@@ -296,6 +296,14 @@ public final class FieldDomains {
      */
     private final Map<TypeSymbol.AtModule, FieldDomains> elements = new ConcurrentHashMap<>();
 
+    /**
+     * Whether a value is written down at each set of places tied together that some value of all
+     * of them holds every rule of ({@link #holdTogether}), kept for the same reason
+     * {@link #classes} is: asked at every place a projection is asked of, and the answer turns on
+     * the rules of this value alone.
+     */
+    private final Map<Set<RuleKey>, Boolean> heldTogether = new ConcurrentHashMap<>();
+
     /** The place {@link #classLeavingNothing} found, worked out the first time it is asked. */
     private volatile Optional<RuleKey> leavingNothing;
 
@@ -2810,12 +2818,14 @@ public final class FieldDomains {
      * Where {@code rule} stands apart from {@code place}, at each place a reading of it names, or
      * null where that is not shown.
      *
-     * <p>Shown at a place where the reading names nothing else; no other place at or under it, or
-     * above it, is named; every reading of a part naming it names nothing else; it is neither at
-     * nor under {@code place}, nor is {@code place} under it; and the rules are shown to leave it
-     * some value ({@link #holdsAValueAt}). A part naming a place above it reads it as well, so it
-     * is not alone there. Each reading is its own: a newtype's rule read at two fields refuses a
-     * value of each, and a value of one has nothing to do with the other.
+     * <p>The places a reading names are tied to one another and to every place a part naming one
+     * of them names, and so on ({@link InvariantChecker#tiedTo}); a part naming a place above one
+     * reads it as well. Shown where none of the places tied to a reading's is the value itself, or
+     * at, under or above {@code place}, and the rules are shown to leave them some value together
+     * ({@link #holdTogether}). No part ties them to anything else, so that value stands beside
+     * every value the rest of the rules leave, and what the rest leave {@code place} is what all of
+     * them do. Each reading is its own: a newtype's rule read at two fields refuses a value of each,
+     * and a value of one has nothing to do with the other.
      *
      * @param placesOf the places each reading of a part names
      * @param unheld   the rules the bounds do not hold
@@ -2828,34 +2838,59 @@ public final class FieldDomains {
             if (!read.getKey().part().rule().equals(rule)) {
                 continue;
             }
-            if (read.getValue().size() != 1) {
+            Set<RuleKey> tied = InvariantChecker.tiedTo(read.getValue().iterator().next(), naming,
+                    null);
+            if (!apartFrom(tied, place) || !holdTogether(tied, placesOf, unheld, asked)) {
                 return null;
             }
-            RuleKey at = read.getValue().iterator().next();
-            if (!aloneAt(at, place, placesOf)
-                    || !holdsAValueAt(at, placesOf, unheld, asked)) {
-                return null;
-            }
-            out.add(new ProjectionEvidence.StandsApart(rule, at));
+            read.getValue().stream().map(at -> new ProjectionEvidence.StandsApart(rule, at))
+                    .filter(each -> !out.contains(each)).forEach(out::add);
         }
         return out.isEmpty() ? null : out;
     }
 
-    /** Whether {@code at} is a place apart from {@code place} that only parts naming nothing else
-     *  name — see {@link #standsApart}. */
-    private boolean aloneAt(RuleKey at, RuleKey place,
-                            Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf) {
-        if (at.isTheValueItself()
-                || (place != null && (at.isAtOrUnder(place) || place.isAtOrUnder(at)))) {
-            return false;
+    /** Whether none of {@code tied} is the value itself, or at, under or above {@code place} —
+     *  which is null where no place is asked about. */
+    private static boolean apartFrom(Set<RuleKey> tied, RuleKey place) {
+        return tied.stream().noneMatch(at -> at.isTheValueItself()
+                || (place != null && (at.isAtOrUnder(place) || place.isAtOrUnder(at))));
+    }
+
+    /**
+     * Whether the rules are shown to leave the places {@code tied} some value together, where no
+     * part ties them to any other place.
+     *
+     * <p>One place is shown to hold a value as {@link #holdsAValueAt} shows it. Several are shown
+     * by a value of this declaration at the fields they are in that every clause naming one of
+     * them holds of ({@link ADeclarationsWitness}): each value at each place may be refused by a
+     * rule about another, so a value of each is not a value of all of them. A clause naming a
+     * place of another field as well is not shown to hold there, since that field is not written.
+     */
+    private boolean holdTogether(Set<RuleKey> tied,
+                                 Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf,
+                                 Set<RuleRef> unheld, Set<TypeSymbol.AtModule> asked) {
+        if (tied.size() == 1) {
+            return holdsAValueAt(tied.iterator().next(), placesOf, unheld, asked);
         }
-        for (RuleKey named : naming.keySet()) {
-            if ((named.isAtOrUnder(at) || at.isAtOrUnder(named)) && !named.equals(at)) {
-                return false;
+        return heldTogether.computeIfAbsent(Set.copyOf(tied), this::writtenTogether);
+    }
+
+    /** Whether a value of this declaration at the fields the places {@code tied} are in is written
+     *  down that every clause naming one of them holds of — see {@link #holdTogether}. */
+    private boolean writtenTogether(Set<RuleKey> tied) {
+        Set<String> fields = new LinkedHashSet<>();
+        tied.forEach(at -> fields.add(at.steps().getFirst()));
+        Set<InvariantChecker.ReadingId> opened = new LinkedHashSet<>();
+        tied.forEach(at -> naming.getOrDefault(at, Set.of())
+                .forEach(read -> opened.add(read.reading())));
+        Map<Core, Boolean> seen = new IdentityHashMap<>();
+        List<Core> rules = new ArrayList<>();
+        for (InvariantChecker.Written each : readings) {
+            if (opened.contains(each.opened()) && seen.put(each.clause(), Boolean.TRUE) == null) {
+                rules.add(each.clause());
             }
         }
-        return naming.getOrDefault(at, Set.of()).stream()
-                .allMatch(read -> placesOf.get(read).equals(Set.of(at)));
+        return ADeclarationsWitness.exists(source, named, fields, rules, this::stringsAdmittedAt);
     }
 
     /**
@@ -3152,8 +3187,9 @@ public final class FieldDomains {
         }
         Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf = placesEachReadingNames();
         for (RuleKey container : handedOn) {
-            if (!shown.contains(container) && (!aloneAt(container, null, placesOf)
-                    || !holdsAValueAt(container, placesOf, unheld, asked))) {
+            Set<RuleKey> tied = InvariantChecker.tiedTo(container, naming, null);
+            if (!shown.contains(container) && (!apartFrom(tied, null)
+                    || !holdTogether(tied, placesOf, unheld, asked))) {
                 return false;
             }
         }
@@ -3177,7 +3213,8 @@ public final class FieldDomains {
                 rules.add(each.clause());
             }
         }
-        return ADeclarationsWitness.exists(source, named, rules, this::stringsAdmittedAt);
+        return ADeclarationsWitness.exists(source, named, Set.copyOf(source.layout().of(named)),
+                rules, this::stringsAdmittedAt);
     }
 
     /** A string the reading of this declaration admits at {@code place}: the least one its

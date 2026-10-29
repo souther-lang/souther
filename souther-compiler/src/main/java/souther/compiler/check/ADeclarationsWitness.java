@@ -86,16 +86,22 @@ final class ADeclarationsWitness {
     }
 
     /**
-     * Whether a value of {@code declared} is shown to exist: one that every one of {@code rules}
-     * folds to true over.
+     * Whether a value of {@code declared} at the fields {@code writing} is shown to exist: one that
+     * every one of {@code rules} folds to true over.
      *
-     * @param rules every rule that holds of a value of {@code declared}, over the bindings of its
-     *              fields
+     * <p>The other fields are written as nothing, so a rule reading one of them folds to nothing
+     * and is not shown to hold.
+     *
+     * @param writing the fields a value is written at, which are all of them where a value of the
+     *                whole declaration is asked for
+     * @param rules   every rule that holds of the fields {@code writing}, over the bindings of the
+     *                declaration's fields
      */
     static boolean exists(RuleReadingSource source, TypeSymbol.AtModule declared,
-                          List<Core> rules, Hints hints) {
+                          Set<String> writing, List<Core> rules, Hints hints) {
         Map<String, BindingId> bindings = source.bindings().of(declared);
-        List<String> names = source.layout().of(declared);
+        List<String> names = source.layout().of(declared).stream()
+                .filter(writing::contains).toList();
         Map<String, Type> types = source.fieldTypes().of(declared);
         if (rules.isEmpty() || names.isEmpty() || !bindings.keySet().containsAll(names)) {
             return false;

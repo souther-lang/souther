@@ -2439,33 +2439,7 @@ public final class InvariantChecker {
          * {@code mid} tied to {@code high} by the second and {@code low} tied to nothing.
          */
         boolean tiedWithout(PartId<RuleRef.Invariant> part, RuleKey one, RuleKey other) {
-            Map<PartReading, Set<RuleKey>> placesOf = new LinkedHashMap<>();
-            named().forEach((place, reads) -> reads.forEach(read ->
-                    placesOf.computeIfAbsent(read, _ -> new LinkedHashSet<>()).add(place)));
-            Set<RuleKey> reached = new LinkedHashSet<>(List.of(one));
-            Deque<RuleKey> todo = new ArrayDeque<>(reached);
-            Set<PartReading> crossed = new HashSet<>();
-            while (!todo.isEmpty()) {
-                RuleKey at = todo.pop();
-                if (near(at, other)) {
-                    return true;
-                }
-                for (Map.Entry<RuleKey, Set<PartReading>> each : named().entrySet()) {
-                    if (!near(each.getKey(), at)) {
-                        continue;
-                    }
-                    for (PartReading read : each.getValue()) {
-                        if (!read.part().equals(part) && crossed.add(read)) {
-                            placesOf.get(read).stream().filter(reached::add).forEach(todo::add);
-                        }
-                    }
-                }
-            }
-            return false;
-        }
-
-        private static boolean near(RuleKey one, RuleKey other) {
-            return one.isAtOrUnder(other) || other.isAtOrUnder(one);
+            return tiedTo(one, named(), part).stream().anyMatch(at -> near(at, other));
         }
 
         /** Every place a part names, with the readings of parts naming it, in the order the walk
@@ -2502,6 +2476,45 @@ public final class InvariantChecker {
      * not relate the two.
      */
     record PartReading(ReadingId reading, PartId<RuleRef.Invariant> part) {}
+
+    /**
+     * The places the parts in {@code named} tie to {@code one}, {@code one} among them: a part
+     * naming a place at, under or over one already tied ties every place it names. The readings of
+     * {@code without} tie nothing, where it is not null.
+     *
+     * <p>Places no chain of parts joins take what the rest leave each of them whatever the others
+     * take, so a value of the ones tied to {@code one} stands beside every value of the rest.
+     *
+     * @param named the parts naming each place, as the readings of one value met them
+     */
+    static Set<RuleKey> tiedTo(RuleKey one, Map<RuleKey, Set<PartReading>> named,
+                               PartId<RuleRef.Invariant> without) {
+        Map<PartReading, Set<RuleKey>> placesOf = new LinkedHashMap<>();
+        named.forEach((place, reads) -> reads.forEach(read ->
+                placesOf.computeIfAbsent(read, _ -> new LinkedHashSet<>()).add(place)));
+        Set<RuleKey> reached = new LinkedHashSet<>(List.of(one));
+        Deque<RuleKey> todo = new ArrayDeque<>(reached);
+        Set<PartReading> crossed = new HashSet<>();
+        while (!todo.isEmpty()) {
+            RuleKey at = todo.pop();
+            for (Map.Entry<RuleKey, Set<PartReading>> each : named.entrySet()) {
+                if (!near(each.getKey(), at)) {
+                    continue;
+                }
+                for (PartReading read : each.getValue()) {
+                    if (!read.part().equals(without) && crossed.add(read)) {
+                        placesOf.get(read).stream().filter(reached::add).forEach(todo::add);
+                    }
+                }
+            }
+        }
+        return reached;
+    }
+
+    /** Whether one of the two places is at or under the other. */
+    private static boolean near(RuleKey one, RuleKey other) {
+        return one.isAtOrUnder(other) || other.isAtOrUnder(one);
+    }
 
     /**
      * Which of the clauses in {@code stated} place an edge, and what each of them raises.
