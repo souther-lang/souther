@@ -31,6 +31,11 @@ class AWalkOverAListAChoiceAnswersIsReadArmByArmTest {
 
     /** The same, asking for at least {@code found} of what the join found. */
     private static PartitionEvidence screened(String before, String codes, String found) {
+        return screenedBy(before, codes, "List.length(found) >= " + found);
+    }
+
+    /** The same, the guard on what the join found being {@code condition}. */
+    private static PartitionEvidence screenedBy(String before, String codes, String condition) {
         String model = """
                 module probe
 
@@ -50,10 +55,10 @@ class AWalkOverAListAChoiceAnswersIsReadArmByArmTest {
                     %s
                     let codes = %s
                     let found = List.flatMap(e -> List.filter(c -> c.code == e, contacts), codes)
-                    guard List.length(found) >= %s else NoMatch
+                    guard %s else NoMatch
                     Matched { ids = List.map(c -> c.id, found) }
                 }
-                """.formatted(before, codes, found);
+                """.formatted(before, codes, condition);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -133,8 +138,9 @@ class AWalkOverAListAChoiceAnswersIsReadArmByArmTest {
 
     /**
      * The guard on how many were found is a line at one, where the list the join makes has a
-     * place, so the join is not one a row of the line stops at. A guard asking for as many as a
-     * list holds is a line at lists the join may not make, and the count is not told to get there.
+     * place, so the join is not one a row of the line stops at and nothing is left unread. A guard
+     * asking for as many as a list holds is not read as a relation between the inputs: it is
+     * said to be about what a run comes to.
      */
     @Test
     void aGuardCountingAJoinIsReadWhereTheCountIsOneAListHolds() {
@@ -144,6 +150,41 @@ class AWalkOverAListAChoiceAnswersIsReadArmByArmTest {
         PartitionEvidence all = screened("", "[ lead.code ]", "2147483647");
         assertEquals(List.of("contacts[*].code", "lead.code"), aboutARun(all),
                 () -> all.notRead().toString());
+    }
+
+    /**
+     * The line is the one the whole comparison draws on the count, not a number written beside
+     * it: the same line at one is read however it is written. A count the line moves with the
+     * input on is no line at a count a list holds, and its list is not taken to be made.
+     */
+    @Test
+    void theLineIsTheOneTheComparisonDrawsOnTheCount() {
+        for (String atOne : List.of("List.length(found) >= 1", "List.length(found) - 1 >= 0",
+                "2 * List.length(found) >= 2", "1 <= List.length(found)")) {
+            PartitionEvidence read = screenedBy("", "[ lead.code ]", atOne);
+            assertEquals(List.of(), stopped(read), () -> atOne + read.notRead());
+            assertEquals(List.of(), aboutARun(read), () -> atOne + read.notRead());
+        }
+        String movesWithTheInput = "List.length(found) >= lead.code";
+        PartitionEvidence moves = screenedBy("", "[ lead.code ]", movesWithTheInput);
+        assertEquals(List.of("contacts[*].code", "lead.code"), stopped(moves),
+                () -> moves.notRead().toString());
+    }
+
+    /**
+     * A line below nought is at no count a list holds, however a number beside the count is
+     * written: {@code List.length(found) + 100 >= 1} holds for every list, and the rule cuts
+     * nothing rather than being read at a list that has no place.
+     */
+    @Test
+    void aLineBelowNoughtIsAtNoCountAListHolds() {
+        for (String below : List.of("List.length(found) + 100 >= 1",
+                "List.length(found) + 1 >= 0")) {
+            PartitionEvidence evidence = screenedBy("", "[ lead.code ]", below);
+            assertEquals(List.of(), stopped(evidence), () -> below + evidence.notRead());
+            assertTrue(evidence.notRead().stream().anyMatch(each -> each.reason()
+                    == UndividedPosition.Reason.RULE_CUTS_NOTHING), () -> evidence.notRead().toString());
+        }
     }
 
     /** Where what the rule states is about a run that may stop on the way to it. */

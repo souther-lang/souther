@@ -499,18 +499,34 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     }
 
 
+    /**
+     * A number the form is moved by is an operation over the other numbers of the form as well as
+     * the witness, and those stand at whatever value their rows put them at: {@code a + 5} stops
+     * at the greatest {@code Int} for {@code a} however {@code x} is chosen. So the operation is
+     * not the witness's to get past, the number {@code a} is not said to be left every remainder,
+     * and no line is drawn on the remainder — whether {@code a} is free or held where there is no
+     * row at all.
+     */
     @Test
-    void aNumberHeldWhereTheFormOverflowsLeavesNoRowToDrawTheLinesAt() {
-        // The number the form is moved by overflows with the other number held at a value, and
-        // that value is no row: with it free the lines are drawn, and with it held at the end of
-        // its type there is no row to draw them at.
+    void aNumberBesideTheWitnessIsNotSaidToBeLeftEveryRemainderWhereTheFormIsMovedByAConstant() {
+        Compilation free = compiled("", "a: Int, x: Int, c: Int",
+                "c == Int.floorMod(a + 5 + x, 11)");
+        assertEquals(List.of("0"), bordersOf(linesOf(free)));
+        assertTrue(notShownAt(free, "a"), () -> reasonsEach("a: Int, x: Int, c: Int",
+                "c == Int.floorMod(a + 5 + x, 11)").toString());
+        Compilation held = compiled("data Top = Int\n    invariant value == 9223372036854775807\n",
+                "a: Top, x: Int, c: Int", "c == Int.floorMod(a.value + 5 + x, 11)");
+        assertFalse(bordersOf(linesOf(held)).contains("11"));
+        assertFalse(bordersOf(linesOf(held)).contains("-1"));
+        // And with no number to move it by, the sum is the form itself and the lines are drawn.
         assertEquals(List.of("-1", "11", "0"), bordersOf("a: Int, x: Int, c: Int",
-                "c == Int.floorMod(a + 5 + x, 11)"));
-        List<String> held = bordersOf(linesOf(compiled(
-                "data Top = Int\n    invariant value == 9223372036854775807\n",
-                "a: Top, x: Int, c: Int", "c == Int.floorMod(a.value + 5 + x, 11)")));
-        assertFalse(held.contains("11"), held::toString);
-        assertFalse(held.contains("-1"), held::toString);
+                "c == Int.floorMod(a + x, 11)"));
+    }
+
+    private static boolean notShownAt(Compilation compilation, String place) {
+        return compilation.db().ask(new Adequacy.Coverage("demo")).value().get("f").notRead()
+                .stream().anyMatch(each -> each.at().equals(place) && each.reason()
+                        == UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE);
     }
 
     /**

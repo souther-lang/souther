@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
  * A sum of several numbers held against a constant is read at each of them, however many there
@@ -106,7 +105,7 @@ class ASumOfSeveralNumbersHeldAgainstAConstantIsReadAtEachOfThemTest {
     /** The list is built before it is counted, so an element that may stop a run is told. */
     @Test
     void anElementOfTheListThatMayStopARunIsNotLeftOutByCountingIt() {
-        assertNotEquals(List.of(), unread("Rational.toInt(DOWN, ("
+        assertEquals(List.of("w.a.pay"), unread("Rational.toInt(DOWN, ("
                 + sum(3, "+") + ") / List.length([ w.a.pay + 9223372036854775807, w.b.pay,"
                 + " w.c.pay ])) >= 100"));
     }

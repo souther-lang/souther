@@ -1015,10 +1015,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (working.operations().isEmpty() && working.decimals().isEmpty()) {
             return new WhatARelationLeavesUndivided.Operations(List.of(), working.told());
         }
-        // The operations over the numbers of a remainder's form are a row's of the witness that
-        // takes the form through every remainder, which is asked to get past them
-        // ({@link #theWorkingGetsPastAtTheWitness}): none is one a row is not asked of here.
-        Boolean pastAtTheWitness = null;
+        // An operation over the witness that takes a remainder's form through every remainder, and
+        // over no other number, is a row's of the witness, which is asked to get past it
+        // (theWorkingGetsPastAtTheWitness): it is not one a row is not asked of here.
+        NumericTerm witness = null;
+        boolean witnessAsked = false;
         Map<NumericTerm, Integer> named = new LinkedHashMap<>();
         for (Side each : sides) {
             if (each.number() != null) {
@@ -1031,11 +1032,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             boolean overTheSides = each.form().coefs().keySet().stream()
                     .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom)));
             if (!overTheSides) {
-                boolean overTheRemainder = remainder != null && overTheFormOfTheRemainder(each);
-                if (overTheRemainder && pastAtTheWitness == null) {
-                    pastAtTheWitness = reachesEveryRemainder(null, read, conditions, heldWhole);
+                if (!witnessAsked && remainder != null) {
+                    witness = witnessForEveryRemainder(null, read, conditions, heldWhole);
+                    witnessAsked = true;
                 }
-                leftOut |= !(overTheRemainder && pastAtTheWitness) && !stopsNoRow(each, read);
+                leftOut |= !(witness != null && isOverOnly(each, witness))
+                        && !stopsNoRow(each, read);
                 continue;
             }
             sums.add(new WhatARelationLeavesUndivided.IntSum(
@@ -4755,13 +4757,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private boolean reachesEveryRemainder(NumericTerm held, InputReading read,
                                           List<OnAWay> conditions, boolean heldWhole) {
+        return witnessForEveryRemainder(held, read, conditions, heldWhole) != null;
+    }
+
+    /**
+     * The number of the form that takes it through every remainder as
+     * {@link #reachesEveryRemainder} says, or null where none does.
+     */
+    private NumericTerm witnessForEveryRemainder(NumericTerm held, InputReading read,
+                                                 List<OnAWay> conditions, boolean heldWhole) {
         if (!heldWhole) {
-            return false;
+            return null;
         }
         for (NumericTerm term : remainder.dividend().coefs().keySet()) {
             TermOrders orders = read.quantities().ordersOf(term);
             if (orders == null || !(orders.answered() instanceof Carrier.Whole)) {
-                return false;
+                return null;
             }
         }
         for (Map.Entry<NumericTerm, ExactRatio> each : remainder.dividend().coefs().entrySet()) {
@@ -4783,18 +4794,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (holdsFromNoughtTo(carrier, window) && theFormIsComputedAtEachOf(weight, window,
                     carrier) && theWorkingGetsPastAtTheWitness(value, window)
                     && theOthersCanBeLeftAtNought(value, held, read, conditions)) {
-                return true;
+                return value;
             }
         }
-        return false;
+        return null;
     }
 
     /**
-     * Whether every operation the comparison works out comes to a number its type holds with
-     * {@code witness} put at each value from nought to {@code top} and every other number of the
-     * form at nought. Of those over numbers of the form the remainder is of: an operation over
-     * any other number is not the witness's to say, and is asked as the operations over the sides
-     * are.
+     * Whether every operation over {@code witness} alone comes to a number its type holds with
+     * the witness put at each value from nought to {@code top}. An operation over another number
+     * as well is not the witness's to say: that number stands at whatever value its rows put it
+     * at, and which of them get past the operation is asked as the operations over the sides are.
      *
      * <p>The operations are sums of the form with the number it is moved by, which the quantity
      * holds taken by the divisor, so they are asked here with the number as it was written. Each
@@ -4802,10 +4812,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private boolean theWorkingGetsPastAtTheWitness(NumericTerm witness, BigInteger top) {
         for (IntOperation each : working.operations()) {
-            if (!overTheFormOfTheRemainder(each)) {
+            if (!isOverOnly(each, witness)) {
                 continue;
             }
-            ExactRatio weight = each.form().coefs().getOrDefault(witness, ExactRatio.ZERO);
+            ExactRatio weight = each.form().coefs().get(witness);
             for (BigInteger at : List.of(BigInteger.ZERO, top)) {
                 ExactRatio value = weight.times(ExactRatio.of(at)).orNull() instanceof ExactRatio
                         product ? product.plus(each.form().constant()).orNull() : null;
@@ -4819,10 +4829,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return true;
     }
 
-    /** Whether every number {@code operation} is over is a number of the form the remainder is
-     *  of. */
-    private boolean overTheFormOfTheRemainder(IntOperation operation) {
-        return remainder.dividend().coefs().keySet().containsAll(operation.form().coefs().keySet());
+    /** Whether {@code operation} is over {@code number} and no other number. */
+    private static boolean isOverOnly(IntOperation operation, NumericTerm number) {
+        return operation.form().coefs().size() == 1
+                && operation.form().coefs().containsKey(number);
     }
 
     /** Whether the values of {@code carrier} include every whole number from nought to
