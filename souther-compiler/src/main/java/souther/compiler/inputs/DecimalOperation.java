@@ -124,6 +124,13 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * the scale it leaves is kept to what a {@code BigDecimal} and an {@code int} hold.
      * <li>Any other operation reads neither, and is found as it is worked out.
      * </ul>
+     *
+     * <p>The guarantee is of the operations together with how the partner is put: a row on each
+     * side of the line at a number of {@code asked} has the partner at numbers written at few
+     * places beside the line ({@link DecimalPoints#besideTheLine}), wherever the line is, and the
+     * third item above is that. An operation added here is read as one of the four, and one that
+     * cannot be is not claimed over; one that needs the partner put in another way needs that way
+     * stated with it.
      */
     public static boolean allowAClaimOver(List<DecimalOperation> all, Object asked,
                                           Object partner) {
