@@ -50,10 +50,6 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                 Endpoint.inclusive(Count.of((long) high)));
     }
 
-    private static Term<String> term(String place, ExactRatio weight) {
-        return term(place, weight, run(LEAST, GREATEST));
-    }
-
     /** A term that may hold every value of the type and is shown to take those of
      *  {@code realizes}: the rows are the ones with it anywhere it may hold. */
     private static Term<String> term(String place, ExactRatio weight,
