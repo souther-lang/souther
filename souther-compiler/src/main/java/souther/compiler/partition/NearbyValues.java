@@ -128,59 +128,45 @@ final class NearbyValues {
      * value has no such list.
      */
     static int heldAt(ObservedValue value, Type type, RuleReadingContext reading, TermPath within) {
-        return heldAt(value, type, reading, new TermPath(within.head(), List.of()), within);
+        int[] held = {0};
+        // The walk every candidate here is made by, so what counts as a position of the value is
+        // decided in one place.
+        Iterator<ObservedValue> walked = of(value, type, reading,
+                new TermPath(within.head(), List.of()), List.of(), new Leaves() {
+
+                    @Override
+                    public Iterator<ObservedValue> beside(Type.Prim prim, ObservedValue leaf,
+                                                          TermPath at, List<Narrowing> along,
+                                                          TypeView view) {
+                        return none();
+                    }
+
+                    @Override
+                    public boolean reaches(TermPath at) {
+                        return onTheWayTo(within, at);
+                    }
+
+                    @Override
+                    public Iterator<ObservedValue> longer(ObservedValue.Sequence sequence,
+                                                          Shape.Sequence unusedShape,
+                                                          TermPath at) {
+                        if (within.equals(at)) {
+                            held[0] += sequence.elements().size();
+                        }
+                        return none();
+                    }
+                });
+        while (walked.hasNext()) {
+            walked.next();
+        }
+        return held[0];
     }
 
-    private static int heldAt(ObservedValue value, Type type, RuleReadingContext reading,
-                              TermPath at, TermPath within) {
-        if (value.unread() != null || at.steps().size() > within.steps().size()
-                || !within.steps().subList(0, at.steps().size()).equals(at.steps())) {
-            return 0;
-        }
-        var source = reading.source();
-        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
-                source.sums());
-        ObservedValue inside = ObservedValue.wearing(view.wrappers(), value);
-        if (inside == null || inside.unread() != null) {
-            return 0;
-        }
-        return switch (view.shape()) {
-            case Shape.Product product -> {
-                int n = 0;
-                if (inside instanceof ObservedValue.Constructed made
-                        && made.type().equals(product.name())) {
-                    for (Map.Entry<String, Type> field : product.fields().entrySet()) {
-                        ObservedValue held = made.field(field.getKey());
-                        if (held != null) {
-                            n += heldAt(held, field.getValue(), reading,
-                                    at.then(field.getKey()), within);
-                        }
-                    }
-                }
-                yield n;
-            }
-            case Shape.Sequence sequence -> {
-                if (!(inside instanceof ObservedValue.Sequence held)) {
-                    yield 0;
-                }
-                if (at.equals(within)) {
-                    yield held.elements().size();
-                }
-                int n = 0;
-                for (ObservedValue each : held.elements()) {
-                    n += heldAt(each, sequence.element(), reading, at.element(), within);
-                }
-                yield n;
-            }
-            case Shape.Sum sum -> inside instanceof ObservedValue.Constructed made
-                    && sum.reaches().cases().contains(made.type())
-                    ? heldAt(inside, Type.ref(made.type()), reading, at, within) : 0;
-            case Shape.Optional optional -> inside instanceof ObservedValue.Absent ? 0
-                    : heldAt(inside, optional.element(), reading, at, within);
-            case Shape.Scalar _, Shape.Mapping _, Shape.Unit _, Shape.Unresolved _, Shape.Cases _,
-                 Shape.Tuple _, Shape.Function _, Shape.Uninhabited _, Shape.Bottom _,
-                 Shape.Erroneous _, Shape.Undecided _ -> 0;
-        };
+    /** Whether {@code at} is {@code within} or a location above it, which is where a walk
+     *  looking for {@code within} has to go on. */
+    private static boolean onTheWayTo(TermPath within, TermPath at) {
+        return at.steps().size() <= within.steps().size()
+                && within.steps().subList(0, at.steps().size()).equals(at.steps());
     }
 
     /** Where a list that grows takes its new element. */
@@ -273,8 +259,7 @@ final class NearbyValues {
 
             @Override
             public boolean reaches(TermPath at) {
-                return within == null || (at.steps().size() <= within.steps().size()
-                        && within.steps().subList(0, at.steps().size()).equals(at.steps()));
+                return within == null || onTheWayTo(within, at);
             }
 
             @Override
