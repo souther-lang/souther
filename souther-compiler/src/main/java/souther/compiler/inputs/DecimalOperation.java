@@ -57,6 +57,15 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * <p>It is also what a number the analysis chooses is held to, so that the room an operation
      * has for it is shown once ({@link #allowAClaimOver}) and does not depend on which number
      * of a run it was chosen near.
+     *
+     * <p>And it is why the room does not turn on how large a number is. A row is built from
+     * numbers written at most this many places before or after the point, so two operands of a
+     * sum differ in scale by at most twice it, whatever their digits are, and the sum lines them
+     * up. {@code 1E+2147483647 + 5.0} has no room because the scales are the whole range apart,
+     * and the number is no row: a row is not built at it. A number far out is stood beside by
+     * numbers written at few places however large it is, so the sum lines up scales no further
+     * apart than at the end of a run, and a run with no end is asked at a point far out
+     * ({@link DecimalPoints#edgeOfWhatIsBuilt}) as at any end.
      */
     public static final int PLACES_A_ROW_IS_BUILT_AT = 1 << 12;
 
@@ -115,6 +124,13 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * the scale it leaves is kept to what a {@code BigDecimal} and an {@code int} hold.
      * <li>Any other operation reads neither, and is found as it is worked out.
      * </ul>
+     *
+     * <p>The guarantee is of the operations together with how the partner is put: a row on each
+     * side of the line at a number of {@code asked} has the partner at numbers written at few
+     * places beside the line ({@link DecimalPoints#besideTheLine}), wherever the line is, and the
+     * third item above is that. An operation added here is read as one of the four, and one that
+     * cannot be is not claimed over; one that needs the partner put in another way needs that way
+     * stated with it.
      */
     public static boolean allowAClaimOver(List<DecimalOperation> all, Object asked,
                                           Object partner) {
