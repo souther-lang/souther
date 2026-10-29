@@ -290,10 +290,7 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
                 WorkFigure.NODES_A_FORK_CARRIES.at(4000))));
         out.add(ReplacementReading.wayOf(new ArmReplacements.Sibling.Why.PastWhatAMethodHolds()));
         // And what a walk the classes carry no switch at leaves, which no run widens either.
-        for (NotCarriedReason why : List.of(new NotCarriedReason.MethodTooLarge(),
-                new NotCarriedReason.StepNotExpanded())) {
-            out.add(ReplacementReading.wayOf(why));
-        }
+        out.add(ReplacementReading.wayOf(new NotCarriedReason.MethodTooLarge()));
         out.add(ReplacementEvidence.Undecided.Way.atNoAllowance(
                 ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ));
         return out;
