@@ -4279,11 +4279,26 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 RewriteVocabulary.rewritten(rewrite),
                                 RewriteVocabulary.answeredAs(rewrite),
                                 RewriteVocabulary.outOfSight(rewrite, module));
+                        case ReplacementReportAnchor.AtTheWalk _ -> throw new IllegalStateException(
+                                "a rewrite of an arm shown at a walk: " + rewrite);
                     };
                     case ReplacementAsWritten.ByOneAnswer one -> String.format(
                             "no row would come out differently if the body always answered what"
                                     + " `%s` answers",
                             RewriteVocabulary.answeredBy(one, rendering));
+                    // A fold by its place where it has one here, and by the definition that wrote
+                    // it where it has not.
+                    case ReplacementAsWritten.OfAWalk walk -> switch (reportAt) {
+                        case ReplacementReportAnchor.AtTheWalk _ -> String.format(
+                                "no row would come out differently if the fold (%s) %s",
+                                f.at().said(rendering, declaredIn), RewriteVocabulary.walked(walk));
+                        case ReplacementReportAnchor.AtTheBehavior _ -> String.format(
+                                "no row would come out differently if the fold %s %s",
+                                RewriteVocabulary.outOfSight(walk, module),
+                                RewriteVocabulary.walked(walk));
+                        case ReplacementReportAnchor.AtTheFork _ -> throw new IllegalStateException(
+                                "a rewrite of a walk shown at a fork: " + walk);
+                    };
                 }));
             }
         }
@@ -5966,6 +5981,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 rendering, declaredIn),
                         publishedStops(asked, parts).stream()
                                 .map(stop -> whyUnread(stop.reason()) + stoppedAt(stop.figures())
+                                        + imagesNotShownSaid(stop.leftOpen())
                                         + sentTo(stop.sentTo(), rendering, declaredIn))
                                 .collect(Collectors.joining("; ")),
                         whatItsPositionWasShortOf(asked).map(AdequacyReport::whyUnread)
@@ -6109,6 +6125,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             left.put("shorterThan", open.shorterThan());
         }
         left.put("atAnyLength", open.atAnyLength());
+        if (!open.imagesNotShown().isEmpty()) {
+            ArrayNode names = left.putArray("imagesNotShown");
+            open.imagesNotShown().forEach(names::add);
+        }
     }
 
     /**
@@ -6359,12 +6379,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             }
             // The behavior and which rewrite: an arm answering as one of its siblings, written
-            // with the fork the way an arm is and the sibling by its part, or the body answering
-            // one value, written as the first row that answered it — a rewrite per value, named
-            // by the row that sends a reader to the value, in the words a row is named by.
+            // with the fork the way an arm is and the sibling by its part, a fold run another way,
+            // written with the fold's coordinates the same way and the way it is run by the word,
+            // or the body answering one value, written as the first row that answered it — a
+            // rewrite per value, named by the row that sends a reader to the value, in the words a
+            // row is named by.
             case ObligationIdentity.OfAReplacement(var behavior, var replacement) -> {
                 into.put("behavior", behavior);
                 switch (replacement) {
+                    case Replacement.OfAWalk(var walk, var how) -> {
+                        WrittenOwner.Body body = WrittenOwner.theBodyThatWrote(walk.owner());
+                        into.put("rewrite", switch (how) {
+                            case STOPS_AFTER_ONE_STEP -> "fold_after_one_step";
+                            case STEPS_FROM_THE_SEED -> "fold_from_the_seed";
+                        });
+                        into.put("module", body.module());
+                        into.put("definition", body.definition());
+                        into.put("construct", walk.ordinal());
+                        into.put("lowered", walk.lowered());
+                    }
                     case Replacement.OfAnArm(var fork, var part, var with) -> {
                         WrittenOwner.Body body = WrittenOwner.theBodyThatWrote(fork.owner());
                         into.put("rewrite", "arm_as_sibling");
@@ -9405,12 +9438,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case About.ARuleNoRowTakes _, About.ACombinationNoRowMakes _,
                     About.ACombinationOfTwoClassesNoRowIsIn _ -> false;
             // A rewrite of an arm shown at its fork stands there, which is what tells two of a
-            // body's rewrites apart where their siblings are; one of the whole body, and one of a
-            // fork this compilation holds no source of, are shown at the behavior and stand nowhere
-            // in it.
+            // body's rewrites apart where their siblings are, and one of a walk shown at its fold
+            // stands there for the same reason; one of the whole body, and one of a fork or a fold
+            // this compilation holds no source of, are shown at the behavior and stand nowhere in
+            // it.
             case About.ARewriteNoRowTellsApart(var _, var _, var reportAt, var _, var _) ->
                     switch (reportAt) {
-                        case ReplacementReportAnchor.AtTheFork _ -> true;
+                        case ReplacementReportAnchor.AtTheFork _,
+                             ReplacementReportAnchor.AtTheWalk _ -> true;
                         case ReplacementReportAnchor.AtTheBehavior _ -> false;
                     };
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
@@ -10061,6 +10096,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * lines this ends a clause of separate what a question stands on with semicolons, and two
      * figures of one stop read there as two stops.
      */
+    private static String imagesNotShownSaid(
+            Optional<BlockReason.RelationShownOverARegion> leftOpen) {
+        return leftOpen.map(BlockReason.RelationShownOverARegion::imagesNotShown)
+                .filter(names -> !names.isEmpty())
+                .map(names -> ", the image of " + String.join(", ", names) + " not shown")
+                .orElse("");
+    }
+
     private static String stoppedAt(List<Figure> figures) {
         return figures.isEmpty() ? "" : ", stopped at " + figures.stream()
                 .map(each -> figuresSaid(List.of(each)))

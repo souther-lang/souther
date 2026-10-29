@@ -212,6 +212,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "ElementsOfAType", "withOneElement",
                     "(" + TYPE + CONTEXT + ")" + PROPOSALS,
                     THE_POSITION),
+            row(PARTITION + "InputsRowsRanWith", "takenAt",
+                    "(" + TYPE + "Lsouther/compiler/observe/ObservedValue;L" + CHECK
+                            + "RuleReadingSource;Ljava/util/List;)V",
+                    THE_POSITION),
             row(PARTITION + "NearbyValues", "of",
                     "(Lsouther/compiler/observe/ObservedValue;" + TYPE + CONTEXT + "L" + INPUTS
                             + "TermPath;Ljava/util/List;L" + PARTITION

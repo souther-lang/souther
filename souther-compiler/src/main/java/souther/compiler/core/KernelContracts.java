@@ -150,12 +150,17 @@ public final class KernelContracts {
      * nowhere else ({@code Capacity.oneMore}, {@code PersistentHashSet.union}). Every other kernel
      * answers always where {@link #abortsOf} says it ends no run, and is not known here where it
      * says it may.
+     *
+     * <p>A case conversion answers the text it makes of its operand, which holds more code points
+     * than the operand where a code point becomes several, and ends a run only where that text is
+     * longer than a {@code String} holds.
      */
     public static GetsPast completionOf(Kernel kernel) {
         return switch (kernel) {
             case SET_UNION -> fits(new GetsPast.AnswerSize.SumOf(List.of(0, 1), 0));
             case SET_INSERT -> fits(new GetsPast.AnswerSize.SumOf(List.of(1), 1));
             case MAP_INSERT -> fits(new GetsPast.AnswerSize.SumOf(List.of(2), 1));
+            case STRING_LOWERCASE, STRING_UPPERCASE -> new GetsPast.WhereTheTextFits(0);
             default -> abortsOf(kernel).isEmpty() ? new GetsPast.Always()
                     : new GetsPast.NotKnown();
         };

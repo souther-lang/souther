@@ -37,9 +37,18 @@ import java.util.Set;
  * @param outcomes  the ways the conditions it evaluated came out
  * @param visits    the same ways, each with the visit it came out on, for the first visits to each
  *                  condition ({@link RecordedVisit#MOST})
+ * @param walks     the numbers of the walks the run entered
+ * @param walksOn   the numbers of the walks the run took a second element of, each one it entered
  */
 public record Observation(NumberingIdentity numbering, Set<Integer> arms,
-                          Set<RecordedConditionOutcome> outcomes, Set<RecordedVisit> visits) {
+                          Set<RecordedConditionOutcome> outcomes, Set<RecordedVisit> visits,
+                          Set<Integer> walks, Set<Integer> walksOn) {
+
+    /** A run that entered no walk. */
+    public Observation(NumberingIdentity numbering, Set<Integer> arms,
+                       Set<RecordedConditionOutcome> outcomes, Set<RecordedVisit> visits) {
+        this(numbering, arms, outcomes, visits, Set.of(), Set.of());
+    }
 
     public Observation {
         if (numbering == null) {
@@ -49,6 +58,12 @@ public record Observation(NumberingIdentity numbering, Set<Integer> arms,
         arms = arms == null ? Set.of() : Set.copyOf(arms);
         outcomes = outcomes == null ? Set.of() : Set.copyOf(outcomes);
         visits = visits == null ? Set.of() : Set.copyOf(visits);
+        walks = walks == null ? Set.of() : Set.copyOf(walks);
+        walksOn = walksOn == null ? Set.of() : Set.copyOf(walksOn);
+        if (!walks.containsAll(walksOn)) {
+            throw new IllegalArgumentException("a walk was taken past its first element and not"
+                    + " entered: " + walksOn + " of " + walks);
+        }
         // And each number under the family the call that wrote it was for. Said here, where the
         // recording is made, rather than left to whoever reads it: a number written into the wrong
         // family is the emitter having lit a place it was not at, and a reader meeting it later has
@@ -65,6 +80,9 @@ public record Observation(NumberingIdentity numbering, Set<Integer> arms,
         }
         for (RecordedVisit visit : visits) {
             requireIssuedTo(numbering, visit.at(), SiteAddress.ConditionOutcome.class, "a condition");
+        }
+        for (int raw : walks) {
+            requireIssuedTo(numbering, raw, SiteAddress.Walk.class, "a walk");
         }
     }
 

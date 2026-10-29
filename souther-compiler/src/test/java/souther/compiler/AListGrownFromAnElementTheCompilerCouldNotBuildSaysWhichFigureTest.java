@@ -11,6 +11,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -46,15 +47,21 @@ class AListGrownFromAnElementTheCompilerCouldNotBuildSaysWhichFigureTest {
                 | ([]) -> 0
             """;
 
+    /**
+     * The body answering one value, and the fold stopping after its first element and handing
+     * each step the seed: each is told apart only by a list holding an element, so each meets the
+     * figure.
+     */
     @Test
     void anElementTooBigToBuildLeavesTheRewriteOpenAtAFigure() {
-        assertEquals(List.of("undecided: a_composing_figure_reached, no_row_answered_differently"),
+        assertEquals(Collections.nCopies(3,
+                        "undecided: a_composing_figure_reached, no_row_answered_differently"),
                 verdicts("Huge"));
     }
 
     @Test
     void anElementTheCompilerBuildsIsToldApart() {
-        assertEquals(List.of("unnoticed: "), verdicts("Int"));
+        assertEquals(Collections.nCopies(3, "unnoticed: "), verdicts("Int"));
     }
 
     private static List<String> verdicts(String element) {

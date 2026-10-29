@@ -836,7 +836,8 @@ public final class Partitions {
         for (Classing.LeftOpen each : answered.leftOpen()) {
             PredicateOrigin origin = each.statement().origin();
             found.regionUndetermined(origin.cited(), origin.readAt(),
-                    new FilingCoordinate.AtPosition(term.position()), each.open());
+                    new FilingCoordinate.AtPosition(term.position()), each.open(),
+                    each.statement().imagesNotShown());
         }
         // The answer's own population, and not what is left after taking the rest away. Subtracted
         // here, the same question is answered twice — and the day the two subtract differently the
@@ -4167,6 +4168,17 @@ public final class Partitions {
         }
         return all == null ? new CandidateStrings(null, shortfall)
                 : withinTheCount(all, characters, meter, shortfall);
+    }
+
+    /**
+     * The strings of {@code strings} that have one of {@code lengths}, or null where the allowance
+     * of {@code meter} would not pay for them.
+     */
+    static Language ofTheLengths(Language strings, LengthsPastTheWay.Lengths lengths,
+                                 Meter meter) {
+        PatternPlan plan = lengths.strings();
+        Language counted = plan == null ? null : plan.compile(meter);
+        return counted == null ? null : strings.and(counted, meter);
     }
 
     /**

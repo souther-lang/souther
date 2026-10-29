@@ -30,6 +30,8 @@ import souther.compiler.core.KernelSignature;
 import souther.compiler.core.GrowingFold;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.WalkProbe;
+import souther.compiler.coverage.WalkRewrite;
 
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.jvm.GeneratedClass;
@@ -51,6 +53,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -1512,8 +1515,27 @@ final class BodyGen {
             for (int i = 0; i < call.args().size(); i++) {
                 box(code, emitArgument(call, i));
             }
+            reachedAsACall(call);
             invokeRecursiveHelper(call);
             castFromObject(code, call.type());
+        }
+
+        /**
+         * Records that a walk the language owes rows of was reached, where it is run as a call of
+         * the library's method and not as the loop it is. Called with the arguments worked out, so
+         * a run that stopped working them out has not reached the walk.
+         *
+         * <p>Only that it was reached: the method is one for every walk of the program, so there is
+         * no switch to carry here and no second element to take note of.
+         */
+        private void reachedAsACall(Core.Call call) {
+            Optional<WalkProbe> site = places == Places.COUNTED && ctx.measuring()
+                    ? ctx.walkSiteOf(call) : Optional.empty();
+            if (site.isPresent()) {
+                ctx.emitted(site.get().raw());
+                code.loadConstant(site.get().raw());
+                code.invokestatic(CD_Probe, "walked", MTD_Probe_hit);
+            }
         }
 
         /**
@@ -1550,12 +1572,14 @@ final class BodyGen {
         private void buildList(Core.Call call) {
             // A list's builder compares nothing it is given, so making one is the same call
             // everywhere.
-            if (walked(call, CD_Lists, MTD_Lists_builder, MTD_Lists_sealed, Work.FIXED)) {
+            if (call.runsAsALoop(ctx.symbols.theWalk())
+                    && walked(call, CD_Lists, MTD_Lists_builder, MTD_Lists_sealed, Work.FIXED)) {
                 return;
             }
             emitStep(call);
             genExpr(call.args().get(1));      // the list walked
             genExpr(call.args().get(2));      // the index walked from (a long)
+            reachedAsACall(call);
             ctx.callRuntime(code, CD_Lists, "build", MTD_Lists_build, Work.CHECKPOINTED);
         }
 
@@ -1582,12 +1606,14 @@ final class BodyGen {
         private void buildMap(Core.Call call) {
             // A map's builder compares the keys written into it, so an evaluated class makes one that
             // holds the checkpoint they are compared under.
-            if (walked(call, CD_Maps, MTD_Maps_builder, MTD_Maps_sealed, Work.CHECKPOINTED)) {
+            if (call.runsAsALoop(ctx.symbols.theWalk())
+                    && walked(call, CD_Maps, MTD_Maps_builder, MTD_Maps_sealed, Work.CHECKPOINTED)) {
                 return;
             }
             emitStep(call);
             genExpr(call.args().get(1));      // the list walked
             genExpr(call.args().get(2));      // the index walked from (a long)
+            reachedAsACall(call);
             ctx.callRuntime(code, CD_Maps, "build", MTD_Maps_build, Work.CHECKPOINTED);
         }
 
@@ -1596,6 +1622,11 @@ final class BodyGen {
          * step's own body as the loop body reading the accumulator and the element from locals.
          * Answers whether it was emitted that way — a walk that starts past the head, or whose step
          * is one that never runs, is left to the {@code foldFrom} method (spec §fn-declaration).
+         *
+         * <p>A step that is not written where the fold hands it over — chosen as the program runs,
+         * or reached as a value — is evaluated once before the walk and applied as a function in
+         * the loop. The loop is the same one, so what is recorded and what a run can switch at the
+         * walk does not depend on how the step is run.
          *
          * <p>This is what makes a fold cost what a loop costs, and {@code fold} is the one loop the
          * language has, so it is the whole of what a program's loops cost. Handed to a method instead,
@@ -1607,14 +1638,14 @@ final class BodyGen {
          * {@code long} in its slot, and each walk is straight-line code the JIT sees on its own.
          */
         private boolean folded(Core.Call call) {
-            if (call.stepRunWhereItStands(ctx.symbols.theWalk()) == null) {
+            if (!call.runsAsALoop(ctx.symbols.theWalk())) {
                 return false;
             }
             Core seed = call.args().get(1);
-            return walked(call.args().get(0), call.args().get(2), () -> {
+            return walked(call, call.args().get(0), call.args().get(2), () -> {
                 Type produced = emitValue(seed, null);
                 asAccumulator(produced, accumulatorOf(call.args().get(0)));
-            }, () -> { });
+            }, () -> { }, false);
         }
 
         /** The same walk, accumulating into a builder that is sealed at the end (see
@@ -1622,9 +1653,9 @@ final class BodyGen {
          *  walk answers with. */
         private boolean walked(Core.Call call, ClassDesc helpers,
                                MethodTypeDesc builder, MethodTypeDesc sealed, Work making) {
-            return walked(call.args().get(0), call.args().get(1),
+            return walked(call, call.args().get(0), call.args().get(1),
                     () -> ctx.callRuntime(code, helpers, "builder", builder, making),
-                    () -> code.invokestatic(helpers, "sealed", sealed));
+                    () -> code.invokestatic(helpers, "sealed", sealed), true);
         }
 
         /** The accumulator's type, as the checker put it on the step. */
@@ -1641,31 +1672,89 @@ final class BodyGen {
             }
         }
 
-        private boolean walked(Core stepValue, Core walked, Runnable seed, Runnable answer) {
+        /**
+         * The loop {@code call} is, over {@code walked}, with {@code stepValue}'s body as the loop
+         * body.
+         *
+         * <p>Where this generation measures and the plan numbered the walk, entering it is recorded,
+         * and where the classes carry its switch, the run is asked how to walk it
+         * ({@link WalkRewrite}): stopping after the first step, or handing each step the seed where
+         * it is handed what the step before it answered. The seed handed again is the value the
+         * walk started from, worked out once, or — where the seed is a builder, which the steps
+         * write into — a new builder, which is what an empty seed is.
+         *
+         * @param freshSeed whether the seed is a builder the steps write into, so that handing it
+         *                  again is making another rather than reading the first
+         */
+        private boolean walked(Core.Call call, Core stepValue, Core walked, Runnable seed,
+                               Runnable answer, boolean freshSeed) {
             Core.Block step = Core.runsWhereItStands(stepValue);
+            Type.FnOf stepType = (Type.FnOf) stepValue.type();
+            Type accType = step != null ? step.paramTypes().get(0) : stepType.params().get(0);
+            Type elementType = step != null ? step.paramTypes().get(1) : stepType.params().get(1);
+
+            // A step handed over as a value is worked out once, before the walk, and applied at
+            // each element: choosing it again at an element would be another fold.
+            int handedOver = -1;
             if (step == null) {
-                return false;
+                handedOver = slot(Type.STRING);   // a reference slot; the type is not read back
+                emitValue(stepValue, null);
+                code.astore(handedOver);
             }
-            Type accType = step.paramTypes().get(0);
-            Type elementType = step.paramTypes().get(1);
+
+            Optional<WalkProbe> site = places == Places.COUNTED && ctx.measuring()
+                    ? ctx.walkSiteOf(call) : Optional.empty();
+            // A copy carried in another arm's place carries nothing of its own, as at a fork.
+            boolean switched = site.isPresent() && carrying == 0 && ctx.carriesTheWalk(call);
+
+            // In the order the call writes them: the step, the seed, then the list.
+            int acc = slot(accType);
+            seed.run();
+            store(code, acc, accType);
 
             int iterator = slot(Type.STRING);   // a reference slot; the type is not read back
             genExpr(walked);
             code.invokeinterface(CD_List, "iterator", MTD_iterator);
             code.astore(iterator);
-
-            int acc = slot(accType);
-            seed.run();
-            store(code, acc, accType);
+            // Recorded once what the walk is handed has been worked out, as at a call of the
+            // library's method: a run that stopped working it out has not entered the walk.
+            if (site.isPresent()) {
+                ctx.emitted(site.get().raw());
+                code.loadConstant(site.get().raw());
+                code.invokestatic(CD_Probe, "walked", MTD_Probe_hit);
+            }
+            // How many elements the walk has taken, where entering it is recorded: so is its
+            // taking a second, which is what tells a list of one element from a longer one.
+            int taken = -1;
+            if (site.isPresent()) {
+                taken = slot(Type.BOOL);   // an int slot
+                code.iconst_0();
+                code.istore(taken);
+            }
+            int how = -1;
+            int startedFrom = -1;
+            if (switched) {
+                how = slot(Type.BOOL);   // an int slot, holding a rewrite's code or -1
+                code.loadConstant(site.get().raw());
+                code.invokestatic(CD_Intervention, "walkAt", MTD_Intervention_walkAt);
+                code.istore(how);
+                if (!freshSeed) {
+                    startedFrom = slot(accType);
+                    load(code, acc, accType);
+                    store(code, startedFrom, accType);
+                }
+            }
 
             // The step's body is emitted here rather than in a class of its own, so the names it binds
             // would otherwise stay bound after the walk — and a step that destructures its accumulator
             // binds ordinary names (`let (i, ys) = acc`), which are the caller's names as often as not.
             // The whole scope is put back, the slots it took staying taken.
             Map<BindingId, Var> enclosing = new HashMap<>(locals);
-            bind(step.params().get(0), acc, accType);
             int element = slot(elementType);
-            bind(step.params().get(1), element, elementType);
+            if (step != null) {
+                bind(step.params().get(0), acc, accType);
+                bind(step.params().get(1), element, elementType);
+            }
 
             Label next = code.newLabel();
             Label done = code.newLabel();
@@ -1676,10 +1765,56 @@ final class BodyGen {
             code.aload(iterator);
             code.invokeinterface(CD_Iterator, "next", MTD_next);
             unbox(code, elementType, element);
-            Type stepped = emitValue(step.body(), null);   // the accumulator the step answers with
-            asAccumulator(stepped, accType);
+            if (site.isPresent()) {
+                Label notTheSecond = code.newLabel();
+                code.iload(taken);
+                code.iconst_1();
+                code.if_icmpne(notTheSecond);
+                code.loadConstant(site.get().raw());
+                code.invokestatic(CD_Probe, "walkedOn", MTD_Probe_hit);
+                code.labelBinding(notTheSecond);
+                code.iinc(taken, 1);
+            }
+            if (switched) {
+                Label asCarried = code.newLabel();
+                code.iload(how);
+                code.loadConstant(WalkRewrite.STEPS_FROM_THE_SEED.code());
+                code.if_icmpne(asCarried);
+                if (freshSeed) {
+                    seed.run();
+                } else {
+                    load(code, startedFrom, accType);
+                }
+                store(code, acc, accType);
+                code.labelBinding(asCarried);
+            }
+            if (step != null) {
+                Type stepped = emitValue(step.body(), null);   // the accumulator the step answers with
+                asAccumulator(stepped, accType);
+            } else {
+                code.aload(handedOver);
+                pushInt(code, 2);
+                code.anewarray(CD_Object);
+                code.dup();
+                pushInt(code, 0);
+                load(code, acc, accType);
+                box(code, accType);
+                code.aastore();
+                code.dup();
+                pushInt(code, 1);
+                load(code, element, elementType);
+                box(code, elementType);
+                code.aastore();
+                code.invokeinterface(CD_Fn, "apply", MTD_Fn_apply);
+                castFromObject(code, accType);
+            }
             store(code, acc, accType);
             countOneStep();
+            if (switched) {
+                code.iload(how);
+                code.loadConstant(WalkRewrite.STOPS_AFTER_ONE_STEP.code());
+                code.if_icmpeq(done);
+            }
             code.goto_(next);
             code.labelBinding(done);
 

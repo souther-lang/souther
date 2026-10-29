@@ -1186,9 +1186,10 @@ public sealed interface Core {
         }
 
         /**
-         * The step this call runs where it stands, as the loop it is, or null where it does not: the
+         * The step this call runs where it stands, as the loop body, or null where it does not: the
          * step is handed over as a function, or replaced by {@code Fn.NEVER} because it is never
-         * applied ({@link #functionArgument} says which).
+         * applied ({@link #functionArgument} says which). A fold whose step is handed over as a
+         * function is still the loop ({@link #runsAsALoop}), applying the step to each element.
          *
          * <p>A walk that starts at the head of the list, and a build of a list or a map, run their
          * step as the loop body, reading what it closes over from the frame around it: no class is
@@ -1201,12 +1202,54 @@ public sealed interface Core {
          * @param theWalk the standard library's one loop
          */
         public Block stepRunWhereItStands(TheWalk theWalk) {
-            boolean walks = fn == Emitted.BUILD_LIST || fn == Emitted.BUILD_MAP
+            return isWalk(theWalk) ? runsWhereItStands(args.get(0)) : null;
+        }
+
+        /**
+         * Whether an output emits this call as the loop it is, and not as a call of the library's
+         * method. The one answer the emitter and whatever asks which classes an emitted call names
+         * read, so the two do not come to disagree about which form a call is emitted in.
+         *
+         * <p>A fold is the loop wherever its step is applied at all, whether the step is written
+         * where the fold hands it over or reaches it as a value. A build writes into its builder in
+         * the step's own body, so it is the loop only where the step is written there.
+         *
+         * @param theWalk the standard library's one loop
+         */
+        public boolean runsAsALoop(TheWalk theWalk) {
+            if (!isWalk(theWalk)) {
+                return false;
+            }
+            if (fn == Emitted.BUILD_LIST || fn == Emitted.BUILD_MAP) {
+                return stepRunWhereItStands(theWalk) != null;
+            }
+            return !omitsFunctionBody(0);
+        }
+
+        /**
+         * Whether the loop this call runs as applies its step as a function value, and not as its
+         * own body: the step is worked out once before the walk, and each element is handed to it
+         * and its answer cast to the type of the accumulator.
+         *
+         * @param theWalk the standard library's one loop
+         */
+        public boolean appliesItsStepAsAValue(TheWalk theWalk) {
+            return runsAsALoop(theWalk) && stepRunWhereItStands(theWalk) == null;
+        }
+
+        /**
+         * Whether this call is a walk of a list from its head, or a build of a list or a map: the
+         * calls an output emits as a loop where it can. What the call is, and not whether it is
+         * emitted as that loop ({@link #runsAsALoop}), which turns on how its step is written.
+         *
+         * @param theWalk the standard library's one loop
+         */
+        public boolean isWalk(TheWalk theWalk) {
+            return fn == Emitted.BUILD_LIST || fn == Emitted.BUILD_MAP
                     || (fn instanceof Reached reached
                     && theWalk.operation().equals(reached.denotes()) && theWalk.inTheLoopsOrder()
                     && args.size() > 3 && withoutStanding(args.get(3)) instanceof Int from
                     && from.value() == 0);
-            return walks ? runsWhereItStands(args.get(0)) : null;
         }
     }
 

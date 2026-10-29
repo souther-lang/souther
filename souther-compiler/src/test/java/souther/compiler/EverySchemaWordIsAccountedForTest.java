@@ -527,9 +527,13 @@ class EverySchemaWordIsAccountedForTest {
                             .collect(Collectors.toSet()),
                     Set.of()),
             // And why one rewrite was left open, which is the entry's own word.
+            // `step_not_expanded` is a fold whose step was handed over as a value, which the
+            // compiler now runs rewritten like any other. Retired rather than gone: reports of
+            // this version were written carrying it.
             new Vocabulary("replacement.obligations[].undecidedBecause",
                     List.of("$defs", "replacement", "properties", "obligations", "items",
                             "properties", "undecidedBecause", "items"),
+                    Set.of("step_not_expanded"),
                     ReplacementEvidence.Undecided.Why.class),
             // Whether a row is owed at one rule at all, which is a different question from whether
             // one took it. Spelled here and held against the answers a search may come to, so an

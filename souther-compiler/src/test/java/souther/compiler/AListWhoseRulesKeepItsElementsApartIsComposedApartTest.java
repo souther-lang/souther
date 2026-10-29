@@ -308,8 +308,8 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
                     "Held(Box { ks = [\"x\", \"xx\"] })", "[(\"x\", \"x\")]"), 1)),
             Map.entry(SUMMED, new Composed(List.of("Keys([0, 1, 9])"), 1)),
             Map.entry(SUMMED_APART_AT_ANOTHER_FIELD, new Composed(List.of(
-                    "Lines([Line { sku = \"x\", q = 10 }, Line { sku = \"xx\", q = 0 },"
-                            + " Line { sku = \"xxx\", q = 0 }])"), 1)),
+                    "Lines([Line { sku = \"x\", q = 3 }, Line { sku = \"xx\", q = 3 },"
+                            + " Line { sku = \"xxx\", q = 4 }])"), 1)),
             Map.entry(SUMMED_OVER_LISTS_OF_A_LIST, new Composed(List.of(
                     "Ledger { entries = [Entry { postings = [Posting { sku = \"x\", q = 0 },"
                             + " Posting { sku = \"xx\", q = 1 }] },"
@@ -549,6 +549,7 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
     private static long totalOf(Hir.Expr value) {
         return switch (value) {
             case Hir.IntLit number -> number.value();
+            case Hir.Neg negated -> -totalOf(negated.operand());
             case Hir.Apply applied -> applied.args().stream().mapToLong(each -> totalOf(each))
                     .sum();
             case Hir.ListLit list -> list.elements().stream().mapToLong(each -> totalOf(each))

@@ -239,7 +239,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                 """);
 
         assertEquals(List.of(new BlockReason.RelationShownOverARegion(false,
-                        LONGEST_DOMAIN_OF_AN_ADDRESS)),
+                        LONGEST_DOMAIN_OF_AN_ADDRESS, List.of())),
                 leftOpenAt(evidence, "book[*].domain@Some"));
         assertEquals(false, notReadAt(evidence, "book[*].domain@Some").contains(
                 UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE));
@@ -266,7 +266,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                 classesAtOf("book[*].domain@Some", ANY_EMAIL, domains,
                         THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
         assertEquals(List.of(new BlockReason.RelationShownOverARegion(false,
-                        LONGEST_DOMAIN_OF_AN_ADDRESS)),
+                        LONGEST_DOMAIN_OF_AN_ADDRESS, List.of())),
                 leftOpenAt(evidence, "book[*].domain@Some"));
         assertEquals(parted,
                 classesAtOf("book[*].domain@Some", ANY_EMAIL, shortDomains,
@@ -292,7 +292,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                 """;
         PartitionEvidence evidence = evidenceOf("[a-z@]+", "[a-z0-9]+(\\\\.[a-z0-9]+)*", lets);
 
-        assertEquals(List.of(new BlockReason.RelationShownOverARegion(true, null)),
+        assertEquals(List.of(new BlockReason.RelationShownOverARegion(true, null, List.of())),
                 leftOpenAt(evidence, "book[*].domain@Some"));
         assertEquals(Map.of("book[*].domain@Some",
                         List.of("book[*].domain@Some/x is never piece 300000000 of email")),
@@ -318,7 +318,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
         PartitionEvidence evidence = evidenceOf("[a-z@]+", "[a-z]+",
                 PIECE_NOTHING_IS_SHOWN_AT.formatted("", ""));
 
-        assertEquals(List.of(new BlockReason.RelationShownOverARegion(true, null)),
+        assertEquals(List.of(new BlockReason.RelationShownOverARegion(true, null, List.of())),
                 leftOpenAt(evidence, "book[*].domain@Some"));
         assertEquals(List.of(), evidence.axes().stream()
                 .filter(axis -> axis.path().equals("book[*].domain@Some")).toList());
@@ -346,7 +346,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                 .filter(each -> each.at().equals("book[*].domain@Some")
                         && each.reason() == UndividedPosition.Reason.RELATION_SHOWN_OVER_A_REGION)
                 .count(), evidence.notRead().toString());
-        assertEquals(List.of(new BlockReason.RelationShownOverARegion(true, null)),
+        assertEquals(List.of(new BlockReason.RelationShownOverARegion(true, null, List.of())),
                 leftOpenAt(evidence, "book[*].domain@Some"));
     }
 
@@ -409,7 +409,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                 classesAtOf("book[*].domain@Some", emails, "[^@\\\\s]+",
                         THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
         assertEquals(List.of(new BlockReason.RelationShownOverARegion(true,
-                        LONGEST_DOMAIN_OF_AN_ADDRESS)),
+                        LONGEST_DOMAIN_OF_AN_ADDRESS, List.of())),
                 leftOpenAt(evidence, "book[*].domain@Some"));
         assertFalse(notReadAt(evidence, "book[*].domain@Some").contains(
                 UndividedPosition.Reason.RULE_TELLS_NOTHING_APART),
@@ -431,7 +431,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                         List.of("book[*].domain@Some/x is never piece 1 of email")),
                 classesAtOf("book[*].domain@Some", "a@a|e\\\\u0301@b", "b|c",
                         THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
-        assertEquals(List.of(new BlockReason.RelationShownOverARegion(true, null)),
+        assertEquals(List.of(new BlockReason.RelationShownOverARegion(true, null, List.of())),
                 leftOpenAt(evidenceOf("a@a|e\\\\u0301@b", "b|c",
                         THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK), "book[*].domain@Some"));
     }
@@ -517,10 +517,15 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                 classesOfTheStringsBehind("guard n >= 1 else false"));
     }
 
-    /** A guard on the string itself narrows it before the equality, and nothing is said. */
+    /**
+     * A guard on the length of the string itself narrows it before the equality: the equality is
+     * reached only with a {@code b} of two code points or more, so an {@code a} of fewer is none
+     * of its values, and a {@code b} that {@code a} cannot hold is one still.
+     */
     @Test
-    void aGuardOnTheStringItselfPartsNothing() {
-        assertEquals(Map.of(),
+    void aGuardOnTheLengthOfTheStringItselfLeavesTheEqualityPartedByTheLengthsItReaches() {
+        assertEquals(Map.of("a", List.of("a/x can be b", "a/x is never b"),
+                        "b", List.of("b/x can be a", "b/x is never a")),
                 classesOfTheStringsBehind("guard String.length(b.value) >= 2 else false"));
     }
 

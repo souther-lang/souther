@@ -408,6 +408,37 @@ public sealed interface ExampleMessage extends Message {
             implements ExampleMessage, Reported {}
 
     /**
+     * No row of the behavior would come out differently if the fold pointed at stopped after its
+     * first element. What a row of fewer than two elements cannot tell from the fold, since it
+     * runs the step once at most.
+     */
+    @Code(DiagnosticCode.E1939)
+    record NoRowTellsTheFoldFromItsFirstStep(String behavior)
+            implements ExampleMessage, Reported {}
+
+    /**
+     * No row of the behavior would come out differently if every step of the fold pointed at were
+     * handed the seed in the place of what the step before it answered.
+     */
+    @Code(DiagnosticCode.E1939)
+    record NoRowTellsTheFoldFromStepsOnTheSeed(String behavior)
+            implements ExampleMessage, Reported {}
+
+    /**
+     * The same as {@link NoRowTellsTheFoldFromItsFirstStep}, of a fold in code this build holds no
+     * source of: pointed at the behavior, and saying which definition wrote the fold, which is
+     * what tells two folds out of sight apart.
+     */
+    @Code(DiagnosticCode.E1939)
+    record NoRowTellsAFoldOutOfSightFromItsFirstStep(String definition, String behavior)
+            implements ExampleMessage, Reported {}
+
+    /** The same as {@link NoRowTellsTheFoldFromStepsOnTheSeed}, of a fold out of sight. */
+    @Code(DiagnosticCode.E1939)
+    record NoRowTellsAFoldOutOfSightFromStepsOnTheSeed(String definition, String behavior)
+            implements ExampleMessage, Reported {}
+
+    /**
      * Marked at the row that came to the value, beside the sentence about it. A row written without
      * a name is numbered within its source, so the number alone can be another source's row; where
      * it is written is what this mark adds.

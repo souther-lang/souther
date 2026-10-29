@@ -59,7 +59,7 @@ public final class Plans {
                 plan.byComparison(), plan.armsByNode(), plan.answered(), everywhere,
                 plan.whereEachArmsForkIsWritten(), plan.comparisons(), plan.numbering(),
                 plan.methods(), plan.carried(), plan.replacements(), plan.oneValue(),
-                plan.armsAsWritten());
+                plan.armsAsWritten(), plan.walks(), plan.walksByNode(), plan.walkRewrites());
     }
 
     /**
@@ -86,7 +86,7 @@ public final class Plans {
                 plan.byComparison(), arms, plan.answered(), plan.mayRepeat(),
                 plan.whereEachArmsForkIsWritten(), plan.comparisons(), plan.numbering(),
                 plan.methods(), plan.carried(), plan.replacements(), plan.oneValue(),
-                plan.armsAsWritten());
+                plan.armsAsWritten(), plan.walks(), plan.walksByNode(), plan.walkRewrites());
     }
 
     /** The nodes this plan numbered arms for, which is what a test counting forks walks. */

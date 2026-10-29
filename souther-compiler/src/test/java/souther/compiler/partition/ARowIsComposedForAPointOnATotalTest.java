@@ -309,7 +309,10 @@ class ARowIsComposedForAPointOnATotalTest {
      */
     @Test
     void aTotalUnderADenseRunHeldAwayFromAValueIsReached() {
-        assertEquals(List.of("([Money(0.5m)])"),
+        // Shared between two elements rather than carried by one: of the rows at the point, the one
+        // chosen is the one that also tells the sum's fold apart, which a row of one element does
+        // not.
+        assertEquals(List.of("([Money(0.3m), Money(0.2m)])"),
                 rowsAt("overADenseRunHeldAwayFromNought", " ON"),
                 "nothing names the first decimal above nought, and the total is a decimal above it");
     }
@@ -349,15 +352,17 @@ class ARowIsComposedForAPointOnATotalTest {
      *
      * <p>From the second on, a list of one keeps nothing, so the first count that reaches five is
      * two, the first of them left at the start. Kept from the far end, the two that carry it are
-     * the last two the row writes, so of a list of three the first is the one left out.
+     * the last two the row writes, so of a list of three the first is the one left out. The two
+     * share it rather than one carrying the whole: of the rows at the point, that is the one that
+     * also tells the sum's fold from one handed the seed.
      */
     @Test
     void aTotalOfTheElementsKeptByPositionIsCarriedWhereTheyStand() {
         assertEquals(List.of("([0, 5])"), rowsAt("fromTheSecondOn", " ON"),
                 "the element before the count carries nothing");
-        assertEquals(List.of("(Three { ns = [0, 0, 5] })"), rowsAt("overTheLastTwoOfThree", " ON"),
-                "the whole of it on the last element the row writes, the first of those kept from"
-                        + " the far end");
+        assertEquals(List.of("(Three { ns = [0, 3, 2] })"), rowsAt("overTheLastTwoOfThree", " ON"),
+                "the whole of it on the last two elements the row writes, the first of those kept"
+                        + " from the far end");
     }
 
     /**

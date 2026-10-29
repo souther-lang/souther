@@ -6,6 +6,9 @@ import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
+import souther.compiler.coverage.Rewriting;
+import souther.compiler.coverage.RunRewrite;
+import souther.compiler.coverage.WalkRewrites;
 import souther.compiler.flow.Ways;
 import souther.compiler.meaning.PieceDemand;
 import souther.compiler.meaning.Quantity;
@@ -87,6 +90,8 @@ import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.function.ToIntFunction;
+import java.util.stream.Stream;
 
 /**
  * Rows for the classes and the arms a caller says are owed one.
@@ -1261,12 +1266,10 @@ public final class Generator {
         ObservedRun run(RowToRun row);
 
         /**
-         * What running {@code row} answered with the arms at {@code replacing}'s sites answering
-         * as the parts it maps them to, or empty where nothing can run it. Nothing runs here unless
-         * a way to run rows says otherwise.
+         * What running {@code row} answered under {@code asked}, or empty where nothing can run
+         * it. Nothing runs here unless a way to run rows says otherwise.
          */
-        default Optional<AnswerObservation> runReplacing(RowToRun row,
-                                                         Map<Integer, Integer> replacing) {
+        default Optional<AnswerObservation> runReplacing(RowToRun row, Rewriting asked) {
             return Optional.empty();
         }
 
@@ -1281,10 +1284,11 @@ public final class Generator {
         /**
          * Every rewrite a row whose run went where {@code ran} did is asked, and that
          * {@link #runReplacing} can be asked for: the questions the measure of the rows written
-         * puts to such a row ({@link ArmReplacements#askedOfARun}). None unless a way to run rows
-         * has the classes and the plan to say which.
+         * puts to such a row ({@link ArmReplacements#askedOfARun}, {@link
+         * WalkRewrites#askedOfARun}). None unless a way to run rows has the classes and the plan
+         * to say which.
          */
-        default List<ArmReplacements.Rewrite> rewritesThrough(AlignedObservation ran) {
+        default List<RunRewrite> rewritesThrough(AlignedObservation ran) {
             return List.of();
         }
 
@@ -1343,7 +1347,7 @@ public final class Generator {
      *
      * <p>What a search may spend is counted in the runs it makes, and a row run already costs
      * nothing. So a search with a figure of its own runs through {@link #run(RowToRun, Spend)}
-     * and {@link #runReplacing(RowToRun, Map, Spend)}, which ask it to spend only for a run not
+     * and {@link #runReplacing(RowToRun, Rewriting, Spend)}, which ask it to spend only for a run not
      * made before: the figure stays the search's, and what is free is decided here, once, for the
      * row and for the row under a rewrite alike.
      */
@@ -1354,8 +1358,8 @@ public final class Generator {
         private final Map<Replaced, Optional<AnswerObservation>> replaced =
                 new ConcurrentHashMap<>();
 
-        /** One row as it is written, and the sites a run of it answers with a sibling at. */
-        private record Replaced(List<String> written, Map<Integer, Integer> replacing) {}
+        /** One row as it is written, and what a run of it asks the classes to rewrite. */
+        private record Replaced(List<String> written, Rewriting asked) {}
 
         private RunOnce(Trial trial) {
             this.trial = trial;
@@ -1374,18 +1378,15 @@ public final class Generator {
         }
 
         /**
-         * What running {@code row} with the arms at {@code replacing}'s sites rewritten answered,
-         * where it was run so already or {@code spend} allows a run; null where it needed a run
-         * and {@code spend} had none.
+         * What running {@code row} under {@code asked} answered, where it was run so already or
+         * {@code spend} allows a run; null where it needed a run and {@code spend} had none.
          */
-        Optional<AnswerObservation> runReplacing(RowToRun row, Map<Integer, Integer> replacing,
-                                                 Spend spend) {
-            Optional<AnswerObservation> already =
-                    replaced.get(new Replaced(writtenAs(row), replacing));
+        Optional<AnswerObservation> runReplacing(RowToRun row, Rewriting asked, Spend spend) {
+            Optional<AnswerObservation> already = replaced.get(new Replaced(writtenAs(row), asked));
             if (already != null) {
                 return already;
             }
-            return spend.aRun() ? runReplacing(row, replacing) : null;
+            return spend.aRun() ? runReplacing(row, asked) : null;
         }
 
         @Override
@@ -1406,15 +1407,14 @@ public final class Generator {
         }
 
         @Override
-        public Optional<AnswerObservation> runReplacing(RowToRun row,
-                                                        Map<Integer, Integer> replacing) {
-            Replaced asked = new Replaced(writtenAs(row), replacing);
-            Optional<AnswerObservation> already = replaced.get(asked);
+        public Optional<AnswerObservation> runReplacing(RowToRun row, Rewriting asked) {
+            Replaced key = new Replaced(writtenAs(row), asked);
+            Optional<AnswerObservation> already = replaced.get(key);
             if (already != null) {
                 return already;
             }
-            Optional<AnswerObservation> now = trial.runReplacing(row, replacing);
-            replaced.put(asked, now);
+            Optional<AnswerObservation> now = trial.runReplacing(row, asked);
+            replaced.put(key, now);
             return now;
         }
 
@@ -1424,7 +1424,7 @@ public final class Generator {
         }
 
         @Override
-        public List<ArmReplacements.Rewrite> rewritesThrough(AlignedObservation ran) {
+        public List<RunRewrite> rewritesThrough(AlignedObservation ran) {
             return trial.rewritesThrough(ran);
         }
 
@@ -2234,6 +2234,96 @@ public final class Generator {
                             inOrder(through, at -> movedFrom(arm.seenThrough().get(at), axes,
                                     purposes, looking, check, answers))));
                 }
+                // From the rows seen entering the walk, which is where a run of it is known to start
+                // whatever a reading of the way in could state. A rewrite of a walk parts from it
+                // only from a second step on, so a list those rows held grown by one element and
+                // then by two is asked first. Then a row in each class of each position, as for a
+                // body answering one value: a walk over a list the rows hold fixed parts from its
+                // rewrite where the value its step reads lies, which is what the classes divide.
+                // And last a row with one position moved.
+                case ReplacementOwed.OfAWalk walk -> {
+                    List<Purpose> purposes = List.of(new Purpose.ForAReplacement(asked));
+                    // A candidate grown from each of the first rows in turn, the rows holding the
+                    // most elements first, and the rows after them once those are asked: the
+                    // first candidates of a row are the new element a rows' lists were grown with,
+                    // and what one row's list is does not change whether that element is told by
+                    // the rewrite, so turns among every row would spend the runs on the same
+                    // elements once for each row written. A row already of one element is a step
+                    // from a row of two, where both rewrites can part from the walk, and a row
+                    // grown from nothing reaches two only with both elements chosen here. In turn
+                    // and not one row after another, since what a row holds may be what keeps
+                    // every list grown from it answering alike.
+                    // Counted in the list the walk goes over where that is known: the elements of
+                    // a list inside one of them are no step of the walk.
+                    List<List<ObservedValue>> from = mostElementsFirst(walk.seenThrough(),
+                            row -> walk.over().isEmpty() ? elementsHeld(row)
+                                    : elementsWalked(row, walk.over(), axes.subject()));
+                    int through = from.size();
+                    Examining lists = new Examining(looking);
+                    // One growth for the search: what stands for a type is made once, as far as the
+                    // search asks.
+                    Growth growth = aListGrownAmong(walk.ranWith(), axes.subject(), check, looking,
+                            NearbyValues.Put.BEFORE_AND_AFTER);
+                    Beside growing = grownTwice(growth, walk.over());
+                    // The lists the walk is not known to go over are grown last, since a step may
+                    // read what another list holds, and no list grown there is one the walk is
+                    // known to take a second step in.
+                    Examining everyList = new Examining(looking);
+                    Beside growingAny = walk.over().isEmpty() ? null : grownTwice(growth, List.of());
+                    // And beside each, a string the body parts with a piece more, and one put as
+                    // pieces the body demands: a walk over the pieces is a walk over a list no
+                    // input holds, and a string of more pieces is how it is handed more elements.
+                    // And a list as long as the row's with one element changed for one the rows
+                    // hold elsewhere: what the step does with one element and with another is what
+                    // a rewrite is seen by.
+                    Examining pieces = new Examining(looking);
+                    Examining parted = new Examining(looking);
+                    Examining changed = new Examining(looking);
+                    Beside aPieceMore = (value, type, reading, parameter) ->
+                            NearbyValues.withAPieceMore(value, type, reading, parameter,
+                                    walk.separators());
+                    Beside anElementChanged = (value, type, reading, _) ->
+                            NearbyValues.withAnElementChanged(value, type, reading,
+                                    walk.ranWith());
+                    List<Iterator<GeneratedRow>> grownFromEach = new ArrayList<>();
+                    List<Iterator<GeneratedRow>> grownFromTheRest = new ArrayList<>();
+                    for (int at = 0; at < from.size(); at++) {
+                        List<ObservedValue> each = from.get(at);
+                        List<Iterator<GeneratedRow>> into =
+                                at < ROWS_GROWN_IN_TURN ? grownFromEach : grownFromTheRest;
+                        into.add(candidatesBeside(each, axes, purposes, check, answers,
+                                growing, lists));
+                        into.add(candidatesBeside(each, axes, purposes, check, answers,
+                                anElementChanged, changed));
+                        if (!walk.separators().isEmpty()) {
+                            into.add(candidatesBeside(each, axes, purposes, check,
+                                    answers, aPieceMore, parted));
+                        }
+                        into.add(piecesDemanded(each, axes, purposes, looking, check,
+                                answers, read.piecesAttempted(), pieces));
+                    }
+                    GeneratedRow seen = taking(looking, grownFromEach);
+                    for (int at = 0; at < axes.size() && seen == null; at++) {
+                        for (int cls = 0; cls < axes.get(at).classes().size(); cls++) {
+                            Pins pins = Pins.of(axes, Map.of(at, cls));
+                            seen = looking.tookFromSearching(() -> search(axes, pins, purposes,
+                                    origins, (_, _) -> true, check, references, answers,
+                                    HeldTogether.Asked.NOTHING, row -> looking.of(row, null), true,
+                                    goingOn.answersNothing()));
+                            if (seen != null) {
+                                break;
+                            }
+                        }
+                    }
+                    List<Iterator<GeneratedRow>> last = new ArrayList<>(grownFromTheRest);
+                    last.add(inOrder(through, at -> movedFrom(from.get(at), axes, purposes,
+                            looking, check, answers)));
+                    if (growingAny != null) {
+                        last.add(inOrder(through, at -> candidatesBeside(from.get(at), axes,
+                                purposes, check, answers, growingAny, everyList)));
+                    }
+                    yield seen != null ? seen : taking(looking, last);
+                }
                 case ReplacementOwed.ByOneAnswer one -> {
                     // Where the composition stands before anything is asked of it first: a body
                     // answering one value is told apart by any row it answers differently, and a
@@ -2413,6 +2503,16 @@ public final class Generator {
      */
     private static Beside aListGrown(InputsRowsRanWith ranWith, MeasuredInput subject,
                                      CandidateCheck check, ReplacementWitness looking) {
+        Growth growth = aListGrownAmong(ranWith, subject, check, looking, NearbyValues.Put.AFTER);
+        return (value, type, reading, _) ->
+                growth.of(value, type, reading, NearbyValues.Lists.ANY, null);
+    }
+
+    /** {@link #aListGrown}, the element put as {@code where} says, in the lists of the kind the
+     *  caller names. */
+    private static Growth aListGrownAmong(InputsRowsRanWith ranWith, MeasuredInput subject,
+                                          CandidateCheck check, ReplacementWitness looking,
+                                          NearbyValues.Put where) {
         // What stands for a type is the same for every row and list the search grows, so it is one
         // for the search and made as far as the search asks, its stops said as they are met. A
         // type's values are bounded as a composing's candidates are, and the bound is said as that
@@ -2434,8 +2534,100 @@ public final class Generator {
                                 WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(most)));
                     }
                 });
-        return (value, type, reading, _) -> NearbyValues.grown(value, type, reading, ranWith,
-                elements::of);
+        return (value, type, reading, which, within) -> within == null
+                ? NearbyValues.grown(value, type, reading, ranWith, elements::of, where, which)
+                : NearbyValues.grownWithin(value, type, reading, ranWith, elements::of, where,
+                        which, within);
+    }
+
+    /** How many elements the lists in {@code row} hold between them, at every depth. */
+    private static int elementsHeld(List<ObservedValue> row) {
+        int n = 0;
+        for (ObservedValue each : row) {
+            n += elementsIn(each);
+        }
+        return n;
+    }
+
+    /** {@code rows} with the one {@code held} counts the most elements in first, the order of the
+     *  rest kept; each row is counted once. */
+    private static List<List<ObservedValue>> mostElementsFirst(
+            List<List<ObservedValue>> rows, ToIntFunction<List<ObservedValue>> held) {
+        record Counted(List<ObservedValue> inputs, int elements) {}
+        return rows.stream().map(inputs -> new Counted(inputs, held.applyAsInt(inputs)))
+                .sorted(Comparator.comparingInt(Counted::elements).reversed())
+                .map(Counted::inputs).toList();
+    }
+
+    /** How many elements the lists {@code over} names hold in {@code row}, between them. */
+    private static int elementsWalked(List<ObservedValue> row, List<TermPath> over,
+                                      MeasuredInput subject) {
+        int n = 0;
+        for (TermPath each : over) {
+            int at = subject.parameters().indexOf(each.head());
+            if (at >= 0 && at < row.size()) {
+                n += NearbyValues.heldAt(row.get(at), subject.types().get(at),
+                        subject.ruleReading(), each);
+            }
+        }
+        return n;
+    }
+
+    private static int elementsIn(ObservedValue value) {
+        return (value instanceof ObservedValue.Sequence sequence ? sequence.elements().size() : 0)
+                + elementsHeld(partsOf(value));
+    }
+
+    /** What {@code value} is made of, one level down: its elements, its fields, its keys and
+     *  values. */
+    private static List<ObservedValue> partsOf(ObservedValue value) {
+        return switch (value) {
+            case ObservedValue.Sequence sequence -> sequence.elements();
+            case ObservedValue.Constructed constructed ->
+                    List.copyOf(constructed.fields().values());
+            case ObservedValue.Mapping mapping -> mapping.entries().stream()
+                    .flatMap(each -> Stream.of(each.key(), each.value())).toList();
+            case ObservedValue.Bool _, ObservedValue.Integer _, ObservedValue.Decimal _,
+                 ObservedValue.Text _, ObservedValue.Temporal _, ObservedValue.Unit _,
+                 ObservedValue.Absent _, ObservedValue.Unknown _, ObservedValue.Truncated _ ->
+                    List.of();
+        };
+    }
+
+    /**
+     * The values of a row grown by one element and then by two, in the order a walk can be seen to
+     * go past its first element on first ({@link GrownTwice}), the new element put before the
+     * others as well as after: a walk stopping after its first element parts from one that goes on
+     * only where what the elements after the first do differs from what the first does.
+     *
+     * <p>In the lists {@code over} names where the walk is known to go over them, and in none of
+     * the others: a list that is not walked is not where a second step is made. Every list, where
+     * the walk is not known to go over one list the input holds.
+     */
+    private static Beside grownTwice(Growth growth, List<TermPath> over) {
+        if (over.isEmpty()) {
+            return (value, type, reading, _) -> GrownTwice.of(value,
+                    (each, which) -> growth.of(each, type, reading, which, null));
+        }
+        return (value, type, reading, parameter) -> {
+            List<Iterator<ObservedValue>> inEach = new ArrayList<>();
+            for (TermPath each : over) {
+                if (each.head().equals(parameter)) {
+                    inEach.add(GrownTwice.of(value,
+                            (grown, which) -> growth.of(grown, type, reading, which, each)));
+                }
+            }
+            return NearbyValues.flat(inEach.iterator(), Function.identity());
+        };
+    }
+
+    /** The values a value becomes with a list of the kind {@code which} names one element
+     *  longer, in the list {@code within} names where one is. */
+    @FunctionalInterface
+    private interface Growth {
+
+        Iterator<ObservedValue> of(ObservedValue seen, Type type, RuleReadingContext reading,
+                                   NearbyValues.Lists which, TermPath within);
     }
 
     /** The values a candidate puts at the position of one parameter, given the value the run had
@@ -3019,6 +3211,13 @@ public final class Generator {
      * its own, not a constant inside a loop.
      */
     private static final int MOST_REPAIRS = 64;
+
+    /**
+     * How many rows a search for a walk's rewrite grows lists from in turn before it goes on to the
+     * others. Every row is grown from; this is only which are asked first, so that the share of
+     * the runs the first candidates get does not shrink with the rows a model writes.
+     */
+    private static final int ROWS_GROWN_IN_TURN = 3;
 
     /**
      * The classes a row is composed for, in the order a search settles them.
@@ -9985,23 +10184,18 @@ public final class Generator {
             if (body == null) {
                 return stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE, runsReached());
             }
-            AnswerObservation rewritten;
-            switch (asked) {
-                case ReplacementOwed.OfAnArm arm -> {
-                    Optional<AnswerObservation> answered =
-                            trial.runReplacing(row.toRun(), arm.replacing(), this::spend);
-                    if (answered == null) {
-                        return stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE,
-                                runsReached());
-                    }
-                    if (answered.isEmpty()) {
-                        return stop(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK,
-                                List.of());
-                    }
-                    rewritten = answered.get();
-                }
-                case ReplacementOwed.ByOneAnswer one ->
-                        rewritten = new AnswerObservation.Answered(one.answer());
+            if (rewriteLeavesAnswerAsItWas(body)) {
+                alike = true;
+                return Acceptance.PASSED;
+            }
+            AnswerObservation rewritten = switch (asked) {
+                case ReplacementOwed.OfAnArm arm -> ranUnder(row, Rewriting.ofArms(arm.replacing()));
+                case ReplacementOwed.OfAWalk walk ->
+                        ranUnder(row, Rewriting.ofWalks(walk.replacing()));
+                case ReplacementOwed.ByOneAnswer one -> new AnswerObservation.Answered(one.answer());
+            };
+            if (rewritten == null) {
+                return Acceptance.STOPPED;
             }
             return switch (trial.change(body.answer(), rewritten)) {
                 case CHANGED -> Acceptance.TAKEN;
@@ -10022,9 +10216,47 @@ public final class Generator {
             };
         }
 
+        /**
+         * Whether the rewrite is shown to answer as the body did without running it: the body came
+         * back with an answer and was recorded not going where the rewrite changes anything. A
+         * rewrite of a walk changes a run only from a second element of the walk on, and one of an
+         * arm only in a run through the arm. A run that did not answer, or that nothing recorded,
+         * shows neither, since it may have gone further than it was seen to.
+         */
+        private boolean rewriteLeavesAnswerAsItWas(ObservedRun body) {
+            if (!(body.answer() instanceof AnswerObservation.Answered)
+                    || !(body.watched() instanceof Watched.Ran(AlignedObservation seen))) {
+                return false;
+            }
+            return switch (asked) {
+                case ReplacementOwed.OfAWalk walk ->
+                        walk.occurrences().stream().noneMatch(seen::wentOn);
+                case ReplacementOwed.OfAnArm arm -> arm.occurrences().stream().noneMatch(seen::lit);
+                case ReplacementOwed.ByOneAnswer _ -> false;
+            };
+        }
+
         /** The body run on {@code row}, once per line, or null where no run is left. */
         private ObservedRun run(GeneratedRow row) {
             return trial.run(row.toRun(), this::spend);
+        }
+
+        /**
+         * What {@code row} answered run under {@code rewriting}, or null where the search stops
+         * there: no run left, or a run that did not come back, each kept as the way it stopped.
+         */
+        private AnswerObservation ranUnder(GeneratedRow row, Rewriting rewriting) {
+            Optional<AnswerObservation> answered =
+                    trial.runReplacing(row.toRun(), rewriting, this::spend);
+            if (answered == null) {
+                stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE, runsReached());
+                return null;
+            }
+            if (answered.isEmpty()) {
+                stop(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK, List.of());
+                return null;
+            }
+            return answered.get();
         }
 
         /** One more run of this search's own, where one is left. */
@@ -10259,8 +10491,8 @@ public final class Generator {
         private final Set<List<String>> ranked = new HashSet<>();
         /** Where the first row ranked went: the arms it passed and how its conditions came out. */
         private AlignedObservation way;
-        /** The rewrites of the arms on that way, which every row compared is asked. */
-        private List<ArmReplacements.Rewrite> rewrites = List.of();
+        /** The rewrites of the arms and the walks on that way, which every row compared is asked. */
+        private List<RunRewrite> rewrites = List.of();
         /** The row taken so far, and how many rewrites were told apart on it. */
         private List<FixtureTemplate> best;
         private int bestTold = -1;
@@ -10402,7 +10634,7 @@ public final class Generator {
                 way = seen;
                 rewrites = trial.rewritesThrough(seen);
             } else if (!(ran.watched() instanceof Watched.Ran(AlignedObservation seen))
-                    || !seen.equals(way)) {
+                    || !seen.wentTheWayOf(way)) {
                 // Only a row that goes the way the first one did, through the same arms with every
                 // condition coming out the same.
                 return onward();
@@ -10413,7 +10645,7 @@ public final class Generator {
             int told = 0;
             for (int i = 0; i < rewrites.size() && told + rewrites.size() - i > bestTold; i++) {
                 Optional<AnswerObservation> now =
-                        trial.runReplacing(row, rewrites.get(i).replacing());
+                        trial.runReplacing(row, rewrites.get(i).asked());
                 if (now.isPresent()
                         && trial.change(ran.answer(), now.get()) == AnswerChange.CHANGED) {
                     told++;

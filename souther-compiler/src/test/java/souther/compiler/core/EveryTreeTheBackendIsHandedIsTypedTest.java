@@ -3,6 +3,7 @@ package souther.compiler.core;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Scopes;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.test.ClosedWorldContract;
@@ -122,7 +123,8 @@ class EveryTreeTheBackendIsHandedIsTypedTest {
                 behavior run : (xs: List<Int>) -> List<Bool>
                 let run (xs) = List.map(n -> n > 0, List.filter(n -> n > 1, xs))
                 """, "Main");
-        Core body = c.db().ask(new Bodies.CheckedBehavior("demo", "run")).value().body();
+        Core built = c.db().ask(new Bodies.CheckedBehavior("demo", "run")).value().body();
+        Core body = GrowingFold.joins(built, Scopes.resolved(c.db(), "demo").value().theWalk());
         List<Core.Block> steps = new ArrayList<>();
         each(body, node -> {
             if (node instanceof Core.Call call && call.fn() == Core.Emitted.BUILD_LIST) {
@@ -290,11 +292,13 @@ class EveryTreeTheBackendIsHandedIsTypedTest {
      * Every body the models this repository carries hand on to be emitted: each behavior's, and
      * each definition a module's check emits as a method of its own — a helper, a value.
      *
-     * <p>These are the answers of the queries that rewrite a checked body for the backend, which
-     * {@code WhoMayRewriteACheckedBodyForTheBackendTest} in {@code souther-architecture-test} holds
-     * to be the only ones. Every model and not only the conformance ones, which are written against
-     * what the language declares and have no reason to write two walks in a row: the compilations
-     * the JVM already holds, so the population is asked and not compiled again.
+     * <p>These are the answers of the queries that rewrite a checked body for the backend, and the
+     * form the backend emits them in where no run is recorded, which is the same bodies with the
+     * walks they hold joined. {@code WhoMayRewriteACheckedBodyForTheBackendTest} in
+     * {@code souther-architecture-test} holds those to be the only places a body is rewritten.
+     * Every model and not only the conformance ones, which are written against what the language
+     * declares and have no reason to write two walks in a row: the compilations the JVM already
+     * holds, so the population is asked and not compiled again.
      */
     private static List<Core> trees() {
         if (trees != null) {
@@ -303,11 +307,14 @@ class EveryTreeTheBackendIsHandedIsTypedTest {
         List<Core> out = new ArrayList<>();
         for (Compilation c : RepositoryModels.all()) {
             for (String module : c.modules()) {
+                TheWalk walk = Scopes.resolved(c.db(), module).value().theWalk();
                 Bodies.ModuleCheck.Of checkedModule =
                         c.db().ask(new Bodies.ModuleCheck(module)).value();
                 if (checkedModule != null) {
-                    checkedModule.emittedDefinitions().values()
-                            .forEach(definition -> out.add(definition.body()));
+                    checkedModule.emittedDefinitions().values().forEach(definition -> {
+                        out.add(definition.body());
+                        out.add(GrowingFold.joins(definition.body(), walk));
+                    });
                 }
                 Set<String> names = c.declaredBehaviors(module);
                 if (names == null) {
@@ -318,6 +325,7 @@ class EveryTreeTheBackendIsHandedIsTypedTest {
                             c.db().ask(new Bodies.CheckedBehavior(module, behavior)).value();
                     if (checked != null && checked.body() != null) {
                         out.add(checked.body());
+                        out.add(GrowingFold.joins(checked.body(), walk));
                     }
                 }
             }

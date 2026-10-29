@@ -3,12 +3,14 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.evaluate.BoundUnderEvaluation;
+import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.semantics.CaseMapping;
 
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -81,12 +83,21 @@ class ARewriteOfWhatKeepsSomePiecesIsToldByPiecesMeetingWhatTheBodyDemandsTest {
         return all.iterator().next();
     }
 
+    /**
+     * What the searches for the rewrites of arms the rows left open came to. The walks over the
+     * pieces are rewritten too, and whether a string of more pieces tells them apart is theirs to
+     * say, not what is asked here.
+     */
     private static Collection<Replacements.Searched> searchedAll(String model, String module,
                                                                  String behavior) {
         Compilation c = Compilation.ofSource(model, "Main");
         c.measure(Adequacy.Asked.fullReport());
         c.answerEverything();
-        return c.db().ask(new Replacements.Witnesses(module, behavior)).value().values();
+        return c.db().ask(new Replacements.Witnesses(module, behavior)).value().entrySet()
+                .stream()
+                .filter(each -> each.getKey() instanceof Replacement.OfAnArm)
+                .map(Map.Entry::getValue)
+                .toList();
     }
 
     /** `cto@acme.example.com` keeps `cto` under the rewrite, which is no domain name. */

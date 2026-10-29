@@ -18,6 +18,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -178,7 +179,11 @@ class AConditionHoldingAPieceOfASplitToAPatternDividesTheStringTest {
         return condition(PREDICATES.get(held), quantifier, WINDOWS.get(window)).written();
     }
 
-    /** A row on each side of the condition meets both classes, and nothing is left owed. */
+    /**
+     * A row on each side of the condition meets both classes, and nothing is left owed. The pieces
+     * are walked, so two rows of two pieces, the one that is a code first and then last, tell the
+     * walk from one stopping after its first piece and from one handed the seed.
+     */
     @Test
     void aRowOnEachSideMeetsBothClasses() {
         String report = report(SOME_CODE, """
@@ -186,6 +191,8 @@ class AConditionHoldingAPieceOfASplitToAPatternDividesTheStringTest {
                 example hasCode
                     | "one" : (Codes("AB7")) -> true
                     | "none" : (Codes("")) -> false
+                    | "a code second" : (Codes(";AB7")) -> true
+                    | "a code first" : (Codes("AB7;")) -> true
                 """);
         assertTrue(report.contains("equivalence partitions 2/2"), report);
         assertTrue(report.contains("adequacy: satisfied"), report);
@@ -441,12 +448,21 @@ class AConditionHoldingAPieceOfASplitToAPatternDividesTheStringTest {
      */
     @Test
     void theObligationsBesideAreTheOnesTheConditionOnTheWholeStringLeaves() {
+        // Without what the rewrites came to: the pieces are walked, and a walk is rewritten where
+        // the whole string is not, which is the replacement measure's and no obligation of the
+        // comparison's.
         Function<String, String> reported = condition -> {
             Compilation compilation = measured(WITH_A_NUMBER.formatted(condition));
             return AdequacyReport.of(compilation)
                     .human(SourceRendering.namedByIdentity(compilation.texts()))
                     .replaceAll("predicate@\\d+:\\d+", "predicate")
-                    .replaceAll("`list\\.s/[^`]*`", "`list.s/the rule`");
+                    .replaceAll("`list\\.s/[^`]*`", "`list.s/the rule`")
+                    .lines()
+                    .filter(line -> !line.strip().startsWith("replacement ")
+                            && !line.contains("no row would come out differently if the fold")
+                            && !line.startsWith("adequacy:")
+                            && !line.matches("\\d+ gaps? marked .*"))
+                    .collect(Collectors.joining("\n"));
         };
         String ofThePieces = reported.apply(
                 "List.any(t -> String.matches(\"[A-Z]{2}[0-9]\", t), String.split(\";\", list.s))");

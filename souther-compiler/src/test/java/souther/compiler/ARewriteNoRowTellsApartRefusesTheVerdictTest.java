@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.Replacement;
+import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
@@ -235,13 +237,21 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
                 () -> "a row composed for each says which: " + block);
     }
 
+    /**
+     * Of the body answering one value only: the fold under the sum is walked over one element at
+     * most on these rows, which is a question of its own
+     * ({@link AFoldOwesARowWhoseStepReadsWhatItCarriedTest}).
+     */
     @Test
     void aSumWhoseRowsAnswerTwoValuesTellsOneAnswerApart() {
         Compilation compilation = compiled(SUM + """
                     | "one of five" : ([Item { amount = Amount(5), kind = Travel }]) -> Sum(5)
                 """);
 
-        assertEquals(0, rewritesUnnoticed(compilation),
+        assertEquals(0, Adequacy.accountOf(compilation.db(), "example.total").stream()
+                        .filter(each -> each.about() instanceof About.ARewriteNoRowTellsApart
+                                rewrite && rewrite.replacement() instanceof Replacement.ByOneAnswer)
+                        .count(),
                 Adequacy.accountOf(compilation.db(), "example.total").toString());
     }
 

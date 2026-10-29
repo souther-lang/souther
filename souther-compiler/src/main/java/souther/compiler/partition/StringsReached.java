@@ -163,7 +163,7 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
      * number reached when asked alone may be reached by no string that keeps the rule's number
      * where it is held.
      */
-    private static boolean bindsNothing(Position at, PositionBounds own) {
+    static boolean bindsNothing(Position at, PositionBounds own) {
         for (PositionBounds other : at.bounds()) {
             if (other != own && !leavesEveryCount(other.rangeLeft())) {
                 return false;

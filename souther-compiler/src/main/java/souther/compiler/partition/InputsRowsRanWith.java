@@ -1,5 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.Shape;
+import souther.compiler.check.TypeView;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
@@ -42,6 +45,73 @@ public final class InputsRowsRanWith {
         public Taken {
             Objects.requireNonNull(type, "a position has a type");
             Objects.requireNonNull(value, "a row's input is some value");
+        }
+    }
+
+    /**
+     * {@code value}, at a position of {@code type}, and every value it holds at a position of its
+     * own, at any depth: an element of a list, a field of a record, the case of a sum, what an
+     * optional holds, a key and a value of a map. Each stands at a position of its own type as
+     * surely as the whole stands at its own, and a list grown by a value another row held at such a
+     * position is a list the rows already speak of.
+     *
+     * <p>Read the way the values a run holds are read back, through the type the position has: a
+     * name the type wears around another is taken off to see what the value holds, and the value is
+     * kept as it was met. A value nothing was read of holds nothing to take.
+     */
+    public static void takenAt(Type type, ObservedValue value, RuleReadingSource source,
+                               List<Taken> out) {
+        out.add(new Taken(type, value));
+        if (value.unread() != null) {
+            return;
+        }
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        ObservedValue inside = ObservedValue.wearing(view.wrappers(), value);
+        if (inside == null || inside.unread() != null) {
+            return;
+        }
+        switch (view.shape()) {
+            case Shape.Sequence sequence -> {
+                if (inside instanceof ObservedValue.Sequence held) {
+                    for (ObservedValue element : held.elements()) {
+                        takenAt(sequence.element(), element, source, out);
+                    }
+                }
+            }
+            case Shape.Product product -> {
+                if (inside instanceof ObservedValue.Constructed made
+                        && made.type().equals(product.name())) {
+                    product.fields().forEach((name, fieldType) -> {
+                        ObservedValue held = made.field(name);
+                        if (held != null) {
+                            takenAt(fieldType, held, source, out);
+                        }
+                    });
+                }
+            }
+            case Shape.Sum sum -> {
+                if (inside instanceof ObservedValue.Constructed made
+                        && sum.reaches().cases().contains(made.type())) {
+                    takenAt(Type.ref(made.type()), inside, source, out);
+                }
+            }
+            case Shape.Optional optional -> {
+                if (!(inside instanceof ObservedValue.Absent)) {
+                    takenAt(optional.element(), inside, source, out);
+                }
+            }
+            case Shape.Mapping mapping -> {
+                if (inside instanceof ObservedValue.Mapping held) {
+                    for (ObservedValue.Entry each : held.entries()) {
+                        takenAt(mapping.key(), each.key(), source, out);
+                        takenAt(mapping.value(), each.value(), source, out);
+                    }
+                }
+            }
+            case Shape.Scalar _, Shape.Unit _, Shape.Unresolved _, Shape.Cases _, Shape.Tuple _,
+                 Shape.Function _, Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _,
+                 Shape.Undecided _ -> { }
         }
     }
 

@@ -46,8 +46,13 @@ import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.OutcomeName;
 import souther.compiler.coverage.RunBodies;
+import souther.compiler.coverage.Rewriting;
 import souther.compiler.coverage.RunRecord;
+import souther.compiler.coverage.RunRewrite;
 import souther.compiler.coverage.SeenConditionOutcome;
+import souther.compiler.coverage.WalkProbe;
+import souther.compiler.coverage.WalkRewrites;
+import souther.compiler.coverage.WalkedNoFurther;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.reach.PathDecision;
@@ -6334,24 +6339,23 @@ public final class Adequacy {
         /**
          * What the search for a row telling {@code untold}'s line from the one beside it came to.
          *
-         * <p>Found by the line the finding is about, in the readings this generation searched. A
-         * finding is made wherever the lines were read and a reading that composed nothing carries
-         * no search, so the answer is the searched reading's — asked of the finding's own, a run
+         * <p>Found by the obligation the finding is about, in every line that reads it
+         * ({@link ARowTellingTheLinesApart#ofObligation}). A finding is made wherever the lines
+         * were read, and a line that composed nothing carries no search, so the answer is the
+         * searched line's — asked of the finding's own, or of whichever line came first, a run
          * that composed a row would report that nothing was offered.
          *
-         * <p>Refused rather than answered where this generation searched no such line. The finding
-         * and the search would then be about different lines, which is two of this compiler's
-         * answers disagreeing rather than a line nothing offers a row for.
+         * <p>Refused rather than answered where this generation searched no such obligation. The
+         * finding and the search would then be about different lines, which is two of this
+         * compiler's answers disagreeing rather than a line nothing offers a row for.
          */
         private static GenerationOutcome tellingApart(About.ALineTheRowsDoNotTellFromAnother untold,
                                                       List<BorderAssessment> edges) {
-            for (BorderAssessment each : edges) {
-                if (each.border().obligation().equals(untold.line().border().obligation())) {
-                    return each.toldApart().outcome(untold.direction());
-                }
-            }
-            throw new IllegalStateException("a finding about a line this generation searched no"
-                    + " reading of: " + untold.line().border().obligation());
+            BorderObligationId obligation = untold.line().border().obligation();
+            return ARowTellingTheLinesApart.ofObligation(edges, obligation)
+                    .orElseThrow(() -> new IllegalStateException("a finding about a line this"
+                            + " generation searched no reading of: " + obligation))
+                    .outcome(untold.direction());
         }
 
         /**
@@ -7389,9 +7393,11 @@ public final class Adequacy {
         }
         SiteNumbering numbering = SiteNumbering.of(checked.numberingIdentity());
         List<CoverageSites.ArmSite> arms = checked.plan().arms(behavior);
+        List<CoverageSites.WalkSite> walks = checked.plan().walks(behavior);
         Predicate<ControlPlace.Arm> unreached =
                 unreachedIn(db.ask(new Arrived(module)).value(), behavior, checked);
         ArmReplacements carried = trials.carried();
+        WalkRewrites walksCarried = trials.walksCarried();
         RowTrials.OfBehavior application = trials.forBehavior(behavior, sig);
         // Each row once, for every search that holds this: a search runs a row to choose it, its
         // reader runs the row it was handed to see where it stands, and the searches of one
@@ -7423,9 +7429,8 @@ public final class Adequacy {
             }
 
             @Override
-            public Optional<AnswerObservation> runReplacing(RowToRun row,
-                                                            Map<Integer, Integer> replacing) {
-                return builtFor(row).flatMap(built -> built.runReplacing(replacing));
+            public Optional<AnswerObservation> runReplacing(RowToRun row, Rewriting asked) {
+                return builtFor(row).flatMap(built -> built.runReplacing(asked));
             }
 
             private Optional<RowTrials.Prepared> builtFor(RowToRun row) {
@@ -7449,9 +7454,28 @@ public final class Adequacy {
                 return application.change(was, now);
             }
 
+            /** What the rows written say of the walks they entered, read once a row asks. */
+            private volatile WalkedNoFurther walkedNoFurther;
+
             @Override
-            public List<ArmReplacements.Rewrite> rewritesThrough(AlignedObservation ran) {
-                return carried.askedOfARun(arms, ran, unreached);
+            public List<RunRewrite> rewritesThrough(AlignedObservation ran) {
+                List<RunRewrite> out = new ArrayList<>(carried.askedOfARun(arms, ran, unreached));
+                if (!walks.isEmpty()) {
+                    out.addAll(walksCarried.askedOfARun(walks, ran, walkedNoFurther()));
+                }
+                return out;
+            }
+
+            private WalkedNoFurther walkedNoFurther() {
+                WalkedNoFurther read = walkedNoFurther;
+                if (read == null) {
+                    Map<String, RowReading> byTarget = db.ask(new RowReadings(module)).value();
+                    read = byTarget == null ? WalkedNoFurther.NOTHING : walkedNoFurtherIn(
+                            RowReadings.readingFor(byTarget, behavior).rowsSeen(),
+                            Optional.of(numbering));
+                    walkedNoFurther = read;
+                }
+                return read;
             }
 
             private static List<Hir.Expr> valuesOf(RowToRun row) {
@@ -7715,10 +7739,12 @@ public final class Adequacy {
             // A row is shown where it is written, which is in this module's own source.
             case About.AnUnansweredRow(RowRef _, SourcePos at) -> Citation.of(at);
             // A rewrite is shown where the reading that made it said, which is the fork for an arm
-            // written in a source this compilation holds and the behavior otherwise.
+            // and the fold for a walk written in a source this compilation holds, and the behavior
+            // otherwise.
             case About.ARewriteNoRowTellsApart(var _, var _, var reportAt, var _, var _) ->
                     switch (reportAt) {
                         case ReplacementReportAnchor.AtTheFork(var fork) -> Sites.placeOf(db, fork);
+                        case ReplacementReportAnchor.AtTheWalk(var walk) -> Sites.placeOf(db, walk);
                         case ReplacementReportAnchor.AtTheBehavior _ ->
                                 whereItIsDeclared(db, module, finding.subject());
                     };
@@ -9829,8 +9855,38 @@ public final class Adequacy {
                                                     phraseFor(construct, rewrite.arm()),
                                                     phraseFor(construct, rewrite.sibling()),
                                                     rewrite.writtenBy().saidIn(module), behavior);
+                                    case ReplacementReportAnchor.AtTheWalk _ ->
+                                            throw new IllegalStateException(
+                                                    "a rewrite of an arm shown at a walk: "
+                                                            + rewrite);
                                 };
                             }
+                            // The fold pointed at where it is written here, and the definition
+                            // that wrote it where it is not; which of the two rewrites it is, is
+                            // the sentence.
+                            case ReplacementAsWritten.OfAWalk rewrite -> switch (reportAt) {
+                                case ReplacementReportAnchor.AtTheWalk _ ->
+                                        switch (rewrite.replacement().how()) {
+                                            case STOPS_AFTER_ONE_STEP -> new ExampleMessage
+                                                    .NoRowTellsTheFoldFromItsFirstStep(behavior);
+                                            case STEPS_FROM_THE_SEED -> new ExampleMessage
+                                                    .NoRowTellsTheFoldFromStepsOnTheSeed(behavior);
+                                        };
+                                case ReplacementReportAnchor.AtTheBehavior _ -> {
+                                    String definition = rewrite.writtenBy().saidIn(module);
+                                    yield switch (rewrite.replacement().how()) {
+                                        case STOPS_AFTER_ONE_STEP -> new ExampleMessage
+                                                .NoRowTellsAFoldOutOfSightFromItsFirstStep(
+                                                definition, behavior);
+                                        case STEPS_FROM_THE_SEED -> new ExampleMessage
+                                                .NoRowTellsAFoldOutOfSightFromStepsOnTheSeed(
+                                                definition, behavior);
+                                    };
+                                }
+                                case ReplacementReportAnchor.AtTheFork _ ->
+                                        throw new IllegalStateException(
+                                                "a rewrite of a walk shown at a fork: " + rewrite);
+                            };
                             case ReplacementAsWritten.ByOneAnswer(var rewrite) ->
                                     new ExampleMessage.NoRowTellsTheBodyFromOneAnswer(
                                             rewrite.answeredBy().identity().shown(), behavior);
@@ -10581,6 +10637,38 @@ public final class Adequacy {
             case Generator.Watched.Ran(var account) -> account.arms();
             case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ -> Set.of();
         };
+    }
+
+    /** The walks a row's run entered, read the way its arms are — and none where the run's account
+     *  was not read. */
+    static Set<WalkProbe> walksSeenIn(RowOutcome row, Optional<SiteNumbering> numbering) {
+        return switch (ObservedInputs.of(row, numbering).watched()) {
+            case Generator.Watched.Ran(var account) -> account.walks();
+            case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ -> Set.of();
+        };
+    }
+
+    /**
+     * The walks some row's run entered and no row's run took a second element of, among the runs
+     * that answered.
+     *
+     * <p>Only those: a run that answered went through every walk it entered to the end, and one
+     * that stopped may have stopped inside one before its second element ({@link
+     * WalkedNoFurther}). What this says of a walk over a list that is one list on every run is
+     * that the list holds one element at most ({@link WalkRewrites.AtWalk#overAFixedList}); of any
+     * other walk, nothing.
+     */
+    static WalkedNoFurther walkedNoFurtherIn(List<RowOutcome> rows,
+                                             Optional<SiteNumbering> numbering) {
+        List<AlignedObservation> answered = new ArrayList<>();
+        for (RowOutcome row : rows) {
+            if (row.answer() instanceof AnswerObservation.Answered
+                    && ObservedInputs.of(row, numbering).watched()
+                    instanceof Generator.Watched.Ran(var account)) {
+                answered.add(account);
+            }
+        }
+        return WalkedNoFurther.ofRunsThatAnswered(answered);
     }
 
     /** The ways a run's conditions came out, read the same way — and none where the run's

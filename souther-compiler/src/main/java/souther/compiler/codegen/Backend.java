@@ -31,8 +31,11 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.core.Composition;
 import souther.compiler.core.Core;
+import souther.compiler.core.GrowingFold;
+import souther.compiler.coverage.WalkRewrite;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.WalkProbe;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.JvmClassName;
@@ -60,6 +63,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -132,6 +136,18 @@ public final class Backend {
             throw new IllegalStateException("no elaborated body for `" + name + "`");
         }
         return definition;
+    }
+
+    /**
+     * {@code body} as it is emitted: a walk whose list is another walk's answer is one loop with
+     * it, unless the classes record what runs. Joined, the loop goes over the inner walk's list and
+     * runs the outer step where the inner one adds, so it is neither walk of the two the source
+     * wrote, and a rewrite of either one ({@link WalkRewrite}) would be a rewrite of neither. The
+     * classes that measure keep each walk the loop it is; the others join them, which changes when
+     * each step runs and no answer.
+     */
+    private Core emittedForm(Core body) {
+        return ctx.measuring() ? body : GrowingFold.joins(body, ctx.symbols.theWalk());
     }
 
     /** The body the checker elaborated for {@code name}. Codegen runs only on a module that type
@@ -331,9 +347,17 @@ public final class Backend {
         // And which siblings the classes carry, which is the plan's less the forks a method could not
         // hold them in: what a run may ask for is what was written, and a reading of the runs is
         // handed this image rather than the plan for that reason.
+        // A walk's switch is left out with the siblings of the method it stands in, for the same
+        // reason, and the walk is then one no run can be asked to rewrite.
         Set<Integer> leftOut = new HashSet<>();
-        for (Core fork : notCarrying) {
-            for (int site : coverage.probesOf(fork)) {
+        Set<Integer> walksLeftOut = new HashSet<>();
+        for (Core node : notCarrying) {
+            Optional<WalkProbe> walk = coverage.walkSiteOf(node);
+            if (walk.isPresent()) {
+                walksLeftOut.add(walk.get().raw());
+                continue;
+            }
+            for (int site : coverage.probesOf(node)) {
                 if (site != CoverageSites.NO_SITE) {
                     leftOut.add(site);
                 }
@@ -341,7 +365,8 @@ public final class Backend {
         }
         ProbeImage probes = instrumentation.measuresCoverage()
                 ? new ProbeImage.Instrumented(coverage.identity(),
-                        coverage.replacements().carryingNothingAt(leftOut))
+                        coverage.replacements().carryingNothingAt(leftOut),
+                        coverage.walkRewrites().carryingNothingAt(walksLeftOut))
                 : new ProbeImage.Uninstrumented();
         ctx.setCoveragePlan(coverage);
         ctx.setNotCarrying(notCarrying);
@@ -787,7 +812,7 @@ public final class Backend {
                     // a recursive helper declares its return type; thread it so a tail-position fold
                     // over an empty seed materialises its step at the declared type, not a bottom (#70)
                     Type helperReturn = h.declaredReturn() == null ? null : successType(h.declaredReturn());
-                    gen.emitTail(definition.body(), cdFns, Set.of(), helperReturn);
+                    gen.emitTail(emittedForm(definition.body()), cdFns, Set.of(), helperReturn);
                 });
             }
         });
@@ -1710,7 +1735,8 @@ public final class Backend {
                 }
                 // thread the behavior's declared output so a tail-position fold over an empty seed
                 // materialises its step at the output type, not a bottom (issue #70)
-                gen.emitTail(elaborated(checked.behaviorBodies(), implemented.definition().name()),
+                gen.emitTail(emittedForm(elaborated(checked.behaviorBodies(),
+                                implemented.definition().name())),
                         cdB, held, successType(spec.ret()));
             });
             if (n != 1) {
