@@ -3162,19 +3162,18 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     Yen(g.value - c.value)
                 }
                 """;
-        // The sum of two amounts is built into a Yen, whose invariant stops a run that no
-        // operation of the comparison tells of: no row is shown computed beside an end of the
-        // type, and no term is shown left either way: the difference of two terms is answered by
-        // the sizes of the form's addends, which say nothing of that invariant.
-        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN, "c", NOT_SHOWN),
+        // The sum of two amounts is built into a Yen, whose invariant leaves the numbers from
+        // nought up. A run stops at that construction where the sum is below nought, which is
+        // told as an operation over the sum, so the places of the comparison are shown the way
+        // the sum written over Int shows them.
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
                 leftIn(named, whereWritten(named, ">= c")));
-        assertEquals(List.of(), classesIn(named, "c"));
-        assertEquals(Set.of("a", "b", "c"), notReadIn(named, whereWritten(named, ">= c")));
+        assertEquals(List.of("c/0 <= x <= 0", "c/0 < x"), classesIn(named, "c"));
+        assertEquals(Set.of(), notReadIn(named, whereWritten(named, ">= c")));
 
         String writtenOut = named.replace("let g = a + b\n    guard g >= c",
                 "guard a + b >= c").replace("g.value", "a.value + b.value");
-        assertEquals(Set.of("a", "b", "c"),
-                notReadIn(writtenOut, whereWritten(writtenOut, ">= c")));
+        assertEquals(Set.of(), notReadIn(writtenOut, whereWritten(writtenOut, ">= c")));
 
         String payroll = """
                 module w1
@@ -3193,9 +3192,149 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 """;
         // The capped allowance is a call whose arms are expanded into relations of their own,
         // which carry none of the operations the comparison works out: nothing is shown of the
-        // places, and that is a reading short of what the comparison states.
-        assertEquals(Set.of("insurance", "p.base", "p.commuting", "p.other", "uplift"),
+        // places beside the allowance, and that is a reading short of what the comparison
+        // states. The allowance itself is read: a constant built into a Yen is inside its run.
+        assertEquals(Set.of("insurance", "p.base", "p.other", "uplift"),
                 notReadIn(payroll, whereWritten(payroll, ">= subtracted")));
+    }
+
+    private static final String CONSTRUCTED_ABOVE = """
+            module w1
+            data Yen = Int invariant value >= 0
+            %s
+            behavior m : (a: Yen, b: Yen, d: Yen) -> Yen | Exceeds
+                constructs %s
+            let m (a, b, d) = {
+                %s
+                Yen(d.value)
+            }
+            """;
+
+    /**
+     * What a newtype's value is when it is taken off the construction that gave it is what the
+     * construction is: the number it wraps, with the check made when it is made told as an
+     * operation over that number. Written as the construction with the value read off it, with
+     * the construction bound to a name first, or as the sum of the type, the sum of two amounts
+     * is read the same, and as the same arithmetic over {@code Int} is.
+     */
+    @Test
+    void aNewtypesValueTakenOffItsConstructionIsReadAsTheConstructionIs() {
+        Map<String, String> related = Map.of("a", RELATES, "b", RELATES);
+        for (String body : List.of(
+                "guard Yen(a.value + b.value).value >= d.value else Exceeds",
+                "let g = Yen(a.value + b.value)\n    guard g.value >= d.value else Exceeds",
+                "guard (a + b).value >= d.value else Exceeds")) {
+            String source = CONSTRUCTED_ABOVE.formatted("", "Yen", body);
+            assertEquals(related, leftIn(source, whereWritten(source, ">= d.value")), body);
+            assertEquals(List.of("d/0 <= x <= 0", "d/0 < x"), classesIn(source, "d"), body);
+        }
+    }
+
+    /**
+     * A construction is told as an operation only where the rules of its type leave a run of
+     * numbers and every number of it. A type that holds a number out of its run, or leaves two
+     * numbers and none between, refuses the construction at numbers its ends admit, and the sum
+     * built into it is not told as stopping at its ends: nothing is shown of the places.
+     */
+    @Test
+    void aConstructionOfATypeWithHolesInItsRunIsNotToldAtItsEnds() {
+        for (String amount : List.of(
+                "data Amount = Int invariant value >= 0 && value /= 50",
+                "data Amount = Int invariant value == 0 || value == 100")) {
+            String source = CONSTRUCTED_ABOVE.formatted(amount, "Yen, Amount",
+                    "guard Amount(a.value + b.value).value >= d.value else Exceeds");
+            assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN, "d", NOT_SHOWN),
+                    leftIn(source, whereWritten(source, ">= d.value")), amount);
+        }
+    }
+
+    /**
+     * A value taken off one of several constructions is not taken off any one of them: the check
+     * that is made is the one of the construction the run reaches, and the arithmetic over
+     * {@code Int} of the same choice is read the way the choice of constructions is.
+     */
+    @Test
+    void aValueTakenOffOneOfSeveralConstructionsIsNotToldAsTheCheckOfAny() {
+        String choice = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                "guard (if a.value > b.value then Yen(a.value + b.value) else Yen(b.value)).value"
+                        + " >= d.value else Exceeds");
+        String ofInt = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                "guard (if a.value > b.value then a.value + b.value else b.value)"
+                        + " >= d.value else Exceeds");
+        Map<String, String> notShown = Map.of("a", NOT_SHOWN, "b", NOT_SHOWN, "d", NOT_SHOWN);
+        assertEquals(notShown, leftIn(choice, whereWritten(choice, ">= d.value")));
+        assertEquals(notShown, leftIn(ofInt, whereWritten(ofInt, ">= d.value")));
+    }
+
+    /**
+     * A construction written inside another is not the value a field is read off: the access takes
+     * the field out of the outer one, whose other parts are made all the same. Here {@code other}
+     * is refused wherever {@code d} is above nought, and a run stops there, so the field read is
+     * not told as the check of the inner construction alone.
+     */
+    @Test
+    void aFieldTakenOffAConstructionInsideAnotherIsNotToldAsTheInnerOnesCheck() {
+        String source = """
+                module w1
+                data Yen = Int invariant value >= 0
+                data Pay = { base: Yen, other: Yen }
+                behavior m : (a: Yen, b: Yen, d: Yen) -> Yen | Exceeds
+                    constructs Yen, Pay
+                let m (a, b, d) = {
+                    guard Pay { base = Yen(a.value + b.value), other = Yen(0 - d.value) }
+                        .base.value >= d.value else Exceeds
+                    Yen(d.value)
+                }
+                """;
+        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN, "d", NOT_SHOWN),
+                leftIn(source, whereWritten(source, ">= d.value")));
+    }
+
+    /**
+     * A type whose rules say nothing refuses nothing, so the construction ends no run and the sum
+     * built into it is read as the sum of {@code Int} is.
+     */
+    @Test
+    void aConstructionOfATypeWithNoRuleEndsNoRun() {
+        String source = CONSTRUCTED_ABOVE.formatted("data Id = Int", "Yen, Id",
+                "guard Id(a.value + b.value).value >= d.value else Exceeds");
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
+                leftIn(source, whereWritten(source, ">= d.value")));
+    }
+
+    /**
+     * A name that stands for one element of a list written out is one of the values the list
+     * holds, and is read the way the walk reads a name that is one of several, however many there
+     * are. The construction written in the list is made before the comparison reads the element,
+     * so a run may stop there and the places are not shown reached; the same list of {@code Int}
+     * makes nothing that can stop.
+     */
+    @Test
+    void aNameForTheOnlyElementOfAListOfConstructionsIsReadAsOneOfSeveral() {
+        String over = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                "guard List.any(g -> g.value >= d.value, [Yen(a.value + b.value)]) else Exceeds");
+        String ofInt = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                "guard List.any(g -> g >= d.value, [a.value + b.value]) else Exceeds");
+        assertEquals(Map.of("a", NOT_REACHED, "b", NOT_REACHED),
+                leftIn(over, whereWritten(over, ">= d.value")));
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
+                leftIn(ofInt, whereWritten(ofInt, ">= d.value")));
+    }
+
+    /**
+     * What an earlier binding works out is read the same whether the value a comparison is read of
+     * is a construction or the number it wraps: a binding the comparison does not read adds
+     * nothing to what is told of it either way.
+     */
+    @Test
+    void aBindingBeforeAConstructionIsReadAsItIsBeforeTheNumberItWraps() {
+        String earlier = "let unused = a.value + 9223372036854775807\n    ";
+        String built = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                earlier + "guard Yen(b.value).value >= d.value else Exceeds");
+        String number = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                earlier + "guard b.value >= d.value else Exceeds");
+        assertEquals(leftIn(number, whereWritten(number, ">= d.value")),
+                leftIn(built, whereWritten(built, ">= d.value")));
     }
 
     /**

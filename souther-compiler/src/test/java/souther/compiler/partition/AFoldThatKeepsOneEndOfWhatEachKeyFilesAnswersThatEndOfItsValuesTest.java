@@ -487,15 +487,19 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
     /**
      * Of three numbers a relation asks about two, and what the way states of those two is about
      * their difference. The sum {@code a + b - c} is worked out by the program, and the rows it
-     * computes are the sum's own: how far apart two of the numbers stand is then not told by the
-     * sizes of the form's addends, which leave out the least value of the type and count a
-     * constant the program may only compare with. So none of the three is read, whichever the
-     * other two are asked beside; they were read, two of the three, while those sizes were taken
-     * for the rows.
+     * computes are the sum's own, which the operations tell. Two of the three are read whichever
+     * the other two are asked beside, and a statement of the second and the third is read when
+     * the first is the one held still, and not only a statement of the first and the second.
      */
     @Test
-    void aSumTheProgramWorksOutIsNotReadByTheDifferenceOfTwoOfItsNumbers() {
-        for (String statement : List.of("b >= c", "a >= c")) {
+    void whatTheWayStatesOfTheTwoAskedAboutIsHeldWhicheverOfThreeTheyAre() {
+        // A statement of a and b is about their difference, and the relation weighs the two alike
+        // and so asks of their sum: it is not read, which no choice of the pair changes.
+        Map<String, String> unreadAbout = Map.of(
+                "b >= c", "a",
+                "a >= c", "b");
+        for (Map.Entry<String, String> each : unreadAbout.entrySet()) {
+            String statement = each.getKey();
             String source = """
                     module example.three
 
@@ -505,7 +509,11 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                     """.formatted(statement);
             String report = report(read(source));
             List<String> unread = unreadAnywhere(report);
-            assertEquals(3, unread.size(), statement + "\n" + report);
+            // The number held still is settled at one end by the statement, which is why it is
+            // the one that is not read: the other two are.
+            assertEquals(1, unread.size(), statement + "\n" + report);
+            assertTrue(unread.getFirst().endsWith("about `" + each.getValue() + "`"),
+                    statement + "\n" + report);
         }
     }
 

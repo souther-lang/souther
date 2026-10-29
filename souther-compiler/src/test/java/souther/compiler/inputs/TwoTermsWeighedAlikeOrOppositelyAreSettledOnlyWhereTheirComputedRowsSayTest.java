@@ -16,6 +16,7 @@ import souther.compiler.numeric.Rel;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -177,7 +178,8 @@ class TwoTermsWeighedAlikeOrOppositelyAreSettledOnlyWhereTheirComputedRowsSayTes
                                                         relation, held, String::equals,
                                                         BigInteger.valueOf(GREATEST),
                                                         WhatARelationLeavesUndivided
-                                                                .Operations.NONE, true);
+                                                                .Operations.NONE, Map.of(),
+                                                        true);
                                         if (leaves == null) {
                                             continue;
                                         }
@@ -255,7 +257,7 @@ class TwoTermsWeighedAlikeOrOppositelyAreSettledOnlyWhereTheirComputedRowsSayTes
                                 terms, at, WhatARelationLeavesUndivided.Beside.just(
                                         ExactRatio.of(constant)), relation, List.of(),
                                 String::equals, BigInteger.valueOf(GREATEST),
-                                WhatARelationLeavesUndivided.Operations.NONE, true);
+                                WhatARelationLeavesUndivided.Operations.NONE, Map.of(), true);
                         if (leaves instanceof Leaves.Settled settled) {
                             assertEquals(List.of(), settled.linesOfTheModel(),
                                     leaves + " for " + weights[0] + "," + weights[1] + " at " + at
