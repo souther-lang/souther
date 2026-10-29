@@ -61,8 +61,14 @@ final class NearbyValues {
         /** What a list becomes beyond its elements moved one at a time: nothing, unless a step
          *  adds to the list itself. */
         default Iterator<ObservedValue> longer(ObservedValue.Sequence unusedHeld,
-                                               Shape.Sequence unusedSequence) {
+                                               Shape.Sequence unusedSequence, TermPath unusedAt) {
             return none();
+        }
+
+        /** Whether anything is beside a value at {@code at} or below it; a value where nothing is
+         *  is not walked. */
+        default boolean reaches(TermPath unusedAt) {
+            return true;
         }
     }
 
@@ -113,7 +119,54 @@ final class NearbyValues {
     static Iterator<ObservedValue> grown(ObservedValue value, Type type, RuleReadingContext reading,
                                          InputsRowsRanWith ranWith,
                                          Function<Type, Iterator<ObservedValue>> stoodFor) {
-        return withAnElement(value, type, reading, ranWith, stoodFor, Lists.ANY, Put.AFTER);
+        return withAnElement(value, type, reading, ranWith, stoodFor, Lists.ANY, Put.AFTER, null);
+    }
+
+    /**
+     * How many elements the list {@code within} names holds in {@code value}, or the lists it
+     * names between them where the location goes through the elements of another. None where the
+     * value has no such list.
+     */
+    static int heldAt(ObservedValue value, Type type, RuleReadingContext reading, TermPath within) {
+        int[] held = {0};
+        // The walk every candidate here is made by, so what counts as a position of the value is
+        // decided in one place.
+        Iterator<ObservedValue> walked = of(value, type, reading,
+                new TermPath(within.head(), List.of()), List.of(), new Leaves() {
+
+                    @Override
+                    public Iterator<ObservedValue> beside(Type.Prim prim, ObservedValue leaf,
+                                                          TermPath at, List<Narrowing> along,
+                                                          TypeView view) {
+                        return none();
+                    }
+
+                    @Override
+                    public boolean reaches(TermPath at) {
+                        return onTheWayTo(within, at);
+                    }
+
+                    @Override
+                    public Iterator<ObservedValue> longer(ObservedValue.Sequence sequence,
+                                                          Shape.Sequence unusedShape,
+                                                          TermPath at) {
+                        if (within.equals(at)) {
+                            held[0] += sequence.elements().size();
+                        }
+                        return none();
+                    }
+                });
+        while (walked.hasNext()) {
+            walked.next();
+        }
+        return held[0];
+    }
+
+    /** Whether {@code at} is {@code within} or a location above it, which is where a walk
+     *  looking for {@code within} has to go on. */
+    private static boolean onTheWayTo(TermPath within, TermPath at) {
+        return at.steps().size() <= within.steps().size()
+                && within.steps().subList(0, at.steps().size()).equals(at.steps());
     }
 
     /** Where a list that grows takes its new element. */
@@ -157,7 +210,22 @@ final class NearbyValues {
                                          InputsRowsRanWith ranWith,
                                          Function<Type, Iterator<ObservedValue>> stoodFor,
                                          Put where, Lists which) {
-        return withAnElement(value, type, reading, ranWith, stoodFor, which, where);
+        return withAnElement(value, type, reading, ranWith, stoodFor, which, where, null);
+    }
+
+    /**
+     * {@link #grown}, in the one list {@code within} names and no other: the list a walk goes over,
+     * where a list that is not it, however deep, is one no step of the walk reads.
+     *
+     * @param within a location in the position {@code value} stands at, rooted at that position's
+     *               parameter
+     */
+    static Iterator<ObservedValue> grownWithin(ObservedValue value, Type type,
+                                               RuleReadingContext reading,
+                                               InputsRowsRanWith ranWith,
+                                               Function<Type, Iterator<ObservedValue>> stoodFor,
+                                               Put where, Lists which, TermPath within) {
+        return withAnElement(value, type, reading, ranWith, stoodFor, which, where, within);
     }
 
     /**
@@ -173,13 +241,15 @@ final class NearbyValues {
                                              RuleReadingContext reading,
                                              Function<Type, Iterator<ObservedValue>> stoodFor) {
         return withAnElement(value, type, reading, InputsRowsRanWith.NONE, stoodFor,
-                Lists.HOLDING_NONE, Put.AFTER);
+                Lists.HOLDING_NONE, Put.AFTER, null);
     }
 
     private static Iterator<ObservedValue> withAnElement(
             ObservedValue value, Type type, RuleReadingContext reading, InputsRowsRanWith ranWith,
-            Function<Type, Iterator<ObservedValue>> stoodFor, Lists which, Put where) {
-        return of(value, type, reading, null, List.of(), new Leaves() {
+            Function<Type, Iterator<ObservedValue>> stoodFor, Lists which, Put where,
+            TermPath within) {
+        TermPath root = within == null ? null : new TermPath(within.head(), List.of());
+        return of(value, type, reading, root, List.of(), new Leaves() {
 
             @Override
             public Iterator<ObservedValue> beside(Type.Prim prim, ObservedValue leaf, TermPath at,
@@ -188,9 +258,15 @@ final class NearbyValues {
             }
 
             @Override
+            public boolean reaches(TermPath at) {
+                return within == null || onTheWayTo(within, at);
+            }
+
+            @Override
             public Iterator<ObservedValue> longer(ObservedValue.Sequence held,
-                                                  Shape.Sequence sequence) {
-                if (!which.admits(held.elements().size())) {
+                                                  Shape.Sequence sequence, TermPath at) {
+                if (!which.admits(held.elements().size())
+                        || (within != null && !within.equals(at))) {
                     return none();
                 }
                 // One of the rows' and one of the type's in turn, so that however many values the
@@ -240,7 +316,7 @@ final class NearbyValues {
 
             @Override
             public Iterator<ObservedValue> longer(ObservedValue.Sequence held,
-                                                  Shape.Sequence sequence) {
+                                                  Shape.Sequence sequence, TermPath unusedAt) {
                 List<ObservedValue> others = ranWith.of(sequence.element());
                 // A list at a time, as the search asks: the element changed, and then the value
                 // it is changed to, so that a long list is copied once for each candidate taken
@@ -505,7 +581,7 @@ final class NearbyValues {
     private static Iterator<ObservedValue> of(ObservedValue value, Type type,
                                               RuleReadingContext reading, TermPath at,
                                               List<Narrowing> along, Leaves leaves) {
-        if (value.unread() != null) {
+        if (value.unread() != null || (at != null && !leaves.reaches(at))) {
             return none();
         }
         var source = reading.source();
@@ -529,7 +605,7 @@ final class NearbyValues {
                     ? fieldsOf(made, product, reading, at, along, leaves) : none();
             case Shape.Sequence sequence -> value instanceof ObservedValue.Sequence held
                     ? flat(List.of(elementsOf(held, sequence, reading, at, along, leaves),
-                            leaves.longer(held, sequence)).iterator(), Function.identity())
+                            leaves.longer(held, sequence, at)).iterator(), Function.identity())
                     : none();
             // The case the value is, as a fixture writes a sum.
             case Shape.Sum sum -> value instanceof ObservedValue.Constructed made

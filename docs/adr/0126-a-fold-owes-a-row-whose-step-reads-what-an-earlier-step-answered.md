@@ -97,7 +97,12 @@ the switch is written again without it, and the rewrites of that walk are left u
 sibling left out is.
 
 What is proven the same is narrow, as ADR-0121's proof is. A list written with one element or none is
-walked no further than its first, by either rewrite. A step whose body never reads the accumulator it
+walked no further than its first, by either rewrite. So is a list a condition the walk is inside the
+arm of limits: the length of that very list, at one location of the input, compared with a number that
+leaves room for one element at most (`List.length(xs) == 1`, `<= 1`, `< 2`, either way round, the arm
+where `> 1` did not hold, a conjunct of such, through a name bound to the length). No row can tell
+either rewrite of such a walk apart, so none is searched for and none is owed. A condition that leaves
+room for two, or is of another list, says nothing and the walk is asked as before. A step whose body never reads the accumulator it
 is handed is the walk under another spelling when handed the seed. And a list that reads nothing a
 run is handed is one list on every run, so a run that answered and was seen walking it no further
 than its first element shows every run does: that is the one proof read off a run, and it rests on
@@ -106,8 +111,18 @@ since only a run that came back went through every walk it entered to the end; t
 from runs that answered and from no others, by the one constructor that says so. Everything else is
 asked, and a rewrite no search finds an input for is undecided, never concluded the same.
 
-The search for an input starts from the rows that entered the walk, the ones holding the most
-elements first and a candidate of each in turn. A list one of them holds is grown by one element and
+A candidate is run under a rewrite only if the body's run on it came back and went where the rewrite
+changes something: a walk rewrite changes a run only from a second element of the walk on, so a run
+recorded not taking one is the rewrite's answer already. The search for an input starts from the rows
+that entered the walk, the ones holding the most elements first and a candidate of each in turn. Where
+the walk goes over a list the input holds as it is, a parameter, a name bound to one or a field of one,
+the rows are ordered by the length of that list and only that list is grown: a list inside its
+elements is no step of the walk. The location is the one every other reader of a location takes: a
+newtype's own value is the value under it and no step, and a field called `value` of a record is one.
+The first few rows are grown from in turn and the others after them, so that the runs the first
+candidates get do not shrink with the rows a model writes. The lists of the input are grown last in any case, since a step may
+read what another list holds. Where the walk goes over a list the behavior made, every list is grown
+as before. A list one of them holds is grown by one element and
 then by two, each with the new element put first as well as last, since a walk stopping after one
 step parts from the walk only where what the later elements do differs from what the first does.
 That is how a list grows wherever it stands, in a field of a record as much as the value itself. The

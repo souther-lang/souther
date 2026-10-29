@@ -4526,7 +4526,8 @@ public final class Bodies {
         // places: a module whose bodies came out has arms whatever else did not come out, and
         // an answer carrying no plan is one every reader of it would walk the bodies for.
         CoverageSites.Plan plan =
-                CoverageSites.of(of, read, handed, db.ask(new Front.Library()).value().walk());
+                CoverageSites.of(of, read, handed, Shapes.declarationNewtypes(db),
+                        db.ask(new Front.Library()).value().walk());
         return new Elaborated(of, module.emittedDefinitions(),
                 judged(db, of, analysed, elements, settled, plan), elements,
                 read, handed, analysed, plan, emits);

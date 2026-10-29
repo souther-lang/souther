@@ -159,6 +159,12 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                     "how many ways a statement of cases is met in for it to be read as one; past"
                             + " it the statement claims nothing of the elements it keeps"),
 
+            // Which rows a walk's rewrite is searched from first. Every row is grown from, the
+            // rest after the first ones are asked, so nothing is left untried by reaching it.
+            Map.entry("souther.compiler.partition.Generator.ROWS_GROWN_IN_TURN",
+                    "how many rows are grown from in turn before the others; the others follow,"
+                            + " so reaching it stops no search"),
+
             // A choice among rows that all stand at the item, which ends with one taken whatever
             // it comes to, so nothing is left owed for reaching it.
             Map.entry("souther.compiler.partition.Generator.MOST_ROWS_OFFERED_FOR_THE_ARMS",
