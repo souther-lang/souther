@@ -191,13 +191,20 @@ public final class BehaviorSetStatements {
                          NumericTerm.FromOnePosition term,
                          AdmittedPlan whenTrue, AdmittedPlan whenFalse,
                          AdmittedPlan notShown, Long trueUpTo, List<ValuesWithin> notReached,
-                         List<String> imagesNotShown) {
+                         List<String> imagesNotShown, List<CountedOpen> notCounted) {
 
         Asked(PredicateOrigin by, PredicateStatement states, NumericTerm.FromOnePosition term,
               AdmittedPlan whenTrue, AdmittedPlan whenFalse) {
-            this(by, states, term, whenTrue, whenFalse, null, null, List.of(), List.of());
+            this(by, states, term, whenTrue, whenFalse, null, null, List.of(), List.of(),
+                    List.of());
         }
     }
+
+    /**
+     * The strings holding so few or so many code points of a class that no run gets to the
+     * relation with them, waiting to be built with the rest of the position's plans.
+     */
+    private record CountedOpen(AdmittedPlan strings, BlockReason.CodePointsLeftOpen why) {}
 
     /**
      * What {@code read} states, built under {@code allowance}.
@@ -305,6 +312,7 @@ public final class BehaviorSetStatements {
             // A string of a length the run does not get to the equality at is on neither side,
             // whichever it would be on.
             List<ValuesWithin> notReached = List.of();
+            List<CountedOpen> notCounted = List.of();
             if (strings.reached() != null) {
                 PatternPlan reached = strings.reached().strings();
                 if (reached == null) {
@@ -313,7 +321,12 @@ public final class BehaviorSetStatements {
                 shown = AdmittedPlan.meeting(List.of(shown, new AdmittedPlan.Pattern(reached)));
                 whenFalse = AdmittedPlan.meeting(List.of(whenFalse,
                         new AdmittedPlan.Pattern(reached)));
-                notReached = strings.reached().outside();
+                switch (strings.reached()) {
+                    case LengthsPastTheWay.Lengths lengths -> notReached = lengths.outside();
+                    case CodePointsPastTheWay counts -> notCounted = counts.outside().stream()
+                            .map(open -> new CountedOpen(new AdmittedPlan.Pattern(open.strings()),
+                                    open.why())).toList();
+                }
             }
             // The partner is the other side's only at the lengths a run gets to the equality with
             // it, so a string of this side is its value only if it is of one of those, and is shown
@@ -331,7 +344,7 @@ public final class BehaviorSetStatements {
             }
             asked.add(new Asked(each.by(), each.states(), each.term(),
                     shown, whenFalse, notShown.equals(AdmittedPlan.NONE) ? null : notShown,
-                    strings.upTo(), notReached, strings.imagesNotShown()));
+                    strings.upTo(), notReached, strings.imagesNotShown(), notCounted));
         }
         List<ClassingBlocker> blocked = new ArrayList<>();
         List<StandingQuestion.NothingClassifiesIt> nothingClassifies = new ArrayList<>();
@@ -366,6 +379,7 @@ public final class BehaviorSetStatements {
             if (each.notShown() != null) {
                 plans.add(each.notShown());
             }
+            each.notCounted().forEach(open -> plans.add(open.strings()));
         }
         Map<NumericTerm.FromOnePosition, Realizations> answers = new LinkedHashMap<>();
         byTerm.forEach((term, plans) ->
@@ -614,7 +628,9 @@ public final class BehaviorSetStatements {
                             built.of(each.whenFalse()), each.states(), each.by(),
                             each.notShown() == null ? ValueSet.NONE
                                     : built.of(each.notShown()),
-                            each.notReached(), each.imagesNotShown())));
+                            each.notReached(), each.imagesNotShown(),
+                            each.notCounted().stream().map(open -> new SetStatement.NotCounted(
+                                    built.of(open.strings()), open.why())).toList())));
         }
     }
 
