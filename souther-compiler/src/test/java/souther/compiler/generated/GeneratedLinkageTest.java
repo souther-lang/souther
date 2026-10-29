@@ -221,16 +221,22 @@ class GeneratedLinkageTest {
         assertDoesNotThrow(() -> GeneratedLinkage.rethrowClassified(null));
     }
 
-    /** Generated code that calls back into the compiler can have a defect thrown through it, and
-     * what carries that out of a supplied implementation holds it as its cause. */
+    /** Applied code can call back into generated code of this compile, and a defect thrown there
+     * reaches the carrier under whatever the reflective call wrapped it in. A defect is not
+     * something an application ended with, so a carrier is not made of one. */
     @Test
-    void aDefectUnderAnAttributedCarrierIsStillFound() {
+    void aDefectFoundAlreadyIsNotSomethingAnApplicationEndedWith() {
         GeneratedLinkage.GeneratedClassDefect found = assertThrows(
                 GeneratedLinkage.GeneratedClassDefect.class,
                 () -> GeneratedLinkage.rejectDefect(new VerifyError("x")));
 
         assertSame(found, assertThrows(GeneratedLinkage.GeneratedClassDefect.class,
-                () -> GeneratedLinkage.rejectDefect(new InvocationFailure(found))));
+                () -> new InvocationFailure(new InvocationTargetException(found))));
+        assertSame(found, assertThrows(GeneratedLinkage.GeneratedClassDefect.class,
+                () -> new ImplementationNotReached("x", new InvocationTargetException(found))));
+        assertSame(found, assertThrows(GeneratedLinkage.GeneratedClassDefect.class,
+                () -> GeneratedLinkage.rejectDefect(new ExecutionException(found))),
+                "and it is found under anything else that carries a cause");
     }
 
     @Test

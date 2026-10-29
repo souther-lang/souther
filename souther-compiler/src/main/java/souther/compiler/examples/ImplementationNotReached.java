@@ -23,9 +23,11 @@ public final class ImplementationNotReached extends RuntimeException
     /**
      * A class missing or a method not there is what this says. What {@code cause} is the failure of,
      * this compile's classes or the other build's, is decided by whoever tried to reach the
-     * implementation and is not decided here.
+     * implementation and is not decided here. A defect that was found already is not a way of not
+     * being reached, and is raised instead.
      */
     public ImplementationNotReached(String why, Throwable cause) {
+        GeneratedLinkage.rethrowClassified(cause);
         super(why, cause);
     }
 }

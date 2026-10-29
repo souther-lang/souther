@@ -32,8 +32,14 @@ public final class InvocationFailure extends RuntimeException implements Generat
      * Carries {@code cause} out as it stands. Whose code ended with it is not decided here, because
      * what is applied may be supplied from outside, and a link failure of a supplied implementation
      * is that implementation failing. Code of this compile is carried by {@link #ofGeneratedCode}.
+     *
+     * <p>What is carried is never a defect that was found already. Applied code may call back into
+     * generated code of this compile, and a defect thrown there reaches here under whatever the
+     * reflective call wrapped it in. Judging nothing new is what this does, and it is why the
+     * readers of one need not each ask: a defect is not something an application ended with.
      */
     public InvocationFailure(Throwable cause) {
+        GeneratedLinkage.rethrowClassified(cause);
         super(cause == null ? "the invocation ended with no cause" : cause.toString(), cause);
     }
 
