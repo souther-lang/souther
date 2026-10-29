@@ -18,16 +18,23 @@ package souther.compiler.coverage;
 public enum WalkRewrite {
 
     /** The walk stops after its first step, and answers what that step answered. */
-    STOPS_AFTER_ONE_STEP,
+    STOPS_AFTER_ONE_STEP(0),
 
     /** Every step is handed the seed in the place of what the step before it answered. */
-    STEPS_FROM_THE_SEED;
+    STEPS_FROM_THE_SEED(1);
+
+    private final int code;
+
+    WalkRewrite(int code) {
+        this.code = code;
+    }
 
     /**
      * The number the classes tell this rewrite by at a walk, which is what a run asks them for and
-     * what the switch there compares.
+     * what the switch there compares. Written out rather than read off the order the constants are
+     * declared in, since a class emitted with one number is asked with it.
      */
     public int code() {
-        return ordinal();
+        return code;
     }
 }
