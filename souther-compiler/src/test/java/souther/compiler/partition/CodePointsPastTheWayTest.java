@@ -2,17 +2,32 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
+import souther.compiler.check.ScopedDeclarations;
+import souther.compiler.check.Symbols;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.PatternPlan;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
+import souther.compiler.types.Type;
+import souther.compiler.values.ValueSet;
 
 import net.unit8.notation199x.pattern.CodePoints;
+import net.unit8.notation199x.pattern.Meter;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -126,6 +141,86 @@ class CodePointsPastTheWayTest {
         CodePointsPastTheWay none = counted(NOT_WHITESPACE, 3, 1);
         assertTrue(none.isEmpty());
         assertNull(none.strings());
+    }
+
+    private static NumericTerm.FromOnePosition countAt(String place) {
+        Symbols symbols = Symbols.none(DefaultStdlib.get());
+        return NumericTerm.CodePointClassCount.of(TermPath.of(place), NOT_WHITESPACE,
+                CaseMapping.NONE, Type.STRING, ScopedDeclarations.wrapsOf(symbols));
+    }
+
+    private static TakenConstraint statement(long constant, Rel rel,
+                                             Map<NumericTerm, Long> weights) {
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        weights.forEach((term, weight) -> coefs.put(term, ExactRatio.of(weight)));
+        return new TakenConstraint.Affine(new LinearForm<>(ExactRatio.of(constant), coefs), rel);
+    }
+
+    /** The count of a class is eliminated against the numbers beside it as a length is: with
+     *  {@code n} between nought and one, three code points of the class less {@code n} are two
+     *  at least, and the strings of those counts are the ones holding two. */
+    @Test
+    void aNumberBesideTheCountOfAClassIsTakenOutAsOneBesideALengthIs() {
+        NumericTerm count = countAt("s");
+        NumericTerm n = new NumericTerm.ValueOf(TermPath.of("n"));
+        LengthsPastTheWay.Lengths counts = LengthsPastTheWay.of(count, List.of(
+                statement(-3, Rel.GE, Map.of(count, 1L, n, 1L))),
+                _ -> new LengthsPastTheWay.Ends(BigInteger.ZERO, BigInteger.ONE));
+
+        assertNotNull(counts);
+        assertEquals(BigInteger.TWO, counts.least());
+        Language within = compiled(new CodePointsPastTheWay(NOT_WHITESPACE, counts).strings());
+        for (String string : strings(4)) {
+            assertEquals(held(NOT_WHITESPACE, string) >= 2, within.has(string), string);
+        }
+    }
+
+    /** What the counts allow and which strings exist are two questions: the strings a place
+     *  holds are met with the counts, and a string of it that holds too few is not among them. */
+    @Test
+    void theStringsAPlaceHoldsAreMetWithTheCountsAndNotTakenFromThem() {
+        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+        Language place = Language.ofWords(List.of(" ", "a ", "ab", ""), meter);
+        Language reaching = Partitions.ofTheLengths(place,
+                counted(NOT_WHITESPACE, 1, null), meter);
+        assertNotNull(reaching);
+        assertTrue(reaching.has("a "));
+        assertTrue(reaching.has("ab"));
+        assertFalse(reaching.has(" "));
+        assertFalse(reaching.has(""));
+    }
+
+    /** A class that counts no code point allows counts that no string holds: the counts are not
+     *  empty, and the strings of them are. */
+    @Test
+    void aClassOfNoCodePointAllowsCountsNoStringHolds() {
+        CodePointClass none = new CodePointClass.OneOf(CodePoints.NONE);
+        CodePointsPastTheWay atLeastOne = counted(none, 1, null);
+        assertFalse(atLeastOne.isEmpty());
+        assertTrue(compiled(atLeastOne.strings()).isEmpty());
+        CodePointsPastTheWay any = counted(none, 0, null);
+        assertTrue(compiled(any.strings()).has("abc"));
+    }
+
+    /** What is shown of a partner is changed without losing the reach it was given: a value built
+     *  again from the strings alone is shown at every length. */
+    @Test
+    void showingOtherStringsKeepsTheReachAndTheOpenOperations() {
+        CodePointsPastTheWay reached = counted(NOT_WHITESPACE, 1, null);
+        CodePointsPastTheWay held = counted(NOT_WHITESPACE, 2, null);
+        UndividedByARelation.StringsAPartnerCanHold shown =
+                new UndividedByARelation.StringsAPartnerCanHold(ValueSet.ANY, ValueSet.ANY, null,
+                        reached, held, "b", List.of("String.uppercase"));
+
+        UndividedByARelation.StringsAPartnerCanHold other =
+                shown.showing(ValueSet.NONE, ValueSet.ANY, 3L);
+
+        assertEquals(ValueSet.NONE, other.canBe());
+        assertEquals(3L, other.upTo());
+        assertEquals(reached, other.reached());
+        assertEquals(held, other.partnerHeldTo());
+        assertEquals("b", other.partner());
+        assertEquals(List.of("String.uppercase"), other.imagesNotShown());
     }
 
     /** A count the allowance does not pay to build is not built, and no string is called of it

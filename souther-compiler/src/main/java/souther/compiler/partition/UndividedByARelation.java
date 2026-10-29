@@ -618,6 +618,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     all.stream().distinct().sorted().toList());
         }
 
+        /**
+         * The same partner and the same reach, with other strings shown. The one way to change
+         * what is shown of a value that has been given its reach: a value built again from its
+         * strings alone is shown at every length, and the reach it was given is gone.
+         */
+        StringsAPartnerCanHold showing(ValueSet canBe, ValueSet mayBe, Long upTo) {
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, reached, partnerHeldTo, partner,
+                    imagesNotShown);
+        }
+
         /** These, shown only at the lengths {@code lengths}, which every other length is left
          *  open at. */
         StringsAPartnerCanHold reachedAt(StringsPastTheWay lengths) {
@@ -2727,11 +2737,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             StringsAPartnerCanHold narrowed = partnerCanHold(hereIsFirst, here, there,
                     ValueSet.matching(reaching), mineHolds, strings.partner());
-            out = narrowed == null
-                    ? new StringsAPartnerCanHold(ValueSet.NONE, strings.mayBe(), null,
-                            strings.partner(), strings.imagesNotShown())
-                    : new StringsAPartnerCanHold(narrowed.canBe(), strings.mayBe(),
-                            narrowed.upTo(), strings.partner(), strings.imagesNotShown());
+            out = narrowed == null ? strings.showing(ValueSet.NONE, strings.mayBe(), null)
+                    : strings.showing(narrowed.canBe(), strings.mayBe(), narrowed.upTo());
         }
         if (onMine != null) {
             Language canBe = languageOf(out.canBe());
@@ -2743,9 +2750,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (canBeThere == null || mayBeOrNot == null) {
                 return null;
             }
-            out = new StringsAPartnerCanHold(ValueSet.matching(canBeThere),
-                    ValueSet.matching(mayBeOrNot), out.upTo(), out.partner(),
-                    out.imagesNotShown());
+            out = out.showing(ValueSet.matching(canBeThere), ValueSet.matching(mayBeOrNot),
+                    out.upTo());
         }
         // Each conversion the run is gotten past exactly is one whose image is shown only where
         // it is exact, and the strings it is not exact on are the ones left open.
