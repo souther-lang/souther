@@ -4,6 +4,7 @@ import souther.compiler.CompilationSources;
 import souther.compiler.CompilationSources.SourceFile;
 import souther.compiler.Compiler;
 import souther.compiler.generated.GeneratedBehavior;
+import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.generated.JsonBoundary;
 import souther.compiler.CanonicalNames;
 import souther.compiler.ast.Hir;
@@ -660,13 +661,24 @@ public final class Runner {
      * as the behavior having run and failed, and sends the author looking through a body that was
      * never entered.
      */
-    private static Object invoke(ClassLoader loader, String pkg, String behavior, Object[] args) {
+    static Object invoke(ClassLoader loader, String pkg, String behavior, Object[] args) {
         try {
             return GeneratedBehavior.apply(loader, pkg, behavior, args);
+        } catch (LinkageError e) {
+            // Loading the compiled class is where the JVM verifies it, and that failure arrives
+            // here as it is and not wrapped by a call. A class this compile generated that will not
+            // link is the compiler failing; what is left is the class's own initializer or the
+            // runtime, which is the behavior not running.
+            GeneratedLinkage.rejectDefect(e);
+            Throwable ended = whatTheInitializerThrew(e);
+            throw fail("run.behavior.failed", "`" + behavior + "` failed: " + ended,
+                    behavior, String.valueOf(ended));
         } catch (java.lang.reflect.InvocationTargetException e) {
             Throwable cause = e.getCause();
-            throw fail("run.behavior.failed", "`" + behavior + "` failed: " + cause,
-                    behavior, String.valueOf(cause));
+            GeneratedLinkage.rejectDefect(cause);
+            Throwable ended = whatTheInitializerThrew(cause);
+            throw fail("run.behavior.failed", "`" + behavior + "` failed: " + ended,
+                    behavior, String.valueOf(ended));
         } catch (ReflectiveOperationException e) {
             String className = GeneratedBehavior.implClass(pkg, behavior);
             throw fail("run.behavior.unreachable",
@@ -674,6 +686,13 @@ public final class Runner {
                             + "` is not reachable: " + e + ". This is a defect in the compiler,"
                             + " not in the module.", behavior, className, e.toString());
         }
+    }
+
+    /** What {@code thrown} says of the behavior failing: an initializer's error says only that it
+     *  failed, and what it threw is its cause. */
+    private static Throwable whatTheInitializerThrew(Throwable thrown) {
+        return thrown instanceof ExceptionInInitializerError initializer
+                && initializer.getCause() != null ? initializer.getCause() : thrown;
     }
 
     // --- small utilities ----------------------------------------------------------------------

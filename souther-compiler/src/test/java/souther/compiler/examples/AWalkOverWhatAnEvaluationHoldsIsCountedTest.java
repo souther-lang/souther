@@ -42,7 +42,7 @@ class AWalkOverWhatAnEvaluationHoldsIsCountedTest {
     void whatIsPaidForBeforeAValueIsWrittenIsAllOfIt() {
         EvaluationContext.begin(Long.MAX_VALUE / 2, 100);
         try {
-            PaidForBeforeItIsWalked.payFor(deepAndWide());
+            PaidForBeforeItIsWalked.payFor(deepAndWide(), ValueOwnership.none());
             long spent = EvaluationContext.spent(Long.MAX_VALUE / 2);
             long nodes = (long) DEEP + WIDE;
             assertTrue(spent >= nodes, "a value of " + nodes + " nodes cost " + spent);
@@ -56,7 +56,8 @@ class AWalkOverWhatAnEvaluationHoldsIsCountedTest {
     void whatIsPaidForStopsWhereTheBudgetRunsOut() {
         EvaluationContext.begin(1_000, 100);
         try {
-            assertThrows(StepLimitExceeded.class, () -> PaidForBeforeItIsWalked.payFor(deepAndWide()));
+            assertThrows(StepLimitExceeded.class,
+                    () -> PaidForBeforeItIsWalked.payFor(deepAndWide(), ValueOwnership.none()));
         } finally {
             EvaluationContext.end();
         }

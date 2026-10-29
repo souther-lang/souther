@@ -70,7 +70,7 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
             new NeutralForm(symbols, ScopedDeclarations.sumsOf(symbols),
                     ScopedDeclarations.kindsOf(symbols),
                     souther.compiler.query.ExampleExecutions.of(compilation.db(), "demo")
-                            .fieldTypes());
+                            .fieldTypes(), ValueOwnership.none());
 
     private static Compilation compiled(String module) {
         Compilation c = Compilation.ofSource(module, "Main");
@@ -197,7 +197,8 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
         Symbols theirs = Scopes.derived(with.db(), "demo").value();
         NeutralForm and = new NeutralForm(theirs, ScopedDeclarations.sumsOf(theirs),
                 ScopedDeclarations.kindsOf(theirs),
-                souther.compiler.query.ExampleExecutions.of(with.db(), "demo").fieldTypes());
+                souther.compiler.query.ExampleExecutions.of(with.db(), "demo").fieldTypes(),
+                ValueOwnership.none());
         assertEquals(Map.of(), neutral.of(unit("Filed"), Position.UNREAD, "h"));
         assertEquals(Map.of(), and.of(value(with, "Filed", Map.of()), Position.UNREAD, "h"));
         // and each sum that does read it there still writes what it reads it under
