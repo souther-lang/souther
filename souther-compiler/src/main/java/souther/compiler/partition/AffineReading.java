@@ -586,7 +586,36 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (reached.endsNoRun(new Denotation(binding.value(), at))) {
                     return;
                 }
+                if (tellsTheClosuresMakingAnOption(binding.value(), at)) {
+                    return;
+                }
                 told.exact = false;
+            }
+
+            /**
+             * Whether {@code value} is an option made by closures applied to what another holds,
+             * and so worked out as they are: each closure's body, read where its parameter stands
+             * for what it was handed, tells its operations. A closure is applied only where the
+             * option holds a value, which a row of the entry it holds is at. What else
+             * {@code value} works out must end no run.
+             */
+            private boolean tellsTheClosuresMakingAnOption(Core value, InputReads at) {
+                List<Denotation> closures = at.closuresMakingWhatItHolds(value,
+                        ruleSource.symbols(), ruleSource.newtypes());
+                if (closures.isEmpty()) {
+                    return false;
+                }
+                for (Denotation closure : closures) {
+                    if (AffineForms.outcome(closure.value(), closure.at(), this)
+                            instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>
+                            && !reached.endsNoRun(closure)) {
+                        told.exact = false;
+                    }
+                }
+                if (!restEndsNoRun(value, at, reached)) {
+                    told.exact = false;
+                }
+                return true;
             }
 
             @Override
@@ -1451,6 +1480,24 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
         }
         return told.working();
+    }
+
+    /** Whether what {@code expression} works out ends no run, apart from the closures written at
+     *  it and the calls that make an option of what they are applied to. */
+    private static boolean restEndsNoRun(Core expression, InputReads at,
+                                         WorkedOutToReachIt reached) {
+        Core here = Core.withoutStanding(expression);
+        if (!(here instanceof Core.PreservedCall call)
+                || !WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(call).endsNone()) {
+            return reached.endsNoRun(new Denotation(expression, at));
+        }
+        for (Core argument : call.args()) {
+            if (!(Core.withoutStanding(argument) instanceof Core.Block)
+                    && !restEndsNoRun(argument, at, reached)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** What {@code side} comes to once the bindings written around it are taken off. */

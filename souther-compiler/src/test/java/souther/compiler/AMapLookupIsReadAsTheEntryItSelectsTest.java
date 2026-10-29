@@ -73,11 +73,8 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
      * entry's value reaches every threshold — written with the default or with the match spelled
      * out.
      *
-     * <p>Moved by a constant in a closure before it is compared, the value is read the same, but
-     * the closure's sum is worked out on the run and nothing tells where it passes the type: the
-     * reading of the lookup reads what the closure answers and not how it is worked out. The
-     * entry and the threshold are then related to a value not shown to reach every value, which
-     * is not that a run stops.
+     * <p>Moved by a constant in a closure before it is compared, the value is read the same: the
+     * closure's sum is worked out where the entry is held, and it is told where it passes the type.
      */
     @Test
     void aLookupWithADefaultIsReadToTheEnd() {
@@ -92,9 +89,7 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
                 let f (k, m, q) =
                     (Map.get(k, m) |> Option.map(v -> v + 1) |> Option.withDefault(0)) >= q
                 """));
-        assertEquals(2, notRead(moved).size(), moved);
-        assertTrue(notRead(moved).stream()
-                .allMatch(line -> line.contains("not shown to reach every value")), moved);
+        assertEquals(List.of(), notRead(moved), moved);
     }
 
     /**
