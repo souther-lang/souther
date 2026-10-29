@@ -1075,7 +1075,24 @@ final class Pullback {
         if (kept != null && kept.working != null) {
             trial().working = kept.working;
         }
+        trial().restated.add(new Once<>(() -> workingOf(kept, arithmeticOf(stated, reads))));
         return new Derivation.Restated(read);
+    }
+
+    /**
+     * That the written comparison works out what the comparisons the rule read it as do, where
+     * {@code read} is what the rule concluded: each of those is of the operand of the one operation
+     * on its side against a number, and what that operation itself may end a run for, the rule's
+     * statement says. A comparison over the operand reads all that working it out does, which a
+     * reading of the written one stopped at the operation does not.
+     */
+    private Derivation worksOutWhatItIsRestatedAs(Derivation read) {
+        Trial theRule = trial();
+        if (read != null && !theRule.restated.isEmpty()) {
+            theRule.working = UndividedByARelation.Working.together(
+                    theRule.restated.stream().map(Supplier::get).toList());
+        }
+        return read;
     }
 
     /**
@@ -1453,16 +1470,19 @@ final class Pullback {
         /** What the rows of the comparison get past, as the rule worked it out; null where the
          *  rule worked out none. */
         private UndividedByARelation.Working working;
-        /** The expressions the rule answers for beside the one the arithmetic stopped at; null
-         *  where it answers for that one alone. */
+        /** The expressions the rule reads the comparison again with each value of, the one the
+         *  arithmetic stopped at among them, which tells what working them out may stop a run at;
+         *  null where it reads none so. */
         private Predicate<Core> answersFor;
+        /** The expressions the rule read as the form of one operand of theirs, each with that
+         *  operand ({@link AffineReading.WhatTheAnalysisAnswersFor#readByTheFormOf}). */
+        private final Map<Core, Core> readByTheFormOf = new IdentityHashMap<>();
         /** What each relation read under an arm of a choice works out, off the comparison read
          *  with the choice standing as that arm ({@link Pullback#tellWhatItWorksOut}). */
         private Map<Relation, UndividedByARelation.Working> relations;
-        /** Whether the rule read an expression as a number taken over a run without showing that
-         *  working it out completes wherever the number has a place: a walk whose step, or a
-         *  closure applied to each element, may stop on its own. */
-        private boolean readAnEvaluationItDoesNotTell;
+        /** What each comparison the rule read the written one as works out, asked only by a rule
+         *  that says the written one works out the same ({@link #worksOutWhatItIsRestatedAs}). */
+        private final List<Supplier<UndividedByARelation.Working>> restated = new ArrayList<>();
 
         void tell(Relation relation, UndividedByARelation.Working told) {
             if (relations == null) {
@@ -1491,18 +1511,6 @@ final class Pullback {
     /** The candidate being tried; one to say into nothing where none is. */
     private Trial trial() {
         return underTrial.isEmpty() ? new Trial() : underTrial.peek();
-    }
-
-    /**
-     * That the candidate read {@code node} as a number taken over a run: a total, a walk, an
-     * operation's answer. The number is the value working it out comes to, which says nothing of
-     * whether it completes ({@link WhatARunMayEndFor#endsOnlyWhereItsAnswerHasNoPlace}); where
-     * that is not shown the candidate leaves what the comparison works out untold.
-     */
-    private void evaluationRead(Core node) {
-        if (!WhatARunMayEndFor.endsOnlyWhereItsAnswerHasNoPlace(node)) {
-            trial().readAnEvaluationItDoesNotTell = true;
-        }
     }
 
     /**
@@ -1557,20 +1565,16 @@ final class Pullback {
     private static UndividedByARelation.Working workingOf(
             Trial theRule, Supplier<AffineReading.OfAComparison> arithmetic) {
         if (theRule != null && theRule.working != null) {
-            return theRule.readAnEvaluationItDoesNotTell ? theRule.working.notEveryOneTold()
-                    : theRule.working;
+            return theRule.working;
         }
         AffineReading.OfAComparison read = arithmetic.get();
-        if (!(read instanceof AffineReading.OfAComparison.Stopped stopped)) {
+        if (theRule == null || !(read instanceof AffineReading.OfAComparison.Stopped stopped)) {
             return AffineReading.OfAComparison.workingOf(read);
         }
-        UndividedByARelation.Working apart = theRule != null && theRule.answersFor != null
-                ? stopped.apart(theRule.answersFor)
-                : AffineReading.OfAComparison.workingOf(read);
-        // The expression the arithmetic stopped at is the rule's to answer for, and a number the
-        // rule read without showing where working it out completes leaves that unanswered.
-        return theRule != null && theRule.readAnEvaluationItDoesNotTell
-                ? apart.notEveryOneTold() : apart;
+        Predicate<Core> readAgain = theRule.answersFor;
+        return stopped.apart(new AffineReading.WhatTheAnalysisAnswersFor(
+                readAgain == null ? _ -> false : readAgain,
+                held -> theRule.readByTheFormOf.get(Core.withoutStanding(held))));
     }
 
     /**
@@ -8641,16 +8645,11 @@ final class Pullback {
                 }
                 LinearForm<Quantity> added = seedPlusWhatEachElementAdds(node, at);
                 if (added != null) {
-                    evaluationRead(node);
                     return added;
                 }
                 LinearForm<NumericTerm> numbers = InputNumber.formOf(node, read.domain(), at,
                         read.rules(), elementsMet);
                 if (numbers != null) {
-                    if (!NumbersOnTheWayToATotal.completeWhereTheAnswerHasAPlace(node, numbers,
-                            read)) {
-                        trial().readAnEvaluationItDoesNotTell = true;
-                    }
                     return numbers.over(term ->
                             LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(term)));
                 }
@@ -8671,7 +8670,6 @@ final class Pullback {
                 // What a container the body wrote out adds up to, element by element.
                 LinearForm<Quantity> total = totalOfWrittenOut(node, at);
                 if (total != null) {
-                    evaluationRead(node);
                     return total;
                 }
                 // What a division by a written number leaves of a form of the input's numbers,
@@ -9275,10 +9273,20 @@ final class Pullback {
             case TheSignOfAnOrder.Read.OfTheArguments<InputReads> ordered
                     when !ordered.isTheCondition() -> null;
             case TheSignOfAnOrder.Read.OfTheArguments<InputReads> ordered
-                    when ordered.operation() instanceof ValueName.Stdlib operation ->
-                    new Derivation.AnOrderOfItsArguments(callOfAnOrder(operation, ordered),
-                            ordered.sign(), firstThatReadsIt(
-                            rulesFor(ordered.arguments(), null, fixed, ordered.at())));
+                    when ordered.operation() instanceof ValueName.Stdlib operation -> {
+                Once<AffineReading.OfAComparison> arithmetic =
+                        arithmeticOf(ordered.arguments(), ordered.at());
+                Derivation arguments = firstThatReadsIt(
+                        rulesFor(ordered.arguments(), null, fixed, ordered.at(), arithmetic));
+                // Where answering the order ends no run, the arguments are all the written
+                // comparison works out, and the comparison of them reads them.
+                if (arguments != null
+                        && WhatARunMayEndFor.ofAnOperation(operation).endsNone()) {
+                    trial().working = workingOf(triedAndConcluded.get(arguments), arithmetic);
+                }
+                yield new Derivation.AnOrderOfItsArguments(callOfAnOrder(operation, ordered),
+                        ordered.sign(), arguments);
+            }
             case TheSignOfAnOrder.Read.Settled<InputReads> settled
                     when settled.operation() instanceof ValueName.Stdlib ->
                     new Derivation.ASignItsBoundsSettle(settled.sign());
@@ -10633,7 +10641,7 @@ final class Pullback {
         long from = written.compareTo(BigDecimal.valueOf(below)) <= 0 ? below
                 : written.compareTo(BigDecimal.valueOf(above)) >= 0 ? above
                 : written.longValue();
-        return switch (year.claim().statedRelation()) {
+        Derivation read = switch (year.claim().statedRelation()) {
             case GE -> comparedWithTheStartOf(from, Rel.GE, taking, at, fixed, reads);
             case GT -> comparedWithTheStartOf(from + 1, Rel.GE, taking, at, fixed, reads);
             case LE -> comparedWithTheStartOf(from + 1, Rel.LT, taking, at, fixed, reads);
@@ -10645,6 +10653,10 @@ final class Pullback {
                     comparedWithTheStartOf(from, Rel.LT, taking, at, fixed, reads),
                     comparedWithTheStartOf(from + 1, Rel.GE, taking, at, fixed, reads));
         };
+        // Where taking the year of a date ends no run, the date is all the written comparison
+        // works out, and the comparisons of it with where years begin read it.
+        return WhatARunMayEndFor.itself(taking).endsNone() ? worksOutWhatItIsRestatedAs(read)
+                : read;
     }
 
     /**
@@ -10740,8 +10752,10 @@ final class Pullback {
         if (rounded == null) {
             return null;
         }
-        return theStatementStands(rounded.statement(), rounded.rounded(), at, fixed,
-                rounded.at());
+        // The statement holds the rounding to the ends of what it answers, past which it aborts,
+        // so the rounding is all of it the written comparison works out beyond what was rounded.
+        return worksOutWhatItIsRestatedAs(theStatementStands(rounded.statement(),
+                rounded.rounded(), at, fixed, rounded.at()));
     }
 
     /**
@@ -10918,6 +10932,9 @@ final class Pullback {
         if (form == null || form.coefs().isEmpty() || !isWhole(form)) {
             return null;
         }
+        // Its rows are made where the form is worked out, each sum on the way a part of it
+        // ({@link UndividedByARelation}), and the divisor is a number above nought.
+        trial().readByTheFormOf.put(Core.withoutStanding(division.call()), division.dividend());
         return new Quantity.RemainderOfADividend(division.call().operation(), new LinearForm<>(
                 ExactRatio.of(constantOf(form).mod(division.divisor())), form.coefs()),
                 division.divisor());

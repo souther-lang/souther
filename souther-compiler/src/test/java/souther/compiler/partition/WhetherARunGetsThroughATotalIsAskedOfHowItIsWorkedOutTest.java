@@ -3,10 +3,12 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -41,7 +43,7 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
                 %s
                 behavior m : (%s) -> Bool
                 let m (%s) = %s
-                """.formatted(declarations, inputs, inputs.replaceAll(": [A-Za-z<>]+", ""), body),
+                """.formatted(declarations, inputs, inputs.replaceAll(": (Map<[^>]*>|[A-Za-z<>]+)", ""), body),
                 "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         compilation.answerEverything();
@@ -191,6 +193,25 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
     }
 
     /**
+     * A value bound and never read that comes to a form, though working it out is not shown to
+     * get through, is still worked out: the total of {@code x + 1 - 1} over {@code ns} comes to
+     * the total of {@code ns} and stops at the greatest {@code Int}. The comparison beside it is
+     * not taken to tell every operation its rows get past, as it is with no such binding.
+     */
+    @Test
+    void aValueThatComesToAFormIsNotTakenToGetThroughForThat() {
+        String inputs = "ns: List<Int>, n: Int, k: Int";
+        UndividedByARelation.Working bound = workingOf(inputs, """
+                ({
+                    let unread = List.sum(List.map(x -> x + 1 - 1, ns))
+                    n
+                }) >= k""");
+        assertEquals(WhatARelationLeavesUndivided.Told.SOME, bound.told(), bound::toString);
+        UndividedByARelation.Working alone = workingOf(inputs, "n >= k");
+        assertEquals(WhatARelationLeavesUndivided.Told.EVERY, alone.told(), alone::toString);
+    }
+
+    /**
      * A walk read after other operations of the comparison is worked out after them, and each
      * step after the one before: the step that adds {@code j} is worked out of the step that
      * added {@code m}, and not of the sum the comparison worked out first.
@@ -216,6 +237,103 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
         assertTrue(whereEveryRunStops(report).startsWith("every run stops in 2 * n where"),
                 report);
         assertTrue(whereEveryRunStops(report).contains("in 2 * m where"), report);
+    }
+
+    /**
+     * A value looked up under a key and handed to a closure is read for the number the closure
+     * answers, which says nothing of whether the closure gets through: {@code v + 1 - 1} answers
+     * {@code v} and stops at the greatest {@code Int}.
+     */
+    @Test
+    void aValueLookedUpAndHandedToAClosureIsNotTakenToGetThroughTheClosure() {
+        String report = report("k: String, m: Map<String, Int>, q: Int", UNUSED,
+                "(Map.get(k, m) |> Option.map(v -> v + 1 - 1) |> Option.withDefault(0)) >= q");
+        assertEquals(Set.of(), related(report), report);
+    }
+
+    /**
+     * A total read off a name is read off what the name was given, and so is what working that
+     * out does: {@code n.value + 1 - 1} totals what {@code n.value} does, and stops at the
+     * greatest {@code Int}, whether the list it makes or the total is what the name holds.
+     */
+    @Test
+    void aTotalReadThroughANameIsAskedOfWhatTheNameWasGiven() {
+        String inputs = "gross: Int, ns: List<Nat>";
+        String theTotal = report(inputs, NAT, """
+                {
+                    let s = List.sum(List.map(n -> n.value + 1 - 1, ns))
+                    gross >= s
+                }""");
+        assertEquals(Set.of(), related(theTotal), theTotal);
+        String theList = report(inputs, NAT, """
+                {
+                    let xs = List.map(n -> n.value + 1 - 1, ns)
+                    gross >= List.sum(xs)
+                }""");
+        assertEquals(Set.of(), related(theList), theList);
+        assertEquals(Set.of("List.sum(ns[*])", "gross"), notShown(theList), theList);
+    }
+
+    /**
+     * How many a list holds is no number a closure applied to its elements adds into, so that
+     * closure is not between nought and it: {@code List.length(List.map(x -> 2 * x, ns))} stops
+     * at a doubling past the type with the length one. Nor is a count a walk keeps, whose step
+     * adds one and not the element it is handed. Neither comparison is taken to tell every
+     * operation its rows get past, where how many there are alone tells them all.
+     */
+    @Test
+    void aCountOfWhatAClosureMadeIsNotAnswerForTheClosure() {
+        String inputs = "ns: List<Int>, k: Int";
+        UndividedByARelation.Working counted = workingOf(inputs,
+                "List.length(List.map(x -> 2 * x, ns)) >= k");
+        assertEquals(WhatARelationLeavesUndivided.Told.SOME, counted.told(), counted::toString);
+        UndividedByARelation.Working walked = workingOf(inputs,
+                "List.fold((acc, x) -> acc + 1, 0, List.map(y -> 2 * y, ns)) >= k");
+        assertEquals(WhatARelationLeavesUndivided.Told.SOME, walked.told(), walked::toString);
+        UndividedByARelation.Working alone = workingOf(inputs, "List.length(ns) >= k");
+        assertEquals(WhatARelationLeavesUndivided.Told.EVERY, alone.told(), alone::toString);
+    }
+
+    /**
+     * Nor is a total of what a list is ordered into answer for the key it was ordered by: every
+     * key is worked out, and {@code 2 * n.value} passes the type where the total of
+     * {@code n.value} does not. Ordered by what is added, the same total is left.
+     */
+    @Test
+    void aTotalOfWhatWasOrderedIsNotAnswerForTheKeyItWasOrderedBy() {
+        String inputs = "gross: Int, ns: List<Nat>";
+        String byTwice = report(inputs, NAT,
+                "gross >= List.sum(List.map(n -> n.value, List.sortBy(n -> 2 * n.value, ns)))");
+        assertEquals(Set.of(), related(byTwice), byTwice);
+        String added = report(inputs, NAT,
+                "gross >= List.sum(List.map(n -> 2 * n.value, ns))");
+        assertTrue(related(added).contains("List.sum({2·the element itself + 0 | ns[*]})"),
+                added);
+    }
+
+    /** A walk over {@code outer} copies of {@code n} whose step adds what doubling each of
+     *  {@code inner} copies of it comes to. */
+    private static String aWalkOverWhatAClosureMakes(int outer, int inner) {
+        return "List.fold((acc, x) -> acc + List.sum(List.map(y -> 2 * y, ["
+                + String.join(", ", Collections.nCopies(inner, "n")) + "])) + x, 0, ["
+                + String.join(", ", Collections.nCopies(outer, "n")) + "]) >= k";
+    }
+
+    /**
+     * Reading a walk or a total element by element makes a reading of each element, and a walk
+     * whose step reads another so makes that many again for each of its own: they are counted
+     * together for the comparison, readings tried and kept apart included. Ten of ten is read so
+     * and every operation told; thirty of thirty is more than are made, and the comparison is not
+     * taken to tell every operation, rather than read a square of them.
+     */
+    @Test
+    void readingsElementByElementAreCountedTogetherForTheComparison() {
+        UndividedByARelation.Working few = workingOf("n: Int, k: Int",
+                aWalkOverWhatAClosureMakes(10, 10));
+        assertEquals(WhatARelationLeavesUndivided.Told.EVERY, few.told(), few::toString);
+        UndividedByARelation.Working many = workingOf("n: Int, k: Int",
+                aWalkOverWhatAClosureMakes(30, 30));
+        assertEquals(WhatARelationLeavesUndivided.Told.SOME, many.told(), many::toString);
     }
 
     /** An empty list is handed to no application, so the closure owes nothing. */

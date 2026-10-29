@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.abort.AbortKind;
+import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.GetsPast;
 import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
@@ -8,6 +10,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
@@ -16,6 +19,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -156,6 +160,20 @@ public final class AffineForms {
          * says only that the walk does not know.
          */
         default void unobserved(Core node) {
+        }
+
+        /**
+         * That the walk read {@code call}, an operation of the library, as {@code form}, the
+         * arithmetic over its arguments the library says it answers, and that a run stops at it
+         * where {@code where} says: it ends one only where its answer is past the ends of its
+         * type, or the library says no more than that it may end one. A reader that does not ask
+         * where is told it was {@link #unobserved} wherever it may end one.
+         */
+        default void answeredByTheLibrary(Core call, LinearForm<A> form,
+                                          WhereAnOperatorAnswers where) {
+            if (!(where instanceof WhereAnOperatorAnswers.Everywhere)) {
+                unobserved(call);
+            }
         }
 
         /**
@@ -400,6 +418,22 @@ public final class AffineForms {
         @Override
         public void composed(Core operation, LinearForm<A> form, List<LinearForm<A>> operands) {
             of.composed(operation, form, operands);
+        }
+
+        @Override
+        public void unobserved(Core node) {
+            of.unobserved(node);
+        }
+
+        @Override
+        public void answeredByTheLibrary(Core call, LinearForm<A> form,
+                                         WhereAnOperatorAnswers where) {
+            of.answeredByTheLibrary(call, form, where);
+        }
+
+        @Override
+        public void bound(Core.LetIn binding, E at) {
+            of.bound(binding, at);
         }
 
         @Override
@@ -1006,14 +1040,37 @@ public final class AffineForms {
     }
 
     /**
-     * The reading told that {@code call}, read as arithmetic over its arguments, was read without
-     * telling of what it works out — where its owners say working it out may end a run, or do not
-     * say. A call that ends none is the arithmetic and nothing else.
+     * {@code form}, what {@code call} was read as over its arguments, with the reading told where a
+     * run stops at the call ({@link Reading#answeredByTheLibrary}). A call that ends none is the
+     * arithmetic and nothing else. One whose owners say it ends a run only where its answer has
+     * no place stops where the form is past the ends of the type it answers; any other, where they
+     * do not say.
      */
-    private static <A, E> void unobservedIfItCanStop(Core call, Reading<A, E> reading) {
-        if (!WhatARunMayEndFor.itself(call).endsNone()) {
-            reading.unobserved(call);
+    private static <A, E> LinearForm<A> answeredByTheLibrary(Core call, LinearForm<A> form,
+                                                             Reading<A, E> reading) {
+        reading.answeredByTheLibrary(call, form, whereTheLibraryAnswers(call, reading));
+        return form;
+    }
+
+    private static <A, E> WhereAnOperatorAnswers whereTheLibraryAnswers(Core call,
+                                                                       Reading<A, E> reading) {
+        WhatARunMayEndFor.Endings own = WhatARunMayEndFor.itself(call);
+        if (own.endsNone()) {
+            return new WhereAnOperatorAnswers.Everywhere();
         }
+        if (!(own instanceof WhatARunMayEndFor.Endings.Known(AbortSet kinds))
+                || !kinds.kinds().stream()
+                .allMatch(kind -> kind == AbortKind.REQUIRED_FORM_HAS_NO_PLACE)) {
+            return new WhereAnOperatorAnswers.NotStated("its owners say more than its answer"
+                    + " having no place ends a run");
+        }
+        Carrier answered = Carrier.ofValue(call.type(), reading.declarations());
+        OrderedInterval ends = answered == null ? null : answered.extent();
+        BigInteger least = ends == null ? null : WholeUnitsBetween.wholeNumberOf(ends.low());
+        BigInteger greatest = ends == null ? null : WholeUnitsBetween.wholeNumberOf(ends.high());
+        return least == null || greatest == null
+                ? new WhereAnOperatorAnswers.NotStated("its type has no whole ends")
+                : new WhereAnOperatorAnswers.WhereItsExactValueIsHeld(least, greatest);
     }
 
     /**
@@ -1414,7 +1471,6 @@ public final class AffineForms {
     private static <A, E> LinearForm<A> overTheValues(Core call, LinearForm<Core> says, E at,
                                                       Reading<A, E> reading, Walk<A, E> following,
                                                       Stop<A, E> stopped) {
-        unobservedIfItCanStop(call, reading);
         Stop<A, E> inside = new Stop<>();
         LinearForm<A> form = LinearForm.constant(says.constant());
         for (Map.Entry<Core, ExactRatio> each : says.coefs().entrySet()) {
@@ -1430,7 +1486,7 @@ public final class AffineForms {
                 }
             }
         }
-        return form;
+        return answeredByTheLibrary(call, form, reading);
     }
 
     /**
@@ -1445,7 +1501,6 @@ public final class AffineForms {
                                                  E at, Reading<A, E> reading,
                                                  Walk<A, E> following,
                                                  Stop<A, E> stopped) {
-        unobservedIfItCanStop(call, reading);
         java.util.List<Core> args = Terms.argsOf(call);
         // The expansion's own stops, kept off the walk's. What is inside a declared form is not
         // what an author wrote: the arguments stand where they stand because the library says the
@@ -1483,7 +1538,7 @@ public final class AffineForms {
                 }
             }
         }
-        return form;
+        return answeredByTheLibrary(call, form, reading);
     }
 
     /**

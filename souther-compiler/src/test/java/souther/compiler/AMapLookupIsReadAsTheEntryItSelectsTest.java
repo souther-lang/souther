@@ -71,20 +71,30 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
      * Nothing is left unread, the threshold included. On the way to the entry the lookup asks
      * which key the map holds an entry under, which says nothing of the value under it, so the
      * entry's value reaches every threshold — written with the default or with the match spelled
-     * out, and with the value moved by a constant before it is compared.
+     * out.
+     *
+     * <p>Moved by a constant in a closure before it is compared, the value is read the same, but
+     * the closure's sum is worked out on the run and nothing tells where it passes the type: the
+     * reading of the lookup reads what the closure answers and not how it is worked out. The
+     * entry and the threshold are then related to a value not shown to reach every value, which
+     * is not that a run stops.
      */
     @Test
     void aLookupWithADefaultIsReadToTheEnd() {
-        for (String source : List.of(WITH_DEFAULT, WRITTEN_OUT, """
-                module p
-                behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
-                let f (k, m, q) =
-                    (Map.get(k, m) |> Option.map(v -> v + 1) |> Option.withDefault(0)) >= q
-                """)) {
+        for (String source : List.of(WITH_DEFAULT, WRITTEN_OUT)) {
             String report = report(measured(source));
 
             assertEquals(List.of(), notRead(report), report);
         }
+        String moved = report(measured("""
+                module p
+                behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
+                let f (k, m, q) =
+                    (Map.get(k, m) |> Option.map(v -> v + 1) |> Option.withDefault(0)) >= q
+                """));
+        assertEquals(2, notRead(moved).size(), moved);
+        assertTrue(notRead(moved).stream()
+                .allMatch(line -> line.contains("not shown to reach every value")), moved);
     }
 
     /**

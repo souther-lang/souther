@@ -340,8 +340,13 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
      * A count another input supplies is no shift of one position: it is a number of two, and the
      * comparison relates them. The counts that settle the comparison whatever the date is are the
      * ones moving the least date past the year or the greatest short of it, which is where the
-     * dates stop and no line the model draws, so the count is read with no line on it. What the
-     * date is shown is still not every value: a count moving it past the last date there is.
+     * dates stop and no line the model draws, so the count is read with no line on it.
+     *
+     * <p>Moving the date is told as what it is, an operation a run stops at where the date passes
+     * the ends of the calendar, and a row is shown to get past it only where it holds at the row.
+     * A row of the count alone, with the date anywhere, is no row it is asked of, so neither the
+     * count nor the date is shown to reach every value of its own. That is not that a run stops
+     * there.
      */
     @Test
     void aShiftByACountAnotherInputSuppliesIsNotAShiftOfOnePosition() {
@@ -355,8 +360,9 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
 
         assertFalse(report.contains("Date.year((birthday"), report);
         assertTrue(report.contains("read as f/birthday + days"), report);
-        assertTrue(report.contains("it relates the value here to another value rather than"
-                + " dividing the values here, about `days`"), report);
+        assertTrue(report.contains("relates the value here to another value not shown to reach"
+                + " every value here, so which values here settle it on their own is not worked"
+                + " out, about `days`"), report);
         assertTrue(report.contains("relates the value here to another value not shown to reach"
                 + " every value here, so which values here settle it on their own is not worked"
                 + " out, about `birthday`"), report);
