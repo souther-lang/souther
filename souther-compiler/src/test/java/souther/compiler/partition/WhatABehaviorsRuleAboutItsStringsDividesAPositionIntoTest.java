@@ -388,7 +388,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
 
         Classing.Classed.NotComposed none = assertInstanceOf(Classing.Classed.NotComposed.class,
                 answered.classed());
-        assertEquals(new BlockReason.RelationShownOverARegion(false, 2L), none.why());
+        assertEquals(new BlockReason.RelationShownOverARegion(false, 2L, List.of()), none.why());
         assertEquals(List.of(Classing.Outcome.NOT_COMPOSED),
                 answered.forEach().stream().map(Classing.Disposed::outcome).toList());
     }

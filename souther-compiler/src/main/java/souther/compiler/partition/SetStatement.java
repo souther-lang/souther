@@ -45,22 +45,35 @@ import java.util.List;
  * @param origin    which rule this is, which reading of it, and where a reader is sent to find it
  * @param notShown  the values shown on neither side, whatever their length; none where every value
  *                  is shown on one
+ * @param imagesNotShown the operations of the library whose image over the strings of a side is
+ *                  shown only where it is exact, which are why {@code notShown} holds the strings
+ *                  it holds
  */
 public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
                           ValueSet whenFalse, PredicateStatement statement,
-                          PredicateOrigin origin, ValueSet notShown) {
+                          PredicateOrigin origin, ValueSet notShown,
+                          List<String> imagesNotShown) {
 
     public SetStatement {
         if (term == null || whenTrue == null || whenFalse == null
-                || statement == null || origin == null || notShown == null) {
+                || statement == null || origin == null || notShown == null
+                || imagesNotShown == null) {
             throw new IllegalArgumentException(
                     "a statement about a position names some values, and some rule made it");
         }
+        imagesNotShown = List.copyOf(imagesNotShown);
         // Whether the two sides hold anything is not asked here, and cannot be. What a rule leaves
         // is a set of every string there is; what the position holds is what its declarations left
         // it — so a side inhabited among the strings can be empty at the position, and one empty
         // among them cannot be inhabited there. Which of those a rule is, is a question about the
         // position's values, and it is asked where they are known ({@link Classing}).
+    }
+
+    /** The same, whose open values are open for no operation's image. */
+    public SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
+                        ValueSet whenFalse, PredicateStatement statement,
+                        PredicateOrigin origin, ValueSet notShown) {
+        this(term, whenTrue, whenFalse, statement, origin, notShown, List.of());
     }
 
     /** Whether every value is shown on one side or the other. */

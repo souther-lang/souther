@@ -47,6 +47,15 @@ public sealed interface GetsPast {
      */
     record WhereTheTotalFits(int operand) implements GetsPast {}
 
+    /**
+     * It answers wherever the text it makes is no longer than a {@code String} holds, and ends a
+     * run for nothing else: a case conversion of the text at {@code operand}, whose answer may
+     * hold more code points than the text it was handed.
+     *
+     * @param operand which of the site's operands is the text, counted from nought
+     */
+    record WhereTheTextFits(int operand) implements GetsPast {}
+
     /** Nothing here says where it answers. */
     record NotKnown() implements GetsPast {}
 

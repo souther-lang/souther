@@ -269,11 +269,12 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
     }
 
     /**
-     * The statement stops no longer being a form nobody reads, whichever way it is written: the
-     * report says the relation is not shown to reach every value, and nothing else of it.
+     * The statement is read to the end, whichever way it is written: each string is parted by the
+     * strings the other can come to, and the strings the lowercase is not exactly a map on are
+     * said to be left open. The report does not say the relation is not shown to reach the values.
      */
     @Test
-    void theReportOfARelationBetweenStringsSaysOnlyThatItIsNotShownToReach() {
+    void theReportOfARelationBetweenStringsSaysItIsShownOverARegion() {
         for (String body : List.of(
                 "List.any(p -> String.contains(String.lowercase(i.businessCase),"
                         + " String.lowercase(p.value)), i.points)",
@@ -286,8 +287,38 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
             assertFalse(json.contains("unsupported_syntax"), () -> "read to the end: " + body);
             assertFalse(json.contains("rule_about_a_derived_value"),
                     () -> "not about a derived value: " + body);
-            assertTrue(json.contains("relation_not_shown_to_reach_every_value"),
-                    () -> "said not shown to reach: " + body);
+            assertFalse(json.contains("relation_not_shown_to_reach_every_value"),
+                    () -> "both strings are parted: " + body);
+            assertTrue(json.contains("relation_shown_over_a_region"),
+                    () -> "said shown over a region: " + body);
+        }
+    }
+
+    /** The report names the function whose image over the strings is not shown, whichever case
+     *  mapping it is, and says nothing of the other. */
+    @Test
+    void theReportNamesTheFunctionWhoseImageIsNotShown() {
+        String lower = reported("List.any(p -> String.contains(String.lowercase(i.businessCase),"
+                + " String.lowercase(p.value)), i.points)");
+        String upper = reported("List.any(p -> String.contains(String.uppercase(i.businessCase),"
+                + " String.uppercase(p.value)), i.points)");
+        assertTrue(lower.contains("imagesNotShown"), lower);
+        assertTrue(lower.contains("lowercase"), "lowercase is named");
+        assertFalse(lower.contains("uppercase"), "only the function applied is named");
+        assertTrue(upper.contains("uppercase"), "uppercase is named");
+        assertFalse(upper.contains("lowercase"), "only the function applied is named");
+    }
+
+    /** startsWith, endsWith and contains are three relations, and each is read to the end. */
+    @Test
+    void everySpellingOfTheRelationIsReadToTheEnd() {
+        for (String function : List.of("contains", "startsWith", "endsWith")) {
+            String json = reported("List.any(p -> String." + function
+                    + "(String.lowercase(i.businessCase), String.lowercase(p.value)), i.points)");
+            assertFalse(json.contains("relation_not_shown_to_reach_every_value"),
+                    () -> function + " is read");
+            assertTrue(json.contains("relation_shown_over_a_region"),
+                    () -> function + " is shown over a region");
         }
     }
 

@@ -2,6 +2,9 @@ package souther.compiler.semantics;
 
 import souther.compiler.types.ValueName;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * What a string is made into by case conversions before it is counted, or none where it is counted
  * as it stands. A conversion of a conversion is a conversion: the outermost is the last applied.
@@ -49,6 +52,26 @@ public sealed interface CaseMapping {
         }
         return ValueName.Stdlib.operation("String", "uppercase").equals(operation)
                 ? new Uppercase(inner) : null;
+    }
+
+    /**
+     * The operations of the library this is made of, each as the library names it, the one done
+     * first before the one done last: none for the string as it stands.
+     */
+    default List<String> operations() {
+        return switch (this) {
+            case None _ -> List.of();
+            case Lowercase lowercase -> concat(lowercase.of().operations(),
+                    ValueName.Stdlib.operation("String", "lowercase").qualified());
+            case Uppercase uppercase -> concat(uppercase.of().operations(),
+                    ValueName.Stdlib.operation("String", "uppercase").qualified());
+        };
+    }
+
+    private static List<String> concat(List<String> before, String last) {
+        List<String> out = new ArrayList<>(before);
+        out.add(last);
+        return List.copyOf(out);
     }
 
     /** {@code value} as it is written where it has been converted by this. */

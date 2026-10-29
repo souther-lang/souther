@@ -5966,6 +5966,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 rendering, declaredIn),
                         publishedStops(asked, parts).stream()
                                 .map(stop -> whyUnread(stop.reason()) + stoppedAt(stop.figures())
+                                        + imagesNotShownSaid(stop.leftOpen())
                                         + sentTo(stop.sentTo(), rendering, declaredIn))
                                 .collect(Collectors.joining("; ")),
                         whatItsPositionWasShortOf(asked).map(AdequacyReport::whyUnread)
@@ -6106,6 +6107,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             left.put("longerThan", open.longerThan());
         }
         left.put("atAnyLength", open.atAnyLength());
+        if (!open.imagesNotShown().isEmpty()) {
+            ArrayNode names = left.putArray("imagesNotShown");
+            open.imagesNotShown().forEach(names::add);
+        }
     }
 
     /**
@@ -10058,6 +10063,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * lines this ends a clause of separate what a question stands on with semicolons, and two
      * figures of one stop read there as two stops.
      */
+    private static String imagesNotShownSaid(
+            Optional<BlockReason.RelationShownOverARegion> leftOpen) {
+        return leftOpen.map(BlockReason.RelationShownOverARegion::imagesNotShown)
+                .filter(names -> !names.isEmpty())
+                .map(names -> ", the image of " + String.join(", ", names) + " not shown")
+                .orElse("");
+    }
+
     private static String stoppedAt(List<Figure> figures) {
         return figures.isEmpty() ? "" : ", stopped at " + figures.stream()
                 .map(each -> figuresSaid(List.of(each)))

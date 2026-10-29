@@ -111,7 +111,7 @@ public final class StringsHeldAsWritten {
     }
 
     /** These as a language, or null past what {@code meter} allows. */
-    Language language(Meter meter) {
+    public Language language(Meter meter) {
         return Language.canonical(machine, meter);
     }
 

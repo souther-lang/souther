@@ -197,9 +197,17 @@ sealed interface ComparisonAssessment {
         /** The places a line on one of them parts the values that settle the relation at, and the
          *  places the strings their partner can hold part. */
         Set<FilingCoordinate> dividedBySettling() {
+            return dividedBySettling(null);
+        }
+
+        /** The same, where the strings their partner can hold part only the places in
+         *  {@code partneredKept}, or every place where that is null. */
+        Set<FilingCoordinate> dividedBySettling(Set<FilingCoordinate> partneredKept) {
             Set<FilingCoordinate> out = new LinkedHashSet<>();
             settling.forEach(line -> out.addAll(line.cutting().over()));
-            left.partnered().keySet().forEach(term -> out.add(FilingCoordinate.of(term)));
+            left.partnered().keySet().stream().map(FilingCoordinate::of)
+                    .filter(at -> partneredKept == null || partneredKept.contains(at))
+                    .forEach(out::add);
             return out;
         }
     }
@@ -391,13 +399,19 @@ sealed interface ComparisonAssessment {
                 each.partnered().forEach((term, strings) -> {
                     FilingCoordinate at = FilingCoordinate.of(term);
                     boolean alike = true;
+                    UndividedByARelation.StringsAPartnerCanHold named = strings;
                     for (int i = 0; i < leaves.size(); i++) {
                         if (about.get(i).contains(at)) {
-                            alike &= strings.equals(leaves.get(i).partnered().get(term));
+                            UndividedByARelation.StringsAPartnerCanHold theirs =
+                                    leaves.get(i).partnered().get(term);
+                            alike &= strings.showsTheStringsOf(theirs);
+                            if (alike) {
+                                named = named.orAnother(theirs);
+                            }
                         }
                     }
                     if (alike) {
-                        out.putIfAbsent(term, strings);
+                        out.putIfAbsent(term, named);
                     }
                 });
             }
@@ -435,9 +449,17 @@ sealed interface ComparisonAssessment {
         /** The places a line on one of them parts the values that settle the relation at, and the
          *  places the strings their partner can hold part. */
         Set<FilingCoordinate> dividedBySettling() {
+            return dividedBySettling(null);
+        }
+
+        /** The same, where the strings their partner can hold part only the places in
+         *  {@code partneredKept}, or every place where that is null. */
+        Set<FilingCoordinate> dividedBySettling(Set<FilingCoordinate> partneredKept) {
             Set<FilingCoordinate> out = new LinkedHashSet<>();
             settling.forEach(line -> out.addAll(line.cutting().over()));
-            partnered.keySet().forEach(term -> out.add(FilingCoordinate.of(term)));
+            partnered.keySet().stream().map(FilingCoordinate::of)
+                    .filter(at -> partneredKept == null || partneredKept.contains(at))
+                    .forEach(out::add);
             return out;
         }
 
@@ -614,6 +636,57 @@ sealed interface ComparisonAssessment {
             if (parts.isEmpty()) {
                 throw new IllegalArgumentException("several lines are some lines");
             }
+        }
+
+        /**
+         * Each string position some part shows parted by the strings its partner can hold, where
+         * every part about its place shows it parted by the same strings, and every part is a
+         * relation to another value. A relation parts the strings of a position whichever case of
+         * the statement a row is in: what a case decides is which lines part what settles it.
+         */
+        Map<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold> partnered() {
+            List<Set<FilingCoordinate>> about = new ArrayList<>();
+            List<Map<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold>>
+                    each = new ArrayList<>();
+            for (Part part : parts) {
+                switch (part.line()) {
+                    case AgainstAnotherValue relation -> {
+                        about.add(Set.copyOf(relation.filedAt()));
+                        each.add(relation.partnered());
+                    }
+                    case AcrossPositions across -> {
+                        about.add(across.relation().places());
+                        each.add(across.left().partnered());
+                    }
+                    default -> {
+                        return Map.of();
+                    }
+                }
+            }
+            Map<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold> out =
+                    new LinkedHashMap<>();
+            for (Map<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold>
+                    one : each) {
+                one.forEach((term, strings) -> {
+                    FilingCoordinate at = FilingCoordinate.of(term);
+                    boolean alike = true;
+                    UndividedByARelation.StringsAPartnerCanHold named = strings;
+                    for (int i = 0; i < each.size(); i++) {
+                        if (about.get(i).contains(at)) {
+                            UndividedByARelation.StringsAPartnerCanHold theirs =
+                                    each.get(i).get(term);
+                            alike &= strings.showsTheStringsOf(theirs);
+                            if (alike) {
+                                named = named.orAnother(theirs);
+                            }
+                        }
+                    }
+                    if (alike) {
+                        out.putIfAbsent(term, named);
+                    }
+                });
+            }
+            return out;
         }
 
         /**
@@ -1741,31 +1814,11 @@ sealed interface ComparisonAssessment {
             // terms, since a form of one term is either.
             // A place the values settling it are parted at by a line is divided, and is left
             // nothing here.
-            case AcrossPositions across -> {
-                if (!(across.cutting().of().whyItDividesNoPosition()
-                        instanceof BlockReason.ComparisonRelatingTwoValues)) {
-                    yield sameAtEachPlace(across.cutting().of().whyItDividesNoPosition());
-                }
-                Set<FilingCoordinate> divided = across.dividedBySettling();
-                // What the relation's search stopped at is for the places it is about.
-                Map<FilingCoordinate, Set<Figure>> stopped = new LinkedHashMap<>();
-                if (!across.left().stoppedAt().isEmpty()) {
-                    across.relation().places().forEach(at ->
-                            stopped.put(at, across.left().stoppedAt()));
-                }
-                yield relatingAt(filedAt().stream()
-                        .filter(place -> !divided.contains(place)).toList(), across.undivided(),
-                        stopped, across.left().mayStopBefore());
-            }
+            case AcrossPositions across -> leftWithAcross(across, null);
             // Another value is no position, and what the rule says is the same thing it says
             // against one: where the value here stands against it. A place a line parts the
             // values settling it at is divided, and is left nothing here.
-            case AgainstAnotherValue against -> {
-                Set<FilingCoordinate> divided = against.dividedBySettling();
-                yield relatingAt(against.filedAt().stream()
-                        .filter(place -> !divided.contains(place)).toList(), against.undivided(),
-                        against.stoppedAt(), against.mayStopBefore());
-            }
+            case AgainstAnotherValue against -> leftWithAgainst(against, null);
             case CutsNothing _ -> sameAtEachPlace(new BlockReason.ComparisonCuttingNothing());
             case AnswersNowhere _ -> sameAtEachPlace(new BlockReason.ComparisonAnswersNowhere());
             case OutsideTheDomain _ -> sameAtEachPlace(UnreadComparison.outsideWhatTheQuantityHolds());
@@ -1793,8 +1846,18 @@ sealed interface ComparisonAssessment {
                         .filter(part -> part.line() instanceof AtAPosition)
                         .flatMap(part -> cuttingOf(part.line()).over().stream())
                         .toList();
+                // A position a part parts by its partner's strings is parted by them only where
+                // every part about it parts it so ({@link Several#partnered}): at any other it is
+                // left as the part with no such reading leaves it.
+                Set<FilingCoordinate> parted = new LinkedHashSet<>();
+                several.partnered().keySet().forEach(term -> parted.add(FilingCoordinate.of(term)));
                 yield several.parts().stream()
-                        .flatMap(part -> part.line().whatEachPlaceIsLeftWith().stream())
+                        .flatMap(part -> switch (part.line()) {
+                            case AcrossPositions across -> leftWithAcross(across, parted).stream();
+                            case AgainstAnotherValue against ->
+                                    leftWithAgainst(against, parted).stream();
+                            default -> part.line().whatEachPlaceIsLeftWith().stream();
+                        })
                         .filter(left -> left.why() instanceof BlockReason.RuleReadingStopped
                                 || !divided.contains(left.at()))
                         .distinct()
@@ -1817,6 +1880,37 @@ sealed interface ComparisonAssessment {
             // place, it would be a rule that reading named reported as one nobody read.
             case OnADependencysAnswer _, StatesNoRelation _ -> List.of();
         };
+    }
+
+    /**
+     * What each place of a line over several positions is left with, where the strings its partners
+     * can hold part only the positions in {@code partneredKept} — every one where that is null.
+     */
+    private List<LeftAt> leftWithAcross(AcrossPositions across,
+                                        Set<FilingCoordinate> partneredKept) {
+        if (!(across.cutting().of().whyItDividesNoPosition()
+                instanceof BlockReason.ComparisonRelatingTwoValues)) {
+            return sameAtEachPlace(across.cutting().of().whyItDividesNoPosition());
+        }
+        Set<FilingCoordinate> divided = across.dividedBySettling(partneredKept);
+        // What the relation's search stopped at is for the places it is about.
+        Map<FilingCoordinate, Set<Figure>> stopped = new LinkedHashMap<>();
+        if (!across.left().stoppedAt().isEmpty()) {
+            across.relation().places().forEach(at ->
+                    stopped.put(at, across.left().stoppedAt()));
+        }
+        return relatingAt(across.filedAt().stream()
+                .filter(place -> !divided.contains(place)).toList(), across.undivided(),
+                stopped, across.left().mayStopBefore());
+    }
+
+    /** The same, of a relation to another value. */
+    private List<LeftAt> leftWithAgainst(AgainstAnotherValue against,
+                                         Set<FilingCoordinate> partneredKept) {
+        Set<FilingCoordinate> divided = against.dividedBySettling(partneredKept);
+        return relatingAt(against.filedAt().stream()
+                .filter(place -> !divided.contains(place)).toList(), against.undivided(),
+                against.stoppedAt(), against.mayStopBefore());
     }
 
     /**

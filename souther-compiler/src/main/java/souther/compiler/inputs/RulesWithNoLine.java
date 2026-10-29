@@ -218,8 +218,10 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
          * while any are left.
          */
         public void regionUndetermined(RuleCitation cited, ModelOccurrences readAt,
-                                       FilingCoordinate at, List<ValuesWithin> open) {
-            BlockReason.RelationShownOverARegion why = BlockReason.RelationShownOverARegion.of(open);
+                                       FilingCoordinate at, List<ValuesWithin> open,
+                                       List<String> imagesNotShown) {
+            BlockReason.RelationShownOverARegion why =
+                    BlockReason.RelationShownOverARegion.of(open, imagesNotShown);
             add(RuleWithoutALine.of(cited, readAt, at, why));
             asked(StandingQuestion.RegionUndetermined.of(cited, readAt, at, why));
         }

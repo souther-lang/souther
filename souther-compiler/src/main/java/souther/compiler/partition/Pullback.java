@@ -118,6 +118,7 @@ import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
@@ -1280,7 +1281,7 @@ final class Pullback {
             operated = held;
         }
         if (outcome instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
-            operated.leaveUnsaid(form.coefs().keySet(), bound);
+            operated.leaveUnsaid(form.coefs().keySet(), bound, reads);
         } else {
             leaveUnsaidOverWhereItStands(operand, reads, bound);
         }
@@ -1309,13 +1310,30 @@ final class Pullback {
                     operated.unsaidAt.addAll(places.places());
                     return;
                 }
+                // A name an arm of a match or a let binds stands for what the value it was bound to
+                // stands for, which is read in the arm and not where the match stands.
+                if (Core.withoutStanding(operand) instanceof Core.Match match) {
+                    leaveUnsaidOverWhereItStands(match.scrutinee(), reads, bound);
+                    for (Core.Case arm : match.cases()) {
+                        leaveUnsaidOverWhereItStands(arm.body(), reads.choosing(
+                                Choice.Decides.ofCase(match, arm), read.rules().symbols(),
+                                read.rules().newtypes()), bound);
+                    }
+                    return;
+                }
+                if (Core.withoutStanding(operand) instanceof Core.LetIn li) {
+                    leaveUnsaidOverWhereItStands(li.value(), reads, bound);
+                    leaveUnsaidOverWhereItStands(li.body(), quantities().inside(li, reads), bound);
+                    return;
+                }
                 boolean[] hasParts = {false};
                 Core.forEachChild(Core.withoutStanding(operand), part -> {
                     hasParts[0] = true;
                     leaveUnsaidOverWhereItStands(part, reads, bound);
                 });
                 if (!hasParts[0] && Core.withoutStanding(operand) instanceof Core.Read name) {
-                    operated.leaveUnsaidOver(name.binding(), bound);
+                    operated.leaveUnsaidOver(bound != null && !bound.names().contains(name.binding())
+                            ? reads.namedBy(name.binding()) : name.binding(), bound);
                 }
             }
         }
@@ -2344,26 +2362,55 @@ final class Pullback {
      */
     private Pieces pieceThatIs(Core e, InputReads at, Function<Denotation, Pieces> held) {
         Denotation whole = theContainerOfTheElement(e, at);
-        if (whole == null) {
-            return null;
-        }
+        return whole == null ? null : piecesOfTheElementsOf(whole, held);
+    }
+
+    /**
+     * The pieces every element of {@code whole} is one of, or null where its elements are not the
+     * pieces of one string.
+     *
+     * <p>A container of each piece wrapped in a newtype holds the pieces, as the values it holds
+     * are the same exactly where the pieces are. One put together of the lists a step answered
+     * holds the elements of those lists: where every list is written with the one element, that
+     * element, read where the arm that writes it is taken; and where the step answers a list
+     * another operation made, the elements of that list.
+     */
+    private Pieces piecesOfTheElementsOf(Denotation whole, Function<Denotation, Pieces> held) {
         Beneath beneath = beneath(whole, false);
         Denotation made = beneath == null ? whole : beneath.at();
         Pieces direct = held.apply(made);
         if (direct != null) {
             return direct;
         }
-        // A container of each piece wrapped in a newtype holds the pieces, as the values it holds
-        // are the same exactly where the pieces are.
         ElementBindings.StepOnEachElement wrapping =
                 ElementBindings.stepAnsweredOnEachElement(made.value(), blocksAt(made));
-        if (wrapping == null || !wrapsItsElement(wrapping)) {
+        if (wrapping != null) {
+            if (!wrapsItsElement(wrapping)) {
+                return null;
+            }
+            Denotation walked = made.at().standing(wrapping.walked(), read.rules().symbols(),
+                    read.rules().newtypes());
+            Beneath beneathWalked = beneath(walked, false);
+            return held.apply(beneathWalked == null ? walked : beneathWalked.at());
+        }
+        ElementBindings.PiecesOfEachElement assembled =
+                ElementBindings.piecesOfEachElement(made.value(), blocksAt(made));
+        if (assembled == null || assembled.piece() != PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS) {
             return null;
         }
-        Denotation walked = made.at().standing(wrapping.walked(), read.rules().symbols(),
-                read.rules().newtypes());
-        Beneath beneathWalked = beneath(walked, false);
-        return held.apply(beneathWalked == null ? walked : beneathWalked.at());
+        ElementBindings.ElementWritten written =
+                ElementBindings.theOneElementWrittenAfter(assembled.step().body());
+        if (written != null) {
+            InputReads inside = made.at();
+            for (Choice.Decides decided : written.decided()) {
+                inside = inside.choosing(decided, read.rules().symbols(), read.rules().newtypes());
+            }
+            Denotation element = withoutTheNewtypesItWears(new Denotation(written.element(),
+                    inside));
+            return pieceThatIs(element.value(), element.at(), held);
+        }
+        return piecesOfTheElementsOf(made.at().standing(assembled.step().body(),
+                read.rules().symbols(), read.rules().newtypes()), held);
     }
 
     /** Whether the step of {@code walk} answers its element wrapped in a newtype's constructor
@@ -2519,7 +2566,8 @@ final class Pullback {
      * depth this is read at: either way the one the same statement names.
      */
     private Quantity.APieceOf aPiece(Denotation side) {
-        Pieces piece = pieceThatIs(side.value(), side.at(), this::piecesInAWindow);
+        Denotation unwrapped = withoutTheNewtypesItWears(side);
+        Pieces piece = pieceThatIs(unwrapped.value(), unwrapped.at(), this::piecesInAWindow);
         // A window of none holds no piece for a value to be, and is no number this says.
         if (piece == null || piece.window().isEmpty()) {
             return null;
@@ -2540,6 +2588,24 @@ final class Pullback {
     }
 
     /**
+     * {@code side} as it stands, with the newtypes it wears taken off: a name wearing a string is
+     * the string, and where the construction is attempted the value is the one handed it, which
+     * is the case a comparison is reached in.
+     */
+    private Denotation withoutTheNewtypesItWears(Denotation side) {
+        Denotation stands = side.at().standing(side.value(), read.rules().symbols(),
+                read.rules().newtypes());
+        while (Core.withoutStanding(stands.value()) instanceof Core.Construct made
+                && made.values().size() == 1
+                && made.typeName() instanceof TypeSymbol.AtModule named
+                && read.rules().newtypes().of(named.key())) {
+            stands = stands.at().standing(made.values().getFirst().value(),
+                    read.rules().symbols(), read.rules().newtypes());
+        }
+        return stands;
+    }
+
+    /**
      * The piece {@code side} is, where it is the element a list lookup at an index written down
      * picks of the pieces of a string of the input — or null where it is not.
      *
@@ -2548,17 +2614,7 @@ final class Pullback {
      * It is one piece, the one at that index, whichever statement it is read inside.
      */
     private Quantity.ThePieceAt thePieceAt(Denotation side) {
-        Denotation stands = side.at().standing(side.value(), read.rules().symbols(),
-                read.rules().newtypes());
-        // A name wearing a string is the string: where the construction is attempted the value
-        // is the one handed it, which is the case the comparison is reached in.
-        while (Core.withoutStanding(stands.value()) instanceof Core.Construct made
-                && made.values().size() == 1
-                && made.typeName() instanceof TypeSymbol.AtModule named
-                && read.rules().newtypes().of(named.key())) {
-            stands = stands.at().standing(made.values().getFirst().value(),
-                    read.rules().symbols(), read.rules().newtypes());
-        }
+        Denotation stands = withoutTheNewtypesItWears(side);
         InputReads.PickedAtAnIndex picked = stands.at().pickedAtAnIndex(stands.value());
         if (picked == null || picked.index() > Integer.MAX_VALUE) {
             return null;
@@ -6117,11 +6173,19 @@ final class Pullback {
          *  of the numbers among them are the ones it may stop on, and a quantity that is no
          *  number of a place leaves it stopping on no place this can name. */
         void leaveUnsaid(Collection<? extends Quantity> reads, Bound bound) {
+            leaveUnsaid(reads, bound, null);
+        }
+
+        /** The same, where a name another name was given is the name it was given, read in
+         *  {@code at}. */
+        void leaveUnsaid(Collection<? extends Quantity> reads, Bound bound, InputReads at) {
             for (Quantity each : reads) {
                 if (each instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
                     unsaidAt.add(term.subjectPath());
                 } else if (each instanceof Quantity.OfABinding named) {
-                    leaveUnsaidOver(named.binding(), bound);
+                    leaveUnsaidOver(at != null && bound != null
+                            && !bound.names().contains(named.binding())
+                            ? at.namedBy(named.binding()) : named.binding(), bound);
                 } else {
                     unsaidElsewhere = true;
                 }
@@ -9366,6 +9430,14 @@ final class Pullback {
             if (outcome instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
                     LinearForm<Quantity> form)) {
                 composed.add(form);
+                // A name for a piece of a string that a name standing for one of several values is
+                // handed to is read on each of them, which is where the string is a position.
+                Inside throughThePiece = soleQuantity(form) instanceof Quantity.OfABinding
+                        ? aWayIntoTheStringOfAPiece(number) : null;
+                if (throughThePiece != null && !(throughThePiece instanceof Inside.OneOfTheValues(
+                        Core.Read name, var _) && number.at().hands(name.binding()))) {
+                    return new NumbersRead(throughThePiece, composed, notLinear);
+                }
             }
             if (outcome instanceof AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
                 if (whereItStopped(stopped).why() instanceof AffineForms.Halt.NotLinear<Quantity,
@@ -9397,6 +9469,22 @@ final class Pullback {
             }
         }
         return new NumbersRead(null, composed, notLinear);
+    }
+
+    /**
+     * The value a reading can go into in the string {@code number}, a piece of a string, is a
+     * piece of, where that string is no position of the input as it stands — or null where
+     * {@code number} is no piece of one, or its string is a position.
+     */
+    private Inside aWayIntoTheStringOfAPiece(Denotation number) {
+        Denotation unwrapped = withoutTheNewtypesItWears(number);
+        Pieces piece = pieceThatIs(unwrapped.value(), unwrapped.at(), this::piecesInAWindow);
+        if (piece == null) {
+            return null;
+        }
+        Core string = piece.split().args().get(piece.parted().string().position());
+        return valueOfTheInput(string, piece.at()) != null ? null
+                : aWayInto(new Denotation(string, piece.at()), new HashSet<>());
     }
 
     /** The innermost value the arithmetic of {@code stopped} stopped at, through the arguments of

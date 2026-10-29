@@ -398,7 +398,9 @@ final class Classing {
         // nothing open, and what stopped the classes is not theirs to be told of.
         if (cells.isEmpty() && !open.isEmpty()) {
             return notComposed(mine, told, BlockReason.RelationShownOverARegion.of(
-                    open.stream().flatMap(each -> each.open().stream()).toList()), open);
+                    open.stream().flatMap(each -> each.open().stream()).toList(),
+                    open.stream().flatMap(each -> each.statement().imagesNotShown().stream())
+                            .toList()), open);
         }
         List<PartitionClass> out = new ArrayList<>();
         for (Cell cell : cells) {

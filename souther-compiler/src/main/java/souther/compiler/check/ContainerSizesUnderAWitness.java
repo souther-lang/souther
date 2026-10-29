@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawSubject;
@@ -14,6 +15,7 @@ import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.values.TextExtents;
 
 import java.math.BigInteger;
 import java.util.HashMap;
@@ -96,6 +98,9 @@ public final class ContainerSizesUnderAWitness {
                         : reading.most(operands.get(at))
                                 .map(most -> most.compareTo(BigInteger.ONE) <= 0).orElse(false);
             }
+            // How long a text a conversion makes turns on the text, and what a run holds of
+            // collections says nothing of it.
+            case GetsPast.WhereTheTextFits _ -> false;
             case GetsPast.NotKnown _ -> false;
         };
     }
@@ -269,6 +274,14 @@ public final class ContainerSizesUnderAWitness {
             Core source = applied.argument(assembled.source());
             return source == null ? Optional.empty() : most(source);
         }
+        // Built from the elements of one container, and no more of them than it holds.
+        BuiltFrom<DeclaredArgument> built = facts.buildsItsResultFrom(applied.operation());
+        if (built != null && built.outputs().size() == 1 && built.lineage().source() != null) {
+            Core source = applied.argument(built.lineage().source().argument());
+            if (source != null) {
+                return most(source);
+            }
+        }
         if (facts.settled(applied.operation(), OperationLaw.Observed.SIZE)
                 instanceof BoundOperationFacts.Settled.ByALaw(
                         OperationLaw.Size<DeclaredArgument> law, var _)) {
@@ -277,6 +290,11 @@ public final class ContainerSizesUnderAWitness {
                 out = larger(out, mostOf(each.equalTo(), applied));
             }
             return out;
+        }
+        // The pieces of a string are one more than the separators it holds, and a string holds
+        // no more code points than a String can.
+        if (facts.piecesOf(applied.operation()) != null) {
+            return Optional.of(BigInteger.valueOf(TextExtents.LONGEST_STRING).add(BigInteger.ONE));
         }
         return Optional.empty();
     }

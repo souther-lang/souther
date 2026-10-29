@@ -3843,6 +3843,33 @@ public final class InputReads {
     }
 
     /**
+     * The name {@code binding} is another name for, through the calls that handed it over and the
+     * names given to it ({@link #handedOver}): itself where it is neither, or where what it was
+     * handed is no name.
+     */
+    public BindingId namedBy(BindingId binding) {
+        BindingId at = binding;
+        InputReads reads = this;
+        Set<BindingId> met = new HashSet<>();
+        while (met.add(at)) {
+            Core handed;
+            if (reads.applied.given().get(at) instanceof Denotation given) {
+                handed = Core.withoutStanding(given.value());
+                reads = given.at();
+            } else if (reads.names.roleOf(at) instanceof BindingRole.Alias(var value)) {
+                handed = Core.withoutStanding(value);
+            } else {
+                break;
+            }
+            if (!(handed instanceof Core.Read next)) {
+                break;
+            }
+            at = next.binding();
+        }
+        return at;
+    }
+
+    /**
      * {@code e} followed through the calls that handed it over, and nothing else: a parameter of a
      * body a call entered is the value the call handed it, read where the call stands, and that
      * value is followed in turn if it is one too.
@@ -4234,8 +4261,18 @@ public final class InputReads {
         if (pieces == null || pieces.piece() != PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS) {
             return null;
         }
-        Core element = ElementBindings.theOneElementWritten(pieces.step().body());
-        return element == null ? null : new ReadMeaning.Through(new Denotation(element, at));
+        ElementBindings.ElementWritten written =
+                ElementBindings.theOneElementWrittenAfter(pieces.step().body());
+        if (written == null) {
+            return null;
+        }
+        // The element is read where the arm that writes it is taken, so a name an attempt writes
+        // stands for what the attempt built.
+        InputReads inside = at;
+        for (Choice.Decides decided : written.decided()) {
+            inside = inside.choosing(decided, symbols, newtypes);
+        }
+        return new ReadMeaning.Through(new Denotation(written.element(), inside));
     }
 
     /** What a walk's answers are read as, and the walk that answered them. */
