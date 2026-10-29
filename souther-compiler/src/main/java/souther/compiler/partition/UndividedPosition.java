@@ -287,7 +287,9 @@ public record UndividedPosition(TermPath at, Why why) {
          * Here the classes stand, and what a reader is told is which values they do not hold and
          * what ended the showing: the longest {@code String}, past which nothing here wrote the
          * other value out, or a value the other side holds only through a code point normalization
-         * changes.
+         * changes. Of numbers, the values it was shown over are the ones a row is shown computed
+         * in, and the rest are the numbers in which the operations the rows work out were not all
+         * worked out on a row built there.
          */
         RELATION_SHOWN_OVER_A_REGION,
         /**

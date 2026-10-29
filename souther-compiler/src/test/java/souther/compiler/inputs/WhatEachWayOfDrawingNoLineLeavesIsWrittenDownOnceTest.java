@@ -17,6 +17,8 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleRef;
+import souther.compiler.numeric.ExactCut;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
@@ -192,6 +194,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // over: what is open is fixed by the longest string and by normalization, and a run
         // allowed more leaves the same values open.
         table.put("RelationShownOverARegion",
+                "RELATION_SHOWN_OVER_A_REGION/UNAFFECTED");
+        // The same word over numbers: the rows shown computed stand, and the numbers in which none
+        // is are fixed by the operations the rows work out, which a run allowed more meets again.
+        table.put("RelationRowsNotShownComputed",
                 "RELATION_SHOWN_OVER_A_REGION/UNAFFECTED");
         // What the rule states was taken apart, and the reason no line came of it is read off that
         // meaning. A part declined at how many readings are made, one way down or in all, at how
@@ -550,6 +556,9 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(AT_A_FIGURE)),
                 new BlockReason.RelationNotShownReachedAtEveryValue(),
                 new BlockReason.RelationShownOverARegion(false, 1L),
+                new BlockReason.RelationRowsNotShownComputed(List.of(
+                        new WhatARelationLeavesUndivided.SettledRun(null,
+                                ExactCut.exclusive(ExactRatio.ZERO), false))),
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonAnswersNowhere(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),

@@ -330,7 +330,10 @@ public final class ReportedReason {
                     UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE;
             // Its own word again: the classes stand over what was shown, and what falls short is
             // the values they do not hold.
-            case BlockReason.RelationShownOverARegion _ ->
+            // The same word for numbers: the rows shown computed stand, and what falls short is
+            // the numbers in which none is.
+            case BlockReason.RelationShownOverARegion _,
+                 BlockReason.RelationRowsNotShownComputed _ ->
                     UndividedPosition.Reason.RELATION_SHOWN_OVER_A_REGION;
             case BlockReason.ComparisonRelatingTwoValues _ ->
                     UndividedPosition.Reason.RULE_RELATING_TWO_VALUES;

@@ -242,6 +242,11 @@ sealed interface ComparisonAssessment {
         for (NumericTerm term : NumericTerms.inOrder(terms)) {
             // A line is drawn on a number a row can be written to stand at, and only where the
             // model draws it: one the orders' ends alone draw parts no class of the model's.
+            // A term some of whose settling numbers have no row shown computed draws no line: the
+            // numbers beside the ones that do would be one class with the ones that do not.
+            if (!settled.get(term).notComputed().isEmpty()) {
+                continue;
+            }
             List<WhatARelationLeavesUndivided.Line> lines = settled.get(term).linesOnAPlaceOf(term);
             List<AtAPosition> here = new ArrayList<>();
             for (WhatARelationLeavesUndivided.Line each : lines) {
@@ -289,6 +294,9 @@ sealed interface ComparisonAssessment {
      * @param mayStopBefore those of {@code undivided} a run may stop on the way to some relation
      *                  about on what nothing here says, so that every value there getting to the
      *                  comparison is not shown ({@link UndividedByARelation.WhatItLeaves#mayStopBefore})
+     * @param notComputed for each of {@code filedAt} some relation about it settles by the terms'
+     *                  ends in some numbers, those numbers where no row is shown computed: no
+     *                  line is drawn for the place, and it is said so
      * @param partnered each string position the relation is shown to part by the strings its
      *                  partner can hold, where the partner is a piece of a string
      */
@@ -298,6 +306,8 @@ sealed interface ComparisonAssessment {
                                Optional<DrawnBeside> beside,
                                Map<FilingCoordinate, Set<Figure>> stoppedAt,
                                Set<FilingCoordinate> mayStopBefore,
+                               Map<FilingCoordinate,
+                                       List<WhatARelationLeavesUndivided.SettledRun>> notComputed,
                                Map<NumericTerm.FromOnePosition,
                                        UndividedByARelation.StringsAPartnerCanHold> partnered)
             implements ComparisonAssessment {
@@ -311,6 +321,10 @@ sealed interface ComparisonAssessment {
             stoppedAt.forEach((at, figures) -> held.put(at, Set.copyOf(figures)));
             stoppedAt = Collections.unmodifiableMap(held);
             settling = List.copyOf(settling);
+            Map<FilingCoordinate, List<WhatARelationLeavesUndivided.SettledRun>> unshown =
+                    new LinkedHashMap<>();
+            notComputed.forEach((at, runs) -> unshown.put(at, List.copyOf(runs)));
+            notComputed = Collections.unmodifiableMap(unshown);
             partnered = Collections.unmodifiableMap(new LinkedHashMap<>(partnered));
             Objects.requireNonNull(beside, "drawn beside something, or nothing");
             if (beside.isEmpty() && !settling.isEmpty()) {
@@ -324,7 +338,7 @@ sealed interface ComparisonAssessment {
                                       InputReading reading, Optional<DrawnBeside> beside,
                                       CountWitnesses.Lookup witnesses) {
             return new AgainstAnotherValue(read.over(), read.relations(), Set.of(), List.of(),
-                    beside, Map.of(), Set.of(), Map.of())
+                    beside, Map.of(), Set.of(), Map.of(), Map.of())
                     .whereRowsArrive(reading, List.of(), witnesses);
         }
 
@@ -374,7 +388,9 @@ sealed interface ComparisonAssessment {
                 }
             }
             return new AgainstAnotherValue(filedAt, relations, shown, lines, beside, stopped,
-                    stops, partedByTheirPartners(about, leaves));
+                    stops, notComputedAt(leaves.stream()
+                            .flatMap(each -> each.settled().entrySet().stream()).toList()),
+                    partedByTheirPartners(about, leaves));
         }
 
         /**
@@ -444,7 +460,7 @@ sealed interface ComparisonAssessment {
         /** The same relation with only {@code lines} parting what settles it. */
         AgainstAnotherValue partedBy(List<AtAPosition> lines) {
             return new AgainstAnotherValue(filedAt, relations, undivided, lines, beside,
-                    stoppedAt, mayStopBefore, partnered);
+                    stoppedAt, mayStopBefore, notComputed, partnered);
         }
     }
 
@@ -1754,7 +1770,8 @@ sealed interface ComparisonAssessment {
                 }
                 yield relatingAt(filedAt().stream()
                         .filter(place -> !divided.contains(place)).toList(), across.undivided(),
-                        stopped, across.left().mayStopBefore());
+                        stopped, across.left().mayStopBefore(),
+                        notComputedAt(List.copyOf(across.left().settled().entrySet())));
             }
             // Another value is no position, and what the rule says is the same thing it says
             // against one: where the value here stands against it. A place a line parts the
@@ -1763,7 +1780,7 @@ sealed interface ComparisonAssessment {
                 Set<FilingCoordinate> divided = against.dividedBySettling();
                 yield relatingAt(against.filedAt().stream()
                         .filter(place -> !divided.contains(place)).toList(), against.undivided(),
-                        against.stoppedAt(), against.mayStopBefore());
+                        against.stoppedAt(), against.mayStopBefore(), against.notComputed());
             }
             case CutsNothing _ -> sameAtEachPlace(new BlockReason.ComparisonCuttingNothing());
             case AnswersNowhere _ -> sameAtEachPlace(new BlockReason.ComparisonAnswersNowhere());
@@ -1858,11 +1875,36 @@ sealed interface ComparisonAssessment {
     static List<LeftAt> relatingAt(List<FilingCoordinate> places,
                                    Set<FilingCoordinate> undivided,
                                    Map<FilingCoordinate, Set<Figure>> stoppedAt,
-                                   Set<FilingCoordinate> mayStopBefore) {
+                                   Set<FilingCoordinate> mayStopBefore,
+                                   Map<FilingCoordinate,
+                                           List<WhatARelationLeavesUndivided.SettledRun>> notComputed) {
         return places.stream().distinct().map(at -> new LeftAt(at, !undivided.contains(at)
-                ? notShownAt(stoppedAt.getOrDefault(at, Set.of()))
+                ? notComputed.containsKey(at)
+                        ? new BlockReason.RelationRowsNotShownComputed(notComputed.get(at))
+                        : notShownAt(stoppedAt.getOrDefault(at, Set.of()))
                 : mayStopBefore.contains(at) ? new BlockReason.RelationNotShownReachedAtEveryValue()
                 : new BlockReason.ComparisonRelatingTwoValues())).toList();
+    }
+
+    /**
+     * The numbers, at the place of each number, in which the runs a relation settles by the
+     * terms' ends have no row shown computed, together over the relations about the place: the
+     * runs of each, once, in the order they were met.
+     */
+    static Map<FilingCoordinate, List<WhatARelationLeavesUndivided.SettledRun>> notComputedAt(
+            List<Map.Entry<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled>> settled) {
+        Map<FilingCoordinate, List<WhatARelationLeavesUndivided.SettledRun>> out =
+                new LinkedHashMap<>();
+        for (Map.Entry<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> each : settled) {
+            for (WhatARelationLeavesUndivided.SettledRun run : each.getValue().notComputed()) {
+                List<WhatARelationLeavesUndivided.SettledRun> here = out.computeIfAbsent(
+                        FilingCoordinate.of(each.getKey()), _ -> new ArrayList<>());
+                if (!here.contains(run)) {
+                    here.add(run);
+                }
+            }
+        }
+        return out;
     }
 
     /** Nothing shown of a place, and the figures a search for more of it stopped at. */

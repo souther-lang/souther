@@ -15,6 +15,8 @@ import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.inputs.WhatARelationLeavesUndivided.SettledRun;
+import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -1254,7 +1256,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 new ComparisonAssessment.AgainstAnotherValue(
                         List.of(FilingCoordinate.of(deals), FilingCoordinate.of(rates)),
                         List.of(counted, sized), Set.of(), List.of(), Optional.empty(), Map.of(),
-                        Set.of(), Map.of())
+                        Set.of(), Map.of(), Map.of())
                         .whereRowsArrive(read, List.of(), stoppedShort);
         Map<FilingCoordinate, BlockReason> left = new LinkedHashMap<>();
         both.whatEachPlaceIsLeftWith().forEach(each -> left.put(each.at(), each.why()));
@@ -3351,14 +3353,34 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(List.of(), classesAt(inputs, HOURS, unknown, "h"));
     }
 
+    /**
+     * A place some of whose settling numbers have no row shown computed is left with those
+     * numbers, and not with the word for a relation nothing is shown of; a place shown
+     * undivided keeps what it was shown, whatever is said of the numbers.
+     */
+    @Test
+    void aPlaceWithNumbersNoRowIsShownComputedInIsLeftWithThoseNumbers() {
+        FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
+        FilingCoordinate rest = new FilingCoordinate.AtPosition(TermPath.of("s"));
+        SettledRun below = new SettledRun(null, ExactCut.exclusive(ExactRatio.ZERO), false);
+        List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
+                List.of(hours, rest), Set.of(rest), Map.of(), Set.of(), Map.of(hours, List.of(below)));
+        assertEquals(new BlockReason.RelationRowsNotShownComputed(List.of(below)),
+                left.get(0).why());
+        assertEquals(new BlockReason.ComparisonRelatingTwoValues(), left.get(1).why());
+    }
+
     @Test
     void aDecimalRunsOnPastEveryValueAnotherIsNeededAt() {
         String amount = "data Amount = Decimal invariant value >= 0.0m";
         String body = "a.value >= s.value + 5.0m";
-        assertEquals(Map.of("a", NOT_SHOWN, "s", NOT_SHOWN), left("a: Amount, s: Amount", amount, body,
+        assertEquals(Map.of("s", NOT_SHOWN), left("a: Amount, s: Amount", amount, body,
                 atThe(">=", amount, "a: Amount, s: Amount", body)));
-        // The boundary at five is the arithmetic's, and no row past it is built.
-        assertEquals(List.of(), classesAt("a: Amount, s: Amount", amount, body, "a"));
+        // The sum reads only the amount put beside the one asked of, so rows past five are
+        // computed whichever amount they stand at, and the row built at the end the run has shows
+        // both sides of the boundary at five.
+        assertEquals(List.of("a/0 <= x < 5", "a/5 <= x"),
+                classesAt("a: Amount, s: Amount", amount, body, "a"));
     }
 
     private static final String KEYED = """

@@ -99,6 +99,13 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
     private static Leaves leftOfNought(BigDecimal lowest, BigDecimal highest,
                                        BigDecimal lowestTaken, BigDecimal highestTaken,
                                        Rel relation) {
+        return leftOfNought(1, lowest, highest, lowestTaken, highestTaken, relation);
+    }
+
+    /** The same, of the term at {@code asked}. */
+    private static Leaves leftOfNought(int asked, BigDecimal lowest, BigDecimal highest,
+                                       BigDecimal lowestTaken, BigDecimal highestTaken,
+                                       Rel relation) {
         NumericDomain.Bounds held = new NumericDomain.Bounds(
                 Endpoint.inclusive(Count.of(lowest)), Endpoint.inclusive(Count.of(highest)));
         NumericDomain.Bounds taken = new NumericDomain.Bounds(Endpoint.inclusive(
@@ -111,7 +118,7 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
                 new Term<>(List.of("s"), ExactRatio.of(-1), nought, nought, null, true,
                         Granularity.DENSE, NumericDomain.Bounds.OPEN, "s"));
         DecimalOperation timesFour = product(H, new Written(new BigDecimal("4.0")));
-        return WhatARelationLeavesUndivided.leavesOf(terms, 1, ExactRatio.ZERO, relation,
+        return WhatARelationLeavesUndivided.leavesOf(terms, asked, ExactRatio.ZERO, relation,
                 String::equals, (one, other) -> true, Granularity.DENSE, null, List.of(),
                 new Operations(List.of(), List.of(timesFour), Told.EVERY));
     }
@@ -171,6 +178,32 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
     void aSideWithNoRowBuiltOnItIsNotShownThoughTheMathsReachesIt() {
         BigDecimal atTheFloor = new BigDecimal(BigInteger.ONE.negate(), Integer.MAX_VALUE);
         assertFalse(leftOfNoughtWithTheHoursFrom(atTheFloor) instanceof Leaves.Undivided);
+    }
+
+    /**
+     * {@code 4h >= s} at {@code s} nought holds at nought and above and fails below it. Shown to
+     * take, below nought, only a number at the floor of the range, {@code h} has no row there:
+     * the run above nought is a class, and the run below it is a region no row is shown computed
+     * in, which is neither a class nor a run the relation leaves either way.
+     */
+    @Test
+    void aRunNoRowIsShownComputedInIsKeptApartFromTheRunsThatAre() {
+        BigDecimal atTheFloor = new BigDecimal(BigInteger.ONE.negate(), Integer.MAX_VALUE);
+        Leaves.Settled settled = assertInstanceOf(Leaves.Settled.class, leftOfNought(0,
+                new BigDecimal("-1"), BigDecimal.ONE, atTheFloor, BigDecimal.ONE, Rel.GE));
+        assertEquals(1, settled.runs().size());
+        assertTrue(settled.runs().getFirst().holds());
+        assertEquals(1, settled.notComputed().size());
+        assertFalse(settled.notComputed().getFirst().holds());
+        assertFalse(settled.leavesItsPlacesUndivided(null));
+    }
+
+    @Test
+    void everyRunBeingComputedLeavesNoRegionApart() {
+        BigDecimal minusOne = new BigDecimal("-1");
+        Leaves.Settled settled = assertInstanceOf(Leaves.Settled.class,
+                leftOfNought(0, minusOne, BigDecimal.ONE, minusOne, BigDecimal.ONE, Rel.GE));
+        assertEquals(List.of(), settled.notComputed());
     }
 
     @Test

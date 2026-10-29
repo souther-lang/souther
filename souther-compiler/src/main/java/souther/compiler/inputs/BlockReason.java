@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.GuaranteeWalk;
 import souther.compiler.check.NonAffineOperation;
 import souther.compiler.meaning.WhyUnread;
+import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
@@ -300,6 +301,7 @@ public sealed interface BlockReason {
                 case RelationNotShownReachedAtEveryValue _ -> 26;
                 case OrderedExtentEndIsNoValue _ -> 27;
                 case RelationShownOverARegion _ -> 29;
+                case RelationRowsNotShownComputed _ -> 30;
             };
         }
 
@@ -335,6 +337,8 @@ public sealed interface BlockReason {
                     yield byLonger != 0 ? byLonger : Comparator.nullsFirst(Long::compare)
                             .compare(shorterThan, them.shorterThan());
                 }
+                case RelationRowsNotShownComputed(var over) -> RelationRowsNotShownComputed
+                        .compare(over, ((RelationRowsNotShownComputed) other).over());
                 // The rank says which statement it is.
                 case WhatItStatesIsNoLine _ -> 0;
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
@@ -400,7 +404,8 @@ public sealed interface BlockReason {
                      SeveralLinesInOneRule _, WhatItStatesIsNoLine _,
                      RelationNotShownToReachEveryValue _,
                      RelationNotShownWhereTheSearchStopped _,
-                     RelationNotShownReachedAtEveryValue _ -> true;
+                     RelationNotShownReachedAtEveryValue _,
+                     RelationRowsNotShownComputed _ -> true;
             };
         }
 
@@ -442,7 +447,7 @@ public sealed interface BlockReason {
                      LineSideNotWorkedOut _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
                      RelationNotShownToReachEveryValue _, RelationNotShownReachedAtEveryValue _,
-                     RelationShownOverARegion _ ->
+                     RelationShownOverARegion _, RelationRowsNotShownComputed _ ->
                         RunSensitivity.UNAFFECTED;
             };
         }
@@ -475,7 +480,8 @@ public sealed interface BlockReason {
                      LineSideNotWorkedOut _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
                      RelationNotShownToReachEveryValue _,
-                     RelationNotShownReachedAtEveryValue _, RelationShownOverARegion _ -> List.of();
+                     RelationNotShownReachedAtEveryValue _, RelationShownOverARegion _,
+                     RelationRowsNotShownComputed _ -> List.of();
             };
         }
     }
@@ -1315,6 +1321,63 @@ public sealed interface BlockReason {
      * way wherever a row gets to it is not this, since that is said whichever values get there.
      */
     record RelationNotShownReachedAtEveryValue() implements RuleReadingStopped {}
+
+    /**
+     * What the rule states was read in full, and it relates the value here to another value, and
+     * the numbers in {@code over} settle it by the terms' ends; but the operations the rows work
+     * out were not all worked out on a row built in them, so no row is shown computed there.
+     *
+     * <p>A region of numbers and not an interval: the runs are those the relation settles, and
+     * they lie where the relation puts them. A number in one has no row shown, which is not a row
+     * shown not to compute, and it is no counterexample to what is said of the others. Apart from
+     * {@link RelationNotShownToReachEveryValue}, which says nothing of where.
+     *
+     * @param over the runs in which no row is shown computed, in order of their values
+     */
+    record RelationRowsNotShownComputed(List<WhatARelationLeavesUndivided.SettledRun> over)
+            implements RuleReadingStopped {
+
+        public RelationRowsNotShownComputed {
+            over = List.copyOf(over);
+            if (over.isEmpty()) {
+                throw new IllegalArgumentException("a relation whose rows are not shown computed"
+                        + " says over which numbers");
+            }
+        }
+
+        /** These runs in order of where they start, an end with none first. */
+        static int compare(List<WhatARelationLeavesUndivided.SettledRun> one,
+                           List<WhatARelationLeavesUndivided.SettledRun> other) {
+            int common = Math.min(one.size(), other.size());
+            for (int i = 0; i < common; i++) {
+                int byRun = compare(one.get(i), other.get(i));
+                if (byRun != 0) {
+                    return byRun;
+                }
+            }
+            return Integer.compare(one.size(), other.size());
+        }
+
+        private static int compare(WhatARelationLeavesUndivided.SettledRun one,
+                                   WhatARelationLeavesUndivided.SettledRun other) {
+            int byStart = compareEnds(one.from(), other.from(), -1);
+            if (byStart != 0) {
+                return byStart;
+            }
+            int byEnd = compareEnds(one.to(), other.to(), 1);
+            return byEnd != 0 ? byEnd : Boolean.compare(one.holds(), other.holds());
+        }
+
+        /** Ends by where they are, then by whether they admit it; {@code none} is where an end
+         *  with no value sorts. */
+        private static int compareEnds(ExactCut one, ExactCut other, int none) {
+            if (one == null || other == null) {
+                return one == other ? 0 : one == null ? none : -none;
+            }
+            int byValue = one.at().compareTo(other.at());
+            return byValue != 0 ? byValue : Boolean.compare(one.inclusive(), other.inclusive());
+        }
+    }
 
     /**
      * What the rule states was read in full, and it relates the value here to another value; the
