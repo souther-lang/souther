@@ -462,6 +462,16 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.AffineReading.1.composed",
                     "asks the operator's own account where an operation a comparison works out"
                             + " answers, so that a row is asked to get past it"),
+            new Held("souther.compiler.partition.AffineReading.1.operandsOfTheQuotient",
+                    "asks whether the stopped expression is a quotient and where the operator's"
+                            + " own account says it answers, so that its operands are told with"
+                            + " the rest"),
+            new Held("souther.compiler.partition.AffineReading.workingOfEvaluating",
+                    "asks whether what a run evaluates is a comparison, whose two sides are"
+                            + " worked out whichever way it comes out"),
+            new Held("souther.compiler.partition.Pullback.divisionBy",
+                    "finds the quotient by the divisor a quotient's analysis read, among the"
+                            + " expressions the comparison was written with"),
             new Held("souther.compiler.check.BinaryElaborator.elaborateBinary",
                     "what the operator makes of its operands' types"),
             new Held("souther.compiler.check.BinaryElaborator.operand",
