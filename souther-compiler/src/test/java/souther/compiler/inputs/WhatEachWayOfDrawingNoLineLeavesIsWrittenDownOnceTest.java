@@ -33,6 +33,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -395,6 +397,32 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     private static String sensitivityOf(BlockReason reason) {
         return reason instanceof BlockReason.ReadingStopReason stopped
                 ? stopped.runSensitivity().name() : "-";
+    }
+
+    /**
+     * Two reasons about one rule at one place are two findings, and neither merges into the
+     * other: a figure a search stopped at is one a run allowed more may get past, and numbers in
+     * which no row is shown computed are not.
+     */
+    @Test
+    void aRuleLeftForTwoReasonsAtOnePlaceKeepsBoth() {
+        RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
+        RuleCitation cited = new RuleCitation.Written(
+                new RuleRef.Comparison("b",
+                        new SourceConstructOrigin(new WrittenOwner.Body("m", "b"),
+                                1, 1, SourceConstruct.IF)),
+                new RuleReportAnchor.ByTheModuleThatWroteIt());
+        FilingCoordinate at = new FilingCoordinate.AtPosition(TermPath.of("x"));
+        BlockReason.RuleWithoutLineReason numbers = new BlockReason.RelationRowsNotShownComputed();
+        BlockReason.RuleWithoutLineReason figure =
+                new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(AT_A_FIGURE));
+        gathered.add(cited, at, numbers);
+        gathered.add(cited, at, figure);
+        gathered.add(cited, at, numbers);
+
+        assertEquals(Set.of(numbers, figure), gathered.found().reported().stream()
+                .map(RuleWithoutALine::why).collect(Collectors.toSet()));
+        assertEquals(2, gathered.found().reported().size());
     }
 
     /**

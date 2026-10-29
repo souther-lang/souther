@@ -57,6 +57,14 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * <p>It is also what a number the analysis chooses is held to, so that the room an operation
      * has for it is shown once ({@link #allowAClaimOver}) and does not depend on which number
      * of a run it was chosen near.
+     *
+     * <p>And it is why the room does not turn on how large a number is. A row is built from
+     * numbers written at most this many places before or after the point, so two operands of a
+     * sum differ in scale by at most twice it, whatever their digits are, and the sum lines them
+     * up. {@code 1E+2147483647 + 5.0} has no room because the scales are the whole range apart,
+     * and the number is no row: a row is not built at it. What a run claims of the numbers far
+     * out is so claimed of the rows that can be built there, which is the convention a row has
+     * everywhere ({@link RowsComputed}): a number whose digits no host holds has none.
      */
     public static final int PLACES_A_ROW_IS_BUILT_AT = 1 << 12;
 

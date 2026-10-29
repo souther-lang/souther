@@ -230,6 +230,13 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
 
     /** The same, with {@code s} held to {@code mostOfS} at the most, or to no most where null. */
     private static Leaves leftOfAmounts(int asked, Formed operand, Long mostOfS) {
+        return leftOfAmounts(asked, operand, mostOfS,
+                sum(operand, new Written(new BigDecimal("5.0"))));
+    }
+
+    /** The same, with {@code worked} the operation told. */
+    private static Leaves leftOfAmounts(int asked, Formed operand, Long mostOfS,
+                                        DecimalOperation worked) {
         NumericDomain.Bounds amounts = new NumericDomain.Bounds(
                 Endpoint.inclusive(Count.of(0)), null);
         NumericDomain.Bounds partners = mostOfS == null ? amounts : new NumericDomain.Bounds(
@@ -239,10 +246,9 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
                         Granularity.DENSE, NumericDomain.Bounds.OPEN, "a"),
                 new Term<>(List.of("s"), ExactRatio.of(-1), partners, partners, null, true,
                         Granularity.DENSE, NumericDomain.Bounds.OPEN, "s"));
-        DecimalOperation plusFive = sum(operand, new Written(new BigDecimal("5.0")));
         return WhatARelationLeavesUndivided.leavesOf(terms, asked, ExactRatio.of(-5), Rel.GE,
                 String::equals, (one, other) -> true, Granularity.DENSE, null, List.of(),
-                new Operations(List.of(), List.of(plusFive), Told.EVERY));
+                new Operations(List.of(), List.of(worked), Told.EVERY));
     }
 
     /**
@@ -293,6 +299,54 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
                         digits + " digits, " + beside);
             }
         }
+    }
+
+    /**
+     * What makes the room of a sum independent of how large its operands are: a row is built only
+     * from numbers written at no more places than {@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT},
+     * before or after the point, so the scales a sum lines up are at most twice that apart
+     * whatever the digits are. Asked over the edge of what is built and over magnitudes from one
+     * to past a hundred thousand digits, for a sum, a difference and a product by a number
+     * written at a few places.
+     */
+    @Test
+    void theRoomOfAnOperationOverARowDoesNotTurnOnHowLargeItsOperandsAre() {
+        int places = DecimalOperation.PLACES_A_ROW_IS_BUILT_AT;
+        BigInteger large = BigInteger.TEN.pow(100_000).subtract(BigInteger.valueOf(7));
+        Written fiveTenths = new Written(new BigDecimal("5.0"));
+        for (BigInteger digits : new BigInteger[] {BigInteger.valueOf(7), large}) {
+            for (int scale : new int[] {-places, -1, 0, 1, places}) {
+                ExactRatio at = ExactRatio.of(new BigDecimal(digits, scale));
+                for (BinOp op : new BinOp[] {BinOp.ADD, BinOp.SUB, BinOp.MUL}) {
+                    DecimalOperation operation = new DecimalOperation(op,
+                            List.of(S, fiveTenths), List.of());
+                    assertTrue(DecimalOperation.allCompleteAt(List.of(operation),
+                                    Map.of("s", at)),
+                            op + " over " + digits.bitLength() + " bits at scale " + scale);
+                }
+            }
+        }
+    }
+
+    /**
+     * A number that needs more places after the point than a row is built at is no row, so no
+     * sum over it is said to be worked out, though adding five tenths to it has room. A number
+     * of many digits before the point is written whole and is a row. A sum with a number written
+     * at the far edge of the scale range is not claimed over, nor is one told of it.
+     */
+    @Test
+    void aNumberPastTheEdgeOfWhatIsBuiltIsNoRowAndNoSumWithItIsClaimed() {
+        List<DecimalOperation> plusFive = List.of(sum(S, new Written(new BigDecimal("5.0"))));
+        ExactRatio past = ExactRatio.of(new BigDecimal(BigInteger.ONE,
+                DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 1));
+        assertFalse(DecimalOperation.allCompleteAt(plusFive, Map.of("s", past)));
+        ExactRatio manyDigits = ExactRatio.of(BigInteger.TEN.pow(
+                DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 1));
+        assertTrue(DecimalOperation.allCompleteAt(plusFive, Map.of("s", manyDigits)));
+        DecimalOperation plusTheFar = sum(S, new Written(new BigDecimal(BigInteger.ONE,
+                -Integer.MAX_VALUE)));
+        assertFalse(DecimalOperation.allowAClaimOver(List.of(plusTheFar), "a", "s"));
+        assertNull(leftOfAmounts(0, S, null, plusTheFar));
     }
 
     /** An operation reading {@code a} has room by the scale {@code a} is written at, which a run

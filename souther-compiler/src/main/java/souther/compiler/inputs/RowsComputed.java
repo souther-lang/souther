@@ -116,7 +116,10 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
      * term has to stand in. That the row built there is computed is asked of the rows built at
      * the end the run has, at the places the partner is chosen at whatever number is asked of
      * ({@link DecimalOperation#allowAClaimOver}); the room of an operation turns on the scales of
-     * its operands, and the number asked of is read by none.
+     * its operands, and the number asked of is read by none. That the scales of rows built far out
+     * are no further apart than those of rows built at the end is
+     * {@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT}'s, and it is held by the tests of
+     * {@code DecimalOperation} over magnitudes and over the edge of what is built.
      */
     boolean aRunWithNoEndIsAskedAtTheEndItHas(Object asked) {
         return greatest == null && tellsEveryOperation() && operations.sums().isEmpty()
