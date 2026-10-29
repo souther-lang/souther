@@ -13,8 +13,8 @@ import java.util.Optional;
 import java.util.TreeSet;
 
 /**
- * A sum, a difference, a product or a negation of decimals a comparison works out, told so that a
- * row can be asked whether the program gets past it.
+ * A sum, a difference or a product of decimals a comparison works out, told so that a row can be
+ * asked whether the program gets past it.
  *
  * <p>Whether a decimal operation has room for its digits and scale is not a region of the numbers
  * its operands come to: {@code 0} written at the scale of an {@code int}'s greatest value is the
@@ -25,11 +25,13 @@ import java.util.TreeSet;
  * built, and not of the rows the number stands for.
  *
  * <p>An operand is a decimal as the program wrote it ({@link Written}), the result of an operation
- * worked out before ({@link Worked}), or the number a row's values come to ({@link Formed}), which
- * is held at the fewest digits the number can be written with.
+ * worked out before ({@link Worked}), or a place of the input ({@link Formed}), which a row is
+ * built with at the fewest digits its number can be written with. Those are the operands whose
+ * scale is known, and the scale is what the room is for: an operand of any other kind is not
+ * told, and the operation with it.
  *
- * @param op       the operator: add, subtract or multiply, or null for a negation
- * @param operands the one operand of a negation, or the two of the others in the order written
+ * @param op       the operator: add, subtract or multiply
+ * @param operands the two operands, in the order written
  * @param after    the operations, by where they are among those told, whose result this one is
  *                 worked out of, and theirs: each is worked out before it on every run
  */
@@ -38,10 +40,9 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
     public DecimalOperation {
         operands = List.copyOf(operands);
         after = List.copyOf(new TreeSet<>(after));
-        if (operands.size() != (op == null ? 1 : 2)
-                || (op != null && op != BinOp.ADD && op != BinOp.SUB && op != BinOp.MUL)) {
-            throw new IllegalArgumentException("a decimal operation is a negation or the sum,"
-                    + " difference or product of two decimals: " + op + " " + operands);
+        if (operands.size() != 2 || (op != BinOp.ADD && op != BinOp.SUB && op != BinOp.MUL)) {
+            throw new IllegalArgumentException("a decimal operation is the sum, difference or"
+                    + " product of two decimals: " + op + " " + operands);
         }
     }
 
@@ -131,7 +132,7 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
                 return null;
             }
         }
-        return op == null ? taken[0].negate() : switch (op) {
+        return switch (op) {
             case ADD -> ExactDecimals.sumWhereThereIsRoom(taken[0], taken[1]);
             case SUB -> ExactDecimals.differenceWhereThereIsRoom(taken[0], taken[1]);
             default -> ExactDecimals.timesWhereThereIsRoom(taken[0], taken[1]);
