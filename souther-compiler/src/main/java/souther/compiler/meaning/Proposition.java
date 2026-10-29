@@ -1,5 +1,6 @@
 package souther.compiler.meaning;
 
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PlacesMoved;
@@ -14,6 +15,7 @@ import souther.compiler.semantics.StringContainment;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -2249,21 +2251,35 @@ public sealed interface Proposition {
         return false;
     }
 
-    /** Whether {@code stated} is that the input {@code container} holds something: how many it
-     *  holds, as it stands, above nought. */
+    /** Whether {@code stated} is that {@code container} holds something: how many it holds, as it
+     *  stands, above nought. */
     private static boolean holdsSomething(Proposition stated, DecisionSubject container) {
-        return container instanceof DecisionSubject.AnInput(TermPath at)
-                && stated instanceof Compared(Relation.Affine(LinearForm<Quantity> form, Rel rel),
-                        boolean holds, String _)
-                && holds && rel == Rel.GT && form.constant().signum() == 0
-                && form.coefs().size() == 1
-                && form.coefs().values().iterator().next().signum() > 0
-                && form.coefs().keySet().iterator().next() instanceof DecisionAtom.OfTheInput(
-                        NumericTerm.TakenOf size)
-                && size.position().equals(at)
-                && size.transformation() == ValueTransformation.NONE
-                && size.arguments().equals(TakenArguments.NONE)
-                && size.takenAs() instanceof TakenAs.HowManyItHolds;
+        if (!(stated instanceof Compared(Relation.Affine(LinearForm<Quantity> form, Rel rel),
+                        boolean holds, String _))
+                || !holds || rel != Rel.GT || form.constant().signum() != 0
+                || form.coefs().size() != 1
+                || form.coefs().values().iterator().next().signum() <= 0) {
+            return false;
+        }
+        return switch (form.coefs().keySet().iterator().next()) {
+            case DecisionAtom.OfTheInput(NumericTerm.TakenOf size) ->
+                    container instanceof DecisionSubject.AnInput(TermPath at)
+                            && size.position().equals(at)
+                            && size.transformation() == ValueTransformation.NONE
+                            && countsWhatItHolds(size.operation(), size.arguments());
+            case DecisionAtom.TakenOfAnAnswer size -> size.of().equals(container)
+                    && countsWhatItHolds(size.operation(), size.arguments());
+            default -> false;
+        };
+    }
+
+    /** Whether {@code operation}, given {@code arguments} beside the value, takes how many the
+     *  value holds. */
+    private static boolean countsWhatItHolds(ValueName.Stdlib operation,
+                                             TakenArguments arguments) {
+        return arguments.equals(TakenArguments.NONE)
+                && DefaultBoundOperationFacts.get().takenAs(operation, arguments)
+                        instanceof TakenAs.HowManyItHolds;
     }
 
     private static Proposition joined(List<Proposition> parts, boolean every) {

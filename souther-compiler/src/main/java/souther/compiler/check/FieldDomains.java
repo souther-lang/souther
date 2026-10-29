@@ -303,7 +303,7 @@ public final class FieldDomains {
      * {@link #classes} is: asked at every place a projection is asked of, and the answer turns on
      * the rules of this value alone.
      */
-    private final Map<Set<RuleKey>, Optional<Map<String, Core>>> heldTogether =
+    private final Map<Set<RuleKey>, Optional<Map<RuleKey, Core>>> heldTogether =
             new ConcurrentHashMap<>();
 
     /** Which places the parts of this value's rules tie together, made the first time it is
@@ -311,7 +311,7 @@ public final class FieldDomains {
     private volatile TiedPlaces tied;
 
     /** What {@link #writtenTogether} answers, worked out the first time it is asked. */
-    private volatile Map<String, Core> writtenTogether;
+    private volatile Map<RuleKey, Core> writtenTogether;
 
     /** What {@link #projection} answers, worked out the first time it is asked. */
     private volatile ProjectionEvidence projected;
@@ -2905,23 +2905,23 @@ public final class FieldDomains {
     }
 
     /** {@link #writtenOver} of {@code together}, worked out once for each set of places. */
-    private Optional<Map<String, Core>> writtenAt(Set<RuleKey> together) {
+    private Optional<Map<RuleKey, Core>> writtenAt(Set<RuleKey> together) {
         return heldTogether.computeIfAbsent(Set.copyOf(together), this::writtenOver);
     }
 
     /**
-     * A value at the fields of each set of places a rule the bounds do not hold ties together,
-     * written down that every part naming one of them holds of, by field — the value that shows
-     * those places hold one together ({@link #holdTogether}).
+     * The constant at each place of each set of places a rule the bounds do not hold ties
+     * together, in a value written down that every part naming one of those places holds of — the
+     * value that shows they hold one together ({@link #holdTogether}).
      *
-     * <p>What a builder of a value of this declaration writes at those fields. Chosen a field at a
+     * <p>What a builder of a value of this declaration offers at those places. Chosen a place at a
      * time against what the rules leave each, the second of {@code String.contains("q", a)} and
      * {@code String.contains(a, b)} was chosen against nothing, since what a rule relating two
-     * strings leaves one is not a set of strings, and the value was refused. A field two such sets
-     * are in, which the two values may write differently, is not among them.
+     * strings leaves one is not a set of strings, and the value was refused. The sets are apart,
+     * so no place is in two of them.
      */
-    public Map<String, Core> writtenTogether() {
-        Map<String, Core> known = writtenTogether;
+    public Map<RuleKey, Core> writtenTogether() {
+        Map<RuleKey, Core> known = writtenTogether;
         if (known == null) {
             known = Collections.unmodifiableMap(writtenTogetherReadOff());
             writtenTogether = known;
@@ -2930,7 +2930,7 @@ public final class FieldDomains {
     }
 
     /** {@link #writtenTogether}, read off the places the rules tie together. */
-    private Map<String, Core> writtenTogetherReadOff() {
+    private Map<RuleKey, Core> writtenTogetherReadOff() {
         if (!(projection() instanceof ProjectionEvidence.NotCertified(
                 List<ProjectionEvidence.Cause> causes))) {
             return Map.of();
@@ -2941,30 +2941,24 @@ public final class FieldDomains {
                 unheld.add(rule);
             }
         });
-        Map<String, Core> out = new LinkedHashMap<>();
-        Set<String> twice = new HashSet<>();
+        Map<RuleKey, Core> out = new LinkedHashMap<>();
         Set<Set<RuleKey>> asked = new HashSet<>();
         tied().placesOf().forEach((read, places) -> {
             if (!unheld.contains(read.part().rule())) {
                 return;
             }
             Set<RuleKey> together = tied().tiedTo(places.iterator().next());
-            if (together.size() < 2 || !apartFrom(together, null) || !asked.add(together)) {
-                return;
+            if (together.size() >= 2 && apartFrom(together, null) && asked.add(together)) {
+                writtenAt(together).ifPresent(out::putAll);
             }
-            writtenAt(together).ifPresent(values -> values.forEach((field, value) -> {
-                if (out.putIfAbsent(field, value) != null) {
-                    twice.add(field);
-                }
-            }));
         });
-        twice.forEach(out::remove);
         return out;
     }
 
     /**
      * A value of this declaration at the fields the places {@code together} are in, written down
-     * that every part naming one of them holds of, by field — see {@link #holdTogether}.
+     * that every part naming one of them holds of, as the constant at each of those places and at
+     * each place under one of them — see {@link #holdTogether}.
      *
      * <p>Asked of each clause such a part is in, as it comes out where its other parts hold
      * ({@link InvariantChecker.Written#withPartsSettled}). Those name places no part ties to these,
@@ -2974,7 +2968,7 @@ public final class FieldDomains {
      * were. A binding the clause is read under is still worked out, and one naming a field not
      * written here stops the fold as it did.
      */
-    private Optional<Map<String, Core>> writtenOver(Set<RuleKey> together) {
+    private Optional<Map<RuleKey, Core>> writtenOver(Set<RuleKey> together) {
         Set<String> fields = new LinkedHashSet<>();
         together.forEach(at -> fields.add(at.steps().getFirst()));
         Map<InvariantChecker.ReadingId, Set<PartId<RuleRef.Invariant>>> kept =
@@ -3000,8 +2994,21 @@ public final class FieldDomains {
             }
             rules.add(held);
         }
-        return Optional.ofNullable(ADeclarationsWitness.written(source, named, fields, rules,
-                this::stringsAdmittedAt));
+        Map<List<String>, Core> written = ADeclarationsWitness.written(source, named, fields,
+                rules, this::stringsAdmittedAt);
+        if (written == null) {
+            return Optional.empty();
+        }
+        // The fields are written whole, and only the places these are or are under are this
+        // value's to offer: the rest of a field is the rest of the rules'.
+        Map<RuleKey, Core> out = new LinkedHashMap<>();
+        written.forEach((steps, value) -> {
+            RuleKey place = placeReachedBy(steps);
+            if (place != null && together.stream().anyMatch(place::isAtOrUnder)) {
+                out.put(place, value);
+            }
+        });
+        return Optional.of(out);
     }
 
     /**
@@ -3357,23 +3364,20 @@ public final class FieldDomains {
     /** A string the reading of this declaration admits at {@code place}: the least one its
      *  language holds, or each string a finite set lists. */
     private List<String> stringsAdmittedAt(List<String> steps) {
-        // The name the reading knows the place by, found among those it has rather than made: what
-        // a rule may name is decided where names are read, and this has no say in it.
-        RuleKey place = admittedByName.keySet().stream()
+        RuleKey place = placeReachedBy(steps);
+        return place == null ? List.of() : admits(place).approximation().stringsItNames();
+    }
+
+    /**
+     * The name the reading knows the place the fields {@code steps} reach by, or null where it
+     * knows it by none.
+     *
+     * <p>Found among those it has rather than made: what a rule may name is decided where names
+     * are read, and this has no say in it.
+     */
+    private RuleKey placeReachedBy(List<String> steps) {
+        return admittedByName.keySet().stream()
                 .filter(each -> each.steps().equals(steps)).findFirst().orElse(null);
-        if (place == null) {
-            return List.of();
-        }
-        return switch (admits(place).approximation()) {
-            case ValueSet.Matching matching -> {
-                String some = matching.language().some();
-                yield some == null ? List.of() : List.of(some);
-            }
-            case ValueSet.Finite finite -> finite.values().stream()
-                    .filter(Value.Text.class::isInstance)
-                    .map(each -> ((Value.Text) each).value()).toList();
-            case ValueSet.Cofinite _, ValueSet.WholeRuns _ -> List.of();
-        };
     }
 
     /**

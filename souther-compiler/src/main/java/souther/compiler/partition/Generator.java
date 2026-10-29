@@ -13719,12 +13719,12 @@ public final class Generator {
                                 ? cutBy : Set.of(), stands.met());
             }
             paths.add(slot.at());
-            // Its part of a value of the fields a rule ties it to, first, where no search holds
-            // its number: chosen a field at a time, no field of such a value would be.
-            FixtureTemplate tied = here == null ? Partitions.writtenAs(
-                    left.writtenTogetherAt(slot.at()), slot.type(), reading) : null;
+            // Its part of a value of the places a rule ties it to first, where the part is inside
+            // what the rules leave it: chosen a place at a time, no place of such a value would be.
+            FixtureTemplate tied = Partitions.writtenAs(left.writtenTogetherAt(slot.at()),
+                    slot.type(), reading);
             List<FixtureTemplate> offered = new ArrayList<>();
-            if (tied != null) {
+            if (tied != null && Witnesses.heldWithin(tied, limits)) {
                 offered.add(tied);
             }
             stands.values().stream()

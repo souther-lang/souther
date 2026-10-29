@@ -2281,7 +2281,8 @@ public final class Partitions {
         FieldDomains.Composing left = rules.composing(Map.of());
         // A value of the fields a rule relating them ties together, which no field chosen at a time
         // against what the rules leave it is: such a rule leaves no one of them a set.
-        Map<String, Core> together = rules.writtenTogether();        // The places the record's own rules read, which a value built at one of its fields is held
+        Map<RuleKey, Core> together = rules.writtenTogether();
+        // The places the record's own rules read, which a value built at one of its fields is held
         // to where they are under the field.
         PlacesTheRulesRead read = PlacesTheRulesRead.of(Type.ref(rulesOn), ruleSource);
         SequencedMap<String, FixtureTemplate> chosen = new LinkedHashMap<>();
@@ -2339,13 +2340,7 @@ public final class Partitions {
                         taken.add(chosenByName.get(other).text());
                     }
                 });
-                // The value written for the fields tied together, where this is one of them and
-                // no search holds its number: a number is chosen where the search puts it.
-                FixtureTemplate tied = limits.values() == null
-                        ? writtenAs(together.get(name), field.getValue(), reading) : null;
-                Proposals stands = tied != null && !taken.contains(tied.text())
-                        ? Proposals.of(List.of(tied))
-                        : holding != null ? holding.firstOf(1)
+                Proposals stands = holding != null ? holding.firstOf(1)
                         : !taken.isEmpty() ? Witnesses.distinctValuesOf(field.getValue(),
                                 taken.size() + 1, limits.held(), limits.admits(), reading, inside)
                         : Witnesses.firstWhatThePlaceAdmits(
@@ -2354,7 +2349,16 @@ public final class Partitions {
                                 inner))
                         .firstOf(1);
                 met = met.and(stands.met());
-                at = stands.values().stream().filter(each -> !taken.contains(each.text()))
+                // Its part of the value written for the fields tied together first, where this is
+                // one of them and the part is inside what the rules and a search leave the field.
+                FixtureTemplate tied = writtenAs(together.get(RuleKey.of(name)), field.getValue(),
+                        reading);
+                List<FixtureTemplate> offered = new ArrayList<>();
+                if (tied != null && Witnesses.heldWithin(tied, limits)) {
+                    offered.add(tied);
+                }
+                offered.addAll(stands.values());
+                at = offered.stream().filter(each -> !taken.contains(each.text()))
                         .findFirst().orElse(null);
                 if (at == null) {
                     within.forgetUnder(within.here());
@@ -2378,12 +2382,8 @@ public final class Partitions {
     }
 
     /**
-     * The constant {@code value} written down at a field of {@code type}, or null where it is
-     * none or is not one of a scalar type or a name around one.
-     *
-     * <p>A value written at such a field is a constant under the names the field's type wears,
-     * each of which is a value of one field; those are taken off, and the names put back as this
-     * module writes them.
+     * The constant {@code value}, written down at a place of {@code type}, under the names that
+     * type wears — or null where there is none, or the place is no scalar.
      */
     static FixtureTemplate writtenAs(Core value, Type type, RuleReadingContext reading) {
         if (value == null || type == null) {
@@ -2395,14 +2395,7 @@ public final class Partitions {
         if (!(view.shape() instanceof Shape.Scalar)) {
             return null;
         }
-        Core bare = Core.withoutStanding(value);
-        for (int worn = 0; worn < view.wrappers().size(); worn++) {
-            if (!(bare instanceof Core.Construct named) || named.values().size() != 1) {
-                return null;
-            }
-            bare = Core.withoutStanding(named.values().getFirst().value());
-        }
-        FixtureTemplate written = switch (bare) {
+        FixtureTemplate written = switch (Core.withoutStanding(value)) {
             case Core.Str text -> FixtureTemplate.string(text.value());
             case Core.Int number -> FixtureTemplate.integer(number.value());
             case Core.Decimal number -> FixtureTemplate.decimal(number.value());

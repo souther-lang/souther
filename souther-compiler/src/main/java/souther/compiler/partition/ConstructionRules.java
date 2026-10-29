@@ -177,21 +177,18 @@ final class ConstructionRules {
     }
 
     /**
-     * The value written for the field at {@code path} where a rule of the value it is a field of
-     * ties it to other fields ({@link FieldDomains#writtenTogether}) — or null where none is.
+     * The constant written at {@code path} where a rule of a value it is in ties it to other
+     * places ({@link FieldDomains#writtenTogether}) — or null where none is.
      *
-     * <p>A value of the fields such a rule ties together is one value of all of them, which the
-     * limits each field is chosen in cannot say: a rule relating two strings leaves no one of them
-     * a set. So each of those fields offers its part of it, and the parts make the one value.
+     * <p>A value of the places such a rule ties together is one value of all of them, which the
+     * limits each place is chosen in cannot say: a rule relating two strings leaves no one of them
+     * a set. So each of those places offers its part of it, and the parts make the one value.
      */
     Core writtenTogetherAt(TermPath path) {
         for (RuleRoots.Naming each : namingOf(path)) {
-            List<String> steps = each.address().key().steps();
-            if (steps.size() == 1) {
-                Core written = bare(each).writtenTogether().get(steps.getFirst());
-                if (written != null) {
-                    return written;
-                }
+            Core written = bare(each).writtenTogether().get(each.address().key());
+            if (written != null) {
+                return written;
             }
         }
         return null;

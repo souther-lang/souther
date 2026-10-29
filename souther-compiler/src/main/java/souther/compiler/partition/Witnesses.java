@@ -7,7 +7,6 @@ import souther.compiler.check.ElementsApart;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.values.AdmissibleSet;
-import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.revision.RevisionWork;
@@ -1761,7 +1760,7 @@ final class Witnesses {
                 source.sums());
         Proposals.Gathering out = Proposals.Gathering.inOrder();
         if (view.shape() instanceof Shape.Scalar scalar && scalar.prim() == Type.Prim.STRING) {
-            for (String each : stringsIn(atThePlace)) {
+            for (String each : atThePlace.approximation().stringsItNames()) {
                 FixtureTemplate written =
                         WornNames.under(view.wrappers(), FixtureTemplate.string(each), source);
                 if (written != null) {
@@ -1796,18 +1795,11 @@ final class Witnesses {
         /** These kept to the numbers {@code limits} leaves, where a value is a number and a range
          *  is known; a value that is no number is not one a range says anything about. */
         Placed within(FieldDomains.ConstructionLimits limits) {
-            NumericDomain.Bounds within = limits.values();
-            OrderedRuns ordered = limits.ordered();
-            if (within == null && ordered == null) {
+            if (limits.values() == null && limits.ordered() == null) {
                 return this;
             }
-            // Between the ends, and in one of the runs the order leaves: a number between the ends
-            // of two runs is one every alternative refuses.
-            return new Placed(offered.map(each ->
-                    !(Counts.writtenIn(each.value()) instanceof Place at)
-                            || ((within == null || within.admits(at))
-                                    && (ordered == null || ordered.admits(at)))
-                            ? each : null), everyValue);
+            return new Placed(offered.map(each -> heldWithin(each, limits) ? each : null),
+                    everyValue);
         }
 
         /** These first, and where they are not every value, {@code otherwise} after them, each
@@ -1846,19 +1838,19 @@ final class Witnesses {
                 .before(otherwise);
     }
 
-    /** Strings {@code admitted} holds that it names: the least of a language, or each string a
-     *  finite set lists — none where it names none. */
-    private static List<String> stringsIn(AdmissibleSet admitted) {
-        return switch (admitted.approximation()) {
-            case ValueSet.Matching matching -> {
-                String some = matching.language().some();
-                yield some == null ? List.of() : List.of(some);
-            }
-            case ValueSet.Finite finite -> finite.values().stream()
-                    .filter(Value.Text.class::isInstance)
-                    .map(each -> ((Value.Text) each).value()).toList();
-            case ValueSet.Cofinite _, ValueSet.WholeRuns _ -> List.of();
-        };
+    /**
+     * Whether {@code value} is inside the numbers {@code limits} leaves, where it is a number and a
+     * range is known; a value that is no number is not one a range says anything about.
+     *
+     * <p>Between the ends, and in one of the runs the order leaves: a number between the ends of two
+     * runs is one every alternative refuses.
+     */
+    static boolean heldWithin(FixtureTemplate value, FieldDomains.ConstructionLimits limits) {
+        NumericDomain.Bounds within = limits.values();
+        OrderedRuns ordered = limits.ordered();
+        return !(Counts.writtenIn(value.value()) instanceof Place at)
+                || ((within == null || within.admits(at))
+                        && (ordered == null || ordered.admits(at)));
     }
 
     /** Whether {@code admitted} names the values it leaves, and some of them. */

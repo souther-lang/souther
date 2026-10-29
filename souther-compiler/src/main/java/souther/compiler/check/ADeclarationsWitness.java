@@ -103,11 +103,16 @@ final class ADeclarationsWitness {
     }
 
     /**
-     * The value {@link #exists} found, by field, each written as the constant it was tried at — or
-     * null where none was found.
+     * The value {@link #exists} found, as the constant tried at each place a value was tried at,
+     * by the fields that reach the place — or null where none was found.
+     *
+     * <p>By place and not by field, so that what the value is at each place is said as itself and
+     * not as a tree a reader takes apart: a name's value is at the place the name is, and a field
+     * of a record is a place of its own.
      */
-    static Map<String, Core> written(RuleReadingSource source, TypeSymbol.AtModule declared,
-                                     Set<String> writing, List<Core> rules, Hints hints) {
+    static Map<List<String>, Core> written(RuleReadingSource source,
+                                           TypeSymbol.AtModule declared, Set<String> writing,
+                                           List<Core> rules, Hints hints) {
         Map<String, BindingId> bindings = source.bindings().of(declared);
         List<String> names = source.layout().of(declared).stream()
                 .filter(writing::contains).toList();
@@ -212,8 +217,9 @@ final class ADeclarationsWitness {
         return List.copyOf(out);
     }
 
-    /** The first value tried that every rule holds of, by field, or null where none was. */
-    private Map<String, Core> found() {
+    /** The first value tried that every rule holds of, by the place each constant was tried at,
+     *  or null where none was. */
+    private Map<List<String>, Core> found() {
         List<Shape> numbered = new ArrayList<>();
         for (Shape each : fields) {
             numbered.add(numbered(each));
@@ -238,9 +244,9 @@ final class ADeclarationsWitness {
         for (int rank = 0; rank <= most && tried[0] < MOST_TRIED; rank++) {
             int[] chosen = new int[slots.size()];
             if (tryAll(numbered, candidates, chosen, 0, rank, unfolded, tried)) {
-                Map<String, Core> out = new LinkedHashMap<>();
-                for (int i = 0; i < names.size(); i++) {
-                    out.put(names.get(i), valueOf(numbered.get(i), candidates, chosen));
+                Map<List<String>, Core> out = new LinkedHashMap<>();
+                for (Slot slot : slots) {
+                    out.put(slot.place(), candidates.get(slot.at()).get(chosen[slot.at()]));
                 }
                 return out;
             }

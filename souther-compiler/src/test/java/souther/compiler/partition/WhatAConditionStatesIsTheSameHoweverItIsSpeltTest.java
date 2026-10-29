@@ -128,6 +128,18 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
                 "nor does the container holding nothing say whether some element meets it");
     }
 
+    /** And the same of a list a dependency answers, which is a container as the input's is. */
+    @Test
+    void someElementOfAnAnswerSaysNothingBesideItHoldingSomething() {
+        Proposition holding = statedOfAnAnswer("Bool.not(List.isEmpty(xs))");
+        assertEquals(holding, statedOfAnAnswer("List.any(v -> true || v > 0, xs)"));
+        assertEquals(holding, statedOfAnAnswer(
+                "Bool.not(List.isEmpty(xs)) || List.any(v -> v > 0, xs)"));
+        assertInstanceOf(Proposition.Any.class, statedOfAnAnswer(
+                        "List.isEmpty(xs) || List.any(v -> v > 0, xs)"),
+                "nor does the answer holding nothing say whether some element meets it");
+    }
+
     @Test
     void aMappingHoldsSomethingWhereWhatItMappedDoes() {
         assertEquals(stated("List.isEmpty(List.filter(v -> v > 0, b.xs))"),
@@ -492,11 +504,29 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
 
     /** What the condition of {@code f}'s one fork states, its fork written as {@code condition}. */
     private static Proposition stated(String condition) {
-        String model = "module demo\n\n" + INPUT + """
+        return statedIn("module demo\n\n" + INPUT + """
 
                 behavior f : (b: Box) -> Int
                 let f (b) = if %s then 1 else 0
-                """.formatted(condition);
+                """.formatted(condition), condition);
+    }
+
+    /** The same, of a condition over {@code xs}, which is what one call of a dependency answers:
+     *  two calls are two answers, so the list is handed over once. */
+    private static Proposition statedOfAnAnswer(String condition) {
+        return statedIn("module demo\n\n" + INPUT + """
+
+                behavior listed : (b: Box) -> List<Int>
+
+                let asked (xs: List<Int>) = %s
+
+                behavior f : (b: Box) -> Int
+                    depends on listed
+                let f (b, listed) = if asked(listed(b)) then 1 else 0
+                """.formatted(condition), condition);
+    }
+
+    private static Proposition statedIn(String model, String condition) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         // The errors of what was asked, which is the body checked: a model that does not check
