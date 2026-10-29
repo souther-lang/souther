@@ -163,6 +163,16 @@ public final class AffineForms {
         }
 
         /**
+         * That the walk read {@code e} as the number it folds to, the same on every run, or a
+         * carrier writes it as, and went no further into it. Either says what the number is
+         * ({@link FoldedValue}, {@link Carrier#literalOf}), following a name to the value it
+         * stands as; what working it out runs on the way there, a value bound and never read
+         * included, neither tells. A reader that does not ask is told nothing.
+         */
+        default void folded(Core e, E at) {
+        }
+
+        /**
          * That the walk read {@code call}, an operation of the library, as {@code form}, the
          * arithmetic over its arguments the library says it answers, and that a run stops at it
          * where {@code where} says: it ends one only where its answer is past the ends of its
@@ -429,6 +439,11 @@ public final class AffineForms {
         public void answeredByTheLibrary(Core call, LinearForm<A> form,
                                          WhereAnOperatorAnswers where) {
             of.answeredByTheLibrary(call, form, where);
+        }
+
+        @Override
+        public void folded(Core e, E at) {
+            of.folded(e, at);
         }
 
         @Override
@@ -1404,9 +1419,13 @@ public final class AffineForms {
      *  where the walk's caller keeps it. */
     private static <A, E> BigDecimal foldedNumber(Core e, E at, Reading<A, E> reading,
                                                   Walk<A, E> following) {
-        return FoldedValue.number(following.folds == null
+        BigDecimal folded = FoldedValue.number(following.folds == null
                 ? FoldedValue.of(e, at, reading, reading.symbols())
                 : FoldedValue.of(e, at, reading, reading.symbols(), following.folds));
+        if (folded != null) {
+            reading.folded(e, at);
+        }
+        return folded;
     }
 
     /**
@@ -1460,7 +1479,12 @@ public final class AffineForms {
         // once, and what the carrier takes apart is followed where the expression was written.
         Place place = carrier.literalOf(new ValueStanding.Standing<>(e, at, reading),
                 reading.symbols());
-        return place == null ? null : LinearForm.constant(Count.number(place).exactly());
+        if (place == null) {
+            return null;
+        }
+        // Taken by the value it stands as, as a fold is: what working it out runs is not run.
+        reading.folded(e, at);
+        return LinearForm.constant(Count.number(place).exactly());
     }
 
     /**

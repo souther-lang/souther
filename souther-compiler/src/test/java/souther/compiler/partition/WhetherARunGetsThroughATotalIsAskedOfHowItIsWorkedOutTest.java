@@ -6,6 +6,7 @@ import souther.compiler.check.StatedComparison;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -396,6 +397,87 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
                             && read.operations().isEmpty(), read::toString);
             assertFalse(read.told() == WhatARelationLeavesUndivided.Told.NOTHING_SAID,
                     read::toString);
+        }
+    }
+
+    private static final String DISCARDED = "{ let discarded = " + MAX + " + 1\n 1 }";
+
+    /** What the rule that reads the comparison {@code condition} over {@code n} and {@code k}
+     *  says its rows work out, where it says more than the arithmetic. */
+    private static UndividedByARelation.Working whatTheRuleWorksOut(String inputs,
+                                                                    String condition) {
+        ReadComparisons read = ReadComparisons.ofTheAnalysis("""
+                module w1
+                data Unused = Int
+                behavior m : (%s) -> Bool
+                let m (%s) = %s
+                """.formatted(inputs, inputs.replaceAll(": [A-Za-z<>]+", ""), condition), "m");
+        ComparisonReadings.Reading only = read.only();
+        return Pullback.ofAComparisonOnTheInput(
+                ((ComparisonReadings.Stated.AComparison) only.statement()).comparison(),
+                only.reads(), read.inputs().reading(read.rules())).working().get();
+    }
+
+    /** Whether no row of {@code working} is shown to get past what it works out: not every
+     *  operation is told, or one told is a number past the type on every run. */
+    private static boolean noRowIsShownToGetPast(UndividedByARelation.Working working) {
+        return working.told() == WhatARelationLeavesUndivided.Told.SOME
+                || working.operations().stream().anyMatch(operation ->
+                        operation.form().coefs().isEmpty()
+                                && (operation.form().constant().compareTo(
+                                        ExactRatio.of(operation.greatest())) > 0
+                                || operation.form().constant().compareTo(
+                                        ExactRatio.of(operation.least())) < 0));
+    }
+
+    /**
+     * That a value folds to a number says what the number is, and nothing of what working it out
+     * runs: a fold follows a name and a {@code let} to the value they stand as, and a value bound
+     * on the way and never read is worked out all the same. Inside an operand, behind a name,
+     * on the side a rule takes by the number it folds to, or as the mode a rounding is handed, an
+     * initializer past the type stops every run, and no row is shown to get past it.
+     */
+    @Test
+    void thatAValueFoldsToANumberSaysNothingOfWorkingItOut() {
+        String inputs = "n: Int, k: Int";
+        assertFalse(theLeftSideGetsThereWhereItsAnswerHasAPlace(inputs,
+                "List.sum([1 + (" + DISCARDED + ")]) >= k"));
+        assertTrue(theLeftSideGetsThereWhereItsAnswerHasAPlace(inputs,
+                "List.sum([1 + ({ let kept = 1\n kept })]) >= k"));
+        UndividedByARelation.Working behindAName = workingOf(inputs, """
+                {
+                    let x = %s
+                    n + x >= k
+                }""".formatted(DISCARDED));
+        assertTrue(noRowIsShownToGetPast(behindAName), behindAName::toString);
+        UndividedByARelation.Working aDateBehindAName = workingOf("b: Date, k: Int", """
+                {
+                    let moved = { let discarded = %s + 1
+                        Date.addDays(-1, b) }
+                    Date.year(moved) >= k
+                }""".formatted(MAX));
+        assertTrue(noRowIsShownToGetPast(aDateBehindAName), aDateBehindAName::toString);
+        UndividedByARelation.Working aWrittenDateBehindAName = workingOf("b: Date, k: Int", """
+                {
+                    let start = { let discarded = %s + 1
+                        Date("2020-01-01") }
+                    b >= start
+                }""".formatted(MAX));
+        assertTrue(noRowIsShownToGetPast(aWrittenDateBehindAName),
+                aWrittenDateBehindAName::toString);
+        for (String condition : List.of(
+                "Date.year(Date.addDays(n, Date(\"2020-01-01\"))) >= (" + DISCARDED + ")",
+                "Rational.toInt(DOWN, n / 2) >= (" + DISCARDED + ")",
+                "Rational.toInt({ let discarded = " + MAX + " + 1\n DOWN }, n / 2) >= 3")) {
+            UndividedByARelation.Working restated = whatTheRuleWorksOut(inputs, condition);
+            assertTrue(noRowIsShownToGetPast(restated), () -> condition + " " + restated);
+        }
+        for (String condition : List.of(
+                "Date.year(Date.addDays(n, Date(\"2020-01-01\"))) >= 2027",
+                "Rational.toInt(DOWN, n / 2) >= 3")) {
+            UndividedByARelation.Working restated = whatTheRuleWorksOut(inputs, condition);
+            assertEquals(WhatARelationLeavesUndivided.Told.EVERY, restated.told(),
+                    () -> condition + " " + restated);
         }
     }
 

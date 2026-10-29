@@ -424,6 +424,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              *  step is read ({@link #walkOfWhatIsWrittenOut}). */
             private final Map<BindingId, LinearForm<NumericTerm>> carried = new HashMap<>();
 
+            /** What a run works out to reach a value, asked once for each value this reading
+             *  asks it of. */
+            private final WorkedOutToReachIt reached = WorkedOutToReachIt.of(ofTheInput);
+
             /**
              * An operation of whole numbers the walk composed, told with the number it comes to:
              * where its type says it answers only between two ends, a row is computed only where
@@ -537,6 +541,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 told.exact = false;
             }
 
+            /** A number read as what it folds to, which says nothing of what working it out runs on
+             *  the way: where that may end a run, not every operation is told. */
+            @Override
+            public void folded(Core e, InputReads at) {
+                if (!reached.endsNoRun(new Denotation(e, at))) {
+                    told.exact = false;
+                }
+            }
+
             /** A call of the library read as arithmetic over its arguments, told as the operation
              *  it is where a run stops at it: past the ends of the type it answers, as a sum is. */
             @Override
@@ -570,8 +583,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                 LinearForm<NumericTerm> value) ? value : null) != null) {
                     return;
                 }
-                if (WorkedOutToReachIt.of(ofTheInput)
-                        .endsNoRun(new Denotation(binding.value(), at))) {
+                if (reached.endsNoRun(new Denotation(binding.value(), at))) {
                     return;
                 }
                 told.exact = false;
@@ -651,8 +663,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * drew the lines answers for. Any other that may end a run has no owner here.
              */
             private boolean worksOutNothingBesideTheStop(Core node, InputReads at) {
-                return WorkedOutToReachIt.of(ofTheInput).endsNoRun(new Denotation(node, at))
-                        || stoppedAt.answersFor(node);
+                return reached.endsNoRun(new Denotation(node, at)) || stoppedAt.answersFor(node);
             }
 
             /**
@@ -663,8 +674,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * out comes to, which says nothing of whether it gets there.
              */
             private boolean theStopIsAnsweredFor(Core node, InputReads at) {
-                return WorkedOutToReachIt.of(ofTheInput)
-                        .endsOnlyWhereItsAnswerHasNoPlace(new Denotation(node, at))
+                return reached.endsOnlyWhereItsAnswerHasNoPlace(new Denotation(node, at))
                         || stoppedAt.answersFor(node)
                         || addsUpTheFormItIsReadAs(node, at);
             }
@@ -682,7 +692,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return false;
                 }
                 boolean[] rest = {true};
-                WorkedOutToReachIt reached = WorkedOutToReachIt.of(ofTheInput);
                 Core.forEachChild(Core.withoutStanding(node), child -> rest[0] &=
                         child == operand || reached.endsNoRun(new Denotation(child, at)));
                 WhatWasTold apart = new WhatWasTold();
@@ -849,8 +858,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 for (Core element : elements) {
                     if (AffineForms.outcome(element, at, this)
                             instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>
-                            && !WorkedOutToReachIt.of(ofTheInput)
-                                    .endsNoRun(new Denotation(element, at))) {
+                            && !reached.endsNoRun(new Denotation(element, at))) {
                         told.exact = false;
                     }
                 }

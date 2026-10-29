@@ -21,7 +21,6 @@ import souther.compiler.check.ClauseName;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DeclarationAccess;
-import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
@@ -34,7 +33,6 @@ import souther.compiler.check.LawAtACall;
 import souther.compiler.check.Location;
 import souther.compiler.check.NonAffineOperation;
 import souther.compiler.check.NumericMeasures;
-import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.check.QuotientByAValue;
 import souther.compiler.check.RecursionOverAList;
 import souther.compiler.check.RecursionOverATree;
@@ -1080,15 +1078,37 @@ final class Pullback {
     }
 
     /**
-     * That the written comparison works out what the comparisons the rule read it as do, where
-     * {@code read} is what the rule concluded: each of those is of the operand of the one operation
-     * on its side against a number, and what that operation itself may end a run for, the rule's
-     * statement says. A comparison over the operand reads all that working it out does, which a
-     * reading of the written one stopped at the operation does not.
+     * Whether working out {@code written}, read in {@code reads}, ends no run but in
+     * {@code operands}, which comparisons of them read whole, and in {@code operation} itself,
+     * whose ending the rule's statement holds it to — none where it is null. The other side the
+     * rule took by the number it folds to, which says nothing of what working it out runs.
      */
-    private Derivation worksOutWhatItIsRestatedAs(Derivation read) {
+    private boolean besideTheOperandsNothingEndsARun(StatedComparison written, InputReads reads,
+                                                     List<Core> operands, Core operation) {
+        WorkedOutToReachIt theRest =
+                WorkedOutToReachIt.of(read).besideWhatWasRestated(operands, operation);
+        return theRest.endsNoRun(new Denotation(written.left(), reads))
+                && theRest.endsNoRun(new Denotation(written.right(), reads));
+    }
+
+    /**
+     * That the written comparison {@code written}, read in {@code reads}, works out what the
+     * comparisons the rule read it as do, where {@code read} is what the rule concluded: each of
+     * those is of {@code operands} against a number, and what {@code operation}, the one operation
+     * on their side, itself may end a run for, the rule's statement says. A comparison over the
+     * operands reads all that working them out does, which a reading of the written one stopped
+     * at the operation does not.
+     *
+     * <p>Only where nothing else the written comparison works out ends a run: the number on the
+     * other side, which the rule took by what it folds to and not by working it out, and the
+     * operation's other arguments. Otherwise the rule says nothing of the operations.
+     */
+    private Derivation worksOutWhatItIsRestatedAs(Derivation read, StatedComparison written,
+                                                  InputReads reads, List<Core> operands,
+                                                  Core operation) {
         Trial theRule = trial();
-        if (read != null && !theRule.restated.isEmpty()) {
+        if (read != null && !theRule.restated.isEmpty()
+                && besideTheOperandsNothingEndsARun(written, reads, operands, operation)) {
             theRule.working = UndividedByARelation.Working.together(
                     theRule.restated.stream().map(Supplier::get).toList());
         }
@@ -2180,8 +2200,8 @@ final class Pullback {
         for (ClausesInOrder.OneClause clause : clauses.inOrder()) {
             holds.add(switch (clause) {
                 case ClausesInOrder.OneClause.Stated stated ->
-                        observe(stated.term(), AnswerAspect.TRUTH,
-                                handingTheFields(inTheRules, stated.given(), reads));
+                        observe(stated.term(), AnswerAspect.TRUTH, inTheRules.handingTheFields(
+                                stated.given(), reads, read.rules().newtypes()));
                 case ClausesInOrder.OneClause.Unread unread -> new Derivation.Stopped(
                         new WhyUnread.AClauseOfAnInvariant(unread.clause(), unread.why()), false);
             });
@@ -2200,22 +2220,6 @@ final class Pullback {
                                     .orElse(true))
                     .toList();
             out.add(new Derivation.ItDeparted(holds, answers));
-        }
-        return out;
-    }
-
-    /**
-     * {@code inTheRules}, where each field of a declaration stands for what a construction handed
-     * it. A value is read where the construction is, {@code reads}, and the clause that names the
-     * field where the declaration is written: the two are not one tree, and a value that is
-     * substituted into the clause is read as if they were.
-     */
-    private InputReads handingTheFields(InputReads inTheRules, Map<BindingId, Core> given,
-                                        InputReads reads) {
-        InputReads out = inTheRules;
-        for (Map.Entry<BindingId, Core> field : given.entrySet()) {
-            out = out.handing(field.getKey(), new Denotation(field.getValue(), reads),
-                    read.rules().newtypes());
         }
         return out;
     }
@@ -9278,10 +9282,13 @@ final class Pullback {
                         arithmeticOf(ordered.arguments(), ordered.at());
                 Derivation arguments = firstThatReadsIt(
                         rulesFor(ordered.arguments(), null, fixed, ordered.at(), arithmetic));
-                // Where answering the order ends no run, the arguments are all the written
-                // comparison works out, and the comparison of them reads them.
+                // Where answering the order ends no run, and nothing else the written comparison
+                // works out does, the comparison of the arguments reads all it works out.
                 if (arguments != null
-                        && WhatARunMayEndFor.ofAnOperation(operation).endsNone()) {
+                        && WhatARunMayEndFor.ofAnOperation(operation).endsNone()
+                        && besideTheOperandsNothingEndsARun(comparison, reads,
+                                List.of(ordered.arguments().left(), ordered.arguments().right()),
+                                null)) {
                     trial().working = workingOf(triedAndConcluded.get(arguments), arithmetic);
                 }
                 yield new Derivation.AnOrderOfItsArguments(callOfAnOrder(operation, ordered),
@@ -9917,7 +9924,7 @@ final class Pullback {
      * it is the declaration's ({@link #endsNoRun(Denotation)}).
      */
     private boolean endsNoRun(Denotation value) {
-        return WorkedOutToReachIt.asking(read, this::endsNoRunItself).endsNoRun(value);
+        return WorkedOutToReachIt.asking(read, this::endsNoRunInTheBodyOfACall).endsNoRun(value);
     }
 
     /**
@@ -9945,50 +9952,6 @@ final class Pullback {
     }
 
     /**
-     * Whether {@code value}, apart from the parts it is made of and the value a name in it was
-     * bound to, is known to end no run: what {@link WhatARunMayEndFor} says of the node, except
-     * for a construction, which it leaves unknown because the invariant that may end it is the
-     * declaration's, and a call of a behavior, whose body is read with its parameters standing
-     * for what it was handed.
-     *
-     * <p>Asked of the expression as it is written, and never of the value it stands as: standing
-     * leaves out a part that is run without coming into the value (the initializer of a
-     * {@code let}, the other fields of a construction an access takes one of), and a name leads
-     * to a value whose binding ran. The parts and the bound values are {@link #endsNoRun}'s,
-     * each asked once.
-     */
-    private boolean endsNoRunItself(Denotation value) {
-        Core written = Core.withoutStanding(value.value());
-        if (written instanceof Core.Construct made) {
-            return holdsNoInvariant(made.typeName()) || holdsWhatItIsHanded(made, value.at());
-        }
-        return WhatARunMayEndFor.itself(written).endsNone() || endsNoRunInTheBodyOfACall(value);
-    }
-
-    /**
-     * Whether every clause of the invariant of {@code made} is known to hold of the values it is
-     * handed where it stands at {@code at}, and working a clause out ends no run: each is read
-     * ({@link ClausesInOrder}), none is left unread, and each folds to true with its fields
-     * standing for what {@code made} hands them. What cannot be shown is not held.
-     */
-    private boolean holdsWhatItIsHanded(Core.Construct made, InputReads at) {
-        ClausesInOrder clauses = ClausesInOrder.at(made, read.rules());
-        if (!clauses.everyRuleReached()) {
-            return false;
-        }
-        for (ClausesInOrder.OneClause clause : clauses.inOrder()) {
-            if (!(clause instanceof ClausesInOrder.OneClause.Stated stated)
-                    || !WhatARunMayEndFor.of(stated.term()).endsNone()
-                    || !Boolean.TRUE.equals(handingTheFields(at.forADeclaredRule(), stated.given(),
-                            at).folded(stated.term(), read.rules().symbols(),
-                            read.rules().newtypes()).orElse(null))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
      * Whether {@code value} is a call of a behavior whose body, read with its parameters standing
      * for what the call handed, ends no run — which {@link WhatARunMayEndFor} leaves unknown of a
      * helper, because it is not the helper's to say. What the call is handed is a part of it.
@@ -9998,16 +9961,6 @@ final class Pullback {
         return called != null && endsNoRun(called.body());
     }
 
-    /**
-     * Whether a construction of {@code type} has no clause to be refused by: what the declaration
-     * publishes holds no {@code invariant} and spreads no declaration that might.
-     */
-    private boolean holdsNoInvariant(TypeSymbol.AtModule type) {
-        return read.rules().declarations().published().of(type.key())
-                instanceof PublishedDeclarationResult.Found(
-                        DeclarationMeaning.Product product)
-                && product.clauses().isEmpty() && product.includes().isEmpty();
-    }
 
     /** Whether {@code arm} is the name of what a walk carried. */
     private static boolean keeps(Core arm, BindingId carried) {
@@ -10592,9 +10545,10 @@ final class Pullback {
                     comparedWithTheStartOf(from, Rel.LT, taking, at, fixed, reads),
                     comparedWithTheStartOf(from + 1, Rel.GE, taking, at, fixed, reads));
         };
-        // Where taking the year of a date ends no run, the date is all the written comparison
-        // works out, and the comparisons of it with where years begin read it.
-        return WhatARunMayEndFor.itself(taking).endsNone() ? worksOutWhatItIsRestatedAs(read)
+        // Where taking the year of a date ends no run, the date is what the written comparison
+        // works out of it, and the comparisons of it with where years begin read it.
+        return WhatARunMayEndFor.itself(taking).endsNone()
+                ? worksOutWhatItIsRestatedAs(read, stated, reads, taking.args(), taking)
                 : read;
     }
 
@@ -10691,10 +10645,10 @@ final class Pullback {
         if (rounded == null) {
             return null;
         }
-        // The statement holds the rounding to the ends of what it answers, past which it aborts,
-        // so the rounding is all of it the written comparison works out beyond what was rounded.
+        // The statement holds the rounding to the ends of what it answers, past which it aborts.
         return worksOutWhatItIsRestatedAs(theStatementStands(rounded.statement(),
-                rounded.rounded(), at, fixed, rounded.at()));
+                rounded.rounded(), at, fixed, rounded.at()), stated, reads,
+                List.of(rounded.rounded()), rounded.rounding());
     }
 
     /**
