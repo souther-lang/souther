@@ -10452,14 +10452,34 @@
             "construct" : 7,
             "lowered" : 0
           },
-          "disposition" : "undecided",
-          "undecidedBecause" : [ "runs_spent", "no_row_answered_differently" ]
+          "disposition" : "unnoticed"
         } ]
       },
       "findings" : [ {
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
         "subject" : "shelf.counts"
+      }, {
+        "kind" : "rewrite_unnoticed",
+        "disposition" : "refused",
+        "subject" : "restockByFold",
+        "obligationId" : {
+          "behavior" : "restockByFold",
+          "rewrite" : "fold_from_the_seed",
+          "module" : "conformance.searching",
+          "definition" : "restockByFold",
+          "construct" : 7,
+          "lowered" : 0
+        },
+        "code" : "E1939",
+        "at" : {
+          "sourceId" : "4",
+          "line" : 41,
+          "column" : 17,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        }
       } ]
     }, {
       "name" : "restockAnyZone",
