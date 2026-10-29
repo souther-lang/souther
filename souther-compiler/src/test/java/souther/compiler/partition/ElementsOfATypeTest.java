@@ -225,6 +225,31 @@ class ElementsOfATypeTest {
         assertTrue(values.contains(listOf(listOf(listOf(whole(0))))), values.toString());
     }
 
+    /**
+     * A type with exactly as many values as the bound lets be made has been made in full, and is
+     * not said to have been stopped: the bound is reached when there is one more to make that it
+     * does not let be.
+     */
+    @Test
+    void aTypeWithExactlyTheBoundsManyValuesIsNotSaidToBeStopped() {
+        Seen seen = new Seen();
+
+        List<ObservedValue> values = first(100, Type.INT, elements(3, seen));
+
+        assertEquals(List.of(whole(0), whole(1), whole(-1)), values);
+        assertEquals(List.of(), seen.limits);
+    }
+
+    @Test
+    void aTypeWithOneMoreThanTheBoundIsSaidToBeStoppedAtIt() {
+        Seen seen = new Seen();
+
+        List<ObservedValue> values = first(100, Type.INT, elements(2, seen));
+
+        assertEquals(List.of(whole(0), whole(1)), values);
+        assertEquals(List.of(2), seen.limits);
+    }
+
     /** Past what the bound lets be made, nothing more is, and the bound is said. */
     @Test
     void theValuesOfATypeAreBoundedAndTheBoundIsSaid() {

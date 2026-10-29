@@ -66,6 +66,7 @@ class ABodyThatCallsNoBehaviorIsOfferedAListOfOneElementTest {
                     data Mark = Dot | Bar
                     """, "Mark", "Int", "List.length(xs)", "0"),
             new Case("", "Bool", "Int", "List.length(xs)", "0"),
+            new Case("", "Bool", "Bool", "List.fold((acc, x) -> acc && x, true, xs)", "true"),
             new Case("", "Date", "Int", "List.length(xs)", "0"),
             new Case("""
                     data Pin = Int

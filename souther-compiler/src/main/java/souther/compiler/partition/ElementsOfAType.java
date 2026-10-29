@@ -155,19 +155,21 @@ final class ElementsOfAType {
             if (making || finished) {
                 return false;
             }
-            if (made.size() >= most) {
-                finished = true;
-                stops.limitedAt(most);
-                return false;
-            }
             making = true;
             try {
-                if (source.hasNext()) {
-                    made.add(source.next());
-                    return true;
+                if (!source.hasNext()) {
+                    finished = true;
+                    return false;
                 }
-                finished = true;
-                return false;
+                // The bound is reached by there being one more it does not let be made, and not
+                // by the last that it does: the one more is asked for and not handed over.
+                if (made.size() >= most) {
+                    finished = true;
+                    stops.limitedAt(most);
+                    return false;
+                }
+                made.add(source.next());
+                return true;
             } finally {
                 making = false;
             }
