@@ -618,7 +618,31 @@ public final class WhatARelationLeavesUndivided {
      * @param to    the upper end of the run, or null where it has no greatest
      * @param holds whether the relation holds there, or fails there
      */
-    public record SettledRun(ExactCut from, ExactCut to, boolean holds) {
+    public record SettledRun(ExactCut from, ExactCut to, boolean holds)
+            implements Comparable<SettledRun> {
+
+        /** By where the run starts, an end with no value first, then where it stops, then
+         *  whether the relation holds there: total over the runs, so that a list of them sorted
+         *  this way is in the same order whichever way they were met. */
+        @Override
+        public int compareTo(SettledRun other) {
+            int byStart = compareEnds(from, other.from, -1);
+            if (byStart != 0) {
+                return byStart;
+            }
+            int byEnd = compareEnds(to, other.to, 1);
+            return byEnd != 0 ? byEnd : Boolean.compare(holds, other.holds);
+        }
+
+        /** Ends by where they are, then by whether they admit it; {@code none} is where an end
+         *  with no value sorts. */
+        private static int compareEnds(ExactCut one, ExactCut other, int none) {
+            if (one == null || other == null) {
+                return one == other ? 0 : one == null ? none : -none;
+            }
+            int byValue = one.at().compareTo(other.at());
+            return byValue != 0 ? byValue : Boolean.compare(one.inclusive(), other.inclusive());
+        }
 
         public SettledRun {
             if (from != null && to != null && (from.at().compareTo(to.at()) > 0

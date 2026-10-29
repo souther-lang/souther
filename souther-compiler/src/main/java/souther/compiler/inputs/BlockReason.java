@@ -3,7 +3,6 @@ package souther.compiler.inputs;
 import souther.compiler.check.GuaranteeWalk;
 import souther.compiler.check.NonAffineOperation;
 import souther.compiler.meaning.WhyUnread;
-import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
@@ -1338,7 +1337,7 @@ public sealed interface BlockReason {
             implements RuleReadingStopped {
 
         public RelationRowsNotShownComputed {
-            over = List.copyOf(over);
+            over = over.stream().distinct().sorted().toList();
             if (over.isEmpty()) {
                 throw new IllegalArgumentException("a relation whose rows are not shown computed"
                         + " says over which numbers");
@@ -1350,32 +1349,12 @@ public sealed interface BlockReason {
                            List<WhatARelationLeavesUndivided.SettledRun> other) {
             int common = Math.min(one.size(), other.size());
             for (int i = 0; i < common; i++) {
-                int byRun = compare(one.get(i), other.get(i));
+                int byRun = one.get(i).compareTo(other.get(i));
                 if (byRun != 0) {
                     return byRun;
                 }
             }
             return Integer.compare(one.size(), other.size());
-        }
-
-        private static int compare(WhatARelationLeavesUndivided.SettledRun one,
-                                   WhatARelationLeavesUndivided.SettledRun other) {
-            int byStart = compareEnds(one.from(), other.from(), -1);
-            if (byStart != 0) {
-                return byStart;
-            }
-            int byEnd = compareEnds(one.to(), other.to(), 1);
-            return byEnd != 0 ? byEnd : Boolean.compare(one.holds(), other.holds());
-        }
-
-        /** Ends by where they are, then by whether they admit it; {@code none} is where an end
-         *  with no value sorts. */
-        private static int compareEnds(ExactCut one, ExactCut other, int none) {
-            if (one == null || other == null) {
-                return one == other ? 0 : one == null ? none : -none;
-            }
-            int byValue = one.at().compareTo(other.at());
-            return byValue != 0 ? byValue : Boolean.compare(one.inclusive(), other.inclusive());
         }
     }
 

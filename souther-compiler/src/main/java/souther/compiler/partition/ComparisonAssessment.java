@@ -42,6 +42,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -1893,17 +1895,19 @@ sealed interface ComparisonAssessment {
      */
     static Map<FilingCoordinate, List<WhatARelationLeavesUndivided.SettledRun>> notComputedAt(
             List<Map.Entry<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled>> settled) {
-        Map<FilingCoordinate, List<WhatARelationLeavesUndivided.SettledRun>> out =
+        // The terms are met in the order a map gives them, which is not an order of the runs, so
+        // the runs are kept in their own.
+        Map<FilingCoordinate, SortedSet<WhatARelationLeavesUndivided.SettledRun>> together =
                 new LinkedHashMap<>();
         for (Map.Entry<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> each : settled) {
             for (WhatARelationLeavesUndivided.SettledRun run : each.getValue().notComputed()) {
-                List<WhatARelationLeavesUndivided.SettledRun> here = out.computeIfAbsent(
-                        FilingCoordinate.of(each.getKey()), _ -> new ArrayList<>());
-                if (!here.contains(run)) {
-                    here.add(run);
-                }
+                together.computeIfAbsent(FilingCoordinate.of(each.getKey()), _ -> new TreeSet<>())
+                        .add(run);
             }
         }
+        Map<FilingCoordinate, List<WhatARelationLeavesUndivided.SettledRun>> out =
+                new LinkedHashMap<>();
+        together.forEach((at, runs) -> out.put(at, List.copyOf(runs)));
         return out;
     }
 
