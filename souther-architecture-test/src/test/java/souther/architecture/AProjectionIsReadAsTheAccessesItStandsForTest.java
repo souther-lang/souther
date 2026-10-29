@@ -673,10 +673,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + ")Z", Reading.STRUCTURE,
                 "asks a node what it ends a run for, and each part under it: a projection ends"
                         + " none beyond what its base does");
-        row(out, c + "partition/NumbersOnTheWayToATotal", "betweenNoughtAndTheAnswer",
-                "(" + core + "Z)Z", Reading.STRUCTURE,
-                "asks each node outside the closures what it ends a run for, and goes down to its"
-                        + " parts: a projection ends none beyond what its base does");
         row(out, c + "partition/NumbersOnTheWayToATotal", "readOffWhatItIsHanded",
                 "(" + core + "Ljava/util/Set;Ljava/util/Set;)Z", Reading.STRUCTURE,
                 "asks whether a value is a name a closure is handed or a run of fields read off"
@@ -687,7 +683,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                         + " and goes down to its parts: a projection applies none beyond what its"
                         + " base does");
         row(out, c + "partition/NumbersOnTheWayToATotal", "soIsWhatEachNameWasGiven",
-                "(" + core + "L" + c + "numeric/LinearForm;L" + c + "inputs/InputReading;L" + c
+                "(" + core + "L" + c + "inputs/InputReading;L" + c
                         + "inputs/InputReads;Ljava/util/Set;)Z", Reading.STRUCTURE,
                 "follows each name under a node to what it was given, and goes down to its"
                         + " parts: a projection reads no name beyond what its base does");
