@@ -517,10 +517,15 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                 classesOfTheStringsBehind("guard n >= 1 else false"));
     }
 
-    /** A guard on the string itself narrows it before the equality, and nothing is said. */
+    /**
+     * A guard on the length of the string itself narrows it before the equality: the equality is
+     * reached only with a {@code b} of two code points or more, so an {@code a} of fewer is none
+     * of its values, and a {@code b} that {@code a} cannot hold is one still.
+     */
     @Test
-    void aGuardOnTheStringItselfPartsNothing() {
-        assertEquals(Map.of(),
+    void aGuardOnTheLengthOfTheStringItselfLeavesTheEqualityPartedByTheLengthsItReaches() {
+        assertEquals(Map.of("a", List.of("a/x can be b", "a/x is never b"),
+                        "b", List.of("b/x can be a", "b/x is never a")),
                 classesOfTheStringsBehind("guard String.length(b.value) >= 2 else false"));
     }
 

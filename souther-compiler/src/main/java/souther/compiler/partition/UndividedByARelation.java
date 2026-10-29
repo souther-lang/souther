@@ -2182,8 +2182,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (mine == null || theirs == null
                     || (here.piece() != null && there.piece() != null)
                     || !(carriers.get(at) instanceof Carrier.Text)
-                    || !(carriers.get(1 - at) instanceof Carrier.Text)
-                    || (inside && room.lengths() != null)) {
+                    || !(carriers.get(1 - at) instanceof Carrier.Text)) {
                 continue;
             }
             // A side already shown undivided needs no other word, but for the strings a run does
@@ -2199,6 +2198,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (theirStrings == null) {
                 continue;
             }
+            // A string is inside the partner's only if the partner is a string the run gets to the
+            // relation with, so the strings it is inside are those of the lengths it gets there at.
+            boolean partnerHeld = room.lengths() != null
+                    && room.limitedTo().equals(theirs.subjectPath());
+            if (inside && partnerHeld) {
+                Language partner = languageOf(theirStrings);
+                Language reaching = partner == null ? null : Partitions.ofTheLengths(partner,
+                        room.lengths(), PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
+                if (reaching == null) {
+                    continue;
+                }
+                theirStrings = ValueSet.matching(reaching);
+            }
             String called = inside ? calledInside(at == 0, there.text(), theirs.subjectPath())
                     : there.piece() == null ? theirs.subjectPath().toString()
                     : there.piece().calledOver(theirs.subjectPath().toString());
@@ -2209,9 +2221,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             if (strings != null && room.lengths() != null) {
-                strings = room.limitedTo().equals(theirs.subjectPath())
-                        ? strings.partnerHeldTo(room.lengths())
-                        : strings.reachedAt(room.lengths());
+                strings = !partnerHeld ? strings.reachedAt(room.lengths())
+                        : inside ? strings : strings.partnerHeldTo(room.lengths());
             }
             // Nothing to part where every string is shown on one side: none may be the partner's,
             // or every one is shown to be. Where every one only may be, some are open, and the
@@ -2303,7 +2314,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return null;
             }
             if (reaches(each, mine) || reaches(each, theirs)) {
-                if (each.whatStands() || !(each.relation() instanceof TakenConstraint.Affine)) {
+                if ((each.whatStands() && !endsTheLengthOfAStringAt(each, mine, theirs))
+                        || !(each.relation() instanceof TakenConstraint.Affine)) {
                     return null;
                 }
                 system.add(each.relation());
@@ -2460,6 +2472,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }));
         return beside;
+    }
+
+    /**
+     * Whether {@code statement} is an end on the length of the string at {@code mine} or at
+     * {@code theirs} and on nothing else. Such an end is on the strings themselves, whereas the
+     * count of a container says nothing of what its elements are ({@link OnAWay#whatStands}).
+     */
+    private static boolean endsTheLengthOfAStringAt(OnAWay statement, TermPath mine,
+                                                    TermPath theirs) {
+        return statement.relation() instanceof TakenConstraint.Affine(var form, _)
+                && !form.coefs().isEmpty()
+                && form.coefs().keySet().stream().allMatch(term ->
+                        isTheLengthOfAStringAt(term, mine) || isTheLengthOfAStringAt(term, theirs));
     }
 
     /** Whether {@code term} is the number of code points of the string at {@code place}. */

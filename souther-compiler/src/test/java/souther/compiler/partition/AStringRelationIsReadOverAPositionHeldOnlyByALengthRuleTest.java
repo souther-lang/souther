@@ -160,6 +160,93 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
         }
     }
 
+    /** The behavior of a guard, then the relation, over needs held by {@code pain}. */
+    private static Compilation guarded(String pain, String guard) {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data PainPoint = String invariant %s
+                data BusinessCase = String invariant String.length(value) >= 1
+                data Needs = List<PainPoint>
+                    invariant List.length(value) >= 1
+                data Missed
+
+                let answersANeed (businessCase: String, Needs(points)): Bool =
+                    List.any(p -> String.contains(String.lowercase(p.value),
+                                                  String.lowercase(businessCase)), points)
+
+                behavior f : (needs: Needs, businessCase: String) -> BusinessCase | Missed
+                    constructs BusinessCase
+                let f (needs, businessCase) = {
+                    %s
+                    guard answersANeed(businessCase, needs) else Missed
+                    let stated = BusinessCase("x")
+                    stated
+                }
+                """.formatted(pain, guard), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation;
+    }
+
+    /**
+     * A guard that ends the length of the other string is on the strings and not a count of a
+     * container: the relation is read over the strings of the lengths the run gets to it with, and
+     * the strings of the other lengths are left open, whether the needs are held by a length rule
+     * or by a pattern for the same strings.
+     */
+    @Test
+    void aGuardOnTheLengthOfTheOtherStringLeavesTheRelationReadOverThoseLengths() {
+        Map<String, String> openAt = new LinkedHashMap<>();
+        openAt.put("guard BusinessCase(businessCase) as stated else Missed", "\"shorterThan\" : 1");
+        openAt.put("guard String.length(businessCase) <= 3 else Missed", "\"longerThan\" : 3");
+        openAt.forEach((guard, left) -> {
+            Compilation byLength = guarded("String.length(value) >= 1", guard);
+            Compilation byPattern = guarded("String.matches(\"[\\\\s\\\\S]+\", value)", guard);
+            NavigableSet<String> reasons = aboutTheRelation(byLength);
+            assertTrue(reasons.contains("relation_shown_over_a_region"), () -> guard + " " + reasons);
+            assertFalse(reasons.contains("relation_not_shown_to_reach_every_value"),
+                    () -> guard + " " + reasons);
+            assertTrue(json(byLength).contains(left), () -> guard + " leaves " + left + " open");
+            assertEquals(aboutTheRelation(byPattern), reasons, guard);
+            assertEquals(classes(byPattern), classes(byLength), guard);
+        });
+    }
+
+    /**
+     * A string longer than every string the run gets to the relation with on the other side is
+     * inside none of them: the strings of one side are parted by the strings of the other that a
+     * run reaches, and not by all it holds. Without that, a need of five code points would be
+     * shown to be inside a business case the guard keeps to three.
+     */
+    @Test
+    void aStringLongerThanAnyThatReachesTheRelationIsShownInsideNoneOfThem() {
+        for (String pain : List.of("String.length(value) >= 1",
+                "String.matches(\"[\\\\s\\\\S]+\", value)")) {
+            Compilation compilation = Compilation.ofSource("""
+                    module demo
+
+                    data PainPoint = String invariant %s
+                    data Needs = List<PainPoint>
+                        invariant List.length(value) >= 1
+                    data Missed
+
+                    behavior f : (needs: Needs, businessCase: String) -> Bool | Missed
+                    let f (needs, businessCase) = {
+                        guard String.length(businessCase) <= 3 else Missed
+                        guard List.any(p -> String.contains(p.value, businessCase), needs.value)
+                            else Missed
+                        true
+                    }
+                    """.formatted(pain), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            assertEquals(List.of("needs[*]/x can be a string inside businessCase",
+                    "needs[*]/x is never a string inside businessCase"),
+                    classes(compilation).get("needs[*]"), pain);
+        }
+    }
+
     /** The shape of the CRM's {@code answersANeed}: the needs are a list of values held only by a
      *  length rule, the business case is any string, and both are lowercased. */
     @Test
