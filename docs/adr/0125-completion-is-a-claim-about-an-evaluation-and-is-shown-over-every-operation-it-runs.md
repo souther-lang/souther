@@ -15,9 +15,10 @@ greatest `Int`:
 - `List.sum(List.map(x -> 2 * x, [MAX, -MAX]))` stops. The final total is `0`, but `2 * MAX` is worked
   out for the first element.
 
-Three computations share a total and have three different sets of rows at which they complete. Whatever
-carries the claim "this row is computed" cannot be keyed on the value, and cannot be shared between
-computations that only agree on one.
+Agreeing on a number, or normalising to the same form, does not carry completion from one computation
+to another: the first two come to `MAX` and one completes where the other stops. Whatever carries the
+claim "this row is computed" cannot be keyed on the value, and cannot be shared between computations
+that only agree on one.
 
 Evidence about the operation itself (what a sum checks, what an addition checks) and evidence about
 what is handed to it (the function applied to each element) are separate facts, known in different
@@ -30,7 +31,7 @@ places. A claim about the whole needs both, and today nothing says when the two 
 For an expression `e` and a row `r` there are three separate claims: `e` completes at `r`, `e` does not
 complete at `r`, and neither is shown. Let `C` be the rows where completion is shown, `S` the rows where
 non-completion is shown, and `D` the rows where `e` really completes. Soundness is `C ⊆ D` and
-`S ∩ D = ∅`, so `C ∩ S = ∅`. The rest is unresolved, and it holds rows of both kinds. Unresolved is never
+`S ∩ D = ∅`, so `C ∩ S = ∅`. The rest is unresolved, and it may hold completing rows, stopping rows, both, or none. Unresolved is never
 read as "stops"; it is also never read as "completes". A reading that cannot tell stays at "some
 operations told" (`Told.SOME`), which no consumer takes as computed.
 
@@ -44,8 +45,13 @@ expression is not evidence for an expression a rewrite produced from it.
 
 ### Showing completion
 
-Completion at `r` is shown when every operation the evaluation runs at `r` is shown to complete there,
-in the order it runs and under the conditions it is reached:
+Completion at `r` is shown when the evaluation is shown to be finite and every operation it runs at `r`
+is shown to complete there, in the order it runs and under the conditions it is reached. Operations that
+each complete do not make a run that never ends complete, so finiteness is a premise of its own. It
+comes from a termination guarantee that already holds: structural descent, the walk of a finite
+container, a helper checked total (ADR-0052). A callee declared `partial` whose termination is not
+shown leaves the claim unresolved however safe each of its operations is. Exceeding the evaluation
+budget (`E1910`) shows no non-termination and is no evidence of a stop.
 
 - Sequence. `a; b` completes when `a` completes and `b` completes in the environment `a` produced.
   Non-completion is shown when `a` is shown not to complete, or when `a` completes and `b` is shown not
@@ -54,21 +60,26 @@ in the order it runs and under the conditions it is reached:
 - Branch. Only the arm taken is run. Evidence is required of the condition and of the arm the condition
   selects at `r`; none is required of an arm it does not select, and a failing operation in such an arm
   is no stop.
-- Element-wise application. `List.map(f, xs)` completes when `xs` completes, `f` completes at every
-  element, and building the result completes. An empty list owes nothing for `f`, and nothing about `f`
-  is learned from it.
-- Accumulating application. `List.fold(f, z, xs)` completes when `f` completes at every step, where the
-  accumulator of a step is the result of the steps before it. A bound on the elements alone is not
-  evidence about the steps. A fold checks every intermediate accumulator against the type and a sum
-  checks only its total; these are different operations and are not given each other's evidence.
+- Element-wise application. `List.map(f, xs)` completes when the expression that makes the function
+  value and the one that makes `xs` complete, `f` completes at every element, and building the result
+  completes. An empty list owes nothing for the applications of `f`, and nothing about `f` is learned
+  from it; the expressions that make `f` and `xs` are owed all the same.
+- Accumulating application. `List.fold(f, z, xs)` completes when the expressions that make `f`, `z`
+  and `xs` complete, `f` completes at every step, and the fold's own work completes. The accumulator of
+  a step is the result of the steps before it, so a bound on the elements alone is no evidence about
+  the steps. `List.fold((acc, x) -> acc, z, [])` owes `z` although `f` is never applied. A fold with
+  `acc + x` runs that `Int` addition at every step, and a sum checks only its total; these are
+  different operations and are not given each other's evidence.
 - Callee. A callee whose endings are not known contributes none, and the claim stays unresolved.
 
 ### The number of applications
 
 A closure may be applied once per element of a container whose length is not known. Evidence about
 those applications is either each application shown, or one statement proved for an arbitrary
-application and quantified over all of them: the elements, or for a fold the steps, with the accumulator
-as the quantified invariant. An enumeration that gave up before covering every application is not a
+application and quantified over all of them: over the elements, or for a fold over the steps by
+induction. The induction needs an invariant `I(i, a)` of the accumulator and three things shown, not
+assumed: `I(0, z)`; that where `I(i, a)` holds the step completes; and that its result satisfies
+`I(i + 1, ·)`. An invariant that is only stated promotes nothing. An enumeration that gave up before covering every application is not a
 proof of the quantified statement. It is also no proof against it: that applications could not be
 listed does not mean they cannot be shown to complete, and `x + 1` over elements all at most `MAX - 1`
 completes however many there are. Until one of the two forms of evidence is shown, the claim stays
@@ -77,8 +88,11 @@ unresolved.
 ### Direction
 
 A claim that a row is computed needs every operation it runs covered, so incomplete coverage always
-leaves it unclaimed. A claim that no row of a region computes needs one operation shown to stop and
-certain to be reached; the rest of the evaluation does not have to be covered.
+leaves it unclaimed. A claim that a row does not compute needs one operation shown to stop at that
+row and certain to be reached there; the rest of the evaluation does not have to be covered. For a
+region the stopping operation may differ from row to row: `if flag then x + 1 else y - 1` stops over
+`x = MAX, y = MIN` for either value of `flag`, though neither operation is reached in every row. What
+is required is that every row of the region has such an operation, not that one operation serves all.
 
 ### Moving evidence across a rewrite
 
