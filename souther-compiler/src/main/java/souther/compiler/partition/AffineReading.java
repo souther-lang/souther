@@ -751,8 +751,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             /**
              * A newtype over an {@code Int} written out is made without ending a run where the
-             * number it wraps lies in the run its clauses leave: the same run a construction is
-             * told as ({@code constructed}), asked of a number that is written and not worked out.
+             * number it wraps lies in the run its clauses leave: the same run a worked-out number
+             * is held to when the construction is told, asked of one that is written.
              */
             @Override
             public boolean makingEndsNoRunOver(Core.Construct construct, Core wrapped) {
