@@ -17,6 +17,7 @@ import souther.compiler.examples.RowTrial;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.execute.RowTrials;
+import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
@@ -188,10 +189,13 @@ public final class JvmProgramExecution implements ProgramExecution {
                     .invoke(null, argumentOf(written.value()))) {
                 return new ConstantOutcome.Holds();
             }
-        } catch (ReflectiveOperationException | LinkageError _) {
-            // Not this compiler failing to say something. Where the check cannot be loaded or run
-            // here the language leaves the construction to the check that runs when the program
-            // does, which is ADR-0032's own degradation and one of the three answers.
+        } catch (ReflectiveOperationException | LinkageError e) {
+            // Not this compiler failing to say something. Where the check cannot be run here the
+            // language leaves the construction to the check that runs when the program does, which
+            // is ADR-0032's own degradation and one of the three answers. A check that was
+            // generated wrongly is this compiler failing and is not left to the program, and it
+            // arrives wrapped where the call reached it.
+            GeneratedLinkage.rejectDefect(e);
             return new ConstantOutcome.NotEvaluatedHere();
         }
         return new ConstantOutcome.Violates(failingClause(ctfe, written));
@@ -293,7 +297,8 @@ public final class JvmProgramExecution implements ProgramExecution {
                         .invoke(null, argumentOf(written.value()))) {
                     return clauses.get(i).name();
                 }
-            } catch (ReflectiveOperationException | LinkageError _) {
+            } catch (ReflectiveOperationException | LinkageError e) {
+                GeneratedLinkage.rejectDefect(e);
                 return Optional.empty();
             }
         }

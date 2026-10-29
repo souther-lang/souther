@@ -150,7 +150,15 @@ final class BoundImplementation implements Answerer {
         for (int i = 0; i < args.length; i++) {
             args[i] = crossing.crossed(sig.ins().get(i), arguments.get(i).neutral().read());
         }
-        Method apply = applyOf(behavior);
+        Method apply;
+        try {
+            apply = applyOf(behavior);
+        } catch (LinkageError e) {
+            // Resolving the supplied implementation's methods loads what it was built against, and
+            // its classes failing to link are not this compile's output.
+            throw new ImplementationNotReached("the bound implementation of `" + behavior
+                    + "` would not link: " + e, e);
+        }
         try {
             // In the caller's world: this is the one part of a row that is not this compile's
             // computation, and what it answers out of is the world the caller called from. Where
@@ -169,6 +177,10 @@ final class BoundImplementation implements Answerer {
             throw new InvocationFailure(ite.getCause());
         } catch (ReflectiveOperationException e) {
             throw new ImplementationNotReached(String.valueOf(e.getMessage()), e);
+        } catch (LinkageError e) {
+            // Whatever the supplied code ended with, as it stands: a dependency of it that is
+            // broken is that implementation failing, and not a class this compile generated.
+            throw new InvocationFailure(e);
         }
     }
 
