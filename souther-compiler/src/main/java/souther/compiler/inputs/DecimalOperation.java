@@ -103,6 +103,9 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * works them out gets past them. False where an operand is a number the row does not have.
      */
     public static boolean allCompleteAt(List<DecimalOperation> all, Map<Object, ExactRatio> values) {
+        if (all.isEmpty()) {
+            return true;
+        }
         BigDecimal[] results = new BigDecimal[all.size()];
         for (int i = 0; i < all.size(); i++) {
             results[i] = all.get(i).workedOut(results, values);
