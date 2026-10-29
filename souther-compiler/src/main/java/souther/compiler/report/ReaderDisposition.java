@@ -5,6 +5,7 @@ import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.BodyDistinction;
 import souther.compiler.query.NotMeasuredReason;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.query.Weakening;
 import souther.compiler.publish.WeakeningVocabulary;
 
 import java.util.ArrayList;
@@ -51,15 +52,26 @@ public sealed interface ReaderDisposition {
      *
      * <p><b>Not an instruction to measure again.</b> No option of this compiler sets the figures it
      * stops at, so a reader told to allow more has nothing to allow it with. What a reader can do is
-     * in the model, and there is something to say of it only where the entry is a point: a row
-     * written at it settles it, and so does a rule leaving no value there.
+     * in the model, and there is something to say of it only where the entry is a point or a
+     * rewrite: a row written at a point settles it, and so does a rule leaving no value there; a
+     * row that tells a rewrite apart settles that, and nothing proves there is none past the figure.
      *
-     * @param figures            what stopped it, as it carried them, never empty
-     * @param aRowThereSettlesIt whether the entry is about one point, which a row written at it or
-     *                           a rule refusing it answers whatever stopped the search
+     * @param figures    what stopped it, as it carried them, never empty
+     * @param settledBy  what a reader writes that answers the entry whatever stopped the search
      */
-    record StoppedAtAFigure(Subject subject, List<Figure> figures, boolean aRowThereSettlesIt)
+    record StoppedAtAFigure(Subject subject, List<Figure> figures, SettledBy settledBy)
             implements ReaderDisposition {
+
+        /** What answers an entry a figure stopped. */
+        public enum SettledBy {
+            /** Nothing a reader writes is named for it. */
+            NOTHING_NAMED,
+            /** A row written at the point, or a rule leaving no value there. */
+            A_ROW_OR_A_RULE_AT_THE_POINT,
+            /** A row that tells the rewrite apart from the body. */
+            A_ROW_THAT_TELLS_THE_REWRITE_APART
+        }
+
 
         public StoppedAtAFigure {
             figures = List.copyOf(figures);
@@ -158,12 +170,15 @@ public sealed interface ReaderDisposition {
         // figure is raised; the figures it reached are said beside it by whoever writes the line.
         if (!figures.isEmpty() && unanswered.runSensitivity() == RunSensitivity.MAY_CHANGE) {
             return new StoppedAtAFigure(subject, figures, switch (subject) {
-                case Subject.AtAPoint _ -> true;
+                case Subject.AtAPoint _ -> StoppedAtAFigure.SettledBy.A_ROW_OR_A_RULE_AT_THE_POINT;
                 case Subject.OfAModule _, Subject.OfABehavior _, Subject.OfASource _,
                      Subject.OfARow _, Subject.AtASpelledPosition _, Subject.AtAPosition _,
                      Subject.AtAnInput _, Subject.AtABorder _, Subject.OfAMeasure _,
                      Subject.OfAnAxisMeasure _, Subject.AtARule _, Subject.AtAFork _,
-                     Subject.AtAnArm _ -> false;
+                     Subject.AtAnArm _ -> unanswered instanceof AdequacyUncertainty.ByWeakening(
+                             Weakening.RewriteUndecided _)
+                             ? StoppedAtAFigure.SettledBy.A_ROW_THAT_TELLS_THE_REWRITE_APART
+                             : StoppedAtAFigure.SettledBy.NOTHING_NAMED;
             });
         }
         return switch (unanswered) {

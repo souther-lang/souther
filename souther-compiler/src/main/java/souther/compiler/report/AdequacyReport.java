@@ -10037,15 +10037,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static String next(AdequacyUncertainty unanswered) {
         ReaderDisposition disposition = ReaderDisposition.of(unanswered);
         String next = next(disposition);
-        // A search that stopped at a figure did not look past it, and a rewrite it left open may
-        // be told apart by a row nobody has written: that is the one thing such a line is owed
-        // beyond the figure, since nothing proves there is no row.
-        if (disposition instanceof ReaderDisposition.StoppedAtAFigure
-                && unanswered instanceof AdequacyUncertainty.ByWeakening(
-                        Weakening.RewriteUndecided _)) {
-            next += ": a row that tells the rewrite apart may exist past it, and writing one"
-                    + " settles it";
-        }
         return disposition instanceof ReaderDisposition.StoppedAtAFigure
                 || unanswered.figures().isEmpty() ? next
                 : next + "; it stopped at " + figuresSaid(unanswered.figures()) + " as well";
@@ -10056,10 +10047,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return switch (disposition) {
             // The figures named here, as what stopped carried them, and nothing a run is given sets
             // them.
-            case ReaderDisposition.StoppedAtAFigure it -> (it.aRowThereSettlesIt()
-                    ? "the search stopped at " : "stopped at ") + figuresSaid(it.figures())
-                    + ", which no option sets" + (it.aRowThereSettlesIt()
-                            ? ": write a row there, or a rule that leaves no value there" : "");
+            case ReaderDisposition.StoppedAtAFigure it -> switch (it.settledBy()) {
+                case NOTHING_NAMED -> "stopped at " + figuresSaid(it.figures())
+                        + ", which no option sets";
+                case A_ROW_OR_A_RULE_AT_THE_POINT -> "the search stopped at "
+                        + figuresSaid(it.figures()) + ", which no option sets: write a row there,"
+                        + " or a rule that leaves no value there";
+                // The search did not look past the figure, so nothing says there is no row.
+                case A_ROW_THAT_TELLS_THE_REWRITE_APART -> "stopped at "
+                        + figuresSaid(it.figures()) + ", which no option sets: a row that tells"
+                        + " the rewrite apart may exist past it, and writing one settles it";
+            };
             case ReaderDisposition.LookAtTheRule _ -> "read the rule and what stopped it";
             // Without the word for it. What the document calls a weakening is for a consumer keyed
             // on this report; a person reading a line is owed a sentence, and the words a build

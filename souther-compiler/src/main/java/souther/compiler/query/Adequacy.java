@@ -2241,17 +2241,19 @@ public final class Adequacy {
             // is about the machine, and whether anything says what it answers is about the rows.
             Set<ArmProbe> lit = new LinkedHashSet<>();
             Set<SeenConditionOutcome> seen = new LinkedHashSet<>();
+            Set<WalkProbe> wentOn = new LinkedHashSet<>();
             for (RowReading observed : db.ask(new RowReadings(name)).value().values()) {
                 for (RowOutcome row : observed.rowsSeen()) {
                     Generator.Watched watched = ObservedInputs.of(row, numbering).watched();
                     lit.addAll(armsSeenIn(watched));
                     seen.addAll(outcomesSeenIn(watched));
+                    wentOn.addAll(walksTakenOnIn(watched));
                 }
             }
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> out =
                     new LinkedHashMap<>();
             proven.value().forEach((behavior, answers) ->
-                    out.put(behavior, answers.asRunWith(lit, seen)));
+                    out.put(behavior, answers.asRunWith(lit, seen, wentOn)));
             return Answer.of(Ordered.map(out));
         }
     }
@@ -10656,6 +10658,16 @@ public final class Adequacy {
     static Set<ArmProbe> armsSeenIn(Generator.Watched watched) {
         return switch (watched) {
             case Generator.Watched.Ran(var account) -> account.arms();
+            case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ -> Set.of();
+        };
+    }
+
+    /** The walks a row's run took a second element of — and none where the run's account was not
+     *  read. */
+    static Set<WalkProbe> walksTakenOnIn(Generator.Watched watched) {
+        return switch (watched) {
+            case Generator.Watched.Ran(var account) -> account.walks().stream()
+                    .filter(account::wentOn).collect(Collectors.toSet());
             case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ -> Set.of();
         };
     }

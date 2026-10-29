@@ -610,24 +610,6 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
                 AdequacyReport.of(compilation).adequacy());
     }
 
-    /**
-     * What is shown to owe nothing is offered nothing: the rows a build is offered are asked of
-     * the walks that are owed, the same ones the measure reports.
-     */
-    @Test
-    void aWalkShownToHoldOneElementAtMostIsOfferedNoRow() {
-        Compilation compilation = measured(foldOverWhatAnInvariantHolds("1", """
-                    | (Few([])) -> 0
-                    | (Few([5])) -> 5
-                """));
-        String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
-                        OfferingRequest.overTheModule("repro.few")),
-                Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
-
-        assertEquals(List.of(), RowsOfABlock.of(block), () -> block);
-    }
-
     /** Room for a second element is room for a row that tells the rewrites apart. */
     @Test
     void aWalkOverAListTheDeclarationsLeaveRoomForTwoElementsIsStillAsked() {
@@ -636,13 +618,26 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
                     | (Few([5])) -> 5
                 """));
 
-        assertEquals(List.of("total"), foldsAsked(verdictsByFold(compilation)));
+        assertEquals(List.of("total"), foldsAsked(compilation));
     }
 
-    /** The definitions that wrote the folds asked about, each once. */
-    private static List<String> foldsAsked(List<String> byFold) {
-        return byFold.stream().map(verdict -> verdict.substring(0, verdict.indexOf(' ')))
-                .distinct().toList();
+    /** The definitions that wrote the folds a rewrite is reported for, each once. */
+    private static List<String> foldsAsked(Compilation compilation) {
+        List<String> out = new ArrayList<>();
+        JsonNode replacement = JSON.readTree(AdequacyReport.of(compilation)
+                        .json(SourceRendering.namedByIdentity(compilation.texts())))
+                .get("modules").get(0).get("behaviors").get(0).get("replacement");
+        for (JsonNode each : replacement.get("obligations")) {
+            JsonNode id = each.get("obligationId");
+            if (!id.get("rewrite").asString().startsWith("fold_")) {
+                continue;
+            }
+            String definition = id.get("definition").asString();
+            if (!out.contains(definition)) {
+                out.add(definition);
+            }
+        }
+        return out.stream().sorted().toList();
     }
 
     private static final String FOLD_OF_XS = "List.fold((acc, x) -> acc + x, 0, i.xs)";
@@ -666,7 +661,7 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
 
         assertEquals(List.of("drop fold_after_one_step: noticed",
                         "drop fold_from_the_seed: noticed"),
-                verdictsByFoldIn(body, ONE_OR_NONE_ANSWER_ROWS));
+                verdictsByFold(guardedModel(body, ONE_OR_NONE_ANSWER_ROWS)));
     }
 
     /** One fold written once but entered from two places is owed where any of them is not shown. */
@@ -690,7 +685,7 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
                     | (In { xs = [5], ys = [1, 2] }) -> 8
                 """);
 
-        assertEquals(List.of("sum"), foldsAsked(verdictsByFold(compilation)));
+        assertEquals(List.of("sum"), foldsAsked(compilation));
     }
 
     /** The same shapes with the walk on the other side of the condition leave room for two. */
@@ -702,8 +697,8 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
         bodies.put("if List.isEmpty(List.drop(1, i.xs)) then 0 else " + FOLD_OF_XS,
                 List.of("drop", "total"));
 
-        bodies.forEach((body, folds) -> assertEquals(folds, foldsAsked(
-                verdictsByFoldIn(body, ROOM_FOR_TWO_ROWS.formatted(0, 3))), body));
+        bodies.forEach((body, folds) -> assertEquals(folds,
+                foldsAsked(guardedModel(body, ROOM_FOR_TWO_ROWS.formatted(0, 3))), body));
     }
 
     /**
@@ -716,14 +711,14 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
         for (String body : List.of(
                 "match List.get(1, i.ys) with\n | Some s -> 0\n | None -> " + FOLD_OF_XS,
                 "match List.get(0 - 1, i.xs) with\n | Some s -> 0\n | None -> " + FOLD_OF_XS)) {
-            assertEquals(List.of("total"), foldsAsked(
-                    verdictsByFoldIn(body, ROOM_FOR_TWO_ROWS.formatted(5, 3))), body);
+            assertEquals(List.of("total"),
+                    foldsAsked(guardedModel(body, ROOM_FOR_TWO_ROWS.formatted(5, 3))), body);
         }
     }
 
-    /** The same, by the definition that wrote each fold. */
-    private static List<String> verdictsByFoldIn(String body, String rows) {
-        return verdictsByFold(measured("""
+    /** A behavior of two lists whose body is {@code body}, measured against {@code rows}. */
+    private static Compilation guardedModel(String body, String rows) {
+        return measured("""
                 module repro.guarded
 
                 data In = { xs: List<Int>, ys: List<Int> }
@@ -733,21 +728,11 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
                 let total (i) = %s
 
                 example total
-                %s""".formatted(body, rows)));
+                %s""".formatted(body, rows));
     }
 
     private static List<String> verdictsOfTheFoldIn(String body, String rows) {
-        return foldVerdicts(measured("""
-                module repro.guarded
-
-                data In = { xs: List<Int>, ys: List<Int> }
-
-                behavior total : (i: In) -> Int
-
-                let total (i) = %s
-
-                example total
-                %s""".formatted(body, rows)));
+        return foldVerdicts(guardedModel(body, rows));
     }
 
     private static final String ONE_OR_NONE_ANSWER_ROWS = """

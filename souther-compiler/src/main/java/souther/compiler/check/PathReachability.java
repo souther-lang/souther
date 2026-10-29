@@ -206,6 +206,17 @@ public final class PathReachability {
             takenBack.forEach(construct -> out.put(construct, new ComparisonArrival.NoProjection()));
             return new Arrivals(numbering, out, recordedAt, stopsBefore, walksHeldToOneAtMost);
         }
+
+        /** These, with the walks in {@code takenBack} no longer shown to go over one element at
+         *  most: a run took a second element of the list there. */
+        Arrivals takingBackWalks(Set<WalkProbe> takenBack) {
+            if (takenBack.isEmpty() || Collections.disjoint(walksHeldToOneAtMost, takenBack)) {
+                return this;
+            }
+            Set<WalkProbe> held = new LinkedHashSet<>(walksHeldToOneAtMost);
+            held.removeAll(takenBack);
+            return new Arrivals(numbering, arriving, recordedAt, stopsBefore, held);
+        }
     }
 
     /**
@@ -336,8 +347,22 @@ public final class PathReachability {
          * @param seen the ways a row saw a condition come out, of the same numbering
          */
         public AsRun asRunWith(Set<ArmProbe> lit, Set<SeenConditionOutcome> seen) {
+            return asRunWith(lit, seen, Set.of());
+        }
+
+        /**
+         * The same, with the walks a row took a second element of: a walk shown to go over one
+         * element at most is no longer shown so where a run went past its first. Taken back like
+         * the proofs above, and so closing nothing.
+         *
+         * @param wentOn the walks a row took a second element of, of the same numbering
+         */
+        public AsRun asRunWith(Set<ArmProbe> lit, Set<SeenConditionOutcome> seen,
+                               Set<WalkProbe> wentOn) {
             lit.forEach(probe -> requireNumbering(probe.numbering()));
             seen.forEach(outcome -> requireNumbering(outcome.at().numbering()));
+            wentOn.forEach(walk -> requireNumbering(walk.numbering()));
+            Arrivals arrivals = this.arrivals.takingBackWalks(wentOn);
             Map<ControlPlace, Reachability> out = new LinkedHashMap<>(found);
             Set<ControlPlace> places = new LinkedHashSet<>();
             found.forEach((where, said) -> {
