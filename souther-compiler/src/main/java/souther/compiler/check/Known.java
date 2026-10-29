@@ -249,6 +249,13 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
         return constraints.leavesNoRow();
     }
 
+    /** This with every condition on the path left out: what holds of the values wherever they are
+     * named, and no choice held. */
+    Known ofTheValuesAlone() {
+        return new Known(unguarded.constraints(), quantified, spoken, unguarded, cases,
+                Choices.NONE);
+    }
+
     /** How far a fact reaches: a value's type and a name's binding say something wherever that value
      * is named, and a condition says it only on the path it guards. */
     enum Held { OF_THE_VALUE, ON_THE_PATH }

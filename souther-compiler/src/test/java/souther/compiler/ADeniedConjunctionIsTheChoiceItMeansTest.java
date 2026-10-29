@@ -38,7 +38,7 @@ class ADeniedConjunctionIsTheChoiceItMeansTest {
             behavior toAway : (n: Int) -> Away | TooNear
                 constructs Away
             let toAway (n) = {
-                guard n < 1
+                guard n < 5
                     else TooNear
                 Away(n)
             }
@@ -53,7 +53,7 @@ class ADeniedConjunctionIsTheChoiceItMeansTest {
      *  the rule says nothing about. */
     private static final String SETTLED = AS_A_CHOICE
             .replace("value < 1 || value > 10", "value <= 10")
-            .replace("guard n < 1", "guard n <= 10");
+            .replace("guard n < 5", "guard n <= 10");
 
     @Test
     void aDeniedConjunctionIsOwedWhatTheChoiceItMeansIsOwed() {

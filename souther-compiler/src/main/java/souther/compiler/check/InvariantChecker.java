@@ -5283,7 +5283,7 @@ public final class InvariantChecker {
                 if (alone == null) {
                     alone = readingOf(k.unguarded().numbers(), asked);
                 }
-                if (c.refutedBy(alone, k.unguarded().facts())) {
+                if (c.refutedByTheValuesAlone(alone, k.unguarded().facts())) {
                     refutedAlone = true;
                 }
                 alongside = true;

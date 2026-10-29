@@ -344,12 +344,33 @@ final class Predicates {
         }
     }
 
+    /**
+     * What a choice owed at a construction came to, asked of the path as a question about the runs
+     * that reach it rather than of either half.
+     *
+     * <p>A choice holds on a run where one of its halves does, and which half is not what the path
+     * says: a guard may state the same choice the other way round, or a half may be settled by
+     * values neither guard names alone. So neither half is proved on its own. The path with the
+     * choice denied is taken in, and the choice is established where that leaves no run; it is
+     * refused where the path with the choice stated leaves none. A look that was given up before it
+     * came to an end leaves a run in either, and so establishes and refuses nothing.
+     *
+     * @param proved       the path with the choice denied reaches nothing
+     * @param refuted      the path with the choice stated reaches nothing
+     * @param refutedAlone the same with the path's conditions left out
+     */
+    record Choice(boolean proved, boolean refuted, boolean refutedAlone) {
+
+        /** Neither: what the path leaves does not decide the choice. */
+        static final Choice UNDECIDED = new Choice(false, false, false);
+    }
+
     /** A clause that cannot hold, said in the language the domain reads: {@code -1 >= 0}. */
     static final Clause VIOLATED = new Clause(
             new NumericConstraint(
                     LinearForm.constant(ExactRatio.ONE.negated()), Rel.GE),
             null, List.of(),
-            null);
+            null, null);
 
     /**
      * One clause of an invariant, and the two ways it can come out: a relation for the domain to
@@ -357,7 +378,13 @@ final class Predicates {
      * present either one discharging the clause is enough — a guard is written one way and a clause
      * another, and which of the two routes carries it is not the author's concern.
      */
-    record Clause(NumericConstraint numeric, Fact fact, List<NumericConstraint> known, Piecewise piecewise) {
+    record Clause(NumericConstraint numeric, Fact fact, List<NumericConstraint> known, Piecewise piecewise,
+                  Choice choice) {
+
+        /** This clause with what asking its choice of the path came to. */
+        Clause choosing(Choice asked) {
+            return new Clause(numeric, fact, known, piecewise, asked);
+        }
 
         /**
          * Every atom a numeric domain could decide this clause differently by.
@@ -395,10 +422,23 @@ final class Predicates {
             return (numeric != null && d.entails(numeric.form(), numeric.rel()))
                     || (fact != null && fact.entailedBy(facts))
                     || (piecewise != null && !decidedAsWritten(d, facts)
-                            && piecewise.entailedBy(d));
+                            && piecewise.entailedBy(d))
+                    || (choice != null && choice.proved());
         }
 
         boolean refutedBy(NumericDomain<FactSubject> d, PredicateFacts<FactSubject> facts) {
+            return refutedByWhatItStates(d, facts) || (choice != null && choice.refuted());
+        }
+
+        /** Whether the values alone refute it: {@code d} and {@code facts} are what is known of
+         * them with the path's conditions left out, and so is the choice's own answer to that. */
+        boolean refutedByTheValuesAlone(NumericDomain<FactSubject> d,
+                                        PredicateFacts<FactSubject> facts) {
+            return refutedByWhatItStates(d, facts) || (choice != null && choice.refutedAlone());
+        }
+
+        private boolean refutedByWhatItStates(NumericDomain<FactSubject> d,
+                                              PredicateFacts<FactSubject> facts) {
             return (numeric != null && d.refutes(numeric.form(), numeric.rel()))
                     || (fact != null && fact.refutedBy(facts))
                     || (piecewise != null && !decidedAsWritten(d, facts)
@@ -649,7 +689,8 @@ final class Predicates {
      * happened to be holding decide what a declaration says. The parameter is gone rather than
      * ignored: what is not there cannot come to be read. */
     Owed assumed(Core inv, Denotations at, boolean decidesFalse) {
-        return obligations(inv, at, Set.of(), true, decidesFalse, Discharge.AN_ASSUMPTION, null);
+        return obligations(inv, at, Set.of(), true, decidesFalse, Discharge.AN_ASSUMPTION, null,
+                null);
     }
 
     /**
@@ -661,7 +702,8 @@ final class Predicates {
      * changes one of them.
      */
     Owed assumed(Core inv, Denotations at, boolean decidesFalse, PerPart per) {
-        return obligations(inv, at, Set.of(), true, decidesFalse, Discharge.AN_ASSUMPTION, per);
+        return obligations(inv, at, Set.of(), true, decidesFalse, Discharge.AN_ASSUMPTION, per,
+                null);
     }
 
     /**
@@ -669,7 +711,7 @@ final class Predicates {
      * occurrence is said in the numbering the clause handed out.
      */
     Owed assumed(ClauseExpr of, Denotations at, boolean decidesFalse, PerPart per) {
-        return new Owing(this, Set.of(), decidesFalse, Discharge.AN_ASSUMPTION)
+        return new Owing(this, Set.of(), decidesFalse, Discharge.AN_ASSUMPTION, null)
                 .read(of, at, terms::inside, per == null ? null : per::read);
     }
 
@@ -745,7 +787,7 @@ final class Predicates {
         // What each handed-over value is, worked out once and where the site stands. Read again
         // further down, a value under a binding would be asked about at names the site never had.
         return obligations(inv, at, handedOver(unnamed, at), true, decidesFalse,
-                Discharge.spending(k), null);
+                Discharge.spending(k), null, k);
     }
 
     /**
@@ -757,8 +799,8 @@ final class Predicates {
      */
     private Owed obligations(Core rawInv, Denotations at, Set<FactSubject> unnamed,
                              boolean positive, boolean decidesFalse, Discharge discharge,
-                             PerPart per) {
-        return new Owing(this, unnamed, decidesFalse, discharge)
+                             PerPart per, Known spending) {
+        return new Owing(this, unnamed, decidesFalse, discharge, spending)
                 .read(rawInv, positive, at, terms::inside,
                         per == null ? null : per::read);
     }
@@ -778,7 +820,8 @@ final class Predicates {
      * where in the clause the reading stands.
      */
     private record Owing(Predicates of, Set<FactSubject> unnamed, boolean decidesFalse,
-                         Discharge discharge) implements ClauseReading<Owed, Denotations> {
+                         Discharge discharge, Known spending)
+            implements ClauseReading<Owed, Denotations> {
 
         /**
          * A conjunction owes what both of its conjuncts owe, and a choice is read whole.
@@ -786,7 +829,8 @@ final class Predicates {
          * <p>Each half of a conjunction on its own: an invariant is a set of things that hold, and
          * one the check cannot read leaves its own run-time check standing without costing the
          * others theirs. A choice states neither of its parts — one of them holds and this cannot
-         * say which — so what is handed to the reader of comparisons is the whole of it.
+         * say which — so what is handed to the reader of comparisons is the whole of it, and where
+         * the path it is owed on is at hand the path is asked about it ({@link Choice}).
          */
         @Override
         public Descent<Owed> at(ClauseExpr.Joined join) {
@@ -798,9 +842,62 @@ final class Predicates {
 
         @Override
         public Owed whole(ClauseExpr.Part part, Denotations at) {
-            return of.owing(Conditions.asSizeComparison(part.of()), at, unnamed, part.positive(),
-                    decidesFalse, discharge);
+            Owed owed = of.owing(Conditions.asSizeComparison(part.of()), at, unnamed,
+                    part.positive(), decidesFalse, discharge);
+            return spending != null && part instanceof ClauseExpr.Joined join
+                    ? of.askedOfThePath(owed, join, at, spending) : owed;
         }
+    }
+
+    /**
+     * What a choice owes, with the path asked about it.
+     *
+     * <p>Whatever the choice was read as on its own stays: a guard that states the same choice
+     * settles it by name. A choice nothing was made of is owed all the same, because the path can
+     * leave no run on which it fails without either half being readable alone; and a choice that
+     * folded the other way keeps saying so. One that folded to hold owes nothing, and one a
+     * violation was already stated for is not asked again.
+     */
+    private Owed askedOfThePath(Owed owed, ClauseExpr.Joined choice, Denotations at, Known k) {
+        if (owed.folded() == Fold.HOLDS || owed.parts().stream().anyMatch(
+                each -> each instanceof Part.Carried carried
+                        && carried.clause().equals(VIOLATED))) {
+            return owed;
+        }
+        Choice answer = choiceAt(choice, k, at);
+        List<Part> parts = new ArrayList<>();
+        for (Part each : owed.parts()) {
+            if (each instanceof Part.Carried carried) {
+                parts.add(new Part.Carried(carried.clause().choosing(answer)));
+            }
+        }
+        if (parts.isEmpty()) {
+            parts.add(new Part.Carried(new Clause(null, null, List.of(), null, answer)));
+        }
+        return new Owed(List.copyOf(parts), owed.folded());
+    }
+
+    /**
+     * Whether the path leaves a run on which {@code choice} holds, and one on which it does not.
+     *
+     * <p>Each is the choice (or its denial) taken in over the path, and a path it leaves nothing of
+     * is one no run takes. A path that already leaves nothing is not asked: every question has an
+     * answer there, both of these included, and a clause that is established and refused at once
+     * says nothing. Taking the choice in is bounded, and a look that was given up leaves a run, so
+     * it neither establishes nor refuses.
+     */
+    private Choice choiceAt(ClauseExpr.Joined choice, Known k, Denotations at) {
+        if (k.reachesNothing()) {
+            return Choice.UNDECIDED;
+        }
+        boolean proved = assumeShape(choice.denied(), k, at).known().reachesNothing();
+        boolean refuted = assumeShape(choice, k, at).known().reachesNothing();
+        if (proved && refuted) {
+            return Choice.UNDECIDED;
+        }
+        boolean alone = refuted
+                && assumeShape(choice, k.ofTheValuesAlone(), at).known().reachesNothing();
+        return new Choice(proved, refuted, alone);
     }
 
     /** What one part of a clause owes, read as the comparison it states. */
@@ -892,7 +989,7 @@ final class Predicates {
         // atom files what it carries where it is named, so having read the clause into forms is
         // having read them ({@link IntrinsicNumericFacts}).
         List<NumericConstraint> known = terms.carriedBy(namedBy(numeric, fact));
-        return Owed.of(new Clause(numeric, fact, known, piecewise)).alsoFolded(fold);
+        return Owed.of(new Clause(numeric, fact, known, piecewise, null)).alsoFolded(fold);
     }
 
     /** What a clause folding to {@code folded}, read with polarity {@code positive}, comes to on its
@@ -1036,7 +1133,17 @@ final class Predicates {
      * numeric domain, a stdlib predicate settles a fact. A condition of neither shape, and an operand
      * outside the affine fragment, leave {@code k} unchanged (sound). */
     Assumed assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
-        Assumed read = new Assuming(this).read(rawCond, positive, at, terms::inside).from(k);
+        return assumeThrough(new Assuming(this).read(rawCond, positive, at, terms::inside), k);
+    }
+
+    /** The same over a shape the caller already read the clause into. */
+    private Assumed assumeShape(ClauseExpr shape, Known k, Denotations at) {
+        return assumeThrough(new Assuming(this).read(shape, at, terms::inside, null), k);
+    }
+
+    /** {@code reading} taken in over {@code k}, and the choices the path holds looked through. */
+    private Assumed assumeThrough(Assumption reading, Known k) {
+        Assumed read = reading.from(k);
         Known after = read.known();
         // A path that holds no choice, or one the looking was given up along, has nothing more to
         // be asked here.
@@ -1044,7 +1151,7 @@ final class Predicates {
                 || (k.holdsAChoice() && k.wayIn() == null)) {
             return read;
         }
-        Known past = wayPast(rawCond, positive, at, k, after);
+        Known past = wayPast(reading, k, after);
         if (past != null) {
             return new Assumed(after.throughWay(past, after.triesLeft()), read.taken(),
                     read.shapeRead(), read.notTaken());
@@ -1070,13 +1177,12 @@ final class Predicates {
      * of the one way known to get through, it is one: the condition read once more, over that way.
      * Where {@code k} held no choice the way is {@code after} itself, and nothing is read again.
      */
-    private Known wayPast(Core cond, boolean positive, Denotations at, Known k, Known after) {
+    private Known wayPast(Assumption cond, Known k, Known after) {
         if (!k.holdsAChoice()) {
             return aPartOfEachSince(after, 0);
         }
         Known before = k.wayIn();
-        return aPartOfEachSince(new Assuming(this).read(cond, positive, at, terms::inside)
-                .from(before).known(), before.heldCount());
+        return aPartOfEachSince(cond.from(before).known(), before.heldCount());
     }
 
     /**

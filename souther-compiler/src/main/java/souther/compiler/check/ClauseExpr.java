@@ -93,6 +93,13 @@ sealed interface ClauseExpr {
     }
 
     /**
+     * What holds exactly where this does not: the same parts, each denied, and a connective
+     * composing the other way round. The occurrences are this one's, so a reader asking about the
+     * denial of a part is asking about the same place in the clause.
+     */
+    ClauseExpr denied();
+
+    /**
      * What a reading is handed: a part of no connective, or a connective it takes whole.
      *
      * <p>A binding standing in the clause is not one of these. Where the environment changes is the
@@ -108,6 +115,9 @@ sealed interface ClauseExpr {
         /** The part itself, with the denials above it taken off, which is the innermost of what it
          *  is spelled as. */
         Core of();
+
+        @Override
+        Part denied();
     }
 
     /** One part of no connective, stated where {@code positive} and denied where it is not. */
@@ -121,6 +131,11 @@ sealed interface ClauseExpr {
         @Override
         public Core of() {
             return spelled.get(spelled.size() - 1);
+        }
+
+        @Override
+        public Leaf denied() {
+            return new Leaf(spelled, !positive, at);
         }
     }
 
@@ -167,6 +182,12 @@ sealed interface ClauseExpr {
         List<Core> writtenHalves() {
             return List.of(left.written(), right.written());
         }
+
+        @Override
+        public Joined denied() {
+            return new Joined(spelled, !positive, at, how.denied(), left.denied(),
+                    right.denied());
+        }
     }
 
     /**
@@ -184,6 +205,11 @@ sealed interface ClauseExpr {
 
         public Scoped {
             spelled = named(spelled);
+        }
+
+        @Override
+        public Scoped denied() {
+            return new Scoped(spelled, !positive, at, binding, body.denied());
         }
     }
 
@@ -286,6 +312,14 @@ sealed interface ClauseExpr {
                 && Core.withoutStanding(iff.then()) instanceof Core.Bool t && !t.value()
                 && Core.withoutStanding(iff.els()) instanceof Core.Bool f && f.value()) {
             return of(iff.cond(), !positive, spelled, at, counted);
+        }
+        // An if whose then-branch is a written true says the choice between its condition and its
+        // else-branch: the else-branch is read only where the condition is false, which is how a
+        // choice reads its right side.
+        if (bare instanceof Core.If iff
+                && Core.withoutStanding(iff.then()) instanceof Core.Bool t && t.value()) {
+            return new Joined(spelled, positive, at, ConditionJoin.EITHER.under(positive),
+                    under(iff.cond(), positive, counted), under(iff.els(), positive, counted));
         }
         return againstATruthValue(clause, positive, spelled, at, counted);
     }
