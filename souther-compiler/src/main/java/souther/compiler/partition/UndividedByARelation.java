@@ -4537,7 +4537,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static boolean settledAtEveryValue(WhatARelationLeavesUndivided.Leaves leaves) {
         return leaves instanceof WhatARelationLeavesUndivided.Leaves.Settled runs
-                && runs.lines().isEmpty();
+                && runs.noRowShownComputed().isEmpty() && runs.lines().isEmpty();
     }
 
     /** Whether a place of one side is a place of the other, or part of one. */

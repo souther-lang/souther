@@ -31,6 +31,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.ExpansionLineage;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -44,6 +45,7 @@ import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 import java.util.function.UnaryOperator;
 
 /**
@@ -250,6 +252,11 @@ sealed interface ComparisonAssessment {
         for (NumericTerm term : NumericTerms.inOrder(terms)) {
             // A line is drawn on a number a row can be written to stand at, and only where the
             // model draws it: one the orders' ends alone draw parts no class of the model's.
+            // A term some of whose settling numbers have no row shown computed draws no line: the
+            // numbers beside the ones that do would be one class with the ones that do not.
+            if (!settled.get(term).noRowShownComputed().isEmpty()) {
+                continue;
+            }
             List<WhatARelationLeavesUndivided.Line> lines = settled.get(term).linesOnAPlaceOf(term);
             List<AtAPosition> here = new ArrayList<>();
             for (WhatARelationLeavesUndivided.Line each : lines) {
@@ -297,6 +304,9 @@ sealed interface ComparisonAssessment {
      * @param mayStopBefore those of {@code undivided} a run may stop on the way to some relation
      *                  about on what nothing here says, so that every value there getting to the
      *                  comparison is not shown ({@link UndividedByARelation.WhatItLeaves#mayStopBefore})
+     * @param noRowShownComputed those of {@code filedAt} some relation about settles by the terms'
+     *                  ends in some numbers where no row is shown computed: no line is drawn for
+     *                  the place, and it is said so
      * @param partnered each string position the relation is shown to part by the strings its
      *                  partner can hold, where the partner is a piece of a string
      */
@@ -306,6 +316,7 @@ sealed interface ComparisonAssessment {
                                Optional<DrawnBeside> beside,
                                Map<FilingCoordinate, Set<Figure>> stoppedAt,
                                Set<FilingCoordinate> mayStopBefore,
+                               Set<FilingCoordinate> noRowShownComputed,
                                Map<NumericTerm.FromOnePosition,
                                        UndividedByARelation.StringsAPartnerCanHold> partnered)
             implements ComparisonAssessment {
@@ -319,6 +330,7 @@ sealed interface ComparisonAssessment {
             stoppedAt.forEach((at, figures) -> held.put(at, Set.copyOf(figures)));
             stoppedAt = Collections.unmodifiableMap(held);
             settling = List.copyOf(settling);
+            noRowShownComputed = Set.copyOf(noRowShownComputed);
             partnered = Collections.unmodifiableMap(new LinkedHashMap<>(partnered));
             Objects.requireNonNull(beside, "drawn beside something, or nothing");
             if (beside.isEmpty() && !settling.isEmpty()) {
@@ -332,7 +344,7 @@ sealed interface ComparisonAssessment {
                                       InputReading reading, Optional<DrawnBeside> beside,
                                       CountWitnesses.Lookup witnesses) {
             return new AgainstAnotherValue(read.over(), read.relations(), Set.of(), List.of(),
-                    beside, Map.of(), Set.of(), Map.of())
+                    beside, Map.of(), Set.of(), Set.of(), Map.of())
                     .whereRowsArrive(reading, List.of(), witnesses);
         }
 
@@ -382,7 +394,9 @@ sealed interface ComparisonAssessment {
                 }
             }
             return new AgainstAnotherValue(filedAt, relations, shown, lines, beside, stopped,
-                    stops, partedByTheirPartners(about, leaves));
+                    stops, noRowShownComputedAt(leaves.stream()
+                            .flatMap(each -> each.settled().entrySet().stream()).toList()),
+                    partedByTheirPartners(about, leaves));
         }
 
         /**
@@ -466,7 +480,7 @@ sealed interface ComparisonAssessment {
         /** The same relation with only {@code lines} parting what settles it. */
         AgainstAnotherValue partedBy(List<AtAPosition> lines) {
             return new AgainstAnotherValue(filedAt, relations, undivided, lines, beside,
-                    stoppedAt, mayStopBefore, partnered);
+                    stoppedAt, mayStopBefore, noRowShownComputed, partnered);
         }
     }
 
@@ -1900,7 +1914,8 @@ sealed interface ComparisonAssessment {
         }
         return relatingAt(across.filedAt().stream()
                 .filter(place -> !divided.contains(place)).toList(), across.undivided(),
-                stopped, across.left().mayStopBefore());
+                stopped, across.left().mayStopBefore(),
+                noRowShownComputedAt(across.left().settled().entrySet()));
     }
 
     /** The same, of a relation to another value. */
@@ -1909,7 +1924,7 @@ sealed interface ComparisonAssessment {
         Set<FilingCoordinate> divided = against.dividedBySettling(partneredKept);
         return relatingAt(against.filedAt().stream()
                 .filter(place -> !divided.contains(place)).toList(), against.undivided(),
-                against.stoppedAt(), against.mayStopBefore());
+                against.stoppedAt(), against.mayStopBefore(), against.noRowShownComputed());
     }
 
     /**
@@ -1952,11 +1967,42 @@ sealed interface ComparisonAssessment {
     static List<LeftAt> relatingAt(List<FilingCoordinate> places,
                                    Set<FilingCoordinate> undivided,
                                    Map<FilingCoordinate, Set<Figure>> stoppedAt,
-                                   Set<FilingCoordinate> mayStopBefore) {
-        return places.stream().distinct().map(at -> new LeftAt(at, !undivided.contains(at)
-                ? notShownAt(stoppedAt.getOrDefault(at, Set.of()))
-                : mayStopBefore.contains(at) ? new BlockReason.RelationNotShownReachedAtEveryValue()
-                : new BlockReason.ComparisonRelatingTwoValues())).toList();
+                                   Set<FilingCoordinate> mayStopBefore,
+                                   Set<FilingCoordinate> noRowShownComputed) {
+        return places.stream().distinct().flatMap(at -> {
+            if (undivided.contains(at)) {
+                return Stream.of(new LeftAt(at, mayStopBefore.contains(at)
+                        ? new BlockReason.RelationNotShownReachedAtEveryValue()
+                        : new BlockReason.ComparisonRelatingTwoValues()));
+            }
+            // Two reasons a place is shown nothing of are two things to be told, and neither
+            // says the other: a figure a search stopped at is one a run allowed more may get
+            // past, and numbers in which no row is shown computed are not.
+            Set<Figure> figures = stoppedAt.getOrDefault(at, Set.of());
+            List<LeftAt> why = new ArrayList<>();
+            if (noRowShownComputed.contains(at)) {
+                why.add(new LeftAt(at, new BlockReason.RelationRowsNotShownComputed()));
+            }
+            if (!figures.isEmpty() || why.isEmpty()) {
+                why.add(new LeftAt(at, notShownAt(figures)));
+            }
+            return why.stream();
+        }).toList();
+    }
+
+    /**
+     * The places of the numbers some of whose settling runs have no row shown computed. A set of
+     * places and not the runs: no reader is told which numbers they are.
+     */
+    static Set<FilingCoordinate> noRowShownComputedAt(
+            Collection<Map.Entry<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled>> settled) {
+        Set<FilingCoordinate> out = new LinkedHashSet<>();
+        for (Map.Entry<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> each : settled) {
+            if (!each.getValue().noRowShownComputed().isEmpty()) {
+                out.add(FilingCoordinate.of(each.getKey()));
+            }
+        }
+        return out;
     }
 
     /** Nothing shown of a place, and the figures a search for more of it stopped at. */
