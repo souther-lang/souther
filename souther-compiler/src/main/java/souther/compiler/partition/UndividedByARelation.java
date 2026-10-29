@@ -874,7 +874,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * counted on. False where a place has no end to give.
      */
     private static boolean stopsNoRow(IntOperation operation, InputReading read) {
-        FormRange range = FormRange.of(operation.form(), read, _ -> null);
+        FormRange range = FormRange.of(operation.form(), read);
         return range != null && range.liesWithin(operation.least(), operation.greatest());
     }
 

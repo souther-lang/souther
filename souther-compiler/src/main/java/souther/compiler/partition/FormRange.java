@@ -12,7 +12,6 @@ import souther.compiler.numeric.NumericDomain;
 
 import java.math.BigInteger;
 import java.util.Map;
-import java.util.function.Function;
 
 /**
  * The numbers a form of the input's numbers can come to, from the ends of the places it is over:
@@ -24,19 +23,24 @@ import java.util.function.Function;
  */
 record FormRange(ExactRatio least, ExactRatio greatest) {
 
+    /** The range of {@code form} over places of the input alone, or null where some place has no
+     *  end to give. */
+    static FormRange of(LinearForm<NumericTerm> form, InputReading read) {
+        return of(form, read, Map.of());
+    }
+
     /**
-     * The range of {@code form}, where {@code standIn} gives a range for the atoms it knows ends
-     * of beside the input's places — or null where some place has no end to give.
+     * The range of {@code form}, where {@code standIns} names the atoms that are no place of the
+     * input — each an expression held aside — with the range of the numbers it comes to, null
+     * where that is not known. Null where some atom has no range to give.
      */
     static FormRange of(LinearForm<NumericTerm> form, InputReading read,
-                        Function<NumericTerm, FormRange> standIn) {
+                        Map<NumericTerm, FormRange> standIns) {
         ExactRatio low = form.constant();
         ExactRatio high = low;
         for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
-            FormRange ends = standIn.apply(each.getKey());
-            if (ends == null) {
-                ends = endsOf(each.getKey(), read);
-            }
+            FormRange ends = standIns.containsKey(each.getKey()) ? standIns.get(each.getKey())
+                    : endsOf(each.getKey(), read);
             if (ends == null) {
                 return null;
             }

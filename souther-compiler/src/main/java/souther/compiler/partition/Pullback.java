@@ -366,40 +366,17 @@ final class Pullback {
      * here: nothing here names the one expression it is the size of.
      */
     private final Map<Quantity.HowManyMeet, Core> readOff = new LinkedHashMap<>();
-    /**
-     * The comparison a reading is of as the source wrote it, which is the one whose rows
-     * {@link #workingOfTheRule} is told of.
-     */
-    private StatedComparison theComparisonRead;
-    /** What the arithmetic over the input made of {@link #theComparisonRead}. */
-    private Supplier<AffineReading.OfAComparison> theArithmeticRead;
-    /**
-     * Whether the comparison being read states what {@link #theComparisonRead} does, over the
-     * same rows, in other words: a rounded number read as the number it is rounded from.
-     */
-    private boolean restatingTheComparisonRead;
     /** Whether the comparisons being read are the parts of a quotient's statement, which work out
      *  a product the quotient does not. */
     private boolean restatingAQuotient;
     /**
-     * What the rule that took {@link #theComparisonRead} tells of the operations its rows get
-     * past, where that rule knows more than the reading of the comparison does; null otherwise.
+     * The candidates being tried, innermost first. Everything a candidate says of the rows of what
+     * it concludes is said into the one on top, so that what a candidate set aside said is said
+     * into nothing the one kept holds ({@link #firstThatReadsIt}).
      */
-    private UndividedByARelation.Working workingOfTheRule;
-    /**
-     * The expressions the rule being tried answers for beside the one the arithmetic stopped at;
-     * null where it answers for that one alone.
-     */
-    private Predicate<Core> answersFor;
-    /** What each rule that concluded something said ({@link #sayingWhatItAnswersFor}), by what it
-     *  concluded. */
-    private final Map<Derivation, WhatTheRuleSaid> said = new IdentityHashMap<>();
-    /**
-     * What each relation read under an arm of a choice works out, off the comparison read with the
-     * choice standing as that arm ({@link #tellWhatItWorksOut}).
-     */
-    private final Map<Relation, UndividedByARelation.Working> workingOfRelation =
-            new LinkedHashMap<>();
+    private final Deque<Trial> underTrial = new ArrayDeque<>();
+    /** What each candidate that concluded something said, by what it concluded. */
+    private final Map<Derivation, Trial> triedAndConcluded = new IdentityHashMap<>();
     /** What decided the arms being read, outermost first: worked out before any arm is. */
     private final Deque<UndividedByARelation.Working> beforeTheFork = new ArrayDeque<>();
     /**
@@ -737,14 +714,13 @@ final class Pullback {
                                               InputReading read) {
         Pullback reading = new Pullback(read, Optional.empty());
         Once<AffineReading.OfAComparison> arithmetic = reading.arithmeticOf(comparison, reads);
-        reading.theComparisonRead = comparison;
-        reading.theArithmeticRead = arithmetic;
         Derivation chosen = reading.firstThatReadsIt(
                 reading.rulesFor(comparison, null, false, reads, arithmetic));
         Pulled stated = reading.pulled(reading.underTheEntriesLookedUp(chosen, comparison, reads));
+        Trial theRule = reading.triedAndConcluded.get(chosen);
         return new OnTheInput(stated, arithmetic,
-                new Once<>(() -> reading.workingOf(chosen, arithmetic)),
-                reading.workingOfRelation::get, reading.readOff);
+                new Once<>(() -> workingOf(theRule, arithmetic)),
+                theRule == null ? _ -> null : theRule::workingOf, reading.readOff);
     }
 
     /**
@@ -1089,7 +1065,16 @@ final class Pullback {
     private Derivation restated(StatedComparison stated, Denotation at, boolean fixed,
                                 InputReads reads) {
         Derivation read = comparison(stated, at, fixed, reads);
-        return read == null ? null : new Derivation.Restated(read);
+        if (read == null) {
+            return null;
+        }
+        // It holds exactly where the written one does, over the same rows, so what the rule that
+        // read it says of the operations they get past is said of the written one.
+        Trial kept = triedAndConcluded.get(read);
+        if (kept != null && kept.working != null) {
+            trial().working = kept.working;
+        }
+        return new Derivation.Restated(read);
     }
 
     /**
@@ -1438,33 +1423,73 @@ final class Pullback {
                 () -> readingTheComparisonAgain(
                         throughWhatItStopsAt(stated, at, fixed, reads, wayIn.get())),
                 () -> partOf(at, ofBoundValues(stated, fixed, reads, wayIn.get())));
-        List<Supplier<Derivation>> saying = new ArrayList<>();
-        for (Supplier<Derivation> rule : rules) {
-            saying.add(() -> sayingWhatItAnswersFor(rule));
-        }
-        return saying;
+        return rules;
     }
 
     /**
-     * What a rule that took a comparison says of the rows of what it concluded, where it is not
-     * what the reading of the comparison says: the working it worked out, and the expressions it
-     * answers for beside the one the arithmetic stopped at ({@link #answersFor}).
+     * What one candidate, a rule being tried at a comparison, says of the rows of what it
+     * concludes where that is more than the reading of the comparison says.
      */
-    private record WhatTheRuleSaid(UndividedByARelation.Working working,
-                                   Predicate<Core> answersFor) { }
+    private static final class Trial {
+
+        /** What the rows of the comparison get past, as the rule worked it out; null where the
+         *  rule worked out none. */
+        private UndividedByARelation.Working working;
+        /** The expressions the rule answers for beside the one the arithmetic stopped at; null
+         *  where it answers for that one alone. */
+        private Predicate<Core> answersFor;
+        /** What each relation read under an arm of a choice works out, off the comparison read
+         *  with the choice standing as that arm ({@link Pullback#tellWhatItWorksOut}). */
+        private Map<Relation, UndividedByARelation.Working> relations;
+
+        void tell(Relation relation, UndividedByARelation.Working told) {
+            if (relations == null) {
+                relations = new LinkedHashMap<>();
+            }
+            UndividedByARelation.Working already = relations.get(relation);
+            relations.put(relation, already == null ? told
+                    : UndividedByARelation.Working.together(List.of(already, told)));
+        }
+
+        /** What the candidate says of the rows of {@code relation}, or null where it says none. */
+        UndividedByARelation.Working workingOf(Relation relation) {
+            return relations == null ? null : relations.get(relation);
+        }
+
+        /** The relations the candidate kept under this one read, held as this one's. What it
+         *  worked out of its own comparison is its own: a comparison read under an arm is not
+         *  this one. */
+        void absorb(Trial kept) {
+            if (kept.relations != null) {
+                kept.relations.forEach(this::tell);
+            }
+        }
+    }
+
+    /** The candidate being tried; one to say into nothing where none is. */
+    private Trial trial() {
+        return underTrial.isEmpty() ? new Trial() : underTrial.peek();
+    }
 
     /**
-     * {@code rule}, tried with nothing said, and what it said recorded against what it concluded,
-     * so that a rule tried and set aside leaves nothing for the one kept.
+     * {@code rule}, tried with nothing said, and what it said held against what it concluded.
      */
-    private Derivation sayingWhatItAnswersFor(Supplier<Derivation> rule) {
-        workingOfTheRule = null;
-        answersFor = null;
-        Derivation concluded = rule.get();
-        if (concluded != null) {
-            said.put(concluded, new WhatTheRuleSaid(workingOfTheRule, answersFor));
-        }
-        return concluded;
+    private Supplier<Derivation> underTrial(Supplier<Derivation> rule) {
+        return () -> {
+            Trial trial = new Trial();
+            underTrial.push(trial);
+            Derivation concluded;
+            try {
+                concluded = rule.get();
+            } finally {
+                underTrial.pop();
+            }
+            if (concluded != null) {
+                // One that several candidates conclude is the one kept by the first of them.
+                triedAndConcluded.putIfAbsent(concluded, trial);
+            }
+            return concluded;
+        };
     }
 
     /**
@@ -1474,7 +1499,7 @@ final class Pullback {
      */
     private Derivation readingTheComparisonAgain(Derivation read) {
         if (read != null) {
-            answersFor = _ -> true;
+            trial().answersFor = _ -> true;
         }
         return read;
     }
@@ -1487,24 +1512,23 @@ final class Pullback {
                 choices.add(value);
             }
         }
-        answersFor = node -> choices.contains(Core.withoutStanding(node));
+        trial().answersFor = node -> choices.contains(Core.withoutStanding(node));
     }
 
     /**
-     * What the rows of {@code chosen}, the derivation a comparison was read by, work out: what the
-     * rule that concluded it says, and otherwise what the arithmetic over the input made of the
-     * comparison, with the expressions the rule answers for held to it.
+     * What the rows of a comparison read by a candidate work out: what the candidate says, and
+     * otherwise what the arithmetic over the input made of the comparison, with the expressions
+     * the candidate answers for held to it.
      */
-    private UndividedByARelation.Working workingOf(
-            Derivation chosen, Supplier<AffineReading.OfAComparison> arithmetic) {
-        WhatTheRuleSaid theRule = said.get(chosen);
-        if (theRule != null && theRule.working() != null) {
-            return theRule.working();
+    private static UndividedByARelation.Working workingOf(
+            Trial theRule, Supplier<AffineReading.OfAComparison> arithmetic) {
+        if (theRule != null && theRule.working != null) {
+            return theRule.working;
         }
         AffineReading.OfAComparison read = arithmetic.get();
-        return theRule != null && theRule.answersFor() != null
+        return theRule != null && theRule.answersFor != null
                 && read instanceof AffineReading.OfAComparison.Stopped stopped
-                ? stopped.apart(theRule.answersFor())
+                ? stopped.apart(theRule.answersFor)
                 : AffineReading.OfAComparison.workingOf(read);
     }
 
@@ -1725,13 +1749,21 @@ final class Pullback {
                 READINGS.maximum(), KeptTruths.readIn(read));
     }
 
-    /** The one of {@code rules} an expression is read by ({@link RuleChoice}). */
+    /**
+     * The one of {@code rules} an expression is read by ({@link RuleChoice}). What each said of
+     * the rows of what it concluded is held against it, and only the one kept says into the
+     * candidate this is being tried under: what a rule set aside said is dropped with it.
+     */
     private Derivation firstThatReadsIt(List<Supplier<Derivation>> rules) {
-        Derivation chosen = RuleChoice.firstThatReadsIt(rules, met, trying);
-        // The rules tried after the one kept said their own, and a comparison read as another
-        // statement of itself (a rounded number) is read by the one kept.
-        WhatTheRuleSaid theRule = said.get(chosen);
-        workingOfTheRule = theRule == null ? null : theRule.working();
+        List<Supplier<Derivation>> tried = new ArrayList<>(rules.size());
+        for (Supplier<Derivation> rule : rules) {
+            tried.add(underTrial(rule));
+        }
+        Derivation chosen = RuleChoice.firstThatReadsIt(tried, met, trying);
+        Trial kept = triedAndConcluded.get(chosen);
+        if (kept != null && !underTrial.isEmpty()) {
+            underTrial.peek().absorb(kept);
+        }
         return chosen;
     }
 
@@ -9094,9 +9126,7 @@ final class Pullback {
         for (UndividedByARelation.Working earlier : beforeTheFork) {
             told = told.after(earlier);
         }
-        UndividedByARelation.Working already = workingOfRelation.get(made.relation());
-        workingOfRelation.put(made.relation(), already == null ? told
-                : UndividedByARelation.Working.together(List.of(already, told)));
+        trial().tell(made.relation(), told);
     }
 
     /**
@@ -10593,14 +10623,8 @@ final class Pullback {
         if (rounded == null) {
             return null;
         }
-        boolean outer = restatingTheComparisonRead;
-        restatingTheComparisonRead = outer || stated == theComparisonRead;
-        try {
-            return theStatementStands(rounded.statement(), rounded.rounded(), at, fixed,
-                    rounded.at());
-        } finally {
-            restatingTheComparisonRead = outer;
-        }
+        return theStatementStands(rounded.statement(), rounded.rounded(), at, fixed,
+                rounded.at());
     }
 
     /**
@@ -10641,9 +10665,10 @@ final class Pullback {
                 || readOnceForEveryValue(quotient.divisor(), quotient.at(), new HashSet<>())) {
             return null;
         }
+        // What this comparison, over these names, works out: its own reading, and no other's.
         UndividedByARelation.Working told = null;
-        if ((stated == theComparisonRead || restatingTheComparisonRead)
-                && theArithmeticRead.get() instanceof AffineReading.OfAComparison.Stopped stopped) {
+        if (AffineReading.read(stated, reads, read)
+                instanceof AffineReading.OfAComparison.Stopped stopped) {
             // The quotient may be written at the stop, behind a name, or around it.
             Core division = divisionBy(quotient.divisor(), stopped.node());
             division = division != null ? division
@@ -10657,6 +10682,7 @@ final class Pullback {
         Derivation answers;
         Derivation signed;
         Derivation states;
+        boolean outer = restatingAQuotient;
         restatingAQuotient = true;
         try {
             answers = restated(quotient.answers(), at, fixed, quotient.at());
@@ -10668,14 +10694,12 @@ final class Pullback {
                             signed == null ? null : new Derivation.UnderADenial(signed, true),
                             restated(quotient.below(), at, fixed, quotient.at())));
         } finally {
-            restatingAQuotient = false;
+            restatingAQuotient = outer;
         }
         if (answers == null || states == null) {
             return null;
         }
-        if (told != null) {
-            workingOfTheRule = told;
-        }
+        trial().working = told;
         return new Derivation.WhereItAnswers(answers, states);
     }
 

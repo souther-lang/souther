@@ -48,6 +48,16 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
             let classify (n, m, k) = if %s then Yes else No
             """;
 
+    private static final String OVER_CHOICES = """
+            module g
+
+            data Yes
+            data No
+
+            behavior classify : (p: Bool, q: Bool, k: Int) -> Yes | No
+            let classify (p, q, k) = if %s then Yes else No
+            """;
+
     private static ReadComparisons readOf(String source, String condition) {
         return ReadComparisons.of(source.formatted(condition), "classify");
     }
@@ -169,6 +179,19 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
         assertUnread(workingOfTheStop("m * k + 5 >= 100"));
         assertEquals(UndividedByARelation.Working.NOTHING, workingOfTheStop("m * k + n >= 100"));
         assertEquals(UndividedByARelation.Working.NOTHING, workingOfTheStop("m * k * 2 >= 100"));
+    }
+
+    /**
+     * Two choices are two values, each held aside as its own and each with the numbers its own
+     * arms come to: the numbers the first comes to say nothing of the second. Their sum is within
+     * the type when the two ranges together are, and is an operation of its own when they are not.
+     */
+    @Test
+    void twoChoicesAreHeldAsideEachWithItsOwnNumbers() {
+        assertEquals(UndividedByARelation.Working.NOTHING, workingOfTheStop(OVER_CHOICES,
+                "(if p then 0 else 1) + (if q then 1 else 0) >= k"));
+        assertUnread(workingOfTheStop(OVER_CHOICES,
+                "(if p then 0 else 1) + (if q then 9223372036854775807 else 0) >= k"));
     }
 
     /** No row is shown computed, and no operation is told. */
