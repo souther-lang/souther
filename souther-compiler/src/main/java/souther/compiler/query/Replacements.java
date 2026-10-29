@@ -129,8 +129,11 @@ public final class Replacements {
                 Position at = Position.at(sig.outputType());
                 Predicate<ControlPlace.Arm> unreached =
                         Adequacy.unreachedIn(arrived, behavior.name(), checked);
-                return ReplacementReading.of(behavior.name(), checked.plan(), inTheClasses,
-                        walksInTheClasses, row -> Adequacy.armsSeenIn(row, numbering),
+                return ReplacementReading.of(behavior.name(), checked.plan(),
+                        Adequacy.armsOwedIn(inTheClasses, behavior.name(), checked),
+                        Adequacy.walksOwedIn(walksInTheClasses, arrived, behavior.name(),
+                                checked),
+                        row -> Adequacy.armsSeenIn(row, numbering),
                         row -> Adequacy.walksSeenIn(row, numbering), unreached,
                         Adequacy.walkedNoFurtherIn(rows, numbering), rows,
                         row -> stoppedAt.getOrDefault(RowRef.of(row),

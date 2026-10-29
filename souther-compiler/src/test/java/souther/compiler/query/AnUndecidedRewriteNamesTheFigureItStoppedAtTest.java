@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.RunSensitivity;
@@ -10,6 +11,7 @@ import souther.compiler.partition.AdequacyPolicy;
 import souther.compiler.partition.Budgets;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.regex.PatternPlan;
+import souther.compiler.report.AdequacyReport;
 
 import java.time.Duration;
 import java.util.List;
@@ -56,6 +58,37 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
                         ReplacementEvidence.Undecided.Why.RUNS_SPENT,
                         List.of(WorkFigure.RUNS_REPLACING_AN_ARM.at(1))), spent,
                 "the runs it was allowed, as they stood on this run");
+    }
+
+    /**
+     * The line a reader gets for a rewrite left open at a figure says that a row telling it apart
+     * may exist past the figure: nothing was proven about a region the search did not look in.
+     */
+    @Test
+    void theLineForARewriteStoppedAtAFigureSaysARowMayExistPastIt() {
+        Compilation compilation = compiled(List.of("""
+                module example.throws
+
+                data Throw = List<Int>
+
+                behavior score : (throws: List<Throw>) -> Int
+
+                let score (throws) =
+                    List.fold((acc, t) -> acc + List.length(t.value), 0, throws)
+
+                example score
+                    | ([]) -> 0
+                    | ([Throw([])]) -> 0
+                    | ([Throw([12])]) -> 1
+                    | ([Throw([1, 2])]) -> 2
+                    | ([Throw([1, 2, 3])]) -> 3
+                    | ([Throw([5, 8])]) -> 2
+                """), 1);
+
+        String page = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+
+        assertTrue(page.contains("a row that tells the rewrite apart may exist past it"), page);
     }
 
     /**

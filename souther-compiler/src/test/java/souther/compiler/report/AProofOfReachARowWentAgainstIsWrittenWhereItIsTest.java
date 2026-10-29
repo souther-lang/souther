@@ -152,7 +152,8 @@ class AProofOfReachARowWentAgainstIsWrittenWhereItIsTest {
 
         PathReachability.Answers.Contradictions contradictions() {
             return new PathReachability.Answers.Contradictions(
-                    new LinkedHashSet<>(List.of(arm, outcome)), Set.of(outcome.occurrence()));
+                    new LinkedHashSet<>(List.of(arm, outcome)), Set.of(outcome.occurrence()),
+                    Set.of());
         }
     }
 

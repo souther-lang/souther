@@ -7819,6 +7819,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 replacement(b, behavior, sources);
                 reachProofsContradicted(b, behavior.name(), behavior.reachShownWrong(),
                         waysGoneDown(behavior));
+                walkProofsContradicted(b, behavior.reachShownWrong());
                 findings(b, behavior, sources);
             }
         }
@@ -8651,7 +8652,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     static void reachProofsContradicted(ObjectNode into, String behavior,
                                         PathReachability.Answers.Contradictions shownWrong,
                                         Set<DecisionRule> waysGoneDown) {
-        if (shownWrong.isEmpty() && waysGoneDown.isEmpty()) {
+        if (shownWrong.reachIsEmpty() && waysGoneDown.isEmpty()) {
             return;
         }
         ArrayNode all = into.putArray("reachProofsContradicted");
@@ -8665,6 +8666,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             ObjectNode one = all.addObject();
             one.put("kind", word(ReachProofWord.WAY_NO_INPUT_TAKES));
             ruleId(one.putObject("way"), behavior, each);
+        }
+    }
+
+    /**
+     * The walks this compiler proved go over one element at most that a row then took a second
+     * element of, each as the fold the author wrote, named the way a rewrite of it is.
+     *
+     * <p>Beside {@code reachProofsContradicted} and not among its entries: that list is of proofs
+     * that nothing arrives somewhere, and this is a proof about how long a list is. Nothing about
+     * the model is wrong then and the proof is, and the rewrites of the walk are asked as if it had
+     * not been made. Absent where no row went against any.
+     */
+    static void walkProofsContradicted(ObjectNode into,
+                                       PathReachability.Answers.Contradictions shownWrong) {
+        if (shownWrong.walks().isEmpty()) {
+            return;
+        }
+        ArrayNode all = into.putArray("walkProofsContradicted");
+        for (SourceConstructOrigin walk : shownWrong.walks()) {
+            WrittenOwner.Body body = WrittenOwner.theBodyThatWrote(walk.owner());
+            ObjectNode one = all.addObject();
+            one.put("module", body.module());
+            one.put("definition", body.definition());
+            one.put("construct", walk.ordinal());
+            one.put("lowered", walk.lowered());
         }
     }
 
@@ -10064,10 +10090,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return switch (disposition) {
             // The figures named here, as what stopped carried them, and nothing a run is given sets
             // them.
-            case ReaderDisposition.StoppedAtAFigure it -> (it.aRowThereSettlesIt()
-                    ? "the search stopped at " : "stopped at ") + figuresSaid(it.figures())
-                    + ", which no option sets" + (it.aRowThereSettlesIt()
-                            ? ": write a row there, or a rule that leaves no value there" : "");
+            case ReaderDisposition.StoppedAtAFigure it -> switch (it.settledBy()) {
+                case NOTHING_NAMED -> "stopped at " + figuresSaid(it.figures())
+                        + ", which no option sets";
+                case A_ROW_OR_A_RULE_AT_THE_POINT -> "the search stopped at "
+                        + figuresSaid(it.figures()) + ", which no option sets: write a row there,"
+                        + " or a rule that leaves no value there";
+                // The search did not look past the figure, so nothing says there is no row.
+                case A_ROW_THAT_TELLS_THE_REWRITE_APART -> "stopped at "
+                        + figuresSaid(it.figures()) + ", which no option sets: a row that tells"
+                        + " the rewrite apart may exist past it, and writing one settles it";
+            };
             case ReaderDisposition.LookAtTheRule _ -> "read the rule and what stopped it";
             // Without the word for it. What the document calls a weakening is for a consumer keyed
             // on this report; a person reading a line is owed a sentence, and the words a build

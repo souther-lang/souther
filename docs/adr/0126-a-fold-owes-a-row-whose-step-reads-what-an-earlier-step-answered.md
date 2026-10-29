@@ -97,12 +97,25 @@ the switch is written again without it, and the rewrites of that walk are left u
 sibling left out is.
 
 What is proven the same is narrow, as ADR-0121's proof is. A list written with one element or none is
-walked no further than its first, by either rewrite. So is a list a condition the walk is inside the
-arm of limits: the length of that very list, at one location of the input, compared with a number that
-leaves room for one element at most (`List.length(xs) == 1`, `<= 1`, `< 2`, either way round, the arm
-where `> 1` did not hold, a conjunct of such, through a name bound to the length). No row can tell
-either rewrite of such a walk apart, so none is searched for and none is owed. A condition that leaves
-room for two, or is of another list, says nothing and the walk is asked as before. A step whose body never reads the accumulator it
+walked no further than its first, by either rewrite. So is a list that what holds where the walk is
+entered limits to one element at most. That is asked of the reading of the paths to the walk, which
+the arms' reachability is read from: at the point the walk is handed its list, with its operands
+worked out, the size of that very list is held against one, under what the declarations leave of the
+input and what the conditions on the way state. A length compared with a number that leaves room for one
+element at most, the arm of a `match` on `List.get(1, xs)` that found nothing, a list dropped past its
+first element that is empty, and an invariant of the type the list is a value of all say it, by the
+laws the operations carry. No row can tell either rewrite of such a walk apart, so none is searched
+for and none is owed. It is shown at every place the walk is entered in the behavior asked, since a fold written once and
+entered from two places is one walk with one rewrite: a place the reading did not get to shows nothing.
+The places are the behavior's own. A helper's fold stands in every behavior that calls it, and what the
+paths, the rows and the source show is shown of one behavior's places, so a behavior owes the same
+whether or not another calls the helper; the sibling rewrites of an arm are scoped the same way.
+A row that takes a second element of a list a walk was shown to hold one element at most of goes
+against the proof: it is taken back, so the rewrites are asked as before, and the document lists the
+walk under `walkProofsContradicted`, beside `reachProofsContradicted` and not among its entries, since
+that list is of proofs that nothing arrives somewhere.
+A condition that leaves room for two, or is of another list, says nothing and the walk is asked as
+before. A step whose body never reads the accumulator it
 is handed is the walk under another spelling when handed the seed. And a list that reads nothing a
 run is handed is one list on every run, so a run that answered and was seen walking it no further
 than its first element shows every run does: that is the one proof read off a run, and it rests on

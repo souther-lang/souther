@@ -588,7 +588,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
             arrivals.put(construct, arriving);
             return new PathReachability.Answers(read.numbering(), read.found(),
                     new PathReachability.Arrivals(compiled.numbering(), arrivals,
-                            compiled.recordedAt(), compiled.stopsBefore()));
+                            compiled.recordedAt(), compiled.stopsBefore(),
+                            compiled.walksHeldToOneAtMost()));
         }
 
         /** A row recorded answering there. */
