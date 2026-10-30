@@ -667,6 +667,19 @@ public final class GuardThresholds {
             whatEachPlaceIsLeftWith(StatedComparison comparison,
                                     AffineReading.OfAComparison.Stopped stopped,
                                     InputReading read, InputReads reads, Arrivals answering) {
+        // A figure of this compiler's work is the same reason at every place the rule is filed at,
+        // whatever the values there are made of, so nothing is read of them.
+        Optional<BlockReason.WhatItStatesIsNoLine.Why> figure =
+                stopped.failure().why().declinedFigure()
+                        .flatMap(BlockReason.WhatItStatesIsNoLine.Why::saying);
+        if (figure.isPresent()) {
+            java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> said =
+                    new java.util.LinkedHashMap<>();
+            for (FilingCoordinate at : filedAt(comparison, read, reads, answering)) {
+                said.putIfAbsent(at, new BlockReason.WhatItStatesIsNoLine(figure.get()));
+            }
+            return said;
+        }
         Symbols symbols = read.symbols();
         DeclarationNewtypes newtypes = read.newtypes();
         Names left = namesIn(comparison.left(), reads, symbols, newtypes, answering);
@@ -682,16 +695,6 @@ public final class GuardThresholds {
                 at -> met.containsKey(at) && orderable(met.get(at), read.rules().declarations());
         java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out =
                 new java.util.LinkedHashMap<>();
-        // A figure of this compiler's work is the same reason at every place the rule is filed at.
-        Optional<BlockReason.WhatItStatesIsNoLine.Why> figure =
-                stopped.failure().why().declinedFigure()
-                        .flatMap(BlockReason.WhatItStatesIsNoLine.Why::saying);
-        if (figure.isPresent()) {
-            for (FilingCoordinate at : filedAt(comparison, read, reads, answering)) {
-                out.putIfAbsent(at, new BlockReason.WhatItStatesIsNoLine(figure.get()));
-            }
-            return out;
-        }
         for (FilingCoordinate at : filedAt(comparison, read, reads, answering)) {
             out.putIfAbsent(at,
                     UnreadComparison.whereItStopped(ruleAt(at, left, right), notRead, ordered));

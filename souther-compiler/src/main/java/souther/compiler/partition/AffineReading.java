@@ -448,10 +448,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         /** What {@code outcome}, the reading of a part, came to as the attempt it is part of. */
         static Attempt ofAPart(AffineForms.Outcome<NumericTerm, InputReads> outcome) {
-            return outcome instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads>(
-                    LinearForm<NumericTerm> form) ? new Form(form)
-                    : new PartStopped((AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>)
-                            outcome);
+            return switch (outcome) {
+                case AffineForms.Outcome.Composed<NumericTerm, InputReads>(var form) ->
+                        new Form(form);
+                case AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped ->
+                        new PartStopped(stopped);
+            };
         }
     }
 
