@@ -219,6 +219,25 @@ public final class ElementsWrittenOut {
         record NotWrittenOut<E>() implements Walked<E> {}
     }
 
+    /**
+     * The list written in the source that {@code container} stands at, with where its elements are
+     * read, or empty where it stands at any other container.
+     *
+     * <p>Followed through the names it was given and the helpers whose body answers it: a helper
+     * is read where its parameters are the values it was handed. The elements of such a list are
+     * the ones the walk of it writes out ({@link #of}), whichever way it was reached. What a run
+     * works out to reach the list is not asked here, since the value a name or a {@code let}
+     * stands at leaves it out; a reader that tells the elements asks it of the container as it is
+     * written ({@link AffineForms#listWrittenOutBy}).
+     */
+    public static <E> Optional<AffineForms.ListWrittenOut<E>> listItStandsAt(
+            Stood<E> container, Reading<E> reading) {
+        Stood<E> here = reading.standing(container.value(), container.at());
+        return Core.withoutStanding(here.value()) instanceof Core.ListLit list
+                ? Optional.of(new AffineForms.ListWrittenOut<>(list, here.at()))
+                : Optional.empty();
+    }
+
     /** Every element {@code container} holds. */
     public static <E> Walked<E> of(Stood<E> container, Reading<E> reading) {
         return of(container, reading, Integer.MAX_VALUE, new int[] {0});

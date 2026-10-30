@@ -655,7 +655,11 @@ public final class StandingAtAPoint {
 
         /** What this walk found at each path it was asked about, so that a row read once is read
          *  once however many quantities and items ask it. */
-        private final Map<TermPath, WalkResult<ObservationAtPoint>> found = new HashMap<>();
+        private final Map<TermPath, Found> found = new HashMap<>();
+
+        /** What the row wrote at a path, and what this walk made of it. Kept together because
+         *  both are asked at every asking, and each asking of a table by a path walks the path. */
+        private record Found(Written written, WalkResult<ObservationAtPoint> answer) {}
 
         WalkOfARow(RowWalk walk) {
             this.walk = walk;
@@ -685,15 +689,19 @@ public final class StandingAtAPoint {
 
         @Override
         public final WalkResult<ObservationAtPoint> at(TermPath path) {
-            WalkResult<ObservationAtPoint> answer = found.computeIfAbsent(path, this::walkedTo);
+            Found had = found.get(path);
+            if (had == null) {
+                Written written = walk.at(path);
+                had = new Found(written, walkedTo(written));
+                found.put(path, had);
+            }
             // Asked every time, found before or not: the value under this walk's elements is what
             // they are, and an answer read of it turns on them.
-            walk.at(path).consultedBy(this);
-            return answer;
+            had.written().consultedBy(this);
+            return had.answer();
         }
 
-        private WalkResult<ObservationAtPoint> walkedTo(TermPath path) {
-            Written written = walk.at(path);
+        private WalkResult<ObservationAtPoint> walkedTo(Written written) {
             // Over the arms, so that a walk coming to answer a third way is one this has to be
             // taught about rather than one quietly read as a walk that could not be made.
             return switch (written.found()) {
