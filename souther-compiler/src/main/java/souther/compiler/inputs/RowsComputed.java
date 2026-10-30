@@ -158,6 +158,69 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
     }
 
     /**
+     * Whether some whole value of the term called {@code other}, from {@code least} to
+     * {@code greatest} (an end null where there is none), completes every operation in a row where
+     * the term called {@code asked} stands at {@code value}. Each operation is a condition on
+     * {@code other} alone once {@code asked} stands, a sum of the two between its ends, so the
+     * values that satisfy it are a run, and the values that satisfy all of them are where those
+     * runs meet.
+     *
+     * <p>False where that is not worked out and nothing is shown: not every operation is told,
+     * some are of decimals, or one reads a term that is none of the two and is not held still.
+     * Whether the term called {@code other} takes a value, and goes with the value of the other,
+     * is the caller's to have shown.
+     */
+    boolean aWholeValueCompletes(Object asked, ExactRatio value, Object other, BigInteger least,
+                                 BigInteger greatest) {
+        if (!tellsEveryOperation() || !operations.decimals().isEmpty()) {
+            return false;
+        }
+        BigInteger from = least;
+        BigInteger to = greatest;
+        for (WhatARelationLeavesUndivided.IntSum each : operations.sums()) {
+            ExactRatio rest = each.constant();
+            ExactRatio weight = ExactRatio.ZERO;
+            for (Map.Entry<Object, ExactRatio> read : each.coefs().entrySet()) {
+                Object key = read.getKey();
+                if (key.equals(other)) {
+                    weight = read.getValue();
+                    continue;
+                }
+                ExactRatio standing = key.equals(asked) ? value : held.get(key);
+                rest = standing == null || rest == null ? null
+                        : standing.times(read.getValue()).flatMap(rest::plus).orNull();
+            }
+            ExactRatio low = rest == null ? null
+                    : ExactRatio.of(each.least()).plus(rest.negated()).orNull();
+            ExactRatio high = rest == null ? null
+                    : ExactRatio.of(each.greatest()).plus(rest.negated()).orNull();
+            if (low == null || high == null) {
+                return false;
+            }
+            if (weight.isZero()) {
+                if (low.signum() > 0 || high.signum() < 0) {
+                    return false;
+                }
+                continue;
+            }
+            ExactRatio first = low.dividedBy(weight).orNull();
+            ExactRatio last = high.dividedBy(weight).orNull();
+            if (first == null || last == null) {
+                return false;
+            }
+            boolean upward = weight.signum() > 0;
+            BigInteger lower = (upward ? first : last).ceiling().orNull();
+            BigInteger upper = (upward ? last : first).floor().orNull();
+            if (lower == null || upper == null) {
+                return false;
+            }
+            from = from == null || lower.compareTo(from) > 0 ? lower : from;
+            to = to == null || upper.compareTo(to) < 0 ? upper : to;
+        }
+        return from == null || to == null || from.compareTo(to) <= 0;
+    }
+
+    /**
      * The values a row stands at, with those of the numbers a product of two forms is made of put
      * beside it, and those of the products the operations are over that no side names.
      *
