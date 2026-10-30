@@ -106,7 +106,7 @@ final class ValuesOfAType {
     private final int budget;
 
     /** What one search over every combination of a record's others may refuse. */
-    static final int REFUSALS_ONE_SEARCH_MAY_COUNT = 100_000;
+    static final int REFUSALS_ONE_SEARCH_MAY_COUNT = 50_000;
 
     /** Values made with each value of a component beside the nearest values of the others. */
     ValuesOfAType() {
