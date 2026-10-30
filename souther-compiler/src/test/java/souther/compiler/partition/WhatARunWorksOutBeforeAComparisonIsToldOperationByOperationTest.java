@@ -6,7 +6,9 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -23,10 +25,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * the rows that reach it hold the others, and the line moves to where those end — so the line says
  * where each operation was held to stop, and not only that it was told. One that is not told ties
  * the places it reads, and the comparison is not shown to be reached at every value of them.
+ *
+ * <p>Each case is a behavior of one model, measured once for the class at the level that reads the
+ * lines and what is left of them: no row has to be built and run for what is asked here.
  */
 class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
 
-    private static final String MODEL = """
+    private static final String DECLARATIONS = """
             module probe
 
             data Yen = Int
@@ -52,16 +57,69 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
             let averageOf (months: List<Month>): Yen =
                 Yen(Rational.toInt(DOWN,
                     List.sum(List.map(m -> totalOf(m.pay).value, months)) / List.length(months)))
+            """;
 
-            behavior judge : (previous: Yen, window: Window) -> Unchanged | Changed
+    /**
+     * A behavior working {@code before} out ahead of the comparison and reading it in both arms as
+     * {@code read}, so that every run works it out.
+     */
+    private static final String JUDGED = """
+
+            behavior %1$s : (previous: Yen, window: Window) -> Unchanged | Changed
                 constructs Yen, Hole, Unchanged, Changed
 
-            let judge (previous, window) = {
-                let before = %s
-                if fixedOf(window.first.pay) == previous then Unchanged { n = %s }
-                else Changed { n = %s, y = Yen(0), h = Hole(0) }
+            let %1$s (previous, window) = {
+                let before = %2$s
+                if fixedOf(window.first.pay) == previous then Unchanged { n = %3$s }
+                else Changed { n = %3$s, y = Yen(0), h = Hole(0) }
             }
             """;
+
+    private static final String VALUE = "before.value";
+
+    private static final String COUNT = "List.length(before)";
+
+    /** What each case works out before the comparison, and how it reads it after, by name. */
+    private static final Map<String, List<String>> CASES = cases();
+
+    private static Map<String, List<String>> cases() {
+        Map<String, List<String>> out = new LinkedHashMap<>();
+        out.put("nothing", List.of("0", "before"));
+        out.put("passed", List.of("Yen(window.first.pay.base.value + 1)", VALUE));
+        out.put("refused", List.of("Yen(0 - window.first.pay.base.value)", VALUE));
+        out.put("holed", List.of("Hole(window.first.pay.base.value)", VALUE));
+        out.put("both", List.of(
+                "List.map(m -> Yen(0 - m.pay.base.value), [ window.second, window.first ])",
+                COUNT));
+        out.put("second", List.of("List.map(m -> Yen(0 - m.pay.base.value), [ window.second ])",
+                COUNT));
+        out.put("someOnly", List.of("List.map(n -> Yen(0 - n), [ window.second.pay.base.value,"
+                + " if window.second.days > 0 then window.first.pay.base.value else 0 ])", COUNT));
+        out.put("kept", List.of("List.map(m -> Yen(0 - m.pay.base.value),"
+                + " List.filter(m -> m.days >= 17, [ window.first ]))", COUNT));
+        out.put("down", List.of(
+                "Yen(Rational.toInt(DOWN, (0 - window.first.pay.base.value) / 3))", VALUE));
+        out.put("floor", List.of(
+                "Yen(Rational.toInt(FLOOR, (0 - window.first.pay.base.value) / 3))", VALUE));
+        out.put("total", List.of("[ List.sum(List.map(m -> m.pay.base.value * 4000000,"
+                + " [ window.first, window.first, window.first ])) ]", COUNT));
+        out.put("average", List.of("averageOf(monthsOf(window))", VALUE));
+        return out;
+    }
+
+    /** Every case measured, by name: one model, compiled and measured once for the class. */
+    private static final Map<String, PartitionEvidence> MEASURED = measured();
+
+    private static Map<String, PartitionEvidence> measured() {
+        StringBuilder source = new StringBuilder(DECLARATIONS);
+        CASES.forEach((name, written) -> source.append(
+                JUDGED.formatted(name, written.get(0), written.get(1))));
+        Compilation compilation = Compilation.ofSource(source.toString(), "Main");
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        return compilation.db().ask(new Adequacy.Coverage("probe")).value();
+    }
 
     /** The classes of {@code previous} where the fixed part of the first month runs to its end. */
     private static final List<String> NOTHING_STOPS_BEFORE_IT =
@@ -71,30 +129,19 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
     private static final List<String> THE_BASE_IS_NOUGHT =
             List.of("previous/0 <= x < 1000000000001", "previous/1000000000001 <= x");
 
-    /**
-     * The model with {@code before} worked out ahead of the comparison and read in both arms as
-     * {@code read}, so that every run works it out.
-     */
-    private static PartitionEvidence judged(String before, String read) {
-        Compilation compilation = Compilation.ofSource(MODEL.formatted(before, read, read),
-                "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
-        PartitionEvidence judge = compilation.db()
-                .ask(new Adequacy.Coverage("probe")).value().get("judge");
-        assertNotNull(judge, "the model under test is measured");
-        return judge;
+    private static PartitionEvidence judged(String name) {
+        PartitionEvidence evidence = MEASURED.get(name);
+        assertNotNull(evidence, () -> name + " is measured");
+        return evidence;
     }
 
-    private static List<String> previous(PartitionEvidence evidence) {
-        return evidence.axes().stream().filter(axis -> axis.path().equals("previous"))
+    private static List<String> previous(String name) {
+        return judged(name).axes().stream().filter(axis -> axis.path().equals("previous"))
                 .findFirst().orElseThrow().classes();
     }
 
-    private static List<String> notReachedAtEveryValue(PartitionEvidence evidence) {
-        return evidence.notRead().stream()
+    private static List<String> notReachedAtEveryValue(String name) {
+        return judged(name).notRead().stream()
                 .filter(each -> each.reason()
                         == UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE)
                 .map(PartitionEvidence.NotRead::at).sorted().distinct().toList();
@@ -103,34 +150,23 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
     /** The comparison on its own, which every row reaches. */
     @Test
     void nothingWorkedOutBeforeTheComparisonLeavesItsLineAtTheEndOfTheFixedPart() {
-        PartitionEvidence evidence = judged("0", "before");
-
-        assertEquals(NOTHING_STOPS_BEFORE_IT, previous(evidence));
-        assertEquals(List.of(), notReachedAtEveryValue(evidence),
-                () -> evidence.notRead().toString());
+        assertEquals(NOTHING_STOPS_BEFORE_IT, previous("nothing"));
+        assertEquals(List.of(), notReachedAtEveryValue("nothing"));
     }
 
     /** {@code base + 1} lies in the run a {@code Yen} holds for every base the declarations
      *  leave, so making one stops no run. */
     @Test
     void aConstructionEveryAmountGetsPastStopsNoRun() {
-        PartitionEvidence evidence = judged("Yen(window.first.pay.base.value + 1)",
-                "before.value");
-
-        assertEquals(NOTHING_STOPS_BEFORE_IT, previous(evidence));
-        assertEquals(List.of(), notReachedAtEveryValue(evidence),
-                () -> evidence.notRead().toString());
+        assertEquals(NOTHING_STOPS_BEFORE_IT, previous("passed"));
+        assertEquals(List.of(), notReachedAtEveryValue("passed"));
     }
 
     /** {@code 0 - base} is a {@code Yen} only where the base is nought. */
     @Test
     void aConstructionStopsTheRunsWhoseNumberIsOutsideTheRunItsClausesLeave() {
-        PartitionEvidence evidence = judged("Yen(0 - window.first.pay.base.value)",
-                "before.value");
-
-        assertEquals(THE_BASE_IS_NOUGHT, previous(evidence));
-        assertEquals(List.of(), notReachedAtEveryValue(evidence),
-                () -> evidence.notRead().toString());
+        assertEquals(THE_BASE_IS_NOUGHT, previous("refused"));
+        assertEquals(List.of(), notReachedAtEveryValue("refused"));
     }
 
     /**
@@ -139,10 +175,8 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
      */
     @Test
     void aConstructionWhoseClausesLeaveAHoleIsNotTold() {
-        PartitionEvidence evidence = judged("Hole(window.first.pay.base.value)", "before.value");
-
         assertEquals(List.of("window.first.pay.base", "window.first.pay.extra"),
-                notReachedAtEveryValue(evidence), () -> evidence.notRead().toString());
+                notReachedAtEveryValue("holed"));
     }
 
     /**
@@ -152,16 +186,9 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
      */
     @Test
     void eachApplicationOfAClosureIsToldOverWhatItIsHanded() {
-        PartitionEvidence both = judged(
-                "List.map(m -> Yen(0 - m.pay.base.value), [ window.second, window.first ])",
-                "List.length(before)");
-        assertEquals(THE_BASE_IS_NOUGHT, previous(both));
-        assertEquals(List.of(), notReachedAtEveryValue(both), () -> both.notRead().toString());
-
-        PartitionEvidence second = judged(
-                "List.map(m -> Yen(0 - m.pay.base.value), [ window.second ])",
-                "List.length(before)");
-        assertEquals(NOTHING_STOPS_BEFORE_IT, previous(second));
+        assertEquals(THE_BASE_IS_NOUGHT, previous("both"));
+        assertEquals(List.of(), notReachedAtEveryValue("both"));
+        assertEquals(NOTHING_STOPS_BEFORE_IT, previous("second"));
     }
 
     /**
@@ -172,13 +199,8 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
      */
     @Test
     void aBodyToldOnSomeApplicationsOnlyIsLeftUnsaid() {
-        PartitionEvidence evidence = judged("List.map(n -> Yen(0 - n),"
-                        + " [ window.second.pay.base.value,"
-                        + " if window.second.days > 0 then window.first.pay.base.value else 0 ])",
-                "List.length(before)");
-
         assertEquals(List.of("window.first.pay.base", "window.first.pay.extra"),
-                notReachedAtEveryValue(evidence), () -> evidence.notRead().toString());
+                notReachedAtEveryValue("someOnly"));
     }
 
     /**
@@ -187,12 +209,8 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
      */
     @Test
     void aClosureAppliedToWhatAFilterKeepsIsNotTold() {
-        PartitionEvidence evidence = judged("List.map(m -> Yen(0 - m.pay.base.value),"
-                        + " List.filter(m -> m.days >= 17, [ window.first ]))",
-                "List.length(before)");
-
         assertEquals(List.of("window.first.pay.base", "window.first.pay.extra"),
-                notReachedAtEveryValue(evidence), () -> evidence.notRead().toString());
+                notReachedAtEveryValue("kept"));
     }
 
     /**
@@ -202,18 +220,10 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
      */
     @Test
     void aRoundingMadeAValueIsHeldWhereTheWayOfRoundingPutsTheEnds() {
-        PartitionEvidence down = judged(
-                "Yen(Rational.toInt(DOWN, (0 - window.first.pay.base.value) / 3))",
-                "before.value");
         assertEquals(List.of("previous/0 <= x < 1000000000003", "previous/1000000000003 <= x"),
-                previous(down));
-
-        PartitionEvidence floor = judged(
-                "Yen(Rational.toInt(FLOOR, (0 - window.first.pay.base.value) / 3))",
-                "before.value");
-        assertEquals(THE_BASE_IS_NOUGHT, previous(floor));
+                previous("down"));
+        assertEquals(THE_BASE_IS_NOUGHT, previous("floor"));
     }
-
 
     /**
      * A total of a list written out is held to an {@code Int} once it is added up: four million
@@ -222,12 +232,8 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
      */
     @Test
     void aTotalIsHeldToAnIntOnceItIsAddedUp() {
-        PartitionEvidence evidence = judged("[ List.sum(List.map(m -> m.pay.base.value * 4000000,"
-                        + " [ window.first, window.first, window.first ])) ]",
-                "List.length(before)");
-
         assertEquals(List.of("previous/0 <= x < 1768614336405", "previous/1768614336405 <= x"),
-                previous(evidence));
+                previous("total"));
     }
 
     /**
@@ -238,10 +244,7 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
      */
     @Test
     void theAverageOfBoundedAmountsLeavesTheComparisonReachedAtEveryValue() {
-        PartitionEvidence evidence = judged("averageOf(monthsOf(window))", "before.value");
-
-        assertEquals(NOTHING_STOPS_BEFORE_IT, previous(evidence));
-        assertEquals(List.of(), notReachedAtEveryValue(evidence),
-                () -> evidence.notRead().toString());
+        assertEquals(NOTHING_STOPS_BEFORE_IT, previous("average"));
+        assertEquals(List.of(), notReachedAtEveryValue("average"));
     }
 }
