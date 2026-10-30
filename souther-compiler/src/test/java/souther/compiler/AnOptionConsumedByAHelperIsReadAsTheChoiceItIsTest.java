@@ -248,7 +248,18 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
 
         assertFalse(pointsOn(called, "q").isEmpty(), called);
         assertEquals(pointsOn(written, "q"), pointsOn(called, "q"), called);
-        assertEquals(saidAbout(written, "q"), saidAbout(called, "q"), called);
+        if (operation.startsWith("List.get")) {
+            // The element an index picks is a number of the input the arm's comparison reads, and
+            // an arm is a comparison of its own: the one over the element relates q to it, and the
+            // one over the default draws the line. The call is one comparison over the choice
+            // between them, which says nothing apart.
+            assertEquals(List.of("· no line: comparison — it relates the value here to another"
+                    + " value rather than dividing the values here, about `q`"),
+                    saidAbout(written, "q"), written);
+            assertEquals(List.of(), saidAbout(called, "q"), called);
+        } else {
+            assertEquals(saidAbout(written, "q"), saidAbout(called, "q"), called);
+        }
     }
 
     /**
@@ -312,7 +323,8 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
 
     /**
      * A clause has nowhere to hold where a line decides, so the line on the default is said not
-     * drawn; what the value found is related to stays that.
+     * drawn. The element found is a number of the input q is read against, so that relation is
+     * said as a relation and is not a reason for the line being missing.
      */
     @Test
     void aClauseKeepsTheValueFoundRelatedBesideTheLinesItCannotHold() {
@@ -332,12 +344,11 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertEquals(List.of(
+                "· no line: ensures f (found) — it relates the value here to another value rather"
+                        + " than dividing the values here, about `q`",
                 "· not read: ensures f (found) — what it states was read, and it is several lines"
                         + " held together, which this compiler does not divide the input by here,"
-                        + " about `q`",
-                "· not read: ensures f (found) — what it states was read, and it relates the value"
-                        + " here to another value not shown to reach every value here, so which"
-                        + " values here settle it on their own is not worked out, about `q`"),
+                        + " about `q`"),
                 saidAbout(report, "q").stream().sorted().toList(), report);
     }
 
