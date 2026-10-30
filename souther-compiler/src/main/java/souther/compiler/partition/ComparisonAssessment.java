@@ -23,6 +23,7 @@ import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WrittenLine;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.NumberRegion;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
@@ -253,7 +254,10 @@ sealed interface ComparisonAssessment {
             // A line is drawn on a number a row can be written to stand at, and only where the
             // model draws it: one the orders' ends alone draw parts no class of the model's.
             // A term some of whose settling numbers have no row shown computed draws no line: the
-            // numbers beside the ones that do would be one class with the ones that do not.
+            // numbers beside the ones that do would be one class with the ones that do not. The
+            // classes standing over what was shown, with a region outside them, are not stated for
+            // numbers: a class of numbers is a run between two lines, and the numbers with no row
+            // are a region the lines at either side of a computed run do not part off.
             if (!settled.get(term).noRowShownComputed().isEmpty()) {
                 continue;
             }
@@ -304,9 +308,10 @@ sealed interface ComparisonAssessment {
      * @param mayStopBefore those of {@code undivided} a run may stop on the way to some relation
      *                  about on what nothing here says, so that every value there getting to the
      *                  comparison is not shown ({@link UndividedByARelation.WhatItLeaves#mayStopBefore})
-     * @param noRowShownComputed those of {@code filedAt} some relation about settles by the terms'
-     *                  ends in some numbers where no row is shown computed: no line is drawn for
-     *                  the place, and it is said so
+     * @param noRowShownComputed for those of {@code filedAt} some relation about settles by the
+     *                  terms' ends in some numbers where no row is shown computed, those numbers,
+     *                  a region for each term read there: no line is drawn for the place, and it
+     *                  is said so
      * @param partnered each string position the relation is shown to part by the strings its
      *                  partner can hold, where the partner is a piece of a string
      */
@@ -316,7 +321,7 @@ sealed interface ComparisonAssessment {
                                Optional<DrawnBeside> beside,
                                Map<FilingCoordinate, Set<Figure>> stoppedAt,
                                Set<FilingCoordinate> mayStopBefore,
-                               Set<FilingCoordinate> noRowShownComputed,
+                               Map<FilingCoordinate, Set<NumberRegion>> noRowShownComputed,
                                Map<NumericTerm.FromOnePosition,
                                        UndividedByARelation.StringsAPartnerCanHold> partnered)
             implements ComparisonAssessment {
@@ -330,7 +335,9 @@ sealed interface ComparisonAssessment {
             stoppedAt.forEach((at, figures) -> held.put(at, Set.copyOf(figures)));
             stoppedAt = Collections.unmodifiableMap(held);
             settling = List.copyOf(settling);
-            noRowShownComputed = Set.copyOf(noRowShownComputed);
+            Map<FilingCoordinate, Set<NumberRegion>> regions = new LinkedHashMap<>();
+            noRowShownComputed.forEach((at, numbers) -> regions.put(at, Set.copyOf(numbers)));
+            noRowShownComputed = Collections.unmodifiableMap(regions);
             partnered = Collections.unmodifiableMap(new LinkedHashMap<>(partnered));
             Objects.requireNonNull(beside, "drawn beside something, or nothing");
             if (beside.isEmpty() && !settling.isEmpty()) {
@@ -344,7 +351,7 @@ sealed interface ComparisonAssessment {
                                       InputReading reading, Optional<DrawnBeside> beside,
                                       CountWitnesses.Lookup witnesses) {
             return new AgainstAnotherValue(read.over(), read.relations(), Set.of(), List.of(),
-                    beside, Map.of(), Set.of(), Set.of(), Map.of())
+                    beside, Map.of(), Set.of(), Map.of(), Map.of())
                     .whereRowsArrive(reading, List.of(), witnesses);
         }
 
@@ -1968,7 +1975,7 @@ sealed interface ComparisonAssessment {
                                    Set<FilingCoordinate> undivided,
                                    Map<FilingCoordinate, Set<Figure>> stoppedAt,
                                    Set<FilingCoordinate> mayStopBefore,
-                                   Set<FilingCoordinate> noRowShownComputed) {
+                                   Map<FilingCoordinate, Set<NumberRegion>> noRowShownComputed) {
         return places.stream().distinct().flatMap(at -> {
             if (undivided.contains(at)) {
                 return Stream.of(new LeftAt(at, mayStopBefore.contains(at)
@@ -1980,9 +1987,9 @@ sealed interface ComparisonAssessment {
             // past, and numbers in which no row is shown computed are not.
             Set<Figure> figures = stoppedAt.getOrDefault(at, Set.of());
             List<LeftAt> why = new ArrayList<>();
-            if (noRowShownComputed.contains(at)) {
-                why.add(new LeftAt(at, new BlockReason.RelationRowsNotShownComputed()));
-            }
+            noRowShownComputed.getOrDefault(at, Set.of()).stream().sorted()
+                    .forEach(numbers -> why.add(new LeftAt(at,
+                            new BlockReason.RelationRowsNotShownComputed(numbers))));
             if (!figures.isEmpty() || why.isEmpty()) {
                 why.add(new LeftAt(at, notShownAt(figures)));
             }
@@ -1991,16 +1998,17 @@ sealed interface ComparisonAssessment {
     }
 
     /**
-     * The places of the numbers some of whose settling runs have no row shown computed. A set of
-     * places and not the runs: no reader is told which numbers they are.
+     * The numbers some of whose settling runs have no row shown computed, at the place of the term
+     * they are of: one region for each term read at a place, since the numbers of two terms are
+     * not numbers of one.
      */
-    static Set<FilingCoordinate> noRowShownComputedAt(
+    static Map<FilingCoordinate, Set<NumberRegion>> noRowShownComputedAt(
             Collection<Map.Entry<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled>> settled) {
-        Set<FilingCoordinate> out = new LinkedHashSet<>();
+        Map<FilingCoordinate, Set<NumberRegion>> out = new LinkedHashMap<>();
         for (Map.Entry<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> each : settled) {
-            if (!each.getValue().noRowShownComputed().isEmpty()) {
-                out.add(FilingCoordinate.of(each.getKey()));
-            }
+            each.getValue().numbersNotShownComputed().ifPresent(numbers ->
+                    out.computeIfAbsent(FilingCoordinate.of(each.getKey()),
+                            _ -> new LinkedHashSet<>()).add(numbers));
         }
         return out;
     }

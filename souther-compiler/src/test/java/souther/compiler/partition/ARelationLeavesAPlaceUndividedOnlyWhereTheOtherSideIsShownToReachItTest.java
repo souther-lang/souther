@@ -15,8 +15,10 @@ import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberRegion;
 import souther.compiler.numeric.Rel;
 import souther.compiler.observe.Figure;
 import souther.compiler.query.Adequacy;
@@ -1256,7 +1258,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 new ComparisonAssessment.AgainstAnotherValue(
                         List.of(FilingCoordinate.of(deals), FilingCoordinate.of(rates)),
                         List.of(counted, sized), Set.of(), List.of(), Optional.empty(), Map.of(),
-                        Set.of(), Set.of(), Map.of())
+                        Set.of(), Map.of(), Map.of())
                         .whereRowsArrive(read, List.of(), stoppedShort);
         Map<FilingCoordinate, BlockReason> left = new LinkedHashMap<>();
         both.whatEachPlaceIsLeftWith().forEach(each -> left.put(each.at(), each.why()));
@@ -3511,9 +3513,32 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
         FilingCoordinate rest = new FilingCoordinate.AtPosition(TermPath.of("s"));
         List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
-                List.of(hours, rest), Set.of(rest), Map.of(), Set.of(), Set.of(hours));
-        assertEquals(new BlockReason.RelationRowsNotShownComputed(), left.get(0).why());
+                List.of(hours, rest), Set.of(rest), Map.of(), Set.of(),
+                Map.of(hours, Set.of(FROM_FIVE)));
+        assertEquals(new BlockReason.RelationRowsNotShownComputed(FROM_FIVE), left.get(0).why());
         assertEquals(new BlockReason.ComparisonRelatingTwoValues(), left.get(1).why());
+    }
+
+    private static final NumberRegion FROM_FIVE = NumberRegion.of(List.of(
+            new NumberRegion.Run(ExactCut.inclusive(ExactRatio.of(5)), null)));
+
+    private static final NumberRegion BELOW_ONE = NumberRegion.of(List.of(
+            new NumberRegion.Run(null, ExactCut.exclusive(ExactRatio.ONE))));
+
+    /**
+     * Two terms read at one place whose numbers have no row shown computed in them are two
+     * findings, each with its own numbers: the numbers of one are not numbers of the other, and a
+     * place told one region would be told that a number of the other term is among them.
+     */
+    @Test
+    void theNumbersOfTwoTermsAtOnePlaceAreToldAsTwoRegions() {
+        FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
+        List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
+                List.of(hours), Set.of(), Map.of(), Set.of(),
+                Map.of(hours, Set.of(FROM_FIVE, BELOW_ONE)));
+        assertEquals(List.of(new BlockReason.RelationRowsNotShownComputed(BELOW_ONE),
+                new BlockReason.RelationRowsNotShownComputed(FROM_FIVE)),
+                left.stream().map(ComparisonAssessment.LeftAt::why).toList());
     }
 
     /**
@@ -3527,8 +3552,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         Figure stopped = CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure();
         List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
                 List.of(hours), Set.of(), Map.of(hours, Set.of(stopped)), Set.of(),
-                Set.of(hours));
-        assertEquals(List.of(new BlockReason.RelationRowsNotShownComputed(),
+                Map.of(hours, Set.of(FROM_FIVE)));
+        assertEquals(List.of(new BlockReason.RelationRowsNotShownComputed(FROM_FIVE),
                 new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(stopped))),
                 left.stream().map(ComparisonAssessment.LeftAt::why).toList());
         assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,

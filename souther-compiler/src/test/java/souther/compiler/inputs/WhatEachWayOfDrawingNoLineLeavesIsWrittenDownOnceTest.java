@@ -8,6 +8,9 @@ import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.SchemaReference;
 import souther.compiler.check.NonAffineOperation;
+import souther.compiler.numeric.ExactCut;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.NumberRegion;
 
 import souther.compiler.check.Clause;
 import souther.compiler.check.PartId;
@@ -413,7 +416,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                                 1, 1, SourceConstruct.IF)),
                 new RuleReportAnchor.ByTheModuleThatWroteIt());
         FilingCoordinate at = new FilingCoordinate.AtPosition(TermPath.of("x"));
-        BlockReason.RuleWithoutLineReason numbers = new BlockReason.RelationRowsNotShownComputed();
+        BlockReason.RuleWithoutLineReason numbers =
+                new BlockReason.RelationRowsNotShownComputed(SOME_NUMBERS);
         BlockReason.RuleWithoutLineReason figure =
                 new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(AT_A_FIGURE));
         gathered.add(cited, at, numbers);
@@ -544,6 +548,9 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     private static final Figure AT_A_FIGURE = WorkFigure.ADMITTED_VALUES_IN_ALL.at(
             "200000 states built and 50000000 looked at");
 
+    private static final NumberRegion SOME_NUMBERS = NumberRegion.of(List.of(
+            new NumberRegion.Run(ExactCut.inclusive(ExactRatio.of(5)), null)));
+
     /** {@code why} as a reading stopped by it says it, at a figure where it carries one. */
     private static StoppedReading stopped(UnreadReason why) {
         return StoppedReading.carriesAFigure(why) ? new StoppedReading(why, AT_A_FIGURE)
@@ -583,7 +590,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(AT_A_FIGURE)),
                 new BlockReason.RelationNotShownReachedAtEveryValue(),
                 new BlockReason.RelationShownOverARegion(false, 1L, List.of()),
-                new BlockReason.RelationRowsNotShownComputed(),
+                new BlockReason.RelationRowsNotShownComputed(SOME_NUMBERS),
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonAnswersNowhere(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),

@@ -4,6 +4,7 @@ import souther.compiler.inputs.AuthoredOrder;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleReasons;
 import souther.compiler.inputs.RuleSite;
+import souther.compiler.numeric.NumberRegion;
 import souther.compiler.observe.Figure;
 import souther.compiler.publish.SourceOrdered;
 
@@ -50,10 +51,14 @@ public final class ReportedReason {
      * @param leftOpen where a relation was shown over some of the values here, which of them it
      *                 was not shown over: no figure of this compiler's, and a reader told only the
      *                 word cannot tell which values no class holds
+     * @param notShownComputed where the relation settles the numbers of a term by its terms' ends
+     *                 and no row is shown computed in them: no figure of this compiler's either,
+     *                 and a reader told only the word cannot tell which numbers they are
      */
     public record Stop(UndividedPosition.Reason reason, RuleSite about, RuleSite sentTo,
                        List<Figure> figures,
-                       Optional<BlockReason.RelationShownOverARegion> leftOpen) {
+                       Optional<BlockReason.RelationShownOverARegion> leftOpen,
+                       Optional<NumberRegion> notShownComputed) {
 
         /**
          * These in a steady order, which two of them are equal in only where they are equal: the
@@ -70,11 +75,13 @@ public final class ReportedReason {
                         .thenComparing(Stop::figures, Figure::compare)
                         .thenComparing(each -> each.leftOpen().orElse(null),
                                 Comparator.nullsFirst(BlockReason.RuleReadingStopped
-                                        .IN_A_STEADY_ORDER));
+                                        .IN_A_STEADY_ORDER))
+                        .thenComparing(each -> each.notShownComputed().orElse(null),
+                                Comparator.nullsFirst(Comparator.naturalOrder()));
 
         public Stop {
             if (reason == null || about == null || sentTo == null || figures == null
-                    || leftOpen == null) {
+                    || leftOpen == null || notShownComputed == null) {
                 throw new IllegalArgumentException(
                         "a question stands on some reason, about something, somewhere in its rule");
             }
@@ -85,7 +92,9 @@ public final class ReportedReason {
     private static Stop stop(RuleReasons.Said said) {
         return new Stop(of(said.reason()), said.about(), said.sentTo(), said.reason().figures(),
                 said.reason() instanceof BlockReason.RelationShownOverARegion open
-                        ? Optional.of(open) : Optional.empty());
+                        ? Optional.of(open) : Optional.empty(),
+                said.reason() instanceof BlockReason.RelationRowsNotShownComputed unshown
+                        ? Optional.of(unshown.numbers()) : Optional.empty());
     }
 
     /**
