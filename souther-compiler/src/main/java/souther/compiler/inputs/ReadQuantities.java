@@ -1682,7 +1682,7 @@ final class ReadQuantities implements Quantities {
      * <p>Not {@code computeIfAbsent}: working out a projection asks other questions of this
      * reading, which would update the map from inside its own update.
      */
-    private final Map<LinearForm<NumericTerm>, Optional<NumericDomain.Bounds>> runsOfForms =
+    private final Map<LinearForm<NumericTerm>, NumericDomain.Bounds> runsOfForms =
             new ConcurrentHashMap<>();
 
     @Override
@@ -1690,19 +1690,19 @@ final class ReadQuantities implements Quantities {
         if (form.coefs().isEmpty()) {
             return null;
         }
-        Optional<NumericDomain.Bounds> had = runsOfForms.get(form);
+        NumericDomain.Bounds had = runsOfForms.get(form);
         if (had == null) {
             // What the declarations were read to prove. Where they admit no value there are no
             // lines owed, which a range cannot say, so a reader drawing lines asks
             // projectionOfTheDeclarations; a caller looking for somewhere to put a value asks the
             // region face. Both keep the difference ({@link #projectionOf}).
-            had = Optional.of(switch (projectionOf(form, false, List.of())) {
+            had = switch (projectionOf(form, false, List.of())) {
                 case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) -> bounds;
                 case NumericDomain.FormProjection.NothingIsLeft _ -> NumericDomain.Bounds.OPEN;
-            });
+            };
             runsOfForms.put(form, had);
         }
-        return had.get();
+        return had;
     }
 
     @Override

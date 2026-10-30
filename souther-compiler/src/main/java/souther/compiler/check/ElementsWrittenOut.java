@@ -220,8 +220,8 @@ public final class ElementsWrittenOut {
     }
 
     /**
-     * The list written in the source that {@code container} is, standing where its elements are
-     * read, or empty where it is any other container.
+     * The list written in the source that {@code container} stands at, with where its elements are
+     * read, or empty where it stands at any other container.
      *
      * <p>Followed through the names it was given and the helpers whose body answers it: a helper
      * is read where its parameters are the values it was handed. The elements of such a list are
@@ -230,10 +230,12 @@ public final class ElementsWrittenOut {
      * stands at leaves it out; a reader that tells the elements asks it of the container as it is
      * written ({@link AffineForms#listWrittenOutBy}).
      */
-    public static <E> Optional<Stood<E>> listWrittenOut(Stood<E> container, Reading<E> reading) {
+    public static <E> Optional<AffineForms.ListWrittenOut<E>> listItStandsAt(
+            Stood<E> container, Reading<E> reading) {
         Stood<E> here = reading.standing(container.value(), container.at());
-        Core value = Core.withoutStanding(here.value());
-        return value instanceof Core.ListLit ? Optional.of(here) : Optional.empty();
+        return Core.withoutStanding(here.value()) instanceof Core.ListLit list
+                ? Optional.of(new AffineForms.ListWrittenOut<>(list, here.at()))
+                : Optional.empty();
     }
 
     /** Every element {@code container} holds. */

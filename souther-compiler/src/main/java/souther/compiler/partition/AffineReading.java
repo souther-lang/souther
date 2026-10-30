@@ -877,12 +877,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             @Override
-            public Optional<AffineForms.ListWrittenOut<InputReads>> listWrittenOut(
+            public Optional<AffineForms.ListWrittenOut<InputReads>> listItStandsAt(
                     Core container, InputReads at) {
-                return WrittenOutElements.listWrittenOut(new Denotation(container, at),
-                        ruleSource.symbols(), ruleSource.newtypes())
-                        .map(found -> new AffineForms.ListWrittenOut<>(
-                                (Core.ListLit) Core.withoutStanding(found.value()), found.at()));
+                return WrittenOutElements.listItStandsAt(new Denotation(container, at),
+                        ruleSource.symbols(), ruleSource.newtypes());
             }
 
             @Override
@@ -1256,7 +1254,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (least == null || greatest == null) {
                     return false;
                 }
-                FormRange rounded = new FormRange(least, greatest);                WhereAnOperatorAnswers.WhereItsExactValueIsHeld ofAnInt =
+                FormRange rounded = new FormRange(least, greatest);
+                WhereAnOperatorAnswers.WhereItsExactValueIsHeld ofAnInt =
                         WhereAnOperatorAnswers.WHAT_AN_INT_HOLDS;
                 if (!rounded.liesWithin(ofAnInt.least(), ofAnInt.greatest())) {
                     return false;

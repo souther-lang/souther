@@ -4460,18 +4460,28 @@ public final class InputReads {
      */
     static Denotation standing(Denotation from, Symbols symbols,
                                DeclarationNewtypes newtypes, Set<BindingId> met) {
-        return standing(from, symbols, newtypes, met, false);
+        return standing(from, symbols, newtypes, met, NamesFollowed.EVERY_ONE);
     }
 
-    /**
-     * The same, following only the names a helper's expansion introduced where
-     * {@code throughExpansionsOnly}: the parameters a helper was handed its arguments by. A name the
-     * author wrote is a value worked out where it was given, which is not where it is read.
-     */
+    /** Which names a walk to where a value stands goes through. */
+    enum NamesFollowed {
+
+        /** Every name that stands for a value. */
+        EVERY_ONE,
+
+        /**
+         * Only the parameters a helper's expansion introduced, which it was handed its arguments
+         * by. A name the author wrote is a value worked out where it was given, which is not
+         * where it is read.
+         */
+        THE_PARAMETERS_OF_AN_EXPANSION
+    }
+
+    /** The same, following the names {@code followed} says. */
     static Denotation standing(Denotation from, Symbols symbols, DeclarationNewtypes newtypes,
-                               Set<BindingId> met, boolean throughExpansionsOnly) {
+                               Set<BindingId> met, NamesFollowed followed) {
         ValueStanding.Standing<InputReads, Followed> stands = ValueStanding.one(from.value(),
-                from.at(), new Followed(symbols, newtypes, met, throughExpansionsOnly));
+                from.at(), new Followed(symbols, newtypes, met, followed));
         return new Denotation(stands.value(), stands.at());
     }
 
@@ -4484,7 +4494,7 @@ public final class InputReads {
      * stop at the same names.
      */
     private record Followed(Symbols symbols, DeclarationNewtypes newtypes, Set<BindingId> met,
-                            boolean throughExpansionsOnly)
+                            NamesFollowed followed)
             implements ValueStanding.Names<InputReads, Followed> {
 
         private Followed {
@@ -4492,12 +4502,12 @@ public final class InputReads {
         }
 
         Followed(Symbols symbols, DeclarationNewtypes newtypes, Set<BindingId> met) {
-            this(symbols, newtypes, met, false);
+            this(symbols, newtypes, met, NamesFollowed.EVERY_ONE);
         }
 
         @Override
         public ValueStanding.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
-            if (throughExpansionsOnly
+            if (followed == NamesFollowed.THE_PARAMETERS_OF_AN_EXPANSION
                     && !(read.binding().owner() instanceof BindingOwner.Expansion)) {
                 return null;
             }

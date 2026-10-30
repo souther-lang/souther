@@ -253,13 +253,15 @@ public final class AffineForms {
         }
 
         /**
-         * The list written in the source that {@code container} is, with where its elements are
-         * read, or empty where it is any other container.
+         * The list written in the source that {@code container} stands at, with where its
+         * elements are read, or empty where it stands at any other container.
          *
          * <p>A reader that follows names and the helpers whose body answers a list says so for a
-         * list reached that way; one that does not takes only a list written at the place.
+         * list reached that way; one that does not takes only a list written at the place. Where
+         * a value stands says nothing of what a run works out to get there, so this is asked
+         * through {@link AffineForms#listWrittenOutBy}, which does.
          */
-        default Optional<ListWrittenOut<E>> listWrittenOut(Core container, E at) {
+        default Optional<ListWrittenOut<E>> listItStandsAt(Core container, E at) {
             return Core.withoutStanding(container) instanceof Core.ListLit list
                     ? Optional.of(new ListWrittenOut<>(list, at)) : Optional.empty();
         }
@@ -541,8 +543,8 @@ public final class AffineForms {
         }
 
         @Override
-        public Optional<ListWrittenOut<E>> listWrittenOut(Core container, E at) {
-            return of.listWrittenOut(container, at);
+        public Optional<ListWrittenOut<E>> listItStandsAt(Core container, E at) {
+            return of.listItStandsAt(container, at);
         }
 
         @Override
@@ -1276,7 +1278,7 @@ public final class AffineForms {
      */
     public static <A, E> Optional<ListWrittenOut<E>> listWrittenOutBy(Core container, E at,
                                                                       Reading<A, E> reading) {
-        Optional<ListWrittenOut<E>> written = reading.listWrittenOut(container, at);
+        Optional<ListWrittenOut<E>> written = reading.listItStandsAt(container, at);
         if (written.isEmpty()) {
             return written;
         }

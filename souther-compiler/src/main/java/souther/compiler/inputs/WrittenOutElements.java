@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.AffineForms;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ElementsWrittenOut;
@@ -72,18 +73,19 @@ public final class WrittenOutElements {
     }
 
     /**
-     * The list written in the source that {@code container} is, standing where its elements are
-     * read, or empty where it is any other container ({@link ElementsWrittenOut#listWrittenOut}).
+     * The list written in the source that {@code container} stands at, with where its elements
+     * are read, or empty where it stands at any other container
+     * ({@link ElementsWrittenOut#listItStandsAt}).
      *
      * <p>Followed through the parameters a helper was handed its arguments by and not through a
      * name the author wrote: what is worked out where a name is given is not worked out where it
      * is read, and the list is not taken as written where it is asked.
      */
-    public static Optional<Denotation> listWrittenOut(Denotation container, Symbols symbols,
-                                                      DeclarationNewtypes newtypes) {
-        return ElementsWrittenOut.listWrittenOut(new ElementsWrittenOut.Stood<>(container.value(),
-                container.at()), new Names(symbols, newtypes, new HashSet<>(), true))
-                .map(WrittenOutElements::denotation);
+    public static Optional<AffineForms.ListWrittenOut<InputReads>> listItStandsAt(
+            Denotation container, Symbols symbols, DeclarationNewtypes newtypes) {
+        return ElementsWrittenOut.listItStandsAt(new ElementsWrittenOut.Stood<>(container.value(),
+                container.at()), new Names(symbols, newtypes, new HashSet<>(),
+                InputReads.NamesFollowed.THE_PARAMETERS_OF_AN_EXPANSION));
     }
 
     /** Every element {@code container}, standing where it is followed to, holds. */
@@ -149,7 +151,7 @@ public final class WrittenOutElements {
      * at the names {@code met} already, and handed to a step's parameter as an application hands one.
      */
     private record Names(Symbols symbols, DeclarationNewtypes newtypes, Set<BindingId> met,
-                         boolean throughExpansionsOnly)
+                         InputReads.NamesFollowed followed)
             implements ElementsWrittenOut.Reading<InputReads> {
 
         Names {
@@ -159,13 +161,13 @@ public final class WrittenOutElements {
         }
 
         Names(Symbols symbols, DeclarationNewtypes newtypes, Set<BindingId> met) {
-            this(symbols, newtypes, met, false);
+            this(symbols, newtypes, met, InputReads.NamesFollowed.EVERY_ONE);
         }
 
         @Override
         public ElementsWrittenOut.Stood<InputReads> standing(Core e, InputReads at) {
             Denotation stood = InputReads.standing(new Denotation(e, at), symbols, newtypes,
-                    new HashSet<>(met), throughExpansionsOnly);
+                    new HashSet<>(met), followed);
             return new ElementsWrittenOut.Stood<>(stood.value(), stood.at());
         }
 
