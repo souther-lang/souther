@@ -91,17 +91,53 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
      */
     @Test
     void whatNoElementDecidesIsNoPartOfWhatSomeElementMeets() {
-        String fixed = "String.startsWith(\"a\", \"ab\")";
-        assertEquals(stated(fixed + " && Bool.not(List.isEmpty(b.xs))"),
-                stated("List.any(v -> " + fixed + ", b.xs)"));
-        assertEquals(stated(fixed + " && Bool.not(List.isEmpty(b.xs))"),
-                stated("Bool.not(List.isEmpty(List.filter(v -> " + fixed + ", b.xs)))"));
-        assertEquals(stated("(" + fixed + " && Bool.not(List.isEmpty(b.xs))) || List.any(v -> v > 0, b.xs)"),
-                stated("List.any(v -> " + fixed + " || v > 0, b.xs)"),
-                "a disjunction is some element meeting one part or some element meeting the other");
-        assertEquals(stated(fixed + " && List.any(v -> v > 0, b.xs)"),
-                stated("List.any(v -> " + fixed + " && v > 0, b.xs)"),
-                "a part no element decides comes out of a conjunction the element does");
+        for (String fixed : List.of("String.startsWith(\"a\", \"ab\")", "b.x > 0")) {
+            assertEquals(stated(fixed + " && Bool.not(List.isEmpty(b.xs))"),
+                    stated("List.any(v -> " + fixed + ", b.xs)"), fixed);
+            assertEquals(stated(fixed + " && Bool.not(List.isEmpty(b.xs))"),
+                    stated("Bool.not(List.isEmpty(List.filter(v -> " + fixed + ", b.xs)))"), fixed);
+            assertEquals(stated("(" + fixed + " && Bool.not(List.isEmpty(b.xs)))"
+                            + " || List.any(v -> v > 0, b.xs)"),
+                    stated("List.any(v -> " + fixed + " || v > 0, b.xs)"),
+                    "a disjunction is some element meeting one part or some element meeting the"
+                            + " other: " + fixed);
+            assertEquals(stated(fixed + " && List.any(v -> v > 0, b.xs)"),
+                    stated("List.any(v -> " + fixed + " && v > 0, b.xs)"),
+                    "a part no element decides comes out of a conjunction the element does: "
+                            + fixed);
+        }
+    }
+
+    /**
+     * Some element meeting anything says nothing beside the container holding something, and no
+     * element meeting it nothing beside the container holding nothing. Kept, a part that always
+     * holds came out two ways by whether it was written inside the quantifier or outside it.
+     */
+    @Test
+    void someElementSaysNothingBesideTheContainerHoldingSomething() {
+        Proposition holding = stated("Bool.not(List.isEmpty(b.xs))");
+        assertEquals(holding, stated("List.any(v -> true || v > 0, b.xs)"));
+        assertEquals(holding,
+                stated("(true && Bool.not(List.isEmpty(b.xs))) || List.any(v -> v > 0, b.xs)"));
+        assertEquals(holding.denied(), stated("List.isEmpty(b.xs) && List.all(v -> v <= 0, b.xs)"));
+        assertInstanceOf(Proposition.Any.class,
+                stated("Bool.not(List.isEmpty(b.xs)) || List.any(v -> v.price > 0, b.items)"),
+                "an element of another container is no element of this one");
+        assertInstanceOf(Proposition.Any.class,
+                stated("List.isEmpty(b.xs) || List.any(v -> v > 0, b.xs)"),
+                "nor does the container holding nothing say whether some element meets it");
+    }
+
+    /** And the same of a list a dependency answers, which is a container as the input's is. */
+    @Test
+    void someElementOfAnAnswerSaysNothingBesideItHoldingSomething() {
+        Proposition holding = statedOfAnAnswer("Bool.not(List.isEmpty(xs))");
+        assertEquals(holding, statedOfAnAnswer("List.any(v -> true || v > 0, xs)"));
+        assertEquals(holding, statedOfAnAnswer(
+                "Bool.not(List.isEmpty(xs)) || List.any(v -> v > 0, xs)"));
+        assertInstanceOf(Proposition.Any.class, statedOfAnAnswer(
+                        "List.isEmpty(xs) || List.any(v -> v > 0, xs)"),
+                "nor does the answer holding nothing say whether some element meets it");
     }
 
     @Test
@@ -468,11 +504,29 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
 
     /** What the condition of {@code f}'s one fork states, its fork written as {@code condition}. */
     private static Proposition stated(String condition) {
-        String model = "module demo\n\n" + INPUT + """
+        return statedIn("module demo\n\n" + INPUT + """
 
                 behavior f : (b: Box) -> Int
                 let f (b) = if %s then 1 else 0
-                """.formatted(condition);
+                """.formatted(condition), condition);
+    }
+
+    /** The same, of a condition over {@code xs}, which is what one call of a dependency answers:
+     *  two calls are two answers, so the list is handed over once. */
+    private static Proposition statedOfAnAnswer(String condition) {
+        return statedIn("module demo\n\n" + INPUT + """
+
+                behavior listed : (b: Box) -> List<Int>
+
+                let asked (xs: List<Int>) = %s
+
+                behavior f : (b: Box) -> Int
+                    depends on listed
+                let f (b, listed) = if asked(listed(b)) then 1 else 0
+                """.formatted(condition), condition);
+    }
+
+    private static Proposition statedIn(String model, String condition) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         // The errors of what was asked, which is the body checked: a model that does not check

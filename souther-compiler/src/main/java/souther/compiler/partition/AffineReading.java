@@ -834,6 +834,28 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 return ClausesInOrder.at(construct, ruleSource).governsNothing();
             }
 
+            /**
+             * A newtype over an {@code Int} written out is made without ending a run where the
+             * number it wraps lies in the run its clauses leave: the same run a worked-out number
+             * is held to when the construction is told, asked of one that is written.
+             */
+            @Override
+            public boolean makingEndsNoRunOver(Core.Construct construct, Core wrapped) {
+                if (makingEndsNoRun(construct)) {
+                    return true;
+                }
+                if (wrapped == null
+                        || !(Core.withoutStanding(wrapped) instanceof Core.Int written)) {
+                    return false;
+                }
+                WhereAnOperatorAnswers.WhereItsExactValueIsHeld where = whereMakingSucceeds(
+                        construct, TypeView.asWritten(Type.ref(construct.typeName()), symbols(),
+                                declarations().kinds(), declarations().sums()));
+                BigInteger number = BigInteger.valueOf(written.value());
+                return where != null && where.least().compareTo(number) <= 0
+                        && number.compareTo(where.greatest()) <= 0;
+            }
+
             @Override
             public Symbols symbols() {
                 return ruleSource.symbols();

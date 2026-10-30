@@ -249,6 +249,17 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
         return constraints.leavesNoRow();
     }
 
+    /**
+     * What is known of the values wherever they are named, with nothing a condition on the path
+     * said: the numbers and predicates {@link Unguarded} holds, and none of what a path adds beside
+     * them — the quantifiers a guard stated, the terms a guard spoke of, the cases it narrowed, the
+     * choices it held. A question asked of this one that comes out refuted is refuted by the values.
+     */
+    Known ofTheValuesAlone() {
+        return new Known(unguarded.constraints(), List.of(), AppendOnly.empty(), unguarded,
+                Map.of(), Choices.NONE);
+    }
+
     /** How far a fact reaches: a value's type and a name's binding say something wherever that value
      * is named, and a condition says it only on the path it guards. */
     enum Held { OF_THE_VALUE, ON_THE_PATH }

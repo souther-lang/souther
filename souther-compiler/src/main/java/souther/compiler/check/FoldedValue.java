@@ -112,6 +112,9 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
             case Core.Neg n -> ConstantAlgebra.negate(eval(n.operand(), at).orElse(null));
             case Core.Binary b -> binary(b, at);
             case Core.PreservedCall call -> call(call, at);
+            // The arm the condition takes and no other, as a run works it out.
+            case Core.If choice -> eval(choice.cond(), at).orElse(null) instanceof Boolean taken
+                    ? eval(taken ? choice.then() : choice.els(), at) : Optional.empty();
             case null, default -> Optional.empty();
         };
     }
@@ -199,6 +202,12 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
     private Optional<Object> call(Core.PreservedCall call, E at) {
         if (!(call.operation() instanceof ValueName.Stdlib.Operation operation)) {
             return Optional.empty();
+        }
+        // A denial is kept as the call it is, and what it answers is its law's to say, which is
+        // the reading of a clause's own word for it ({@link DischargeRules#denies}).
+        if (DischargeRules.denies(operation) && call.args().size() == 1) {
+            return eval(call.args().getFirst(), at).orElse(null) instanceof Boolean held
+                    ? Optional.of(!held) : Optional.empty();
         }
         Optional<Object> rounding = rounded(call, at);
         if (rounding.isPresent()) {

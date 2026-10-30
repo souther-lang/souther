@@ -299,7 +299,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/ValueStanding", "theConstructionAndItsRestEndNone",
                 "(L" + c + "core/Core$FieldAccess;Ljava/lang/Object;L" + c
                         + "check/ValueStanding$Names;L" + c
-                        + "check/BindingWalk;Ljava/util/function/Predicate;)Z",
+                        + "check/BindingWalk;Ljava/util/function/BiPredicate;)Z",
                 Reading.ONE_ACCESS,
                 "asks of one access the construction it is read off and the parts of it other"
                         + " than the field it reads");
@@ -399,6 +399,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/InvariantChecker", "without",
                 "(" + core + "Ljava/util/Set;" + core + ")" + core,
                 Reading.STRUCTURE, REWRITES_THE_BASE);
+        row(out, c + "check/InvariantChecker$Written", "replaced",
+                "(" + core + "Ljava/util/Map;)" + core, Reading.STRUCTURE,
+                "puts a truth value in place of the nodes a clause's parts stand at, which are"
+                        + " statements and no name read off a value: a projection is passed as"
+                        + " any other node");
         row(out, c + "check/Location", "of", "(" + core + "L" + c
                 + "check/DeclarationNewtypes;Ljava/util/function/Function;"
                 + "Ljava/util/function/Function;)L" + c
@@ -659,10 +664,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node what it ends a run for, an operator or a call: a name read off a"
                         + " value ends none, so what a projection may end one for is what its base"
                         + " may");
-        row(out, c + "check/WhatARunMayEndFor", "endsNoneAndReadsNoNameBeneath",
-                "(" + core + ")Z", Reading.STRUCTURE,
-                "asks each node what it ends a run for and whether it reads a name, and goes down"
-                        + " to its parts: a name read off a value ends none, so what a projection"
+        row(out, c + "check/ValueStanding", "endsNoneWhenWorkedOut",
+                "(L" + c + "check/ValueStanding$Standing;Ljava/util/Set;Ljava/util/function/BiPredicate;L"
+                        + c + "check/BindingWalk;)Z",
+                Reading.STRUCTURE,
+                "asks each node what it ends a run for, and goes down to its parts and along the"
+                        + " names it reads: a name read off a value ends none, so what a projection"
                         + " may end one for is what its base may");
         row(out, c + "check/WhatARunMayEndFor", "endsNoneBeneath", "(" + core + ")Z",
                 Reading.STRUCTURE,

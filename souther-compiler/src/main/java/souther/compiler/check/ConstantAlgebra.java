@@ -210,6 +210,19 @@ final class ConstantAlgebra {
                     return Optional.of(s.contains(sub));
                 }
             }
+            // startsWith(prefix, s) and endsWith(suffix, s), the same way round
+            case STRING_STARTS_WITH -> {
+                if (args.size() == 2 && args.get(0) instanceof String prefix
+                        && args.get(1) instanceof String s) {
+                    return Optional.of(s.startsWith(prefix));
+                }
+            }
+            case STRING_ENDS_WITH -> {
+                if (args.size() == 2 && args.get(0) instanceof String suffix
+                        && args.get(1) instanceof String s) {
+                    return Optional.of(s.endsWith(suffix));
+                }
+            }
             // The decimal operations, on the account of the arithmetic below: a sum, a difference and
             // a product are the operators', and a comparison is by amount and not by how a decimal
             // was written. A rounding is not here: which operations round, and what each way of
