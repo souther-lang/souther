@@ -1610,6 +1610,55 @@
               "type": "string"
             }
           }
+        },
+        {
+          "description": "What two forms of numbers come to multiplied, each as the numbers it is made of at their weights and its constant. The numbers of the two forms are apart: no place is read by a number of each.",
+          "required": [
+            "factors"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "product"
+            },
+            "factors": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "object",
+                "required": [
+                  "constant",
+                  "terms"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "constant": {
+                    "type": "string"
+                  },
+                  "terms": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "term",
+                        "coefficient"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "term": {
+                          "$ref": "#/$defs/termId"
+                        },
+                        "coefficient": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       ]
     },

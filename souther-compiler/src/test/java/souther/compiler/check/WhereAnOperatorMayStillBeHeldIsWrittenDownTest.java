@@ -382,7 +382,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.Pullback.productAt",
                     "asks whether the expression the arithmetic stopped at is the product it"
                             + " stopped for, so the two numbers multiplied are read as one"),
-            new Held("souther.compiler.partition.AffineReading.1.productOfTwoForms",
+            new Held("souther.compiler.partition.AffineReading.1.productFormOf",
                     "asks whether the expression is the product of two whole numbers, and tells"
                             + " the multiplication the run works out as it was written, so that a"
                             + " row where it stops is not taken as computed"),
