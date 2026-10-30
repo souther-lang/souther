@@ -1274,10 +1274,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)
                         || !(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
                                 instanceof GetsPast.WhereTheTotalFits(int operand))
-                        || operand >= call.args().size()
-                        || !(Core.withoutStanding(call.args().get(operand))
-                                instanceof Core.PreservedCall making)) {
+                        || operand >= call.args().size()) {
                     return new Attempt.NotApplicable();
+                }
+                if (!(Core.withoutStanding(call.args().get(operand))
+                        instanceof Core.PreservedCall making)) {
+                    return totalOfWhatIsMadeOfWhatANameStandsFor(call, call.args().get(operand),
+                            at);
                 }
                 if (!WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(making).endsNone()) {
                     return totalOfWhatIsMadeOfTheCodePointsOfAString(call, making, at);
@@ -1315,6 +1318,29 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             /**
+             * The same, where the operand of the total is a name that stands for the call that
+             * makes the list: a code point list is read as the call it stands for is, and the
+             * binding of the name is then told with it and not read again.
+             */
+            private Attempt totalOfWhatIsMadeOfWhatANameStandsFor(Core.PreservedCall call,
+                                                                 Core operand, InputReads at) {
+                if (!(Core.withoutStanding(operand) instanceof Core.Read)) {
+                    return new Attempt.NotApplicable();
+                }
+                Denotation stands = at.standing(operand, ruleSource.symbols(),
+                        ruleSource.newtypes());
+                if (!(Core.withoutStanding(stands.value()) instanceof Core.PreservedCall making)) {
+                    return new Attempt.NotApplicable();
+                }
+                Attempt made = totalOfWhatIsMadeOfTheCodePointsOfAString(call, making,
+                        stands.at());
+                if (made instanceof Attempt.Form) {
+                    told.readByATerm(operand);
+                }
+                return made;
+            }
+
+            /**
              * What a total over what an operation makes of the code points of a string of the
              * input comes to, read application by application as a list written out is: the
              * closure's body once per code point, the position it is handed bound to the place
@@ -1342,6 +1368,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (walked == null) {
                     return new Attempt.NotApplicable();
                 }
+                // Which code points the list holds is a question of values, and following a block
+                // to its answer leaves out what it works out beside it. The list is built all the
+                // same, so the operations are every one only where it is built by nothing that may
+                // end a run. A name it reads is bound, and worked out, where the walk that reached
+                // it read the binding.
+                if (!reached.endsNoRun(new Denotation(listed, at))) {
+                    told.exact = false;
+                }
                 Optional<WhyUnread> declined = told.declinedAtCounting(walked.indices().size());
                 if (declined.isPresent()) {
                     return new Attempt.Declined(declined.get());
@@ -1357,11 +1391,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     }
                     made.add(new Denotation(closure.body(), handing));
                 }
+                boolean outside = told.applyingToCodePoints;
                 told.applyingToCodePoints = true;
                 try {
                     return totalOfApplications(call, told.operations.size(), made);
                 } finally {
-                    told.applyingToCodePoints = false;
+                    told.applyingToCodePoints = outside;
                 }
             }
 

@@ -203,6 +203,55 @@ class ACodePointHeldAgainstARemainderOfTheOthersIsReadAtItsIndexTest {
                 + " dividing"), open);
     }
 
+    private static final String MODEL_WITH_REBUILT_CODES = MODEL.replace(
+            "let body = List.take(11, codes)", """
+                    let rebuilt = {
+                        let unused = List.length(codes) * 9223372036854775807
+                        codes
+                    }
+                    let body = List.take(11, rebuilt)""");
+
+    /**
+     * What builds the list the closure is applied over is worked out all the same. The list is
+     * the string's code points whatever else the block that answers it computes, but that block
+     * multiplies past what an {@code Int} holds, so a run through it does not get through.
+     */
+    @Test
+    void whatBuildsTheListTheClosureIsAppliedOverIsWorkedOutToo() {
+        String report = report(measured(MODEL_WITH_REBUILT_CODES));
+        assertTrue(report.contains("not read:"), report);
+    }
+
+    private static final String MODEL_WITH_A_NAMED_MAP = MODEL.replaceFirst(
+            "(?s)let weightedSum.*?\\n(let expectedCheckDigit)", """
+                    let weightedSum (body: List<Int>): Int = {
+                        let weighed = List.mapIndexed(
+                            (i, c) -> (if i <= 5 then i + 2 else i - 4) * digitValue(c),
+                            List.reverse(body))
+                        List.sum(weighed)
+                    }
+                    $1""");
+
+    /** The total of a map bound to a name is read as the total of the map written in place. */
+    @Test
+    void aMapBoundToANameIsReadAsTheMapWrittenInPlace() {
+        assertTrue(!MODEL_WITH_A_NAMED_MAP.equals(MODEL));
+        assertFalse(report(measured(MODEL_WITH_A_NAMED_MAP)).contains("not read:"),
+                () -> report(measured(MODEL_WITH_A_NAMED_MAP)));
+    }
+
+    /** Two closures over code points, one inside the other, are each read at the arm their
+     *  match takes. Each is read by a reading of its own, so the inner one cannot turn off what
+     *  the outer one is read with; this holds the two together. */
+    @Test
+    void aClosureOverCodePointsInsideAnotherIsReadAtItsArmToo() {
+        String nested = MODEL.replace("* digitValue(c)", "* (digitValue(c) + List.sum("
+                + "List.mapIndexed((j, d) -> 0 * digitValue(d), List.take(1, body))))");
+        assertTrue(!nested.equals(MODEL));
+        assertFalse(report(measured(nested)).contains("not read:"),
+                () -> report(measured(nested)));
+    }
+
     /**
      * A match inside the closure is read at its taken arm only where the lookup it matches on
      * finds an element. A lookup past the end of the one-character text finds none, so neither arm
