@@ -1077,10 +1077,8 @@ final class Coverages {
                     realizer, way, false);
             // The way a class the line cuts is looked for along where the walk to the case the
             // line decides in has no value to stand at: the class runs over the whole of the
-            // quantity, and the case is only where the line is read. Made at the first point that
-            // asks, so that a border none of whose points come to that pays for one walk.
-            WayToTheBorder wayToTheClasses =
-                    reaching.wayToTheClassesOf(border.border().origin());
+            // quantity, and the case is only where the line is read. Worked out at the first point
+            // that asks, so that a border none of whose points come to that pays for one walk.
             OneSearchOfABorder inTheClasses = null;
             java.util.Map<DomainPoint, ItemAssessment> items = new java.util.LinkedHashMap<>();
             for (DomainPoint point : border.items().keySet()) {
@@ -1092,13 +1090,17 @@ final class Coverages {
                 if (item instanceof ItemAssessment.Owed owed && owed.worthSearching()) {
                     String label = border.border().label(point);
                     SearchOutcomes outcomes = search.search(owed.criterion(), label);
-                    if (!point.againstTheLine() && outcomes.provesInfeasible()
-                            && !wayToTheClasses.equals(way)) {
+                    if (!point.againstTheLine() && outcomes.provesInfeasible()) {
                         if (inTheClasses == null) {
-                            inTheClasses = searching(border.border(), read, input, probe,
-                                    realizer, wayToTheClasses, true);
+                            WayToTheBorder wayToTheClasses =
+                                    reaching.wayToTheClassesOf(border.border().origin());
+                            inTheClasses = wayToTheClasses.equals(way) ? search
+                                    : searching(border.border(), read, input, probe, realizer,
+                                            wayToTheClasses, true);
                         }
-                        outcomes = inTheClasses.search(owed.criterion(), label);
+                        if (inTheClasses != search) {
+                            outcomes = inTheClasses.search(owed.criterion(), label);
+                        }
                     }
                     items.put(point, owed.settledBy(outcomes.readAt(border.readAt())));
                 } else {
