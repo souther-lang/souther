@@ -448,12 +448,31 @@ class ARuleOfADeclarationHoldingAFormToAnIntervalStillLeavesTheNextComparisonOfI
                 pointsOf(report, line), report);
     }
 
-    /** The declaration at two places of one parameter: what holds of one of them is not shown of
-     *  the other, so the rule keeps tying the fields. */
+    /** The declaration at two places of one parameter, the guard on one of them: the rule at the
+     *  other names nothing the guard or the way speaks of, so it is held aside with the first. */
     @Test
-    void theSameDeclarationAtTwoPlacesOfOneParameterStillTiesTheFields() {
+    void theSameDeclarationAtAnotherPlaceOfOneParameterDoesNotKeepTheGuardFromBeingRead() {
         String report = reportOf(TWO_VALUES_OF_THE_DECLARATION);
         int line = lineWith(TWO_VALUES_OF_THE_DECLARATION, "guard t.p.a - t.p.b < 200");
+        assertFalse(report.contains("· not read: comparison@" + line), report);
+    }
+
+    /** What holds of one place of the declaration is not shown of another the way speaks of, so
+     *  the rule keeps tying the fields. */
+    @Test
+    void theSameDeclarationAtAPlaceTheWaySpeaksOfStillTiesTheFields() {
+        String source = TWO_VALUES_OF_THE_DECLARATION.replace("""
+                let nested (t) = {
+                    guard t.p.a - t.p.b < 200 else High
+                    Mid
+                }""", """
+                let nested (t) = {
+                    guard t.q.a - t.q.b < 300 else High
+                    guard t.p.a - t.p.b < 200 else High
+                    Mid
+                }""");
+        String report = reportOf(source);
+        int line = lineWith(source, "guard t.p.a - t.p.b < 200");
         assertTrue(report.contains("· not read: comparison@" + line), report);
     }
 

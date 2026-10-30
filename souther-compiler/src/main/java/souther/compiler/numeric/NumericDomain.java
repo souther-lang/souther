@@ -942,10 +942,77 @@ public final class NumericDomain<A> {
      *                  ranges either, which holds less than this does
      */
     private ExactCut highestProven(Goal<A> goal, boolean withRules) {
+        ExactCut acrossTheParts = withRules ? highestAcrossTheParts(goal) : null;
+        if (acrossTheParts != null) {
+            return acrossTheParts;
+        }
         FormReach<A> reading = readingFor(goal.coefs());
         return withRules
                 ? reading.most(goal.coefs(), goal.constant())
                 : reading.mostFromTheEndsAndTheDifferences(goal.coefs(), goal.constant());
+    }
+
+    /**
+     * The highest a goal over positions of more than one part comes to, or null where it is not
+     * over the positions of two parts or more, each of them weighed by a part.
+     *
+     * <p>Parts share no position and no rule, so what one part leaves is independent of what
+     * another does: the goal is a sum of one goal per part, each of which reaches its highest
+     * wherever the others reach theirs, and the highest of the sum is the sum of the highests. Each
+     * is read from its part's closure, which may take one rule as a premise. Asked of the parts
+     * put together, a goal over three amounts each held to a bound by a rule of its own would take
+     * the rule of one of them and the ends of the other two, and the bound a rule gives each
+     * amount would be spent once.
+     */
+    private ExactCut highestAcrossTheParts(Goal<A> goal) {
+        if (goal.coefs().size() < 2) {
+            return null;
+        }
+        ClosedStates.Parted<A> parted = parted();
+        List<ClosedState<A>> parts = new ArrayList<>();
+        List<A> firsts = new ArrayList<>();
+        List<Map<A, ExactRatio>> weights = new ArrayList<>();
+        for (Map.Entry<A, ExactRatio> each : goal.coefs().entrySet()) {
+            ClosedState<A> part = parted.partWeighing(each.getKey());
+            if (part == null || part.holdsNothing()) {
+                return null;
+            }
+            int at = indexOfThePart(parts, part);
+            if (at < 0) {
+                parts.add(part);
+                firsts.add(each.getKey());
+                weights.add(new LinkedHashMap<>());
+                at = parts.size() - 1;
+            }
+            weights.get(at).put(each.getKey(), each.getValue());
+        }
+        if (parts.size() < 2) {
+            return null;
+        }
+        ExactRatio sum = goal.constant();
+        boolean inclusive = true;
+        for (int at = 0; at < parts.size(); at++) {
+            ClosedState<A> part = parts.get(at);
+            FormReach<A> reading = FormReach.over(parted.rulesOfThePartWeighing(firsts.get(at)),
+                    part.box(), part.differences(), order, closedStates.walksIn(order));
+            ExactCut highest = reading.most(weights.get(at), ExactRatio.ZERO);
+            sum = highest == null ? null : sum.plus(highest.at()).orNull();
+            if (sum == null) {
+                return null;
+            }
+            inclusive &= highest.inclusive();
+        }
+        return new ExactCut(sum, inclusive);
+    }
+
+    /** Where {@code part} stands in {@code parts}, which a part is by its identity, or -1. */
+    private static <A> int indexOfThePart(List<ClosedState<A>> parts, ClosedState<A> part) {
+        for (int at = 0; at < parts.size(); at++) {
+            if (parts.get(at) == part) {
+                return at;
+            }
+        }
+        return -1;
     }
 
     /**

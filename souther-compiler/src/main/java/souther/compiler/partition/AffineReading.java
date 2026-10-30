@@ -11,6 +11,7 @@ import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
 import souther.compiler.check.DeclarationAccess;
+import souther.compiler.check.RoundedToAWholeNumber;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.SeededWalk;
 import souther.compiler.check.WhatARunMayEndFor;
@@ -833,12 +834,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 StoppedValues.Held aside = stoppedAt.holdAside(node);
                 if (aside.firstMeeting()) {
                     if (!aside.theStop) {
-                        if (!worksOutNothingBesideTheStop(node, at)) {
+                        if (!worksOutNothingBesideTheStop(node, at)
+                                && !roundingWorkedOut(node, at, aside)) {
                             told.exact = false;
                         }
                     } else if (stoppedAt.quotientAwayFromNought()) {
                         operandsOfTheQuotient(node, at);
-                    } else if (!theStopIsAnsweredFor(node, at)) {
+                    } else if (!theStopIsAnsweredFor(node, at)
+                            && !roundingWorkedOut(node, at, aside)) {
                         told.exact = false;
                     }
                     if (aside.aChoice) {
@@ -1030,6 +1033,40 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
                 told.readByATerm(node);
                 return answer;
+            }
+
+            /**
+             * Whether {@code node}, a number rounded to a whole one the way its policy says, is
+             * worked out here and stops no run beyond what is told of the number before rounding:
+             * that number is read as any is, its operations told, and rounding keeps the order of
+             * the numbers, so the rounded number lies from what the least of the number rounds to,
+             * to what the greatest does. A run stops at the rounding only where that is past the
+             * ends of an {@code Int}, so it stops at none where the range lies within them, and the
+             * range is what is known of the rounded number from here on.
+             *
+             * <p>False where the call is no such rounding, its policy is not written out, or the
+             * range is not known to lie inside the ends of an {@code Int}.
+             */
+            private boolean roundingWorkedOut(Core node, InputReads at,
+                                              StoppedValues.Held aside) {
+                RoundedToAWholeNumber.Written rounding = RoundedToAWholeNumber.written(node);
+                if (rounding == null || !(AffineForms.outcome(rounding.value(), at, this)
+                        instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> number)) {
+                    return false;
+                }
+                FormRange before = FormRange.of(number.form(), stoppedAt.read(), stoppedAt.ranges());
+                ExactRatio least = before == null ? null : rounding.roundedFrom(before.least());
+                ExactRatio greatest = before == null ? null : rounding.roundedFrom(before.greatest());
+                if (least == null || greatest == null) {
+                    return false;
+                }
+                FormRange rounded = new FormRange(least, greatest);                WhereAnOperatorAnswers.WhereItsExactValueIsHeld ofAnInt =
+                        WhereAnOperatorAnswers.WHAT_AN_INT_HOLDS;
+                if (!rounded.liesWithin(ofAnInt.least(), ofAnInt.greatest())) {
+                    return false;
+                }
+                aside.rangeIs(rounded);
+                return true;
             }
 
             /**

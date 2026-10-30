@@ -59,6 +59,44 @@ public final class RoundedToAWholeNumber {
     }
 
     /**
+     * A call that rounds a number to a whole one, the policy written out as one of its cases.
+     *
+     * @param value the number before rounding
+     * @param way what the policy does
+     */
+    public record Written(Core value, WholeRounding way) {
+
+        public Written {
+            Objects.requireNonNull(value, "a number is rounded");
+            Objects.requireNonNull(way, "and a policy rounds it");
+        }
+
+        /**
+         * The whole number this rounds {@code x} to, where the exact arithmetic holds the whole
+         * numbers either side of it, and null otherwise.
+         */
+        public ExactRatio roundedFrom(ExactRatio x) {
+            BigInteger whole = way.of(x);
+            return whole == null ? null : ExactRatio.of(whole);
+        }
+    }
+
+    /**
+     * {@code call} as a rounding of a number to a whole one with a policy written out, or null where
+     * it is no such call. A policy that is no written case is one the run chooses, and no way of
+     * rounding is its.
+     */
+    public static Written written(Core call) {
+        AnOperationApplied applied = AnOperationApplied.of(Core.withoutStanding(call));
+        BoundOperationFact.RoundsToAStep rounds = applied == null ? null
+                : DefaultBoundOperationFacts.get().roundsToAWholeNumber(applied.operation());
+        Core value = rounds == null ? null : applied.argument(rounds.value());
+        Core policy = rounds == null ? null : applied.argument(rounds.mode());
+        WholeRounding way = policy == null ? null : rounds.wayOf(policy);
+        return value == null || way == null ? null : new Written(value, way);
+    }
+
+    /**
      * What {@code comparison}, read in {@code at}, states of the number one of its sides rounds — or
      * null where neither side is such a rounding, its policy is no one case where it is read, or the
      * other side is no whole number the same on every run.

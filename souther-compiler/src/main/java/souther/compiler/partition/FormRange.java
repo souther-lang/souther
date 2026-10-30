@@ -55,7 +55,26 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
             low = atLeast;
             high = atMost;
         }
-        return new FormRange(low, high);
+        return new FormRange(low, high).within(form, read, standIns);
+    }
+
+    /**
+     * This, held to what the rules say of the form as a whole, where every atom of it is a place of
+     * the input. The ends of the places added one by one say less than the rules say of their sum
+     * whenever a rule relates the places: two amounts that together stay within a bound are
+     * together within it, and each alone is only within the bound.
+     */
+    private FormRange within(LinearForm<NumericTerm> form, InputReading read,
+                             Map<NumericTerm, FormRange> standIns) {
+        if (form.coefs().isEmpty() || form.coefs().keySet().stream().anyMatch(standIns::containsKey)) {
+            return this;
+        }
+        NumericDomain.Bounds runs = read.quantities().runsBetween(form);        if (runs == null) {
+            return this;
+        }
+        ExactRatio from = tighter(least, runs.min(), true);
+        ExactRatio to = tighter(greatest, runs.max(), false);
+        return new FormRange(from, to);
     }
 
     /** The ends of the place {@code term} stands at, or null where it has none at either end. */
