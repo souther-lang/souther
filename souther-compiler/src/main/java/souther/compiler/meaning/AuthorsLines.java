@@ -18,7 +18,7 @@ import java.util.Objects;
  * return 12 as well.
  *
  * @param byRelation for each relation the comparison states, spelled as
- *                   {@link Proposition.Compared#heldKey}, the lines it is a place of and how it
+ *                   {@link Proposition.Compared#heldSpelling}, the lines it is a place of and how it
  *                   stands to each
  * @param taken      for each line, where a row takes every arm it is under; a line under no arm
  *                   is taken wherever the comparison is

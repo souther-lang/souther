@@ -98,7 +98,7 @@ public final class WrittenLines {
     }
 
     /**
-     * For each relation {@code how} concludes, spelled as {@link Proposition.Compared#heldKey}, the
+     * For each relation {@code how} concludes, spelled as {@link Proposition.Compared#heldSpelling}, the
      * lines of the comparison standing in {@code comparison} it is a place of, and how it stands to
      * each; and where a row takes the arms of each of those lines.
      *
