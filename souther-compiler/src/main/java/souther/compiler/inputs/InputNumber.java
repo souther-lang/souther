@@ -1018,9 +1018,13 @@ public final class InputNumber {
                                              RuleReadingSource source,
                                              Function<Core, Core.Block> blockOf) {
         SeededWalk walk = SeededWalk.of(e, blockOf);
-        if (walk == null) {
-            return null;
-        }
+        return walk == null ? null : ofAWalkAdding(walk, inputs, reads, source);
+    }
+
+    /** The same, of {@code walk} as it is handed: a walk read for one field of what it carries
+     *  ({@link SeededWalk#ofTheField}) is no call standing anywhere. */
+    public static SeedAndAdded ofAWalkAdding(SeededWalk walk, InputDomain inputs, InputReads reads,
+                                             RuleReadingSource source) {
         Denotation container =
                 reads.standing(walk.container(), source.symbols(), source.newtypes());
         // Every occurrence of the position and each as often, which a total of what each element

@@ -8400,6 +8400,9 @@ final class Pullback {
      */
     private LinearForm<Quantity> seedPlusWhatEachElementAdds(Core node, InputReads at) {
         Core stands = Core.withoutStanding(node);
+        if (stands instanceof Core.FieldAccess || stands instanceof Core.FieldProjection) {
+            return unlessUnread(() -> aFieldOfAWalk(node, at));
+        }
         if (!(stands instanceof Core.PreservedCall) && !(stands instanceof Core.Read)) {
             return null;
         }
@@ -8415,10 +8418,51 @@ final class Pullback {
             LinearForm<Quantity> counted = unlessUnread(() -> countedByTheArmsOfTheStep(walk));
             return counted != null ? counted : unlessUnread(() -> foldOfWrittenOut(walk));
         }
+        return ofTheInput(added);
+    }
+
+    /** {@code added} as a form of the input's numbers. */
+    private static LinearForm<Quantity> ofTheInput(InputNumber.SeedAndAdded added) {
         Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
         added.added().coefs().forEach((term, by) -> coefs.put(new DecisionAtom.OfTheInput(term),
                 by));
         return new LinearForm<>(added.seed(), coefs);
+    }
+
+    /**
+     * What a field of the record a walk from a seed ends with comes to, where {@code node} takes
+     * that field of such a walk — or of a call of a behavior whose body is one — and the field is a
+     * walk of its own ({@link SeededWalk#ofTheField}): the seed and the total of what its step adds,
+     * or how many elements take each arm of it. Null where it is none of these.
+     *
+     * <p>A field that only adds is the total a fold over that field alone is, so a comparison of
+     * {@code state(xs).score} draws the line {@code List.sum} of the same numbers draws, whatever
+     * the other fields of the record do.
+     */
+    private LinearForm<Quantity> aFieldOfAWalk(Core node, InputReads at) {
+        Core.FieldAccess access = switch (Core.withoutStanding(node)) {
+            case Core.FieldAccess one -> one;
+            case Core.FieldProjection projection -> projection.lastAccess();
+            default -> null;
+        };
+        if (access == null) {
+            return null;
+        }
+        Denotation whole = at.standing(access.target(), read.rules().symbols(),
+                read.rules().newtypes());
+        Inside.ACall called = intoACall(whole);
+        if (called != null) {
+            whole = called.body().at().standing(called.body().value(), read.rules().symbols(),
+                    read.rules().newtypes());
+        }
+        SeededWalk walk = SeededWalk.of(whole.value(), blocksAt(whole));
+        SeededWalk field = walk == null ? null : walk.ofTheField(access.field());
+        if (field == null) {
+            return null;
+        }
+        InputNumber.SeedAndAdded added = InputNumber.ofAWalkAdding(field, read.domain(),
+                whole.at(), read.rules());
+        return added != null ? ofTheInput(added) : countedByTheArmsOfTheStep(field, whole.at());
     }
 
     /**
@@ -9194,15 +9238,17 @@ final class Pullback {
      */
     private LinearForm<Quantity> countedByTheArmsOfTheStep(Denotation call) {
         SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
-        if (walk == null) {
-            return null;
-        }
+        return walk == null ? null : countedByTheArmsOfTheStep(walk, call.at());
+    }
+
+    /** The same, of {@code walk} as it is handed, read where it stands at {@code at}. */
+    private LinearForm<Quantity> countedByTheArmsOfTheStep(SeededWalk walk, InputReads at) {
         Core step = Core.withoutStanding(walk.step().body());
         BindingId accumulator = walk.accumulator().binding();
         if (decidedByWhatItCarried(step, accumulator)
-                || !(walkedContainer(walk.container(), call.at())
+                || !(walkedContainer(walk.container(), at)
                         instanceof DecisionSubject.AnInput held)
-                || !(AffineForms.outcome(walk.seed(), call.at(), quantities())
+                || !(AffineForms.outcome(walk.seed(), at, quantities())
                         instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
                                 LinearForm<Quantity> seed))) {
             return null;
@@ -9214,7 +9260,7 @@ final class Pullback {
             }
             carriedSoFar.put(accumulator, LinearForm.atom(soFar));
             try {
-                Sized each = byTheArmsOfAnElement(step, call.at(),
+                Sized each = byTheArmsOfAnElement(step, at,
                         (arm, inside) -> addedBesideWhatItCarried(arm, inside, soFar));
                 return each instanceof Sized.AsAForm(LinearForm<Quantity> form)
                         ? addedUpOver(held, form) : each;

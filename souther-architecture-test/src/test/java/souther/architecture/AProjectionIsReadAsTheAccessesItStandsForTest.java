@@ -595,6 +595,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/ComparisonReadings", "readsAnAnswer", "(" + core
                 + reads + "L" + c + "inputs/InputReading;Ljava/util/Set;)Z", Reading.STRUCTURE,
                 CHOICES_AND_CALLS);
+        row(out, c + "check/SeededWalk", "theFieldAsCarried", "(" + core + "L" + c
+                + "types/BindingId;Ljava/lang/String;L" + CORE + "$Read;)" + core,
+                Reading.NAMES, "reads the field of what a walk carried a step names, a projection"
+                        + " as the accesses it stands for, the last of them holding the rest");
+        row(out, c + "partition/Pullback", "aFieldOfAWalk", "(" + core + reads + ")L" + c
+                + "numeric/LinearForm;", Reading.ONE_ACCESS, ONE);
         row(out, c + "partition/ComparisonAssessment", "written",
                 "(" + core + ")Ljava/lang/String;", Reading.NAMES,
                 "spells a side of a comparison for a report, a projection as the accesses it"
