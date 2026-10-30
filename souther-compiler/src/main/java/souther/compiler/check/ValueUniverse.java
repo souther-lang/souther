@@ -28,12 +28,30 @@ public final class ValueUniverse {
     private ValueUniverse() {}
 
     /**
-     * How many values of {@code type} differ, where they can be counted out — or minus one where
-     * they cannot, which is not that there are many.
+     * How many values of {@code type} differ, where they can be counted out and no rule holds any
+     * of them back — or minus one where they cannot, which is not that there are many.
+     *
+     * <p>Not {@link #of}'s count as it stands. That one reads through every name a type wears to
+     * the values underneath, so that a rule saying which values a position may not hold can be
+     * read as the values it may: a name wrapped round a boolean is two values there whatever the
+     * name's rules leave. What a reader asking how many values the type <em>has</em> needs is the
+     * values the rules leave, so a count is given only where the names the type wears, and the sum
+     * it is where it is one, are shown to carry no rule ({@link
+     * DeclaredClauses.OnAName#carriesNone}). A rule over them leaves a count this does not read.
      */
-    public static long howManyDiffer(Type type, NewtypeInners inners, DeclarationKinds kinds,
-                                     SumCases sums) {
-        List<Value> every = of(type, inners, kinds, sums);
+    public static long howManyDiffer(Type type, RuleReadingContext reading) {
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        List<TypeSymbol> names = new ArrayList<>(view.wrappers());
+        if (view.shape() instanceof Shape.Sum sum) {
+            names.add(sum.name());
+        }
+        if (!DeclaredClauses.of(names, source).stream()
+                .allMatch(DeclaredClauses.OnAName::carriesNone)) {
+            return -1;
+        }
+        List<Value> every = of(type, source.inners(), source.kinds(), source.sums());
         return every == null ? -1 : every.size();
     }
 

@@ -7006,8 +7006,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (each == null) {
             return 1;
         }
-        long counted = ValueUniverse.howManyDiffer(each, rules.inners(), rules.kinds(),
-                rules.sums());
+        long counted = ValueUniverse.howManyDiffer(each, read.ruleReading());
         if (counted >= 0) {
             return (int) Math.min(counted, Integer.MAX_VALUE);
         }

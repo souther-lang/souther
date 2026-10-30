@@ -51,6 +51,15 @@ class HowManyAContainerHoldsIsACountAnEntryCanBeWrittenAtTest {
     void aSetOfATypeNothingCountsOutOrARuleHoldsIsShownOneValue() {
         assertEquals(List.of(true, true, false, false), heldAt("Set<Date>"));
         assertEquals(List.of(true, true, false, false), heldAt("Set<Digit>"));
+        assertEquals(List.of(true, true, false, false), heldAt("Set<OnlyTrue>"));
+    }
+
+    /** The keys of a map are counted as the elements of a set are: the cases an enumeration
+     *  declares, and one where a rule is written on the key. */
+    @Test
+    void aMapIsHeldUpToHowManyItsKeysDiffer() {
+        assertEquals(List.of(true, true, true, true), heldAt("Map<Side, Int>"));
+        assertEquals(List.of(true, false, false, false), heldAt("Map<OnlyA, Int>"));
     }
 
     /** Whether a container of {@code type} is shown to be held at nought, one, two and three. */
@@ -60,6 +69,12 @@ class HowManyAContainerHoldsIsACountAnEntryCanBeWrittenAtTest {
 
                 %s
                 data Digit = Int invariant value >= 1 && value <= 3
+                data OnlyTrue = Bool invariant value == true
+                data A
+                data B
+                data C
+                data Side = A | B | C
+                data OnlyA = Side invariant value == A
                 data Holder = { c: %s }
 
                 data Ok
