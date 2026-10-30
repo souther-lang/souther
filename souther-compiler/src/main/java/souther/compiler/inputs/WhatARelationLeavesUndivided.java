@@ -6,6 +6,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberRegion;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
@@ -18,6 +19,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiPredicate;
@@ -476,6 +478,15 @@ public final class WhatARelationLeavesUndivided {
                     throw new IllegalArgumentException("a term some values of which settle a"
                             + " relation has some");
                 }
+            }
+
+            /** The numbers of {@link #noRowShownComputed}, as the region they make together, or
+             *  empty where there are none. */
+            public Optional<NumberRegion> numbersNotShownComputed() {
+                return noRowShownComputed.isEmpty() ? Optional.empty()
+                        : Optional.of(NumberRegion.of(noRowShownComputed.stream()
+                                .map(run -> new NumberRegion.Run(run.from(), run.to()))
+                                .toList()));
             }
 
             /** The same runs, those of their lines {@code model} does not draw drawn by the

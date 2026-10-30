@@ -9758,7 +9758,8 @@ final class Pullback {
                             new HashSet<>());
             case AffineForms.Halt.NotLinear<Quantity, InputReads> _,
                  AffineForms.Halt.NoNumberOnARun<Quantity, InputReads> _,
-                 AffineForms.Halt.NotHeld<Quantity, InputReads> _ -> null;
+                 AffineForms.Halt.NotHeld<Quantity, InputReads> _,
+                 AffineForms.Halt.DeclinedAtAFigure<Quantity, InputReads> _ -> null;
         };
     }
 
@@ -11947,6 +11948,7 @@ final class Pullback {
                     new WhyUnread.SeveralValuesNotGoneInto();
             case AffineForms.Halt.AnArgumentStopped<Quantity, InputReads>(var argument) ->
                     noFormOf(argument);
+            case AffineForms.Halt.DeclinedAtAFigure<Quantity, InputReads>(WhyUnread why) -> why;
         };
     }
 
