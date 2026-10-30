@@ -44,13 +44,14 @@ public sealed interface PointSearchGoal {
      * figure laid down elsewhere, the order they come in would decide which of them are ever
      * tried, and a candidate in the population would be one no search reaches.
      *
-     * <p>Once at least, so that a goal with no candidate is asked and answers that it has none.
+     * <p>None, for a goal with no candidate. That the point is asked once whatever this says is the
+     * search's: the first asking is the point's answer, and an empty population answers that it is
+     * empty there.
      */
     default int askedAtMost() {
         return switch (this) {
             case ByConstraints _ -> CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH.maximum();
-            case ByObservation observed ->
-                    Math.max(1, RowsARunIsTriedFor.candidates(observed).size());
+            case ByObservation observed -> RowsARunIsTriedFor.candidates(observed).size();
         };
     }
 

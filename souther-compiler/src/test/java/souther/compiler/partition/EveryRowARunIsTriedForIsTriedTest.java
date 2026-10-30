@@ -84,14 +84,14 @@ class EveryRowARunIsTriedForIsTriedTest {
         assertEquals(Count.of(1), at(candidates.get(4), LENGTH), candidates.toString());
     }
 
-    /** One dimension alone is every value of it, asked for; none is asked once and has none. */
+    /** One dimension alone is every value of it, asked for; none has none to ask for. */
     @Test
     void oneDimensionAloneIsEveryValueOfIt() {
         assertEquals(7, RowsARunIsTriedFor.candidates(goal(List.of(LENGTH), List.of())).size());
         assertEquals(4, RowsARunIsTriedFor.candidates(goal(List.of(), List.of(NUMBER))).size());
         PointSearchGoal.ByObservation none = goal(List.of(), List.of());
         assertEquals(List.of(), RowsARunIsTriedFor.candidates(none));
-        assertEquals(1, none.askedAtMost());
+        assertEquals(0, none.askedAtMost());
     }
 
     /** A region the rules leave nothing in holds no row, solved for or run: that is proved, and

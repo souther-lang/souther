@@ -2041,9 +2041,12 @@ final class Coverages {
                 SearchOutcomes last = null;
                 Realization.Found first = null;
                 // As many askings as the way the row is found says, which is said where what is
-                // asked is ({@link PointSearchGoal#askedAtMost}).
+                // asked is ({@link PointSearchGoal#askedAtMost}) — and the first whatever it says,
+                // since the first is the point's answer: a goal with nothing to try is asked, and
+                // answers that.
                 int askings = quantity.searchGoalAt(criterion).askedAtMost();
-                for (int value = 0; value < askings; value++) {
+                int value = 0;
+                do {
                     Searching came = searchingWith(criterion, label, able, region, tried);
                     if (came.witness().isPresent()) {
                         return new Looked(came.outcomes(), came.realized(), came.witness());
@@ -2075,7 +2078,7 @@ final class Coverages {
                     // into. Charged here for that reason: a point with more ways to stand its
                     // dependencies in would otherwise be allowed fewer values than one with fewer.
                     tried = tried.and(came.realized().fixing());
-                }
+                } while (++value < askings);
                 // The count ran out, and whether that is what ended the asking is the realizer's to
                 // say. Asked once more and for nothing else: a figure reported where the values
                 // themselves had run out is a number an author raises to be told the same thing,
