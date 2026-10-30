@@ -699,10 +699,29 @@ public final class GuardThresholds {
         java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out =
                 new java.util.LinkedHashMap<>();
         for (FilingCoordinate at : filedAt(comparison, read, reads, answering)) {
+            if (onlyChoseBeside(at.path(), here, left, right)) {
+                continue;
+            }
             out.putIfAbsent(at,
                     UnreadComparison.whereItStopped(ruleAt(at, left, right), notRead, ordered));
         }
         return out;
+    }
+
+    /**
+     * Whether {@code at} is named by the comparison only as what chose which value a side the
+     * reading did not stop on is: no value either side may be is, or was made from, what stands
+     * there, and what the reading stopped at does not read it.
+     *
+     * <p>Such a side is a value apiece on the arms of the choice, each read for itself, and the
+     * choice divides {@code at}. {@code Int.floorMod(i, 2) == r}, with {@code r} chosen by a match
+     * on {@code side}, stops on the remainder, and said to be about a value made from {@code side}
+     * it sends an author after a position whose values the rule never read a number of.
+     */
+    private static boolean onlyChoseBeside(TermPath at, Names here, Names left, Names right) {
+        return !here.origin().positions().contains(at)
+                && !left.origin().valuesFrom().contains(at)
+                && !right.origin().valuesFrom().contains(at);
     }
 
     /**
