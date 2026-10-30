@@ -9,6 +9,7 @@ import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.NumericResult;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.BinOp;
@@ -298,16 +299,32 @@ final class DischargeRules {
     }
 
     /**
-     * The bounds {@code call}'s result has here: the operation's rows, less those whose condition on
-     * the arguments this call does not meet.
+     * The operation's rows for {@code call}, in the two halves the call's arguments make of them.
+     *
+     * @param holding  the rows whose condition on the arguments this call meets as constants, which
+     *                 are the bounds its result has here
+     * @param heldBack the rest. A reading that settles the condition some other way — by what a
+     *                 guard established of the argument — is the one to take them in.
+     */
+    record BoundRows(List<ResultBound<DeclaredArgument>> holding,
+                     List<ResultBound<DeclaredArgument>> heldBack) {}
+
+    /**
+     * {@code call}'s rows, each asked once.
      *
      * @param constant what an argument reads as, or null where it reads as no constant. Asked of the
      *                 caller because what a value is read as is the reading's answer and not a
      *                 property of the syntax at the call.
      */
-    static List<ResultBound<DeclaredArgument>> boundsOn(Core.PreservedCall call,
-                                                        Function<Core, BigDecimal> constant) {
-        return boundsOn(call.operation(), CallArguments.readAs(call, constant));
+    static BoundRows boundRowsOn(Core.PreservedCall call, Function<Core, BigDecimal> constant) {
+        ConstantArguments<DeclaredArgument> constants = CallArguments.readAs(call, constant);
+        List<ResultBound<DeclaredArgument>> rows = facts().boundsOnTheResult(call.operation());
+        List<ResultBound<DeclaredArgument>> holding = new ArrayList<>(rows.size());
+        List<ResultBound<DeclaredArgument>> heldBack = new ArrayList<>();
+        for (ResultBound<DeclaredArgument> row : rows) {
+            (constants.satisfy(row.provided()) ? holding : heldBack).add(row);
+        }
+        return new BoundRows(holding, heldBack);
     }
 
     /**
@@ -405,6 +422,51 @@ final class DischargeRules {
     static Carrying carried(Core.PreservedCall call) {
         BoundOperationFact.ReadsItsContainer carried = facts().readsItsContainer(call.operation());
         return carried == null ? null : new Carrying(call, carried.container(), carried.through());
+    }
+
+    /**
+     * The predicate the value {@code call} answers meets where it answers one, or null where the
+     * operation says nothing of the value it finds — or where what stands in the closure argument is
+     * not a one-parameter block this can read.
+     */
+    static Core.Block foundWhereItHolds(Core.PreservedCall call, Denotations at) {
+        BoundOperationFacts.Found found = facts().answersAnElementWhereTheClosureHolds(
+                call.operation());
+        if (found == null) {
+            return null;
+        }
+        Core.Block predicate = Terms.blockOf(CallArguments.of(found.closure(), call), at);
+        return predicate == null || predicate.params().size() != 1 ? null : predicate;
+    }
+
+    /** The container whose element {@code call} answers where it answers a value, or null where
+     * the operation does not say which value it answers. */
+    static Core elementAnsweredFrom(Core.PreservedCall call) {
+        DeclaredArgument source = facts().answersAnElementOf(call.operation());
+        return source == null ? null : CallArguments.of(source, call);
+    }
+
+    /** Where every element {@code call} answers stands, as the operation keeps them. */
+    static List<ResultBound<DeclaredArgument>> boundsOnEachElement(Core.PreservedCall call) {
+        return facts().boundsOnEachElementOfTheResult(call.operation());
+    }
+
+    /**
+     * The predicate every element {@code call} answers meets, or null where the operation does not
+     * answer the elements of a container where a closure holds of them — or where what stands in
+     * the closure argument is not a one-parameter block this can read.
+     *
+     * <p>Read off the piece the operation assembles, which the library proves of its body, so an
+     * operation that keeps elements by a predicate states it here by being declared to and by no
+     * name this spells.
+     */
+    static Core.Block keptWhereItHolds(Core.PreservedCall call, Denotations at) {
+        BoundOperationFacts.Assembled assembled = facts().assembles(call.operation());
+        if (assembled == null || assembled.piece() != PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS) {
+            return null;
+        }
+        Core.Block predicate = Terms.blockOf(CallArguments.of(assembled.closure(), call), at);
+        return predicate == null || predicate.params().size() != 1 ? null : predicate;
     }
 
     /** The projection {@code call}'s predicate is stated over, or null where it is stated over the

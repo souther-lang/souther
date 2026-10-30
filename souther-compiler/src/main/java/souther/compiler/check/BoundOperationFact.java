@@ -418,6 +418,22 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record BoundsItsResult(DeclaredOperation operation, ResultBound<DeclaredArgument> bound)
             implements SeveralAboutAnOperation {}
 
+    /** Something that holds of every number in the list the operation answers, wherever it is
+     *  called. One per bound: an operation with two ends states two of these. */
+    record BoundsEachElementOfItsResult(DeclaredOperation operation,
+                                        ResultBound<DeclaredArgument> bound)
+            implements SeveralAboutAnOperation {}
+
+    /** What the operation answers holds, where it holds a value, an element of {@code source}. */
+    record AnswersAnElementOf(DeclaredOperation operation, DeclaredArgument source)
+            implements OneAboutAnOperation {}
+
+    /** What the operation answers holds, where it holds a value, an element of {@code source} that
+     *  {@code closure} answers true on. */
+    record AnswersAnElementWhereTheClosureHolds(DeclaredOperation operation,
+                                                DeclaredArgument source, DeclaredArgument closure)
+            implements OneAboutAnOperation {}
+
     /** The operation's result is never smaller than what {@code container} holds. One per
      *  container: {@code a ++ b} is as long as either half. */
     record ResultIsNoSmallerThan(DeclaredOperation operation, DeclaredArgument container)

@@ -287,7 +287,41 @@ final class PathEngine {
                 assuming(answeredBy(scrutinee, in.at()), answered(arm, scrutinee),
                         guard -> impliedBy(guard, arm.pattern()), in));
         Known lawful = whatItsLawSaysOfTheArm(arm, scrutinee, taken.known(), at);
-        return new Entered(takingItsCases(arm, scrutinee, lawful, at), taken.at());
+        Known answered = whatTheValueItHoldsMeets(arm, scrutinee, lawful, at, taken.at());
+        return new Entered(takingItsCases(arm, scrutinee, answered, at), taken.at());
+    }
+
+    /**
+     * {@code k} with what is known of every element of the container the optional
+     * {@code scrutinee} answers an element of, taken of the value {@code arm} binds where it is
+     * taken because the answer holds one: {@code List.max(xs)} is {@code Some(x)} only for an
+     * {@code x} of {@code xs}, and {@code List.find(p, xs)} only for one with {@code p(x)}.
+     *
+     * <p>Of the value the arm binds and of no other. That the container holds something, or that
+     * some element meets the predicate, is the law of whether the answer holds a value, which
+     * {@link #whatItsLawSaysOfTheArm} reads, and it names no element. Which relations hold of every
+     * element is {@link Predicates#elementRelations}' to say, the one reading a closure handed an
+     * element is given them by, so the value found and the element a closure is handed are known by
+     * the same account. Read where the call was written, as the law's arguments are, and taken at
+     * the value where the arm enters it ({@code inside}).
+     */
+    private Known whatTheValueItHoldsMeets(Core.Case arm, Core scrutinee, Known k, Denotations at,
+                                           Denotations inside) {
+        if (arm.binder() == null || !Boolean.TRUE.equals(LawAtACall.presentWhereTaken(arm))) {
+            return k;
+        }
+        Terms.Given called = terms.originating(scrutinee, at, new HashSet<>());
+        if (called == null
+                || !(Core.withoutStanding(called.value()) instanceof Core.PreservedCall call)
+                || DischargeRules.elementAnsweredFrom(call) == null) {
+            return k;
+        }
+        Core.Read value = Terms.read(arm.binder(), arm.bindType(), arm.pos());
+        Known out = k;
+        for (ElementRelation relation : predicates.elementRelations(call, k, called.at())) {
+            out = predicates.instantiate(relation, value, out, inside);
+        }
+        return out;
     }
 
     /**

@@ -209,6 +209,59 @@ public sealed interface OperationFact {
     }
 
     /**
+     * Something that holds of every element the operation answers, wherever it is called:
+     * {@code List.rangeInclusive(from, to)} holds only numbers from {@code from} up and to {@code to}
+     * down.
+     *
+     * <p>One fact per bound, as {@link BoundsItsResult} is, and the same bound: the number each
+     * element is stands where the bound says. The bound is the operation's own and holds under no
+     * condition, so it is a line against an argument and nothing the representation keeps.
+     */
+    record BoundsEachElementOfItsResult(ResultBound<ArgumentRef> bound) implements OperationFact {
+
+        public BoundsEachElementOfItsResult {
+            Objects.requireNonNull(bound, "this one states a bound");
+            if (bound.against() == null
+                    || !(bound.provided() instanceof ResultBound.Provided.Always<ArgumentRef>)
+                    || !(bound.origin() instanceof ResultBound.Origin.OfTheOperation)) {
+                throw new IllegalArgumentException("a bound on each element is a line of the"
+                        + " operation against an argument it is handed, under no condition: " + bound);
+            }
+        }
+    }
+
+    /**
+     * What the operation answers holds, where it holds a value, an element of {@code source}:
+     * {@code List.max(xs)} is {@code Some(x)} only for an {@code x} of {@code xs}, so whatever holds
+     * of every element of {@code xs} holds of it.
+     *
+     * <p>About the value the answer holds and not about whether it holds one, which is a law of its
+     * own: that the container holds something says when the answer is {@code Some}, and says nothing
+     * of which element it is {@code Some} of.
+     */
+    record AnswersAnElementOf(ArgumentRef source) implements OperationFact {
+
+        public AnswersAnElementOf {
+            Objects.requireNonNull(source, "an element is one of some container's");
+        }
+    }
+
+    /**
+     * What the operation answers holds, where it holds a value, an element of {@code source} that
+     * the closure it is handed answers true on: {@code List.find(p, xs)} is {@code Some(x)} only for
+     * an {@code x} of {@code xs} with {@code p(x)}.
+     *
+     * <p>The stronger of two statements, and the weaker is stated from it and never beside it
+     * ({@link AnswersAnElementOf}): written twice, the two could be changed apart.
+     */
+    record AnswersAnElementWhereTheClosureHolds(ArgumentRef source) implements OperationFact {
+
+        public AnswersAnElementWhereTheClosureHolds {
+            Objects.requireNonNull(source, "an element is one of some container's");
+        }
+    }
+
+    /**
      * The operation builds a container out of another, and this says where its elements came from
      * and how many of them there are.
      */

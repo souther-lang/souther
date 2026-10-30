@@ -4968,7 +4968,7 @@ public final class InvariantChecker {
         Type elem = Terms.elementType(container.type());
         // The container is read under what every argument answered, which is what holds where the
         // operation is entered.
-        List<Quantified> relations = predicates.elementRelations(container, out, at);
+        List<ElementRelation> relations = predicates.elementRelations(container, out, at);
         Core.Read element = Terms.read(handed.element(), elem, handed.step().pos());
         // an element of a container is not a location the body can otherwise name
         Entered in = enter(element, out, at);   // the element carries its type's invariant
@@ -4978,7 +4978,7 @@ public final class InvariantChecker {
         // its newtype up to be reasoned about.
         in = enterOthers(handed, in);
         Known k2 = in.known();
-        for (Quantified q : relations) {
+        for (ElementRelation q : relations) {
             k2 = predicates.instantiate(q, element, k2, in.at());
         }
         // A region of its own, and what it leaves stays in it: the body runs once per element, on
@@ -5008,7 +5008,13 @@ public final class InvariantChecker {
                 throw new IllegalStateException("a closure a preserved call applies has an untyped"
                         + " parameter, so what it is handed cannot be said");
             }
-            out = enter(Terms.read(params.get(i), given, handed.step().pos()), out.known(), out.at());
+            Core.Read read = Terms.read(params.get(i), given, handed.step().pos());
+            out = enter(read, out.known(), out.at());
+            // The operation hands this parameter the place of the element it is handed beside it.
+            if (params.get(i) == handed.position()) {
+                out = new Entered(predicates.placeIn(read, handed.container(), out.known(), out.at()),
+                        out.at());
+            }
         }
         return out;
     }

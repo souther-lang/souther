@@ -647,6 +647,8 @@ final class DerivedNumericFacts {
                         case NO -> between(atom, AT_NOUGHT, terms);
                         case UNSETTLED -> Says.NOTHING;
                     };
+            case Derivation.GuaranteedWhere guaranteed ->
+                    guaranteedWhere(guaranteed, base, terms, done, deriving, copies);
             // Wherever all of them put it: what each found, together — and no value at all where
             // one of them shows the operation answered none.
             case Derivation.Each each -> {
@@ -664,6 +666,26 @@ final class DerivedNumericFacts {
                         : found.isEmpty() ? Says.NOTHING : new Says.These(found);
             }
         };
+    }
+
+    /**
+     * What the guarantees whose condition this reading shows state of the answer.
+     *
+     * <p>The condition is read as the operands of any recipe are: what the form lies between, with
+     * whatever was derived of the atoms it names taken in first. A condition the reading puts on
+     * neither side states nothing.
+     */
+    private static Says guaranteedWhere(Derivation.GuaranteedWhere guaranteed, ReadingDomain base,
+                                        Terms terms, Memo done, Deriving deriving,
+                                        ContextMultiplicity copies) {
+        List<Fact> found = new ArrayList<>();
+        for (ConditionalConstraint one : guaranteed.guarantees()) {
+            Bounds lies = boundsOf(one.premise().form(), base, terms, done, deriving, copies);
+            if (Boolean.TRUE.equals(lies.stands(one.premise().rel(), Count.ZERO))) {
+                found.add(one.consequence());
+            }
+        }
+        return found.isEmpty() ? Says.NOTHING : new Says.These(found);
     }
 
     /** Whether a statement over some counts holds under this reading, as far as it shows. */

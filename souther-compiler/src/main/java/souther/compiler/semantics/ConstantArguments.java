@@ -42,10 +42,9 @@ public interface ConstantArguments<A> {
     default boolean satisfy(ResultBound.Provided<A> provided) {
         return switch (provided) {
             case ResultBound.Provided.Always<A> _ -> true;
-            case ResultBound.Provided.ConstantAboveZero<A> above ->
-                    at(above.argument()).filter(read -> read.signum() > 0).isPresent();
-            case ResultBound.Provided.ConstantBelowZero<A> below ->
-                    at(below.argument()).filter(read -> read.signum() < 0).isPresent();
+            case ResultBound.Provided.ArgumentStands<A> stands ->
+                    at(stands.argument()).filter(read -> stands.rel().holds(read.signum()))
+                            .isPresent();
         };
     }
 }

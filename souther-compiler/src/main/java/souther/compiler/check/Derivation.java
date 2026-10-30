@@ -434,6 +434,68 @@ sealed interface Derivation {
     }
 
     /**
+     * A value its operation guarantees something of where the arguments stand a way: the remainder
+     * of a floor division is not negative where the divisor is above nought.
+     *
+     * <p>A recipe and not a fact the atom carries, because the condition is a question about
+     * values and not about the path. The divisor may be a clamp, a product or a remainder itself,
+     * and what it lies between is what a reading derives of it; a condition asked before that was
+     * derived would be asked of less than the reading knows. Read as the other recipes are, its
+     * operands are derived first and the guarantee is stated where they put the condition.
+     *
+     * <p>A condition this reading cannot decide states nothing, which is a recipe saying less and
+     * never a recipe saying something false.
+     *
+     * @param guarantees each condition with what it guarantees
+     */
+    record GuaranteedWhere(List<ConditionalConstraint> guarantees) implements Derivation {
+
+        public GuaranteedWhere {
+            guarantees = List.copyOf(guarantees);
+            if (guarantees.isEmpty()) {
+                throw new IllegalArgumentException("a value guaranteed something where a condition"
+                        + " holds was recorded with no guarantee");
+            }
+        }
+
+        /** The forms the conditions are asked of, and the ones the guarantees are written over. */
+        @Override
+        public List<LinearForm<FactSubject>> formsRead() {
+            List<LinearForm<FactSubject>> out = new ArrayList<>();
+            for (ConditionalConstraint one : guarantees) {
+                out.add(one.premise().form());
+                out.add(one.consequence().form());
+            }
+            return List.copyOf(out);
+        }
+
+        /** Guarantee by guarantee and in order. */
+        @Override
+        public boolean sameAs(Derivation other, Same same) {
+            if (!(other instanceof GuaranteedWhere it)
+                    || guarantees.size() != it.guarantees().size()) {
+                return false;
+            }
+            for (int i = 0; i < guarantees.size(); i++) {
+                ConditionalConstraint mine = guarantees.get(i);
+                ConditionalConstraint theirs = it.guarantees().get(i);
+                if (mine.premise().rel() != theirs.premise().rel()
+                        || !same.forms(mine.premise().form(), theirs.premise().form())
+                        || mine.consequence().rel() != theirs.consequence().rel()
+                        || !same.forms(mine.consequence().form(), theirs.consequence().form())) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        @Override
+        public DivisorExtent divisorExtent() {
+            return null;
+        }
+    }
+
+    /**
      * A value every one of {@code recipes} says something of, each on its own: it lies wherever all
      * of them put it.
      *
