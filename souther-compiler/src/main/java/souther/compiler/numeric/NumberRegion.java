@@ -74,6 +74,9 @@ public record NumberRegion(List<Run> runs) implements Comparable<NumberRegion> {
         }
     }
 
+    private static final Comparator<Run> BY_RUN =
+            Comparator.comparing((Run run) -> run, Run::byLowerEnd).thenComparing(Run::byUpperEnd);
+
     public NumberRegion {
         runs = normalized(runs);
         if (runs.isEmpty()) {
@@ -112,10 +115,8 @@ public record NumberRegion(List<Run> runs) implements Comparable<NumberRegion> {
      *  then the upper. */
     @Override
     public int compareTo(NumberRegion other) {
-        Comparator<Run> byRun = Run::byLowerEnd;
-        byRun = byRun.thenComparing(Run::byUpperEnd);
         for (int i = 0; i < Math.min(runs.size(), other.runs.size()); i++) {
-            int order = byRun.compare(runs.get(i), other.runs.get(i));
+            int order = BY_RUN.compare(runs.get(i), other.runs.get(i));
             if (order != 0) {
                 return order;
             }
