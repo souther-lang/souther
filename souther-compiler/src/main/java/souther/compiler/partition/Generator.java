@@ -7052,20 +7052,52 @@ public final class Generator {
      * looked into is composed for it ({@code ContainersAddingUp}). Not where a number stands
      * for it already, which is the row's own and is not written over.
      */
-    private static Map<RealizationTarget, Place> withTheMapLookedIntoWritten(
+    private static NumbersWrittenBeside withTheMapLookedIntoWritten(
             MeasuredInput subject, Map<RealizationTarget, Place> fixed) {
         Map<RealizationTarget, Place> out = new LinkedHashMap<>(fixed);
+        Map<NumericTerm, RealizationTarget> beside = new LinkedHashMap<>();
         for (Map.Entry<RealizationTarget, Place> each : fixed.entrySet()) {
+            // A product of two forms is held at a value by the number alone that carries it
+            // standing there and the number of the other form standing where that form is one:
+            // the product's target is replaced by the targets of the two numbers.
+            if (each.getKey() instanceof RealizationTarget.OfAProduct product
+                    && product.term().atAValue() instanceof NumericTerm.ProductOf.AtAValue way
+                    && Count.written(way.at()) instanceof ExactAnswer.Held<Optional<Count>>(
+                            Optional<Count> formsOne)
+                    && formsOne.isPresent()) {
+                RealizationTarget carrier = RealizationTarget.of(way.carrier());
+                RealizationTarget other = RealizationTarget.of(way.fixed());
+                Place had = out.get(carrier);
+                Place otherHad = out.get(other);
+                if ((had == null || had.equals(each.getValue()))
+                        && (otherHad == null || otherHad.equals(formsOne.get()))) {
+                    out.remove(each.getKey());
+                    out.put(carrier, each.getValue());
+                    out.put(other, formsOne.get());
+                    beside.put(way.carrier(), carrier);
+                    beside.put(way.fixed(), other);
+                }
+                continue;
+            }
             if (each.getKey() instanceof RealizationTarget.OverARun run) {
-                NumericTerm.TakenOver beside =
+                NumericTerm.TakenOver lookedInto =
                         InputNumber.totalOfTheMapLookedInto(run.term(), subject.rules());
-                if (beside != null) {
-                    out.putIfAbsent(RealizationTarget.of(beside), each.getValue());
+                if (lookedInto != null
+                        && out.putIfAbsent(RealizationTarget.of(lookedInto), each.getValue())
+                        == null) {
+                    beside.put(lookedInto, RealizationTarget.of(lookedInto));
                 }
             }
         }
-        return out;
+        return new NumbersWrittenBeside(out, beside);
     }
+
+    /**
+     * The numbers the row stands at once the numbers written beside a product are in it, and those
+     * numbers by the target each is realized by.
+     */
+    private record NumbersWrittenBeside(Map<RealizationTarget, Place> standing,
+                                        Map<NumericTerm, RealizationTarget> beside) {}
 
     /**
      * The item's positions, and a place inside the region for each position the way to it bounds.
@@ -7105,9 +7137,10 @@ public final class Generator {
                                          boolean everyQuantifierCounted,
                                          CompositionBudget alikeStoppedBy,
                                          WhatTheWayLeaves leaves) {
-        Map<RealizationTarget, Place> fixing = withTheMapLookedIntoWritten(subject, fixed);
+        NumbersWrittenBeside written = withTheMapLookedIntoWritten(subject, fixed);
+        Map<RealizationTarget, Place> fixing = written.standing();
         Map<RealizationTarget, Place> out = new LinkedHashMap<>(fixing);
-        Map<NumericTerm, RealizationTarget> routed = new LinkedHashMap<>();
+        Map<NumericTerm, RealizationTarget> routed = new LinkedHashMap<>(written.beside());
         Map<RealizationTarget, NumbersAskedFor> counted = new LinkedHashMap<>();
         // What composing each location a cut placed a number at came to, where the cut was placed:
         // the value the row is written with wherever nothing asked of the location since.
@@ -8502,6 +8535,7 @@ public final class Generator {
         return switch (target) {
             case RealizationTarget.AtOnePosition(NumericTerm.FromOnePosition term) -> term;
             case RealizationTarget.OverARun(NumericTerm.TakenOver term) -> term;
+            case RealizationTarget.OfAProduct(NumericTerm.ProductOf term) -> term;
             case RealizationTarget.AmongTheElements(NumericTerm.Multiplicity term) -> term;
             case RealizationTarget.AtItsKey(NumericTerm.ExtremeOfItsKey term) -> term;
             case RealizationTarget.UnderItsKey(NumericTerm.GatheredUnderItsKey term) -> term;
@@ -9035,6 +9069,7 @@ public final class Generator {
         // follows is what reads it.
         if (target.term() instanceof NumericTerm.OccurrencesOfAKey
                 || target.term() instanceof NumericTerm.GatheredUnderAKey
+                || target.term() instanceof NumericTerm.ProductOf
                 || (target.term() instanceof NumericTerm.TakenOver over
                         && over.source() instanceof RunSource.JoinedOccurrences)) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.TurnsOnAnotherParameter());
@@ -9057,6 +9092,7 @@ public final class Generator {
             // from.
             case NumericTerm.GatheredUnderItsKey gathered -> gathered.elements();
             case NumericTerm.GatheredUnderAKey asked -> asked.subjectPath();
+            case NumericTerm.ProductOf product -> product.subjectPath();
         };
         // Over the arms, so a walk that comes to answer a third way is one this is taught about
         // rather than one read as the walk and the type disagreeing.
@@ -9094,7 +9130,7 @@ public final class Generator {
             case NumericTerm.FromOnePosition _, NumericTerm.OccurrencesOfItsValue _,
                  NumericTerm.GatheredUnderItsKey _ -> values.isEmpty();
             case NumericTerm.TakenOver _, NumericTerm.OccurrencesOfAKey _,
-                 NumericTerm.GatheredUnderAKey _ -> false;
+                 NumericTerm.GatheredUnderAKey _, NumericTerm.ProductOf _ -> false;
         };
         if (nothingToRead) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.NoValueAtThePosition());
@@ -9245,6 +9281,8 @@ public final class Generator {
                     "how often a key occurs is read back from a whole row");
             case NumericTerm.GatheredUnderAKey _ -> throw new IllegalStateException(
                     "what a key's elements come to is read back from a whole row");
+            case NumericTerm.ProductOf _ -> throw new IllegalStateException(
+                    "what two forms come to multiplied is read back from a whole row");
             case NumericTerm.TakenOver _ -> switch (readRun(on, values)) {
                 case NumericTerm.Reading.Number number -> number.value().compareTo(at) == 0;
                 case NumericTerm.Reading.Missing missing -> {
@@ -14654,7 +14692,8 @@ public final class Generator {
                      NumericTerm.WholeUnitsOf _, NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                      NumericTerm.TakenOver _, NumericTerm.ExtremeOfItsKey _,
-                     NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> null;
+                     NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _,
+                     NumericTerm.ProductOf _ -> null;
             };
             // Nor is how many of its elements meet a statement, or that they meet one together.
             case RealizationTarget.ACount _, RealizationTarget.ElementsMeetingTogether _ -> null;

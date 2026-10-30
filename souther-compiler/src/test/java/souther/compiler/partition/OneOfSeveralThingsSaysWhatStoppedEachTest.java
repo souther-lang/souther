@@ -41,11 +41,11 @@ class OneOfSeveralThingsSaysWhatStoppedEachTest {
             data Order = { x: Int, y: Int, floor: Int, lines: List<Line> }
 
             behavior written : (o: Order) -> Bool
-            let written (o) = 2 * o.x * o.y > 8 || List.all(l -> l.price > o.floor, o.lines)
+            let written (o) = 2 * o.x * o.x > 8 || List.all(l -> l.price > o.floor, o.lines)
 
             behavior denied : (o: Order) -> Bool
             let denied (o) =
-                Bool.not(2 * o.x * o.y <= 8 && List.any(l -> l.price <= o.floor, o.lines))
+                Bool.not(2 * o.x * o.x <= 8 && List.any(l -> l.price <= o.floor, o.lines))
             """;
 
     /** What the walk declined, and why, in the order it met them. */

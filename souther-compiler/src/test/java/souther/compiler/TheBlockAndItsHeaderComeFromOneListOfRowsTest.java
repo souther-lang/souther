@@ -83,7 +83,7 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
 
             behavior fee""", """
                 }
-                invariant together = Int.floorMod(rate.value * cap.value, 7) == 2
+                invariant together = Int.floorMod(rate.value * cap.value, 7) == 2 && rate.value * cap.value > 4000
 
             behavior fee""");
 
@@ -129,9 +129,13 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
     void twoEdgesMeetingAtOneInputAreOneRow() {
         String block = block(POLICY, "example.policy");
 
+        // The comparison of the product with the cap draws its own points beside the minimum of
+        // each, and the minimum edges are the one row at the end: rate and cap at nought.
         assertEquals(List.of(
                         "example fee",
-                        "    | (0, Policy { rate = Rate(0), cap = Cap(0) }) -> <?>"),
+                        "    | (-1, Policy { rate = Rate(1), cap = Cap(0) }) -> <?>",
+                        "    | (1, Policy { rate = Rate(1), cap = Cap(0) })  -> <?>",
+                        "    | (0, Policy { rate = Rate(0), cap = Cap(0) })  -> <?>"),
                 written(block));
     }
 
@@ -146,8 +150,10 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
 
         assertEquals(List.of(
                         "example fee",
-                        "    | (0, Policy { rate = Rate(0), cap = Cap(1) }) -> <?>",
-                        "    | (1, Policy { rate = Rate(1), cap = Cap(0) }) -> <?>"),
+                        "    | (1, Policy { rate = Rate(1), cap = Cap(0) }) -> <?>",
+                        "    | (0, Policy { rate = Rate(1), cap = Cap(0) }) -> <?>",
+                        "    | (2, Policy { rate = Rate(1), cap = Cap(0) }) -> <?>",
+                        "    | (0, Policy { rate = Rate(0), cap = Cap(1) }) -> <?>"),
                 written(block));
     }
 

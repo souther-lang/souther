@@ -6920,6 +6920,9 @@ final class Pullback {
                                         Rel states,
                                         Map<Quantity, Derivation.AComparisonRead.Counted> read,
                                         Derivation.AComparisonRead.Facing written) {
+        // The relation between the numbers: a product beside a factor of its own is the one
+        // product, which numbers apart are the factors of.
+        form = FactoredProducts.of(form);
         Relation.OneWay<Quantity> one = Relation.OneWay.of(form, states);
         // Turning the form to face the one way turns it against the written sides as well.
         Derivation.AComparisonRead.Facing facing = switch (written) {
@@ -10860,7 +10863,6 @@ final class Pullback {
         if (inside == null
                 || !(Core.withoutStanding(node) instanceof Core.Binary written)
                 || written.op() != BinOp.MUL || inside.node() != written
-                || written != sideAsWritten
                 || !(inside.why() instanceof AffineForms.Halt.NotLinear<Quantity, InputReads>(
                         NonAffineOperation operation, var _))
                 || operation != NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES) {
@@ -10868,11 +10870,31 @@ final class Pullback {
         }
         NumericTerm.FromOnePosition left = aFactor(written.left(), at);
         NumericTerm.FromOnePosition right = aFactor(written.right(), at);
-        if (left == null || right == null || left.position().equals(right.position())
-                || !countsWhole(left) || !countsWhole(right)) {
+        if (written == sideAsWritten && left != null && right != null
+                && !left.position().equals(right.position()) && countsWhole(left)
+                && countsWhole(right)) {
+            return LinearForm.atom(new Quantity.ProductOfTwo(left, right));
+        }
+        // Otherwise one number of its own among the others of the comparison: the product of two
+        // forms of the input's numbers, read as the arithmetic of the comparison reads them.
+        return productOfTwoForms(written, at);
+    }
+
+    /**
+     * What two forms of the input's whole numbers come to multiplied, as a number of the input —
+     * or null where either form is none, or a number of one is read off a place a number of the
+     * other is. The comparison's arithmetic reads the same product ({@code AffineReading}), and
+     * the two are one term.
+     */
+    private LinearForm<Quantity> productOfTwoForms(Core.Binary written, InputReads at) {
+        if (written.type() != Type.INT) {
             return null;
         }
-        return LinearForm.atom(new Quantity.ProductOfTwo(left, right));
+        LinearForm<NumericTerm> left = AffineReading.formOf(written.left(), at, read);
+        LinearForm<NumericTerm> right = AffineReading.formOf(written.right(), at, read);
+        NumericTerm.ProductOf.Signed product = NumericTerm.ProductOf.signed(left, right);
+        return product == null ? null : new LinearForm<>(ExactRatio.ZERO,
+                Map.of(new DecisionAtom.OfTheInput(product.product()), product.sign()));
     }
 
     /**

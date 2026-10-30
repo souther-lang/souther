@@ -14,6 +14,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
@@ -35,8 +36,10 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -72,7 +75,7 @@ public sealed interface NumericTerm
         permits NumericTerm.FromOnePosition, NumericTerm.TakenOver,
                 NumericTerm.OfAnElementsNeighbours, NumericTerm.OccurrencesOfItsValue,
                 NumericTerm.OccurrencesOfAKey, NumericTerm.GatheredUnderItsKey,
-                NumericTerm.GatheredUnderAKey {
+                NumericTerm.GatheredUnderAKey, NumericTerm.ProductOf {
 
     /**
      * One order over these, for a walk that has to take them in one: by what each is written as,
@@ -1848,6 +1851,225 @@ public sealed interface NumericTerm
     }
 
     /**
+     * What two forms of the input's numbers come to multiplied: {@code a * b}, or
+     * {@code g * (1 - r)}, each factor a sum of numbers at their weights and a constant.
+     *
+     * <p>A number of its own and no form over its factors. Fixing every number of one factor
+     * leaves a form over the other, weighed by what the first comes to, so a rule about the
+     * product relates the numbers of the two factors and divides none of them by a line of its own.
+     * The numbers of the two factors are apart ({@link #sharesAPlaceWith}), which is what lets each
+     * factor be fixed while the other is chosen: a number read off a place both factors read is
+     * not one of these. {@code g - g * r} is {@code g * (1 - r)} here, and it is the reading that
+     * brings it to that form; what a run works out is worked out as it was written, and is told of
+     * by the operations of the comparison and not by this.
+     *
+     * <p>The factors in one order whichever was written first, so {@code r * g} is
+     * {@code g * r}.
+     */
+    final class ProductOf implements NumericTerm {
+
+        private final LinearForm<NumericTerm> one;
+        private final LinearForm<NumericTerm> other;
+
+        private ProductOf(LinearForm<NumericTerm> one, LinearForm<NumericTerm> other) {
+            this.one = one;
+            this.other = other;
+        }
+
+        /**
+         * The product of {@code left} and {@code right}, or null where either is a constant (that
+         * is a form, scaled), or where a number of one is read off a place a number of the other
+         * is read off, so that the two are not apart.
+         */
+        public static ProductOf of(LinearForm<NumericTerm> left, LinearForm<NumericTerm> right) {
+            Signed made = signed(left, right);
+            return made == null ? null : made.product();
+        }
+
+        /**
+         * A product and the sign the product of the two forms given is, as the product is
+         * written: {@code (1 - r) * g} and {@code (r - 1) * g} are one product, and one is the
+         * other negated.
+         *
+         * @param product the product, each factor turned until its first number is weighed above
+         *                nought
+         * @param sign    one, or minus one where the forms given were turned to bring it about —
+         *                what the product given comes to is {@code sign} times {@code product}
+         */
+        public record Signed(ProductOf product, ExactRatio sign) {
+
+            /** The product as a form, weighed by its sign. */
+            public LinearForm<NumericTerm> asAForm() {
+                return new LinearForm<>(ExactRatio.ZERO, Map.of(product, sign));
+            }
+        }
+
+        /**
+         * The product of {@code left} and {@code right} and its sign, or null where the product
+         * is none ({@link #of}).
+         */
+        public static Signed signed(LinearForm<NumericTerm> left, LinearForm<NumericTerm> right) {
+            if (left == null || right == null || left.coefs().isEmpty()
+                    || right.coefs().isEmpty()) {
+                return null;
+            }
+            for (NumericTerm in : left.coefs().keySet()) {
+                for (NumericTerm there : right.coefs().keySet()) {
+                    if (in.sharesAPlaceWith(there)) {
+                        return null;
+                    }
+                }
+            }
+            ExactRatio sign = ExactRatio.ONE;
+            LinearForm<NumericTerm> first = turnedUp(left);
+            LinearForm<NumericTerm> second = turnedUp(right);
+            if (first != left) {
+                sign = sign.negated();
+            }
+            if (second != right) {
+                sign = sign.negated();
+            }
+            boolean firstFirst = String.valueOf(first).compareTo(String.valueOf(second)) <= 0;
+            return new Signed(firstFirst ? new ProductOf(first, second)
+                    : new ProductOf(second, first), sign);
+        }
+
+        /**
+         * {@code form}, or its negation where its constant is below nought — or, where it has
+         * none, where its first number, in the order numbers are kept in, is weighed below
+         * nought.
+         *
+         * <p>The constant first, so that {@code 1 - r} stays as it is written and {@code r - 1}
+         * is turned to it: the number that makes the form one is nought for the first and two for
+         * the second, and a row held at the value of a product by the first multiplies by nought
+         * where the second multiplies by two.
+         */
+        private static LinearForm<NumericTerm> turnedUp(LinearForm<NumericTerm> form) {
+            NumericTerm first = NumericTerms.inOrder(form.coefs().keySet()).getFirst();
+            if (form.constant().signum() > 0
+                    || (form.constant().signum() == 0 && form.coefs().get(first).signum() >= 0)) {
+                return form;
+            }
+            Map<NumericTerm, ExactRatio> negated = new LinkedHashMap<>();
+            form.coefs().forEach((term, weight) -> negated.put(term, weight.negated()));
+            return new LinearForm<>(form.constant().negated(), negated);
+        }
+
+        /** The factor first in the order of factors. */
+        public LinearForm<NumericTerm> one() {
+            return one;
+        }
+
+        /** The other factor. */
+        public LinearForm<NumericTerm> other() {
+            return other;
+        }
+
+        /** Both factors, in their order. */
+        public List<LinearForm<NumericTerm>> factors() {
+            return List.of(one, other);
+        }
+
+        /**
+         * How a row comes to hold a given value of the product: one factor is a number alone, and
+         * stands at the value; the other is a form of one number, which stands at the number that
+         * makes the form one. The product is then the value, and the two numbers are apart.
+         *
+         * @param carrier the number alone that stands at the value
+         * @param fixed   the number of the other factor
+         * @param at      where {@code fixed} stands, so that the other factor comes to one
+         */
+        public record AtAValue(NumericTerm carrier, NumericTerm fixed, ExactRatio at) {}
+
+        /**
+         * The way a given value of this product is held, or null where neither factor is a number
+         * alone beside a form of one number that can be made one. The first factor that is a number
+         * alone is the one that carries the value.
+         */
+        public AtAValue atAValue() {
+            for (int at = 0; at < 2; at++) {
+                LinearForm<NumericTerm> alone = factors().get(at);
+                LinearForm<NumericTerm> beside = factors().get(1 - at);
+                if (alone.coefs().size() != 1 || !alone.constant().isZero()
+                        || !ExactRatio.ONE.equals(alone.coefs().values().iterator().next())
+                        || beside.coefs().size() != 1) {
+                    continue;
+                }
+                Map.Entry<NumericTerm, ExactRatio> number =
+                        beside.coefs().entrySet().iterator().next();
+                ExactRatio makingOne = number.getValue().isZero() ? null
+                        : ExactRatio.ONE.minus(beside.constant())
+                                .flatMap(left -> left.dividedBy(number.getValue())).orNull();
+                if (makingOne != null) {
+                    return new AtAValue(alone.coefs().keySet().iterator().next(), number.getKey(),
+                            makingOne);
+                }
+            }
+            return null;
+        }
+
+        /** Where the first number of the first factor is read from, which is where a reader is
+         *  sent and no place the product stands at. */
+        @Override
+        public TermPath subjectPath() {
+            return one.coefs().keySet().iterator().next().subjectPath();
+        }
+
+        /** The same product of the numbers read from where {@code moved} puts each — or null
+         *  where one of them is no number there, or the two are no longer apart. */
+        @Override
+        public ProductOf movedTo(PlacesMoved moved) {
+            LinearForm<NumericTerm> first = movedForm(one, moved);
+            LinearForm<NumericTerm> second = movedForm(other, moved);
+            return first == null || second == null ? null : of(first, second);
+        }
+
+        private static LinearForm<NumericTerm> movedForm(LinearForm<NumericTerm> form,
+                                                         PlacesMoved moved) {
+            Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>();
+            for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+                NumericTerm there = each.getKey().movedTo(moved);
+                if (there == null || out.put(there, each.getValue()) != null) {
+                    return null;
+                }
+            }
+            return new LinearForm<>(form.constant(), out);
+        }
+
+        @Override
+        public boolean equals(Object that) {
+            return that instanceof ProductOf product && one.equals(product.one)
+                    && other.equals(product.other);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(ProductOf.class, one, other);
+        }
+
+        @Override
+        public String toString() {
+            return written(one) + " * " + written(other);
+        }
+
+        /** A factor as an author writes it: a number alone as it is, a sum of them in brackets. */
+        private static String written(LinearForm<NumericTerm> factor) {
+            if (factor.constant().isZero() && factor.coefs().size() == 1
+                    && ExactRatio.ONE.equals(factor.coefs().values().iterator().next())) {
+                return factor.coefs().keySet().iterator().next().toString();
+            }
+            List<String> parts = new ArrayList<>();
+            if (!factor.constant().isZero()) {
+                parts.add(factor.constant().toString());
+            }
+            factor.coefs().forEach((number, weight) ->
+                    parts.add(ExactRatio.ONE.equals(weight) ? number.toString()
+                            : weight + " * " + number));
+            return "(" + String.join(" + ", parts) + ")";
+        }
+    }
+
+    /**
      * Where the subject of this number is read or reported from.
      *
      * <p>Not a position at which this term may be divided. What a reader may do with this is go and
@@ -1946,6 +2168,8 @@ public sealed interface NumericTerm
             // A run of values is answered by no single place, which is the whole of what this term
             // is. Every reader that goes on to draw a line or ask for a value gets the answer here.
             case TakenOver _ -> null;
+            // And a product is made of the numbers of two forms, so no one place answers it.
+            case ProductOf _ -> null;
             // And a number of an element read off its neighbours is read off all of them, so no
             // value standing at one place is it.
             case OfAnElementsNeighbours _ -> null;
@@ -1971,7 +2195,7 @@ public sealed interface NumericTerm
      */
     default boolean partsNoPlaceByALine() {
         return switch (this) {
-            case TakenOver _ -> true;
+            case TakenOver _, ProductOf _ -> true;
             case FromOnePosition _, OfAnElementsNeighbours _, OccurrencesOfItsValue _,
                  OccurrencesOfAKey _, GatheredUnderItsKey _, GatheredUnderAKey _ -> false;
         };
@@ -2033,6 +2257,9 @@ public sealed interface NumericTerm
             // even where it reads one field: the field read as another kind of number is another
             // number at the same place.
             case GatheredUnderItsKey _, GatheredUnderAKey _ -> null;
+            // Made of the numbers of two forms, which no place and kind of number say apart from
+            // another product: it is named by the term itself.
+            case ProductOf _ -> null;
         };
     }
 
@@ -2083,6 +2310,8 @@ public sealed interface NumericTerm
             case OccurrencesOfAKey _ -> null;
             // Gathered over a run, which a place moved alone is another one of.
             case GatheredUnderItsKey _, GatheredUnderAKey _ -> null;
+            // Made of places, and a place moved alone is one factor's of the two.
+            case ProductOf _ -> null;
         };
     }
 
@@ -2145,6 +2374,8 @@ public sealed interface NumericTerm
             // they are bounded by is what the elements' rules guarantee, which is a reading of
             // the run and not of the term.
             case GatheredUnderItsKey _, GatheredUnderAKey _ -> NumericDomain.Bounds.OPEN;
+            // What two forms come to multiplied is not bounded by the form of either alone.
+            case ProductOf _ -> NumericDomain.Bounds.OPEN;
             // Asked of the operation, as a taking is. That a total of non-negative amounts is
             // itself non-negative is not among the answers: it follows from what the values the run
             // walks guarantee, together with the value the operation starts from and the step it

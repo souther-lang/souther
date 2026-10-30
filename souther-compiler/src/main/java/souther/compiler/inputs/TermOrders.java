@@ -42,6 +42,7 @@ public final class TermOrders {
     private final Carrier answered;
     private final Map<ElementProjection, Carrier> fields;
     private final Map<ElementProjection, List<TypeSymbol>> worn;
+    private final List<TermOrders> factors;
     private int hash;
 
     /**
@@ -70,6 +71,17 @@ public final class TermOrders {
     TermOrders(NumericTerm term, Carrier observed, Carrier answered,
                Map<ElementProjection, Carrier> fields,
                Map<ElementProjection, List<TypeSymbol>> worn) {
+        this(term, observed, answered, fields, worn, List.of());
+    }
+
+    /**
+     * @param factors for a product of two forms: the orders of every number either form is of,
+     *                the numbers a row is read for before they are multiplied. Nothing for any
+     *                other term
+     */
+    TermOrders(NumericTerm term, Carrier observed, Carrier answered,
+               Map<ElementProjection, Carrier> fields,
+               Map<ElementProjection, List<TypeSymbol>> worn, List<TermOrders> factors) {
         if (term == null) {
             throw new IllegalArgumentException("orders of no term, which is an answer to nothing");
         }
@@ -78,6 +90,12 @@ public final class TermOrders {
         this.answered = answered;
         this.fields = Map.copyOf(fields);
         this.worn = Map.copyOf(worn);
+        this.factors = List.copyOf(factors);
+    }
+
+    /** The orders of every number either form of a product is of, or none for any other term. */
+    public List<TermOrders> factors() {
+        return factors;
     }
 
     /** The number these are the orders of. */

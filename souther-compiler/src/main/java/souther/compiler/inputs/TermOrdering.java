@@ -7,9 +7,11 @@ import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,6 +74,8 @@ final class TermOrdering {
                  NumericTerm.WholeUnitsOf _, NumericTerm.Multiplicity _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                  NumericTerm.TakenOver _ -> answeredOn(term, positionType, symbols, declarations);
+            case NumericTerm.ProductOf _ -> throw new IllegalArgumentException(
+                    term + " is made of the orders of its factors (ofAProduct)");
         };
         Map<ElementProjection, Carrier> fields = new LinkedHashMap<>();
         fieldTypes.forEach((field, type) -> {
@@ -88,6 +92,35 @@ final class TermOrdering {
             }
         }
         return new TermOrders(term, observed, answered, fields, worn);
+    }
+
+    /** What a reading answers of one number: the orders it stands on, or null. */
+    interface OfTheNumbers {
+        TermOrders of(NumericTerm number);
+    }
+
+    /**
+     * The orders of a product of two forms, which is counted on the order its factors' numbers
+     * are, or null where they are not all counted on one: a product of a date and a count is the
+     * product of nothing.
+     *
+     * @param reading the orders of a number either form is of
+     */
+    static TermOrders ofAProduct(NumericTerm.ProductOf term, OfTheNumbers reading) {
+        Carrier on = null;
+        List<TermOrders> factors = new ArrayList<>();
+        for (LinearForm<NumericTerm> form : term.factors()) {
+            for (NumericTerm number : form.coefs().keySet()) {
+                TermOrders each = reading.of(number);
+                if (each == null || each.answered() == null
+                        || (on != null && !on.equals(each.answered()))) {
+                    return null;
+                }
+                on = each.answered();
+                factors.add(each);
+            }
+        }
+        return on == null ? null : new TermOrders(term, on, on, Map.of(), Map.of(), factors);
     }
 
     /**
@@ -156,6 +189,8 @@ final class TermOrdering {
                         over.operation(), new Type.ListOf(positionType), inners, symbols);
                 yield answers == null ? null : Carrier.ofValue(answers, declarations);
             }
+            // Counted on the order its factors are ({@link #ofAProduct}), not on a type.
+            case NumericTerm.ProductOf _ -> null;
         };
     }
 

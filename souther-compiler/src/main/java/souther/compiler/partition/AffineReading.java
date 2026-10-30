@@ -64,6 +64,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Stream;
 import java.util.function.Predicate;
 import java.util.stream.IntStream;
 
@@ -272,6 +273,20 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      */
     static OfAComparison read(StatedComparison comparison, InputReads reads,
                               InputReading ofTheInput) {
+        OfAComparison with = read(comparison, reads, ofTheInput, true);
+        // A product held against a written number is a line on the product, drawn through the
+        // two factors, which is not a line on a number of one place: it stays a stop here, where
+        // the rule for a product reads it.
+        return with == null ? read(comparison, reads, ofTheInput, false) : with;
+    }
+
+    /**
+     * The same, with a product of two non-constant numbers a number of its own, or a stop;
+     * null where it is a number of its own and the comparison is nothing but that product held
+     * against a written number.
+     */
+    private static OfAComparison read(StatedComparison comparison, InputReads reads,
+                                      InputReading ofTheInput, boolean productsAreNumbers) {
         InputDomain inputs = ofTheInput.domain();
         RuleReadingSource ruleSource = ofTheInput.rules();
         // What this reading names as it goes, kept so that a reading which ran to the end can say
@@ -281,6 +296,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         ElementsMet met = new ElementsMet();
         // What the two sides work out, as they are written.
         WhatWasTold told = new WhatWasTold();
+        told.productsStop = !productsAreNumbers;
         // The left first where both stop, which is the side a threshold would be read off.
         LinearForm<NumericTerm> left = null;
         for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
@@ -308,6 +324,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         TotalsOfOneRun.addedUp(difference.value(), inputs, ruleSource);
                 if (whole.coefs().isEmpty()) {
                     return new OfAComparison.CutsNothing(named, whole.constant());
+                }
+                if (productsAreNumbers && whole.coefs().size() == 1
+                        && whole.coefs().keySet().iterator().next()
+                        instanceof NumericTerm.ProductOf) {
+                    return null;
                 }
                 AffineReading here = new AffineReading(
                         new LinearForm<>(ExactRatio.ZERO, whole.coefs()),
@@ -377,9 +398,19 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     static java.util.List<souther.compiler.inputs.FilingCoordinate> filedAt(
             java.util.Collection<NumericTerm> terms) {
         return souther.compiler.inputs.NumericTerms.inOrder(terms).stream()
+                .flatMap(AffineReading::thoseItIsMadeOf)
                 .<souther.compiler.inputs.FilingCoordinate>map(
                         souther.compiler.inputs.FilingCoordinate::of)
                 .distinct().toList();
+    }
+
+    /** The numbers {@code term} is read of: itself, and for a product of two forms the numbers of
+     *  both, each of which a rule about the product is about. */
+    private static Stream<NumericTerm> thoseItIsMadeOf(NumericTerm term) {
+        return term instanceof NumericTerm.ProductOf product
+                ? product.factors().stream().flatMap(form -> form.coefs().keySet().stream())
+                        .flatMap(AffineReading::thoseItIsMadeOf)
+                : Stream.of(term);
     }
 
     /**
@@ -414,6 +445,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          *  application by application; null where it is no such total or a part does not
          *  compose. */
         LinearForm<NumericTerm> totalOfWhatIsMadeOfAListWrittenOut(Core node, InputReads at);
+
+        /** What a product of two forms of whole numbers comes to as a number of its own; null
+         *  where it is no such product or a part does not compose. */
+        LinearForm<NumericTerm> productOfTwoForms(Core node, InputReads at);
     }
 
     /**
@@ -880,6 +915,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         && carried.get(name.binding()) instanceof LinearForm<NumericTerm> so) {
                     return so;
                 }
+                // What two numbers of the input come to multiplied, where the arithmetic stopped at
+                // the product itself: one number, whichever factor was written first.
+                if (Core.withoutStanding(node) instanceof Core.Binary) {
+                    LinearForm<NumericTerm> product =
+                            tried(apart -> apart.productOfTwoForms(node, at));
+                    if (product != null) {
+                        return product;
+                    }
+                }
                 // Each reading below is of a call the library's operations keep, and asked of
                 // nothing else, since what it puts back where it reads nothing is copied first.
                 if (Core.withoutStanding(node) instanceof Core.PreservedCall) {
@@ -946,6 +990,44 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     }
                 }
                 return LinearForm.atom(aside.atom);
+            }
+
+            /**
+             * The product of two forms of whole numbers {@code node} is, as a number of its own, or
+             * null where it is no such product: a form of the first and a form of the second, each
+             * read as any is, the numbers of the two apart.
+             *
+             * <p>The multiplication is told as the operation it is: the product is a number of its
+             * own, so a run stops at it where that number passes the ends of an {@code Int}.
+             */
+            @Override
+            public LinearForm<NumericTerm> productOfTwoForms(Core node, InputReads at) {
+                if (told.productsStop || !(Core.withoutStanding(node) instanceof Core.Binary mul)
+                        || mul.op() != BinOp.MUL || mul.type() != Type.INT) {
+                    return null;
+                }
+                LinearForm<NumericTerm> left = composedBy(mul.left(), at, this);
+                LinearForm<NumericTerm> right =
+                        left == null ? null : composedBy(mul.right(), at, this);
+                NumericTerm.ProductOf.Signed product =
+                        right == null ? null : NumericTerm.ProductOf.signed(left, right);
+                if (product == null) {
+                    return null;
+                }
+                named.add(product.product());
+                LinearForm<NumericTerm> atom = product.asAForm();
+                // Told whatever the type of the number says of it: the product is the number the
+                // factors come to, which is not held to an Int by being typed as one, and a run
+                // stops where it passes the ends.
+                if (WhereAnOperatorAnswers.ofAnOperator(BinOp.MUL, Type.INT,
+                        List.of(Type.INT, Type.INT))
+                        instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
+                    told.add(mul, new UndividedByARelation.IntOperation(atom, held.least(),
+                            held.greatest(), told.workedOutOf(mul)));
+                } else {
+                    told.exact = false;
+                }
+                return atom;
             }
 
             /**
@@ -1444,6 +1526,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          *  one, shared with every reading tried apart from it ({@link #apart}). */
         private final int[] elementsRead;
         private boolean exact = true;
+        /** Whether a product of two non-constant numbers is a stop and not a number of its own. */
+        private boolean productsStop;
         /** The totals of a container whose walk's running totals are the only thing left untold
          *  ({@link UndividedByARelation.Working#partials}). */
         private final List<NumericTerm> partials = new ArrayList<>();
@@ -1459,7 +1543,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** Nothing told yet, for a part of the comparison read apart: what it reads element by
          *  element is counted with what this reading has. */
         WhatWasTold apart() {
-            return new WhatWasTold(elementsRead);
+            WhatWasTold apart = new WhatWasTold(elementsRead);
+            apart.productsStop = productsStop;
+            return apart;
         }
 
         /**

@@ -738,6 +738,16 @@ final class AStatementAtARow {
             case NumericTerm.GatheredUnderAKey gathered -> new WhatItReads(among(
                     gathered.gathered().elements().containersHoldingIt(), container)
                     ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT, false);
+            // Made of the numbers of its two forms, and reads what all of them read.
+            case NumericTerm.ProductOf product -> {
+                WhatItReads read = new WhatItReads(TurnsOn.THE_ELEMENT, false);
+                for (LinearForm<NumericTerm> form : product.factors()) {
+                    for (NumericTerm each : form.coefs().keySet()) {
+                        read = read.and(readOf(each, container, under, across));
+                    }
+                }
+                yield read;
+            }
         };
     }
 

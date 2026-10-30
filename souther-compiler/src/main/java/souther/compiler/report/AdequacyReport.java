@@ -103,6 +103,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Figure;
@@ -6991,6 +6992,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case NumericTerm.ValueOf it -> {
                 into.put("kind", "value");
                 into.put("position", it.position().discriminated());
+            }
+            // Two forms multiplied: each as the numbers it is of at their weights, and its
+            // constant.
+            case NumericTerm.ProductOf it -> {
+                into.put("kind", "product");
+                ArrayNode factors = into.putArray("factors");
+                for (LinearForm<NumericTerm> form : it.factors()) {
+                    ObjectNode factor = factors.addObject();
+                    factor.put("constant", form.constant().spelled());
+                    ArrayNode weighed = factor.putArray("terms");
+                    for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+                        ObjectNode one = weighed.addObject();
+                        termId(one.putObject("term"), each.getKey());
+                        one.put("coefficient", each.getValue().spelled());
+                    }
+                }
             }
             // And what the operation was given beside the value, by where each argument stands in
             // the call: a quotient by two and a quotient by three are two numbers of one place.

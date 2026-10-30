@@ -145,23 +145,58 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
 
     /**
      * A product of one number with itself or of three numbers is not read as one, and neither is
-     * a product with arithmetic before or after it, which the run does in the type: at
-     * {@code price} of two to the sixty-second, {@code price * quantity * 2} stops the run for
-     * every {@code quantity} above nought, where a product held against five hundred would come
-     * out true. A factor weighed, negated or moved, and a product weighed, moved or negated, are
-     * each named as the arithmetic was before.
+     * a product of three with arithmetic before or after it, which the run does in the type: at
+     * {@code price} of two to the sixty-second, {@code price * quantity * price * 2} stops the run
+     * for every {@code quantity} above nought, where a product held against five hundred would
+     * come out true. Each is named as a product.
      */
     @Test
     void aProductThisDoesNotReadIsNamedAsAProduct() {
         for (String condition : List.of("price * price >= 1000",
-                "price * quantity * price >= 1000", "2 * price * quantity >= 1000",
-                "(0 - price) * quantity >= 1000", "(price + 1) * quantity >= 1000",
-                "price * quantity * 2 >= 1000", "price * quantity - 5 >= 995",
-                "0 - price * quantity <= 0 - 1000")) {
+                "price * quantity * price >= 1000", "price * quantity * price * 2 >= 1000",
+                "price * quantity * price - 5 >= 995",
+                "0 - price * quantity * price <= 0 - 1000")) {
             Compilation compilation = compiled("", PRICE_AND_QUANTITY, condition);
             assertEquals(List.of(), bordersOf(linesOf(compilation)), condition);
             assertEquals(List.of(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
                     reasonsOf(measured(compilation)), condition);
+        }
+    }
+
+    /**
+     * A product beside other numbers relates the numbers of both, and is read where a number
+     * stands in the product and beside it: {@code a - a * b} is {@code a} at one value and
+     * {@code 1 - b} at another, and a row for each side of the line is the pair of inputs that
+     * makes it.
+     */
+    @Test
+    void aProductBesideOtherNumbersIsReadAndLeavesNoPlaceUnread() {
+        for (String condition : List.of("a * b + c >= 1000", "a * b <= c", "a - a * b <= c",
+                "a * b + a <= c", "Int.max(0, a - a * b) <= c", "c - b * a >= 5")) {
+            Compilation compilation = compiled("", "a: Int, b: Int, c: Int", condition);
+            PartitionEvidence measured = measured(compilation);
+            List<BorderAssessment> lines = linesOf(compilation);
+            assertTrue(!lines.isEmpty(), condition);
+            for (BorderAssessment line : lines) {
+                if (!line.axis().contains("*")) {
+                    continue;
+                }
+                assertTrue(!certifiedRows(List.of(line)).isEmpty(),
+                        condition + " has no row for " + line.axis() + " @ " + line.value());
+            }
+            assertTrue(!reasonsOf(measured).contains(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
+                    condition + ": " + reasonsOf(measured));
+        }
+    }
+
+    /** A number times itself is no product of two numbers apart, and is named as a product. */
+    @Test
+    void aNumberTimesItselfBesideOtherNumbersIsStillNamedAsAProduct() {
+        for (String condition : List.of("a * a + c >= 1000", "a - a * a <= c")) {
+            PartitionEvidence measured = measured(
+                    compiled("", "a: Int, c: Int", condition));
+            assertTrue(reasonsOf(measured).contains(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
+                    condition + ": " + reasonsOf(measured));
         }
     }
 

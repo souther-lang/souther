@@ -192,7 +192,7 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
 
     @Test
     void anElementThatIsNoFormStopsOnlyTheWaysThatKeepIt() {
-        String report = measured("List.sum(List.map(m -> m.pay * m.days,"
+        String report = measured("List.sum(List.map(m -> m.pay * m.days * m.pay,"
                 + " List.filter(m -> m.days >= 17, [a, b])))");
         assertTrue(report.contains("not read"), report);
         assertFalse(report.contains("states no law"), report);

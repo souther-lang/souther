@@ -114,6 +114,8 @@ class ANumberMovedWhereItStandsIsTheNumberItIsTest {
         ElementValue n = new ElementValue.Affine(LinearForm.atom(N));
         List<NumericTerm> out = new ArrayList<>(Arrays.asList(
                 new NumericTerm.ValueOf(TermPath.of("x")),
+                NumericTerm.ProductOf.of(LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("x"))),
+                        LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("y")))),
                 NumericTerm.TakenOf.of(ValueName.Stdlib.operation("String", "length"),
                         ObservationSource.asItStands(TermPath.of("s")), TakenArguments.NONE,
                         Type.STRING, NewtypeInners.NONE, SYMBOLS),

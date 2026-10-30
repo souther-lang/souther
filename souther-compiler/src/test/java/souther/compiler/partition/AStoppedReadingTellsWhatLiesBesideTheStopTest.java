@@ -97,7 +97,7 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
 
     @Test
     void nothingBesideTheProductLeavesTheSizesOfTheFormToAnswer() {
-        assertEquals(UndividedByARelation.Working.NOTHING, workingOfTheStop("m * k >= 100"));
+        assertEquals(UndividedByARelation.Working.NOTHING, workingOfTheStop("m * m >= 100"));
     }
 
     /**
@@ -106,7 +106,7 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
      */
     @Test
     void anOperationBesideTheProductIsTold() {
-        UndividedByARelation.Working working = workingOfTheStop("(n + 1) - 1 + m * k >= 100");
+        UndividedByARelation.Working working = workingOfTheStop("(n + 1) - 1 + m * m >= 100");
         assertEquals(WhatARelationLeavesUndivided.Told.EVERY, working.told());
         assertTrue(working.operations().stream().anyMatch(each ->
                         each.form().coefs().size() == 1 && each.form().constant().signum() > 0),
@@ -151,7 +151,7 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
      */
     @Test
     void aSecondStopIsNotTheFirstOnesToAnswerFor() {
-        UndividedByARelation.Working working = workingOfTheStop("m * k + n / m >= 100");
+        UndividedByARelation.Working working = workingOfTheStop("m * m + n / m >= 100");
         assertNotEquals(WhatARelationLeavesUndivided.Told.EVERY, working.told());
         assertNotEquals(UndividedByARelation.Working.NOTHING, working);
     }
@@ -164,8 +164,8 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
      */
     @Test
     void aQuotientBesideTheStopIsNotTheStopsToAnswerFor() {
-        assertUnread(workingOfTheStop("(m * k) / n >= 100"));
-        assertUnread(workingOfTheStop("m * k >= n / m"));
+        assertUnread(workingOfTheStop("(m * m) / n >= 100"));
+        assertUnread(workingOfTheStop("m * m >= n / m"));
     }
 
     /**
@@ -175,10 +175,10 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
      */
     @Test
     void anOperationThatIsNoSumOfTheAddendsIsNotTheOwnersToAnswerFor() {
-        assertUnread(workingOfTheStop("((m * k) + 1) - 1 >= 100"));
-        assertUnread(workingOfTheStop("m * k + 5 >= 100"));
-        assertEquals(UndividedByARelation.Working.NOTHING, workingOfTheStop("m * k + n >= 100"));
-        assertEquals(UndividedByARelation.Working.NOTHING, workingOfTheStop("m * k * 2 >= 100"));
+        assertUnread(workingOfTheStop("((m * m) + 1) - 1 >= 100"));
+        assertUnread(workingOfTheStop("m * m + 5 >= 100"));
+        assertEquals(UndividedByARelation.Working.NOTHING, workingOfTheStop("m * m + n >= 100"));
+        assertEquals(UndividedByARelation.Working.NOTHING, workingOfTheStop("m * m * 2 >= 100"));
     }
 
     /**
@@ -206,7 +206,7 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
      */
     @Test
     void aConstructionAroundTheStopStillChecksItsInvariant() {
-        assertUnread(workingOfTheStop(CHECKED, "Pos(m * k).value + n >= 100"));
+        assertUnread(workingOfTheStop(CHECKED, "Pos(m * m).value + n >= 100"));
     }
 
     /**

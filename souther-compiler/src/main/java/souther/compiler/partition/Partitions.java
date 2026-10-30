@@ -374,6 +374,9 @@ public final class Partitions {
                 // here has walked that, so no edge on such a number is known writable, and the
                 // point says as much rather than promising a row.
                 case NumericTerm.TakenOver _ -> false;
+                // And what two forms come to multiplied is written by choosing the numbers of
+                // both, which nothing here has shown the rules leave.
+                case NumericTerm.ProductOf _ -> false;
             };
         }
 

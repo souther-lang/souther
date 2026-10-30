@@ -1018,7 +1018,8 @@ final class ContainersAddingUp {
                 case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _,
                      NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _,
                      NumericTerm.OfAnElementsNeighbours _,
-                     NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ -> null;
+                     NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                     NumericTerm.ProductOf _ -> null;
             };
         }
 
@@ -1556,6 +1557,9 @@ final class ContainersAddingUp {
                             + " here adds it up");
             case NumericTerm.ExtremeOfItsKey extreme -> throw new IllegalStateException(
                     extreme + " is written as one value, and nothing here adds it up");
+            case NumericTerm.ProductOf product -> throw new IllegalStateException(
+                    product + " is written by the numbers of its forms, and nothing here adds it"
+                            + " up");
             // The place of each element the number is, where it is one; a number made of the
             // element is solved for through a field of it ({@link FieldSolved}).
             case NumericTerm.GatheredUnderItsKey gathered -> placeOfEach(gathered);
