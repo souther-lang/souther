@@ -5,6 +5,7 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * What one way through a coverage construct means, said in the source's own terms.
@@ -91,6 +92,17 @@ public sealed interface SourceOutcome {
 
         public Matched {
             cases = List.copyOf(cases);
+        }
+
+        /**
+         * The cases as the source names them, which is all a reader is shown of them.
+         *
+         * <p>Names and not the types: two types of two modules may be named alike, and a sentence
+         * saying either says the one word. Every word for this arm is made from this, so what two
+         * arms are told apart by in a sentence is asked here and nowhere else.
+         */
+        public String named() {
+            return cases.stream().map(TypeSymbol::name).collect(Collectors.joining(" | "));
         }
     }
 

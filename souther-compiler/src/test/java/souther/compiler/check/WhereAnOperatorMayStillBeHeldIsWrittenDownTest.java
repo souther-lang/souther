@@ -332,7 +332,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "what a comparison or an arithmetic does, written into what a reader copied of"
                             + " another module's definition: a copy that computes another way is"
                             + " another copy, and a reader built from the first answers otherwise"),
-            new Held("souther.compiler.report.ArmVocabulary.label",
+            new Held("souther.compiler.coverage.ArmWord.of",
                     "writes the operator into the words a report shows for an arm"),
             new Held("souther.compiler.reading.Meetings.run",
                     "gathers the operands one operator reaches, which is what it is asked about"),
@@ -382,6 +382,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.Pullback.productAt",
                     "asks whether the expression the arithmetic stopped at is the product it"
                             + " stopped for, so the two numbers multiplied are read as one"),
+            new Held("souther.compiler.partition.AffineReading.1.productFormOf",
+                    "asks whether the expression is the product of two whole numbers, and tells"
+                            + " the multiplication the run works out as it was written, so that a"
+                            + " row where it stops is not taken as computed"),
             new Held("souther.compiler.check.QuotientByAValue.operated",
                     "writes the number times the divisor as the source would, through the rule"
                             + " for the operator, so that the comparison is read where any"
@@ -490,6 +494,16 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks whether the stopped expression is a quotient and where the operator's"
                             + " own account says it answers, so that its operands are told with"
                             + " the rest"),
+            new Held("souther.compiler.partition.AffineReading.1.onlyAddsTheElement",
+                    "asks whether a walk's step is the answer so far and the element added, as"
+                            + " it is written: an operation not written is one no run can stop at"),
+            new Held("souther.compiler.partition.AffineReading.1.multipliesFieldsOf",
+                    "asks whether an expression is fields of the one element multiplied and"
+                            + " nothing else, so that the product is worked out as it is written"),
+            new Held("souther.compiler.inputs.InputNumber.lookedUpBy",
+                    "asks whether a walk's step adds the entry's value times the lookup of the"
+                            + " entry's key in another map, with a written nought where it holds"
+                            + " none, as it is written"),
             new Held("souther.compiler.partition.AffineReading.workingOfEvaluating",
                     "asks whether what a run evaluates is a comparison, whose two sides are"
                             + " worked out whichever way it comes out"),

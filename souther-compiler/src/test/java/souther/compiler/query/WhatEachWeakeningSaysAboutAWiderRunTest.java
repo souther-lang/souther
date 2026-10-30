@@ -303,7 +303,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         out.add(new Weakening.DecisionRuleReadShort("b"));
         out.add(new Weakening.KeyedOverwriteCasesUnmeasured("b"));
         out.add(new Weakening.ReachableNodeCasesUnmeasured("b"));
-        out.add(new Weakening.RewriteUndecided("b",
+        out.add(new Weakening.RewriteUndecided("m", "b",
                 new Replacement.ByOneAnswer(new ObservedValue.Integer(0),
                         new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1))),
                 new ReplacementEvidence.Undecided(ReplacementEvidence.Undecided.Way.atFigures(

@@ -1843,6 +1843,33 @@ public final class NumericDomain<A> {
             return endAdmits(min, at, true) && endAdmits(max, at, false);
         }
 
+        /**
+         * What each value of this run comes to times {@code by}, between the ends it puts the
+         * ends of this at — or null where {@code by} is nought or an end cannot be written.
+         */
+        public Bounds timesEach(ExactRatio by) {
+            if (by.signum() == 0) {
+                return null;
+            }
+            Endpoint low = timesEnd(min, by);
+            Endpoint high = timesEnd(max, by);
+            if ((min != null && low == null) || (max != null && high == null)) {
+                return null;
+            }
+            return by.signum() > 0 ? new Bounds(low, high) : new Bounds(high, low);
+        }
+
+        private static Endpoint timesEnd(Endpoint end, ExactRatio by) {
+            if (end == null) {
+                return null;
+            }
+            ExactRatio at = Count.number(end.at()).exactly().times(by).orNull();
+            return at != null && Count.written(at)
+                    instanceof ExactAnswer.Held<Optional<Count>>(
+                            Optional<Count> written) && written.isPresent()
+                    ? new Endpoint(written.get(), end.inclusive()) : null;
+        }
+
         /** Whether one end lets {@code at} past it, which is the end's own strictness read against
          *  the lifted number. */
         private static boolean endAdmits(Endpoint end, ExactRatio at, boolean lower) {

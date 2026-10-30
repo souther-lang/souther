@@ -7796,13 +7796,8 @@ public final class Adequacy {
             // A rewrite is shown where the reading that made it said, which is the fork for an arm
             // and the fold for a walk written in a source this compilation holds, and the behavior
             // otherwise.
-            case About.ARewriteNoRowTellsApart(var _, var _, var reportAt, var _, var _) ->
-                    switch (reportAt) {
-                        case ReplacementReportAnchor.AtTheFork(var fork) -> Sites.placeOf(db, fork);
-                        case ReplacementReportAnchor.AtTheWalk(var walk) -> Sites.placeOf(db, walk);
-                        case ReplacementReportAnchor.AtTheBehavior _ ->
-                                whereItIsDeclared(db, module, finding.subject());
-                    };
+            case About.ARewriteNoRowTellsApart(var behavior, var _, var reportAt, var _, var _) ->
+                    placeOfRewrite(db, module, behavior, reportAt);
             // Everything else is about the behavior as a whole — what its rows do not reach, what
             // its rules do not divide, what nothing here could read of them. Shown at the behavior.
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
@@ -7823,6 +7818,23 @@ public final class Adequacy {
     private static Citation whereItIsWritten(Db db, TypeSymbol.AtModule declared) {
         return somewhere(db.ask(new Sites.WhereADeclarationIsWritten(declared)),
                 "the declaration " + declared.name());
+    }
+
+    /**
+     * Where a rewrite of a behavior's body is shown: the fork for an arm and the fold for a walk
+     * written in a source this compilation holds, and the behavior otherwise.
+     *
+     * <p>Asked by the finding that no row tells the rewrite apart and by the line that says a
+     * rewrite was left open, which are two reports of one rewrite and so show it at one place.
+     */
+    public static Citation placeOfRewrite(Db db, String module, String behavior,
+                                          ReplacementReportAnchor reportAt) {
+        return switch (reportAt) {
+            case ReplacementReportAnchor.AtTheFork(var fork) -> Sites.placeOf(db, fork);
+            case ReplacementReportAnchor.AtTheWalk(var walk) -> Sites.placeOf(db, walk);
+            case ReplacementReportAnchor.AtTheBehavior _ ->
+                    whereItIsDeclared(db, module, new FindingSubject.OfABehavior(behavior));
+        };
     }
 
     /** Where the behavior a finding is about is declared. */
@@ -9909,7 +9921,10 @@ public final class Adequacy {
                                                     .NoRowTellsAnArmOutOfSightFromItsSibling(
                                                     phraseFor(construct, rewrite.arm()),
                                                     phraseFor(construct, rewrite.sibling()),
-                                                    rewrite.writtenBy().saidIn(module), behavior);
+                                                    rewrite.writtenBy().saidIn(module),
+                                                    toldApart(Replacements.toldApartBy(db, module,
+                                                            behavior, rewrite)),
+                                                    behavior);
                                     case ReplacementReportAnchor.AtTheWalk _ ->
                                             throw new IllegalStateException(
                                                     "a rewrite of an arm shown at a walk: "
@@ -9929,13 +9944,15 @@ public final class Adequacy {
                                         };
                                 case ReplacementReportAnchor.AtTheBehavior _ -> {
                                     String definition = rewrite.writtenBy().saidIn(module);
+                                    Localizable construct = toldApart(Replacements.toldApartBy(db,
+                                            module, behavior, rewrite));
                                     yield switch (rewrite.replacement().how()) {
                                         case STOPS_AFTER_ONE_STEP -> new ExampleMessage
                                                 .NoRowTellsAFoldOutOfSightFromItsFirstStep(
-                                                definition, behavior);
+                                                definition, construct, behavior);
                                         case STEPS_FROM_THE_SEED -> new ExampleMessage
                                                 .NoRowTellsAFoldOutOfSightFromStepsOnTheSeed(
-                                                definition, behavior);
+                                                definition, construct, behavior);
                                     };
                                 }
                                 case ReplacementReportAnchor.AtTheFork _ ->
@@ -10272,6 +10289,33 @@ public final class Adequacy {
         }
 
         /**
+         * What tells a rewrite from one whose words read the same, as a phrase in the reader's
+         * language; an empty one where its words already differ. The numbers are the measure's
+         * ({@link ReplacementEvidence.ToldApartBy}) and the words for them are the message
+         * file's, so the two languages say the same numbers in their own.
+         */
+        private static Localizable toldApart(Optional<ReplacementEvidence.ToldApartBy> by) {
+            if (by.isEmpty()) {
+                return Localizable.of("rewrite.apart.none");
+            }
+            ReplacementEvidence.ToldApartBy it = by.get();
+            boolean lowered = it.lowered() != 0;
+            String construct = String.valueOf(it.construct());
+            String loweredNumber = String.valueOf(it.lowered());
+            if (it.arms().isPresent()) {
+                String part = String.valueOf(it.arms().get().part());
+                String with = String.valueOf(it.arms().get().with());
+                return lowered
+                        ? Localizable.of("rewrite.apart.lowered.arms", construct, loweredNumber,
+                                part, with)
+                        : Localizable.of("rewrite.apart.arms", construct, part, with);
+            }
+            return lowered
+                    ? Localizable.of("rewrite.apart.lowered", construct, loweredNumber)
+                    : Localizable.of("rewrite.apart.construct", construct);
+        }
+
+        /**
          * One condition of a decision rule, said under the sentence about the rule.
          *
          * <p>Exhaustive with no {@code default}, so a shape added to the reading is one somebody
@@ -10441,11 +10485,7 @@ public final class Adequacy {
         }
 
         private static String casesOf(SourceOutcome outcome) {
-            return outcome instanceof SourceOutcome.Matched matched
-                    ? matched.cases().stream()
-                            .map(TypeSymbol::name)
-                            .collect(Collectors.joining(" | "))
-                    : "";
+            return outcome instanceof SourceOutcome.Matched matched ? matched.named() : "";
         }
 
         private static Optional<String> clauseOf(SourceOutcome outcome) {

@@ -173,6 +173,30 @@ public sealed interface ReadingGap {
     }
 
     /**
+     * Every value the quantity reads came back, and whether two maps hold a value under one key is
+     * not something this reading can say of the keys it was given.
+     *
+     * <p>Not {@link NoValue}: the row wrote something at every position, and saying otherwise tells
+     * a reader the row is missing a value it has. And not a number the row lacks: the products the
+     * maps' values come to under their common keys are numbers, and which keys are common is what
+     * the observation of a key does not settle — a decimal is the amount it stands for however it
+     * is written, and an observation of it is written one way.
+     */
+    record KeysNotTold() implements ReadingGap {
+
+        /** The observation of a key is the same however much a run is allowed. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+
+        @Override
+        public List<Figure> figures() {
+            return List.of();
+        }
+    }
+
+    /**
      * Every value the quantity reads came back, and the number they come to is one this compiler
      * could not hold.
      *
@@ -316,6 +340,8 @@ public sealed interface ReadingGap {
     ReadingGap COULD_NOT_WALK = new CouldNotWalk();
 
     ReadingGap COULD_NOT_READ_ROW = new CouldNotReadRow();
+
+    ReadingGap KEYS_NOT_TOLD = new KeysNotTold();
 
     /** The gap what an observation met is, for a reader holding it: the code, at the figure it
      *  stopped at where one did. */

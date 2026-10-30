@@ -8,6 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A row generated for a rewrite of an arm says which fork the rewrite is at.
@@ -116,12 +117,13 @@ class AGeneratedRowSaysWhichForkEachRewriteItFillsIsAtTest {
     }
 
     /**
-     * Two forks of one definition this build holds no source of are said in the same words and at
-     * the same place, which is all this build can say of them. They are still two, so neither is
-     * dropped as a repeat of the other and no row is named by words that are both of theirs.
+     * Two forks of one definition this build holds no source of read alike in the arms and the
+     * definition, which is all this build can say of them, so the construct each is of is said
+     * beside them. They are two, so neither is dropped as a repeat of the other and no row is
+     * named by words that are both of theirs.
      */
     @Test
-    void twoForksOfOneLibraryDefinitionAreTwoThingsThoughTheyAreSaidAlike() throws Exception {
+    void twoForksOfOneLibraryDefinitionAreTwoThingsSaidApart() throws Exception {
         String generated = generated("clamp.sou", """
                 data Ok = { n: Int }
                 data Err
@@ -141,6 +143,12 @@ class AGeneratedRowSaysWhichForkEachRewriteItFillsIsAtTest {
                         "// no row for `then answering as else` (in a fork of `souther.int.clamp`"))
                         .count(),
                 "the rewrite of each fork's `then` is said, once each: " + generated);
+        List<String> noRow = generated.lines().filter(line -> line.startsWith("// no row for"))
+                .toList();
+        assertEquals(noRow.size(), noRow.stream().distinct().count(),
+                "and no two of the lines are the same line: " + generated);
+        assertTrue(noRow.stream().anyMatch(line -> line.contains("(construct ")),
+                "the ones that read alike say which construct: " + generated);
         assertFalse(generated.contains("\"else answering as then\""),
                 "and the row for one fork's `else` is not named by words the other's has: "
                         + generated);

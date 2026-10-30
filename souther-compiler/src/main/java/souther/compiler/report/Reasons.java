@@ -194,6 +194,9 @@ final class Reasons {
                 case STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR ->
                         "the strings whose case conversion holds a count of code points of a"
                                 + " class by other code points than the class's own";
+                case MAPS_WRITTEN_WITH_ONE_ENTRY ->
+                        "the maps whose values come to a total by more than one entry, and the"
+                                + " maps whose entries are asked to hold more than the number";
             });
         }
         return String.join(", ", out);

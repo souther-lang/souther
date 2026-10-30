@@ -395,8 +395,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior run : (x: Cyclic) -> Ok
                 let run (x) = Ok
                 """));
-        // A comparison over a product of two input fields one of which is weighed before the
-        // product is taken, and over a quotient by one held against a third: the arithmetic met a
+        // A comparison over a product of three input values, and over a quotient by one held against a third: the arithmetic met a
         // shape it has no term for, and nothing was made of either position. A quotient held
         // against a number is a line on each sign of the divisor, and only a number times the
         // divisor is a form; a value times it is a product.
@@ -404,7 +403,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 module m
                 %s
                 behavior f : (a: Int, b: Int) -> Answer
-                let f (a, b) = if 2 * a * b > 10 then Yes else No
+                let f (a, b) = if a * b * a > 10 then Yes else No
                 """.formatted(ANSWER)));
         out.put(UndividedPosition.Reason.NON_CONSTANT_DIVISOR, of("""
                 module m
@@ -517,7 +516,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 %s
                 behavior f : (a: Int, b: Int, c: Int) -> Answer
                 let f (a, b, c) = {
-                    let p = a * b
+                    let p = a * b * a
                     let q = Int.floorMod(a, b)
                     if Int.max(p, q) <= c then Yes else No
                 }

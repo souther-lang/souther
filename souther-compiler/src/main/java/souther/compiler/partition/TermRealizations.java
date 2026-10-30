@@ -395,6 +395,11 @@ final class TermRealizations {
                      NumericTerm.GatheredUnderAKey _ -> {
                     return nothingSolvesAGroup();
                 }
+                // Replaced by the numbers its two forms are of before a row is composed
+                // ({@code Generator}), so it is never a number of a group.
+                case NumericTerm.ProductOf _ -> {
+                    return nothingSolvesAGroup();
+                }
                 // A number read off a value the group asks for, as any number taken of the place is:
                 // the step a value falls in is what reading that value comes to. Asked beside the
                 // value itself, the candidates are the value's and the step is read off each of
@@ -596,7 +601,8 @@ final class TermRealizations {
             }
             case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _,
                  NumericTerm.ExtremeOfItsKey _, NumericTerm.OccurrencesOfAKey _,
-                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> null;
+                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _,
+                 NumericTerm.ProductOf _ -> null;
         };
     }
 
@@ -1755,7 +1761,7 @@ final class TermRealizations {
                      NumericTerm.WholeUnitsOf _, NumericTerm.Multiplicity _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                      NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _,
-                     NumericTerm.GatheredUnderAKey _ -> false;
+                     NumericTerm.GatheredUnderAKey _, NumericTerm.ProductOf _ -> false;
             };
             // Each element is chosen for what it answers of the statements, out of values of the
             // element's own number; nothing else inside it is planned.
@@ -1971,6 +1977,10 @@ final class TermRealizations {
                     asked, within, reading, inside, null);
             case NumericTerm.GatheredUnderAKey _ -> underAKey(sourceType, keptApart, orders,
                     asked, within, reading, inside, null, null);
+            // Replaced by the numbers its two forms are of before a row is composed
+            // ({@code Generator}), so nothing is written for it as one value.
+            case NumericTerm.ProductOf _ -> new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
             case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(),
                     taken.transformation(), sourceType, keptApart, orders, asked, within,
                     reading, inside);
@@ -2242,6 +2252,9 @@ final class TermRealizations {
             case RunSource.ProjectedOccurrences _, RunSource.ComputedOccurrences _ ->
                     throw new IllegalStateException(orders.term() + " is a count of a run one"
                             + " container holds, which is a taking of that container's place");
+            // How many keys two maps share is a number nothing here asks of a row.
+            case RunSource.JoinedOccurrences _ -> new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         };
     }
 
@@ -3867,7 +3880,8 @@ final class TermRealizations {
                      NumericTerm.WholeUnitsOf _,
                      NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                      NumericTerm.ExtremeOfItsKey _, NumericTerm.TakenOver _,
-                     NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ ->
+                     NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _,
+                     NumericTerm.ProductOf _ ->
                         throw new IllegalStateException(
                         term + " is no number a string is written for");
             };

@@ -170,7 +170,7 @@ sealed interface ConditionPlacement {
             case NumericTerm.OfAnElementsNeighbours _ -> false;
             case NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ -> false;
             case NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> false;
-            case NumericTerm.TakenOver _ -> false;
+            case NumericTerm.TakenOver _, NumericTerm.ProductOf _ -> false;
         };
     }
 }

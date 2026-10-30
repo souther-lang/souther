@@ -125,6 +125,9 @@ final class RunReach {
             // The nodes of a tree stand at no path a type is declared at, and what is taken over
             // them is how many there are, which no step of a walk adds up.
             case RunSource.ReachableNodes _ -> null;
+            // A product of two entries is a product of the runs two places hold, and the run of
+            // a product is not read off the runs of its factors here.
+            case RunSource.JoinedOccurrences _ -> null;
         };
         NumberSpace answeredOn = spaceOf(orders.answered());
         NumberSpace observedOn = spaceOf(orders.observed());

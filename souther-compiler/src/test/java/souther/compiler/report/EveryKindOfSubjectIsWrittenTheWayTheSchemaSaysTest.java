@@ -65,6 +65,13 @@ class EveryKindOfSubjectIsWrittenTheWayTheSchemaSaysTest {
         armId.put("lowered", 0);
         armId.put("part", 0);
         armId.put("decidedBy", "the_body");
+        ObjectNode rewriteId = JSON.createObjectNode();
+        rewriteId.put("behavior", "b");
+        rewriteId.put("rewrite", "fold_after_one_step");
+        rewriteId.put("module", "m");
+        rewriteId.put("definition", "b");
+        rewriteId.put("construct", 0);
+        rewriteId.put("lowered", 0);
         ObjectNode line = JSON.createObjectNode();
         // A comparison written in a body, which is a rule apiece: the rule is the whole of what
         // names a line of it, and there is nothing under it to be one of.
@@ -126,7 +133,8 @@ class EveryKindOfSubjectIsWrittenTheWayTheSchemaSaysTest {
                 new PublishedSubject.AtAFork("m", writtenBy, 0, 0, "if"),
                 new PublishedSubject.AtAnArm(armId),
                 new PublishedSubject.OfAMeasure("m", "b", MeasureWord.BRANCH),
-                new PublishedSubject.OfAnAxisMeasure("m", "b", "r.cost"));
+                new PublishedSubject.OfAnAxisMeasure("m", "b", "r.cost"),
+                new PublishedSubject.OfAReplacement("m", rewriteId));
     }
 
     /**

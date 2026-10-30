@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -213,9 +214,15 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
         assertEquals(withoutWhere(counted), withoutWhere(report));
     }
 
-    /** A report with where each part stands left out: the two spellings differ in length. */
+    /**
+     * A report with where each part stands left out, the two spellings differing in length, and
+     * with what is said of how the position is read left out: a {@code match} on the element
+     * reads which case it is, which a count does not, though every arm answers alike.
+     */
     private static String withoutWhere(String report) {
-        return report.replaceAll("\\d+:\\d+", "");
+        return report.replaceAll("\\d+:\\d+", "").lines()
+                .filter(line -> !line.contains("reads it without telling them apart"))
+                .collect(Collectors.joining("\n"));
     }
 
     /** An arm that is no form of the case's fields leaves the walk a rule nothing read. */

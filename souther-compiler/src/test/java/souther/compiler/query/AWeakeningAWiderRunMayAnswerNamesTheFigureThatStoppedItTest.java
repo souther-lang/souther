@@ -143,10 +143,10 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
                 new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1)));
 
         WeakeningSet both = WeakeningSet.of(
-                new Weakening.RewriteUndecided("b", rewrite, runsSpentAt(four)),
-                new Weakening.RewriteUndecided("b", rewrite, runsSpentAt(eight)));
+                new Weakening.RewriteUndecided("m", "b", rewrite, runsSpentAt(four)),
+                new Weakening.RewriteUndecided("m", "b", rewrite, runsSpentAt(eight)));
 
-        assertEquals(Set.of(new Weakening.RewriteUndecided("b", rewrite,
+        assertEquals(Set.of(new Weakening.RewriteUndecided("m", "b", rewrite,
                         new ReplacementEvidence.Undecided(ReplacementEvidence.Undecided.Way
                                 .atFigures(ReplacementEvidence.Undecided.Why.RUNS_SPENT,
                                         List.of(four, eight))).why())),
@@ -260,8 +260,8 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
         Replacement rewrite = new Replacement.ByOneAnswer(new ObservedValue.Integer(0),
                 new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1)));
         for (ReplacementEvidence.Undecided.Way way : everyWayARewriteIsLeftOpen()) {
-            Weakening.RewriteUndecided undecided = new Weakening.RewriteUndecided("b", rewrite,
-                    new ReplacementEvidence.Undecided(way).why());
+            Weakening.RewriteUndecided undecided = new Weakening.RewriteUndecided("m", "b",
+                    rewrite, new ReplacementEvidence.Undecided(way).why());
             out.putIfAbsent("RewriteUndecided " + way.why()
                     + (way.figures().isEmpty() ? "" : " " + way.figures()), undecided);
         }

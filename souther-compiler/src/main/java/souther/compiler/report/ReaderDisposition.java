@@ -175,7 +175,8 @@ public sealed interface ReaderDisposition {
                      Subject.OfARow _, Subject.AtASpelledPosition _, Subject.AtAPosition _,
                      Subject.AtAnInput _, Subject.AtABorder _, Subject.OfAMeasure _,
                      Subject.OfAnAxisMeasure _, Subject.AtARule _, Subject.AtAFork _,
-                     Subject.AtAnArm _ -> unanswered instanceof AdequacyUncertainty.ByWeakening(
+                     Subject.AtAnArm _, Subject.OfAReplacement _ ->
+                         unanswered instanceof AdequacyUncertainty.ByWeakening(
                              Weakening.RewriteUndecided _)
                              ? StoppedAtAFigure.SettledBy.A_ROW_THAT_TELLS_THE_REWRITE_APART
                              : StoppedAtAFigure.SettledBy.NOTHING_NAMED;
@@ -203,7 +204,7 @@ public sealed interface ReaderDisposition {
                 case Subject.OfAModule _, Subject.OfABehavior _, Subject.OfASource _,
                      Subject.OfARow _, Subject.AtASpelledPosition _, Subject.AtAPosition _,
                      Subject.AtAnInput _, Subject.AtABorder _, Subject.AtAPoint _,
-                     Subject.OfAMeasure _, Subject.OfAnAxisMeasure _ ->
+                     Subject.OfAMeasure _, Subject.OfAnAxisMeasure _, Subject.OfAReplacement _ ->
                         new LookAtWhatTheMeasureWentWithout(subject, wordOf(it));
             };
         };

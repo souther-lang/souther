@@ -37,6 +37,7 @@ import souther.compiler.query.GenerationScope;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.query.OfferedRow;
 import souther.compiler.query.Offering;
+import souther.compiler.query.Replacements;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.query.InteractionEvidence;
 import souther.compiler.query.ReplacementAsWritten;
@@ -522,25 +523,33 @@ public final class GeneratedRows {
         return switch (finding.about()) {
             case About.AnArmNoRowGoesThrough _ -> Called.named(owed, name, Optional.of(
                     Adequacy.placeOf(db, module, finding).said(rendering, declaredIn)));
-            case About.ARewriteNoRowTellsApart(var _, ReplacementAsWritten.OfAnArm rewrite,
+            case About.ARewriteNoRowTellsApart(var behavior, ReplacementAsWritten.OfAnArm rewrite,
                     var reportAt, var _, var _) -> Called.named(owed, name, Optional.of(
                     switch (reportAt) {
                         case ReplacementReportAnchor.AtTheFork _ ->
-                                Adequacy.placeOf(db, module, finding).said(rendering, declaredIn);
+                                Adequacy.placeOf(db, module, finding).said(rendering, declaredIn)
+                                        + RewriteVocabulary.apart(Replacements.toldApartBy(db,
+                                                module, behavior, rewrite));
                         case ReplacementReportAnchor.AtTheBehavior _ ->
-                                RewriteVocabulary.outOfSight(rewrite, module);
+                                RewriteVocabulary.outOfSight(rewrite, module)
+                                        + RewriteVocabulary.apart(Replacements.toldApartBy(db,
+                                                module, behavior, rewrite));
                         case ReplacementReportAnchor.AtTheWalk _ -> throw new IllegalStateException(
                                 "a rewrite of an arm shown at a walk: " + rewrite);
                     }));
             // A fold's rewrite by the fold's place, or by the definition that wrote it where this
             // build holds no source of it, for the reason an arm's is.
-            case About.ARewriteNoRowTellsApart(var _, ReplacementAsWritten.OfAWalk rewrite,
+            case About.ARewriteNoRowTellsApart(var behavior, ReplacementAsWritten.OfAWalk rewrite,
                     var reportAt, var _, var _) -> Called.named(owed, name, Optional.of(
                     switch (reportAt) {
                         case ReplacementReportAnchor.AtTheWalk _ ->
-                                Adequacy.placeOf(db, module, finding).said(rendering, declaredIn);
+                                Adequacy.placeOf(db, module, finding).said(rendering, declaredIn)
+                                        + RewriteVocabulary.apart(Replacements.toldApartBy(db,
+                                                module, behavior, rewrite));
                         case ReplacementReportAnchor.AtTheBehavior _ ->
-                                RewriteVocabulary.outOfSight(rewrite, module);
+                                RewriteVocabulary.outOfSight(rewrite, module)
+                                        + RewriteVocabulary.apart(Replacements.toldApartBy(db,
+                                                module, behavior, rewrite));
                         case ReplacementReportAnchor.AtTheFork _ -> throw new IllegalStateException(
                                 "a rewrite of a walk shown at a fork: " + rewrite);
                     }));
