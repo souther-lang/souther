@@ -5132,7 +5132,7 @@ public final class InvariantChecker {
                 continue;
             }
             List<Known> entered = predicates.eachWayOf(condition, k).stream()
-                    .filter(way -> !way.reachesNothing())
+                    .filter(way -> !predicates.leavesNoRun(way))
                     .toList();
             if (entered.isEmpty()) {
                 return null;
@@ -5303,7 +5303,7 @@ public final class InvariantChecker {
                 if (alone == null) {
                     alone = readingOf(k.unguarded().numbers(), asked);
                 }
-                if (c.refutedBy(alone, k.unguarded().facts())) {
+                if (c.refutedByTheValuesAlone(alone, k.unguarded().facts())) {
                     refutedAlone = true;
                 }
                 alongside = true;
