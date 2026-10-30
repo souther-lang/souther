@@ -69,7 +69,7 @@ class WhereALineOfACountDecidesWhereTheOthersComeToTheNumbersAroundItTest {
             assertEquals(n, lines.size(), () -> n + "," + k + ": a line for each value");
             for (WhereEachLineDecides.Decides line : lines) {
                 List<Proposition> others = new ArrayList<>(values);
-                others.removeIf(each -> each.key().equals(line.line().key()));
+                others.removeIf(each -> each.spelledOut().equals(line.line().spelledOut()));
                 assertEquals(List.of(count(others, k - 1), count(others, k)),
                         line.cases().stream().map(DecidingCase::condition).toList(),
                         () -> n + "," + k + ": " + line.line());
@@ -91,7 +91,7 @@ class WhereALineOfACountDecidesWhereTheOthersComeToTheNumbersAroundItTest {
 
         for (WhereEachLineDecides.Decides line : WhereEachLineDecides.in(stated)) {
             List<Proposition> others = new ArrayList<>(values);
-            others.removeIf(each -> each.key().equals(line.line().key()));
+            others.removeIf(each -> each.spelledOut().equals(line.line().spelledOut()));
             assertEquals(List.of(count(others, 6)),
                     line.cases().stream().map(DecidingCase::condition).toList(),
                     () -> "" + line.line());
@@ -112,7 +112,7 @@ class WhereALineOfACountDecidesWhereTheOthersComeToTheNumbersAroundItTest {
         Proposition stated = Proposition.SoManyHold.counting(all, weights, List.of(6));
 
         WhereEachLineDecides.Decides doubled = WhereEachLineDecides.in(stated).stream()
-                .filter(line -> line.line().key().equals(positive(0).key())).findFirst()
+                .filter(line -> line.line().spelledOut().equals(positive(0).spelledOut())).findFirst()
                 .orElseThrow();
 
         assertEquals(List.of(count(others, 4), count(others, 6)),
@@ -135,14 +135,14 @@ class WhereALineOfACountDecidesWhereTheOthersComeToTheNumbersAroundItTest {
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
 
         WhereEachLineDecides.Decides ofTheValue = lines.stream()
-                .filter(line -> line.line().key().equals(above.key())).findFirst().orElseThrow();
+                .filter(line -> line.line().spelledOut().equals(above.spelledOut())).findFirst().orElseThrow();
         assertEquals(List.of(), ofTheValue.cases());
         for (Proposition other : List.of(y, z)) {
             WhereEachLineDecides.Decides line = lines.stream()
-                    .filter(each -> each.line().key().equals(other.key())).findFirst()
+                    .filter(each -> each.line().spelledOut().equals(other.spelledOut())).findFirst()
                     .orElseThrow();
             List<Proposition> rest = new ArrayList<>(List.of(above, notAbove, y, z));
-            rest.removeIf(each -> each.key().equals(other.key()));
+            rest.removeIf(each -> each.spelledOut().equals(other.spelledOut()));
             assertEquals(List.of(count(rest, 1), count(rest, 2)),
                     line.cases().stream().map(DecidingCase::condition).toList());
         }

@@ -53,7 +53,7 @@ class ARelationToAnotherValueInAStatementOfSeveralIsPartedWhereItDecidesTest {
         ComparisonAssessment.AgainstAnotherValue relation =
                 assertInstanceOf(ComparisonAssessment.AgainstAnotherValue.class, part.line());
         assertFalse(relation.settling().isEmpty(), several::toString);
-        assertTrue(part.cases().stream().anyMatch(each -> each.condition().key().contains("o.open")),
+        assertTrue(part.cases().stream().anyMatch(each -> each.condition().spelledOut().contains("o.open")),
                 () -> "it decides where the order is open: " + several);
         assertEquals(part.cases().size(), part.readings().size(), several::toString);
         assertTrue(several.whatEachPlaceIsLeftWith().stream().noneMatch(

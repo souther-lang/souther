@@ -79,7 +79,7 @@ public final class Conclusion {
         private final Map<Proposition, Long> parts = new IdentityHashMap<>();
         /** Where the numbers a statement over the ways is owed start, by what it is written out
          *  from, so that the statement met again here is owed the same ones. */
-        private final Map<String, Long> reserved = new HashMap<>();
+        private final Map<Spelling, Long> reserved = new HashMap<>();
         /** The figure parts are counted up to, and held at one past. */
         private final long mostParts;
         private int unread;
@@ -207,7 +207,7 @@ public final class Conclusion {
         ways.conditions().forEach((truth, condition) -> conditions.put(truth, of(condition)));
         Proposition reading = of(ways.reading());
         long owed = numbersOwed(cases);
-        String spelled = new Proposition.WaysToWrite(kept, conditions, reading, ways.forms(),
+        Spelling spelled = new Proposition.WaysToWrite(kept, conditions, reading, ways.forms(),
                 ways.sum(), ways.count(), ways.counted(), ways.fixed(), shared.where, 0, owed)
                 .spelled();
         Long first = shared.reserved.get(spelled);

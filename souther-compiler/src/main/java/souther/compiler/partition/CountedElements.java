@@ -308,6 +308,6 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
 
     @Override
     public String toString() {
-        return spelled(container, differentAt, across, meeting.key());
+        return spelled(container, differentAt, across, meeting.spelling().toString());
     }
 }

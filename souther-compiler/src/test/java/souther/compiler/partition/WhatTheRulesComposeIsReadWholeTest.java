@@ -166,7 +166,7 @@ class WhatTheRulesComposeIsReadWholeTest {
             assertFalse(read.meanings().stated().isEmpty(), () -> behavior + " has conditions");
             read.meanings().stated().forEach((site, meaning) -> assertEquals(List.of(),
                     Proposition.stopsIn(meaning.states()),
-                    () -> behavior + " leaves a part of " + meaning.states().key() + " unread"));
+                    () -> behavior + " leaves a part of " + meaning.states().spelledOut() + " unread"));
         });
     }
 
@@ -209,6 +209,6 @@ class WhatTheRulesComposeIsReadWholeTest {
         }
         Core.If fork = assertInstanceOf(Core.If.class, e, behavior + " is one fork");
         return Pullback.ofATruth(fork.cond(), reads, read.input(), Optional.empty())
-                .proposition().key();
+                .proposition().spelledOut();
     }
 }

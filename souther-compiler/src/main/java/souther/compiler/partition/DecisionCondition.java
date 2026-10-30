@@ -189,10 +189,10 @@ public sealed interface DecisionCondition {
                 throw new IllegalArgumentException(
                         "a statement is a column where all of it was read: " + statement);
             }
-            if (statement.denied().key().compareTo(statement.key()) < 0) {
+            if (statement.denied().spelling().compareTo(statement.spelling()) < 0) {
                 throw new IllegalArgumentException("a statement and its denial are one column,"
-                        + " read as " + statement.denied().key() + " rather than as "
-                        + statement.key());
+                        + " read as " + statement.denied().spelling() + " rather than as "
+                        + statement.spelling());
             }
         }
 
@@ -204,7 +204,7 @@ public sealed interface DecisionCondition {
          *               two ways one condition comes out name the column with one value
          */
         static DecidedCondition.Held of(Proposition stated, Proposition denied, boolean held) {
-            return denied.key().compareTo(stated.key()) < 0
+            return denied.spelling().compareTo(stated.spelling()) < 0
                     ? new DecidedCondition.Held(new AStatement(denied), !held)
                     : new DecidedCondition.Held(new AStatement(stated), held);
         }

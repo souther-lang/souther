@@ -88,6 +88,7 @@ import souther.compiler.meaning.MeaningsOfABody.Meaning;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.Spelling;
 import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.meaning.TruthTable;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
@@ -277,14 +278,14 @@ final class Pullback {
         }
 
         private List<Leaf> turnsOnWorkedOut() {
-            Set<String> parts = new HashSet<>();
+            Set<Spelling> parts = new HashSet<>();
             partsOf(proposition(), parts);
             List<Leaf> out = new ArrayList<>();
-            Map<Core, Set<String>> kept = new IdentityHashMap<>();
+            Map<Core, Set<Spelling>> kept = new IdentityHashMap<>();
             for (Leaf leaf : leaves) {
-                if (parts.contains(leaf.part().key()) && kept
+                if (parts.contains(leaf.part().spelling()) && kept
                         .computeIfAbsent(leaf.from().value(), _ -> new HashSet<>())
-                        .add(leaf.part().key())) {
+                        .add(leaf.part().spelling())) {
                     out.add(leaf);
                 }
             }
@@ -292,7 +293,7 @@ final class Pullback {
         }
 
         /** The spelling of each part {@code stated} turns on, either way round, into {@code into}. */
-        static void partsOf(Proposition stated, Set<String> into) {
+        static void partsOf(Proposition stated, Set<Spelling> into) {
             switch (stated) {
                 case Proposition.Always _ -> { }
                 case Proposition.Unread unread when unread.fixed() -> { }
@@ -313,8 +314,8 @@ final class Pullback {
                      Proposition.SameValue _, Proposition.StringInside _,
                      Proposition.LastToHold _, Proposition.Carried _,
                      Proposition.SomeReachable _ -> {
-                    into.add(stated.key());
-                    into.add(stated.deniedKey());
+                    into.add(stated.spelling());
+                    into.add(stated.deniedSpelling());
                 }
             }
         }

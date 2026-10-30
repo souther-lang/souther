@@ -41,7 +41,7 @@ public final class WhatTheComparisonsState {
         List<String> out = new ArrayList<>();
         meanings.stated().forEach((site, meaning) -> {
             if (site.part() == MeaningsOfABody.Part.Asked.ITSELF) {
-                out.add(meaning.states().key());
+                out.add(meaning.states().spelledOut());
             }
         });
         out.sort(null);

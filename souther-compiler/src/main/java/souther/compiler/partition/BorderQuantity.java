@@ -1052,7 +1052,7 @@ public sealed interface BorderQuantity
                                     + affine.form().constant().negated().dividedBy(weight)
                                             .map(ExactRatio::spelled).orNull();
                         }
-                        yield form == null ? stated.key()
+                        yield form == null ? stated.spelling().toString()
                                 : OrderedAffineBoundary.spelled(form.coefs()) + " " + rel.written()
                                         + " " + form.constant().negated().spelled();
                     }
@@ -1078,7 +1078,8 @@ public sealed interface BorderQuantity
                      Proposition.InTheStrings _, Proposition.SameValue _,
                      Proposition.StringInside _, Proposition.LastToHold _,
                      Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
-                     Proposition.OnAnApplication _, Proposition.WhereItAnswers _ -> stated.key();
+                     Proposition.OnAnApplication _, Proposition.WhereItAnswers _ ->
+                        stated.spelling().toString();
             };
         }
 

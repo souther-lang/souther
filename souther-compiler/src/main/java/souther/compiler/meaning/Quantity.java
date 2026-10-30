@@ -1199,7 +1199,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         public String spelled() {
             return "#different " + container + " [" + ofTheElement + "] where "
                     + (meeting instanceof Selection.OfEachValue ? "each value " : "")
-                    + "[" + meeting.statement().key() + "]";
+                    + "[" + meeting.statement().spelling() + "]";
         }
 
         @Override
@@ -1349,7 +1349,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         public String spelled() {
             StringBuilder out = new StringBuilder("#[");
             for (int i = 0; i < each.size(); i++) {
-                out.append(i == 0 ? "" : ", ").append(each.get(i).key());
+                out.append(i == 0 ? "" : ", ");
+                each.get(i).spelling().appendTo(out);
             }
             return out.append("]").toString();
         }
@@ -1413,7 +1414,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return "#" + container + " [" + ofTheElement.key() + "]";
+            return "#" + container + " [" + ofTheElement.spelling() + "]";
         }
 
         @Override

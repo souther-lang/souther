@@ -60,7 +60,7 @@ class WhichAnswersACountOfStatementsCanGiveTest {
     /** How many of {@code statements} hold, each once, being one of {@code admitted}. */
     private static Proposition count(List<Proposition> statements, Integer... admitted) {
         List<Proposition> byKey = statements.stream()
-                .sorted(Comparator.comparing(Proposition::key)).toList();
+                .sorted(Comparator.comparing(Proposition::spelledOut)).toList();
         return new Proposition.SoManyHold(byKey,
                 Stream.generate(() -> 1).limit(byKey.size()).toList(), List.of(admitted));
     }

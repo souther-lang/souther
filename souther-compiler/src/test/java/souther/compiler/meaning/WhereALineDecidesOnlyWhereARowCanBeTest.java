@@ -136,7 +136,7 @@ class WhereALineDecidesOnlyWhereARowCanBeTest {
     /** Where {@code line} decides in {@code stated}. */
     private static List<Proposition> casesOf(Proposition stated, Proposition.Compared line) {
         for (WhereEachLineDecides.Decides each : WhereEachLineDecides.in(stated)) {
-            if (each.line().key().equals(line.key())) {
+            if (each.line().spelledOut().equals(line.spelledOut())) {
                 return each.cases().stream().map(DecidingCase::condition).toList();
             }
         }

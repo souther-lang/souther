@@ -42,7 +42,7 @@ class WhatAPathCannotHoldSaysWhatStoppedItsPartsTest {
     private static List<WhyNotTaken> notTaken(Proposition stated, boolean positive) {
         Predicates.Assumed assumed = MeaningAssumptions.assumed(stated, positive, Known.top(), null,
                 MeaningAssumptions.InputPlaces.NONE, null);
-        assertFalse(assumed.shapeRead(), () -> stated.key() + " is not read to the end");
+        assertFalse(assumed.shapeRead(), () -> stated.spelledOut() + " is not read to the end");
         return assumed.notTaken();
     }
 
@@ -69,7 +69,7 @@ class WhatAPathCannotHoldSaysWhatStoppedItsPartsTest {
                         : List.of(whole, new WhyNotTaken.MeaningUnread(NO_SIZE),
                                 new WhyNotTaken.MeaningUnread(NOT_LINEAR));
                 assertEquals(expected, notTaken(stated, positive),
-                        stated.key() + " coming out " + positive);
+                        stated.spelledOut() + " coming out " + positive);
             }
         }
     }

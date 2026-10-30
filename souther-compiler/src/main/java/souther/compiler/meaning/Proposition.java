@@ -57,30 +57,36 @@ public sealed interface Proposition {
      * built again for every join a part goes into.
      *
      * <p>And what each of them hashes as. It is one of the values compared, so two equal
-     * propositions spell it alike, and a string keeps its hash; worked out from the parts instead, a
-     * hash walks the whole proposition each time one is used as a key.
+     * propositions spell it alike, and a spelling keeps its hash; worked out from the parts instead,
+     * a hash walks the whole proposition each time one is used as a key.
+     *
+     * <p>Held as the pieces it is put together from and not written out ({@link Spelling}): a
+     * proposition's spelling holds its parts', and written out at every level, a conjunction nested
+     * as deep as a model's rules nest holds the text of everything below it once for each level.
      */
-    String key();
+    Spelling spelling();
 
     /**
-     * {@code kind} and the spellings of {@code parts} in a list, built in one pass over a buffer
-     * of the length it comes to. A part's spelling holds its own parts', so a spelling made by
-     * collecting the parts' into a list and joining that copies every character once for each
-     * step, at every level of a proposition as deep as its conjunctions and disjunctions.
+     * The spelling written out, for a reader of the text — a message, or a test asking what a
+     * statement says. It writes the text of every part below this one, so nothing that tells
+     * propositions apart, files them or orders them asks for it: {@link #spelling} is that.
      */
-    private static String spellingOf(String kind, List<Proposition> parts) {
-        int length = kind.length() + 2 + 2 * (parts.size() - 1);
-        for (Proposition each : parts) {
-            length += each.key().length();
-        }
-        StringBuilder out = new StringBuilder(length).append(kind).append('[');
+    default String spelledOut() {
+        return spelling().toString();
+    }
+
+    /** {@code opening} and the spellings of {@code parts} in a list, each part's held as it is. */
+    private static Spelling spellingOf(Spelling opening, List<Proposition> parts) {
+        List<Spelling> pieces = new ArrayList<>(2 * parts.size() + 1);
+        pieces.add(opening);
         for (int at = 0; at < parts.size(); at++) {
             if (at > 0) {
-                out.append(", ");
+                pieces.add(Spelling.SEPARATOR);
             }
-            out.append(parts.get(at).key());
+            pieces.add(parts.get(at).spelling());
         }
-        return out.append(']').toString();
+        pieces.add(Spelling.CLOSE);
+        return Spelling.joined(pieces);
     }
 
     /**
@@ -90,8 +96,8 @@ public sealed interface Proposition {
      * statement a reading projects; a proposition that spells its own denial from its spelling says
      * so here and makes none.
      */
-    default String deniedKey() {
-        return denied().key();
+    default Spelling deniedSpelling() {
+        return denied().spelling();
     }
 
     /**
@@ -239,22 +245,25 @@ public sealed interface Proposition {
             return new Always(!holds);
         }
 
+        private static final Spelling HOLDS = Spelling.of("true");
+        private static final Spelling FAILS = Spelling.of("false");
+
         @Override
-        public String key() {
-            return String.valueOf(holds);
+        public Spelling spelling() {
+            return holds ? HOLDS : FAILS;
         }
     }
 
     /**
      * A relation over quantities, held or failing.
      *
-     * @param key spelled from the rest when it is made, whatever is handed in
+     * @param spelling spelled from the rest when it is made, whatever is handed in
      */
-    record Compared(Relation relation, boolean holds, String key) implements Proposition {
+    record Compared(Relation relation, boolean holds, Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public Compared(Relation relation, boolean holds) {
@@ -269,35 +278,34 @@ public sealed interface Proposition {
                 throw new IllegalArgumentException("counts held against nought are whether some"
                         + " element meets what is counted, and are written as that: " + relation);
             }
-            key = (holds ? "" : "!") + relation;
+            spelling = Spelling.denying(holds, Spelling.of(String.valueOf(relation)));
         }
 
         /** The spelling of the relation held, whichever way round this is: one for one relation. */
-        public String heldKey() {
-            return holds ? key : key.substring(1);
+        public Spelling heldSpelling() {
+            return holds ? spelling : spelling.denied();
         }
-
         @Override
         public Proposition denied() {
             return new Compared(relation, !holds);
         }
 
         @Override
-        public String deniedKey() {
-            return holds ? "!" + key : key.substring(1);
+        public Spelling deniedSpelling() {
+            return spelling.denied();
         }
     }
 
     /**
      * A subject read for its truth, holding or failing.
      *
-     * @param key spelled from the rest when it is made, whatever is handed in
+     * @param spelling spelled from the rest when it is made, whatever is handed in
      */
-    record Truth(DecisionSubject of, boolean holds, String key) implements Proposition {
+    record Truth(DecisionSubject of, boolean holds, Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public Truth(DecisionSubject of, boolean holds) {
@@ -308,7 +316,7 @@ public sealed interface Proposition {
             if (of == null) {
                 throw new IllegalArgumentException("a truth is a truth of something");
             }
-            key = (holds ? "" : "!") + of.spelled();
+            spelling = Spelling.of((holds ? "" : "!") + of.spelled());
         }
 
         @Override
@@ -323,14 +331,14 @@ public sealed interface Proposition {
      * <p>The cases selected and not the fork that selected them: a match of three arms is three
      * propositions about one subject, one per arm.
      *
-     * @param key spelled from the rest when it is made, whatever is handed in
+     * @param spelling spelled from the rest when it is made, whatever is handed in
      */
-    record InCases(DecisionSubject of, CasesLeft cases, boolean holds, String key)
+    record InCases(DecisionSubject of, CasesLeft cases, boolean holds, Spelling spelling)
             implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public InCases(DecisionSubject of, CasesLeft cases, boolean holds) {
@@ -341,7 +349,7 @@ public sealed interface Proposition {
             if (of == null || cases == null) {
                 throw new IllegalArgumentException("a case is some subject's, and some cases");
             }
-            key = (holds ? "" : "!") + of.spelled() + " is " + cases.spelled();
+            spelling = Spelling.of((holds ? "" : "!") + of.spelled() + " is " + cases.spelled());
         }
 
         @Override
@@ -353,13 +361,13 @@ public sealed interface Proposition {
     /**
      * An optional subject holding a value, or not.
      *
-     * @param key spelled from the rest when it is made, whatever is handed in
+     * @param spelling spelled from the rest when it is made, whatever is handed in
      */
-    record Present(DecisionSubject of, boolean holds, String key) implements Proposition {
+    record Present(DecisionSubject of, boolean holds, Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public Present(DecisionSubject of, boolean holds) {
@@ -370,7 +378,7 @@ public sealed interface Proposition {
             if (of == null) {
                 throw new IllegalArgumentException("a value is present at some subject");
             }
-            key = (holds ? "" : "!") + "present " + of.spelled();
+            spelling = Spelling.of((holds ? "" : "!") + "present " + of.spelled());
         }
 
         @Override
@@ -388,9 +396,9 @@ public sealed interface Proposition {
      * what a statement about the string is read as. A statement and its denial hold the one
      * language, so turning a statement over spells nothing again.
      *
-     * @param key spelled from the rest when it is made, whatever is handed in
+     * @param spelling spelled from the rest when it is made, whatever is handed in
      */
-    record InTheStrings(Strings of, StringsLanguage accepts, boolean holds, String key)
+    record InTheStrings(Strings of, StringsLanguage accepts, boolean holds, Spelling spelling)
             implements Proposition {
 
         /** The string a statement of this kind is about. */
@@ -439,7 +447,7 @@ public sealed interface Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public InTheStrings(Strings of, StringsLanguage accepts, boolean holds) {
@@ -450,7 +458,7 @@ public sealed interface Proposition {
             if (of == null || accepts == null) {
                 throw new IllegalArgumentException("a string is one of the strings of a language");
             }
-            key = (holds ? "" : "!") + of.spelled() + " in " + accepts.spelled();
+            spelling = Spelling.of((holds ? "" : "!") + of.spelled() + " in " + accepts.spelled());
         }
 
         @Override
@@ -463,14 +471,14 @@ public sealed interface Proposition {
      * Two subjects holding the same value, or not — what a container holding a value asks of one
      * of its elements.
      *
-     * @param key spelled from the rest when it is made, whatever is handed in
+     * @param spelling spelled from the rest when it is made, whatever is handed in
      */
-    record SameValue(DecisionSubject one, DecisionSubject other, boolean holds, String key)
+    record SameValue(DecisionSubject one, DecisionSubject other, boolean holds, Spelling spelling)
             implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public SameValue(DecisionSubject one, DecisionSubject other, boolean holds) {
@@ -481,7 +489,7 @@ public sealed interface Proposition {
             if (one == null || other == null) {
                 throw new IllegalArgumentException("a sameness is of two subjects");
             }
-            key = one.spelled() + (holds ? " == " : " /= ") + other.spelled();
+            spelling = Spelling.of(one.spelled() + (holds ? " == " : " /= ") + other.spelled());
         }
 
         @Override
@@ -502,14 +510,14 @@ public sealed interface Proposition {
      *
      * @param inner the string looked for
      * @param outer the string looked in
-     * @param key   spelled from the rest when it is made, whatever is handed in
+     * @param spelling  spelled from the rest when it is made, whatever is handed in
      */
     record StringInside(Quantity inner, Quantity outer, StringContainment where, boolean holds,
-                        String key) implements Proposition {
+                        Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public StringInside(Quantity inner, Quantity outer, StringContainment where,
@@ -521,7 +529,8 @@ public sealed interface Proposition {
             if (inner == null || outer == null || where == null) {
                 throw new IllegalArgumentException("a string inside another is of two strings");
             }
-            key = (holds ? "" : "!") + inner.spelled() + " " + where + " " + outer.spelled();
+            spelling = Spelling.of(
+                    (holds ? "" : "!") + inner.spelled() + " " + where + " " + outer.spelled());
         }
 
         @Override
@@ -545,14 +554,14 @@ public sealed interface Proposition {
      *                  composed with
      * @param position  a place under the container's element, which an element is told apart
      *                  from the others by
-     * @param key       spelled from the rest when it is made, whatever is handed in
+     * @param spelling      spelled from the rest when it is made, whatever is handed in
      */
     record LastToHold(DecisionSubject container, DecisionSubject position, boolean holds,
-                      String key) implements Proposition {
+                      Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public LastToHold(DecisionSubject container, DecisionSubject position, boolean holds) {
@@ -563,7 +572,7 @@ public sealed interface Proposition {
             if (container == null || position == null) {
                 throw new IllegalArgumentException("a last is of a container's element by a place");
             }
-            key = (holds ? "last " : "not last ") + container + " by " + position;
+            spelling = Spelling.of((holds ? "last " : "not last ") + container + " by " + position);
         }
 
         @Override
@@ -582,14 +591,14 @@ public sealed interface Proposition {
      * way. {@code answers} is where the statement is about anything at all, and so never one of
      * its lines: a row where it fails is no row of either side.
      *
-     * @param key spelled from the parts' own when it is made, whatever is handed in
+     * @param spelling spelled from the parts' own when it is made, whatever is handed in
      */
-    record WhereItAnswers(Proposition answers, Proposition states, String key)
+    record WhereItAnswers(Proposition answers, Proposition states, Spelling spelling)
             implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public WhereItAnswers(Proposition answers, Proposition states) {
@@ -600,7 +609,7 @@ public sealed interface Proposition {
             if (answers == null || states == null) {
                 throw new IllegalArgumentException("a statement is read somewhere, of something");
             }
-            key = "where " + answers.key() + " [" + states.key() + "]";
+            spelling = Spelling.of("where ", answers.spelling(), " [", states.spelling(), "]");
         }
 
         @Override
@@ -621,19 +630,20 @@ public sealed interface Proposition {
      *
      * @param ways  what the cases are written out from, shared by this and its denial
      * @param holds whether the statement holds or its denial does
-     * @param key   spelled from the ways' own when it is made, whatever is handed in
+     * @param spelling  spelled from the ways' own when it is made, whatever is handed in
      */
-    record OfTheWays(WaysToWrite ways, boolean holds, String key) implements Proposition {
+    record OfTheWays(WaysToWrite ways, boolean holds, Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         @Override
         public boolean equals(Object other) {
             return this == other || (other instanceof OfTheWays that
-                    && key.hashCode() == that.key.hashCode() && key.equals(that.key));
+                    && spelling.hashCode() == that.spelling.hashCode()
+                    && spelling.equals(that.spelling));
         }
 
         public OfTheWays(WaysToWrite ways, boolean holds) {
@@ -642,7 +652,7 @@ public sealed interface Proposition {
 
         public OfTheWays {
             Objects.requireNonNull(ways, "a statement over the ways is written out from something");
-            key = (holds ? "" : "!") + ways.spelled();
+            spelling = holds ? ways.spelled() : Spelling.of("!", ways.spelled());
         }
 
         /** The statement written out: a case for each way, written once while the ways are held
@@ -682,7 +692,7 @@ public sealed interface Proposition {
         private final Optional<ModelOccurrence> where;
         private final long firstNumber;
         private final long numbersOwed;
-        private final String spelled;
+        private final Spelling spelled;
 
         /**
          * @param kept        which truths keep which elements
@@ -763,19 +773,23 @@ public sealed interface Proposition {
         }
 
         /** What these are made of, which tells them from others. */
-        String spelled() {
+        Spelling spelled() {
             return spelled;
         }
 
-        private String spell() {
-            StringBuilder out = new StringBuilder("ways ").append(kept.spelled()).append('|')
-                    .append(reading.key());
-            new TreeMap<>(conditions).forEach((truth, condition) ->
-                    out.append('|').append(truth).append('=').append(condition.key()));
-            return out.append('|').append(forms).append('|').append(sum).append('|')
-                    .append(count).append('|').append(counted).append('|').append(fixed)
-                    .append('|').append(where).append('|').append(firstNumber).append('+')
-                    .append(numbersOwed).toString();
+        /** Spelled with the reading's and each condition's spelling held as it is, so a statement
+         *  over the ways holds no second copy of what its conditions spell. */
+        private Spelling spell() {
+            List<Spelling> pieces = new ArrayList<>();
+            pieces.add(Spelling.of("ways " + kept.spelled() + "|"));
+            pieces.add(reading.spelling());
+            new TreeMap<>(conditions).forEach((truth, condition) -> {
+                pieces.add(Spelling.of("|" + truth + "="));
+                pieces.add(condition.spelling());
+            });
+            pieces.add(Spelling.of("|" + forms + "|" + sum + "|" + count + "|" + counted + "|"
+                    + fixed + "|" + where + "|" + firstNumber + "+" + numbersOwed));
+            return Spelling.joined(pieces);
         }
 
         /** Alike where they are spelled alike: the cases follow from what is spelled. */
@@ -795,13 +809,13 @@ public sealed interface Proposition {
     /**
      * Every part holding. Made through {@link #all}.
      *
-     * @param key spelled from the parts' own when it is made, whatever is handed in
+     * @param spelling spelled from the parts' own when it is made, whatever is handed in
      */
-    record All(List<Proposition> parts, String key) implements Proposition {
+    record All(List<Proposition> parts, Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         /**
@@ -812,9 +826,11 @@ public sealed interface Proposition {
         @Override
         public boolean equals(Object other) {
             return this == other || (other instanceof All that
-                    && key.hashCode() == that.key.hashCode() && key.equals(that.key)
-                    && parts.equals(that.parts));
+                    && spelling.hashCode() == that.spelling.hashCode()
+                    && spelling.equals(that.spelling) && parts.equals(that.parts));
         }
+
+        private static final Spelling OPENING = Spelling.of("all[");
 
         public All(List<Proposition> parts) {
             this(parts, null);
@@ -825,7 +841,7 @@ public sealed interface Proposition {
             if (parts.size() < 2) {
                 throw new IllegalArgumentException("a conjunction is of two or more parts");
             }
-            key = spellingOf("all", parts);
+            spelling = spellingOf(OPENING, parts);
         }
 
         @Override
@@ -838,22 +854,24 @@ public sealed interface Proposition {
     /**
      * Some part holding. Made through {@link #any}.
      *
-     * @param key spelled from the parts' own when it is made, whatever is handed in
+     * @param spelling spelled from the parts' own when it is made, whatever is handed in
      */
-    record Any(List<Proposition> parts, String key) implements Proposition {
+    record Any(List<Proposition> parts, Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         /** Both components, the spelling first, as {@link All} compares them. */
         @Override
         public boolean equals(Object other) {
             return this == other || (other instanceof Any that
-                    && key.hashCode() == that.key.hashCode() && key.equals(that.key)
-                    && parts.equals(that.parts));
+                    && spelling.hashCode() == that.spelling.hashCode()
+                    && spelling.equals(that.spelling) && parts.equals(that.parts));
         }
+
+        private static final Spelling OPENING = Spelling.of("any[");
 
         public Any(List<Proposition> parts) {
             this(parts, null);
@@ -864,7 +882,7 @@ public sealed interface Proposition {
             if (parts.size() < 2) {
                 throw new IllegalArgumentException("a disjunction is of two or more parts");
             }
-            key = spellingOf("any", parts);
+            spelling = spellingOf(OPENING, parts);
         }
 
         /** Every part failing — which {@link #all} keeps as the cases of a condition where the
@@ -897,18 +915,18 @@ public sealed interface Proposition {
      * two are asked at once, which is a reader's to say and not something to be worked out here.
      */
     private static Proposition byTheCases(List<Proposition> conjuncts) {
-        List<Set<String>> partsOfEach = new ArrayList<>(conjuncts.size());
-        Set<String> anywhere = new HashSet<>();
+        List<Set<Spelling>> partsOfEach = new ArrayList<>(conjuncts.size());
+        Set<Spelling> anywhere = new HashSet<>();
         for (Proposition conjunct : conjuncts) {
-            Set<String> keys = new HashSet<>();
-            disjunctsOf(conjunct).forEach(each -> keys.add(each.key()));
+            Set<Spelling> keys = new HashSet<>();
+            disjunctsOf(conjunct).forEach(each -> keys.add(each.spelling()));
             partsOfEach.add(keys);
             anywhere.addAll(keys);
         }
         for (Proposition conjunct : conjuncts) {
             for (Proposition against : disjunctsOf(conjunct)) {
                 Proposition condition = against.denied();
-                if (!anywhere.contains(condition.key()) || !deniedWhereverItFails(condition)) {
+                if (!anywhere.contains(condition.spelling()) || !deniedWhereverItFails(condition)) {
                     continue;
                 }
                 List<Proposition> whereItHolds = new ArrayList<>();
@@ -918,8 +936,8 @@ public sealed interface Proposition {
                 boolean everyRow = false;
                 for (int at = 0; at < conjuncts.size(); at++) {
                     Proposition each = conjuncts.get(at);
-                    boolean holding = partsOfEach.get(at).contains(against.key());
-                    boolean failing = partsOfEach.get(at).contains(condition.key());
+                    boolean holding = partsOfEach.get(at).contains(against.spelling());
+                    boolean failing = partsOfEach.get(at).contains(condition.spelling());
                     if (holding && failing) {
                         everyRow = true;
                     } else if (holding) {
@@ -955,7 +973,7 @@ public sealed interface Proposition {
     /** What {@code stated} holds beside {@code part}, which fails where nothing else holds. */
     private static Proposition without(Proposition stated, Proposition part) {
         return any(disjunctsOf(stated).stream()
-                .filter(each -> !each.key().equals(part.key())).toList());
+                .filter(each -> !each.spelling().equals(part.spelling())).toList());
     }
 
     /**
@@ -968,14 +986,14 @@ public sealed interface Proposition {
      * the same container is never quantified twice inside one proposition: the two elements would be
      * one subject, and the proposition would say {@code x < x} where it was asked about two of them.
      *
-     * @param key spelled from the rest when it is made, whatever is handed in
+     * @param spelling spelled from the rest when it is made, whatever is handed in
      */
-    record Some(DecisionSubject container, Proposition ofTheElement, boolean holds, String key)
+    record Some(DecisionSubject container, Proposition ofTheElement, boolean holds, Spelling spelling)
             implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public Some(DecisionSubject container, Proposition ofTheElement, boolean holds) {
@@ -998,7 +1016,8 @@ public sealed interface Proposition {
                 throw new IllegalArgumentException("a quantifier over " + container + " is of a"
                         + " statement answering on every element: " + ofTheElement);
             }
-            key = (holds ? "some " : "no ") + container + " [" + ofTheElement.key() + "]";
+            spelling = Spelling.of((holds ? "some " : "no ") + container + " [",
+                    ofTheElement.spelling(), Spelling.CLOSE);
         }
 
         /**
@@ -1069,14 +1088,14 @@ public sealed interface Proposition {
         /** This quantifier with the parts it asks of its element, spelled once. */
         public ElementAsked elementAsked() {
             return new ElementAsked(this, switch (ofTheElement) {
-                case All all -> all.parts().stream().map(Proposition::key)
+                case All all -> all.parts().stream().map(Proposition::spelling)
                         .collect(Collectors.toUnmodifiableSet());
-                case Always(boolean always) -> always ? Set.of() : Set.of(ofTheElement.key());
+                case Always(boolean always) -> always ? Set.of() : Set.of(ofTheElement.spelling());
                 // One part, whatever it says: two spelled alike are one statement.
                 case Compared _, Truth _, InCases _, Present _, InTheStrings _, SameValue _,
                      StringInside _, LastToHold _, Any _, Some _, Carried _, SomeReachable _,
                      Unread _, OnAnApplication _, SoManyHold _, WhereItAnswers _, OfTheWays _ ->
-                        Set.of(ofTheElement.key());
+                        Set.of(ofTheElement.spelling());
             });
         }
 
@@ -1086,7 +1105,7 @@ public sealed interface Proposition {
          * @param quantifier the quantifier
          * @param parts      what it asks of its element, part by part; none where it asks nothing
          */
-        public record ElementAsked(Some quantifier, Set<String> parts) {
+        public record ElementAsked(Some quantifier, Set<Spelling> parts) {
 
             public ElementAsked {
                 Objects.requireNonNull(quantifier, "the parts are some quantifier's");
@@ -1125,13 +1144,13 @@ public sealed interface Proposition {
      * and either way as far as anything here knows. Every concluding of a whole condition supposes
      * it ({@link Derivation.Supposing}), so no reader of what a condition states is handed one.
      *
-     * @param key spelled from the rest when it is made, whatever is handed in
+     * @param spelling spelled from the rest when it is made, whatever is handed in
      */
-    record Carried(ACarriedValue value, boolean holds, String key) implements Proposition {
+    record Carried(ACarriedValue value, boolean holds, Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public Carried(ACarriedValue value, boolean holds) {
@@ -1142,7 +1161,7 @@ public sealed interface Proposition {
             if (value == null) {
                 throw new IllegalArgumentException("a walk carried something");
             }
-            key = (holds ? "" : "!") + value;
+            spelling = Spelling.of((holds ? "" : "!") + value);
         }
 
         @Override
@@ -1176,15 +1195,15 @@ public sealed interface Proposition {
      * @param through   the fields of a node whose elements are the nodes below it, in one order
      * @param noneBelow that the node at {@code at} has no node below it, where {@code at} is
      *                  {@code writtenAt} and the containers under it are measured
-     * @param key       spelled from the rest when it is made, whatever is handed in
+     * @param spelling      spelled from the rest when it is made, whatever is handed in
      */
     record SomeReachable(TermPath at, TermPath writtenAt, List<String> through,
                          Proposition atANode, Optional<Proposition> noneBelow, boolean holds,
-                         String key) implements Proposition {
+                         Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public SomeReachable(TermPath at, TermPath writtenAt, List<String> through,
@@ -1205,9 +1224,10 @@ public sealed interface Proposition {
                 throw new IllegalArgumentException("a search is of a statement answering on every"
                         + " node: " + atANode);
             }
-            key = (holds ? "reachable " : "unreachable ") + at + " from " + writtenAt + " through "
-                    + through + " [" + atANode.key() + "]"
-                    + noneBelow.map(none -> " none below [" + none.key() + "]").orElse("");
+            Spelling reached = Spelling.of((holds ? "reachable " : "unreachable ") + at + " from "
+                    + writtenAt + " through " + through + " [", atANode.spelling(), Spelling.CLOSE);
+            spelling = noneBelow.map(none -> Spelling.of(reached, " none below [", none.spelling(),
+                    Spelling.CLOSE)).orElse(reached);
         }
 
         @Override
@@ -1325,14 +1345,14 @@ public sealed interface Proposition {
      * @param ordinal which unread part of the condition this is, in the order the reading met them
      * @param why     what stopped it, in the stopping reader's words
      * @param fixed   whether it is the same whatever the input, which is all that is known of it
-     * @param key     spelled from where and which it is when it is made, whatever is handed in
+     * @param spelling    spelled from where and which it is when it is made, whatever is handed in
      */
     record Unread(Optional<ModelOccurrence> where, int ordinal, WhyUnread why, boolean fixed,
-                  boolean holds, String key) implements Proposition {
+                  boolean holds, Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public Unread(Optional<ModelOccurrence> where, int ordinal, WhyUnread why, boolean fixed,
@@ -1344,8 +1364,8 @@ public sealed interface Proposition {
             if (where == null || why == null) {
                 throw new IllegalArgumentException("an unread part stopped somewhere, for a reason");
             }
-            key = (holds ? "" : "!") + "unread " + where.map(String::valueOf).orElse("")
-                    + "#" + ordinal;
+            spelling = Spelling.of((holds ? "" : "!") + "unread "
+                    + where.map(String::valueOf).orElse("") + "#" + ordinal);
         }
 
         @Override
@@ -1373,22 +1393,24 @@ public sealed interface Proposition {
      * for what can come out, and one that needs what must — what a path assumes, what a row is
      * asked for — declines it.
      *
-     * @param key spelled from the statements' own when it is made, whatever is handed in
+     * @param spelling spelled from the statements' own when it is made, whatever is handed in
      */
-    record OnAnApplication(List<Proposition> each, String key) implements Proposition {
+    record OnAnApplication(List<Proposition> each, Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         /** Both components, the spelling first, as {@link All} compares them. */
         @Override
         public boolean equals(Object other) {
             return this == other || (other instanceof OnAnApplication that
-                    && key.hashCode() == that.key.hashCode() && key.equals(that.key)
-                    && each.equals(that.each));
+                    && spelling.hashCode() == that.spelling.hashCode()
+                    && spelling.equals(that.spelling) && each.equals(that.each));
         }
+
+        private static final Spelling OPENING = Spelling.of("on an application[");
 
         public OnAnApplication(List<Proposition> each) {
             this(each, null);
@@ -1400,7 +1422,7 @@ public sealed interface Proposition {
                 throw new IllegalArgumentException(
                         "a condition read on its applications states two or more things");
             }
-            key = "on an application" + each.stream().map(Proposition::key).toList();
+            spelling = spellingOf(OPENING, each);
         }
 
         @Override
@@ -1434,21 +1456,22 @@ public sealed interface Proposition {
      * @param weights    how many times each of {@code statements} was written, in the same order
      * @param admitted   the counts this holds at, rising — none of them every count there is, and
      *                   not none
-     * @param key        spelled from the rest when it is made, whatever is handed in
+     * @param spelling       spelled from the rest when it is made, whatever is handed in
      */
     record SoManyHold(List<Proposition> statements, List<Integer> weights, List<Integer> admitted,
-                      String key) implements Proposition {
+                      Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         /** Every component, the spelling first, as {@link All} compares them. */
         @Override
         public boolean equals(Object other) {
             return this == other || (other instanceof SoManyHold that
-                    && key.hashCode() == that.key.hashCode() && key.equals(that.key)
+                    && spelling.hashCode() == that.spelling.hashCode()
+                    && spelling.equals(that.spelling)
                     && statements.equals(that.statements) && weights.equals(that.weights)
                     && admitted.equals(that.admitted));
         }
@@ -1471,7 +1494,7 @@ public sealed interface Proposition {
                         + " row: " + statements);
             }
             for (int at = 1; at < statements.size(); at++) {
-                if (statements.get(at - 1).key().compareTo(statements.get(at).key()) >= 0) {
+                if (statements.get(at - 1).spelling().compareTo(statements.get(at).spelling()) >= 0) {
                     throw new IllegalArgumentException("statements are kept once, in the order of"
                             + " their keys: " + statements);
                 }
@@ -1492,12 +1515,14 @@ public sealed interface Proposition {
                             + all + ": " + admitted);
                 }
             }
-            StringBuilder spelled = new StringBuilder("so many hold").append(admitted).append(" of [");
+            List<Spelling> spelled = new ArrayList<>(2 * statements.size() + 1);
+            spelled.add(Spelling.of("so many hold" + admitted + " of ["));
             for (int at = 0; at < statements.size(); at++) {
-                spelled.append(at == 0 ? "" : ", ").append(weights.get(at)).append('*')
-                        .append(statements.get(at).key());
+                spelled.add(Spelling.of((at == 0 ? "" : ", ") + weights.get(at) + "*"));
+                spelled.add(statements.get(at).spelling());
             }
-            key = spelled.append(']').toString();
+            spelled.add(Spelling.CLOSE);
+            spelling = Spelling.joined(spelled);
         }
 
         /** How many the statements come to where every one of them holds. */
@@ -1520,8 +1545,8 @@ public sealed interface Proposition {
          */
         public static Proposition counting(List<Proposition> statements, List<Integer> weights,
                                            List<Integer> admitted) {
-            SortedMap<String, Proposition> kept = new TreeMap<>();
-            Map<String, Integer> weighed = new HashMap<>();
+            SortedMap<Spelling, Proposition> kept = new TreeMap<>();
+            Map<Spelling, Integer> weighed = new HashMap<>();
             int always = 0;
             for (int at = 0; at < statements.size(); at++) {
                 Proposition statement = statements.get(at);
@@ -1529,8 +1554,8 @@ public sealed interface Proposition {
                     always += holds ? weights.get(at) : 0;
                     continue;
                 }
-                kept.putIfAbsent(statement.key(), statement);
-                weighed.merge(statement.key(), weights.get(at), Integer::sum);
+                kept.putIfAbsent(statement.spelling(), statement);
+                weighed.merge(statement.spelling(), weights.get(at), Integer::sum);
             }
             int all = weighed.values().stream().mapToInt(Integer::intValue).sum();
             List<Integer> counts = new ArrayList<>();
@@ -1697,8 +1722,8 @@ public sealed interface Proposition {
      * kept once in one order, and one statement where every application states it.
      */
     static Proposition onAnApplication(List<Proposition> each) {
-        SortedMap<String, Proposition> kept = new TreeMap<>();
-        each.forEach(one -> kept.putIfAbsent(one.key(), one));
+        SortedMap<Spelling, Proposition> kept = new TreeMap<>();
+        each.forEach(one -> kept.putIfAbsent(one.spelling(), one));
         if (kept.isEmpty()) {
             throw new IllegalArgumentException("a condition is read on some application");
         }
@@ -1885,7 +1910,7 @@ public sealed interface Proposition {
         return switch (stated) {
             case Always _, Unread _, Carried _ -> false;
             case LastToHold last -> last.container() instanceof DecisionSubject.AnAnswer;
-            case Compared(Relation relation, boolean _, String _) -> switch (relation) {
+            case Compared(Relation relation, boolean _, Spelling _) -> switch (relation) {
                 case Relation.Affine affine -> affine.form().coefs().keySet().stream()
                         .anyMatch(Proposition::anAnswerIn);
                 case Relation.Ordered ordered -> anAnswerIn(ordered.term());
@@ -2054,7 +2079,7 @@ public sealed interface Proposition {
             return states;
         }
         // Where it answers is one region however many operations it was said of.
-        return states instanceof WhereItAnswers(Proposition inner, Proposition stated, String _)
+        return states instanceof WhereItAnswers(Proposition inner, Proposition stated, Spelling _)
                 ? new WhereItAnswers(all(List.of(answers, inner)), stated)
                 : new WhereItAnswers(answers, states);
     }
@@ -2071,7 +2096,7 @@ public sealed interface Proposition {
 
     /** Whether {@code stated} answers on no row ({@link #answersNowhere}). */
     static boolean answersNowhere(Proposition stated) {
-        return stated instanceof WhereItAnswers(Proposition answers, Proposition _, String _)
+        return stated instanceof WhereItAnswers(Proposition answers, Proposition _, Spelling _)
                 && answers instanceof Always(boolean everywhere) && !everywhere;
     }
 
@@ -2088,7 +2113,7 @@ public sealed interface Proposition {
         if (!holdsAnAnswering(stated)) {
             return null;
         }
-        if (stated instanceof WhereItAnswers(Proposition answers, Proposition states, String _)) {
+        if (stated instanceof WhereItAnswers(Proposition answers, Proposition states, Spelling _)) {
             Proposition inside = answeredWhere(states);
             return inside == null ? answers : all(List.of(answers, inside));
         }
@@ -2155,7 +2180,7 @@ public sealed interface Proposition {
         }
         // Where it answers may be written as a part and its denial side by side, which holds
         // where the part answers either way.
-        if (stated instanceof WhereItAnswers(Proposition answers, Proposition states, String _)) {
+        if (stated instanceof WhereItAnswers(Proposition answers, Proposition states, Spelling _)) {
             Proposition inside = whereItAnswersAtAll(states);
             return inside == null ? whereItHolds(answers)
                     : all(List.of(whereItHolds(answers), inside));
@@ -2176,7 +2201,7 @@ public sealed interface Proposition {
             return stated;
         }
         return switch (stated) {
-            case WhereItAnswers(Proposition answers, Proposition states, String _) ->
+            case WhereItAnswers(Proposition answers, Proposition states, Spelling _) ->
                     all(List.of(whereItHolds(answers), whereItHolds(states)));
             case All all -> all(all.parts().stream().map(Proposition::whereItHolds).toList());
             case Any any -> any(any.parts().stream().map(Proposition::whereItHolds).toList());
@@ -2261,7 +2286,7 @@ public sealed interface Proposition {
     private static boolean saidByAContainerHolding(Proposition one, List<Proposition> joined,
                                                    boolean every) {
         if (!(one instanceof Some(DecisionSubject container, Proposition _, boolean holds,
-                String _)) || holds == every) {
+                Spelling _)) || holds == every) {
             return false;
         }
         for (Proposition other : joined) {
@@ -2276,7 +2301,7 @@ public sealed interface Proposition {
      *  stands, above nought. */
     private static boolean holdsSomething(Proposition stated, DecisionSubject container) {
         if (!(stated instanceof Compared(Relation.Affine(LinearForm<Quantity> form, Rel rel),
-                        boolean holds, String _))
+                        boolean holds, Spelling _))
                 || !holds || rel != Rel.GT || form.constant().signum() != 0
                 || form.coefs().size() != 1
                 || form.coefs().values().iterator().next().signum() <= 0) {
@@ -2305,7 +2330,7 @@ public sealed interface Proposition {
 
     private static Proposition joined(List<Proposition> parts, boolean every) {
         // In the order of their spellings, a part whose spelling is already kept left out.
-        SortedMap<String, Proposition> kept = new TreeMap<>();
+        SortedMap<Spelling, Proposition> kept = new TreeMap<>();
         for (Proposition part : parts) {
             List<Proposition> flat = switch (part) {
                 case All all when every -> all.parts();
@@ -2319,7 +2344,7 @@ public sealed interface Proposition {
                     }
                     continue;
                 }
-                kept.putIfAbsent(one.key(), one);
+                kept.putIfAbsent(one.spelling(), one);
             }
         }
         if (kept.size() > 1 && kept.values().stream().anyMatch(Some.class::isInstance)) {

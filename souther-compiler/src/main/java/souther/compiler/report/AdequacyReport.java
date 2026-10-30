@@ -6711,7 +6711,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // what it states — which is what makes it and its denial one column.
             case DecidedCondition.Held(var condition, var held) -> {
                 out.put("kind", "statement");
-                out.put("condition", condition.statement().key());
+                out.put("condition", condition.statement().spelling().toString());
                 out.put("outcome", held ? "held" : "denied");
             }
             // A condition this compiler had no words for, named by the reading that met it. Two

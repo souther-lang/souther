@@ -523,7 +523,7 @@ public sealed interface RealizationTarget {
 
         @Override
         public String toString() {
-            return container + " meeting " + stated.key();
+            return container + " meeting " + stated.spelling();
         }
     }
 }

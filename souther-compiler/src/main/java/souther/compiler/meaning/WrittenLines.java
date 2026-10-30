@@ -288,7 +288,7 @@ public final class WrittenLines {
                 && conclusionOf(step) instanceof Proposition.Compared compared
                 && compared.relation().equals(read.relation())) {
             facing = read.facing();
-            own = compared.heldKey();
+            own = compared.heldSpelling().toString();
         }
         if (!under.decidedOutside()) {
             drawn.add(under.line());
@@ -348,8 +348,8 @@ public final class WrittenLines {
     private void gather(Proposition stated, Set<String> into) {
         switch (stated) {
             case Proposition.Compared compared -> {
-                into.add(compared.heldKey());
-                this.stated.putIfAbsent(compared.heldKey(), compared);
+                into.add(compared.heldSpelling().toString());
+                this.stated.putIfAbsent(compared.heldSpelling().toString(), compared);
             }
             case Proposition.All all -> all.parts().forEach(each -> gather(each, into));
             case Proposition.Any any -> any.parts().forEach(each -> gather(each, into));

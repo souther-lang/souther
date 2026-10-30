@@ -120,8 +120,8 @@ public final class WhereEachLineDecides {
      * cases nobody took apart.
      */
     public static List<Decides> in(Proposition writtenAs) {
-        Map<String, Proposition.Compared> lines = new TreeMap<>();
-        Map<String, List<List<List<DecidingCase>>>> standings = new TreeMap<>();
+        Map<Spelling, Proposition.Compared> lines = new TreeMap<>();
+        Map<Spelling, List<List<List<DecidingCase>>>> standings = new TreeMap<>();
         OneSpellingPerLine spellings = new OneSpellingPerLine();
         Proposition stated = spellings.of(writtenAs);
         Proposition lifted = new Lifting().of(stated);
@@ -338,13 +338,13 @@ public final class WhereEachLineDecides {
      */
     private static void read(Proposition stated, Proposition whole, DecisionSubject element,
                              List<List<DecidingCase>> around, boolean lifted,
-                             Map<String, Proposition.Compared> lines,
-                             Map<String, List<List<List<DecidingCase>>>> standings) {
+                             Map<Spelling, Proposition.Compared> lines,
+                             Map<Spelling, List<List<List<DecidingCase>>>> standings) {
         Reading reading = lifted ? Reading.of(stated) : Reading.unread(stated);
-        Set<String> whereItAnswers = onlyWhereItAnswers(stated);
+        Set<Spelling> whereItAnswers = onlyWhereItAnswers(stated);
         for (Proposition part : reading.named()) {
             if (part instanceof Proposition.Compared line
-                    && !whereItAnswers.contains(line.key())) {
+                    && !whereItAnswers.contains(line.spelling())) {
                 List<List<DecidingCase>> factors = new ArrayList<>(around);
                 if (element == null || line.mayTurnOnAnElementOf(element)) {
                     factors.add(reading.turnsOn(line));
@@ -354,8 +354,8 @@ public final class WhereEachLineDecides {
                 } else {
                     factors = List.of(Reading.unread(whole).turnsOn(line));
                 }
-                lines.putIfAbsent(line.key(), line);
-                standings.computeIfAbsent(line.key(), k -> new ArrayList<>()).add(factors);
+                lines.putIfAbsent(line.spelling(), line);
+                standings.computeIfAbsent(line.spelling(), k -> new ArrayList<>()).add(factors);
             } else if (part instanceof Proposition.Some some
                     && statesARelation(some.ofTheElement())) {
                 List<List<DecidingCase>> inside = new ArrayList<>(around);
@@ -415,7 +415,7 @@ public final class WhereEachLineDecides {
                     yield answers == where.answers() && states == where.states() ? stated
                             : Proposition.whereItAnswers(answers, states);
                 }
-                case Proposition.Compared(Relation.Affine affine, boolean holds, String _) -> {
+                case Proposition.Compared(Relation.Affine affine, boolean holds, Spelling _) -> {
                     Relation.Affine first = firstWritten(affine);
                     yield first == affine ? stated : new Proposition.Compared(first, holds);
                 }
@@ -656,7 +656,7 @@ public final class WhereEachLineDecides {
          *  null where every part may be. */
         private static Proposition aboutNoElement(Proposition element,
                                                   DecisionSubject container) {
-            Map<String, Proposition> parts = new TreeMap<>();
+            Map<Spelling, Proposition> parts = new TreeMap<>();
             gather(element, parts, new TreeMap<>());
             return parts.values().stream()
                     .filter(part -> !part.mayTurnOnAnElementOf(container))
@@ -674,8 +674,8 @@ public final class WhereEachLineDecides {
 
         private final Proposition stated;
         private final List<Proposition> named;
-        private final Map<String, Integer> index;
-        private final Map<String, Literal> leaves;
+        private final Map<Spelling, Integer> index;
+        private final Map<Spelling, Literal> leaves;
         /** Whether the statement was lifted, so that each part is one part of it. */
         private final boolean lifted;
         private final WhatAStatementComesTo ways;
@@ -702,13 +702,13 @@ public final class WhereEachLineDecides {
             // joins next to each other: asked in that order, a statement of several such joined
             // together is left as few statements as it has joins, where asked with the parts of
             // each apart it is left as a different one for every way the earlier ones come out.
-            Map<String, Proposition> parts = new LinkedHashMap<>();
+            Map<Spelling, Proposition> parts = new LinkedHashMap<>();
             this.leaves = new TreeMap<>();
             gather(stated, parts, leaves);
             this.named = List.copyOf(parts.values());
             this.index = new TreeMap<>();
             for (int i = 0; i < named.size(); i++) {
-                index.put(named.get(i).key(), i);
+                index.put(named.get(i).spelling(), i);
             }
             this.twice = askedTwice(named);
             this.ways = new WhatAStatementComesTo();
@@ -776,7 +776,7 @@ public final class WhereEachLineDecides {
                      Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _ -> {
                     Proposition held = held(stated);
-                    yield asking.part(index.get(held.key()), held == stated);
+                    yield asking.part(index.get(held.spelling()), held == stated);
                 }
             };
         }
@@ -1020,17 +1020,17 @@ public final class WhereEachLineDecides {
                 if (!(statement instanceof Proposition.All || statement instanceof Proposition.Any
                         || statement instanceof Proposition.WhereItAnswers
                         || statement instanceof Proposition.SoManyHold)
-                        && held(statement).key().equals(part.key())) {
-                    if (statement.key().equals(part.key())) {
+                        && held(statement).spelling().equals(part.spelling())) {
+                    if (statement.spelling().equals(part.spelling())) {
                         held += weight;
                     } else {
                         denied += weight;
                     }
                     continue;
                 }
-                Map<String, Proposition> asked = new TreeMap<>();
+                Map<Spelling, Proposition> asked = new TreeMap<>();
                 gather(statement, asked, new TreeMap<>());
-                if (asked.containsKey(part.key())) {
+                if (asked.containsKey(part.spelling())) {
                     return null;
                 }
                 others.add(statement);
@@ -1064,7 +1064,7 @@ public final class WhereEachLineDecides {
             for (Proposition each : canBe) {
                 Proposition held = with(each, part, true);
                 Proposition failing = with(each, part, false);
-                if (!held.key().equals(each.key()) || !failing.key().equals(each.key())) {
+                if (!held.spelling().equals(each.spelling()) || !failing.spelling().equals(each.spelling())) {
                     parts.add(held);
                     parts.add(failing);
                 }
@@ -1086,7 +1086,7 @@ public final class WhereEachLineDecides {
             }
             WhatAStatementComesTo.Asking asking =
                     ways.asking(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.maximum());
-            int at = index.get(part.key());
+            int at = index.get(part.spelling());
             int held = asking.with(possible, at, true);
             int failing = asking.with(possible, at, false);
             int decides = asking.both(asking.oneNotTheOther(asking.with(whole, at, true),
@@ -1308,7 +1308,7 @@ public final class WhereEachLineDecides {
 
     /** Whether {@code leaf} is {@code part}, held or denied. */
     private static boolean standsAs(Proposition leaf, Proposition part) {
-        return leaf.getClass() == part.getClass() && held(leaf).key().equals(part.key());
+        return leaf.getClass() == part.getClass() && held(leaf).spelling().equals(part.spelling());
     }
 
     private static boolean statesARelation(Proposition stated) {
@@ -1334,11 +1334,11 @@ public final class WhereEachLineDecides {
      * A part as it stands in the statement: which part it is, by the spelling of it held, and
      * whether it stands held or denied.
      */
-    private record Literal(String part, boolean held) {}
+    private record Literal(Spelling part, boolean held) {}
 
     /** Every part {@code stated} joins, held, and each place one stands, by its own spelling. */
-    private static void gather(Proposition stated, Map<String, Proposition> parts,
-                               Map<String, Literal> leaves) {
+    private static void gather(Proposition stated, Map<Spelling, Proposition> parts,
+                               Map<Spelling, Literal> leaves) {
         switch (stated) {
             case Proposition.All all -> all.parts().forEach(part -> gather(part, parts, leaves));
             case Proposition.Any any -> any.parts().forEach(part -> gather(part, parts, leaves));
@@ -1355,8 +1355,8 @@ public final class WhereEachLineDecides {
                  Proposition.SomeReachable _, Proposition.Unread _,
                  Proposition.OnAnApplication _ -> {
                 Proposition held = held(stated);
-                parts.putIfAbsent(held.key(), held);
-                leaves.putIfAbsent(stated.key(), new Literal(held.key(), held == stated));
+                parts.putIfAbsent(held.spelling(), held);
+                leaves.putIfAbsent(stated.spelling(), new Literal(held.spelling(), held == stated));
             }
         }
     }
@@ -1367,18 +1367,18 @@ public final class WhereEachLineDecides {
      * a row the statement says nothing of, so it stands on no side of anything, and what such a
      * part does is narrow the cases the lines of the rest decide in.
      */
-    private static Set<String> onlyWhereItAnswers(Proposition stated) {
-        Map<String, Proposition> answering = new TreeMap<>();
-        Map<String, Proposition> stating = new TreeMap<>();
+    private static Set<Spelling> onlyWhereItAnswers(Proposition stated) {
+        Map<Spelling, Proposition> answering = new TreeMap<>();
+        Map<Spelling, Proposition> stating = new TreeMap<>();
         partsBy(stated, false, answering, stating);
-        Set<String> out = new HashSet<>(answering.keySet());
+        Set<Spelling> out = new HashSet<>(answering.keySet());
         out.removeAll(stating.keySet());
         return out;
     }
 
     /** Every part {@code stated} joins, held, filed by whether it stands in where it answers. */
     private static void partsBy(Proposition stated, boolean answering,
-                                Map<String, Proposition> where, Map<String, Proposition> what) {
+                                Map<Spelling, Proposition> where, Map<Spelling, Proposition> what) {
         switch (stated) {
             case Proposition.All all ->
                     all.parts().forEach(part -> partsBy(part, answering, where, what));
@@ -1397,7 +1397,7 @@ public final class WhereEachLineDecides {
                  Proposition.SomeReachable _, Proposition.Unread _,
                  Proposition.OnAnApplication _ -> {
                 Proposition held = held(stated);
-                (answering ? where : what).putIfAbsent(held.key(), held);
+                (answering ? where : what).putIfAbsent(held.spelling(), held);
             }
         }
     }
@@ -1508,7 +1508,7 @@ public final class WhereEachLineDecides {
                                                          Proposition part) {
         List<DecidingCase> out = new ArrayList<>();
         for (UnderACase each : underEachCase) {
-            if (each.reading().index.containsKey(part.key())) {
+            if (each.reading().index.containsKey(part.spelling())) {
                 each.reading().turnsOn(part).forEach(one -> out.add(one.meeting(each.is())));
             }
         }
@@ -1662,7 +1662,7 @@ public final class WhereEachLineDecides {
      * for: what was said for several is kept as several, whatever it was joined with.
      */
     static List<DecidingCase> joinedOverAValue(List<DecidingCase> cases) {
-        Map<String, Joined> joined = new LinkedHashMap<>();
+        Map<Spelling, Joined> joined = new LinkedHashMap<>();
         for (DecidingCase written : cases) {
             // Said as the cases left of each value first, so that what two cases ask of a value is
             // one set each and the two are told apart by that alone. A case leaving no value is
@@ -1677,14 +1677,14 @@ public final class WhereEachLineDecides {
                     .filter(part -> part instanceof Proposition.InCases in && oneValueOfTheRow(in))
                     .map(Proposition.InCases.class::cast).findFirst().orElse(null);
             if (asked == null) {
-                joined.computeIfAbsent("whole " + each.key(),
+                joined.computeIfAbsent(Spelling.of("whole ", each.spelling()),
                         _ -> new Joined(null, each, List.of(), new ArrayList<>()))
                         .written().add(written);
                 continue;
             }
             Proposition rest = Proposition.all(parts.stream().filter(part -> part != asked)
                     .toList());
-            Joined there = joined.computeIfAbsent(asked.of() + " " + rest.key(),
+            Joined there = joined.computeIfAbsent(Spelling.of(asked.of() + " ", rest.spelling()),
                     _ -> new Joined(asked.of(), rest, new ArrayList<>(), new ArrayList<>()));
             asked.cases().atoms().stream().filter(atom -> !there.atoms().contains(atom))
                     .forEach(there.atoms()::add);
@@ -1803,7 +1803,7 @@ public final class WhereEachLineDecides {
                     counted.mapped(each -> with(each, part, holds));
             case Proposition.OfTheWays ways -> with(ways.written(), part, holds);
             case Proposition leaf when standsAs(leaf, part) ->
-                    new Proposition.Always(leaf.key().equals(part.key()) == holds);
+                    new Proposition.Always(leaf.spelling().equals(part.spelling()) == holds);
             case Proposition.Some some when !part.mayTurnOnAnElementOf(some.container()) ->
                     new Proposition.Some(some.container(), with(some.ofTheElement(), part, holds),
                             some.holds());

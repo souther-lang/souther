@@ -61,7 +61,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
         List<String> found = Adequacy.readingsOf(compilation.db(), "demo").get("f").stream()
                 .filter(line -> line.border().cut().toString().contains("Apart"))
                 .map(line -> ((LineOrigin.ComparisonOrigin) line.origin()).part()
-                        .map(part -> part.decides().key()).orElse("everywhere"))
+                        .map(part -> part.decides().spelledOut()).orElse("everywhere"))
                 .toList();
         assertEquals(1, found.size(), found.toString());
         return found.getFirst();

@@ -18,6 +18,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Spelling;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.query.Adequacy;
@@ -151,7 +152,7 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
     /** The value being one of the pieces of the window, wherever in the statement it stands. */
     private static Quantity.IsAmongThePieces among(Proposition stated) {
         if (stated instanceof Proposition.Compared(
-                souther.compiler.meaning.Relation.Affine affine, boolean _, String _)) {
+                souther.compiler.meaning.Relation.Affine affine, boolean _, Spelling _)) {
             for (Quantity each : affine.form().coefs().keySet()) {
                 if (each instanceof Quantity.IsAmongThePieces among) {
                     return among;
@@ -194,11 +195,11 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
     @Test
     void twoWindowsOfOneStringAreTwoStatements() {
         String split = "String.split(\"@\", i.b)";
-        assertTrue(!stated("List.any(d -> i.a == d, " + split + ")").key().equals(
-                stated("List.any(d -> i.a == d, List.drop(1, " + split + "))").key()));
+        assertTrue(!stated("List.any(d -> i.a == d, " + split + ")").spelledOut().equals(
+                stated("List.any(d -> i.a == d, List.drop(1, " + split + "))").spelledOut()));
         assertTrue(!stated("List.any(d -> i.a == d, List.take(2, List.drop(1, " + split
-                + "))) ").key().equals(stated("List.any(d -> i.a == d, List.drop(1, List.take(2, "
-                + split + ")))").key()));
+                + "))) ").spelledOut().equals(stated("List.any(d -> i.a == d, List.drop(1, List.take(2, "
+                + split + ")))").spelledOut()));
     }
 
     /** A window that holds no piece is no number of the pieces a value is among, and is not read
@@ -328,14 +329,14 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
     /** Two spellings of one relation are one statement, and two different relations are not. */
     @Test
     void theRelationIsToldApartByTheStringsAndWhereOneStandsInTheOther() {
-        assertEquals(stated("String.contains(i.a, i.b)").key(),
-                stated("String.contains(i.a, i.b)").key());
-        assertTrue(!stated("String.contains(i.a, i.b)").key()
-                .equals(stated("String.contains(i.b, i.a)").key()), "the strings swapped");
-        assertTrue(!stated("String.contains(i.a, i.b)").key()
-                .equals(stated("String.startsWith(i.a, i.b)").key()), "where one stands");
-        assertTrue(!stated("String.contains(i.a, i.b)").key()
-                .equals(stated("String.contains(String.lowercase(i.a), i.b)").key()),
+        assertEquals(stated("String.contains(i.a, i.b)").spelledOut(),
+                stated("String.contains(i.a, i.b)").spelledOut());
+        assertTrue(!stated("String.contains(i.a, i.b)").spelledOut()
+                .equals(stated("String.contains(i.b, i.a)").spelledOut()), "the strings swapped");
+        assertTrue(!stated("String.contains(i.a, i.b)").spelledOut()
+                .equals(stated("String.startsWith(i.a, i.b)").spelledOut()), "where one stands");
+        assertTrue(!stated("String.contains(i.a, i.b)").spelledOut()
+                .equals(stated("String.contains(String.lowercase(i.a), i.b)").spelledOut()),
                 "what one was made of");
     }
 

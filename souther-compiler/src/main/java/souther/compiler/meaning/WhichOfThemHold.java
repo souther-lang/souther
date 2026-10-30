@@ -66,11 +66,11 @@ final class WhichOfThemHold {
                         instanceof Quantity.HowManyHold(List<Proposition> each))) {
             return null;
         }
-        Map<String, Proposition> once = new LinkedHashMap<>();
-        Map<String, Integer> written = new LinkedHashMap<>();
+        Map<Spelling, Proposition> once = new LinkedHashMap<>();
+        Map<Spelling, Integer> written = new LinkedHashMap<>();
         for (Proposition one : each) {
-            once.putIfAbsent(one.key(), one);
-            written.merge(one.key(), 1, Integer::sum);
+            once.putIfAbsent(one.spelling(), one);
+            written.merge(one.spelling(), 1, Integer::sum);
         }
         ExactRatio by = form.coefs().values().iterator().next();
         boolean[] admitted = new boolean[each.size() + 1];
@@ -120,7 +120,7 @@ final class WhichOfThemHold {
         for (int one = 0; one < statements.size(); one++) {
             byKey.add(one);
         }
-        byKey.sort(Comparator.comparing((Integer one) -> statements.get(one).key()));
+        byKey.sort(Comparator.comparing((Integer one) -> statements.get(one).spelling()));
         List<Proposition> kept = new ArrayList<>(statements.size());
         List<Integer> weighed = new ArrayList<>(statements.size());
         byKey.forEach(one -> {

@@ -141,7 +141,7 @@ final class StatementsOnClasses {
 
     private static void collect(Proposition stated, Map<String, Proposition.Compared> out) {
         switch (stated) {
-            case Proposition.Compared leaf -> out.putIfAbsent(leaf.heldKey(), leaf);
+            case Proposition.Compared leaf -> out.putIfAbsent(leaf.heldSpelling().toString(), leaf);
             case Proposition.All all -> all.parts().forEach(part -> collect(part, out));
             case Proposition.Any any -> any.parts().forEach(part -> collect(part, out));
             default -> { }
@@ -237,7 +237,7 @@ final class StatementsOnClasses {
     /** What is known of a relation: what was drawn or implied for it, and nothing where neither
      *  was. */
     private Settled ofARelation(Proposition.Compared leaf) {
-        Settled of = known.get(leaf.heldKey());
+        Settled of = known.get(leaf.heldSpelling().toString());
         if (of == null) {
             return new Settled(filled(false), filled(false));
         }

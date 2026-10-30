@@ -62,7 +62,7 @@ public sealed interface CaseOfAStatement {
 
         @Override
         public String spelled() {
-            return step + " of " + statement.key();
+            return step + " of " + statement.spelling();
         }
 
         /**
@@ -144,7 +144,7 @@ public sealed interface CaseOfAStatement {
         @Override
         public String spelled() {
             return way + " of " + order.position() + " in " + order.container() + " in "
-                    + statement.key();
+                    + statement.spelling();
         }
     }
 }
