@@ -1,6 +1,11 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.AffineForms;
+import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.SeededWalk;
+import souther.compiler.inputs.Denotation;
+import souther.compiler.types.BindingId;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationAccess;
@@ -60,6 +65,7 @@ import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -663,11 +669,115 @@ public final class GuardThresholds {
      * that was read as one that was not. Where the reading stopped, the expression and the
      * environment it was being read in come back together, so the sides are not read again in
      * whatever the caller happens to hold.
+     *
+     * <p>And where it stopped ({@link #whereItStopped}), which is this reader's to say for the
+     * same reason: it is the one that holds the expression the reading stopped at.
      */
-    static java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped>
-            whatEachPlaceIsLeftWith(StatedComparison comparison,
-                                    AffineReading.OfAComparison.Stopped stopped,
-                                    InputReading read, InputReads reads, Arrivals answering) {
+    static Cutting.Read.Stopped whatEachPlaceIsLeftWith(StatedComparison comparison,
+                                                        AffineReading.OfAComparison.Stopped stopped,
+                                                        InputReading read, InputReads reads,
+                                                        Arrivals answering) {
+        return new Cutting.Read.Stopped(
+                leftAtEachPlace(comparison, stopped, read, reads, answering),
+                whereItStopped(stopped, read));
+    }
+
+    /**
+     * Where the reading of a comparison stopped: in what a run works out where the walk had no
+     * rule for the expression it stopped at and that expression works a number out by a call into
+     * a behavior's body or a walk from a seed; elsewhere otherwise.
+     *
+     * <p>Both halves are the stop's. Why it stopped says whether anything about the expression was
+     * decided — arithmetic no form says, a figure of this compiler's work, a number not held each
+     * name what stopped it, and are said as that. The expression says whether a run works the
+     * number out where the reading did not: {@code Int.floorMod(i, 2)} over an index is no rule
+     * here either, and no call or walk works it out. Asked of the comparison's sides instead, a
+     * call anywhere in them would answer for a stop at a remainder beside it.
+     */
+    private static WhereAReadingStopped whereItStopped(AffineReading.OfAComparison.Stopped stopped,
+                                                       InputReading read) {
+        if (!(stopped.failure().why() instanceof AffineForms.Halt.NoRule<?, ?>)) {
+            return WhereAReadingStopped.ELSEWHERE;
+        }
+        return worksOutByACallOrAWalk(stopped.node(), stopped.at(), read, new HashSet<>())
+                && !readsAnAnswer(stopped.node(), stopped.at(), read, new HashSet<>())
+                ? WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT : WhereAReadingStopped.ELSEWHERE;
+    }
+
+    /**
+     * Whether {@code e} works a number out by entering a behavior's body or by walking from a
+     * seed, anywhere in it or in what the names in it stand for.
+     */
+    private static boolean worksOutByACallOrAWalk(Core e, InputReads reads, InputReading read,
+                                                  Set<BindingId> followed) {
+        Core node = Core.withoutStanding(e);
+        if (AnOperationApplied.of(node) instanceof AnOperationApplied applied
+                && applied.operation() instanceof ValueName.Behavior behavior
+                && !reads.standsIn(behavior)) {
+            return true;
+        }
+        if (SeededWalk.of(node, closure -> Core.withoutStanding(closure)
+                instanceof Core.Block block ? block : null) != null) {
+            return true;
+        }
+        // A closure's body is read where it is applied, and is no part of this value.
+        if (node instanceof Core.Block) {
+            return false;
+        }
+        // What a name stands for, once for each name: a name met again stands for what it stood
+        // for the first time, and following it again is the same walk over the same definition.
+        if (node instanceof Core.Read name) {
+            if (name.binding() == null || !followed.add(name.binding())) {
+                return false;
+            }
+            Denotation stands = reads.standing(node, read.symbols(), read.newtypes());
+            return Core.withoutStanding(stands.value()) != node
+                    && worksOutByACallOrAWalk(stands.value(), stands.at(), read, followed);
+        }
+        boolean[] found = {false};
+        Core.forEachChild(node, child -> found[0] = found[0]
+                || worksOutByACallOrAWalk(child, reads, read, followed));
+        return found[0];
+    }
+
+    /**
+     * Whether {@code e} reads what a dependency a row stands in answered, anywhere in it or in
+     * what the names in it stand for.
+     *
+     * <p>Such a number is what the stand-in answered as much as what the run worked out of the
+     * input, and a row stands in for the answer rather than working it out: it is the decision
+     * table's to read ({@link ComparisonAssessment.OnADependencysAnswer}), and is not placed by
+     * the runs.
+     */
+    private static boolean readsAnAnswer(Core e, InputReads reads, InputReading read,
+                                         Set<BindingId> followed) {
+        Core node = Core.withoutStanding(e);
+        if (AnOperationApplied.of(node) instanceof AnOperationApplied applied
+                && applied.operation() instanceof ValueName.Behavior behavior
+                && reads.standsIn(behavior)) {
+            return true;
+        }
+        if (node instanceof Core.Block) {
+            return false;
+        }
+        if (node instanceof Core.Read name) {
+            if (name.binding() == null || !followed.add(name.binding())) {
+                return false;
+            }
+            Denotation stands = reads.standing(node, read.symbols(), read.newtypes());
+            return Core.withoutStanding(stands.value()) != node
+                    && readsAnAnswer(stands.value(), stands.at(), read, followed);
+        }
+        boolean[] found = {false};
+        Core.forEachChild(node, child -> found[0] = found[0]
+                || readsAnAnswer(child, reads, read, followed));
+        return found[0];
+    }
+
+    private static java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped>
+            leftAtEachPlace(StatedComparison comparison,
+                            AffineReading.OfAComparison.Stopped stopped,
+                            InputReading read, InputReads reads, Arrivals answering) {
         // A figure of this compiler's work is the same reason at every place the rule is filed at,
         // whatever the values there are made of, so nothing is read of them.
         Optional<WhyUnread> declined = stopped.failure().why().declinedFigure();

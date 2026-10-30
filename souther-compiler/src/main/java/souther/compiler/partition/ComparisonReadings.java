@@ -24,7 +24,6 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
-import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -729,108 +728,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             Citation where, ComparisonAssessment assessed, InputReading read, InputReads reads,
             CountWitnesses.Lookup witnesses) {
         if (!(assessed instanceof ComparisonAssessment.Unread unread)
-                || !unread.why().values().stream().allMatch(ComparisonReadings::onlyLostTrack)
-                || !(worksOutByACallOrAWalk(comparison.left(), reads, read, new HashSet<>())
-                        || worksOutByACallOrAWalk(comparison.right(), reads, read,
-                                new HashSet<>()))
-                || readsAnAnswer(comparison.left(), reads, read, new HashSet<>())
-                || readsAnAnswer(comparison.right(), reads, read, new HashSet<>())) {
+                || unread.where() != WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT) {
             return assessed;
         }
         return ModelOccurrence.statedAt(stands)
                 .map(which -> ComparisonAssessment.onItsRuns(behavior, comparison, which, where,
                         unread, read, witnesses))
                 .orElse(assessed);
-    }
-
-    /**
-     * Whether {@code e} reads what a dependency a row stands in answered, anywhere in it or in
-     * what the names in it stand for.
-     *
-     * <p>Such a number is what the stand-in answered as much as what the run worked out of the
-     * input, and a row stands in for the answer rather than working it out: it is the decision
-     * table's to read ({@link ComparisonAssessment.OnADependencysAnswer}), and is not placed by
-     * the runs.
-     */
-    private static boolean readsAnAnswer(Core e, InputReads reads, InputReading read,
-                                         Set<BindingId> followed) {
-        Core node = Core.withoutStanding(e);
-        if (AnOperationApplied.of(node) instanceof AnOperationApplied applied
-                && applied.operation() instanceof ValueName.Behavior behavior
-                && reads.standsIn(behavior)) {
-            return true;
-        }
-        if (node instanceof Core.Block) {
-            return false;
-        }
-        if (node instanceof Core.Read name) {
-            if (name.binding() == null || !followed.add(name.binding())) {
-                return false;
-            }
-            Denotation stands = reads.standing(node, read.rules().symbols(),
-                    read.rules().newtypes());
-            return Core.withoutStanding(stands.value()) != node
-                    && readsAnAnswer(stands.value(), stands.at(), read, followed);
-        }
-        boolean[] found = {false};
-        Core.forEachChild(node, child -> found[0] = found[0]
-                || readsAnAnswer(child, reads, read, followed));
-        return found[0];
-    }
-
-    /**
-     * Whether {@code why} says only that the reading lost track of the number — a form it does
-     * not read, a value made from a position it did not follow back — and nothing more particular.
-     *
-     * <p>A stop that names what stopped it — a product, a seed no form says, a figure of this
-     * compiler's — tells an author what to write otherwise or what to raise, and is said as that
-     * however a run would place the rows.
-     */
-    private static boolean onlyLostTrack(BlockReason.RuleReadingStopped why) {
-        return why instanceof BlockReason.UnreadComparisonForm
-                || why instanceof BlockReason.RuleAboutADerivedValue;
-    }
-
-    /**
-     * Whether {@code e} works a number out by entering a behavior's body or by walking from a
-     * seed, anywhere in it or in what the names in it stand for.
-     *
-     * <p>What the issue of a reading stopping inside such a number is: the reading enters the
-     * body or the walk and comes out with no form, while a run works it out all the same. A stop
-     * anywhere else — a product, a remainder by a value a row writes — is a form this compiler
-     * does not read, and said as that.
-     */
-    private static boolean worksOutByACallOrAWalk(Core e, InputReads reads, InputReading read,
-                                                  Set<BindingId> followed) {
-        Core node = Core.withoutStanding(e);
-        if (AnOperationApplied.of(node) instanceof AnOperationApplied applied
-                && applied.operation() instanceof ValueName.Behavior behavior
-                && !reads.standsIn(behavior)) {
-            return true;
-        }
-        if (SeededWalk.of(node, closure -> Core.withoutStanding(closure)
-                instanceof Core.Block block ? block : null) != null) {
-            return true;
-        }
-        // A closure's body is read where it is applied, and is no part of this value.
-        if (node instanceof Core.Block) {
-            return false;
-        }
-        // What a name stands for, once for each name: a name met again stands for what it stood
-        // for the first time, and following it again is the same walk over the same definition.
-        if (node instanceof Core.Read name) {
-            if (name.binding() == null || !followed.add(name.binding())) {
-                return false;
-            }
-            Denotation stands = reads.standing(node, read.rules().symbols(),
-                    read.rules().newtypes());
-            return Core.withoutStanding(stands.value()) != node
-                    && worksOutByACallOrAWalk(stands.value(), stands.at(), read, followed);
-        }
-        boolean[] found = {false};
-        Core.forEachChild(node, child -> found[0] = found[0]
-                || worksOutByACallOrAWalk(child, reads, read, followed));
-        return found[0];
     }
 
     /**

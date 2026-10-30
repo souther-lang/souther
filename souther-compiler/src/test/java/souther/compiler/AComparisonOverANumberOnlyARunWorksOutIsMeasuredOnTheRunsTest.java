@@ -188,6 +188,29 @@ class AComparisonOverANumberOnlyARunWorksOutIsMeasuredOnTheRunsTest {
         assertFalse(visited.contains(atTheLine), visited);
     }
 
+    /**
+     * Where the reading stopped decides, and not what else the comparison holds: stopped at a
+     * remainder of where an element stands, which no call or walk works out, the comparison is
+     * said as a form this compiler does not read though a call stands beside the remainder.
+     */
+    @Test
+    void aStopBesideACallIsSaidAsWhatItStoppedAt() {
+        String report = report("""
+                module m
+
+                behavior misses : (xs: List<Int>) -> Int
+
+                let misses (xs) = List.fold((n, x) -> if x == 0 then n + 1 else 0, 0, xs)
+
+                behavior out : (xs: List<Int>) -> List<Bool>
+
+                let out (xs) = List.mapIndexed((i, x) -> Int.floorMod(i, 2) + misses(xs) >= 1, xs)
+                """, List.of("([0]) -> [true]"));
+
+        assertFalse(report.contains(MEASURED_ON_ITS_RUNS), report);
+        assertTrue(report.contains("not read"), report);
+    }
+
     /** The row at three is the one at the line, and the row at two the one beside it. */
     @Test
     void theRowsAtThreeAndTwoAreTheOnesAtTheLineAndBesideIt() {

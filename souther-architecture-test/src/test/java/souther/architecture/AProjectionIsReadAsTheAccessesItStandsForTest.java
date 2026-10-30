@@ -590,12 +590,13 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/ComparisonReadings", "wayTo", "(" + core + core + reads + "L" + c
                 + "partition/ComparisonReadings$Body;)L" + c + "partition/ComparisonReadings$Way;",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
-        // Whether a side works its number out by a call or a walk from a seed: it looks for a
-        // call, which a projection's base is read for as any other subexpression is.
-        row(out, c + "partition/ComparisonReadings", "worksOutByACallOrAWalk", "(" + core
+        // Whether what a reading stopped at works its number out by a call or a walk from a seed:
+        // it looks for a call, which a projection's base is read for as any other subexpression
+        // is.
+        row(out, c + "partition/GuardThresholds", "worksOutByACallOrAWalk", "(" + core
                 + reads + "L" + c + "inputs/InputReading;Ljava/util/Set;)Z", Reading.STRUCTURE,
                 CHOICES_AND_CALLS);
-        row(out, c + "partition/ComparisonReadings", "readsAnAnswer", "(" + core
+        row(out, c + "partition/GuardThresholds", "readsAnAnswer", "(" + core
                 + reads + "L" + c + "inputs/InputReading;Ljava/util/Set;)Z", Reading.STRUCTURE,
                 CHOICES_AND_CALLS);
         row(out, c + "check/SeededWalk", "theFieldAsCarried", "(" + core + "L" + c
