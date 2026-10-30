@@ -443,6 +443,8 @@ final class DecisionNaming implements Naming<DecisionPath> {
                     ModelOccurrence.statedAt(binary.occurrence());
             case Core.PreservedCall applied when applied.occurrence().isWritten() ->
                     ModelOccurrence.statedAt(applied.occurrence());
+            case Core.Call call when call.isAWrittenCallOfABehaviorAnsweringATruth() ->
+                    ModelOccurrence.statedAt(call.occurrence());
             default -> Optional.empty();
         };
         if (itself.isPresent()) {

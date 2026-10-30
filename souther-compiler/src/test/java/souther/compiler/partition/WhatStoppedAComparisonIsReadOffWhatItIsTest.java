@@ -255,25 +255,31 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
     @Test
     void aValueWhoseArithmeticStoppedIsThatStopUnderAnOperationAnsweringOneOfSeveral() {
         String parameters = "a: Int, b: Int, c: Int";
-        for (String bound : List.of("let p = a * b", "let p = Int.floorMod(a, b)")) {
+        // A number multiplied by itself is the product the arithmetic stops at: two numbers
+        // multiplied are a number of their own, which relates them to what it is compared with.
+        for (Map.Entry<String, List<String>> each : Map.of("let p = a * a", List.of("a", "c"),
+                "let p = Int.floorMod(a, b)", List.of("a", "b", "c")).entrySet()) {
+            String bound = each.getKey();
             List<UndividedPosition.Reason> alone = whyAt(guard(parameters, bound, "p <= c"), "a");
             assertEquals(1, alone.size(), bound);
             for (String condition : List.of("Int.max(0, p) <= c", "Int.min(0, p) <= c",
                     "Int.abs(p) <= c")) {
                 PartitionEvidence measured = guard(parameters, bound, condition);
-                for (String position : List.of("a", "b", "c")) {
+                for (String position : each.getValue()) {
                     assertEquals(alone, whyAt(measured, position),
                             bound + " | " + condition + " at " + position);
                 }
             }
         }
         assertEquals(List.of(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
-                whyAt(guard(parameters, "let p = a * b", "p <= c"), "a"));
+                whyAt(guard(parameters, "let p = a * a", "p <= c"), "a"));
         assertEquals(List.of(UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR),
                 whyAt(guard(parameters, "let p = Int.floorMod(a, b)", "p <= c"), "a"));
-        // Written inline, the product is the same number with no name over it.
+        assertEquals(List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
+                whyAt(guard(parameters, "let p = a * b", "p <= c"), "a"));
+        // Written inline, the square is the same number with no name over it.
         assertEquals(List.of(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
-                whyAt(guard(parameters, "Int.max(0, a * b) <= c"), "a"));
+                whyAt(guard(parameters, "Int.max(0, a * a) <= c"), "a"));
     }
 
     /**
@@ -339,7 +345,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
     @Test
     void twoValuesStoppedAtDifferentOperationsAreNamedForNeither() {
         String parameters = "a: Int, b: Int, c: Int";
-        String bound = "let p = a * b\n    let q = Int.floorMod(a, b)";
+        String bound = "let p = a * a\n    let q = Int.floorMod(a, b)";
         for (String condition : List.of("Int.max(p, q) <= c", "Int.max(q, p) <= c")) {
             assertEquals(List.of(UndividedPosition.Reason.RULE_MEANING_NOT_READ),
                     whyAt(guard(parameters, bound, condition), "a"), condition);
@@ -396,7 +402,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
         for (String bound : List.of("let n = List.length(List.distinct(xs))",
                 "let n = Option.withDefault(0, List.find(x -> x > a, xs))")) {
             assertEquals(List.of(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
-                    whyAt(guard(parameters, "let p = a * b\n    " + bound,
+                    whyAt(guard(parameters, "let p = a * a\n    " + bound,
                             "Int.max(p, n) <= c"), "c"), bound);
         }
     }

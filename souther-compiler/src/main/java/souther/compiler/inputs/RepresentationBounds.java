@@ -68,7 +68,8 @@ public final class RepresentationBounds {
             case NumericTerm.ValueOf _, NumericTerm.CodePointAt _, NumericTerm.WholeUnitsOf _,
                  NumericTerm.TakenOver _, NumericTerm.OfAnElementsNeighbours _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
-                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> null;
+                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _,
+                 NumericTerm.ProductOf _ -> null;
         };
     }
 

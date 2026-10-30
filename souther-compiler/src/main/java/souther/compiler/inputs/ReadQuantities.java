@@ -502,6 +502,10 @@ final class ReadQuantities implements Quantities {
         // absent, so a term of another input comes back with an order on one end and nothing on the
         // other — an answer about no reading, wearing this one's name.
         held(term);
+        if (term instanceof NumericTerm.ProductOf product) {
+            // Counted on the order its factors' numbers are, each read on its own.
+            return TermOrdering.ofAProduct(product, this::ordersOf);
+        }
         if (term instanceof NumericTerm.TakenOver over
                 && over.source() instanceof RunSource.ComputedOccurrences computed) {
             // What a computed value stands as is what the computation made, and no position of the
@@ -2721,6 +2725,8 @@ final class ReadQuantities implements Quantities {
             // Of the elements of one key, which are some of the run's: where they are bounded.
             case NumericTerm.GatheredUnderAKey asked ->
                     whereItsValuesAre(asked.gathered());
+            // Made of the numbers of two forms, which bound it only together.
+            case NumericTerm.ProductOf _ -> null;
         };
     }
 

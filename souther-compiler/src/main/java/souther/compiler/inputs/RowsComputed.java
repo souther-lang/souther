@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.Operations;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.Term;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 
 import java.math.BigInteger;
 import java.util.LinkedHashMap;
@@ -151,8 +152,70 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
         }
         Map<Object, ExactRatio> standing = new LinkedHashMap<>(held);
         standing.putAll(values.get());
+        withTheNumbersAProductIsMadeOf(standing, operations);
         return operations.sums().stream().allMatch(sum -> sum.holdsAt(standing))
                 && DecimalOperation.allCompleteAt(operations.decimals(), standing);
+    }
+
+    /**
+     * The values a row stands at, with those of the numbers a product of two forms is made of put
+     * beside it, and those of the products the operations are over that no side names.
+     *
+     * <p>A product at a value is held there by one number alone standing at it and the number of
+     * the other form standing where that form is one ({@link NumericTerm.ProductOf#atAValue}),
+     * which is the row the product is reached by. An operation the run works out over the numbers
+     * the comparison was written over — {@code g - g * r}, and the {@code g * r} before it — is
+     * then over values that row holds, and holds or not at those.
+     */
+    private static void withTheNumbersAProductIsMadeOf(Map<Object, ExactRatio> standing,
+                                                       Operations operations) {
+        for (Object key : List.copyOf(standing.keySet())) {
+            if (key instanceof NumericTerm.ProductOf product
+                    && product.atAValue() instanceof NumericTerm.ProductOf.AtAValue way) {
+                ExactRatio alone = standing.get(key).dividedBy(way.scale()).orNull();
+                if (alone != null) {
+                    standing.putIfAbsent(way.carrier(), alone);
+                    standing.putIfAbsent(way.fixed(), way.at());
+                }
+            }
+        }
+        boolean more = true;
+        while (more) {
+            more = false;
+            for (WhatARelationLeavesUndivided.IntSum each : operations.sums()) {
+                for (Object atom : each.coefs().keySet()) {
+                    if (atom instanceof NumericTerm.ProductOf product && !standing.containsKey(atom)) {
+                        ExactRatio made = madeOf(product, standing);
+                        if (made != null) {
+                            standing.put(atom, made);
+                            more = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** What {@code product} comes to when every number of its two forms stands at a value, or
+     *  null where one does not or the exact arithmetic cannot hold it. */
+    private static ExactRatio madeOf(NumericTerm.ProductOf product, Map<Object, ExactRatio> at) {
+        ExactRatio made = ExactRatio.ONE;
+        for (LinearForm<NumericTerm> form : product.factors()) {
+            ExactRatio worth = form.constant();
+            for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+                ExactRatio value = at.get(each.getKey());
+                worth = value == null ? null
+                        : value.times(each.getValue()).flatMap(worth::plus).orNull();
+                if (worth == null) {
+                    return null;
+                }
+            }
+            made = made.times(worth).orNull();
+            if (made == null) {
+                return null;
+            }
+        }
+        return made;
     }
 
     /**

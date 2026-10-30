@@ -4,14 +4,21 @@ import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.FakeTables;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Sig;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.Comparisons;
+import souther.compiler.observe.Limits;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.Position;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
+import souther.compiler.observe.ValueTypes;
+import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.MeasuredInput;
@@ -68,6 +75,13 @@ final class CallExampleSeeds {
         boolean standsAtTheInputThroughout() {
             return at.stream().allMatch(Optional::isPresent);
         }
+
+        /** Whether a lift through this call asks the generator to build a value, which an
+         *  argument at a field or a case does and one at an element or a parameter does not. */
+        boolean buildsAroundAPosition() {
+            return at.stream().anyMatch(each -> each.orElseThrow().steps().stream()
+                    .anyMatch(step -> !(step instanceof TermPath.Step.Element)));
+        }
     }
 
     /**
@@ -78,24 +92,49 @@ final class CallExampleSeeds {
      */
     static List<Call> callsIn(AnalysisBody analysis, InputReading input,
                               Predicate<ValueName.Behavior> worthReading) {
-        List<AnOperationApplied> calls = new ArrayList<>();
-        collect(analysis.core(), worthReading, calls);
-        if (calls.isEmpty()) {
+        List<AnOperationApplied> any = new ArrayList<>();
+        collect(analysis.core(), worthReading, any);
+        if (any.isEmpty()) {
             return List.of();
         }
         InputReads reads = InputReads.ofParametersWhereCallsStand(
                 input.domain().parameterReads(), input.declared(),
                 ElementBindings.of(analysis, input.newtypes()), input.domain().dependencies());
+        List<CallRead> calls = new ArrayList<>();
+        collect(analysis.core(), reads, input, worthReading, calls);
         Set<Call> out = new LinkedHashSet<>();
-        for (AnOperationApplied each : calls) {
+        for (CallRead each : calls) {
             List<Optional<TermPath>> at = new ArrayList<>();
-            for (Core argument : each.args()) {
-                at.add(reads.pathOf(argument, input.newtypes()) instanceof PathResolution.At(
+            for (Core argument : each.applied().args()) {
+                at.add(each.reads().pathOf(argument, input.newtypes()) instanceof PathResolution.At(
                         TermPath path) ? Optional.of(path) : Optional.empty());
             }
-            out.add(new Call((ValueName.Behavior) each.operation(), at));
+            out.add(new Call((ValueName.Behavior) each.applied().operation(), at));
         }
         return List.copyOf(out);
+    }
+
+    /** A call of a behavior, with the reading of the names in force where it is made. */
+    private record CallRead(AnOperationApplied applied, InputReads reads) {}
+
+    /**
+     * The calls under {@code e}, each with the reading of the names in force at it: a name an arm
+     * binds over a case, or a {@code let} binds, stands for a position of the input only in the
+     * reading the arm or the {@code let} is entered in.
+     */
+    private static void collect(Core e, InputReads reads, InputReading input,
+                                Predicate<ValueName.Behavior> worthReading, List<CallRead> out) {
+        for (Core each : Core.subexpressionsAt(e)) {
+            if (AnOperationApplied.of(each) instanceof AnOperationApplied applied
+                    && applied.operation() instanceof ValueName.Behavior callee
+                    && worthReading.test(callee)) {
+                out.add(new CallRead(applied, reads));
+            }
+        }
+        ScopeStep.forEachChild(e, (child, step) -> collect(child,
+                input.symbols() == null ? reads
+                        : reads.entering(step, input.symbols(), input.newtypes()),
+                input, worthReading, out));
     }
 
     /**
@@ -104,12 +143,16 @@ final class CallExampleSeeds {
      * <p>Direct calls only, in the order the body makes them, and each row of the callee in the
      * order it is written. A call whose argument stands at an element of a list the caller takes
      * is handed a list holding that one input, and one whose argument stands at the parameter
-     * itself is handed the input. Every position of the caller's input no argument stands at is
+     * itself is handed the input. One whose argument stands at a field, or at a value narrowed to
+     * a case, is handed the record or the case the model builds around that value; and one whose
+     * arguments stand inside one another is handed the wider argument's value alone, when it holds
+     * what the row gives the narrower. Every position of the caller's input no argument stands at is
      * what the first of {@code bases} has there, or nothing is composed where there is no base and
      * the callee's row does not fill them all.
      *
      * <p>A row the caller has written is not offered again, and the first lift to it takes none of
-     * the rows tried: it costs no build. It is the same row when its inputs are the inputs of the written one and
+     * the rows tried: it costs no build, unless the lift builds around a position, which asks the
+     * decoder before it is known to be written and is a row tried either way. It is the same row when its inputs are the inputs of the written one and
      * both are answered by the module's table for each dependency; a written row with a
      * {@code with} of its own, or a base that answers with a value of its own, is not compared
      * and the row is offered.
@@ -158,6 +201,14 @@ final class CallExampleSeeds {
                 ranOf.apply(subject.behavior()), sigs.get(subject.behavior()), subject,
                 base == null ? List.of() : base.answers(),
                 db.ask(new Names.FakeTables(module)).value());
+        BehaviorInputs reading = BehaviorInputs.of(input);
+        ValueTypes types = ValueTypes.over(ExampleExecutions.checkedFieldTypes(db));
+        // Whether two values are the same is the language's to say, and it asks of a value that it
+        // be there in full.
+        BehaviorInputs.SameValue same = (found, expected, type) ->
+                Limits.UNBOUNDED.stoppedBy(found) == null
+                        && Limits.UNBOUNDED.stoppedBy(expected) == null
+                        && Comparisons.same(found, expected, types, Position.at(type));
         Set<List<String>> considered = new HashSet<>();
         Map<WrittenRow, List<Optional<FixtureTemplate>>> written = new HashMap<>();
         int tried = 0;
@@ -174,8 +225,14 @@ final class CallExampleSeeds {
                 }
                 List<Optional<FixtureTemplate>> inputsWritten = written.computeIfAbsent(
                         new WrittenRow(call.callee(), at), _ -> writtenInputs(row, callee, subject));
+                // A lift that builds around a position asks the decoder before the key is known,
+                // so it is a row tried whether or not the author wrote it.
+                boolean counted = call.buildsAroundAPosition();
+                if (counted && tried++ == limit) {
+                    return List.copyOf(out.values());
+                }
                 Optional<Map<Integer, FixtureTemplate>> lifted =
-                        lifted(call, inputsWritten, subject);
+                        lifted(call, inputsWritten, row.inputs(), reading, same, subject, check);
                 List<FixtureTemplate> inputs = lifted.isEmpty() ? List.of()
                         : composed(base, lifted.get(), subject);
                 List<String> key = inputs.stream()
@@ -187,7 +244,7 @@ final class CallExampleSeeds {
                 if (lifted.isPresent() && alreadyWritten.contains(key) && considered.add(key)) {
                     continue;
                 }
-                if (tried++ == limit) {
+                if (!counted && tried++ == limit) {
                     return List.copyOf(out.values());
                 }
                 if (lifted.isEmpty() || inputs.contains(null) || !considered.add(key)
@@ -278,29 +335,148 @@ final class CallExampleSeeds {
      * element it stands under. Nothing where an argument stands anywhere else, where two
      * arguments stand at one parameter and the row gives them different values, or where an input
      * could not be written.
+     *
+     * <p>An argument that stands at a field of the input, or at a value narrowed by {@code as}, is
+     * a position the row's value is fixed at and not a value the lift builds: the record and the
+     * case around it are what the model builds ({@link Generator#composeWithFixedValues}).
      */
     private static Optional<Map<Integer, FixtureTemplate>> lifted(
-            Call call, List<Optional<FixtureTemplate>> written, MeasuredInput subject) {
+            Call call, List<Optional<FixtureTemplate>> written, List<ObservedValue> given,
+            BehaviorInputs reading, BehaviorInputs.SameValue same, MeasuredInput subject,
+            Generator.CandidateCheck check) {
+        Optional<Set<Integer>> implied = saidByAWiderArgument(call, given, reading, same, subject);
+        if (implied.isEmpty()) {
+            return Optional.empty();
+        }
         Map<Integer, FixtureTemplate> out = new LinkedHashMap<>();
+        Map<TermPath, FixtureTemplate> fixed = new LinkedHashMap<>();
         for (int i = 0; i < call.at().size(); i++) {
+            if (implied.get().contains(i)) {
+                continue;
+            }
             TermPath at = call.at().get(i).orElseThrow();
             int parameter = subject.parameters().indexOf(at.head());
-            if (parameter < 0 || written.get(i).isEmpty()
-                    || !at.steps().stream().allMatch(step -> step instanceof TermPath.Step.Element)) {
+            if (parameter < 0 || written.get(i).isEmpty()) {
                 return Optional.empty();
             }
             FixtureTemplate held = written.get(i).get();
+            if (!at.steps().stream().allMatch(step -> step instanceof TermPath.Step.Element)) {
+                // One position holds one value. Two arguments at it that cannot be read as an
+                // input, because it is a field or a case, are served when the row writes them the
+                // same, which is less than when the language calls them the same and never more.
+                FixtureTemplate already = fixed.putIfAbsent(at, held);
+                if (already != null && !already.text().equals(held.text())) {
+                    return Optional.empty();
+                }
+                continue;
+            }
             for (int depth = 0; depth < at.steps().size(); depth++) {
                 held = FixtureTemplate.collection(List.of(held));
             }
-            // One position holds one value: two arguments standing at it are served by it when the
-            // row gives them the same, and by no value when it gives them two.
-            FixtureTemplate already = out.putIfAbsent(parameter, held);
-            if (already != null && !already.text().equals(held.text())) {
+            // Two positions of one parameter that neither holds the other are not a call a lift
+            // builds a value for.
+            if (out.putIfAbsent(parameter, held) != null) {
+                return Optional.empty();
+            }
+        }
+        if (fixed.isEmpty()) {
+            return Optional.of(out);
+        }
+        Optional<Map<Integer, FixtureTemplate>> built =
+                Generator.composeWithFixedValues(subject, fixed, check);
+        if (built.isEmpty()) {
+            return Optional.empty();
+        }
+        for (Map.Entry<Integer, FixtureTemplate> each : built.get().entrySet()) {
+            if (out.putIfAbsent(each.getKey(), each.getValue()) != null) {
                 return Optional.empty();
             }
         }
         return Optional.of(out);
+    }
+
+    /**
+     * The arguments another argument already says: one that stands inside the position another
+     * stands at, whose value the row gives is the value the wider one holds there.
+     *
+     * <p>A position is fixed once. Handed the wider and the narrower both, the model has two
+     * accounts of one place; handed the wider alone, the narrower is what the wider holds.
+     * Whether it holds it is asked of the behavior's own reading of an input
+     * ({@link BehaviorInputs#readAtEachPositionAs}), once for all the narrower arguments of a
+     * wider one: they are the one call, so under a container they are read at the same element.
+     *
+     * <p>Empty where the row gives a narrower argument a value the wider does not hold there,
+     * which is no call of the caller's. Empty too where the wider argument stands at something
+     * this does not hold the value of as an input to read: only a whole parameter, or an element
+     * of a list it is, which is what a lift builds around the value.
+     */
+    private static Optional<Set<Integer>> saidByAWiderArgument(
+            Call call, List<ObservedValue> given, BehaviorInputs reading,
+            BehaviorInputs.SameValue same, MeasuredInput subject) {
+        Set<Integer> out = new HashSet<>();
+        for (int wide = 0; wide < call.at().size(); wide++) {
+            if (out.contains(wide)) {
+                continue;
+            }
+            TermPath outer = call.at().get(wide).orElseThrow();
+            List<BehaviorInputs.ExpectedAt> expected = new ArrayList<>();
+            Set<Integer> narrower = new HashSet<>();
+            boolean strictly = false;
+            for (int narrow = 0; narrow < call.at().size(); narrow++) {
+                TermPath inner = call.at().get(narrow).orElseThrow();
+                int shared = outer.steps().size();
+                boolean inside = inner.head().equals(outer.head())
+                        && inner.steps().size() >= shared
+                        && inner.steps().subList(0, shared).equals(outer.steps());
+                // The same position as a wider argument is that argument's to say once, the first
+                // of them being the one that stays.
+                boolean repeated = inside && inner.steps().size() == shared && narrow > wide;
+                boolean deeper = inside && inner.steps().size() > shared;
+                if (!repeated && !deeper) {
+                    continue;
+                }
+                strictly |= deeper;
+                expected.add(new BehaviorInputs.ExpectedAt(inner, given.get(narrow)));
+                narrower.add(narrow);
+            }
+            if (narrower.isEmpty()) {
+                continue;
+            }
+            ObservedValue root = rootedAt(given.get(wide), outer.steps());
+            if (root == null) {
+                // Not a position this holds an input for. A wider argument there that holds a
+                // narrower one is no row; one repeated is left to be served by the row writing
+                // it the same.
+                if (strictly) {
+                    return Optional.empty();
+                }
+                continue;
+            }
+            List<ObservedValue> inputs = new ArrayList<>(Collections.nCopies(
+                    subject.parameters().size(), new ObservedValue.Unknown("not read")));
+            inputs.set(subject.parameters().indexOf(outer.head()), root);
+            if (!reading.readAtEachPositionAs(inputs, expected, same)) {
+                return Optional.empty();
+            }
+            out.addAll(narrower);
+        }
+        return Optional.of(out);
+    }
+
+    /**
+     * The parameter's value that holds {@code held} at {@code steps}, as a lift builds it: the
+     * value itself at the parameter, and a list of that one under each element step. Null where
+     * the position is at anything else.
+     */
+    private static ObservedValue rootedAt(ObservedValue held, List<TermPath.Step> steps) {
+        ObservedValue root = held;
+        for (TermPath.Step step : steps) {
+            if (!(step instanceof TermPath.Step.Element)) {
+                return null;
+            }
+            root = new ObservedValue.Sequence(List.of(root));
+        }
+        return root;
     }
 
     /** Whether the decoder refuses one of the values a lift puts at a parameter. */

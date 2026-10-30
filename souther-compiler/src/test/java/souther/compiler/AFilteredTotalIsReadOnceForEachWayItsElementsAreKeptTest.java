@@ -161,7 +161,7 @@ class AFilteredTotalIsReadOnceForEachWayItsElementsAreKeptTest {
     @Test
     void aWayThatKeepsAnElementWithNoFormSaysWhatTheElementIs() {
         String report = report(guarded("""
-                List.sum(List.map(r -> r.pay * r.days, List.filter(r -> r.days >= 17, [ p.x ])))
+                List.sum(List.map(r -> r.pay * r.days * r.pay, List.filter(r -> r.days >= 17, [ p.x ])))
                     >= p.y.pay"""));
         assertTrue(report.contains("compares a product of two values that are not constants"),
                 report);

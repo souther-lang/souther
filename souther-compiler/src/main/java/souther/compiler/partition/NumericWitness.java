@@ -668,8 +668,8 @@ final class NumericWitness {
             case NumericTerm.GatheredUnderAKey asked ->
                     admittedAt(asked.gathered(), looking, within);
             case NumericTerm.TakenOver _, NumericTerm.Multiplicity _,
-                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ ->
-                    ValueSet.ANY;
+                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                 NumericTerm.ProductOf _ -> ValueSet.ANY;
         };
     }
 
@@ -681,7 +681,7 @@ final class NumericWitness {
             case NumericTerm.TakenOver _, NumericTerm.Multiplicity _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                  NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _,
-                 NumericTerm.GatheredUnderAKey _ -> PlacesApart.NONE;
+                 NumericTerm.GatheredUnderAKey _, NumericTerm.ProductOf _ -> PlacesApart.NONE;
         };
     }
 

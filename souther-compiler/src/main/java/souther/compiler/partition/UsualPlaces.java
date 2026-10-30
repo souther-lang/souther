@@ -41,8 +41,8 @@ final class UsualPlaces {
                  NumericTerm.CodePointAt _,
                  NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _,
                  NumericTerm.TakenOver _, NumericTerm.Multiplicity _,
-                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ ->
-                    UsualPlace.NONE;
+                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                 NumericTerm.ProductOf _ -> UsualPlace.NONE;
         };
     }
 

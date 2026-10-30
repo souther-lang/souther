@@ -234,9 +234,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   those of one arm of a choice, or those beside an expression another
      *                   analysis answers for
      * @param decimals the operations of decimals, which a row is asked by working them out
+     * @param partials the totals of a container a walk adds up whose running totals are all that
+     *                 is left untold: a run stops at one only for the elements it was handed, and
+     *                 not for the number the total comes to. Empty where anything else is left
+     *                 untold as well, and then {@code told} is some. A row of one element holds
+     *                 no running total but the total, so these rows are computed where the total
+     *                 is written by one element alone ({@link #operationsOverTheSides})
      */
     record Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
-                   boolean onEveryRun, List<DecimalOperation> decimals) {
+                   boolean onEveryRun, List<DecimalOperation> decimals,
+                   List<NumericTerm> partials) {
 
         Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told) {
             this(operations, told, true);
@@ -245,6 +252,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
                 boolean onEveryRun) {
             this(operations, told, onEveryRun, List.of());
+        }
+
+        Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
+                boolean onEveryRun, List<DecimalOperation> decimals) {
+            this(operations, told, onEveryRun, decimals, List.of());
         }
 
         /** No reading of the comparison was made, and the program is taken to add the form up.
@@ -273,7 +285,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Working {
             operations = List.copyOf(operations);
             decimals = List.copyOf(decimals);
+            partials = List.copyOf(partials);
             Objects.requireNonNull(told, "what the reading told, or that there was none");
+            if (!partials.isEmpty() && told != WhatARelationLeavesUndivided.Told.SOME) {
+                throw new IllegalArgumentException(
+                        "a total left to its running totals leaves some untold: " + partials);
+            }
+        }
+
+        /** Whether what is untold is at most the running totals of the walks in {@link #partials}. */
+        boolean exactButForTheRunningTotals() {
+            return exact() || !partials.isEmpty();
         }
 
         /**
@@ -299,15 +321,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             for (DecimalOperation each : decimals) {
                 bothDecimals.add(each.shifted(earlier.decimals.size()));
             }
+            List<NumericTerm> bothPartials = new ArrayList<>();
+            if (earlier.exactButForTheRunningTotals() && exactButForTheRunningTotals()) {
+                bothPartials.addAll(earlier.partials);
+                partials.stream().filter(each -> !bothPartials.contains(each))
+                        .forEach(bothPartials::add);
+            }
             return new Working(both, earlier.exact() && exact()
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,
-                    earlier.onEveryRun && onEveryRun, bothDecimals);
+                    earlier.onEveryRun && onEveryRun, bothDecimals, bothPartials);
         }
 
         /** The same operations, for a relation not every run that gets to the comparison reaches. */
         Working notOnEveryRun() {
-            return new Working(operations, told, false, decimals);
+            return new Working(operations, told, false, decimals, partials);
         }
 
         /** Whether every operation that can stop a run is told. */
@@ -852,7 +880,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (places.isEmpty()) {
             NumericTerm.FromOnePosition countedAs = each.readOff() != null ? each.readOff()
                     : summedAs(each.number());
-            TermOrders orders = countedAs == null ? null : read.quantities().ordersOf(countedAs);
+            // A product of two forms is counted on the order its factors are.
+            NumericTerm countedOn = countedAs != null ? countedAs
+                    : each.number() instanceof NumericTerm.ProductOf product ? product : null;
+            TermOrders orders = countedOn == null ? null : read.quantities().ordersOf(countedOn);
             return orders == null ? null : orders.answered();
         }
         Carrier first = null;
@@ -873,6 +904,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             sides.add(switch (each.getKey()) {
                 case DecisionAtom.OfTheInput(NumericTerm term) -> ofTheInput(term,
                         each.getValue());
+                // Two numbers of the input multiplied and held against another value: the product
+                // is a number of its own, made of the numbers of both.
+                case Quantity.ProductOfTwo product -> NumericTerm.ProductOf.signed(
+                        LinearForm.atom(product.one()), LinearForm.atom(product.other()))
+                        instanceof NumericTerm.ProductOf.Signed made
+                        && each.getValue().times(made.sign())
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio weight)
+                        ? ofTheInput(made.product(), weight)
+                        : new Side(List.of(), each.getValue(), null, null, null);
                 case Quantity.WhatAnOperationAnswers answers -> new Side(
                         answers.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
                         each.getValue(), null, null, null);
@@ -1001,7 +1041,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     private static Side ofTheInput(NumericTerm term, ExactRatio weight) {
-        return new Side(List.of(FilingCoordinate.of(term)), weight, term, null, null);
+        // A product of two forms is made of the numbers of both, each a place its rule is about.
+        return new Side(term instanceof NumericTerm.ProductOf
+                ? AffineReading.filedAt(List.of(term)) : List.of(FilingCoordinate.of(term)),
+                weight, term, null, null);
     }
 
     /**
@@ -1010,11 +1053,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * which cuts less and says nothing false — and is an operation a row is not asked to get past
      * here, so the operations are then not every one, unless no row of the places it is over
      * could stop at it.
+     *
+     * <p>A total whose running totals are all that is left untold ({@link Working#partials}) is
+     * told after all where every one of them is a side written by one element alone: such a row
+     * holds one element, which runs no total but the answer, so a row of the term is computed
+     * wherever the operations told hold at it. A row of any other arrangement of the container
+     * is not claimed.
      */
     private WhatARelationLeavesUndivided.Operations operationsOverTheSides(
-            InputReading read, List<OnAWay> conditions, boolean heldWhole) {
+            InputReading read, List<OnAWay> conditions, boolean heldWhole,
+            Set<NumericTerm> writtenByOneElement) {
+        boolean runningTotalsAreNoneOfTheRows = !working.partials().isEmpty()
+                && writtenByOneElement.containsAll(working.partials());
         if (working.operations().isEmpty() && working.decimals().isEmpty()) {
-            return new WhatARelationLeavesUndivided.Operations(List.of(), working.told());
+            return new WhatARelationLeavesUndivided.Operations(List.of(),
+                    runningTotalsAreNoneOfTheRows ? WhatARelationLeavesUndivided.Told.EVERY
+                            : working.told());
         }
         // An operation over the witness that takes a remainder's form through every remainder, and
         // over no other number, is a row's of the witness, which is asked to get past it
@@ -1048,7 +1102,46 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // An operation left out is one a row is not asked to get past here: not every one told.
         return new WhatARelationLeavesUndivided.Operations(sums, decimals,
                 leftOut && working.exact() ? WhatARelationLeavesUndivided.Told.SOME
+                        : runningTotalsAreNoneOfTheRows && !leftOut
+                        ? WhatARelationLeavesUndivided.Told.EVERY
                         : working.told());
+    }
+
+    /**
+     * The totals of a container among the sides that a row writes with one element alone: the
+     * term is shown taken at every value of a run ({@code terms}, aligned with the sides), the
+     * run being what one element comes to, and no other side is read off a place in common with
+     * the container, so nothing else asks the container to hold more.
+     */
+    private Set<NumericTerm> totalsWrittenByOneElement(
+            List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms) {
+        Set<NumericTerm> alone = new LinkedHashSet<>();
+        if (working.partials().isEmpty()) {
+            return alone;
+        }
+        for (int i = 0; i < sides.size() && i < terms.size(); i++) {
+            NumericTerm total = sides.get(i).number();
+            if (total instanceof NumericTerm.ProductOf product
+                    && product.atAValue() instanceof NumericTerm.ProductOf.AtAValue way) {
+                // The product is held at a value by the total alone standing at it.
+                total = way.carrier();
+            }
+            if (total == null || !working.partials().contains(total)
+                    || terms.get(i).realizes() == null) {
+                continue;
+            }
+            boolean askedByNoOther = true;
+            for (int j = 0; j < sides.size(); j++) {
+                NumericTerm other = sides.get(j).number();
+                if (j != i && (other == null || other.sharesAPlaceWith(total))) {
+                    askedByNoOther = false;
+                }
+            }
+            if (askedByNoOther) {
+                alone.add(total);
+            }
+        }
+        return alone;
     }
 
     /** How many sides each number that is one is: the numbers the sides of this relation are. */
@@ -1059,13 +1152,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 named.merge(each.number(), 1, Integer::sum);
             }
         }
+        // A product of two forms stands at its value by the number alone that carries it standing
+        // there and the number of the other form standing where it is one
+        // ({@link NumericTerm.ProductOf#atAValue}): those numbers have values at a row that
+        // holds the product, which the operations written over them are asked at.
+        for (Side each : sides) {
+            if (each.number() instanceof NumericTerm.ProductOf product
+                    && product.atAValue() instanceof NumericTerm.ProductOf.AtAValue way) {
+                named.merge(way.carrier(), 1, Integer::sum);
+                named.merge(way.fixed(), 1, Integer::sum);
+            }
+        }
         return named;
     }
 
-    /** Whether every number {@code operation} is over is a side of this relation, once. */
+    /** Whether every number {@code operation} is over is a side of this relation, once — or a
+     *  product of numbers that are. */
     private static boolean isOverTheSides(IntOperation operation, Map<NumericTerm, Integer> named) {
-        return operation.form().coefs().keySet().stream()
-                .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom)));
+        return operation.form().coefs().keySet().stream().allMatch(atom ->
+                Integer.valueOf(1).equals(named.get(atom))
+                        || (atom instanceof NumericTerm.ProductOf product
+                        && product.factors().stream().flatMap(form -> form.coefs().keySet().stream())
+                        .allMatch(each -> Integer.valueOf(1).equals(named.get(each)))));
     }
 
     /** Whether every number {@code operation} reads from a row is a side of this relation, once. */
@@ -1695,7 +1803,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * around it names — or, where {@code aRuleMayNameIt}, that rules name only so that its ends
      * are the whole of what they leave it.
      */
-    private static NumericDomain.Bounds everyValueTheDeclarationsLeave(
+    static NumericDomain.Bounds everyValueTheDeclarationsLeave(
             NumericTerm.ValueOf value, InputReading read, boolean aRuleMayNameIt) {
         // A number is given a value only on an order that is a count or a decimal, whose
         // every whole number between its ends is one of its values; a string's place on
@@ -2072,7 +2180,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<WhatARelationLeavesUndivided.JointSupport> supports =
                 datePartsTogether(sources, stating, heldWhole, left.years());
         WhatARelationLeavesUndivided.Operations operations =
-                operationsOverTheSides(read, conditions, heldWhole);
+                operationsOverTheSides(read, conditions, heldWhole,
+                        totalsWrittenByOneElement(terms));
         for (int at = 0; at < sides.size(); at++) {
             WhatARelationLeavesUndivided.Leaves each = offItsLine
                     ? WhatARelationLeavesUndivided.leavesOffItsLine(terms, at, constant, relation,
@@ -3717,7 +3826,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
                  NumericTerm.CodePointAt _, NumericTerm.WholeUnitsOf _, NumericTerm.Multiplicity _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
-                 NumericTerm.GatheredUnderAKey _ -> CutDown.NOT;
+                 NumericTerm.GatheredUnderAKey _, NumericTerm.ProductOf _ -> CutDown.NOT;
         };
     }
 
@@ -4690,8 +4799,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     .anyMatch(statement -> statement.leavesAlone(each.atOnePosition()))
                     ? declared : region;
             NumericDomain.Bounds realizes = source != null
-                    ? asARelationReadsIt(realized(each.atOnePosition(), source, answering, way),
-                            carriers.get(i))
+                    ? asARelationReadsIt(realizedAlong(each.atOnePosition(), source, answering, way,
+                            read, conditions, heldWhole, carriers.get(i)), carriers.get(i))
+                    : each.number() instanceof NumericTerm.ProductOf product
+                    ? asARelationReadsIt(realizedProduct(product, read, region, declared,
+                            conditions, narrowedByTheRun, heldWhole), carriers.get(i))
                     : each.number() instanceof NumericTerm.TakenOver over
                     ? asARelationReadsIt(summedOverOneElement(over, read, region, conditions,
                             heldWhole, carriers.get(i)), carriers.get(i))
@@ -6067,6 +6179,46 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
+     * A run every value of which {@code term} is shown to take — or null where none is shown.
+     *
+     * <p>What {@link #realized} shows of the value at the position is that. Where it shows
+     * nothing, how many a container holds is taken at every count some row in the region holds the
+     * container at ({@link #howManyAreHeld}): a count is a number of elements written together,
+     * and no source value of it stands at the position. What a container's elements sum to is,
+     * where the container may hold one element, that element's own number
+     * ({@link #shownOfAnElementAlone}).
+     */
+    private static NumericDomain.Bounds realizedAlong(NumericTerm.FromOnePosition term,
+                                                      Source source, SearchRegion region, Way way,
+                                                      InputReading read, List<OnAWay> conditions,
+                                                      boolean heldWhole, Carrier carrier) {
+        NumericDomain.Bounds ofTheValue = realized(term, source, region, way);
+        if (ofTheValue != null) {
+            return ofTheValue;
+        }
+        if (heldWhole && term instanceof NumericTerm.TakenOf taken) {
+            if (taken.takenAs() instanceof TakenAs.HowManyItHolds) {
+                return howManyAreHeld(taken.position(), read, region);
+            }
+            if (taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds && carrier != null
+                    && SUMMED.equals(
+                            DefaultBoundOperationFacts.get().accumulation(taken.operation()))) {
+                List<TermPath> entry = read.domain().entryOf(taken.position(), read.rules());
+                StatedOfATotal stated = statedOfTheTotalAlone(taken, conditions);
+                // A map's entry is its element and the key it is filed under, and the total adds
+                // up the elements: the key is written beside it, which the count of one entry
+                // asks of it as well.
+                NumericDomain.Bounds alone = entry.isEmpty() || entry.size() > 2 || stated == null
+                        ? null
+                        : shownOfAnElementAlone(List.of(new NumericTerm.ValueOf(entry.getFirst())),
+                                taken.position(), read, region, stated.rest(), carrier);
+                return alone == null ? null : alone.meet(stated.run());
+            }
+        }
+        return null;
+    }
+
+    /**
      * The value at the element a total over one container's elements is counted as, or null
      * where {@code number} is no such total. A sum answers what its elements are
      * ({@link TakenAs.TheSumOfWhatItHolds}), so it is counted on the order they are.
@@ -6135,16 +6287,215 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                              List<OnAWay> conditions,
                                                              boolean heldWhole, Carrier carrier) {
         List<NumericTerm.ValueOf> elements = valuesOfOneElement(over);
-        if (!heldWhole || carrier == null || elements.isEmpty()
+        if (!heldWhole || carrier == null
                 || !SUMMED.equals(DefaultBoundOperationFacts.get().accumulation(over.operation()))) {
             return null;
         }
-        List<TermPath> containers = over.subjectPath().containersHoldingIt();
-        if (containers.size() != 1) {
+        StatedOfATotal stated = statedOfTheTotalAlone(over, conditions);
+        if (stated == null) {
             return null;
         }
-        return shownOfAnElementAlone(elements, containers.getFirst(), read, region, conditions,
-                carrier);
+        NumericDomain.Bounds alone;
+        if (elements.isEmpty()) {
+            alone = summedOverProductsOfOneElement(over, read, region, stated.rest(), carrier);
+        } else {
+            List<TermPath> containers = over.subjectPath().containersHoldingIt();
+            alone = containers.size() != 1 ? null
+                    : shownOfAnElementAlone(elements, containers.getFirst(), read, region,
+                            stated.rest(), carrier);
+        }
+        return alone == null ? null : alone.meet(stated.run());
+    }
+
+    /**
+     * A run every value of which the product {@code product} of two forms is shown to take — or
+     * null where none is shown: the run the number alone that carries the value is shown to take,
+     * where the number of the other form is shown to take the value that makes that form one
+     * ({@link NumericTerm.ProductOf#atAValue}). The two numbers are apart, and no rule of the
+     * declarations ties their places to one another ({@link #tiedByARule}), so each stands where
+     * it is asked at whatever the other is.
+     *
+     * <p>A run of decimals is the values a row is written at, as every run of a dense term is:
+     * numbers written at few places, which is the room the operations of the comparison are shown
+     * for ({@code DecimalOperation#allowAClaimOver}). It claims no number that needs more places
+     * than a row is built with, so the product is no more claimed at one than the term alone.
+     * Where the number alone stands over a scale, the scale is a whole number's inverse and adds
+     * no place ({@link NumericTerm.ProductOf#standingWhereTheDeclarationsAdmit}).
+     */
+    private static NumericDomain.Bounds realizedProduct(NumericTerm.ProductOf product,
+                                                        InputReading read, SearchRegion region,
+                                                        SearchRegion declared,
+                                                        List<OnAWay> conditions,
+                                                        List<TakenConstraint> narrowedByTheRun,
+                                                        boolean heldWhole) {
+        NumericTerm.ProductOf.AtAValue way = product.atAValue();
+        if (way == null) {
+            return null;
+        }
+        if (tiedByARule(way.carrier().subjectPath(), way.fixed().subjectPath(), read)) {
+            return null;
+        }
+        // What the way states of the product is a relation of the product and other numbers, which
+        // the region holds the product's numbers apart from: it is no statement about either
+        // factor, and the product is tied to what it is stated against as any number is
+        // ({@code tiedTo}). The factors are then read where the region has them narrowed.
+        List<OnAWay> beside = new ArrayList<>();
+        boolean statedOfIt = false;
+        for (OnAWay each : conditions) {
+            if (each.relation() instanceof TakenConstraint.Affine(var form, var _)
+                    && form.coefs().containsKey(product)) {
+                statedOfIt = true;
+            } else {
+                beside.add(each);
+            }
+        }
+        NumericDomain.Bounds carried = realizedFactor(way.carrier(), read, region, declared,
+                beside, narrowedByTheRun, heldWhole, statedOfIt);
+        NumericDomain.Bounds fixed = realizedFactor(way.fixed(), read, region, declared,
+                beside, narrowedByTheRun, heldWhole, statedOfIt);
+        if (carried == null || fixed == null || !fixed.admits(way.at())) {
+            return null;
+        }
+        // The number alone stands at the value over what the other factor comes to there.
+        return ExactRatio.ONE.equals(way.scale()) ? carried : carried.timesEach(way.scale());
+    }
+
+    /**
+     * A run every value of which the number {@code term} of a factor is shown to take where it
+     * stands alone — or null where none is shown, or the number is of a kind nothing is shown of
+     * here.
+     */
+    private static NumericDomain.Bounds realizedFactor(NumericTerm term, InputReading read,
+                                                       SearchRegion region, SearchRegion declared,
+                                                       List<OnAWay> conditions,
+                                                       List<TakenConstraint> narrowedByTheRun,
+                                                       boolean heldWhole, boolean statedOfTheProduct) {
+        TermOrders orders = read.quantities().ordersOf(term);
+        Carrier carrier = orders == null ? null : orders.answered();
+        if (carrier == null) {
+            return null;
+        }
+        NumericDomain.Bounds run = null;
+        if (term instanceof NumericTerm.FromOnePosition one) {
+            // As a side of the relation is: the way the statements leave it, and the region that
+            // answers for it.
+            Way way = wayOf(one, statingAnythingOf(one, conditions));
+            Source source = sourceOf(one, read);
+            if (way == Way.UNTOUCHED && narrowedByTheRun.stream().anyMatch(past ->
+                    past.terms().stream().anyMatch(each -> each.equals(one)))) {
+                way = Way.NARROWED;
+            }
+            if (way == Way.UNTOUCHED && source != null && source.relaxed()) {
+                way = Way.NARROWED;
+            }
+            if (way == Way.UNTOUCHED && statedOfTheProduct) {
+                way = Way.NARROWED;
+            }
+            if (way == Way.TIES || source == null) {
+                return null;
+            }
+            SearchRegion answering = way == Way.UNTOUCHED
+                    && conditions.stream().anyMatch(statement -> statement.leavesAlone(one))
+                    ? declared : region;
+            run = realizedAlong(one, source, answering, way, read, conditions, heldWhole, carrier);
+        } else if (term instanceof NumericTerm.TakenOver over) {
+            run = summedOverOneElement(over, read, region, conditions, heldWhole, carrier);
+        }
+        return asARelationReadsIt(run, carrier);
+    }
+
+    /**
+     * A run every value of which the total {@code over} of products of fields of its elements is
+     * shown to take — or null where none is shown: the total of one element whose fields are
+     * multiplied, one field at the value and every other at one.
+     *
+     * <p>Only a total of the one product of at least two fields, each weighed one, over a
+     * container of one container deep. The element is then written with the fields at one but the
+     * field the value is asked at, and the product is that field's number. A field is the one the
+     * value is asked at only where every other field may stand at one, so each run taken is
+     * the run one field is shown to take with nothing but that field asked of the element; and the
+     * runs are one run only where they are alike. No rule of the declarations ties two of the
+     * fields to one another ({@link #tiedByARule}): the fields are then written apart, each at
+     * the number it is asked at.
+     */
+    private static NumericDomain.Bounds summedOverProductsOfOneElement(
+            NumericTerm.TakenOver over, InputReading read, SearchRegion region,
+            List<OnAWay> conditions, Carrier carrier) {
+        List<NumericTerm.FromOnePosition> factors = new ArrayList<>();
+        List<TermPath> containers = new ArrayList<>();
+        if (over.source() instanceof RunSource.JoinedOccurrences joined) {
+            // The entry of one map and the entry of the other under the key both hold.
+            factors.add(new NumericTerm.ValueOf(joined.elements()));
+            factors.add(new NumericTerm.ValueOf(joined.alongside()));
+            containers.addAll(joined.elements().containersHoldingIt());
+            containers.addAll(joined.alongside().containersHoldingIt());
+        } else {
+            if (!(over.source() instanceof RunSource.ComputedOccurrences computed)
+                    || !(computed.computation() instanceof ElementValue.Multilinear product)
+                    || !product.form().constant().isZero() || product.form().coefs().size() != 1) {
+                return null;
+            }
+            Map.Entry<ElementValue.Monomial, ExactRatio> only =
+                    product.form().coefs().entrySet().iterator().next();
+            containers.addAll(over.subjectPath().containersHoldingIt());
+            if (!ExactRatio.ONE.equals(only.getValue()) || only.getKey().rounding() != null
+                    || only.getKey().fields().size() < 2 || containers.size() != 1) {
+                return null;
+            }
+            for (ElementProjection field : only.getKey().fields()) {
+                factors.add(new NumericTerm.ValueOf(field.from(computed.elements())));
+            }
+        }
+        for (int i = 0; i < factors.size(); i++) {
+            for (int j = i + 1; j < factors.size(); j++) {
+                if (tiedByARule(factors.get(i).position(), factors.get(j).position(), read)) {
+                    return null;
+                }
+            }
+        }
+        List<NumericDomain.Bounds> runs = new ArrayList<>();
+        for (NumericTerm.FromOnePosition factor : factors) {
+            Source source = sourceOf(factor, read);
+            if (source == null
+                    || wayOf(factor, statingAnythingOf(factor, conditions)) != Way.UNTOUCHED) {
+                return null;
+            }
+            NumericDomain.Bounds run = realized(factor, source, region, Way.UNTOUCHED);
+            if (run == null || !run.holdsAValue()) {
+                return null;
+            }
+            runs.add(run);
+        }
+        NumericDomain.Bounds asked = null;
+        for (int at = 0; at < runs.size(); at++) {
+            // The products of two maps' values are written with the entry of the map walked at
+            // one and the number at the entry of the map looked into: no other way is written.
+            if (over.source() instanceof RunSource.JoinedOccurrences && at != 1) {
+                continue;
+            }
+            boolean restAtOne = true;
+            for (int other = 0; other < runs.size(); other++) {
+                restAtOne &= other == at || runs.get(other).admits(Count.of(1));
+            }
+            if (!restAtOne) {
+                continue;
+            }
+            if (asked != null && !asked.equals(runs.get(at))) {
+                return null;
+            }
+            asked = runs.get(at);
+        }
+        // Each container may hold the one entry; the total is nought where some container holds
+        // none, which a join of it is empty.
+        boolean noughtIsATotal = false;
+        for (TermPath container : containers) {
+            NumericDomain.Bounds held = howManyAreHeld(container, read, region);
+            if (asked == null || held == null || !held.admits(Count.of(1))) {
+                return null;
+            }
+            noughtIsATotal |= held.admits(Count.ZERO);
+        }
+        return noughtIsATotal ? withNought(asked, carrier) : asked;
     }
 
     /**
@@ -6513,6 +6864,71 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             each instanceof TypeSymbol.AtModule member
                             && aValueIsShownToExist(Type.ref(member), read));
             case null, default -> false;
+        };
+    }
+
+    /**
+     * What the way states of a total alone, and the statements of the way beside those.
+     *
+     * @param run  the values the statements about the total alone leave it, open where there are
+     *             none
+     * @param rest the other statements of the way
+     */
+    private record StatedOfATotal(NumericDomain.Bounds run, List<OnAWay> rest) { }
+
+    /**
+     * What {@code conditions} state of the total {@code total} and of nothing else, as the run
+     * they leave it — or null where one of them states more of it than a bound.
+     *
+     * <p>A container of one element totals to that element's number, so a bound stated of the
+     * total is the bound stated of the element: the element is then written anywhere in the run,
+     * and the total takes every value the element does there. A statement relating the total to
+     * another number, or an equality, says more than that and stays a statement the total is tied
+     * by.
+     */
+    private static StatedOfATotal statedOfTheTotalAlone(NumericTerm total,
+                                                        List<OnAWay> conditions) {
+        NumericDomain.Bounds run = NumericDomain.Bounds.OPEN;
+        List<OnAWay> rest = new ArrayList<>();
+        for (OnAWay each : conditions) {
+            TakenConstraint.Affine stated = each.affine();
+            if (stated == null || !stated.form().coefs().containsKey(total)) {
+                rest.add(each);
+                continue;
+            }
+            NumericDomain.Bounds bounds = stated.form().coefs().size() == 1
+                    ? boundsStatedOf(stated) : null;
+            if (bounds == null) {
+                return null;
+            }
+            run = run.meet(bounds);
+        }
+        return new StatedOfATotal(run, rest);
+    }
+
+    /** The values {@code stated}, which is over one number, leaves it — or null where it is an
+     *  equality, a difference, or a bound no number holds. */
+    private static NumericDomain.Bounds boundsStatedOf(TakenConstraint.Affine stated) {
+        ExactRatio weight = stated.form().coefs().values().iterator().next();
+        ExactRatio at = stated.form().constant().negated().dividedBy(weight).orNull();
+        if (at == null || !(Count.written(at)
+                instanceof ExactAnswer.Held<Optional<Count>>(Optional<Count> count))
+                || count.isEmpty()) {
+            return null;
+        }
+        Rel rel = weight.signum() > 0 ? stated.rel() : switch (stated.rel()) {
+            case GE -> Rel.LE;
+            case GT -> Rel.LT;
+            case LE -> Rel.GE;
+            case LT -> Rel.GT;
+            case EQ, NE -> stated.rel();
+        };
+        return switch (rel) {
+            case GE -> new NumericDomain.Bounds(Endpoint.inclusive(count.get()), null);
+            case GT -> new NumericDomain.Bounds(Endpoint.exclusive(count.get()), null);
+            case LE -> new NumericDomain.Bounds(null, Endpoint.inclusive(count.get()));
+            case LT -> new NumericDomain.Bounds(null, Endpoint.exclusive(count.get()));
+            case EQ, NE -> null;
         };
     }
 

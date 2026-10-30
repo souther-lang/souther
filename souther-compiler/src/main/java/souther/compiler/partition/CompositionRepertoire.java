@@ -220,6 +220,14 @@ public enum CompositionRepertoire {
     STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
 
     /**
+     * The maps whose values come to a total, written with the one entry that holds it. A map of
+     * several entries coming to the same total, and a map whose entries are asked to hold
+     * something beside the number, are written by no way here; raising no figure does, and a total
+     * only such a map comes to is not one no map comes to.
+     */
+    MAPS_WRITTEN_WITH_ONE_ENTRY,
+
+    /**
      * The rows whose run works a number out at an item, for a number only a run works out.
      *
      * <p>Nothing says where the input's numbers stand for the run to come to a value there, so a
@@ -250,7 +258,7 @@ public enum CompositionRepertoire {
                  TOTALS_FROM_A_PUT_WRITTEN_AS_ONE_ELEMENT,
                  MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER, ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL,
                  TREES_WRITTEN_FOR_A_COUNT, STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
-                 ROWS_A_RUN_IS_TRIED_FOR -> false;
+                 MAPS_WRITTEN_WITH_ONE_ENTRY, ROWS_A_RUN_IS_TRIED_FOR -> false;
         };
     }
 

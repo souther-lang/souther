@@ -5,14 +5,21 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 
 /**
@@ -363,6 +370,135 @@ sealed interface WhatATermRead {
     static WhatATermRead overElements(TermOrders on, RunSource.ComputedOccurrences computed,
                                       BorderQuantity.Observation row) {
         return row.keptOf(new ARunOfEachElement(on, computed));
+    }
+
+    /**
+     * What {@code orders} reads of {@code term} at the row {@code observation} was made of: each
+     * term asked for what its own number is of — one value where a place answers it, every value
+     * where it is taken over a run of them.
+     */
+    static WhatATermRead ofTerm(TermOrders orders, BorderQuantity.Observation observation) {
+        return switch (orders.term()) {
+            case NumericTerm.OfAnElementsNeighbours _ ->
+                    inItsOccurrence(orders, observation);
+            case NumericTerm.FromOnePosition one -> at(orders, observation.at(one.position()));
+            case NumericTerm.OccurrencesOfItsValue among ->
+                    amongEveryOccurrence(orders, observation, among.subjectPath());
+            case NumericTerm.OccurrencesOfAKey asked ->
+                    ofAKey(orders, observation, asked.subjectPath(), asked.key());
+            case NumericTerm.GatheredUnderItsKey _ -> underItsKey(orders, observation);
+            case NumericTerm.GatheredUnderAKey asked ->
+                    underAKey(orders, observation, asked.asked());
+            case NumericTerm.TakenOver over -> switch (over.source()) {
+                // The nodes of a tree are found below its root, which is where they are read
+                // from ({@code TermReading}).
+                case RunSource.ProjectedOccurrences _, RunSource.FlattenedOccurrences _,
+                     RunSource.ReachableNodes _ -> over(orders, observation, over.subjectPath());
+                case RunSource.ComputedOccurrences computed ->
+                        overElements(orders, computed, observation);
+                case RunSource.JoinedOccurrences joined -> joined(orders, joined, observation);
+            };
+            case NumericTerm.ProductOf _ -> productOf(orders, observation);
+        };
+    }
+
+    /**
+     * What the two forms of a product come to at the row, multiplied: each form is the numbers it
+     * is of at their weights and its constant, each number read as it is read anywhere.
+     */
+    private static WhatATermRead productOf(TermOrders orders, BorderQuantity.Observation row) {
+        NumericTerm.ProductOf product = (NumericTerm.ProductOf) orders.term();
+        Map<NumericTerm, TermOrders> byTerm = new LinkedHashMap<>();
+        orders.factors().forEach(each -> byTerm.put(each.term(), each));
+        ExactRatio[] worth = new ExactRatio[2];
+        int at = 0;
+        for (LinearForm<NumericTerm> form : product.factors()) {
+            ExactRatio sum = form.constant();
+            for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+                TermOrders its = byTerm.get(each.getKey());
+                if (its == null) {
+                    return new CameToNothing(ReadingGap.COULD_NOT_WALK);
+                }
+                switch (ofTerm(its, row)) {
+                    case Number(Place value) -> {
+                        switch (Count.number(value).exactly().times(each.getValue())
+                                .flatMap(sum::plus)) {
+                            case ExactAnswer.Held<ExactRatio> held -> sum = held.value();
+                            case ExactAnswer.Unheld<ExactRatio> unheld -> {
+                                return new CameToNothing(ReadingGap.of(unheld.why()));
+                            }
+                        }
+                    }
+                    case WhatATermRead stopped -> {
+                        return stopped;
+                    }
+                }
+            }
+            worth[at++] = sum;
+        }
+        return switch (worth[0].times(worth[1])) {
+            case ExactAnswer.Held<ExactRatio>(ExactRatio made) ->
+                    switch (Count.written(made)) {
+                        case ExactAnswer.Held<Optional<Count>>(Optional<Count> count) ->
+                                count.isPresent() && orders.answered().onTheGrid(count.get()) != null
+                                        ? new Number(count.get()) : new NoNumberOfTheValue();
+                        case ExactAnswer.Unheld<Optional<Count>> unheld ->
+                                new CameToNothing(ReadingGap.of(unheld.why()));
+                    };
+            case ExactAnswer.Unheld<ExactRatio> unheld ->
+                    new CameToNothing(ReadingGap.of(unheld.why()));
+        };
+    }
+
+    /**
+     * What {@code on} reads of the products of the entries two maps hold under one key.
+     *
+     * <p>Not yet read: the row stands for no number of this term.
+     */
+    static WhatATermRead joined(TermOrders on, RunSource.JoinedOccurrences joined,
+                                BorderQuantity.Observation row) {
+        return row.keptOf(new AJoinOfTwoMaps(on, joined));
+    }
+
+    /** The entries of the two maps a join is of, each map read whole. */
+    record AJoinOfTwoMaps(TermOrders on, RunSource.JoinedOccurrences joined)
+            implements BorderQuantity.ReadAlike<WhatATermRead> {
+
+        @Override
+        public WhatATermRead readAt(BorderQuantity.Observation reading) {
+            WhatRowsLeft left = new WhatRowsLeft();
+            List<TermOrders.KeyedEntry> first = entries(reading, joined.elements(), left);
+            List<TermOrders.KeyedEntry> second = entries(reading, joined.alongside(), left);
+            if (left.stopped() != null) {
+                return left.stopped();
+            }
+            if (first == null || second == null) {
+                return new CameToNothing(ReadingGap.COULD_NOT_WALK);
+            }
+            return on.canTellTheKeysApart(first, second)
+                    ? of(on.readJoined(first, second))
+                    : new CameToNothing(ReadingGap.KEYS_NOT_TOLD);
+        }
+
+        /** What the map whose values stand at {@code values} holds, or null where it is not read. */
+        private static List<TermOrders.KeyedEntry> entries(BorderQuantity.Observation reading,
+                                                           TermPath values, WhatRowsLeft left) {
+            TermPath map = values.outermostContainer();
+            if (!(reading.eachElementOf(map)
+                    instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
+                return null;
+            }
+            List<TermOrders.KeyedEntry> out = new ArrayList<>();
+            for (BorderQuantity.Observation entry : reached.value()) {
+                ObservedValue key = left.at(entry, map.key());
+                ObservedValue value = left.at(entry, values);
+                if (key == null || value == null) {
+                    return null;
+                }
+                out.add(new TermOrders.KeyedEntry(key, value));
+            }
+            return out;
+        }
     }
 
     /** A run computed of each element of a container. */

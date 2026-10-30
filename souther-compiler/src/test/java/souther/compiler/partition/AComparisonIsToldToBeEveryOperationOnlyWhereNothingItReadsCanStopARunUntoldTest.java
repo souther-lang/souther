@@ -96,7 +96,7 @@ class AComparisonIsToldToBeEveryOperationOnlyWhereNothingItReadsCanStopARunUntol
     @Test
     void aProductOfTwoPositionsIsNotAFormAndIsNotToldToBeEveryOperation() {
         UndividedByARelation.Working working = told(
-                "{\n    let p = n * m\n    if p + k >= 100 then Yes else No\n}");
+                "{\n    let p = n * m * n\n    if p + k >= 100 then Yes else No\n}");
         assertFalse(working != null && working.exact(),
                 () -> "a product no form says is worked out and not told of: " + working);
     }
