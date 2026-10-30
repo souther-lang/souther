@@ -33,6 +33,7 @@ import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.BooleanMeaning;
@@ -669,14 +670,16 @@ public final class GuardThresholds {
                                     InputReading read, InputReads reads, Arrivals answering) {
         // A figure of this compiler's work is the same reason at every place the rule is filed at,
         // whatever the values there are made of, so nothing is read of them.
-        Optional<BlockReason.WhatItStatesIsNoLine.Why> figure =
-                stopped.failure().why().declinedFigure()
-                        .flatMap(BlockReason.WhatItStatesIsNoLine.Why::saying);
-        if (figure.isPresent()) {
+        Optional<WhyUnread> declined = stopped.failure().why().declinedFigure();
+        if (declined.isPresent()) {
+            BlockReason.WhatItStatesIsNoLine.Why word =
+                    BlockReason.WhatItStatesIsNoLine.Why.saying(declined.get())
+                            .orElseThrow(() -> new IllegalStateException(
+                                    "no word says a part stopped at " + declined.get()));
             java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> said =
                     new java.util.LinkedHashMap<>();
             for (FilingCoordinate at : filedAt(comparison, read, reads, answering)) {
-                said.putIfAbsent(at, new BlockReason.WhatItStatesIsNoLine(figure.get()));
+                said.putIfAbsent(at, new BlockReason.WhatItStatesIsNoLine(word));
             }
             return said;
         }

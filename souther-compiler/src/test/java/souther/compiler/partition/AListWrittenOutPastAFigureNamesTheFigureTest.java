@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.meaning.WhyUnread;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -158,6 +159,82 @@ class AListWrittenOutPastAFigureNamesTheFigureTest {
         ReadComparisons read =
                 ReadComparisons.ofTheAnalysis(SOURCE.formatted(length + " >= k"), "classify");
         assertFalse(stopped(read.only(), read), "the length of a list is its length");
+    }
+
+    /** A total over what an operation makes of a list written out. */
+    private static String totalOver(int elements) {
+        return "List.sum(List.map(x -> x + 1, [n" + ", 1".repeat(elements - 1) + "]))";
+    }
+
+    @Test
+    void aTotalOverAListWithinTheFigureIsReadAndOnePastItNamesIt() {
+        int most = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
+        assertEquals(List.of(), saidOf(totalOver(most) + " >= k"));
+        assertNames(BlockReason.WhatItStatesIsNoLine.Why.MORE_READINGS_THAN_ARE_MADE,
+                saidOf(totalOver(most + 1) + " >= k"));
+    }
+
+    @Test
+    void totalsPastTheFigureOfAllNameIt() {
+        int each = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
+        int all = CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum();
+        List<String> within = new ArrayList<>();
+        for (int left = all; left > 0; left -= each) {
+            within.add(totalOver(Math.min(each, left)));
+        }
+        assertEquals(List.of(), saidOf(String.join(" + ", within) + " >= k"),
+                "as many elements in all as are read are read");
+        within.add(totalOver(1));
+        assertNames(BlockReason.WhatItStatesIsNoLine.Why.MORE_TOTAL_READINGS_THAN_ARE_MADE,
+                saidOf(String.join(" + ", within) + " >= k"));
+    }
+
+    @Test
+    void aListPastTheFigureInsideWhatATotalMakesNamesItAtTheTotal() {
+        int most = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
+        String within = "List.sum(List.map(x -> x + " + walkOver(3) + ", [1]))";
+        assertEquals(List.of(), saidOf(within + " >= k"));
+        assertNames(BlockReason.WhatItStatesIsNoLine.Why.MORE_READINGS_THAN_ARE_MADE,
+                saidOf("List.sum(List.map(x -> x + " + walkOver(most + 1) + ", [1])) >= k"));
+    }
+
+    /**
+     * What is read of a call that is past a figure and has a part no form says is the part: the
+     * product is what an author would change, and the figure is lifted by nothing they write.
+     */
+    @Test
+    void aPartNoFormSaysIsReportedBeforeTheFigureTheCallIsPast() {
+        int most = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
+        for (int elements : List.of(3, most, most + 1)) {
+            String walk = "List.fold((acc, x) -> acc + x, n * n, [n"
+                    + ", 1".repeat(elements - 1) + "])";
+            List<BlockReason.RuleReadingStopped> said = saidOf(walk + " >= k");
+            assertFalse(said.isEmpty(), "the seed is no form, at " + elements + " elements");
+            assertTrue(said.stream().allMatch(each ->
+                            each instanceof BlockReason.NonAffineArithmetic),
+                    () -> elements + " elements: " + said);
+            ReadComparisons read =
+                    ReadComparisons.ofTheAnalysis(SOURCE.formatted(walk + " >= k"), "classify");
+            AffineReading.OfAComparison arithmetic = AffineReading.read(
+                    ((ComparisonReadings.Stated.AComparison) read.only().statement())
+                            .comparison(),
+                    read.only().reads(), read.inputs().reading(read.rules()));
+            AffineReading.OfAComparison.Stopped stop =
+                    assertInstanceOf(AffineReading.OfAComparison.Stopped.class, arithmetic);
+            assertTrue(stop.failure().why().nonAffineOperation().isPresent(),
+                    () -> elements + " elements, as the arithmetic stopped: "
+                            + stop.failure().why());
+        }
+    }
+
+    /** Each figure a list can be declined at has the word the rule says it with. */
+    @Test
+    void everyFigureAListIsDeclinedAtHasAWord() {
+        for (WhyUnread each : List.of(WhyUnread.PAST_THE_READINGS,
+                WhyUnread.PAST_THE_TOTAL_READINGS)) {
+            assertTrue(BlockReason.WhatItStatesIsNoLine.Why.saying(each).isPresent(),
+                    each::toString);
+        }
     }
 
     @Test

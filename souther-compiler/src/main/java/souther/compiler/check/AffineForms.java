@@ -815,9 +815,12 @@ public final class AffineForms {
         if (stopped.at != null) {
             return stopped.at;
         }
-        // A rule the caller has for the expression, which stopped, is the expression's own reason.
+        // A rule the caller has for the expression, which stopped, is the expression's own reason
+        // where no argument stopped on arithmetic no form says: that is what an author would
+        // change, and a figure of this compiler's work is lifted by nothing they write.
         if (leaf instanceof Leaf.Stopped<A, E>(var stop)) {
-            return stop;
+            Outcome.StoppedAt<A, E> argument = stoppedOnArithmetic(e, at, reading, following);
+            return argument != null ? argument : stop;
         }
         return denoted != null ? denoted : noRule(e, at, reading, following);
     }
@@ -830,13 +833,24 @@ public final class AffineForms {
      */
     private static <A, E> Outcome<A, E> noRule(Core e, E at, Reading<A, E> reading,
                                                Walk<A, E> following) {
+        Outcome.StoppedAt<A, E> argument = stoppedOnArithmetic(e, at, reading, following);
+        return argument != null ? argument
+                : new Outcome.StoppedAt<>(e, at, new Halt.NoRule<>());
+    }
+
+    /**
+     * The stop at the call {@code e}, for the first argument of it that stopped on arithmetic no
+     * form says — or null where none did.
+     */
+    private static <A, E> Outcome.StoppedAt<A, E> stoppedOnArithmetic(
+            Core e, E at, Reading<A, E> reading, Walk<A, E> following) {
         for (Core argument : Terms.argsOf(e)) {
             if (of(argument, at, reading, following) instanceof Outcome.StoppedAt<A, E> inside
                     && inside.why().nonAffineOperation().isPresent()) {
                 return new Outcome.StoppedAt<>(e, at, new Halt.AnArgumentStopped<>(inside));
             }
         }
-        return new Outcome.StoppedAt<>(e, at, new Halt.NoRule<>());
+        return null;
     }
 
     /** The first stop met inside what this walk composes, kept while the questions after it are
