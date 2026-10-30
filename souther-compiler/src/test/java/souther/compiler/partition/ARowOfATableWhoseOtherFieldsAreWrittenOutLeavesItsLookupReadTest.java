@@ -60,6 +60,94 @@ class ARowOfATableWhoseOtherFieldsAreWrittenOutLeavesItsLookupReadTest {
                 .toList();
     }
 
+    private static final String STOPPING_BEFORE_THE_NUMBER = """
+            module demo
+
+            data Yen = Int
+                invariant value >= 0
+            data Rem = { base: Yen, sched: Yen, commute: Yen, excl: Yen, variable: Yen }
+            data Row = { std: Yen, lowerBound: Yen }
+            data Decision = { std: Int }
+            %s
+            let totalOf (r: Rem): Yen = r.base + r.sched + r.commute + r.excl + r.variable
+            let gradeRowFor (m: Yen, k: Int): Row =
+                List.fold((acc, r) -> if r.lowerBound <= m then r else acc,
+                          Row { std = Yen(0), lowerBound = Yen(0) },
+                          [ %s, %s ])
+
+            behavior f : (r: Rem, k: Int) -> Decision
+                constructs Decision, Row, Yen
+            let f (r, k) = {
+                let row = gradeRowFor(totalOf(r), k)
+                Decision { std = row.std.value }
+            }
+            """;
+
+    private static List<String> unreadStoppingBeforeTheNumber(String helpers, String first,
+                                                                String second) {
+        Compilation compilation = Compilation.ofSource(
+                STOPPING_BEFORE_THE_NUMBER.formatted(helpers, first, second), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        return AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .filter(line -> line.contains("not read:"))
+                .map(line -> line.replaceAll(".*about `([^`]*)`.*", "$1"))
+                .toList();
+    }
+
+    private static final List<String> EVERY_PLACE_OF_THE_TOTAL =
+            List.of("r.base", "r.commute", "r.excl", "r.sched", "r.variable");
+
+    /** The control: what the helper works out before it answers five ends no run. */
+    @Test
+    void aWorkingOutBeforeTheNumberThatEndsNoRunIsFollowed() {
+        assertEquals(List.of(), unreadStoppingBeforeTheNumber("""
+                let five (n: Int): Yen = {
+                    let unused = 7
+                    Yen(5)
+                }
+                """, "Row { std = five(0), lowerBound = Yen(0) }",
+                "Row { std = five(0), lowerBound = Yen(100) }"));
+    }
+
+    /** What the helper works out before it answers five is worked out all the same: the number
+     *  it answers is five whatever that is, and a run can stop before it is answered. */
+    @Test
+    void anOperationBeforeTheNumberIsStillWorkedOut() {
+        assertEquals(EVERY_PLACE_OF_THE_TOTAL, unreadStoppingBeforeTheNumber("""
+                let five (n: Int): Yen = {
+                    let unused = n + 1
+                    Yen(5)
+                }
+                """, "Row { std = five(0), lowerBound = Yen(0) }",
+                "Row { std = five(0), lowerBound = Yen(100) }"));
+    }
+
+    /** The same before the row itself is made: the row is what the helper answers last. */
+    @Test
+    void anOperationBeforeTheRowIsStillWorkedOut() {
+        assertEquals(EVERY_PLACE_OF_THE_TOTAL, unreadStoppingBeforeTheNumber("""
+                let rowAt (n: Int, lowerBound: Int): Row = {
+                    let unused = n + 1
+                    Row { std = Yen(5), lowerBound = Yen(lowerBound) }
+                }
+                """, "rowAt(0, 0)", "rowAt(0, 100)"));
+    }
+
+    /** The control for the row: what the helper works out before it answers ends no run. */
+    @Test
+    void aWorkingOutBeforeTheRowThatEndsNoRunIsFollowed() {
+        assertEquals(List.of(), unreadStoppingBeforeTheNumber("""
+                let rowAt (n: Int, lowerBound: Int): Row = {
+                    let unused = 7
+                    Row { std = Yen(5), lowerBound = Yen(lowerBound) }
+                }
+                """, "rowAt(0, 0)", "rowAt(0, 100)"));
+    }
+
     @Test
     void constructionsOfNumbersTheirTypesLeaveEndNoRun() {
         assertEquals(List.of(), unread("""

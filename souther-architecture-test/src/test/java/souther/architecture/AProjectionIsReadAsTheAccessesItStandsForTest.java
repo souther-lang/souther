@@ -659,10 +659,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node what it ends a run for, an operator or a call: a name read off a"
                         + " value ends none, so what a projection may end one for is what its base"
                         + " may");
-        row(out, c + "check/WhatARunMayEndFor", "endsNoneAndReadsNoNameBeneath",
-                "(" + core + ")Z", Reading.STRUCTURE,
-                "asks each node what it ends a run for and whether it reads a name, and goes down"
-                        + " to its parts: a name read off a value ends none, so what a projection"
+        row(out, c + "check/ValueStanding", "endsNoneWhenWorkedOut",
+                "(L" + c + "check/ValueStanding$Standing;Ljava/util/Set;Ljava/util/function/BiPredicate;L"
+                        + c + "check/BindingWalk;)Z",
+                Reading.STRUCTURE,
+                "asks each node what it ends a run for, and goes down to its parts and along the"
+                        + " names it reads: a name read off a value ends none, so what a projection"
                         + " may end one for is what its base may");
         row(out, c + "check/WhatARunMayEndFor", "endsNoneBeneath", "(" + core + ")Z",
                 Reading.STRUCTURE,

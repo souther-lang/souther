@@ -2,9 +2,13 @@ package souther.compiler.check;
 
 import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
+import souther.compiler.core.Evaluated;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.function.BiPredicate;
 
 /**
@@ -368,59 +372,121 @@ public final class ValueStanding {
     /**
      * Whether making the construction a field access is read off, and working out its parts other
      * than the field it reads, end no run: both are done all the same, and one that ends a run is
-     * an operation the reading of the field does not tell of. The construction itself ends one
-     * where its type has an invariant, which is checked when it is made; a part ends none only
-     * when it is written out under the construction and names nothing, since what a name stands
-     * for was worked out where it was bound, out of this reading's sight. False where nothing
-     * written stands against the access, which has no construction to ask.
+     * an operation the reading of the field does not tell of. False where nothing written stands
+     * against the access, which has no construction to ask.
      *
-     * <p>A name a part is given is followed to the value it was given, and a construction among
-     * the parts ends none where {@code makingEndsNone} says so of it over the one value it wraps:
-     * a row of a table whose other fields are written as {@code Yen(58000)}, or handed to the
-     * helper that writes them, ends no run at the fields beside the one read.
-     *
-     * @param makingEndsNone whether making a construction ends no run, given the value its one
-     *                       field is given followed as far as it goes, or null where it has not
-     *                       one field
+     * <p><b>Which construction is a question of values, and whether working it out ends a run is
+     * a question of evaluation.</b> The first is answered by following the target as far as one
+     * value goes, and that walk steps over what a run works out on the way: the initializer of a
+     * {@code let}, the arguments of a call, the parts of a construction beside the one taken.
+     * Asked of the value it ends at, the second would not see them. So it is asked of the target as
+     * it is written ({@code endsNoneWhenWorkedOut}), which has them all.
      */
     static <E, N extends Names<E, N>> boolean theConstructionAndItsRestEndNone(
             Core.FieldAccess fa, E at, N names, BindingWalk<?> following,
             BiPredicate<Core.Construct, Core> makingEndsNone) {
+        Set<Core> read = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Standing<E, N> target : of(fa.target(), at, names, following)) {
-            if (!(Core.withoutStanding(target.value()) instanceof Core.Construct nd)
-                    || !makingEndsNone.test(nd, null)) {
+            if (!(Core.withoutStanding(target.value()) instanceof Core.Construct nd)) {
                 return false;
             }
-            Core read = ConstructionProjection.given(nd, fa.field());
-            for (var part : nd.values()) {
-                if (part.value() != read && !endsNoneAsWritten(target.part(part.value()),
-                        makingEndsNone)) {
+            Core given = ConstructionProjection.given(nd, fa.field());
+            if (given != null) {
+                read.add(Core.withoutStanding(given));
+            }
+        }
+        return endsNoneWhenWorkedOut(new Standing<>(fa.target(), at, names), read,
+                makingEndsNone, following);
+    }
+
+    /**
+     * Whether working out {@code written} ends no run, everything a run works out for it
+     * included ({@link Evaluated}), apart from the expressions in {@code apart}, which the reading
+     * of the field tells of itself.
+     *
+     * <p>A name is worked out where it was bound, so it is followed to the expression it was given
+     * as that expression is written, and one that stands for several is followed into each of
+     * them. A name the environment says nothing of is one this cannot judge. A call the
+     * environment enters is its arguments and then its body; a construction ends none where
+     * {@code makingEndsNone} says so of it over the one value it wraps, and its parts are worked
+     * out all the same.
+     */
+    private static <E, N extends Names<E, N>> boolean endsNoneWhenWorkedOut(
+            Standing<E, N> written, Set<Core> apart,
+            BiPredicate<Core.Construct, Core> makingEndsNone, BindingWalk<?> following) {
+        Core e = Core.withoutStanding(written.value());
+        if (apart.contains(e)) {
+            return true;
+        }
+        if (e instanceof Core.Read r) {
+            Named<E, N> led = named(r, written.at(), written.names());
+            if (led == null || !following.enter(r.binding())) {
+                return false;
+            }
+            boolean ends = switch (led) {
+                case Named.One<E, N>(Standing<E, N> one) ->
+                        endsNoneWhenWorkedOut(one, apart, makingEndsNone, following);
+                case Named.OneOf<E, N>(List<Standing<E, N>> members) -> members.stream()
+                        .allMatch(one -> endsNoneWhenWorkedOut(one, apart, makingEndsNone,
+                                following));
+            };
+            following.leave(r.binding());
+            return ends;
+        }
+        Standing<E, N> taken = taken(e, written.at(), written.names());
+        if (taken != null) {
+            for (Evaluated.Step step : Evaluated.inOrder(e)) {
+                if (!endsNoneWhenWorkedOut(new Standing<>(step.expression(), written.at(),
+                        written.names()), apart, makingEndsNone, following)) {
                     return false;
                 }
             }
+            return endsNoneWhenWorkedOut(taken, apart, makingEndsNone, following);
         }
-        return true;
-    }
-
-    /** Whether working out {@code written}, followed as far as it goes, ends no run: a
-     *  construction by what {@code makingEndsNone} says of it, and anything else by what is
-     *  written under it, which reads no name. */
-    private static <E, N extends Names<E, N>> boolean endsNoneAsWritten(
-            Standing<E, N> written, BiPredicate<Core.Construct, Core> makingEndsNone) {
-        if (!(Core.withoutStanding(written.value()) instanceof Core.Construct nd)) {
-            return WhatARunMayEndFor.endsNoneAndReadsNoNameBeneath(written.value());
+        if (e instanceof Core.LetIn let) {
+            return endsNoneWhenWorkedOut(new Standing<>(let.value(), written.at(),
+                    written.names()), apart, makingEndsNone, following)
+                    && endsNoneWhenWorkedOut(new Standing<>(let.body(),
+                    written.names().inside(let, written.at()), written.names()), apart,
+                    makingEndsNone, following);
         }
-        Standing<E, N> wrapped = nd.values().size() == 1
-                ? written.part(nd.values().getFirst().value()) : null;
-        if (!makingEndsNone.test(nd, wrapped == null ? null : wrapped.value())) {
+        boolean itself = e instanceof Core.Construct nd
+                ? makingEndsNone.test(nd, wrappedBy(nd, written, following))
+                : WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(e).endsNone();
+        if (!itself) {
             return false;
         }
-        for (var part : nd.values()) {
-            if (!endsNoneAsWritten(written.part(part.value()), makingEndsNone)) {
-                return false;
-            }
+        boolean[] under = {true};
+        Core.forEachChild(e, child -> under[0] = under[0] && endsNoneWhenWorkedOut(
+                new Standing<>(child, written.at(), written.names()), apart, makingEndsNone,
+                following));
+        return under[0];
+    }
+
+    /**
+     * The one value {@code construction} wraps, as far as names lead to it, or null where it wraps
+     * more than one. Only names are followed: what a run works out for the field on the way is
+     * worked out by the walk that asks this, which visits the field itself.
+     */
+    private static <E, N extends Names<E, N>> Core wrappedBy(Core.Construct construction,
+                                                             Standing<E, N> written,
+                                                             BindingWalk<?> following) {
+        if (construction.values().size() != 1) {
+            return null;
         }
-        return true;
+        Standing<E, N> here = new Standing<>(construction.values().getFirst().value(),
+                written.at(), written.names());
+        List<Core.Read> entered = new ArrayList<>();
+        while (Core.withoutStanding(here.value()) instanceof Core.Read r
+                && named(r, here.at(), here.names()) instanceof Named.One<E, N>(
+                        Standing<E, N> one)
+                && following.enter(r.binding())) {
+            entered.add(r);
+            here = one;
+        }
+        Core value = Core.withoutStanding(here.value());
+        entered.forEach(each -> following.leave(each.binding()));
+        return value;
     }
 
     /**
