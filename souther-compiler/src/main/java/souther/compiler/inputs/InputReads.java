@@ -2033,6 +2033,15 @@ public final class InputReads {
         };
     }
 
+    /**
+     * This reading, with {@code element} standing for the element the application of a closure
+     * over {@code list} that stands at {@code index} of it is handed, where the elements are
+     * code points of a string ({@link InputNumber#codePointsWalked}).
+     */
+    public InputReads handingTheCodePointAt(BindingId element, Denotation list, long index) {
+        return picking(element, new PickedAtAnIndex(list, index));
+    }
+
     /** This reading, with {@code name} standing for the element an index picks of a list as
      *  well as for whatever else it stands for. */
     private InputReads picking(BindingId name, PickedAtAnIndex element) {

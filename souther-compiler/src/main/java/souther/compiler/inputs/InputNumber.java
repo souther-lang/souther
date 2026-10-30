@@ -555,11 +555,21 @@ public final class InputNumber {
      * The string a list of code points is of, and the index of its code point at each place of
      * the list.
      */
-    private record CodePointsWalked(TermPath at, List<Integer> indices) {
+    public record CodePointsWalked(TermPath at, List<Integer> indices) {
 
-        private CodePointsWalked {
+        public CodePointsWalked {
             indices = List.copyOf(indices);
         }
+    }
+
+    /**
+     * The code points {@code listed}, read in {@code where}, is the list of, or null where it is no
+     * such list or the string holds no number of code points its rules settle
+     * ({@link #indicesOf}).
+     */
+    public static CodePointsWalked codePointsWalked(Core listed, InputDomain inputs,
+                                                    InputReads where, RuleReadingSource source) {
+        return indicesOf(listed, where, inputs, source);
     }
 
     /**
