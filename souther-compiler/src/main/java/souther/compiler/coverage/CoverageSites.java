@@ -1948,10 +1948,10 @@ public final class CoverageSites {
                     applications.add(new ConstructOccurrence(written.origin(), opened.within()));
                 }
             }
-            if (e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
-                    && (reached.denotes() instanceof ValueName.Stdlib.Operation
-                    || reached.denotes() instanceof ValueName.Behavior)
-                    && call.occurrence().isWritten()) {
+            if (e instanceof Core.Call call && (call.isAWrittenCallOfABehaviorAnsweringATruth()
+                    || (call.fn() instanceof Core.Reached reached
+                    && reached.denotes() instanceof ValueName.Stdlib.Operation
+                    && call.occurrence().isWritten()))) {
                 applications.add(call.occurrence());
             }
             applications.removeIf(each -> ModelOccurrence.statedAt(each).isEmpty());

@@ -138,12 +138,16 @@ final class CallExampleSeeds {
      * <p>Direct calls only, in the order the body makes them, and each row of the callee in the
      * order it is written. A call whose argument stands at an element of a list the caller takes
      * is handed a list holding that one input, and one whose argument stands at the parameter
-     * itself is handed the input. Every position of the caller's input no argument stands at is
+     * itself is handed the input. One whose argument stands at a field, or at a value narrowed to
+     * a case, is handed the record or the case the model builds around that value; and one whose
+     * arguments stand inside one another is handed the wider argument's value alone, when it holds
+     * what the row gives the narrower. Every position of the caller's input no argument stands at is
      * what the first of {@code bases} has there, or nothing is composed where there is no base and
      * the callee's row does not fill them all.
      *
      * <p>A row the caller has written is not offered again, and the first lift to it takes none of
-     * the rows tried: it costs no build. It is the same row when its inputs are the inputs of the written one and
+     * the rows tried: it costs no build, unless the lift builds around a position, which asks the
+     * decoder before it is known to be written and is a row tried either way. It is the same row when its inputs are the inputs of the written one and
      * both are answered by the module's table for each dependency; a written row with a
      * {@code with} of its own, or a base that answers with a value of its own, is not compared
      * and the row is offered.
@@ -421,7 +425,9 @@ final class CallExampleSeeds {
                     && holdsAt(built.field(field.name()), rest, expected);
             case TermPath.Step.Element _ -> held instanceof ObservedValue.Sequence sequence
                     && sequence.elements().stream().anyMatch(each -> holdsAt(each, rest, expected));
-            default -> false;
+            // A key of a map and a narrowing to a case are not read down: the row is lifted
+            // through neither, and a wider argument that would need one is no row.
+            case TermPath.Step.Key _, TermPath.Step.Refine _ -> false;
         };
     }
 

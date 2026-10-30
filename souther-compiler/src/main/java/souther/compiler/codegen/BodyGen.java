@@ -446,23 +446,9 @@ final class BodyGen {
             }
             switch (e) {
                 case Core.LetIn li -> {
-                    if (Core.withoutStanding(li.value()) instanceof Core.Call call
-                            && behaviorOf(call) != null
-                            && requiredNames.contains(behaviorOf(call))) {
-                        // call an injected required behavior; requiredCall handles both the unary
-                        // Behavior contract and a multi-input base (issue #57), leaving the success
-                        // value cast on the stack
-                        requiredCall(call);
-                        // The value is written here and not through genExpr, which is where an
-                        // answer is recorded for every other node.
-                        answerProbe(call);
-                        standAs(call.type(), li.value().type());
-                        storeLet(li, li.value().type());
-                    } else {
-                        Type vt = li.value().type();
-                        emitValue(li.value(), vt);
-                        storeLet(li, vt);
-                    }
+                    Type vt = li.value().type();
+                    emitValue(li.value(), vt);
+                    storeLet(li, vt);
                     emitLine(li);   // re-pin: a bound value may have moved the line off the call
                     emitTail(li.body(), cdB, requiredNames, expected);
                 }

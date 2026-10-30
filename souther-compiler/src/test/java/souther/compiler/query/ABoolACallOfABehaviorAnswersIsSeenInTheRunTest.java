@@ -154,12 +154,12 @@ class ABoolACallOfABehaviorAnswersIsSeenInTheRunTest {
      */
     @Test
     void aDependencyAnsweringATruthIsSeenInTailPosition() {
-        assertMeasuresWithoutError(A_DEPENDENCY);
+        assertEveryRowIsPlacedAtItsOwnRule(A_DEPENDENCY, "w", 2);
     }
 
     @Test
     void aDependencyAnsweringATruthIsSeenWhereALetBindsIt() {
-        assertMeasuresWithoutError(A_BOUND_DEPENDENCY);
+        assertEveryRowIsPlacedAtItsOwnRule(A_BOUND_DEPENDENCY, "w", 2);
     }
 
     @Test
