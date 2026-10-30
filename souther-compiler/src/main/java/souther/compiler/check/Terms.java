@@ -272,22 +272,6 @@ final class Terms {
     }
 
     /**
-     * Records that {@code atom} carries {@code facts} where the conditions beside them hold, whatever
-     * reached it. Answered once whoever named it, for the reason {@link #carrying} gives.
-     */
-    void carryingWhere(FactSubject atom, List<ConditionalConstraint> facts) {
-        AtomKnowledge had = knowledgeOf(atom);
-        if (facts.isEmpty()) {
-            return;
-        }
-        if (!had.conditional().isEmpty() && !sameConditionals(had.conditional(), facts)) {
-            throw new OneTermTwoIntrinsicAnswers("atom `" + atom.rendered() + "` carries "
-                    + had.conditional() + " and carries " + facts);
-        }
-        knowledge.put(atom, had.carryingWhere(facts));
-    }
-
-    /**
      * Every atom {@code form} reaches: the ones it names, and the ones a recipe filed against those
      * is read from, however deep.
      *
@@ -1186,15 +1170,15 @@ final class Terms {
             // said about where its counts run starts every rule about it from a range that admits
             // what the order does not hold.
             atomExtents.putIfAbsent(atom, extentOf(type));
-            recording(atom, e, type, at);
             // What the value carries is filed where the value is named, so that a reader holding the
             // atom and no tree has it. Asked of the operation the value came from, whichever surface
             // it was written on — the same normalisation the recipe is read through.
-            if (asOperator(e) instanceof Core.PreservedCall call) {
-                IntrinsicNumericFacts.Carried carried =
-                        IntrinsicNumericFacts.ofCall(call, atom, at, this);
+            IntrinsicNumericFacts.Carried carried =
+                    asOperator(e) instanceof Core.PreservedCall call
+                            ? IntrinsicNumericFacts.ofCall(call, atom, at, this) : null;
+            recording(atom, e, type, at, carried == null ? List.of() : carried.where());
+            if (carried != null) {
                 carrying(atom, carried.always());
-                carryingWhere(atom, carried.where());
             }
         }
         return atom;
@@ -1226,8 +1210,15 @@ final class Terms {
      * <p>What is recorded is how the value was computed and not what it lies between. What it lies
      * between depends on what the path assumed, and the path is not something the naming of an
      * expression knows — which is why the walk that reads the operands is not handed one.
+     *
+     * <p>{@code guarantees} are what the operation states of its answer where its arguments stand a
+     * way the call does not settle. They are recorded as a recipe beside whatever else computed the
+     * value: whether the arguments stand so is a question about the values they are, which a recipe
+     * answers with its operands derived first ({@link DerivedNumericFacts}), and not one about the
+     * path. A walk or an accumulation states none.
      */
-    private void recording(FactSubject atom, Core e, Type answered, Denotations at) {
+    private void recording(FactSubject atom, Core e, Type answered, Denotations at,
+                           List<ConditionalConstraint> guarantees) {
         // What was computed first, and the representation only where nothing was. Asked the other
         // way round, a value the table states arithmetic for reached the walk reader because the
         // reading had kept its call standing — so which of the two answered turned on how the tree
@@ -1266,6 +1257,10 @@ final class Terms {
             Choice choice = Choice.of(operator);
             made = choice != null ? chosen(choice, at)
                     : operator instanceof Core.PreservedCall call ? definedByCases(call, at) : null;
+        }
+        if (!guarantees.isEmpty()) {
+            Derivation guaranteed = new Derivation.GuaranteedWhere(guarantees);
+            made = made == null ? guaranteed : new Derivation.Each(List.of(made, guaranteed));
         }
         if (made == null) {
             return;
@@ -2022,20 +2017,6 @@ final class Terms {
      * numbers and not on the records' own equality, for the reason a recipe is: {@code 0.10} and
      * {@code 0.1} are one number, and two readings differing in nothing but a scale are not this
      * check disagreeing with itself. */
-    private static boolean sameConditionals(List<ConditionalConstraint> a,
-                                            List<ConditionalConstraint> b) {
-        if (a.size() != b.size()) {
-            return false;
-        }
-        for (int i = 0; i < a.size(); i++) {
-            if (!sameFacts(List.of(a.get(i).premise(), a.get(i).consequence()),
-                    List.of(b.get(i).premise(), b.get(i).consequence()))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     private static boolean sameFacts(List<NumericConstraint> a, List<NumericConstraint> b) {
         if (a.size() != b.size()) {
             return false;

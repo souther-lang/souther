@@ -15,7 +15,6 @@ import souther.compiler.numeric.Rel;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -356,35 +355,16 @@ final class DerivedNumericFacts {
      *
      * <p>Not an inference and not a round. What is taken in holds of the values whatever any of it
      * comes to, so nothing here is read back to reach anything else — the closure is over what the
-     * naming recorded, and it is walked once. What a value carries only where a condition holds is
-     * taken in after those, for each condition this reading holds ({@link ConditionalConstraint}).
+     * naming recorded, and it is walked once.
      */
     static ReadingDomain readingOf(NumericDomain<FactSubject> base, Terms terms,
                                    Set<FactSubject> asked) {
         Set<FactSubject> from = new LinkedHashSet<>(asked);
         from.addAll(base.atomsSpokenOf());
         NumericDomain<FactSubject> out = base;
-        List<ConditionalConstraint> waiting = new ArrayList<>();
         for (FactSubject atom : terms.reachedFrom(from)) {
             for (NumericConstraint fact : terms.knowledgeOf(atom).intrinsic()) {
                 out = out.assume(fact.form(), fact.rel(), terms.spacesOf(fact.form()));
-            }
-            waiting.addAll(terms.knowledgeOf(atom).conditional());
-        }
-        // What holds where a condition does is taken in where this reading holds the condition.
-        // Until nothing more is taken in, because one consequence can settle another's condition:
-        // the remainder a remainder is taken of. Each is taken in once, so this ends.
-        boolean taken = true;
-        while (taken && !waiting.isEmpty()) {
-            taken = false;
-            for (Iterator<ConditionalConstraint> each = waiting.iterator(); each.hasNext();) {
-                ConditionalConstraint one = each.next();
-                if (out.entails(one.premise().form(), one.premise().rel())) {
-                    out = out.assume(one.consequence().form(), one.consequence().rel(),
-                            terms.spacesOf(one.consequence().form()));
-                    each.remove();
-                    taken = true;
-                }
             }
         }
         return new ReadingDomain(out);
@@ -667,6 +647,8 @@ final class DerivedNumericFacts {
                         case NO -> between(atom, AT_NOUGHT, terms);
                         case UNSETTLED -> Says.NOTHING;
                     };
+            case Derivation.GuaranteedWhere guaranteed ->
+                    guaranteedWhere(guaranteed, base, terms, done, deriving, copies);
             // Wherever all of them put it: what each found, together — and no value at all where
             // one of them shows the operation answered none.
             case Derivation.Each each -> {
@@ -684,6 +666,26 @@ final class DerivedNumericFacts {
                         : found.isEmpty() ? Says.NOTHING : new Says.These(found);
             }
         };
+    }
+
+    /**
+     * What the guarantees whose condition this reading shows state of the answer.
+     *
+     * <p>The condition is read as the operands of any recipe are: what the form lies between, with
+     * whatever was derived of the atoms it names taken in first. A condition the reading puts on
+     * neither side states nothing.
+     */
+    private static Says guaranteedWhere(Derivation.GuaranteedWhere guaranteed, ReadingDomain base,
+                                        Terms terms, Memo done, Deriving deriving,
+                                        ContextMultiplicity copies) {
+        List<Fact> found = new ArrayList<>();
+        for (ConditionalConstraint one : guaranteed.guarantees()) {
+            Bounds lies = boundsOf(one.premise().form(), base, terms, done, deriving, copies);
+            if (Boolean.TRUE.equals(lies.stands(one.premise().rel(), Count.ZERO))) {
+                found.add(one.consequence());
+            }
+        }
+        return found.isEmpty() ? Says.NOTHING : new Says.These(found);
     }
 
     /** Whether a statement over some counts holds under this reading, as far as it shows. */

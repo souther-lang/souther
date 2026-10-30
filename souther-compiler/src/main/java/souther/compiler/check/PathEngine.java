@@ -315,7 +315,7 @@ final class PathEngine {
             return k;
         }
         Core.Read found = Terms.read(arm.binder(), arm.bindType(), arm.pos());
-        return predicates.instantiate(new Quantified(null, Set.of(), predicate), found, k, inside);
+        return predicates.instantiatePredicate(predicate, found, k, inside);
     }
 
     /**

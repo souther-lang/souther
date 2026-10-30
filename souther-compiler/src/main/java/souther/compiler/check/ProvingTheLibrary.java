@@ -422,10 +422,8 @@ final class ProvingTheLibrary implements LibraryProofs {
                         Map.of(numberAt(bound.against()), ExactRatio.ONE));
         LawProposition<Integer> where = switch (bound.provided()) {
             case ResultBound.Provided.Always<DeclaredArgument> _ -> new LawProposition.Always<>(true);
-            case ResultBound.Provided.ConstantAboveZero<DeclaredArgument>(var argument) ->
-                    new LawProposition.Compared<>(LinearForm.atom(numberAt(argument)), Rel.GT);
-            case ResultBound.Provided.ConstantBelowZero<DeclaredArgument>(var argument) ->
-                    new LawProposition.Compared<>(LinearForm.atom(numberAt(argument)), Rel.LT);
+            case ResultBound.Provided.ArgumentStands<DeclaredArgument>(var argument, var rel) ->
+                    new LawProposition.Compared<>(LinearForm.atom(numberAt(argument)), rel);
         };
         return prover.answers(operation, bound.rel(), against, where)
                 instanceof LibraryProver.Outcome.Proved;

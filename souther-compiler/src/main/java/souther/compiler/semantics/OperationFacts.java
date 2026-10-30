@@ -1492,11 +1492,11 @@ public final class OperationFacts {
     }
 
     private static ResultBound.Provided<ArgumentRef> aboveZero(ArgumentRef argument) {
-        return new ResultBound.Provided.ConstantAboveZero<>(argument);
+        return new ResultBound.Provided.ArgumentStands<>(argument, Rel.GT);
     }
 
     private static ResultBound.Provided<ArgumentRef> belowZero(ArgumentRef argument) {
-        return new ResultBound.Provided.ConstantBelowZero<>(argument);
+        return new ResultBound.Provided.ArgumentStands<>(argument, Rel.LT);
     }
 
     private static OperationFact countsWholeUnitsBetween(ArgumentRef from, ArgumentRef to,

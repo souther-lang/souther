@@ -440,14 +440,8 @@ final class DischargeRules {
     }
 
     /** Where every element {@code call} answers stands, as the operation keeps them. */
-    static List<ElementBound> boundsOnEachElement(Core.PreservedCall call) {
-        List<ElementBound> out = new ArrayList<>();
-        for (ResultBound<DeclaredArgument> row
-                : facts().boundsOnEachElementOfTheResult(call.operation())) {
-            out.add(new ElementBound(CallArguments.of(row.against(), call), row.offset(),
-                    row.rel()));
-        }
-        return out;
+    static List<ResultBound<DeclaredArgument>> boundsOnEachElement(Core.PreservedCall call) {
+        return facts().boundsOnEachElementOfTheResult(call.operation());
     }
 
     /**

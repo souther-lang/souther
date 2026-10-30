@@ -147,26 +147,28 @@ public record ResultBound<A>(A against, BigDecimal offset, Rel rel, Provided<A> 
         record Always<A>() implements Provided<A> {}
 
         /**
-         * An argument that reads as a constant above zero.
+         * An argument that stands above zero or below it.
          *
-         * <p>Constant, and not written as one. What a name was given is what the name is, wherever
-         * a value is read, so {@code floorMod(x, k)} under {@code let k = 100} is the same call as
-         * {@code floorMod(x, 100)}. Requiring the digits at the call would make a rule an author
-         * cannot predict from what the value is, only from where it was written.
+         * <p>What the condition says is this and only this; how an argument is found to stand so is
+         * the reader's. One that can say only constants ({@link ConstantArguments}) holds it where
+         * the argument reads as a constant that stands so, and one that holds a path holds it where
+         * the path puts the argument there.
+         *
+         * <p>A constant is read and not written as one. What a name was given is what the name is,
+         * wherever a value is read, so {@code floorMod(x, k)} under {@code let k = 100} is the same
+         * call as {@code floorMod(x, 100)}. Requiring the digits at the call would make a rule an
+         * author cannot predict from what the value is, only from where it was written.
+         *
+         * @param rel above zero ({@link Rel#GT}) or below it ({@link Rel#LT})
          */
-        record ConstantAboveZero<A>(A argument) implements Provided<A> {
+        record ArgumentStands<A>(A argument, Rel rel) implements Provided<A> {
 
-            public ConstantAboveZero {
+            public ArgumentStands {
                 java.util.Objects.requireNonNull(argument, "this one names an argument");
-            }
-        }
-
-        /** An argument that reads as a constant below zero, constant for the reason
-         *  {@link ConstantAboveZero} is. */
-        record ConstantBelowZero<A>(A argument) implements Provided<A> {
-
-            public ConstantBelowZero {
-                java.util.Objects.requireNonNull(argument, "this one names an argument");
+                if (rel != Rel.GT && rel != Rel.LT) {
+                    throw new IllegalArgumentException("an argument is above zero or below it,"
+                            + " and was asked to stand " + rel);
+                }
             }
         }
     }

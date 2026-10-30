@@ -256,10 +256,8 @@ final class IntrinsicNumericFacts {
                                                Core.PreservedCall call, Denotations at, Terms terms) {
         return switch (provided) {
             case ResultBound.Provided.Always<DeclaredArgument> _ -> null;
-            case ResultBound.Provided.ConstantAboveZero<DeclaredArgument> above ->
-                    relationOfArgument(above.argument(), Rel.GT, call, at, terms);
-            case ResultBound.Provided.ConstantBelowZero<DeclaredArgument> below ->
-                    relationOfArgument(below.argument(), Rel.LT, call, at, terms);
+            case ResultBound.Provided.ArgumentStands<DeclaredArgument> stands ->
+                    relationOfArgument(stands.argument(), stands.rel(), call, at, terms);
         };
     }
 

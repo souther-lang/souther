@@ -15,6 +15,7 @@ import souther.compiler.core.Core;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.semantics.ResultBound;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -84,7 +85,15 @@ final class Predicates {
                 if (kept != null && key != null) {
                     found.add(new Quantified(key, Set.copyOf(crossed), kept));
                 }
-                found.addAll(DischargeRules.boundsOnEachElement(call));
+                for (ResultBound<DeclaredArgument> row : DischargeRules.boundsOnEachElement(call)) {
+                    // Read where the call was written, which is not always where the elements are
+                    // taken: what the argument stands for goes with the bound.
+                    LinearForm<FactSubject> against =
+                            terms.affineOf(CallArguments.of(row.against(), call), here);
+                    if (against != null) {
+                        found.add(new ElementBound(against, row.offset(), row.rel()));
+                    }
+                }
             }
             Source built = DischargeRules.builtFrom(call);
             if (built == null) {
@@ -108,7 +117,7 @@ final class Predicates {
      * closure is handed, and says nothing the values alone decide. */
     private Known instantiate(ElementBound bound, Core element, Known k, Denotations at) {
         LinearForm<FactSubject> against = Terms.add(terms.affineOf(element, at),
-                terms.affineOf(bound.against(), at), true);
+                bound.against(), true);
         if (against != null && against.minus(LinearForm.constant(ExactRatio.of(bound.offset())))
                 instanceof ExactAnswer.Held<LinearForm<FactSubject>> stands) {
             return k.taking(stands.value(), bound.rel(), Known.Held.ON_THE_PATH,
@@ -123,8 +132,14 @@ final class Predicates {
      * predicate in turn states of a container is recorded, so a container of containers reaches its
      * innermost element. */
     Known instantiate(Quantified q, Core element, Known k, Denotations at) {
-        Core stated = Clauses.substituted(q.predicate().body(),
-                Map.of(q.predicate().params().get(0).binding(), element));
+        return instantiatePredicate(q.predicate(), element, k, at);
+    }
+
+    /** What {@code predicate} says of the value at {@code element}, taken into {@code k}: of one
+     * element of a container as a quantifier does, or of the one value an operation found. */
+    Known instantiatePredicate(Core.Block predicate, Core element, Known k, Denotations at) {
+        Core stated = Clauses.substituted(predicate.body(),
+                Map.of(predicate.params().get(0).binding(), element));
         List<Quantified> nested = new ArrayList<>();
         quantifiedBy(stated, at, true, nested);
         // A quantifier is recorded by a guard and by a type's invariant alike, and carries no record
@@ -1821,7 +1836,7 @@ final class Predicates {
             }
             case Derivation.Product _, Derivation.TruncatingQuotient _,
                  Derivation.TruncatingRemainder _, Derivation.RoundedQuotient _,
-                 Derivation.HoldsSomethingWhere _ -> null;
+                 Derivation.HoldsSomethingWhere _, Derivation.GuaranteedWhere _ -> null;
         };
     }
 

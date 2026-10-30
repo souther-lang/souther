@@ -925,12 +925,9 @@ final class OperationFactBinder {
                         "the argument a bound on the result is held against");
         ResultBound.Provided<DeclaredArgument> provided = switch (bound.provided()) {
             case ResultBound.Provided.Always<ArgumentRef> _ -> new ResultBound.Provided.Always<>();
-            case ResultBound.Provided.ConstantAboveZero<ArgumentRef> constant ->
-                    new ResultBound.Provided.ConstantAboveZero<>(
-                            holdBoundArgument(declaration, constant.argument()));
-            case ResultBound.Provided.ConstantBelowZero<ArgumentRef> constant ->
-                    new ResultBound.Provided.ConstantBelowZero<>(
-                            holdBoundArgument(declaration, constant.argument()));
+            case ResultBound.Provided.ArgumentStands<ArgumentRef> stands ->
+                    new ResultBound.Provided.ArgumentStands<>(
+                            holdBoundArgument(declaration, stands.argument()), stands.rel());
         };
         BigDecimal offset = switch (bound.origin()) {
             case ResultBound.Origin.OfTheOperation _ -> bound.offset();

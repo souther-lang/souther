@@ -107,6 +107,55 @@ class WhatALibraryOperationGuaranteesReachesAnInvariantTest {
                 "if n > 0 && n <= 10 then Small(Int.floorMod(a, n) + 1) else Small(1)"));
     }
 
+    /** The divisor is a value the library derives: a clamp from one to ten is above nought on every
+     * path, and the guarantee waits on what is derived of it. */
+    @Test
+    void aDivisorThatIsAClampAboveNoughtIsAboveNought() {
+        assertEquals(List.of(),
+                remainder("Idx", "Idx(Int.floorMod(a, Int.clamp(1, 10, n)))"));
+    }
+
+    @Test
+    void aDivisorThatIsAClampGivenANameIsAboveNought() {
+        assertEquals(List.of(), remainder("Idx", """
+                {
+                    let d = Int.clamp(1, 10, n)
+                    Idx(Int.floorMod(a, d))
+                }"""));
+    }
+
+    /** The control: a clamp that can end below nought leaves the divisor on neither side. */
+    @Test
+    void aDivisorThatIsAClampFromBelowNoughtIsOnNeitherSide() {
+        assertEquals(List.of("E2011"),
+                remainder("Idx", "Idx(Int.floorMod(a, Int.clamp(-5, 10, n)))"));
+    }
+
+    /** A remainder is itself a guarantee the next one waits on: the remainder by a divisor above
+     * nought is not negative, and one more than it is above nought. */
+    @Test
+    void aDivisorThatIsAGuaranteedRemainderPlusOneIsAboveNought() {
+        assertEquals(List.of(), reported("(a: Int, b: Int, n: Int) -> Idx", "Idx", """
+                (a, b, n) = if n > 0
+                    then Idx(Int.floorMod(a, Int.floorMod(b, n) + 1))
+                    else Idx(0)"""));
+    }
+
+    /** The control: without the guard the inner remainder is of no known sign. */
+    @Test
+    void aDivisorThatIsAnUnguardedRemainderPlusOneIsOnNeitherSide() {
+        assertEquals(List.of("E2011"), reported("(a: Int, b: Int, n: Int) -> Idx", "Idx", """
+                (a, b, n) = Idx(Int.floorMod(a, Int.floorMod(b, n) + 1))"""));
+    }
+
+    @Test
+    void aDivisorThatIsAProductOfTwoValuesAboveNoughtIsAboveNought() {
+        assertEquals(List.of(), reported("(a: Int, x: Int, y: Int) -> Idx", "Idx", """
+                (a, x, y) = if x > 0 && y > 0
+                    then Idx(Int.floorMod(a, x * y))
+                    else Idx(0)"""));
+    }
+
     /** The control: nothing puts the divisor on either side of nought. */
     @Test
     void aDivisorOfNoKnownSignLeavesTheRemainderUnread() {
@@ -240,6 +289,54 @@ class WhatALibraryOperationGuaranteesReachesAnInvariantTest {
                 (n) = if n >= 1 && n <= 10
                     then List.map(k -> Small(k), List.rangeInclusive(1, n))
                     else []"""));
+    }
+
+    /** The bounds are read where the call was written. Named beforehand, the ends are values of
+     * their own, and the elements are taken somewhere else. */
+    @Test
+    void theEndsOfARangeNamedBeforeItIsConsumedAreTheEndsItWasMadeWith() {
+        assertEquals(List.of(), reported("(n: Int) -> List<Pos>", "Pos", """
+                (n) = if n >= 0
+                    then {
+                        let lo = n + 1
+                        let r = List.rangeInclusive(lo, lo + 3)
+                        List.map(k -> Pos(k), r)
+                    }
+                    else []"""));
+    }
+
+    @Test
+    void theEndsOfARangeAreReadInsideAClosureThatConsumesIt() {
+        assertEquals(List.of(), reported("(ns: List<Int>) -> List<List<Pos>>", "Pos", """
+                (ns) = List.map(n -> if n >= 1
+                    then List.map(k -> Pos(k), List.rangeInclusive(1, n))
+                    else [], ns)"""));
+    }
+
+    /** A helper that makes the range is the common way to write it. */
+    @Test
+    void aRangeMadeInAHelperIsReadAsTheRangeItIs() {
+        assertEquals(List.of(), reported("""
+                let ones (m: Int): List<Int> = List.rangeInclusive(1, m)
+                """, "(n: Int) -> List<Pos>", "Pos",
+                "(n) = if n >= 1 then List.map(k -> Pos(k), ones(n)) else []"));
+    }
+
+    @Test
+    void aFilterMadeInAHelperIsReadAsTheFilterItIs() {
+        assertEquals(List.of(), reported("""
+                let nonNegative (ys: List<Int>): List<Int> = List.filter(y -> y >= 0, ys)
+                """, "(xs: List<Int>) -> List<Idx>", "Idx",
+                "(xs) = List.map(x -> Idx(x), nonNegative(xs))"));
+    }
+
+    /** The control: a helper that does not filter says nothing of the elements. */
+    @Test
+    void aHelperThatKeepsEverythingSaysNothingOfTheElements() {
+        assertEquals(List.of("E2011"), reported("""
+                let everything (ys: List<Int>): List<Int> = List.filter(y -> y < 10, ys)
+                """, "(xs: List<Int>) -> List<Idx>", "Idx",
+                "(xs) = List.map(x -> Idx(x), everything(xs))"));
     }
 
     /** The control: the filter keeps what is below ten, which says nothing of nought. */
