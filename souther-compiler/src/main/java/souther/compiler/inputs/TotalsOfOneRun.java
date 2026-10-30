@@ -146,7 +146,8 @@ public final class TotalsOfOneRun {
                         : new ElementValue.Affine(LinearForm.atom(field));
                 each = computed == null ? null : inputs.typeAt(run.subjectPath(), source);
             }
-            case RunSource.FlattenedOccurrences _, RunSource.ReachableNodes _ -> {
+            case RunSource.FlattenedOccurrences _, RunSource.ReachableNodes _,
+                 RunSource.JoinedOccurrences _ -> {
                 return null;
             }
         }

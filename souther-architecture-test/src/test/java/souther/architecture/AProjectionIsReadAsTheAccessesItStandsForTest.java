@@ -694,6 +694,14 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + "L" + c + "inputs/InputReads;)Z", Reading.STRUCTURE,
                 "asks each part of the stopped expression whether it is the operand read by its"
                         + " form or ends no run: a projection's one part is its base");
+        row(out, c + "partition/AffineReading$1", "multipliesFieldsOf",
+                "(" + core + "L" + c + "types/BindingId;)Z", Reading.STRUCTURE,
+                "asks whether an expression is fields of one name multiplied: a projection's one"
+                        + " part is its base, down to the name");
+        row(out, c + "inputs/InputNumber", "namedIn", "(" + core + "Ljava/util/Map;)V",
+                Reading.STRUCTURE,
+                "records each name a node binds, going down to its parts: a projection binds none"
+                        + " and has its base for its one part");
         row(out, c + "partition/AffineReading$WhatLiesBesideTheStop", "collectUnder",
                 "(" + core + "Ljava/util/Set;)V", Reading.STRUCTURE,
                 "records each node and goes down to its parts: a projection is held where its"

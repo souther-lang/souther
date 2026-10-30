@@ -4,7 +4,10 @@ import souther.compiler.abort.GetsPast;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ClausesInOrder;
+import souther.compiler.check.CallArguments;
+import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.StatedComparison;
@@ -20,6 +23,7 @@ import souther.compiler.core.Evaluated;
 import souther.compiler.core.Kernel;
 import souther.compiler.inputs.DecimalOperation;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.inputs.InputDomain;
@@ -30,6 +34,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TotalsOfOneRun;
 import souther.compiler.inputs.WrittenOutElements;
@@ -39,6 +44,8 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
@@ -59,6 +66,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Stream;
 import java.util.function.Predicate;
 import java.util.stream.IntStream;
 
@@ -85,6 +93,11 @@ import java.util.stream.IntStream;
  * @param claim what the operator states about the threshold's own value
  */
 record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonClaim claim) {
+
+    /** The library's widening of a whole number to a decimal: exact, and no place past the
+     *  point. */
+    private static final ValueName.Stdlib.Operation WIDENS_A_WHOLE_NUMBER =
+            ValueName.Stdlib.operation("Decimal", "fromInt");
 
     /**
      * What reading {@code comparison} as a line came to.
@@ -267,6 +280,20 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      */
     static OfAComparison read(StatedComparison comparison, InputReads reads,
                               InputReading ofTheInput) {
+        OfAComparison with = read(comparison, reads, ofTheInput, true);
+        // A product held against a written number is a line on the product, drawn through the
+        // two factors, which is not a line on a number of one place: it stays a stop here, where
+        // the rule for a product reads it.
+        return with == null ? read(comparison, reads, ofTheInput, false) : with;
+    }
+
+    /**
+     * The same, with a product of two non-constant numbers a number of its own, or a stop;
+     * null where it is a number of its own and the comparison is nothing but that product held
+     * against a written number.
+     */
+    private static OfAComparison read(StatedComparison comparison, InputReads reads,
+                                      InputReading ofTheInput, boolean productsAreNumbers) {
         InputDomain inputs = ofTheInput.domain();
         RuleReadingSource ruleSource = ofTheInput.rules();
         // What this reading names as it goes, kept so that a reading which ran to the end can say
@@ -276,6 +303,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         ElementsMet met = new ElementsMet();
         // What the two sides work out, as they are written.
         WhatWasTold told = new WhatWasTold();
+        told.productsStop = !productsAreNumbers;
         // The left first where both stop, which is the side a threshold would be read off.
         LinearForm<NumericTerm> left = null;
         for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
@@ -303,6 +331,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         TotalsOfOneRun.addedUp(difference.value(), inputs, ruleSource);
                 if (whole.coefs().isEmpty()) {
                     return new OfAComparison.CutsNothing(named, whole.constant());
+                }
+                if (productsAreNumbers && whole.coefs().size() == 1
+                        && whole.coefs().keySet().iterator().next()
+                        instanceof NumericTerm.ProductOf) {
+                    return null;
                 }
                 AffineReading here = new AffineReading(
                         new LinearForm<>(ExactRatio.ZERO, whole.coefs()),
@@ -372,9 +405,19 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     static java.util.List<souther.compiler.inputs.FilingCoordinate> filedAt(
             java.util.Collection<NumericTerm> terms) {
         return souther.compiler.inputs.NumericTerms.inOrder(terms).stream()
+                .flatMap(AffineReading::thoseItIsMadeOf)
                 .<souther.compiler.inputs.FilingCoordinate>map(
                         souther.compiler.inputs.FilingCoordinate::of)
                 .distinct().toList();
+    }
+
+    /** The numbers {@code term} is read of: itself, and for a product of two forms the numbers of
+     *  both, each of which a rule about the product is about. */
+    private static Stream<NumericTerm> thoseItIsMadeOf(NumericTerm term) {
+        return term instanceof NumericTerm.ProductOf product
+                ? product.factors().stream().flatMap(form -> form.coefs().keySet().stream())
+                        .flatMap(AffineReading::thoseItIsMadeOf)
+                : Stream.of(term);
     }
 
     /**
@@ -407,6 +450,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** What a total over what an operation makes of a list written out at it comes to,
          *  application by application. */
         Attempt totalOfWhatIsMadeOfAListWrittenOut(Core node, InputReads at);
+
+        /** What a product of two forms of numbers comes to as a number of its own. */
+        Attempt productOfTwoForms(Core node, InputReads at);
     }
 
     /**
@@ -605,7 +651,20 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             @Override
             public void answeredByTheLibrary(Core call, LinearForm<NumericTerm> form,
                                              WhereAnOperatorAnswers where) {
+                if (aDecimalMadeOfWholeNumbers(call)) {
+                    told.readsTheInput(form);
+                }
                 tell(call, form, List.of(form), where);
+            }
+
+            /** Whether {@code call} is the library's widening of a whole number to a decimal, which
+             *  holds no places beyond the point: {@code Decimal.fromInt(n)} is the number
+             *  {@code n} is. Only that operation, and not any that answers a decimal from whole
+             *  numbers: a division of two of them has as many places as it is asked for. */
+            private boolean aDecimalMadeOfWholeNumbers(Core call) {
+                return Core.withoutStanding(call) instanceof Core.PreservedCall kept
+                        && kept.operation() instanceof ValueName.Stdlib.Operation operation
+                        && WIDENS_A_WHOLE_NUMBER.equals(operation);
             }
 
             /**
@@ -822,7 +881,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 WhatWasTold apart = new WhatWasTold();
                 LinearForm<NumericTerm> form = rest[0] ? composedBy(operand, at,
                         reading(ofTheInput, new LinkedHashSet<>(), met.copied(), apart)) : null;
-                if (form == null || !apart.exact || !apart.decimals.isEmpty()) {
+                if (form == null || !apart.exact || !apart.partials.isEmpty()
+                        || !apart.decimals.isEmpty()) {
                     return false;
                 }
                 // An operation that is no addend of the form, a sum with a number it is moved
@@ -936,6 +996,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         && carried.get(name.binding()) instanceof LinearForm<NumericTerm> so) {
                     return new AffineForms.Leaf.Form<>(so);
                 }
+                // What two numbers of the input come to multiplied, where the arithmetic stopped at
+                // the product itself: one number, whichever factor was written first.
+                if (Core.withoutStanding(node) instanceof Core.Binary
+                        && tried(apart -> apart.productOfTwoForms(node, at))
+                        instanceof Attempt.Form(var product)) {
+                    return new AffineForms.Leaf.Form<>(product);
+                }
                 AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> keptAtAFigure = null;
                 // Each reading below is of a call the library's operations keep, and asked of
                 // nothing else, since what it puts back where it reads nothing is copied first.
@@ -968,10 +1035,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     // a binding of one of them is answered for here.
                     if (!NumbersOnTheWayToATotal.completeWhereTheAnswerHasAPlace(node, numbers,
                             ofTheInput, at)) {
-                        told.exact = false;
+                        NumericTerm total = addedAsItIs(numbers);
+                        if (total instanceof NumericTerm.TakenOver && sumsProductsOfFields(node,
+                                total)) {
+                            tellAnIntTotal(node, numbers, List.of());
+                            told.partials.add(total);
+                        } else {
+                            told.exact = false;
+                        }
                     }
                     told.readByATerm(node);
-                    if (isAPlainRead(node)) {
+                    if (isAPlainRead(node) || aDecimalMadeOfWholeNumbers(node)) {
                         told.readsTheInput(numbers);
                     }
                     return new AffineForms.Leaf.Form<>(numbers);
@@ -1018,6 +1092,59 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                     new AffineForms.Halt.AnArgumentStopped<>(inside));
                     case Attempt.PartStopped _, Attempt.NotApplicable _, Attempt.Form _ -> null;
                 };
+            }
+
+            /**
+             * The product of two forms of whole numbers {@code node} is, as a number of its own, or
+             * null where it is no such product: a form of the first and a form of the second, each
+             * read as any is, the numbers of the two apart.
+             *
+             * <p>The multiplication is told as the operation it is: the product is a number of its
+             * own, so a run stops at it where that number passes the ends of an {@code Int}.
+             */
+            @Override
+            public Attempt productOfTwoForms(Core node, InputReads at) {
+                LinearForm<NumericTerm> product = productFormOf(node, at);
+                return product == null ? new Attempt.NotApplicable() : new Attempt.Form(product);
+            }
+
+            private LinearForm<NumericTerm> productFormOf(Core node, InputReads at) {
+                if (told.productsStop || !(Core.withoutStanding(node) instanceof Core.Binary mul)
+                        || mul.op() != BinOp.MUL
+                        || (mul.type() != Type.INT && mul.type() != Type.DECIMAL)) {
+                    return null;
+                }
+                LinearForm<NumericTerm> left = composedBy(mul.left(), at, this);
+                LinearForm<NumericTerm> right =
+                        left == null ? null : composedBy(mul.right(), at, this);
+                NumericTerm.ProductOf.Signed made =
+                        right == null ? null : NumericTerm.ProductOf.signed(left, right);
+                if (made == null) {
+                    return null;
+                }
+                NumericTerm.ProductOf.Signed product =
+                        ProductDeclarations.admitted(made, ofTheInput);
+                named.add(product.product());
+                LinearForm<NumericTerm> atom = product.asAForm();
+                if (mul.type() == Type.DECIMAL) {
+                    // A decimal product has no region; a row is asked by working it out.
+                    if (!told.addsDecimal(mul, atom, List.of(left, right))) {
+                        told.exact = false;
+                    }
+                    return atom;
+                }
+                // Told whatever the type of the number says of it: the product is the number the
+                // factors come to, which is not held to an Int by being typed as one, and a run
+                // stops where it passes the ends.
+                if (WhereAnOperatorAnswers.ofAnOperator(BinOp.MUL, Type.INT,
+                        List.of(Type.INT, Type.INT))
+                        instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
+                    told.add(mul, new UndividedByARelation.IntOperation(atom, held.least(),
+                            held.greatest(), told.workedOutOf(mul)));
+                } else {
+                    told.exact = false;
+                }
+                return atom;
             }
 
             /**
@@ -1197,6 +1324,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         ruleSource, closure -> Core.withoutStanding(closure)
                                 instanceof Core.Block block ? block : null);
                 if (walk == null) {
+                    walk = InputNumber.ofAWalkJoiningTwoMaps(node, inputs, at, ruleSource,
+                            closure -> Core.withoutStanding(closure)
+                                    instanceof Core.Block block ? block : null);
+                }
+                if (walk == null) {
                     return null;
                 }
                 LinearForm<NumericTerm> answer = new LinearForm<>(walk.seed(),
@@ -1206,10 +1338,156 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         ofTheInput, at)) {
                     tellAnIntTotal(node, answer, List.of());
                 } else {
-                    told.exact = false;
+                    NumericTerm total = addedAsItIs(walk.added());
+                    if (total == null || !onlyAddsTheElement(node, total)) {
+                        told.exact = false;
+                    } else {
+                        tellAnIntTotal(node, answer, List.of());
+                        told.partials.add(total);
+                    }
                 }
                 told.readByATerm(node);
                 return answer;
+            }
+
+            /**
+             * Whether {@code node} is a walk from a written number whose step is the answer so
+             * far and what {@code total} adds up of the element, written as that and no more: the
+             * element itself for a total of the elements, the product of fields of it for a
+             * total of products. The reading composes a step as a form, which leaves out the
+             * operations that were written to get to it, and an operation not written is one no
+             * run can stop at.
+             */
+            private static boolean onlyAddsTheElement(Core node, NumericTerm total) {
+                // The walk joining two maps is read only of the one step, which adds the product
+                // as it is written ({@link InputNumber#ofAWalkJoiningTwoMaps}).
+                if (total instanceof NumericTerm.TakenOver over
+                        && over.source() instanceof RunSource.JoinedOccurrences) {
+                    return true;
+                }
+                SeededWalk walk = SeededWalk.of(node, closure -> Core.withoutStanding(closure)
+                        instanceof Core.Block block ? block : null);
+                if (walk == null || !(Core.withoutStanding(walk.seed()) instanceof Core.Int)
+                        || !(Core.withoutStanding(walk.step().body())
+                                instanceof Core.Binary sum) || sum.op() != BinOp.ADD) {
+                    return false;
+                }
+                BindingId carried = walk.accumulator().binding();
+                BindingId element = walk.element().binding();
+                return (isRead(sum.left(), carried) && writtenAs(sum.right(), element, total))
+                        || (isRead(sum.right(), carried) && writtenAs(sum.left(), element, total));
+            }
+
+            private static boolean isRead(Core e, BindingId name) {
+                return Core.withoutStanding(e) instanceof Core.Read read
+                        && name.equals(read.binding());
+            }
+
+            /**
+             * Whether {@code e} is what {@code total} adds up of the element {@code element}, as
+             * it is written: the element, or a product of fields of it.
+             */
+            private static boolean writtenAs(Core e, BindingId element, NumericTerm total) {
+                return total instanceof NumericTerm.TakenOf ? isRead(e, element)
+                        : multipliesFieldsOf(e, element);
+            }
+
+            /** Whether {@code e} is fields of {@code element} multiplied, and nothing else. */
+            private static boolean multipliesFieldsOf(Core e, BindingId element) {
+                Core here = Core.withoutStanding(e);
+                if (here instanceof Core.Binary product && product.op() == BinOp.MUL
+                        && product.type() == Type.INT) {
+                    return multipliesFieldsOf(product.left(), element)
+                            && multipliesFieldsOf(product.right(), element);
+                }
+                while (true) {
+                    switch (here) {
+                        case Core.Read read -> {
+                            return element.equals(read.binding());
+                        }
+                        case Core.FieldAccess access -> here = Core.withoutStanding(access.target());
+                        case Core.FieldProjection projection ->
+                                here = Core.withoutStanding(projection.base());
+                        default -> {
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            /**
+             * The total of a container's elements that {@code added} is, where a walk adds each
+             * element as it stands, or the product of fields of it, and nothing else — or null
+             * where it adds anything beside that. Nothing is then worked out of an element before
+             * it is added, so the one thing a run can stop at besides the answer is a running
+             * total.
+             */
+            private static NumericTerm addedAsItIs(LinearForm<NumericTerm> added) {
+                if (added.coefs().size() != 1 || !added.constant().isZero()) {
+                    return null;
+                }
+                Map.Entry<NumericTerm, ExactRatio> only = added.coefs().entrySet().iterator().next();
+                return ExactRatio.ONE.equals(only.getValue()) && isATotalOfProductsOrElements(
+                        only.getKey()) ? only.getKey() : null;
+            }
+
+            /** Whether {@code term} adds up the elements of a container, or one product of fields
+             *  of each element at the weight one. */
+            private static boolean isATotalOfProductsOrElements(NumericTerm term) {
+                return switch (term) {
+                    case NumericTerm.TakenOf taken ->
+                            taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
+                    case NumericTerm.TakenOver over -> aProductOfFieldsPerElement(over);
+                    default -> false;
+                };
+            }
+
+            /** Whether {@code over} adds up, over the elements of a container, one product of at
+             *  least two fields of each at the weight one. */
+            private static boolean aProductOfFieldsPerElement(NumericTerm.TakenOver over) {
+                if (over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
+                        && over.source() instanceof RunSource.JoinedOccurrences) {
+                    return true;
+                }
+                if (!(over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)
+                        || !(over.source() instanceof RunSource.ComputedOccurrences computed)
+                        || !(computed.computation() instanceof ElementValue.Multilinear product)
+                        || !product.form().constant().isZero()
+                        || product.form().coefs().size() != 1) {
+                    return false;
+                }
+                Map.Entry<ElementValue.Monomial, ExactRatio> only =
+                        product.form().coefs().entrySet().iterator().next();
+                return ExactRatio.ONE.equals(only.getValue()) && only.getKey().rounding() == null
+                        && only.getKey().fields().size() >= 2;
+            }
+
+            /**
+             * Whether {@code node} is the total of a closure's answers over a container, the
+             * closure a product of fields of the element and nothing else, as {@code total} is
+             * read: {@code List.sum(List.map(l -> l.price * l.qty, lines))}.
+             */
+            private static boolean sumsProductsOfFields(Core node, NumericTerm total) {
+                if (!aProductOfFieldsPerElement((NumericTerm.TakenOver) total)
+                        || !(Core.withoutStanding(node) instanceof Core.PreservedCall sum)
+                        || sum.args().size() != 1
+                        || !(Core.withoutStanding(sum.args().getFirst())
+                                instanceof Core.PreservedCall map)) {
+                    return false;
+                }
+                BuiltFrom<DeclaredArgument> built =
+                        DefaultBoundOperationFacts.get().buildsItsResultFrom(map.operation());
+                DeclaredArgument mapped = built == null ? null : built.mapsEachElementOf();
+                int over = mapped == null ? -1 : CallArguments.positionOf(mapped, map.operation());
+                if (over < 0 || over >= map.args().size() || map.args().size() != 2) {
+                    return false;
+                }
+                Core closure = Core.withoutStanding(map.args().get(1 - over));
+                return closure instanceof Core.Block block && block.params().size() == 1
+                        && block.params().getFirst() != null
+                        && block.params().getFirst().binding() != null
+                        && multipliesFieldsOf(block.body(),
+                                block.params().getFirst().binding());
             }
 
             /**
@@ -1373,6 +1651,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          *  one, shared with every reading tried apart from it ({@link #apart}). */
         private final int[] elementsRead;
         private boolean exact = true;
+        /** Whether a product of two non-constant numbers is a stop and not a number of its own. */
+        private boolean productsStop;
+        /** The totals of a container whose walk's running totals are the only thing left untold
+         *  ({@link UndividedByARelation.Working#partials}). */
+        private final List<NumericTerm> partials = new ArrayList<>();
 
         WhatWasTold() {
             this(new int[1]);
@@ -1385,7 +1668,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** Nothing told yet, for a part of the comparison read apart: what it reads element by
          *  element is counted with what this reading has. */
         WhatWasTold apart() {
-            return new WhatWasTold(elementsRead);
+            WhatWasTold apart = new WhatWasTold(elementsRead);
+            apart.productsStop = productsStop;
+            return apart;
         }
 
         /**
@@ -1456,6 +1741,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             countsOverTheStop.addAll(apart.countsOverTheStop);
             readByATerm.addAll(apart.readByATerm);
             exact &= apart.exact;
+            partials.addAll(apart.partials);
         }
 
         /**
@@ -1589,11 +1875,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             inputReads.add(form);
         }
 
+
         UndividedByARelation.Working working() {
-            return new UndividedByARelation.Working(operations, exact
+            return new UndividedByARelation.Working(operations, exact && partials.isEmpty()
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,
-                    true, decimals);
+                    true, decimals, exact ? partials : List.of());
         }
     }
 
@@ -2075,7 +2362,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             // reader of a line wants the one the answer is measured on. Carried together so neither
             // stands in for the other (#1027).
             souther.compiler.inputs.TermOrders here = quantities.ordersOf(term);
-            if (here.answered() == null || !here.answered().counts()) {
+            if (here == null || here.answered() == null || !here.answered().counts()) {
                 return null;
             }
             on.put(term, here);

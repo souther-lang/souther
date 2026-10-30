@@ -29,10 +29,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * a position and a word, so a reason that reaches one of the two positions a product names and not
  * the other is a failure.
  *
- * <p>The products here weigh a factor by two before they are taken, which is a product the
- * arithmetic does not read: {@code 2 * q} passes where its type stops for half the values of
- * {@code q}, whatever the other factor is. A product of two numbers each read as itself is read,
- * and whatever carries it leaves no place of it unread — the last of these.
+ * <p>The products here have a product as a factor of a product, which the arithmetic does not
+ * read: {@code (q * p) * q} is neither a number nor a form of one. A product of two numbers each
+ * read as itself is read, and whatever carries it leaves no place of it unread — the last of
+ * these.
  */
 class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
 
@@ -47,7 +47,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
         assertEquals(List.of("xs[*].p: NON_AFFINE_PRODUCT", "xs[*].q: NON_AFFINE_PRODUCT"),
                 reasons("""
                         behavior f : (xs: List<A>) -> Bool
-                        let f (xs) = List.any(i -> 2 * i.q * i.p >= 1000, xs)
+                        let f (xs) = List.any(i -> i.q * i.p * i.q >= 1000, xs)
                         """));
     }
 
@@ -57,7 +57,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                         "xs[*].q: NON_AFFINE_PRODUCT"),
                 reasons("""
                         behavior f : (xs: List<A>) -> Bool
-                        let f (xs) = List.length(List.filter(i -> 2 * i.q * i.p >= 1000, xs)) >= 1
+                        let f (xs) = List.length(List.filter(i -> i.q * i.p * i.q >= 1000, xs)) >= 1
                         """));
     }
 
@@ -67,7 +67,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                 reasons("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.any(i -> {
-                            let amount = 2 * i.q * i.p
+                            let amount = i.q * i.p * i.q
                             amount >= 1000
                         }, xs)
                         """));
@@ -78,7 +78,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
         assertEquals(List.of("xs: NON_AFFINE_PRODUCT", "xs[*]: NON_AFFINE_PRODUCT"),
                 reasons("""
                         behavior amount : (a: A) -> Int
-                        let amount (a) = 2 * a.q * a.p
+                        let amount (a) = a.q * a.p * a.q
 
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.length(List.filter(i -> amount(i) >= 1000, xs)) >= 1
@@ -94,7 +94,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
         assertEquals(List.of("a: NON_AFFINE_PRODUCT", "b: NON_AFFINE_PRODUCT"),
                 reasons("""
                         behavior f : (a: Int, b: Int) -> Bool
-                        let f (a, b) = Int.add(2 * a * b, 1) >= 1000
+                        let f (a, b) = Int.add(a * b * a, 1) >= 1000
                         """));
     }
 
@@ -144,19 +144,19 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                 reasons("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.length(List.filter(
-                            i -> 2 * i.q * i.p >= 1000 && i.q / i.p >= i.q, xs)) >= 1
+                            i -> i.q * i.p * i.q >= 1000 && i.q / i.p >= i.q, xs)) >= 1
                         """));
         // A quotient against a number counted beside the product is read, and leaves what the
         // comparison written out over the product leaves.
         assertEquals(reasons("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.length(List.filter(
-                            i -> 2 * i.q * i.p >= 1000 && i.q >= 10 * i.p, xs)) >= 1
+                            i -> i.q * i.p * i.q >= 1000 && i.q >= 10 * i.p, xs)) >= 1
                         """),
                 reasons("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.length(List.filter(
-                            i -> 2 * i.q * i.p >= 1000 && i.q / i.p >= 10, xs)) >= 1
+                            i -> i.q * i.p * i.q >= 1000 && i.q / i.p >= 10, xs)) >= 1
                         """));
     }
 
@@ -176,7 +176,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
      *  does not hold, is a product at each of its positions, as one nothing reads is. */
     @Test
     void aProductBetweenTwoPositionsIsAProductAtEach() {
-        for (String condition : List.of("2 * a * b >= 1000", "Int.add(a * b, 1) >= 1000")) {
+        for (String condition : List.of("a * b * a >= 1000", "Int.add(a * b * a, 1) >= 1000")) {
             assertEquals(List.of("a: NON_AFFINE_PRODUCT", "b: NON_AFFINE_PRODUCT"),
                     reasons("""
                             behavior f : (a: Int, b: Int) -> Bool

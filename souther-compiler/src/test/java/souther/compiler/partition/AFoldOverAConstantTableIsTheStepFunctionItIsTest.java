@@ -347,7 +347,7 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                 behavior f : (cur: Int, pay: Int) -> Ok | No
                 let f (cur, pay) = {
                     let computed = List.fold((acc, r) -> if r.lowerBound <= pay then r.grade else acc,
-                        cur * pay, table)
+                        cur * pay * cur, table)
                     guard computed < 2 else No
                     Ok
                 }

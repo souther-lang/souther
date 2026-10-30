@@ -1471,7 +1471,7 @@ final class Pullback {
                     if (read != null) {
                         // Each side that is a choice is read arm by arm, with the choice standing
                         // as that arm, so what it works out is this rule's to answer for.
-                        answersForTheChoicesAmong(stated);
+                        answersForTheChoicesAmong(stated, reads);
                     }
                     return read;
                 },
@@ -1566,12 +1566,17 @@ final class Pullback {
         return read;
     }
 
-    private void answersForTheChoicesAmong(StatedComparison stated) {
+    private void answersForTheChoicesAmong(StatedComparison stated, InputReads reads) {
         List<Core> choices = new ArrayList<>();
         for (Core side : List.of(stated.left(), stated.right())) {
             Core value = AffineReading.withoutBindings(side);
             if (Choice.of(value) != null) {
                 choices.add(value);
+            }
+            // A choice a name was given is the side as well: the name stands for it.
+            Denotation chosen = chosenAt(new Denotation(side, reads));
+            if (chosen != null) {
+                choices.add(Core.withoutStanding(chosen.value()));
             }
         }
         trial().answersFor = node -> choices.contains(Core.withoutStanding(node));
@@ -6516,7 +6521,7 @@ final class Pullback {
      * wherever it answers at all, and an operator whose region is not said is left where nothing
      * here says it.
      */
-    private static List<Derivation> whereEachOperatorAnswers(Operators operated) {
+    private List<Derivation> whereEachOperatorAnswers(Operators operated) {
         List<Derivation> out = new ArrayList<>();
         for (Operated each : operated.told) {
             LinearForm<Quantity> form = each.form();
@@ -6907,19 +6912,23 @@ final class Pullback {
      *                right, the other way about, or neither where no two written sides were read
      *                into it
      */
-    private static Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
-                                        Rel states, Derivation.AComparisonRead.Facing written) {
+    private Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
+                                 Rel states, Derivation.AComparisonRead.Facing written) {
         return aRelation(by, form, states, Map.of(), written);
     }
 
     /**
-     * The same, holding how each count it names was read: the ones of {@code read} it still names —
-     * a count written on both sides comes to nought and names none.
+     * The same, holding how each count it names was read: the ones of {@code counted} it still
+     * names — a count written on both sides comes to nought and names none.
      */
-    private static Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
-                                        Rel states,
-                                        Map<Quantity, Derivation.AComparisonRead.Counted> read,
-                                        Derivation.AComparisonRead.Facing written) {
+    private Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
+                                 Rel states,
+                                 Map<Quantity, Derivation.AComparisonRead.Counted> counted,
+                                 Derivation.AComparisonRead.Facing written) {
+        // The relation between the numbers: a product beside a factor of its own is the one
+        // product, which numbers apart are the factors of, and each product stands where the
+        // declarations of the input admit.
+        form = ProductDeclarations.admittedIn(FactoredProducts.of(form), read);
         Relation.OneWay<Quantity> one = Relation.OneWay.of(form, states);
         // Turning the form to face the one way turns it against the written sides as well.
         Derivation.AComparisonRead.Facing facing = switch (written) {
@@ -6931,7 +6940,7 @@ final class Pullback {
         };
         Relation.Affine relation = new Relation.Affine(one.form(), one.proposition());
         List<Derivation.AComparisonRead.Counted> named = new ArrayList<>();
-        read.forEach((count, how) -> {
+        counted.forEach((count, how) -> {
             if (one.form().coefs().containsKey(count)) {
                 named.add(how);
             }
@@ -8393,6 +8402,10 @@ final class Pullback {
         Denotation walk = at.standing(node, read.rules().symbols(), read.rules().newtypes());
         InputNumber.SeedAndAdded added = InputNumber.ofAWalkAdding(walk.value(), read.domain(),
                 walk.at(), read.rules(), blocksAt(walk));
+        if (added == null) {
+            added = InputNumber.ofAWalkJoiningTwoMaps(walk.value(), read.domain(), walk.at(),
+                    read.rules(), blocksAt(walk));
+        }
         if (added == null) {
             LinearForm<Quantity> ofAnAnswer =
                     unlessUnread(() -> seedPlusWhatEachElementOfAnAnswerAdds(walk));
@@ -10850,10 +10863,9 @@ final class Pullback {
      * against the level. A square and a product of three are not read here either, and for each of
      * these the stop stands.
      *
-     * <p>And only of two whole numbers, which are the numbers a product of two is worked out of at a
-     * row ({@link OrderedAffineBoundary#productAt}) and a line drawn on: a product of decimals is
-     * answered at a scale the run settles, and its stop stands too. Said here, where the product is
-     * made, so that everything reading one reads a product of two whole numbers.
+     * <p>And only of two whole numbers on the line drawn through the two factors
+     * ({@link OrderedAffineBoundary#productAt}). A product of decimals is answered at a scale the
+     * run settles, so it is read only as one number among the others of the comparison.
      */
     private LinearForm<Quantity> productAt(Core node, InputReads at,
                                            AffineForms.Outcome.StoppedAt<Quantity, InputReads>
@@ -10861,7 +10873,6 @@ final class Pullback {
         if (inside == null
                 || !(Core.withoutStanding(node) instanceof Core.Binary written)
                 || written.op() != BinOp.MUL || inside.node() != written
-                || written != sideAsWritten
                 || !(inside.why() instanceof AffineForms.Halt.NotLinear<Quantity, InputReads>(
                         NonAffineOperation operation, var _))
                 || operation != NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES) {
@@ -10869,11 +10880,35 @@ final class Pullback {
         }
         NumericTerm.FromOnePosition left = aFactor(written.left(), at);
         NumericTerm.FromOnePosition right = aFactor(written.right(), at);
-        if (left == null || right == null || left.position().equals(right.position())
-                || !countsWhole(left) || !countsWhole(right)) {
+        if (written == sideAsWritten && left != null && right != null
+                && !left.position().equals(right.position()) && countsWhole(left)
+                && countsWhole(right)) {
+            return LinearForm.atom(new Quantity.ProductOfTwo(left, right));
+        }
+        // Otherwise one number of its own among the others of the comparison: the product of two
+        // forms of the input's numbers, read as the arithmetic of the comparison reads them.
+        return productOfTwoForms(written, at);
+    }
+
+    /**
+     * What two forms of the input's whole numbers come to multiplied, as a number of the input —
+     * or null where either form is none, or a number of one is read off a place a number of the
+     * other is. The comparison's arithmetic reads the same product ({@code AffineReading}), and
+     * the two are one term.
+     */
+    private LinearForm<Quantity> productOfTwoForms(Core.Binary written, InputReads at) {
+        if (written.type() != Type.INT && written.type() != Type.DECIMAL) {
             return null;
         }
-        return LinearForm.atom(new Quantity.ProductOfTwo(left, right));
+        LinearForm<NumericTerm> left = AffineReading.formOf(written.left(), at, read);
+        LinearForm<NumericTerm> right = AffineReading.formOf(written.right(), at, read);
+        NumericTerm.ProductOf.Signed made = NumericTerm.ProductOf.signed(left, right);
+        if (made == null) {
+            return null;
+        }
+        NumericTerm.ProductOf.Signed product = ProductDeclarations.admitted(made, read);
+        return new LinearForm<>(ExactRatio.ZERO,
+                Map.of(new DecisionAtom.OfTheInput(product.product()), product.sign()));
     }
 
     /**

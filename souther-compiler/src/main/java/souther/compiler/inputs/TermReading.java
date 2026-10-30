@@ -1114,6 +1114,82 @@ final class TermReading {
     }
 
     /**
+     * Whether a key is the same key as another exactly where the two observations are equal.
+     *
+     * <p>A map of the input is keyed by what crosses the boundary: strings, temporals, enumerations,
+     * and newtypes over those. The language writes each of those one way when it is the same key,
+     * so the observation of one is equal to the observation of the other. A decimal is the amount
+     * it stands for whatever scale it is written at, and two observations of it differ where the
+     * amounts do not, so keys of one would be told apart that the map holds as one; the same of a
+     * collection. No key that reaches this is one of those today, and one that did would be read
+     * as the sum of no products where the walk adds some.
+     */
+    static boolean keysCanBeTold(List<TermOrders.KeyedEntry> first,
+                                 List<TermOrders.KeyedEntry> second) {
+        return first.stream().allMatch(each -> spelledOneWay(each.key()))
+                && second.stream().allMatch(each -> spelledOneWay(each.key()));
+    }
+
+    private static boolean spelledOneWay(ObservedValue key) {
+        return switch (key) {
+            case ObservedValue.Decimal _, ObservedValue.Sequence _,
+                 ObservedValue.Mapping _ -> false;
+            case ObservedValue.Constructed constructed -> constructed.fields().values().stream()
+                    .allMatch(TermReading::spelledOneWay);
+            case ObservedValue.Bool _, ObservedValue.Integer _, ObservedValue.Text _,
+                 ObservedValue.Temporal _, ObservedValue.Unit _ -> true;
+            default -> false;
+        };
+    }
+
+    /**
+     * What the products of the values two maps hold under one key add up to, for a term over
+     * {@link RunSource.JoinedOccurrences}: each key both hold makes one product, and a key only
+     * one holds makes none. Nought where they share none, as an empty total is.
+     */
+    static Reading joined(TermOrders on, java.util.List<TermOrders.KeyedEntry> first,
+                          java.util.List<TermOrders.KeyedEntry> second) {
+        Carrier elements = on.answered();
+        if (elements == null) {
+            return new Reading.NotNumber();
+        }
+        List<ExactRatio> terms = new ArrayList<>();
+        if (!keysCanBeTold(first, second)) {
+            throw new IllegalArgumentException("a join is read of keys that are told apart by"
+                    + " their observations, which the caller asks first ("
+                    + "TermOrders#canTellTheKeysApart)");
+        }
+        for (TermOrders.KeyedEntry one : first) {
+            for (TermOrders.KeyedEntry other : second) {
+                if (!one.key().equals(other.key())) {
+                    continue;
+                }
+                ExactRatio[] pair = new ExactRatio[2];
+                int at = 0;
+                for (ObservedValue each : List.of(one.value(), other.value())) {
+                    Membership.Incomplete unread = Membership.unread(each);
+                    if (unread != null) {
+                        return new Reading.Missing(unread.cause());
+                    }
+                    ObservedValue value = each instanceof ObservedValue.Constructed c
+                            && c.field("value") != null ? c.field("value") : each;
+                    if (!(elements.placeOf(value) instanceof Count count)) {
+                        return new Reading.NotNumber();
+                    }
+                    pair[at++] = count.exactly();
+                }
+                switch (pair[0].times(pair[1])) {
+                    case ExactAnswer.Held<ExactRatio>(ExactRatio product) -> terms.add(product);
+                    case ExactAnswer.Unheld<ExactRatio> unheld -> {
+                        return new Reading.NotWorkedOut(unheld.why());
+                    }
+                }
+            }
+        }
+        return sumOf(terms, elements);
+    }
+
+    /**
      * What an observed container's elements add up to.
      *
      * <p>Every element, on the order the answer is measured on. That order is the elements' own —
@@ -1131,8 +1207,13 @@ final class TermReading {
      * can write outside every class of the number a rule is about.
      */
     private static Reading addedUp(ObservedValue at, TermOrders on) {
-        return at instanceof ObservedValue.Sequence held
-                ? addedUp(held.elements(), on) : new Reading.NotNumber();
+        return switch (at) {
+            case ObservedValue.Sequence held -> addedUp(held.elements(), on);
+            // A map holds its values, one for each key.
+            case ObservedValue.Mapping held -> addedUp(
+                    held.entries().stream().map(ObservedValue.Entry::value).toList(), on);
+            case null, default -> new Reading.NotNumber();
+        };
     }
 
     /**

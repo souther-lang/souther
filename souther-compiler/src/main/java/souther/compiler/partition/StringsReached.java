@@ -204,6 +204,9 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
                     countsReached.contains(taken.position());
             case NumericTerm.CodePointClassCount count -> countsReached.contains(count.position());
             case NumericTerm.CodePointValueSum sum -> countsReached.contains(sum.position());
+            // Every number of either form is one some value has.
+            case NumericTerm.ProductOf product -> product.factors().stream()
+                    .flatMap(form -> form.coefs().keySet().stream()).allMatch(this::reaches);
             case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.CodePointAt _,
                  NumericTerm.WholeUnitsOf _, NumericTerm.TakenOver _, NumericTerm.OfAnElementsNeighbours _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,

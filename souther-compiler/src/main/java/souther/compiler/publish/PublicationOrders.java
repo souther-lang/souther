@@ -262,6 +262,7 @@ public final class PublicationOrders {
         out.add(ReadingGap.NO_VALUE);
         out.add(ReadingGap.COULD_NOT_WALK);
         out.add(ReadingGap.COULD_NOT_READ_ROW);
+        out.add(ReadingGap.KEYS_NOT_TOLD);
         for (ReadingGap.ReachNotRead.Why why : ReadingGap.ReachNotRead.Why.values()) {
             out.add(new ReadingGap.ReachNotRead(why));
         }
@@ -419,6 +420,7 @@ public final class PublicationOrders {
                             CompositionRepertoire.ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL,
                             CompositionRepertoire.TREES_WRITTEN_FOR_A_COUNT,
                             CompositionRepertoire.STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
+                            CompositionRepertoire.MAPS_WRITTEN_WITH_ONE_ENTRY,
                             CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED,
                             CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE));
 

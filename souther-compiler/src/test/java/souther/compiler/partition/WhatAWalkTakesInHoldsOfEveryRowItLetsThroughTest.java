@@ -72,10 +72,10 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             let withAnUnreadCall (p) = p.x > 0 && Int.floorMod(p.y, p.x) > 1
 
             behavior product : (p: Pair) -> Bool
-            let product (p) = 2 * p.x * p.y > 8
+            let product (p) = 2 * p.x * p.x > 8
 
             behavior productThroughACall : (p: Pair) -> Bool
-            let productThroughACall (p) = Decimal.fromInt(2 * p.x * p.y) > Decimal.fromInt(8)
+            let productThroughACall (p) = Decimal.fromInt(2 * p.x * p.x) > Decimal.fromInt(8)
 
             behavior nested : (p: Pair) -> Bool
             let nested (p) = (p.x > 0 || p.y > 1) && p.y < 5
@@ -89,8 +89,8 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             "affineSum", (x, y) -> x + 2 * y <= 7,
             "withACall", (x, y) -> x > 0 && Math.max(y, 3) > 10,
             "withAnUnreadCall", (x, y) -> x > 0 && Math.floorMod(y, x) > 1,
-            "product", (x, y) -> 2 * x * y > 8,
-            "productThroughACall", (x, y) -> 2 * x * y > 8,
+            "product", (x, y) -> 2 * x * x > 8,
+            "productThroughACall", (x, y) -> 2 * x * x > 8,
             "nested", (x, y) -> (x > 0 || y > 1) && y < 5);
 
     /**

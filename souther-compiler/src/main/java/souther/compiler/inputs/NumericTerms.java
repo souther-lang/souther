@@ -99,6 +99,7 @@ public final class NumericTerms {
             case NumericTerm.GatheredUnderAKey _ -> "11";
             case NumericTerm.CodePointAt _ -> "12";
             case NumericTerm.WholeUnitsOf _ -> "13";
+            case NumericTerm.ProductOf _ -> "14";
         };
     }
 }
