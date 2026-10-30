@@ -1626,7 +1626,7 @@ final class AStatementAtARow {
      * holding no value a part is about is on neither side of it, so the part and its denial both
      * fail there — read off a failing answer, the denial would hold.
      */
-    private sealed interface Said {
+    sealed interface Said {
 
         /** The part is {@code truth} at the row. */
         record Is(boolean truth) implements Said {}
