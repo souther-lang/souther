@@ -38,6 +38,11 @@ import java.util.function.Function;
  * list, goes down more than one field, or asks anything but that one equality of the node, is not
  * read so.
  *
+ * <p>What is put in the list is a value the node holds, which is read at a position under the node.
+ * What it is does not change how long the line is, so a body that listed a value made of the node
+ * ({@code node.v + 1}) would answer the same lengths, and is not read all the same: nothing here
+ * says that a value made of the node, with no call of the search in it, is the same list.
+ *
  * <p>The reading evaluates the body abstractly. A value is one of: nothing, a list of one value,
  * what the walk answers (the line below some element, or nothing), and the line from the node.
  */

@@ -2283,11 +2283,12 @@ final class TermRealizations {
             // How many keys two maps share is a number nothing here asks of a row.
             case RunSource.JoinedOccurrences _ -> new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            // Written against the value the row stands at for the search, which no group of more
+            // than the one number is composed with ({@link JointBuilder.ALineToTheValue}).
             case RunSource.SearchedLine _ -> {
                 nothingInside(inside);
-                yield new Realization.Unexhausted(CompositionShortfall.writing(
-                        Set.of(CompositionRepertoire.TREES_WRITTEN_FOR_A_LINE)),
-                        "nothing here writes a tree whose search finds a line of a given length");
+                yield linesNotWritten("a line asked beside other numbers of the same tree is not"
+                        + " written");
             }
         };
     }
