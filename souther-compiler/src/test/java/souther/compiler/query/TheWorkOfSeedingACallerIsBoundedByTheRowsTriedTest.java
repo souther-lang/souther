@@ -146,6 +146,41 @@ class TheWorkOfSeedingACallerIsBoundedByTheRowsTriedTest {
     }
 
     @Test
+    void aWrittenRowLiftedToTwiceTakesNoneOfTheRowsTriedOnlyTheFirstTime() {
+        String source = """
+                module repro.bound
+
+                behavior f : (n: Int) -> Int
+
+                let f (n) = n
+
+                example f
+                    | (1) -> 1
+                    | (2) -> 2
+
+                behavior h : (n: Int) -> Int
+
+                let h (n) = n
+
+                example h
+                    | (1) -> 1
+                    | (3) -> 3
+
+                behavior g : (xs: List<Int>) -> Int
+
+                let g (xs) = List.fold((acc, x) -> acc + f(x) + h(x), 0, xs)
+
+                example g
+                    | ([1]) -> 2
+                """;
+        assertEquals(List.of("[2]"), seeded(source, false, 2).rows().stream()
+                .map(row -> row.inputs().getFirst().text()).toList(),
+                "the second lift to the written [1] is a row tried, and is not offered");
+        assertEquals(List.of("[2]", "[3]"), seeded(source, false, 3).rows().stream()
+                .map(row -> row.inputs().getFirst().text()).toList());
+    }
+
+    @Test
     void aValueTriedTwiceIsBuiltOnce() {
         Seeded same = seeded(model(false), false, ROWS);
         assertEquals(1, same.rows().size());

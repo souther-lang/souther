@@ -53,25 +53,31 @@ class AFoldAnswersWhatTheRunTimeAnswersTest {
 
     /**
      * What the run time computes for each kernel the algebra folds, over the arguments in the order
-     * the kernel takes them. {@code contains} is answered by the JDK's own method at run time, which
-     * is why it is the witness there; {@code matches} is handed the machine the pattern's meaning is
-     * lowered to, which is what a compiled call loads.
+     * the kernel takes them. {@code contains}, {@code startsWith} and {@code endsWith} are answered
+     * by the JDK's own methods at run time, which is why they are the witness there; {@code matches}
+     * is handed the machine the pattern's meaning is lowered to, which is what a compiled call
+     * loads.
      */
-    private static final Map<Kernel, Function<List<Object>, Object>> RUN_TIME = Map.of(
-            Kernel.DECIMAL_ADD, args -> DecimalMath.add((BigDecimal) args.get(0),
-                    (BigDecimal) args.get(1)),
-            Kernel.DECIMAL_SUBTRACT, args -> DecimalMath.subtract((BigDecimal) args.get(0),
-                    (BigDecimal) args.get(1)),
-            Kernel.DECIMAL_MULTIPLY, args -> DecimalMath.multiply((BigDecimal) args.get(0),
-                    (BigDecimal) args.get(1)),
-            Kernel.DECIMAL_COMPARE, args -> DecimalMath.compare((BigDecimal) args.get(0),
-                    (BigDecimal) args.get(1)),
-            Kernel.DECIMAL_FROM_INT, args -> DecimalMath.fromInt((Long) args.get(0)),
-            Kernel.STRING_LENGTH, args -> Strings.length((String) args.get(0)),
-            Kernel.STRING_CONTAINS, args -> ((String) args.get(1)).contains((String) args.get(0)),
-            Kernel.STRING_MATCHES, args -> machine(
+    private static final Map<Kernel, Function<List<Object>, Object>> RUN_TIME = Map.ofEntries(
+            Map.entry(Kernel.DECIMAL_ADD, args -> DecimalMath.add((BigDecimal) args.get(0),
+                    (BigDecimal) args.get(1))),
+            Map.entry(Kernel.DECIMAL_SUBTRACT, args -> DecimalMath.subtract(
+                    (BigDecimal) args.get(0), (BigDecimal) args.get(1))),
+            Map.entry(Kernel.DECIMAL_MULTIPLY, args -> DecimalMath.multiply(
+                    (BigDecimal) args.get(0), (BigDecimal) args.get(1))),
+            Map.entry(Kernel.DECIMAL_COMPARE, args -> DecimalMath.compare(
+                    (BigDecimal) args.get(0), (BigDecimal) args.get(1))),
+            Map.entry(Kernel.DECIMAL_FROM_INT, args -> DecimalMath.fromInt((Long) args.get(0))),
+            Map.entry(Kernel.STRING_LENGTH, args -> Strings.length((String) args.get(0))),
+            Map.entry(Kernel.STRING_CONTAINS,
+                    args -> ((String) args.get(1)).contains((String) args.get(0))),
+            Map.entry(Kernel.STRING_STARTS_WITH,
+                    args -> ((String) args.get(1)).startsWith((String) args.get(0))),
+            Map.entry(Kernel.STRING_ENDS_WITH,
+                    args -> ((String) args.get(1)).endsWith((String) args.get(0))),
+            Map.entry(Kernel.STRING_MATCHES, args -> machine(
                     ((PatternRead.Read) PatternParser.read((String) args.get(0))).meaning())
-                    .test((String) args.get(1)));
+                    .test((String) args.get(1))));
 
     /** The constant a compiled call loads for {@code meaning}, made by the bootstrap it names. */
     private static Predicate<String> machine(PatternMeaning meaning) {

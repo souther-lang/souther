@@ -1,5 +1,6 @@
 package souther.cli;
 
+import souther.compiler.generated.GeneratedLinkage.GeneratedClassDefect;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.JvmClassName;
 import souther.compiler.CompilationSources;
@@ -110,7 +111,7 @@ public final class Main {
     static int guarded(PrintStream err, IntSupplier command) {
         try {
             return command.getAsInt();
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | GeneratedClassDefect e) {
             String said = internalFailure(e);
             if (said == null) {
                 throw e;
@@ -426,7 +427,7 @@ public final class Main {
      * that is not theirs. What is left — the exception's name and what it said — is what a report of
      * it would be filed with, and is the only part of it they can pass on.
      */
-    static String internalFailure(RuntimeException e) {
+    static String internalFailure(Throwable e) {
         if (e instanceof CompileException) {
             return null;
         }

@@ -92,15 +92,22 @@ class ASumOfSeveralNumbersHeldAgainstAConstantIsReadAtEachOfThemTest {
     }
 
     /**
-     * Divided by how many a list written out holds, the average is read the same, but that the
-     * divisor is not nought is not shown: how many the list holds is no number the arithmetic
-     * reads. So no row is shown to get past the quotient, and each number is left unread for
-     * that, which is not that a run stops there.
+     * Divided by how many a list written out holds, the average is read the same: the count is no
+     * number the arithmetic reads, but building the list is all the call does, and the elements
+     * are worked out where the list is built.
      */
     @Test
-    void anAverageDividedByTheLengthOfAListIsNotShownToGetPastTheQuotient() {
-        assertEquals(List.of("w.a.pay", "w.b.pay", "w.c.pay"), unread("Rational.toInt(DOWN, ("
+    void anAverageDividedByTheLengthOfAListIsReadAtEachOfTheNumbers() {
+        assertEquals(List.of(), unread("Rational.toInt(DOWN, ("
                 + sum(3, "+") + ") / List.length([ w.a, w.b, w.c ])) >= 100"));
+    }
+
+    /** The list is built before it is counted, so an element that may stop a run is told. */
+    @Test
+    void anElementOfTheListThatMayStopARunIsNotLeftOutByCountingIt() {
+        assertEquals(List.of("w.a.pay"), unread("Rational.toInt(DOWN, ("
+                + sum(3, "+") + ") / List.length([ w.a.pay + 9223372036854775807, w.b.pay,"
+                + " w.c.pay ])) >= 100"));
     }
 
     @Test

@@ -1,5 +1,6 @@
 package souther.compiler.meaning;
 
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PlacesMoved;
@@ -8,9 +9,13 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.semantics.StringContainment;
+import souther.compiler.semantics.TakenArguments;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -2242,6 +2247,62 @@ public sealed interface Proposition {
         return joined(parts, false);
     }
 
+    /**
+     * Whether {@code one} is some element of a container meeting something, beside a part of
+     * {@code joined} saying the container holds something — or, joined by "and", whether it is no
+     * element meeting it beside one saying the container holds nothing.
+     *
+     * <p>Some element meeting anything holds only where there is an element, so beside the
+     * container holding something it adds nothing to an "or", and no element meeting it adds
+     * nothing to an "and" beside the container holding nothing. Kept, a condition comes out two
+     * ways by how it was spelt: {@code List.any(v -> true || v > 0, xs)} is the container holding
+     * something, and so is {@code !List.isEmpty(xs) || List.any(v -> v > 0, xs)}.
+     */
+    private static boolean saidByAContainerHolding(Proposition one, List<Proposition> joined,
+                                                   boolean every) {
+        if (!(one instanceof Some(DecisionSubject container, Proposition _, boolean holds,
+                String _)) || holds == every) {
+            return false;
+        }
+        for (Proposition other : joined) {
+            if (holdsSomething(every ? other.denied() : other, container)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether {@code stated} is that {@code container} holds something: how many it holds, as it
+     *  stands, above nought. */
+    private static boolean holdsSomething(Proposition stated, DecisionSubject container) {
+        if (!(stated instanceof Compared(Relation.Affine(LinearForm<Quantity> form, Rel rel),
+                        boolean holds, String _))
+                || !holds || rel != Rel.GT || form.constant().signum() != 0
+                || form.coefs().size() != 1
+                || form.coefs().values().iterator().next().signum() <= 0) {
+            return false;
+        }
+        return switch (form.coefs().keySet().iterator().next()) {
+            case DecisionAtom.OfTheInput(NumericTerm.TakenOf size) ->
+                    container instanceof DecisionSubject.AnInput(TermPath at)
+                            && size.position().equals(at)
+                            && size.transformation() == ValueTransformation.NONE
+                            && countsWhatItHolds(size.operation(), size.arguments());
+            case DecisionAtom.TakenOfAnAnswer size -> size.of().equals(container)
+                    && countsWhatItHolds(size.operation(), size.arguments());
+            default -> false;
+        };
+    }
+
+    /** Whether {@code operation}, given {@code arguments} beside the value, takes how many the
+     *  value holds. */
+    private static boolean countsWhatItHolds(ValueName.Stdlib operation,
+                                             TakenArguments arguments) {
+        return arguments.equals(TakenArguments.NONE)
+                && DefaultBoundOperationFacts.get().takenAs(operation, arguments)
+                        instanceof TakenAs.HowManyItHolds;
+    }
+
     private static Proposition joined(List<Proposition> parts, boolean every) {
         // In the order of their spellings, a part whose spelling is already kept left out.
         SortedMap<String, Proposition> kept = new TreeMap<>();
@@ -2260,6 +2321,10 @@ public sealed interface Proposition {
                 }
                 kept.putIfAbsent(one.key(), one);
             }
+        }
+        if (kept.size() > 1 && kept.values().stream().anyMatch(Some.class::isInstance)) {
+            List<Proposition> joinedAsKept = List.copyOf(kept.values());
+            kept.values().removeIf(one -> saidByAContainerHolding(one, joinedAsKept, every));
         }
         if (every && kept.size() > 1) {
             Proposition byCases = byTheCases(List.copyOf(kept.values()));

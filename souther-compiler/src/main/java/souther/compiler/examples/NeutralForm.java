@@ -55,8 +55,11 @@ final class NeutralForm {
      *  the same answer decides what a comparison reads at a place inside a value. */
     private final FieldTypes fields;
 
+    /** Whose classes a live value is of, which is what a member of it failing to be read means. */
+    private final ValueOwnership ownership;
+
     NeutralForm(Symbols symbols, SumCases sums, DeclarationKinds kinds,
-                FieldTypes fields) {
+                FieldTypes fields, ValueOwnership ownership) {
         if (fields == null) {
             throw new IllegalArgumentException("a value's parts are read against what its"
                     + " declaration was checked to hold");
@@ -65,6 +68,11 @@ final class NeutralForm {
         this.sums = sums;
         this.kinds = kinds;
         this.fields = fields;
+        this.ownership = ownership;
+    }
+
+    ValueOwnership ownership() {
+        return ownership;
     }
 
     // --- a live value, re-materialised -------------------------------------------------------------
@@ -175,11 +183,22 @@ final class NeutralForm {
             java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod(name);
             accessor.setAccessible(true);
             return accessor.invoke(live);
-        } catch (ReflectiveOperationException e) {
-            EvaluationContext.rethrowIfOverspent(e);
-            throw new FixtureException(what + " cannot be read back as a fixture: `"
-                    + simpleName(live) + "` has no `" + name + "` to read");
+        } catch (ReflectiveOperationException | LinkageError e) {
+            ownership.readFailed(live, e);
+            throw new FixtureException(what + " cannot be read back as a fixture: "
+                    + unreadable(live, name, e));
         }
+    }
+
+    /** Why a member of a live value could not be read: it is not there, or it was and ended in
+     *  a failure of its own. */
+    private static String unreadable(Object live, String name, Throwable failure) {
+        if (failure instanceof NoSuchMethodException) {
+            return "`" + simpleName(live) + "` has no `" + name + "` to read";
+        }
+        Throwable ended = failure instanceof java.lang.reflect.InvocationTargetException call
+                && call.getCause() != null ? call.getCause() : failure;
+        return "`" + name + "` of `" + simpleName(live) + "` could not be read: " + ended;
     }
 
     // --- the form itself, read by both directions -------------------------------------------------
@@ -472,7 +491,7 @@ final class NeutralForm {
 
     /** What a live optional holds. A `?` position takes the value itself as well as a `Some` around
      *  it, so anything that is not one is what it stands for. */
-    static Object heldBy(Object live) {
+    Object heldBy(Object live) {
         if (live == null || !simpleName(live).equals("Option$Some")) {
             return live;
         }
@@ -480,10 +499,10 @@ final class NeutralForm {
             java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod("value");
             accessor.setAccessible(true);
             return accessor.invoke(live);
-        } catch (ReflectiveOperationException e) {
-            EvaluationContext.rethrowIfOverspent(e);
-            throw new FixtureException("an optional's value cannot be read back: `"
-                    + simpleName(live) + "` has no `value` to read");
+        } catch (ReflectiveOperationException | LinkageError e) {
+            ownership.readFailed(live, e);
+            throw new FixtureException("an optional's value cannot be read back: "
+                    + unreadable(live, "value", e));
         }
     }
 

@@ -335,4 +335,21 @@ public sealed interface ValueSet {
     default boolean isAny() {
         return this instanceof Cofinite it && it.excluded().isEmpty();
     }
+
+    /**
+     * Strings this holds that it names: the least a language holds, or each string a finite set
+     * lists — none where it names none, which a set of everything but some values does not.
+     */
+    default List<String> stringsItNames() {
+        return switch (this) {
+            case Matching matching -> {
+                String some = matching.language().some();
+                yield some == null ? List.of() : List.of(some);
+            }
+            case Finite finite -> finite.values().stream()
+                    .filter(Value.Text.class::isInstance)
+                    .map(each -> ((Value.Text) each).value()).toList();
+            case Cofinite _, WholeRuns _ -> List.of();
+        };
+    }
 }

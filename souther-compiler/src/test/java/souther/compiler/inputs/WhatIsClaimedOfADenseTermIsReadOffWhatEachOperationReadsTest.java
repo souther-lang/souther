@@ -14,6 +14,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberRegion;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.BinOp;
@@ -23,6 +24,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -197,6 +199,12 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
         assertEquals(1, settled.noRowShownComputed().size());
         assertFalse(settled.noRowShownComputed().getFirst().holds());
         assertFalse(settled.leavesItsPlacesUndivided(null));
+        // The numbers are the run itself, below nought and not at it, and nothing of the run
+        // that is computed.
+        assertEquals(Optional.of(NumberRegion.of(List.of(new NumberRegion.Run(
+                        settled.noRowShownComputed().getFirst().from(),
+                        ExactCut.exclusive(ExactRatio.ZERO))))),
+                settled.numbersNotShownComputed());
     }
 
     @Test
@@ -205,6 +213,7 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
         Leaves.Settled settled = assertInstanceOf(Leaves.Settled.class,
                 leftOfNought(0, minusOne, BigDecimal.ONE, minusOne, BigDecimal.ONE, Rel.GE));
         assertEquals(List.of(), settled.noRowShownComputed());
+        assertEquals(Optional.empty(), settled.numbersNotShownComputed());
     }
 
     @Test

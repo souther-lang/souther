@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.GuaranteeWalk;
 import souther.compiler.check.NonAffineOperation;
 import souther.compiler.meaning.WhyUnread;
+import souther.compiler.numeric.NumberRegion;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
@@ -363,6 +364,8 @@ public sealed interface BlockReason {
                     }
                     yield Integer.compare(byCodePoints.size(), theirCounts.size());
                 }
+                case RelationRowsNotShownComputed(NumberRegion numbers) -> numbers.compareTo(
+                        ((RelationRowsNotShownComputed) other).numbers());
                 // The rank says which statement it is.
                 case WhatItStatesIsNoLine _ -> 0;
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
@@ -372,8 +375,7 @@ public sealed interface BlockReason {
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
                      RelationNotShownToReachEveryValue _,
-                     RelationNotShownReachedAtEveryValue _, OrderedExtentEndIsNoValue _,
-                     RelationRowsNotShownComputed _ -> 0;
+                     RelationNotShownReachedAtEveryValue _, OrderedExtentEndIsNoValue _ -> 0;
             };
         }
 
@@ -1352,12 +1354,21 @@ public sealed interface BlockReason {
      * some numbers here settle it by the terms' ends; but the operations the rows work out were
      * not all worked out on a row built in them, so no row is shown computed there.
      *
-     * <p>A fact about what was shown and not about the numbers, and one no reader is told which
-     * numbers it is about: the document says the word and not the region, so nothing here holds
-     * the region either. Apart from {@link RelationNotShownToReachEveryValue}, which says
-     * nothing of rows being computed.
+     * <p>A fact about what was shown and not about the numbers: it does not say that a number of
+     * the region has no room, and a number outside it may have none. The region is the numbers of
+     * the runs the relation settles in which no row was built, as a region and not an interval,
+     * since numbers with a row can lie between them. Apart from
+     * {@link RelationNotShownToReachEveryValue}, which says nothing of rows being computed.
+     *
+     * @param numbers the numbers of the term the relation is read over in which no row is shown
+     *                computed
      */
-    record RelationRowsNotShownComputed() implements RuleReadingStopped {}
+    record RelationRowsNotShownComputed(NumberRegion numbers) implements RuleReadingStopped {
+
+        public RelationRowsNotShownComputed {
+            Objects.requireNonNull(numbers, "numbers no row is shown computed in are some");
+        }
+    }
 
     /**
      * What the rule states was read in full, and it relates the value here to another value; the

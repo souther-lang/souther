@@ -484,14 +484,80 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
         // And where it is computed at them, the same form is: three times the number is.
         assertEquals(List.of("-1", "11", "0"), bordersOf("x: Int, c: Int",
                 "c == Int.floorMod(3 * x, 11)"));
-        // Moved by a number, the form is computed at those values all the same, but the sum with
-        // the number is worked out on every row and nothing shows a row gets past it: the reading
-        // of the remainder holds the number taken by the divisor and leaves what the run adds to
-        // the row. So the number beside the remainder is not said to be left either way here.
-        assertEquals(List.of("0"), bordersOf("x: Int, c: Int",
+        // Moved by a number, the sum with the number is worked out on every row, and it is asked
+        // at the values the rows are built at as it was written: it comes to a number an Int
+        // holds there, so the form is computed at them all the same.
+        assertEquals(List.of("-1", "11", "0"), bordersOf("x: Int, c: Int",
                 "c == Int.floorMod(3 * x + 5, 11)"));
+        // And moved by a number that overflows at them, the sum is no row's: the quantity holds
+        // that number taken by the divisor, which is a small one, so only the sum as written
+        // says so.
+        assertEquals(List.of("0"), bordersOf("x: Int, c: Int",
+                "c == Int.floorMod(3 * x + 9223372036854775807, 11)"));
+        assertEquals(List.of("0"), bordersOf("x: Int, c: Int",
+                "c == Int.floorMod(3 * x - 9223372036854775807 - 10, 11)"));
     }
 
+
+    /**
+     * A number the form is moved by is an operation over the other numbers of the form as well as
+     * the witness, and those stand at whatever value their rows put them at: {@code a + 5} stops
+     * at the greatest {@code Int} for {@code a} however {@code x} is chosen. So the operation is
+     * not the witness's to get past, the number {@code a} is not said to be left every remainder,
+     * and no line is drawn on the remainder — whether {@code a} is free or held where there is no
+     * row at all.
+     */
+    @Test
+    void aNumberBesideTheWitnessIsNotSaidToBeLeftEveryRemainderWhereTheFormIsMovedByAConstant() {
+        Compilation free = compiled("", "a: Int, x: Int, c: Int",
+                "c == Int.floorMod(a + 5 + x, 11)");
+        assertEquals(List.of("0"), bordersOf(linesOf(free)));
+        assertTrue(notShownAt(free, "a"), () -> reasonsEach("a: Int, x: Int, c: Int",
+                "c == Int.floorMod(a + 5 + x, 11)").toString());
+        Compilation held = compiled("data Top = Int\n    invariant value == 9223372036854775807\n",
+                "a: Top, x: Int, c: Int", "c == Int.floorMod(a.value + 5 + x, 11)");
+        assertFalse(bordersOf(linesOf(held)).contains("11"));
+        assertFalse(bordersOf(linesOf(held)).contains("-1"));
+        // And with no number to move it by, the sum is the form itself and the lines are drawn.
+        assertEquals(List.of("-1", "11", "0"), bordersOf("a: Int, x: Int, c: Int",
+                "c == Int.floorMod(a + x, 11)"));
+    }
+
+    /**
+     * What the form comes to once it is cancelled is not what the run works out: the {@code y} of
+     * {@code x + M * y - M * y} is gone from the form and is in the products, which stop the run
+     * at every {@code y} but nought. The form is {@code x}, but {@code x} is not put through
+     * every remainder by any assignment of the numbers the run reads, so the proof is given up
+     * and no line is drawn on the remainder.
+     */
+    @Test
+    void aNumberTheFormCancelledIsStillOneTheRunStopsAt() {
+        String m = "9223372036854775807";
+        for (String form : List.of(
+                m + " * (x + y) - " + m + " * (x - y) + x - (" + m + " * y + " + m + " * y)",
+                "x + " + m + " * y - " + m + " * y")) {
+            List<String> borders = bordersOf("x: Int, y: Int, c: Int",
+                    "c == Int.floorMod(" + form + ", 11)");
+            assertEquals(List.of("0"), borders, form);
+        }
+        // A number only the cancelling reads is one the run stops at all the same: the product
+        // comes first, whatever is added after it, and there is no row for any x.
+        List<String> pinned = bordersOf(linesOf(compiled(
+                "data Top = Int\n    invariant value == " + m + "\n", "x: Int, y: Top, c: Int",
+                "c == Int.floorMod((" + m + " * y.value - " + m + " * y.value) + x, 11)")));
+        assertFalse(pinned.contains("11"), pinned::toString);
+        assertFalse(pinned.contains("-1"), pinned::toString);
+        // Nor is it drawn where the cancelled number could stop nothing: no assignment of it is
+        // chosen, so there is none to ask the run to get past.
+        assertEquals(List.of("0"), bordersOf("x: Int, y: Int, c: Int",
+                "c == Int.floorMod(x + y - y, 11)"));
+    }
+
+    private static boolean notShownAt(Compilation compilation, String place) {
+        return compilation.db().ask(new Adequacy.Coverage("demo")).value().get("f").notRead()
+                .stream().anyMatch(each -> each.at().equals(place) && each.reason()
+                        == UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE);
+    }
 
     /**
      * A number beside the remainder that is read off a place the form is read at is not apart from

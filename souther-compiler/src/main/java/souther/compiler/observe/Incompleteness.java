@@ -102,10 +102,11 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at,
          *
          * <p>Named for what is caught, which is a {@code LinkageError} and not one of the things
          * that raise it. The case this exists for is the runtime being off the host's classpath —
-         * it is {@code provided}, like CTFE — and the JVM raises the same error for a class that
-         * will not verify, one whose format it does not accept, and one compiled against a
-         * different version of what it calls. Nothing here can tell them apart, so nothing here
-         * says which.
+         * it is {@code provided}, like CTFE — and a runtime of another version that lacks a class
+         * the generated code names raises the same error, so nothing here says which. A class that
+         * will not verify, one whose format the JVM does not accept and one that failed to
+         * initialize are not this: the first two are the compiler's own output failing and the last
+         * is a failure with a cause of its own, and each ends the run instead of being recorded.
          *
          * <p>One place writes it: an example whose evaluation raised one, where nothing was
          * observed and so its rows did not run. It had three, and the other two — a fill that could

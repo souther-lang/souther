@@ -354,6 +354,39 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
         assertEquals(Stage.INVOKED, crossed.stage());
     }
 
+    /** An implementation whose own dependency is not what it was built against. */
+    private static final String DEPENDS_ON_A_METHOD_THAT_IS_NOT_THERE = """
+            package example.todo;
+            public final class FindTodoImpl extends FindTodo {
+                public FindTodoResult apply(TodoId id) {
+                    throw new NoSuchMethodError("a driver the query calls");
+                }
+            }
+            """;
+
+    /**
+     * A supplied implementation failing to link is that implementation failing.
+     *
+     * <p>A link failure does not say whose class it was. What the supplied code ended with is the
+     * row's to read, as any other throw is, on either side of the crossing; it is not this
+     * compiler's output, and ending the run with an internal compiler error for it would blame the
+     * wrong code.
+     */
+    @Test
+    void anImplementationWhoseDependencyDoesNotLinkIsTheImplementationFailing() throws Exception {
+        BoundExamples over = SoutherExamples.ofSource(MODEL)
+                .bind(builtElsewhere(compiled(MODEL), DEPENDS_ON_A_METHOD_THAT_IS_NOT_THERE));
+        RowOutcome crossed = over.evaluate(over.rows().get(0)).outcome();
+
+        RowOutcome stood = named(evaluated(MODEL, DEPENDS_ON_A_METHOD_THAT_IS_NOT_THERE),
+                crossed.identity().shown());
+
+        for (RowOutcome row : List.of(crossed, stood)) {
+            assertEquals(Disposition.FAILED, row.disposition());
+            assertEquals(Stage.INVOKED, row.stage());
+        }
+    }
+
     /** The classes of each model, emitted once for the class. */
     private static final Map<String, Map<String, ClassFileImage>> EMITTED = new HashMap<>();
 

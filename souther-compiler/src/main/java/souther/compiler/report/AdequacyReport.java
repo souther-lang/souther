@@ -103,6 +103,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.NumberRegion;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Figure;
@@ -5982,6 +5983,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         publishedStops(asked, parts).stream()
                                 .map(stop -> whyUnread(stop.reason()) + stoppedAt(stop.figures())
                                         + imagesNotShownSaid(stop.leftOpen())
+                                        + numbersNotShownComputedSaid(stop.notShownComputed())
                                         + sentTo(stop.sentTo(), rendering, declaredIn))
                                 .collect(Collectors.joining("; ")),
                         whatItsPositionWasShortOf(asked).map(AdequacyReport::whyUnread)
@@ -6080,10 +6082,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *                from another
      * @param leftOpen which values a relation shown over some of them was not shown over, which
      *                 tells two entries apart: two of them leave two sets of values open
+     * @param notShownComputed which numbers a relation settles by the terms' ends with no row
+     *                 shown computed in them, which tells two entries apart likewise
      */
     private record PublishedStop(UndividedPosition.Reason reason, Optional<PublishedAt> sentTo,
                                  List<Figure> figures,
-                                 Optional<BlockReason.RelationShownOverARegion> leftOpen) {
+                                 Optional<BlockReason.RelationShownOverARegion> leftOpen,
+                                 Optional<NumberRegion> notShownComputed) {
     }
 
     /** Where every run getting to a rule stops, as the human report says it after the rule. */
@@ -6158,17 +6163,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static List<PublishedStop> publishedStops(PartitionEvidence.Unanswered asked,
                                                       WhereAPartIs parts) {
         record WordAtAPlace(UndividedPosition.Reason reason, Optional<PublishedAt> sentTo,
-                            Optional<BlockReason.RelationShownOverARegion> leftOpen) {}
+                            Optional<BlockReason.RelationShownOverARegion> leftOpen,
+                            Optional<NumberRegion> notShownComputed) {}
         Map<WordAtAPlace, List<Figure>> out = new LinkedHashMap<>();
         for (ReportedReason.Stop each : whyStanding(asked, parts).written()) {
             out.computeIfAbsent(
                     new WordAtAPlace(each.reason(), placeInTheRule(each.sentTo(), parts),
-                            each.leftOpen()),
+                            each.leftOpen(), each.notShownComputed()),
                     _ -> new ArrayList<>()).addAll(each.figures());
         }
         List<PublishedStop> written = new ArrayList<>();
         out.forEach((entry, figures) -> written.add(new PublishedStop(entry.reason(),
-                entry.sentTo(), Figure.inOrder(figures), entry.leftOpen())));
+                entry.sentTo(), Figure.inOrder(figures), entry.leftOpen(),
+                entry.notShownComputed())));
         return List.copyOf(written);
     }
 
@@ -8235,6 +8242,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         standsOn.put("reason", word(stop.reason()));
                         figuresMet(standsOn, stop.figures());
                         stop.leftOpen().ifPresent(open -> leftOpen(standsOn, open));
+                        stop.notShownComputed().ifPresent(
+                                numbers -> numbersNotShownComputed(standsOn, numbers));
                         stop.sentTo().ifPresent(
                                 at -> place(standsOn.putObject("sentTo"), at, sources));
                     });
@@ -10094,8 +10103,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case NOTHING_NAMED -> "stopped at " + figuresSaid(it.figures())
                         + ", which no option sets";
                 case A_ROW_OR_A_RULE_AT_THE_POINT -> "the search stopped at "
-                        + figuresSaid(it.figures()) + ", which no option sets: write a row there,"
-                        + " or a rule that leaves no value there";
+                        + figuresSaid(it.figures()) + ", which no option sets: a row there, or a"
+                        + " rule that leaves no value there, would settle it; nothing shows one"
+                        + " is needed";
                 // The search did not look past the figure, so nothing says there is no row.
                 case A_ROW_THAT_TELLS_THE_REWRITE_APART -> "stopped at "
                         + figuresSaid(it.figures()) + ", which no option sets: a row that tells"
@@ -10152,6 +10162,48 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 .filter(names -> !names.isEmpty())
                 .map(names -> ", the image of " + String.join(", ", names) + " not shown")
                 .orElse("");
+    }
+
+    /**
+     * The numbers a relation settles by the terms' ends and no row is shown computed in, as the
+     * line a question's stops are written in says them: each run by its ends, joined with "or".
+     */
+    private static String numbersNotShownComputedSaid(Optional<NumberRegion> numbers) {
+        return numbers.map(region -> ", no row shown computed in the numbers "
+                + region.runs().stream().map(run -> {
+                    List<String> ends = new ArrayList<>();
+                    if (run.from() != null) {
+                        ends.add((run.from().inclusive() ? "at least " : "above ")
+                                + run.from().at().spelled());
+                    }
+                    if (run.to() != null) {
+                        ends.add((run.to().inclusive() ? "at most " : "below ")
+                                + run.to().at().spelled());
+                    }
+                    return ends.isEmpty() ? "of any size" : String.join(" and ", ends);
+                }).collect(Collectors.joining(" or "))).orElse("");
+    }
+
+    /**
+     * Where the numbers a relation settles by the terms' ends and no row is shown computed in lie,
+     * as an entry of a question's {@code stopped} writes them: the runs they make, in order. Each
+     * end is spelled exactly, and absent where the run has none.
+     */
+    public static void numbersNotShownComputed(ObjectNode into, NumberRegion numbers) {
+        ArrayNode runs = into.putArray("numbersNotShownComputed");
+        for (NumberRegion.Run each : numbers.runs()) {
+            ObjectNode run = runs.addObject();
+            if (each.from() != null) {
+                ObjectNode from = run.putObject("from");
+                from.put("at", each.from().at().spelled());
+                from.put("inclusive", each.from().inclusive());
+            }
+            if (each.to() != null) {
+                ObjectNode to = run.putObject("to");
+                to.put("at", each.to().at().spelled());
+                to.put("inclusive", each.to().inclusive());
+            }
+        }
     }
 
     private static String stoppedAt(List<Figure> figures) {

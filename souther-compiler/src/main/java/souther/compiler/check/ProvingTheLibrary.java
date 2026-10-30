@@ -183,6 +183,9 @@ final class ProvingTheLibrary implements LibraryProofs {
             case BoundOperationFact.ListsTheCodePointsOf _ -> false;
             case BoundOperationFact.EveryElementOfItsAnswerIs _ -> false;
             case BoundOperationFact.AnswersTheClosureOnWhatItHolds _ -> false;
+            case BoundOperationFact.BoundsEachElementOfItsResult _ -> false;
+            case BoundOperationFact.AnswersAnElementOf _ -> false;
+            case BoundOperationFact.AnswersAnElementWhereTheClosureHolds _ -> false;
             case BoundOperationFact.KeepsWhetherItHoldsACodePointOf _ -> false;
             case BoundOperationFact.IsRelated _ -> false;
             case BoundOperationFact.PutsAValueIn _ -> false;
@@ -420,10 +423,8 @@ final class ProvingTheLibrary implements LibraryProofs {
                         Map.of(numberAt(bound.against()), ExactRatio.ONE));
         LawProposition<Integer> where = switch (bound.provided()) {
             case ResultBound.Provided.Always<DeclaredArgument> _ -> new LawProposition.Always<>(true);
-            case ResultBound.Provided.ConstantAboveZero<DeclaredArgument>(var argument) ->
-                    new LawProposition.Compared<>(LinearForm.atom(numberAt(argument)), Rel.GT);
-            case ResultBound.Provided.ConstantBelowZero<DeclaredArgument>(var argument) ->
-                    new LawProposition.Compared<>(LinearForm.atom(numberAt(argument)), Rel.LT);
+            case ResultBound.Provided.ArgumentStands<DeclaredArgument>(var argument, var rel) ->
+                    new LawProposition.Compared<>(LinearForm.atom(numberAt(argument)), rel);
         };
         return prover.answers(operation, bound.rel(), against, where)
                 instanceof LibraryProver.Outcome.Proved;

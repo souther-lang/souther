@@ -57,7 +57,7 @@ final class ObservedValues {
         // budget, because the budget bounds the value that is kept: charged for, the same value
         // would be kept or dropped depending on whether the position it stood at was optional.
         if (live != null && NeutralForm.simpleName(live).equals("Option$Some")) {
-            Object held = read(live, "value");
+            Object held = read(live, "value", neutral.ownership());
             return held == FAILED
                     ? new ObservedValue.Unknown("an optional's value could not be read")
                     : walk(held, depth);
@@ -148,7 +148,7 @@ final class ObservedValues {
     }
 
     private ObservedValue field(Object live, String name, int depth) {
-        Object value = read(live, name);
+        Object value = read(live, name, neutral.ownership());
         return value == FAILED
                 ? new ObservedValue.Unknown("`" + name + "` could not be read from `"
                         + NeutralForm.simpleName(live) + "`")
@@ -161,18 +161,20 @@ final class ObservedValues {
 
     /** One field, through the accessor every data has (ADR-0065). The class may be package-private, so
      * the declared method is taken and opened, the way a codec is. */
-    static Object readOrNull(Object live, String name) {
-        Object value = read(live, name);
+    static Object readOrNull(Object live, String name, ValueOwnership ownership) {
+        Object value = read(live, name, ownership);
         return value == FAILED ? null : value;
     }
 
-    private static Object read(Object live, String name) {
+    private static Object read(Object live, String name, ValueOwnership ownership) {
         try {
             java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod(name);
             accessor.setAccessible(true);
             return accessor.invoke(live);
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            EvaluationContext.rethrowIfOverspent(e);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            // The value may be one a supplied implementation answered, and resolving an accessor
+            // can raise a link failure unwrapped. Whose class it is decides what that means.
+            ownership.readFailed(live, e);
             return FAILED;
         }
     }

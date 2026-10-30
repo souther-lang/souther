@@ -39,11 +39,9 @@ import souther.compiler.types.ValueName;
 import souther.compiler.values.TextExtent;
 import souther.compiler.values.ValueSet;
 import java.math.BigInteger;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -1880,6 +1878,45 @@ public final class InvariantChecker {
         List<Clauses.StatedPart> parts() {
             return view.present();
         }
+
+        /**
+         * The clause as it comes out where each part {@code settled} names holds or fails as it
+         * says, every other part as written — or null where a part named is not one this can put
+         * in place.
+         *
+         * <p>Each such part is put in place at its own node, by the value of the node at which it
+         * holds or fails: a part denied holds where the node it denies is false. The rest of the
+         * clause stays as it was written, with the bindings it is read under and the order it is
+         * worked out in, so a binding the part names nothing of is still worked out, and one that
+         * stops a run still stops it. What comes out is the clause as one part of it stands with the
+         * others answered: a question about one part of a clause asked of the whole of it, which
+         * holds the other parts to the same values.
+         */
+        Core withPartsSettled(Map<PartId<RuleRef.Invariant>, Boolean> settled) {
+            Map<Core, Core> at = new IdentityHashMap<>();
+            for (Clauses.StatedPart each : parts()) {
+                Boolean holds = settled.get(each.id());
+                if (holds == null) {
+                    continue;
+                }
+                if (!(each.of() instanceof ClauseExpr.Part part)) {
+                    return null;
+                }
+                at.put(part.of(), new Core.Bool(holds == part.positive(), Type.BOOL,
+                        part.of().pos()));
+            }
+            if (at.size() != settled.size()) {
+                return null;
+            }
+            return replaced(clause, at);
+        }
+
+        /** {@code e} with each node {@code at} names, the very node, put in place of. */
+        private static Core replaced(Core e, Map<Core, Core> at) {
+            Core put = at.get(e);
+            return put != null ? put
+                    : Core.mapAll(e, child -> replaced(child, at), name -> name);
+        }
     }
 
     /**
@@ -2405,6 +2442,9 @@ public final class InvariantChecker {
         private final Denotations at;
         private final Coordinates byName;
         private Map<RuleKey, Set<PartReading>> named;
+        private Map<RuleKey, Set<PartReading>> byPlace;
+        /** Which places the parts tie together, made the first time a tie is asked about. */
+        private TiedPlaces tied;
 
         PartsNaming(List<Written> stated, Denotations at, Coordinates byName) {
             this.stated = stated;
@@ -2439,42 +2479,22 @@ public final class InvariantChecker {
          * {@code mid} tied to {@code high} by the second and {@code low} tied to nothing.
          */
         boolean tiedWithout(PartId<RuleRef.Invariant> part, RuleKey one, RuleKey other) {
-            Map<PartReading, Set<RuleKey>> placesOf = new LinkedHashMap<>();
-            named().forEach((place, reads) -> reads.forEach(read ->
-                    placesOf.computeIfAbsent(read, _ -> new LinkedHashSet<>()).add(place)));
-            Set<RuleKey> reached = new LinkedHashSet<>(List.of(one));
-            Deque<RuleKey> todo = new ArrayDeque<>(reached);
-            Set<PartReading> crossed = new HashSet<>();
-            while (!todo.isEmpty()) {
-                RuleKey at = todo.pop();
-                if (near(at, other)) {
-                    return true;
-                }
-                for (Map.Entry<RuleKey, Set<PartReading>> each : named().entrySet()) {
-                    if (!near(each.getKey(), at)) {
-                        continue;
-                    }
-                    for (PartReading read : each.getValue()) {
-                        if (!read.part().equals(part) && crossed.add(read)) {
-                            placesOf.get(read).stream().filter(reached::add).forEach(todo::add);
-                        }
-                    }
-                }
+            if (tied == null) {
+                tied = TiedPlaces.of(byPlace());
             }
-            return false;
-        }
-
-        private static boolean near(RuleKey one, RuleKey other) {
-            return one.isAtOrUnder(other) || other.isAtOrUnder(one);
+            return tied.tiedWithout(part, one, other);
         }
 
         /** Every place a part names, with the readings of parts naming it, in the order the walk
          *  met them. */
         Map<RuleKey, Set<PartReading>> byPlace() {
-            Map<RuleKey, Set<PartReading>> out = new LinkedHashMap<>();
-            named().forEach((place, parts) -> out.put(place, Collections.unmodifiableSet(
-                    new LinkedHashSet<>(parts))));
-            return Collections.unmodifiableMap(out);
+            if (byPlace == null) {
+                Map<RuleKey, Set<PartReading>> out = new LinkedHashMap<>();
+                named().forEach((place, parts) -> out.put(place, Collections.unmodifiableSet(
+                        new LinkedHashSet<>(parts))));
+                byPlace = Collections.unmodifiableMap(out);
+            }
+            return byPlace;
         }
 
         private Map<RuleKey, Set<PartReading>> named() {
@@ -4948,7 +4968,7 @@ public final class InvariantChecker {
         Type elem = Terms.elementType(container.type());
         // The container is read under what every argument answered, which is what holds where the
         // operation is entered.
-        List<Quantified> relations = predicates.elementRelations(container, out, at);
+        List<ElementRelation> relations = predicates.elementRelations(container, out, at);
         Core.Read element = Terms.read(handed.element(), elem, handed.step().pos());
         // an element of a container is not a location the body can otherwise name
         Entered in = enter(element, out, at);   // the element carries its type's invariant
@@ -4958,7 +4978,7 @@ public final class InvariantChecker {
         // its newtype up to be reasoned about.
         in = enterOthers(handed, in);
         Known k2 = in.known();
-        for (Quantified q : relations) {
+        for (ElementRelation q : relations) {
             k2 = predicates.instantiate(q, element, k2, in.at());
         }
         // A region of its own, and what it leaves stays in it: the body runs once per element, on
@@ -4988,7 +5008,13 @@ public final class InvariantChecker {
                 throw new IllegalStateException("a closure a preserved call applies has an untyped"
                         + " parameter, so what it is handed cannot be said");
             }
-            out = enter(Terms.read(params.get(i), given, handed.step().pos()), out.known(), out.at());
+            Core.Read read = Terms.read(params.get(i), given, handed.step().pos());
+            out = enter(read, out.known(), out.at());
+            // The operation hands this parameter the place of the element it is handed beside it.
+            if (params.get(i) == handed.position()) {
+                out = new Entered(predicates.placeIn(read, handed.container(), out.known(), out.at()),
+                        out.at());
+            }
         }
         return out;
     }
@@ -5112,7 +5138,7 @@ public final class InvariantChecker {
                 continue;
             }
             List<Known> entered = predicates.eachWayOf(condition, k).stream()
-                    .filter(way -> !way.reachesNothing())
+                    .filter(way -> !predicates.leavesNoRun(way))
                     .toList();
             if (entered.isEmpty()) {
                 return null;
@@ -5283,7 +5309,7 @@ public final class InvariantChecker {
                 if (alone == null) {
                     alone = readingOf(k.unguarded().numbers(), asked);
                 }
-                if (c.refutedBy(alone, k.unguarded().facts())) {
+                if (c.refutedByTheValuesAlone(alone, k.unguarded().facts())) {
                     refutedAlone = true;
                 }
                 alongside = true;
