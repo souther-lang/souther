@@ -298,7 +298,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
     }
 
-    public static final int SCHEMA_VERSION = 27;
+    public static final int SCHEMA_VERSION = 28;
 
     /**
      * Where the schema this writes documents ships.
@@ -665,9 +665,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                          List<List<ShownCondition>>> combinationReadings,
                                  List<UnobservedGroup> unobserved,
                                  Map<RowRef, WhereARowIs.Shown> rowPlaces,
-                                 List<TiltOfADerivedValue> weights) {
+                                 List<TiltOfADerivedValue> weights,
+                                 Map<Replacement, Citation> undecidedRewritePlaces) {
         public BehaviorReport {
             weights = List.copyOf(weights);
+            undecidedRewritePlaces = Map.copyOf(undecidedRewritePlaces);
             Objects.requireNonNull(reachShownWrong,
                     "what the rows showed of the reading of reach, or that they showed nothing");
             reported = List.copyOf(reported);
@@ -680,6 +682,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             combinationReadings = Map.copyOf(combinationReadings);
             unobserved = List.copyOf(unobserved);
             rowPlaces = Map.copyOf(rowPlaces);
+        }
+
+        /**
+         * Where this report shows a rewrite of the body that was left open.
+         *
+         * <p>Worked out when the report was assembled, from the question that places a rewrite no
+         * row tells apart: the two are one rewrite and a reader is sent to one place for it.
+         */
+        public Citation placeOfUndecided(Replacement rewrite) {
+            Citation at = undecidedRewritePlaces.get(rewrite);
+            if (at == null) {
+                throw new IllegalStateException("this report was not assembled with the rewrite "
+                        + rewrite + " of `" + name + "` that was left open");
+            }
+            return at;
         }
 
         /** Where this report shows a row of the module that does not hold — see
@@ -1110,7 +1127,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     // owing them, asked of the one answer the findings read.
                     Optional.ofNullable(compilation.db()
                             .ask(new Adequacy.Weights(name, behavior.name())).value())
-                            .orElse(List.of())));
+                            .orElse(List.of()),
+                    undecidedRewritePlaces(compilation, name, behavior.name(), evidence.replacement())));
         }
         Adequacy.DeclaredBoundaries declared =
                 compilation.db().ask(new Adequacy.DeclaredBorders(name)).value();
@@ -1823,6 +1841,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
         }
         return places;
+    }
+
+    /**
+     * Where this report shows each rewrite of a body that was left open.
+     *
+     * <p>Built from the rewrites themselves, so that every one the page may name has an entry and
+     * nothing else does. The place is the one a finding that no row tells the rewrite apart is
+     * shown at.
+     */
+    private static Map<Replacement, Citation> undecidedRewritePlaces(Compilation compilation,
+                                                                     String module,
+                                                                     String behavior,
+                                                                     ReplacementEvidence evidence) {
+        Map<Replacement, Citation> places = new LinkedHashMap<>();
+        for (ReplacementEvidence.Rewrite each : undecidedRewrites(evidence)) {
+            places.put(each.replacement(),
+                    Adequacy.placeOfRewrite(compilation.db(), module, behavior, each.reportAt()));
+        }
+        return places;
+    }
+
+    /** The rewrites of a body the rows left open, in the order the measure read them. */
+    private static List<ReplacementEvidence.Rewrite> undecidedRewrites(
+            ReplacementEvidence evidence) {
+        if (evidence == null) {
+            return List.of();
+        }
+        return evidence.measured().made()
+                .map(summary -> summary.rewrites().stream()
+                        .filter(each -> each.outcome() instanceof ReplacementEvidence.Undecided)
+                        .toList())
+                .orElse(List.of());
     }
 
     /**
@@ -2667,6 +2717,30 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * Every rewrite this report holds that was left open, in the words a page says it in.
+     *
+     * <p>Gathered from every page rather than the one an entry is about: an entry that holds a
+     * verdict open names the rewrite and not the page it was found on.
+     */
+    private Map<ObligationIdentity.OfAReplacement, String> everyUndecidedRewriteSaid(
+            SourceRendering rendering) {
+        Map<ObligationIdentity.OfAReplacement, String> out = new LinkedHashMap<>();
+        for (ModuleReport module : modules) {
+            for (BehaviorReport behavior : module.behaviors()) {
+                for (ReplacementEvidence.Rewrite each : undecidedRewrites(behavior.evidence().replacement())) {
+                    out.putIfAbsent(
+                            new ObligationIdentity.OfAReplacement(behavior.name(), each.replacement()),
+                            rewriteSaid(each.written(), each.reportAt(),
+                                    behavior.placeOfUndecided(each.replacement())
+                                            .said(rendering, module.declaredIn()),
+                                    module.module(), rendering));
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
      * Every copy of a helper this report's pages name, with the calls it was made at.
      *
      * <p>Gathered from every page rather than the one an entry is about: an entry that holds a
@@ -2730,8 +2804,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Subject.OfAModule _, Subject.OfABehavior _, Subject.OfASource _,
                  Subject.OfARow _, Subject.AtASpelledPosition _, Subject.AtAPosition _,
                  Subject.AtAnInput _, Subject.AtABorder _, Subject.OfAMeasure _,
-                 Subject.OfAnAxisMeasure _, Subject.AtAFork _, Subject.AtAnArm _ ->
-                    ModelOccurrences.NONE;
+                 Subject.OfAnAxisMeasure _, Subject.AtAFork _, Subject.AtAnArm _,
+                 Subject.OfAReplacement _ -> ModelOccurrences.NONE;
         };
     }
 
@@ -3030,6 +3104,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             PublishedRuleHandle.WhereARuleIs places = rulePlaces();
             Map<ModelOccurrence, CopyShown> copies = everyCopyShown();
             Map<BorderObligationPoint, ModelOccurrences> pointsReadAt = whereEachPointIsRead();
+            Map<ObligationIdentity.OfAReplacement, String> rewrites =
+                    everyUndecidedRewriteSaid(rendering);
             out.append("  what keeps it open\n");
             out.append(String.format("    stopped at a figure of this compiler   %3d%n",
                     open.atAFigure()));
@@ -3052,7 +3128,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // helper read alike at two calls is one fact, and two facts at one rule and one
                 // position read alike but for the calls.
                 out.append(String.format("      %s%s — %s%n",
-                        said(each.subject(), rendering, places),
+                        said(each.subject(), rendering, places, rewrites),
                         inCopies(readAt(each, pointsReadAt), copies, rendering, null),
                         next(each)));
             }
@@ -4268,41 +4344,60 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (ReportedFinding f : behavior.reported()) {
             if (f.finding().about() instanceof About.ARewriteNoRowTellsApart(
                     var _, var written, var reportAt, var _, var _)) {
-                out.append(String.format("      %s %s%n", mark(f.finding()), switch (written) {
-                    case ReplacementAsWritten.OfAnArm rewrite -> switch (reportAt) {
-                        case ReplacementReportAnchor.AtTheFork _ -> String.format(
-                                "no row would come out differently if `%s` (%s) answered as `%s`",
-                                RewriteVocabulary.rewritten(rewrite),
-                                f.at().said(rendering, declaredIn),
-                                RewriteVocabulary.answeredAs(rewrite));
-                        case ReplacementReportAnchor.AtTheBehavior _ -> String.format(
-                                "no row would come out differently if `%s` answered as `%s` %s",
-                                RewriteVocabulary.rewritten(rewrite),
-                                RewriteVocabulary.answeredAs(rewrite),
-                                RewriteVocabulary.outOfSight(rewrite, module));
-                        case ReplacementReportAnchor.AtTheWalk _ -> throw new IllegalStateException(
-                                "a rewrite of an arm shown at a walk: " + rewrite);
-                    };
-                    case ReplacementAsWritten.ByOneAnswer one -> String.format(
-                            "no row would come out differently if the body always answered what"
-                                    + " `%s` answers",
-                            RewriteVocabulary.answeredBy(one, rendering));
-                    // A fold by its place where it has one here, and by the definition that wrote
-                    // it where it has not.
-                    case ReplacementAsWritten.OfAWalk walk -> switch (reportAt) {
-                        case ReplacementReportAnchor.AtTheWalk _ -> String.format(
-                                "no row would come out differently if the fold (%s) %s",
-                                f.at().said(rendering, declaredIn), RewriteVocabulary.walked(walk));
-                        case ReplacementReportAnchor.AtTheBehavior _ -> String.format(
-                                "no row would come out differently if the fold %s %s",
-                                RewriteVocabulary.outOfSight(walk, module),
-                                RewriteVocabulary.walked(walk));
-                        case ReplacementReportAnchor.AtTheFork _ -> throw new IllegalStateException(
-                                "a rewrite of a walk shown at a fork: " + walk);
-                    };
-                }));
+                out.append(String.format("      %s no row would come out differently if %s%n",
+                        mark(f.finding()),
+                        rewriteSaid(written, reportAt, f.at().said(rendering, declaredIn), module,
+                                rendering)));
             }
         }
+        // A rewrite left open is said the same way, by what it is and where, and not marked as a
+        // gap: nothing showed that no row tells it apart, only that nothing here could decide.
+        for (ReplacementEvidence.Rewrite each : undecidedRewrites(replacement)) {
+            out.append(String.format("      ? not decided whether a row would come out"
+                            + " differently if %s%n",
+                    rewriteSaid(each.written(), each.reportAt(),
+                            behavior.placeOfUndecided(each.replacement())
+                                    .said(rendering, declaredIn),
+                            module, rendering)));
+        }
+    }
+
+    /**
+     * One rewrite of a body in the words a report uses for it, wherever it is said.
+     *
+     * <p>{@code at} is where the rewrite is shown, already said, and is used by the rewrites that
+     * have a place in a source this compilation holds. An arm by the arm and the arm it answered
+     * as, with the fork's place once: both arms are of the one fork. A fold by its place where it
+     * has one here, and by the definition that wrote it where it has not. The body answering one
+     * value is told from another by the value, and said by the row that came to it.
+     */
+    private static String rewriteSaid(ReplacementAsWritten written, ReplacementReportAnchor reportAt,
+                                      String at, String module, SourceRendering rendering) {
+        return switch (written) {
+            case ReplacementAsWritten.OfAnArm rewrite -> switch (reportAt) {
+                case ReplacementReportAnchor.AtTheFork _ -> String.format(
+                        "`%s` (%s) answered as `%s`", RewriteVocabulary.rewritten(rewrite), at,
+                        RewriteVocabulary.answeredAs(rewrite));
+                case ReplacementReportAnchor.AtTheBehavior _ -> String.format(
+                        "`%s` answered as `%s` %s", RewriteVocabulary.rewritten(rewrite),
+                        RewriteVocabulary.answeredAs(rewrite),
+                        RewriteVocabulary.outOfSight(rewrite, module));
+                case ReplacementReportAnchor.AtTheWalk _ -> throw new IllegalStateException(
+                        "a rewrite of an arm shown at a walk: " + rewrite);
+            };
+            case ReplacementAsWritten.ByOneAnswer one -> String.format(
+                    "the body always answered what `%s` answers",
+                    RewriteVocabulary.answeredBy(one, rendering));
+            case ReplacementAsWritten.OfAWalk walk -> switch (reportAt) {
+                case ReplacementReportAnchor.AtTheWalk _ -> String.format("the fold (%s) %s", at,
+                        RewriteVocabulary.walked(walk));
+                case ReplacementReportAnchor.AtTheBehavior _ -> String.format("the fold %s %s",
+                        RewriteVocabulary.outOfSight(walk, module),
+                        RewriteVocabulary.walked(walk));
+                case ReplacementReportAnchor.AtTheFork _ -> throw new IllegalStateException(
+                        "a rewrite of a walk shown at a fork: " + walk);
+            };
+        };
     }
 
     /**
@@ -9999,6 +10094,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 into.put("behavior", it.behavior());
                 into.put("axis", it.axis());
             }
+            case PublishedSubject.OfAReplacement it -> into.set("replacementId", it.replacementId());
         }
     }
 
@@ -10014,7 +10110,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * rather than an entry printed with nothing said about it.
      */
     private static String said(Subject subject, SourceRendering rendering,
-                               PublishedRuleHandle.WhereARuleIs places) {
+                               PublishedRuleHandle.WhereARuleIs places,
+                               Map<ObligationIdentity.OfAReplacement, String> rewrites) {
         return switch (subject) {
             case Subject.OfAModule it -> "module " + it.module();
             case Subject.OfABehavior it -> it.behavior();
@@ -10058,6 +10155,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Subject.OfAMeasure it ->
                     word(it.measure()) + " of " + it.behavior();
             case Subject.OfAnAxisMeasure it -> it.at().term() + " of " + it.behavior();
+            case Subject.OfAReplacement it -> it.obligation().behavior() + ", where "
+                    + rewrites.getOrDefault(it.obligation(), "a rewrite of it");
         };
     }
 
@@ -10301,6 +10400,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     it.behavior(), it.measure());
             case Subject.OfAnAxisMeasure it -> new PublishedSubject.OfAnAxisMeasure(it.module(),
                     it.behavior(), it.at().toString());
+            case Subject.OfAReplacement it -> {
+                ObjectNode id = JSON.createObjectNode();
+                obligationId(id, it.obligation(), sources);
+                yield new PublishedSubject.OfAReplacement(id);
+            }
         };
     }
 

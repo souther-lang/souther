@@ -7796,13 +7796,8 @@ public final class Adequacy {
             // A rewrite is shown where the reading that made it said, which is the fork for an arm
             // and the fold for a walk written in a source this compilation holds, and the behavior
             // otherwise.
-            case About.ARewriteNoRowTellsApart(var _, var _, var reportAt, var _, var _) ->
-                    switch (reportAt) {
-                        case ReplacementReportAnchor.AtTheFork(var fork) -> Sites.placeOf(db, fork);
-                        case ReplacementReportAnchor.AtTheWalk(var walk) -> Sites.placeOf(db, walk);
-                        case ReplacementReportAnchor.AtTheBehavior _ ->
-                                whereItIsDeclared(db, module, finding.subject());
-                    };
+            case About.ARewriteNoRowTellsApart(var behavior, var _, var reportAt, var _, var _) ->
+                    placeOfRewrite(db, module, behavior, reportAt);
             // Everything else is about the behavior as a whole — what its rows do not reach, what
             // its rules do not divide, what nothing here could read of them. Shown at the behavior.
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
@@ -7823,6 +7818,23 @@ public final class Adequacy {
     private static Citation whereItIsWritten(Db db, TypeSymbol.AtModule declared) {
         return somewhere(db.ask(new Sites.WhereADeclarationIsWritten(declared)),
                 "the declaration " + declared.name());
+    }
+
+    /**
+     * Where a rewrite of a behavior's body is shown: the fork for an arm and the fold for a walk
+     * written in a source this compilation holds, and the behavior otherwise.
+     *
+     * <p>Asked by the finding that no row tells the rewrite apart and by the line that says a
+     * rewrite was left open, which are two reports of one rewrite and so show it at one place.
+     */
+    public static Citation placeOfRewrite(Db db, String module, String behavior,
+                                          ReplacementReportAnchor reportAt) {
+        return switch (reportAt) {
+            case ReplacementReportAnchor.AtTheFork(var fork) -> Sites.placeOf(db, fork);
+            case ReplacementReportAnchor.AtTheWalk(var walk) -> Sites.placeOf(db, walk);
+            case ReplacementReportAnchor.AtTheBehavior _ ->
+                    whereItIsDeclared(db, module, new FindingSubject.OfABehavior(behavior));
+        };
     }
 
     /** Where the behavior a finding is about is declared. */

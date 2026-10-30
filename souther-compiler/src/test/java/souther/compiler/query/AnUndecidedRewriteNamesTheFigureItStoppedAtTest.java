@@ -194,6 +194,74 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
                 () -> "the rewrite that loops names the steps it spent: " + its);
     }
 
+    /**
+     * Two folds of one body, each left open at a figure: the page and the document say which
+     * rewrite each is, and the two are two lines.
+     */
+    @Test
+    void twoRewritesOfOneBodyLeftOpenAreTwoLinesEachSayingWhichRewriteItIs() throws Exception {
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module repro.allopen
+
+                data Rec = { n: Int, xs: List<Int> }
+
+                behavior count : (r: Rec, k: Int) -> Int
+
+                let count (r, k) = List.length(List.filter(x -> x == k, r.xs))
+
+                behavior done : (r: Rec) -> Bool
+
+                let done (r) = List.all(k -> count(r, k) >= 2, List.rangeInclusive(1, r.n))
+
+                example count
+                    | (Rec { n = 1, xs = [1, 1] }, 1) -> 2
+                    | (Rec { n = 1, xs = [] }, 1) -> 0
+                    | (Rec { n = 0, xs = [] }, 0) -> 0
+                    | (Rec { n = 0, xs = [0] }, 0) -> 1
+                    | (Rec { n = 0, xs = [-1] }, 0) -> 0
+                    | (Rec { n = 0, xs = [1] }, 0) -> 0
+                    | (Rec { n = 0, xs = [-2] }, 0) -> 0
+                    | (Rec { n = 0, xs = [2] }, 0) -> 0
+
+                example done
+                    | (Rec { n = 1, xs = [1, 1] }) -> true
+                    | (Rec { n = 1, xs = [] }) -> false
+                    | (Rec { n = 0, xs = [] }) -> true
+                """), ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        AdequacyReport report = AdequacyReport.of(compilation);
+        SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
+
+        List<String> lines = report.human(rendering).lines().map(String::strip).toList();
+
+        List<String> undecided = lines.stream()
+                .filter(line -> line.startsWith("? not decided whether a row would come out"))
+                .toList();
+        assertEquals(2, undecided.size(), () -> "one line per rewrite left open: " + lines);
+        assertTrue(undecided.stream().anyMatch(line -> line.contains("stopped after its first")),
+                () -> "the fold that stopped after one element is named: " + undecided);
+        assertTrue(undecided.stream().anyMatch(line -> line.contains("handed each step the seed")),
+                () -> "the fold handed the seed is named: " + undecided);
+
+        List<String> keepingItOpen = lines.stream()
+                .filter(line -> line.startsWith("done, where the fold"))
+                .toList();
+        assertEquals(2, keepingItOpen.stream().distinct().count(),
+                () -> "what keeps the verdict open names each of the two: " + keepingItOpen);
+
+        tools.jackson.databind.JsonNode kept = tools.jackson.databind.json.JsonMapper.builder()
+                .build().readTree(report.json(rendering)).get("keptOpenBy");
+        List<String> ids = new java.util.ArrayList<>();
+        for (tools.jackson.databind.JsonNode each : kept) {
+            if (each.get("about").get("kind").asString().equals("replacement")) {
+                ids.add(each.get("about").get("replacementId").toString());
+            }
+        }
+        assertEquals(2, ids.stream().distinct().count(),
+                () -> "the document names which rewrite each entry is about: " + ids);
+    }
+
     private static ReplacementEvidence.Undecided.Way wayOf(ReplacementEvidence.Undecided open,
                                                          ReplacementEvidence.Undecided.Why why) {
         return open.why().ways().stream().filter(each -> each.why() == why).findFirst()

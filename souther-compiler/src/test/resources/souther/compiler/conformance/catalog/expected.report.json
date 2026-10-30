@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 27,
+  "schemaVersion" : 28,
   "compilerVersion" : "<version>",
   "status" : "partial",
   "weakening" : [ "rule_unread", "reachable_node_cases_unmeasured", "rewrite_undecided" ],

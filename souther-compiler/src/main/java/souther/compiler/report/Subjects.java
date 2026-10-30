@@ -4,6 +4,7 @@ import souther.compiler.observe.Target;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.ClosureGap;
+import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.query.Weakening;
 
 /**
@@ -110,9 +111,10 @@ final class Subjects {
             // on that search is not said: no node further down was measured.
             case Weakening.ReachableNodeCasesUnmeasured it ->
                     new Subject.OfABehavior(it.behavior());
-            // The behavior whose body the rewrite is of. Which rewrite, and why it was left open,
-            // is the rewrite's own entry under the replacement measure.
-            case Weakening.RewriteUndecided it -> new Subject.OfABehavior(it.behavior());
+            // The rewrite, as the obligation the replacement measure owes it. Two rewrites of one
+            // body left open are two entries; why each was left open travels as the reason.
+            case Weakening.RewriteUndecided it -> new Subject.OfAReplacement(
+                    new ObligationIdentity.OfAReplacement(it.behavior(), it.replacement()));
         };
     }
 

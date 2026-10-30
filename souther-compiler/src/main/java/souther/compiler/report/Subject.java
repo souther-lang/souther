@@ -7,6 +7,7 @@ import souther.compiler.observe.RowRef;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BoundaryLine;
+import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.publish.MeasureWord;
 import souther.compiler.source.SourceId;
 import souther.compiler.types.SourceConstructOrigin;
@@ -134,4 +135,14 @@ public sealed interface Subject {
      * among the places above.
      */
     record OfAnAxisMeasure(String module, String behavior, AxisId at) implements Subject {}
+
+    /**
+     * One rewrite of a behavior's body, as the obligation the replacement measure owes it.
+     *
+     * <p>The rewrite and not the behavior it is of. Two rewrites of one body that were left open
+     * are two things to write a row for, and named by the behavior they would be one line printed
+     * twice. The identity is the one the replacement entry of the document is told apart by, so an
+     * entry that keeps the verdict open and the entry under the measure join on it.
+     */
+    record OfAReplacement(ObligationIdentity.OfAReplacement obligation) implements Subject {}
 }
