@@ -34,6 +34,9 @@ final class FactoredProducts {
      * one product; the same form where there is none.
      */
     static LinearForm<Quantity> of(LinearForm<Quantity> form, InputReading read) {
+        if (form.coefs().keySet().stream().noneMatch(FactoredProducts::isAProduct)) {
+            return form;
+        }
         LinearForm<Quantity> now = asNumbers(form);
         for (boolean changed = true; changed; ) {
             LinearForm<Quantity> next = once(now, read);
@@ -41,6 +44,12 @@ final class FactoredProducts {
             now = changed ? next : now;
         }
         return now;
+    }
+
+    /** Whether {@code atom} is a product of two numbers: the only atoms this brings together. */
+    private static boolean isAProduct(Quantity atom) {
+        return atom instanceof Quantity.ProductOfTwo
+                || atom instanceof DecisionAtom.OfTheInput(NumericTerm.ProductOf _);
     }
 
     /**

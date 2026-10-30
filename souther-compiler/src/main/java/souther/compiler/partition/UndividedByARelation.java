@@ -1114,6 +1114,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private Set<NumericTerm> totalsWrittenByOneElement(
             List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms) {
         Set<NumericTerm> alone = new LinkedHashSet<>();
+        if (working.partials().isEmpty()) {
+            return alone;
+        }
         for (int i = 0; i < sides.size() && i < terms.size(); i++) {
             NumericTerm total = sides.get(i).number();
             if (total instanceof NumericTerm.ProductOf product
