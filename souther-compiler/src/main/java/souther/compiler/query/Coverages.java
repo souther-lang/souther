@@ -1072,8 +1072,16 @@ final class Coverages {
         MeasuredInput.Lines lines = input.lines();
         for (BorderAssessment border : measured.each()) {
             MeasuredInput.BorderReading read = lines.at(border.border());
+            WayToTheBorder way = wayTo(border.border(), reaching);
             OneSearchOfABorder search = searching(border.border(), read, input, probe,
-                    realizer, wayTo(border.border(), reaching));
+                    realizer, way, false);
+            // The way a class the line cuts is looked for along where the walk to the case the
+            // line decides in has no value to stand at: the class runs over the whole of the
+            // quantity, and the case is only where the line is read. Made at the first point that
+            // asks, so that a border none of whose points come to that pays for one walk.
+            WayToTheBorder wayToTheClasses =
+                    reaching.wayToTheClassesOf(border.border().origin());
+            OneSearchOfABorder inTheClasses = null;
             java.util.Map<DomainPoint, ItemAssessment> items = new java.util.LinkedHashMap<>();
             for (DomainPoint point : border.items().keySet()) {
                 ItemAssessment item = border.at(point);
@@ -1081,10 +1089,21 @@ final class Coverages {
                 // because this is the last place one reading's searches are that reading's alone:
                 // the readings of one line are put together next, searches and copies both, and a
                 // search stopped at one call would come out stopped at every call of the line.
-                items.put(point, item instanceof ItemAssessment.Owed owed && owed.worthSearching()
-                        ? owed.settledBy(search.search(owed.criterion(),
-                                border.border().label(point)).readAt(border.readAt()))
-                        : item);
+                if (item instanceof ItemAssessment.Owed owed && owed.worthSearching()) {
+                    String label = border.border().label(point);
+                    SearchOutcomes outcomes = search.search(owed.criterion(), label);
+                    if (!point.againstTheLine() && outcomes.provesInfeasible()
+                            && !wayToTheClasses.equals(way)) {
+                        if (inTheClasses == null) {
+                            inTheClasses = searching(border.border(), read, input, probe,
+                                    realizer, wayToTheClasses, true);
+                        }
+                        outcomes = inTheClasses.search(owed.criterion(), label);
+                    }
+                    items.put(point, owed.settledBy(outcomes.readAt(border.readAt())));
+                } else {
+                    items.put(point, item);
+                }
             }
             // And who put on the way what the search went along, which is what says at which calls
             // of a helper a reader meets what the search went without.
@@ -1897,17 +1916,24 @@ final class Coverages {
      * <p>Beside {@link #reading} rather than inside it. Both are about one border and neither is the
      * other: what the rows already established is read whatever anybody asked for, and building a
      * value is work somebody asked for and pays for.
+     *
+     * @param inTheRegion whether a row is put to the points as one of a class the line cuts, which
+     *                    asks nothing of it that is only where the line decides
+     *                    ({@link StandingAtAPoint.AtALine#inTheRegion})
      */
     private static OneSearchOfABorder searching(Border border, MeasuredInput.BorderReading line,
                                                 MeasuredInput input,
                                                 Probe probe, LevelRealizer realizer,
-                                                souther.compiler.partition.WayToTheBorder within) {
+                                                souther.compiler.partition.WayToTheBorder within,
+                                                boolean inTheRegion) {
         souther.compiler.inputs.Quantities rules = input.quantities();
         BorderQuantity quantity = line.quantity();
         List<ConditionOutcomeSite> site =
                 border.origin().recordedAt();
         // Put to rows once for every row a point is searched with.
-        StandingAtAPoint.AtALine toRows = StandingAtAPoint.putToRows(line, site);
+        StandingAtAPoint.AtALine toRows = inTheRegion
+                ? StandingAtAPoint.putToRows(line, site).inTheRegion()
+                : StandingAtAPoint.putToRows(line, site);
         // Built here and gone when the search is. What a row has to be to arrive is a way of asking
         // about values rather than something that says what it is, so it is what the walk runs
         // against and never what the answer keeps; the account it was built from is what travels.

@@ -337,6 +337,26 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
     }
 
     /**
+     * How a row for a class that the line {@code origin} cuts came to be looked for where it is:
+     * the walk to the comparison alone where the line decides in relations over numbers only, and
+     * {@link #wayTo} where it decides in a case of a value.
+     *
+     * <p>A case of a value is where the quantity stands, and a class of it stands only there. A
+     * relation over numbers is where the line turns the statement, and the classes it cuts run
+     * over the whole of the quantity: a value in a class outside it reaches the comparison and
+     * answers it, and is a row of the class without being a row that shows where the line falls.
+     */
+    public WayToTheBorder wayToTheClassesOf(LineOrigin origin) {
+        if (origin instanceof LineOrigin.ComparisonOrigin comparison
+                && comparison.part().map(WhereAPartDecides::statesNoCaseOfAValue).orElse(false)) {
+            List<OnTheWay> found =
+                    byLine.get(new ALine(comparison.read().states(), Optional.empty()));
+            return new WayToTheBorder(found == null ? List.of() : found);
+        }
+        return wayTo(origin);
+    }
+
+    /**
      * Whether no row is on the ways to the lines {@code one} and {@code other} at once: what the two
      * ways ask of a row, taken together, asks one position to be two things.
      *

@@ -311,6 +311,24 @@ public final class StandingAtAPoint {
             this.reached = reached;
         }
 
+        /**
+         * This line put to rows for a point of a class it cuts, and not for a point against it.
+         *
+         * <p>A row outside the case the line decides in does not show where the line falls, and is
+         * still a row of the class: it reaches the comparison and gets an answer out of it. Only
+         * the relations over numbers are let go, and only where the line decides in nothing else:
+         * a case of a value is where the quantity stands, and so is where its classes stand. The
+         * quantity standing in the class and the comparison having been answered are asked as
+         * they are.
+         */
+        public AtALine inTheRegion() {
+            boolean overNumbersOnly =
+                    line.border().origin() instanceof LineOrigin.ComparisonOrigin comparison
+                            && comparison.part().map(WhereAPartDecides::statesNoCaseOfAValue)
+                                    .orElse(false);
+            return overNumbersOnly ? new AtALine(line, watched, Optional.empty(), reached) : this;
+        }
+
         /** {@link StandingAtAPoint#met}, of this line. */
         public Met met(List<ObservedInputs> observed, Criterion criterion) {
             return StandingAtAPoint.met(line, decides, reached, observed, criterion, watched);
