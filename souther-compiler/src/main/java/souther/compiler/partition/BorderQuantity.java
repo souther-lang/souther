@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.collect.InTheOrderGiven;
 import souther.compiler.coverage.SeenComparison;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
@@ -585,8 +586,8 @@ public sealed interface BorderQuantity
                 coefs.put(term, form.coefs().get(term));
                 readOn.put(term, on.get(term));
             }
-            form = new LinearForm<>(form.constant(), Collections.unmodifiableMap(coefs));
-            on = Collections.unmodifiableMap(readOn);
+            form = new LinearForm<>(form.constant(), InTheOrderGiven.map(coefs));
+            on = InTheOrderGiven.map(readOn);
             // And each entry's orders are that position's own. The key set agreeing says the map
             // is about the right positions and says nothing about which of them each answer came
             // from: a table with the two ends swapped has exactly the same keys.

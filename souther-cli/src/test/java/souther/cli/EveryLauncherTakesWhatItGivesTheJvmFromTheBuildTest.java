@@ -59,6 +59,23 @@ class EveryLauncherTakesWhatItGivesTheJvmFromTheBuildTest {
         }
     }
 
+    /** Every line that starts the JVM hands it the object layout beside the stack, so a compile
+     *  holds what it holds in the same room whichever line started it. */
+    @Test
+    void everyLineThatStartsTheJvmHandsItTheLayoutTheRootPomStates() throws Exception {
+        assertFalse(LAYOUT.rootProperty("souther.jvm.layout").isBlank());
+        for (String launcher : List.of("souther", "souther.cmd")) {
+            List<String> withoutIt = new ArrayList<>();
+            for (String line : Files.readString(launcher(launcher)).split("\\R")) {
+                if (!COMMENT.matcher(line).matches() && STACK.matcher(line).find()
+                        && !line.contains("@souther.jvm.layout@")) {
+                    withoutIt.add(line);
+                }
+            }
+            assertEquals(List.of(), withoutIt, launcher + " starts the JVM without the layout");
+        }
+    }
+
     @Test
     void theBatchLauncherRefusesTheJavaTheRootPomStates() throws Exception {
         assertFalse(LAYOUT.rootProperty("souther.java.minimum").isBlank());

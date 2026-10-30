@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.collect.HeldOnce;
 import souther.compiler.core.EnteredArm;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
@@ -246,13 +247,26 @@ public sealed interface OnTheWay {
         private final int hash;
 
         /**
-         * The condition {@code condition}, come out one of {@code alternatives}.
+         * The ways made last. Every path through a condition of several ways reads the condition
+         * again, and each held what it read as a tree of its own: the same few conditions were
+         * hundreds of thousands of trees.
+         */
+        private static final HeldOnce<OneOf> MADE = new HeldOnce<>(14);
+
+        /**
+         * The condition {@code condition}, come out one of {@code alternatives} — the one made
+         * before, where it is still held.
          *
          * @param alternatives what each alternative asks, in the order they are kept; two or more
          * @param stated       the statement read, where one proposition says it
          */
-        public OneOf(ConditionOccurrence condition, ConditionReportAnchor anchor,
-                     List<List<OnTheWay>> alternatives, Optional<Proposition> stated) {
+        public static OneOf of(ConditionOccurrence condition, ConditionReportAnchor anchor,
+                               List<List<OnTheWay>> alternatives, Optional<Proposition> stated) {
+            return MADE.held(new OneOf(condition, anchor, alternatives, stated));
+        }
+
+        private OneOf(ConditionOccurrence condition, ConditionReportAnchor anchor,
+                      List<List<OnTheWay>> alternatives, Optional<Proposition> stated) {
             if (condition == null || stated == null) {
                 throw new IllegalArgumentException(
                         "a condition of several ways is some condition the reading met");

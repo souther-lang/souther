@@ -67,7 +67,7 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
 
     /** What stands at {@code position}. */
     public static <P> NumberAt<P> valueOf(P position) {
-        return new NumberAt<>(position, new OfWhatNumber.OfItsOwnValue());
+        return new NumberAt<>(position, OfWhatNumber.OWN_VALUE);
     }
 
     /** The number {@code operation} answers of what stands at {@code position} as it stands,
@@ -95,7 +95,7 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
 
     /** What the code points of the string at {@code position} come to, each the number it is. */
     public static <P> NumberAt<P> codePointSumOf(P position) {
-        return new NumberAt<>(position, new OfWhatNumber.OfWhatItsCodePointsComeTo());
+        return new NumberAt<>(position, OfWhatNumber.WHAT_ITS_CODE_POINTS_COME_TO);
     }
 
     /** The code point of the string at {@code position} at {@code index} of its code points. */
@@ -112,13 +112,13 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
     /** How many elements of the container {@code position} stands inside hold there what the
      *  element under consideration holds. */
     public static <P> NumberAt<P> multiplicityOf(P position) {
-        return new NumberAt<>(position, new OfWhatNumber.OfItsMultiplicity());
+        return new NumberAt<>(position, OfWhatNumber.MULTIPLICITY);
     }
 
     /** How many of the values standing at {@code position}, in every container it stands inside,
      *  are what the value under consideration is. */
     public static <P> NumberAt<P> occurrencesOf(P position) {
-        return new NumberAt<>(position, new OfWhatNumber.OfItsOccurrencesInEveryContainer());
+        return new NumberAt<>(position, OfWhatNumber.OCCURRENCES_IN_EVERY_CONTAINER);
     }
 
     /** How many of the values standing at {@code position}, in every container it stands inside,
@@ -156,6 +156,14 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
      * place is what this exists to stop, so what makes them two is carried rather than summarised.
      */
     public sealed interface OfWhatNumber {
+
+        // The kinds that carry nothing, each one value: a name of a number holds its kind, and
+        // every name of a place's own value would otherwise hold a kind of its own.
+        OfItsOwnValue OWN_VALUE = new OfItsOwnValue();
+        OfWhatItsCodePointsComeTo WHAT_ITS_CODE_POINTS_COME_TO = new OfWhatItsCodePointsComeTo();
+        OfItsMultiplicity MULTIPLICITY = new OfItsMultiplicity();
+        OfItsOccurrencesInEveryContainer OCCURRENCES_IN_EVERY_CONTAINER =
+                new OfItsOccurrencesInEveryContainer();
 
         /** What stands at the place. */
         record OfItsOwnValue() implements OfWhatNumber {}

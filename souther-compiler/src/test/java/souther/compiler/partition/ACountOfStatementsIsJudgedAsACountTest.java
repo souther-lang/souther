@@ -277,7 +277,7 @@ class ACountOfStatementsIsJudgedAsACountTest {
     @Test
     void countsAndChoicesNestedInEachOtherAreHeldToOneFigureTogether() {
         Counting counting = new Counting();
-        OnTheWay.OneOf choice = new OnTheWay.OneOf(
+        OnTheWay.OneOf choice = OnTheWay.OneOf.of(
                 new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 2), WHERE,
                 List.of(List.of(ofPositives(14, 7)), List.of(ofPositives(14, 6))),
                 Optional.empty());
@@ -372,7 +372,7 @@ class ACountOfStatementsIsJudgedAsACountTest {
         // Both of two statements hold, so x_0 > 0 and x_1 > 0 — and each alternative of the choice
         // denies one of them.
         OnTheWay.Counted both = counted(List.of(2), positiveStatement(0), positiveStatement(1));
-        OnTheWay.OneOf denies = new OnTheWay.OneOf(
+        OnTheWay.OneOf denies = OnTheWay.OneOf.of(
                 new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 2), WHERE,
                 List.of(List.of(positive(0, false)), List.of(positive(1, false))),
                 Optional.empty());
@@ -389,7 +389,7 @@ class ACountOfStatementsIsJudgedAsACountTest {
         // One of two holds: x_0 > 0 and x_1 <= 0, or the other way round. The alternatives say
         // x_0 > 0 or x_1 > 0, and each fits one assignment.
         OnTheWay.Counted one = counted(List.of(1), positiveStatement(0), positiveStatement(1));
-        OnTheWay.OneOf choice = new OnTheWay.OneOf(
+        OnTheWay.OneOf choice = OnTheWay.OneOf.of(
                 new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 2), WHERE,
                 List.of(List.of(positive(0, true)), List.of(positive(1, true))),
                 Optional.empty());

@@ -1,5 +1,6 @@
 package souther.compiler.numeric;
 
+import souther.compiler.collect.HeldOnce;
 import souther.exact.ExactArithmetic;
 import souther.exact.ExactDecimals;
 import souther.exact.ExactFailure;
@@ -121,11 +122,11 @@ public final class ExactRatio implements Comparable<ExactRatio> {
     }
 
     public static ExactRatio of(BigInteger whole) {
-        return new ExactRatio(whole, BigInteger.ONE);
+        return shared(ExactArithmetic.canonical(whole, BigInteger.ONE, 0, 0));
     }
 
     public static ExactRatio of(BigInteger numerator, BigInteger denominator) {
-        return new ExactRatio(numerator, denominator);
+        return shared(ExactArithmetic.canonical(numerator, denominator, 0, 0));
     }
 
     /**
@@ -138,7 +139,7 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      * digits as it has, and this holds the value it was given without spelling them.
      */
     public static ExactRatio of(BigDecimal at) {
-        return new ExactRatio(ExactArithmetic.canonical(at));
+        return shared(ExactArithmetic.canonical(at));
     }
 
     /**
@@ -153,7 +154,18 @@ public final class ExactRatio implements Comparable<ExactRatio> {
     /** The value an answer of the arithmetic comes to, put in canonical form — which hands the
      *  answer back as it is where it is in that form already. */
     private static ExactRatio from(ExactParts parts) {
-        return new ExactRatio(ExactArithmetic.canonical(parts));
+        return shared(ExactArithmetic.canonical(parts));
+    }
+
+    /**
+     * The ratios made last. A compile holds a great many ratios and few values: the same
+     * coefficients and bounds are worked out again in every form and closure that holds them.
+     */
+    private static final HeldOnce<ExactRatio> MADE = new HeldOnce<>(14);
+
+    /** The ratio {@code canonical} is, the one made before where it is still held. */
+    private static ExactRatio shared(ExactParts canonical) {
+        return MADE.held(new ExactRatio(canonical));
     }
 
     /**
@@ -444,7 +456,7 @@ public final class ExactRatio implements Comparable<ExactRatio> {
         // sum is put in canonical form once.
         ExactParts negation = negation(other.parts);
         if (isZero()) {
-            return ExactAnswer.held(new ExactRatio(negation));
+            return ExactAnswer.held(shared(negation));
         }
         return ExactAnswer.of(() -> from(ExactArithmetic.plus(parts, negation)));
     }
@@ -502,7 +514,7 @@ public final class ExactRatio implements Comparable<ExactRatio> {
     }
 
     public ExactRatio negated() {
-        return isZero() ? this : new ExactRatio(negation(parts));
+        return isZero() ? this : shared(negation(parts));
     }
 
     public ExactRatio abs() {
@@ -650,7 +662,7 @@ public final class ExactRatio implements Comparable<ExactRatio> {
                 a.denominatorWithoutUnits(), b.denominatorWithoutUnits());
         BigInteger bottoms = a.denominatorWithoutUnits().divide(common)
                 .multiply(b.denominatorWithoutUnits());
-        return new ExactRatio(tops, bottoms, twos, fives);
+        return shared(ExactArithmetic.canonical(tops, bottoms, twos, fives));
     }
 
     /**

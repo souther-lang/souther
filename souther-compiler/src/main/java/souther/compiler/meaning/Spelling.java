@@ -1,5 +1,7 @@
 package souther.compiler.meaning;
 
+import souther.compiler.collect.HeldOnce;
+
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -41,6 +43,13 @@ import java.util.Set;
  */
 public final class Spelling implements Comparable<Spelling> {
 
+    /**
+     * The spellings of one piece made last. The same few texts are spelled over and over — the
+     * name of a place, a word between two parts — and each spelling made of one was held with a
+     * copy of the text of its own for as long as what it spells.
+     */
+    private static final HeldOnce<Spelling> WRITTEN = new HeldOnce<>(14);
+
     /** What a list of parts' spellings is separated by, and closed by. */
     static final Spelling SEPARATOR = of(", ");
     static final Spelling CLOSE = of("]");
@@ -70,7 +79,8 @@ public final class Spelling implements Comparable<Spelling> {
 
     /** The spelling that is {@code text}. */
     public static Spelling of(String text) {
-        return new Spelling(text, List.of(), text.length(), text.hashCode(), powerOf(text.length()));
+        return WRITTEN.held(new Spelling(text, List.of(), text.length(), text.hashCode(),
+                powerOf(text.length())));
     }
 
     /**

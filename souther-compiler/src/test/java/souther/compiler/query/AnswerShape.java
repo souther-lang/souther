@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.collect.InTheOrderGiven;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
@@ -105,10 +107,17 @@ final class AnswerShape {
      * for a walk to hold, and what it is is what it turned out to be. Of the language's own, since
      * something of this compiler's own that implements a map holds whatever else it was written to
      * hold; and not one that says it keeps none of the contract, which is written down above.
+     *
+     * <p>And the copies {@link InTheOrderGiven} makes, which are this compiler's own and hold
+     * nothing but their entries, in the order given, with the hashes worked out of them. What
+     * comparing two of them compares is a map's or a set's, and
+     * {@code ACopyInTheOrderGivenAnswersAsTheViewItReplacesTest} holds them to the language's own
+     * maps and sets on that.
      */
     static boolean keepsThatContract(Class<?> type) {
         return !WHICH_KEEP_NONE_OF_IT.contains(type)
-                && type.getModule() == Object.class.getModule()
+                && (type.getModule() == Object.class.getModule()
+                        || type.getEnclosingClass() == InTheOrderGiven.class)
                 && (java.util.List.class.isAssignableFrom(type)
                         || java.util.Set.class.isAssignableFrom(type)
                         || java.util.Map.class.isAssignableFrom(type)

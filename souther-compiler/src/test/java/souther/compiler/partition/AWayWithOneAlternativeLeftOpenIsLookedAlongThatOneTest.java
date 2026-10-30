@@ -42,7 +42,7 @@ class AWayWithOneAlternativeLeftOpenIsLookedAlongThatOneTest {
     void theOneAlternativeLeftIsTheWayLookedAlong() {
         WayToTheBorder way = new WayToTheBorder(List.of(
                 new OnTheWay.Narrowed(WHERE, KIND.refine(only("A")), List.of(), List.of()),
-                new OnTheWay.OneOf(
+                OnTheWay.OneOf.of(
                         new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 1),
                         WHERE, List.of(
                                 List.of(new OnTheWay.Narrowed(WHERE, KIND.refine(only("A")),

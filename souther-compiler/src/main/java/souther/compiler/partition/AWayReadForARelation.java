@@ -492,7 +492,7 @@ final class AWayReadForARelation {
                 return List.of(choice);
             }
             OnTheWay.OneOf several = (OnTheWay.OneOf) choice;
-            return List.of(new OnTheWay.OneOf(several.condition(), several.anchor(), free,
+            return List.of(OnTheWay.OneOf.of(several.condition(), several.anchor(), free,
                     Optional.empty()));
         }
 
@@ -507,7 +507,7 @@ final class AWayReadForARelation {
                 return Optional.empty();
             }
             OnTheWay.OneOf several = (OnTheWay.OneOf) choice;
-            return Optional.of(new OnTheWay.OneOf(several.condition(), several.anchor(), bearing,
+            return Optional.of(OnTheWay.OneOf.of(several.condition(), several.anchor(), bearing,
                     Optional.empty()));
         }
     }

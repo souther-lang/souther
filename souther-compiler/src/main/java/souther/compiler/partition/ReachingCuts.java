@@ -805,7 +805,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                     new OnTheWay.Settled(condition, at, thisWay);
             case DemandReading.Read.Narrows(TermPath position, CasesLeft cases) ->
                     narrowing(condition, at, position, cases, input);
-            case DemandReading.Read.OneOf oneOf -> new OnTheWay.OneOf(
+            case DemandReading.Read.OneOf oneOf -> OnTheWay.OneOf.of(
                     condition, at, oneOf.alternatives().stream().map(each -> each.stream()
                             .map(one -> onTheWay(condition, at, one, input, readOff, by, entered))
                             .toList()).toList(),

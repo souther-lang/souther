@@ -1816,7 +1816,7 @@ public final class InputDomain {
      * every position has before the one only some do.
      */
     private static List<NumberAt.OfWhatNumber> numbersOf(ValueName.Stdlib taken) {
-        NumberAt.OfWhatNumber own = new NumberAt.OfWhatNumber.OfItsOwnValue();
+        NumberAt.OfWhatNumber own = NumberAt.OfWhatNumber.OWN_VALUE;
         return taken == null ? List.of(own)
                 : List.of(own, new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(taken,
                         TakenArguments.NONE, ValueTransformation.NONE));

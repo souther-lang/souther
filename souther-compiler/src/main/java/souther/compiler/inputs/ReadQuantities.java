@@ -9,8 +9,10 @@ import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleKey;
+import souther.compiler.collect.RecentAnswers;
 import souther.compiler.check.RuleRef;
 import souther.compiler.meaning.PositionsAStatementReads;
+import souther.compiler.meaning.Spelling;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.Congruences;
@@ -695,9 +697,21 @@ final class ReadQuantities implements Quantities {
         private final Set<TermPath> all;
         private final Map<TermPath, Optional<UnderARoot>> nearest = new ConcurrentHashMap<>();
         private final Map<TermPath, Optional<UnderARoot>> reNamed = new ConcurrentHashMap<>();
+        /** Every name of a number made under these roots, each held once: a name is made for
+         *  every atom of every question asked, and the forms and bounds that hold it outlive the
+         *  question. */
+        private final Map<InputAtom.Named, InputAtom.Named> names = new ConcurrentHashMap<>();
 
         Roots(Set<TermPath> all) {
             this.all = Set.copyOf(all);
+        }
+
+        /** The name of the {@code kind} number at {@code path} of {@code root}, the one held for
+         *  it wherever it was named before. */
+        InputAtom.Named named(UnderARoot at, NumberAt.OfWhatNumber kind) {
+            InputAtom.Named made = new InputAtom.Named(at.rootName(), at.named(), kind);
+            InputAtom.Named held = names.putIfAbsent(made, made);
+            return held == null ? made : held;
         }
 
         /**
@@ -779,19 +793,19 @@ final class ReadQuantities implements Quantities {
          * <p>Kept here for the reason {@link #runs} is: what a reading's terms stand under is the
          * terms' and not the reading's, and a search makes a reading for every value it tries of
          * terms that are the same.
+         *
+         * <p>The last ones asked and not all of them. A search fixes one more term at each step, so
+         * every step of every path it takes is a list of its own, and all of them kept grow with the
+         * square of the path for as long as the behavior is read.
          */
-        private final Map<List<NumericTerm>, StructuralContext.Merge> standings =
-                new ConcurrentHashMap<>();
+        private final RecentAnswers<List<NumericTerm>, StructuralContext.Merge> standings =
+                new RecentAnswers<>(12);
 
         StructuralContext.Merge standing(List<NumericTerm> terms) {
-            StructuralContext.Merge had = standings.get(terms);
-            if (had != null) {
-                return had;
-            }
-            StructuralContext.Merge made = whereTermsStand(terms);
-            STANDINGS_WORKED_OUT.incrementAndGet();
-            standings.put(List.copyOf(terms), made);
-            return made;
+            return standings.answer(List.copyOf(terms), listed -> {
+                STANDINGS_WORKED_OUT.incrementAndGet();
+                return whereTermsStand(listed);
+            });
         }
 
         NumericDomain.Bounds runOf(NumericTerm.TakenOver over, ReadQuantities asking) {
@@ -1415,8 +1429,8 @@ final class ReadQuantities implements Quantities {
      * spelled alike are put in the order they are listed.
      */
     private static StructuralContext.Merge whereTermsStand(List<NumericTerm> terms) {
-        List<Map.Entry<String, TermPath>> said = new ArrayList<>();
-        terms.forEach(term -> said.add(Map.entry(term.toString(), term.subjectPath())));
+        List<Map.Entry<Spelling, TermPath>> said = new ArrayList<>();
+        terms.forEach(term -> said.add(Map.entry(term.spelling(), term.subjectPath())));
         said.sort(Map.Entry.comparingByKey());
         Set<TermPath> places = new LinkedHashSet<>();
         said.forEach(each -> places.add(each.getValue()));
@@ -1533,7 +1547,7 @@ final class ReadQuantities implements Quantities {
         TermPath subject = term.subjectPath();
         if (!anyNarrowingHeld(under)) {
             UnderARoot at = roots.standingAt(subject);
-            return new InputAtom.Named(at.rootName(), at.named(), which);
+            return roots.named(at, which);
         }
         UnderARoot at = rootOf(subject);
         return atomAt(standingUnder(pathOf(at.root(), at.named()), under), which);
@@ -1566,7 +1580,7 @@ final class ReadQuantities implements Quantities {
     private InputAtom.Named atomAt(TermPath place,
                                    NumberAt.OfWhatNumber kind) {
         UnderARoot at = rootOf(place);
-        return new InputAtom.Named(at.rootName(), at.named(), kind);
+        return roots.named(at, kind);
     }
 
     /**

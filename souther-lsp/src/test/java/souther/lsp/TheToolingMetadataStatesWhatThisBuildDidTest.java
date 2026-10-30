@@ -112,7 +112,8 @@ class TheToolingMetadataStatesWhatThisBuildDidTest {
             stated.add(argument.asString());
         }
 
-        assertEquals(List.of("-Xss" + rootPomProperty("souther.jvm.stack")), stated);
+        assertEquals(List.of("-Xss" + rootPomProperty("souther.jvm.stack"),
+                rootPomProperty("souther.jvm.layout")), stated);
         List<String> given = ManagementFactory.getRuntimeMXBean().getInputArguments();
         assertTrue(given.containsAll(stated),
                 "the tests run on what a client is told to give the JVM: " + given);

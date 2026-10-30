@@ -58,6 +58,9 @@
              to what is written here. -->
         <souther.java.minimum>25</souther.java.minimum>
         <souther.jvm.stack>4m</souther.jvm.stack>
+        <!-- An object's header in eight bytes rather than twelve. What a compile holds at its
+             largest is mostly small objects, so their headers are a large part of it. -->
+        <souther.jvm.layout>-XX:+UseCompactObjectHeaders</souther.jvm.layout>
         <maven.compiler.release>${souther.java.minimum}</maven.compiler.release>
         <raoh.version>0.9.0</raoh.version>
         <!-- Raoh takes Jackson as provided, so the version on every classpath is this one. -->
@@ -324,7 +327,7 @@
                              same one: a source at the structural bound needs about a megabyte, and
                              what is checked here has to be checked on the stack the bound was set
                              for. A test that wants a smaller one makes its own thread. -->
-                        <argLine>${test.jvm.args} -Xss${souther.jvm.stack}</argLine>
+                        <argLine>${test.jvm.args} -Xss${souther.jvm.stack} ${souther.jvm.layout}</argLine>
                         <systemPropertyVariables>
                             <souther.example.step.limit>${test.example.step.limit}</souther.example.step.limit>
                         </systemPropertyVariables>
@@ -578,7 +581,7 @@
                             <!-- `@{}` rather than `${}`: the agent's arguments are set by a goal
                                  that runs after the model is read, and only a late reference sees
                                  them. -->
-                            <argLine>${test.jvm.args} -Xss${souther.jvm.stack} @{jacoco.agent.args}</argLine>
+                            <argLine>${test.jvm.args} -Xss${souther.jvm.stack} ${souther.jvm.layout} @{jacoco.agent.args}</argLine>
                             <systemPropertyVariables>
                                 <souther.test.coverage.dir>${project.build.directory}/coverage-by-class</souther.test.coverage.dir>
                             </systemPropertyVariables>

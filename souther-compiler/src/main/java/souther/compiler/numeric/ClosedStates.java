@@ -249,7 +249,7 @@ public final class ClosedStates {
             this.parts = parts;
             this.questions = questions;
             this.closed = closed;
-            this.partOf = partOf;
+            this.partOf = Map.copyOf(partOf);
             this.state = state;
             this.complete = complete;
         }

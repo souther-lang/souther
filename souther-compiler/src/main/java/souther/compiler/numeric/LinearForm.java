@@ -1,5 +1,7 @@
 package souther.compiler.numeric;
 
+import souther.compiler.collect.InTheOrderGiven;
+
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -36,6 +38,12 @@ import java.util.function.Function;
  *                 writings of one form are one value
  */
 public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
+
+    /** The coefficients held as a copy in the order given: a form is held as long as what holds
+     *  it, and the table the arithmetic filled holds a slot table and an entry per term on top. */
+    public LinearForm {
+        coefs = InTheOrderGiven.map(coefs);
+    }
 
     public static <A> LinearForm<A> constant(ExactRatio c) {
         return new LinearForm<>(c, Map.of());

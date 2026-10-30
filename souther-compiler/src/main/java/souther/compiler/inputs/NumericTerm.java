@@ -2367,21 +2367,21 @@ public sealed interface NumericTerm
      */
     default NumberAt.OfWhatNumber atItsPlace() {
         return switch (this) {
-            case ValueOf _ -> new NumberAt.OfWhatNumber.OfItsOwnValue();
+            case ValueOf _ -> NumberAt.OfWhatNumber.OWN_VALUE;
             case TakenOf taken -> new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(
                     taken.operation(), taken.arguments(), taken.transformation());
             case CodePointClassCount count ->
                     new NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn(count.counted(),
                             count.through());
-            case CodePointValueSum _ -> new NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo();
+            case CodePointValueSum _ -> NumberAt.OfWhatNumber.WHAT_ITS_CODE_POINTS_COME_TO;
             case CodePointAt at -> new NumberAt.OfWhatNumber.OfTheCodePointAt(at.index());
             case WholeUnitsOf units ->
                     new NumberAt.OfWhatNumber.OfTheWholeUnitsOf(units.operation());
-            case Multiplicity _ -> new NumberAt.OfWhatNumber.OfItsMultiplicity();
+            case Multiplicity _ -> NumberAt.OfWhatNumber.MULTIPLICITY;
             // Which values are counted, where a statement keeps some of them, is the statement's
             // and not the place's: it is named by the term itself.
             case OccurrencesOfItsValue occurrences -> occurrences.selection() == null
-                    ? new NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer() : null;
+                    ? NumberAt.OfWhatNumber.OCCURRENCES_IN_EVERY_CONTAINER : null;
             // The key by the whole place it stands at: what a rule calls a place is relative to the
             // value it is a position of, and two parameters are both called the value.
             case OccurrencesOfAKey asked ->

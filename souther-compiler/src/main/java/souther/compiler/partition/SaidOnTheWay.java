@@ -1,8 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.collect.InTheOrderGiven;
 import souther.compiler.types.ModelOccurrences;
 
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -210,6 +210,6 @@ public record SaidOnTheWay(Map<OnTheWay, ModelOccurrences> entries,
 
     /** Each key in the order it was met, which is the order a reader is told them in. */
     private static <K> Map<K, ModelOccurrences> ordered(Map<K, ModelOccurrences> map) {
-        return Collections.unmodifiableMap(new LinkedHashMap<>(map));
+        return InTheOrderGiven.map(map);
     }
 }
