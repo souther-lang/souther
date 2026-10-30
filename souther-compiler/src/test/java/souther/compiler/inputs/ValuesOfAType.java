@@ -55,7 +55,10 @@ import java.util.function.Function;
  * a null where a component is never absent — asked one record the same question the better part of
  * a million times. What that leaves out is held against every combination, nightly
  * ({@link #everyCombination}, {@code TheNearestValuesOfATypeAreTheValuesEveryCombinationMakesTest}),
- * so a record that comes to take a value only far from the first ones is named there.
+ * so a record that comes to take a value only far from the first ones is named there. Every
+ * combination puts a value beside the nearest values' partner wherever those find one, and counts
+ * through the rest only where they find none; a search that takes more constructions than its
+ * budget is an error, since it has not found that no combination takes the value.
  *
  * <p>Null is offered for every component that is not a primitive, and the constructor says whether
  * it is a value. An absence a record means — the owner of a construct no source wrote — is one an
@@ -102,15 +105,20 @@ final class ValuesOfAType {
      *  not only the nearest ones. */
     private final boolean everyCombination;
 
-    /** How many constructions one search over every combination may refuse before it is an error. */
+    /** How many constructions one search over every combination may make before it is an error. */
     private final int budget;
 
-    /** What one search over every combination of a record's others may refuse. */
-    static final int REFUSALS_ONE_SEARCH_MAY_COUNT = 50_000;
+    /**
+     * What one search over every combination of a record's others may construct: about twice the
+     * most the types asked here take, which is a null of {@code RuleReasons.Said} refused at every
+     * combination. A record that grows past it is an error that names the record, and not a run
+     * that does not finish.
+     */
+    private static final int CONSTRUCTIONS_A_SEARCH_MAY_MAKE = 50_000;
 
     /** Values made with each value of a component beside the nearest values of the others. */
     ValuesOfAType() {
-        this(false, REFUSALS_ONE_SEARCH_MAY_COUNT);
+        this(false, CONSTRUCTIONS_A_SEARCH_MAY_MAKE);
     }
 
     private ValuesOfAType(boolean everyCombination, int budget) {
@@ -124,7 +132,7 @@ final class ValuesOfAType {
      * against.
      */
     static ValuesOfAType everyCombination() {
-        return everyCombination(REFUSALS_ONE_SEARCH_MAY_COUNT);
+        return everyCombination(CONSTRUCTIONS_A_SEARCH_MAY_MAKE);
     }
 
     /** As {@link #everyCombination()}, with each search over the others allowed {@code budget}
@@ -138,9 +146,10 @@ final class ValuesOfAType {
      * {@code nearest} made none with, named by the record and the component — empty where the
      * nearest values leave out nothing every combination takes.
      *
-     * <p>By the values of each component and not by the values made: the two put a value beside
-     * different values of the others, and what the nearest ones are held to is that each value is
-     * in some value made, not that it is beside the same ones.
+     * <p>By the values of each component and not by the values made: where the nearest values leave
+     * a value out, every combination puts it beside others the nearest values do not reach, and
+     * what the nearest ones are held to is that each value is in some value made, not that it is
+     * beside the same ones.
      *
      * <p>Every record made, a generic one among them: what is a record is the type's question and
      * not how it was asked for, and a record over type arguments is made as that type, with the
