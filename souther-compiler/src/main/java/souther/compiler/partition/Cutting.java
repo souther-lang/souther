@@ -12,7 +12,6 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
-import souther.compiler.inputs.RuleSite;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
@@ -47,17 +46,14 @@ import souther.compiler.reach.ComparisonArrival;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
-import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -248,26 +244,26 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
          * expression this did not take apart says nothing about what that position carries — and
          * one answer handed to all of them told a position about the carrier of another.
          *
+         * @param places each place and what stopped the reading there, with the expressions it
+         *               stopped at to leave the rule at that place
          * @param where where the reading stopped, as the reader that stopped saw it
-         * @param stoppedAt the expressions its author wrote that the arithmetic stopped at, each
-         *                  once and in the order they were met. Empty where the reading that
-         *                  stopped has no expression to name, or the one it stopped at is none its
-         *                  author wrote
          */
-        record Stopped(SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why,
-                       WhereAReadingStopped where, SequencedSet<RuleSite> stoppedAt)
-                implements Read {
+        record Stopped(PlacesStopped places, WhereAReadingStopped where) implements Read {
 
             public Stopped {
-                why = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(why));
+                Objects.requireNonNull(places, "a reading that stopped left some places");
                 Objects.requireNonNull(where, "a reading that stopped stopped somewhere");
-                stoppedAt = RuleSite.held(stoppedAt);
             }
 
             /** A reading that stopped with no expression of the author's to name. */
             public Stopped(SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why,
                            WhereAReadingStopped where) {
-                this(why, where, RuleSite.NO_SITES);
+                this(PlacesStopped.of(why), where);
+            }
+
+            /** What stopped the reading at each place, without the expressions. */
+            public SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why() {
+                return places.reasons();
             }
         }
 
@@ -626,10 +622,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                           List<ClosureApplications.Application> each,
                                           Arrivals answering, WhatConditionsState conditions,
                                           Optional<ExpansionLineage> writtenIn) {
-        SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> stopped =
-                new LinkedHashMap<>();
+        PlacesStopped stopped = PlacesStopped.NOWHERE;
         WhereAReadingStopped stoppedWhere = WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT;
-        SequencedSet<RuleSite> stoppedAt = new LinkedHashSet<>();
         List<FilingCoordinate> settled = new ArrayList<>();
         List<FilingCoordinate> answeringNowhere = new ArrayList<>();
         List<FilingCoordinate> against = new ArrayList<>();
@@ -645,8 +639,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             switch (readOnce(behavior, comparison, read, one.reads(), answering, onTheInput,
                     writtenIn)) {
                 case Read.Stopped alone -> {
-                    alone.why().forEach(stopped::putIfAbsent);
-                    stoppedAt.addAll(alone.stoppedAt());
+                    stopped = stopped.and(alone.places());
                     stoppedWhere = stoppedWhere.and(alone.where());
                 }
                 case Read.StatesNoRelation _ -> {
@@ -692,7 +685,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
         }
         if (!stopped.isEmpty()) {
-            return new Read.Stopped(stopped, stoppedWhere, stoppedAt);
+            return new Read.Stopped(stopped, stoppedWhere);
         }
         // Every application's statement is a line or none of them is drawn, and one that relates
         // the input to another value is no line.

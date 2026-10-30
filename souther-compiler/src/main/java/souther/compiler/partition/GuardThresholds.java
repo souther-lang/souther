@@ -25,7 +25,6 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
-import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
@@ -683,8 +682,9 @@ public final class GuardThresholds {
                                                         InputReading read, InputReads reads,
                                                         Arrivals answering) {
         return new Cutting.Read.Stopped(
-                leftAtEachPlace(comparison, stopped, read, reads, answering),
-                whereItStopped(stopped, read), stoppedAtThe(stopped));
+                PlacesStopped.of(leftAtEachPlace(comparison, stopped, read, reads, answering),
+                        stoppedAtThe(stopped)),
+                whereItStopped(stopped, read));
     }
 
     /**
@@ -693,12 +693,13 @@ public final class GuardThresholds {
      */
     private static SequencedSet<RuleSite> stoppedAtThe(
             AffineReading.OfAComparison.Stopped stopped) {
-        SequencedSet<RuleSite> out = new LinkedHashSet<>();
         if (Core.withoutStanding(stopped.node()) instanceof Core.PreservedCall call
                 && call.occurrence().origin().isWritten()) {
+            SequencedSet<RuleSite> out = new LinkedHashSet<>();
             out.add(new RuleSite.AConstructTheAuthorWrote(call.occurrence().origin()));
+            return out;
         }
-        return out;
+        return RuleSite.NO_SITES;
     }
 
     /**
@@ -1094,13 +1095,7 @@ public final class GuardThresholds {
         // nothing but whether its reading finished. There is no reading that says what a body's
         // comparison raises — a line it comes to owes its rows by having been read — so where the
         // reading stopped there is nothing that was determined and nothing that could have been.
-        read.whatEachPlaceIsLeftWith().forEach(left -> {
-            if (left.why() instanceof BlockReason.RuleReadingStopped stopped) {
-                out.unclassified(cited, readAt, left.at(), stopped, left.stoppedAt());
-            } else {
-                out.add(RuleWithoutALine.of(cited, readAt, left.at(), left.why()));
-            }
-        });
+        read.whatEachPlaceIsLeftWith().forEach(left -> left.filedIn(cited, readAt, out));
     }
 
     /** How a row meets a line a body's condition drew, which is a guard's own answer: what it takes
