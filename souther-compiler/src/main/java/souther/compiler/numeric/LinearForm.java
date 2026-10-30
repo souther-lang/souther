@@ -225,17 +225,35 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
      */
     @Override
     public String toString() {
-        Map<String, ExactRatio> named = new TreeMap<>();
-        coefs.forEach((atom, coef) -> named.put(String.valueOf(atom), coef));
-        StringBuilder out = new StringBuilder("LinearForm[constant=")
-                .append(constant.spelled()).append(", coefs={");
+        StringBuilder out = new StringBuilder();
+        writtenAs(String::valueOf).forEach(out::append);
+        return out.toString();
+    }
+
+    /**
+     * What {@link #toString} writes, as the pieces it is written from in order: the text around the
+     * positions, and each position as {@code named} names it — one entry for each name, in the order
+     * of the names. Named by {@link String#valueOf} the pieces write {@link #toString}; a reader that
+     * holds a position's name some other way that is ordered as its text is (a spelling held as
+     * pieces) is handed the same text without the names written out, and from the one definition of
+     * how a form is written.
+     */
+    public <N extends Comparable<? super N>> List<Object> writtenAs(Function<? super A, N> named) {
+        Map<N, ExactRatio> byName = new TreeMap<>();
+        coefs.forEach((atom, coef) -> byName.put(named.apply(atom), coef));
+        List<Object> out = new ArrayList<>(3 * byName.size() + 2);
+        out.add("LinearForm[constant=" + constant.spelled() + ", coefs={");
         boolean first = true;
-        for (Map.Entry<String, ExactRatio> each : named.entrySet()) {
-            out.append(first ? "" : ", ").append(each.getKey()).append('=')
-                    .append(each.getValue().spelled());
+        for (Map.Entry<N, ExactRatio> each : byName.entrySet()) {
+            if (!first) {
+                out.add(", ");
+            }
+            out.add(each.getKey());
+            out.add("=" + each.getValue().spelled());
             first = false;
         }
-        return out.append("}]").toString();
+        out.add("}]");
+        return out;
     }
 
     /**

@@ -175,8 +175,8 @@ class ASpellingIsItsTextWithoutWritingItOutTest {
             Proposition below = nested;
             nested = i % 2 == 0 ? new Proposition.All(List.of(below, beside))
                     : new Proposition.Any(List.of(below, beside));
-            if (!nested.spelling().holdsAsAPiece(below.spelling())
-                    || !nested.spelling().holdsAsAPiece(beside.spelling())) {
+            if (!nested.spelling().holdsWithin(below.spelling())
+                    || !nested.spelling().holdsWithin(beside.spelling())) {
                 copied.add("level " + i);
             }
             assertEquals((i % 2 == 0 ? "all[" : "any[") + below.spelledOut() + ", "

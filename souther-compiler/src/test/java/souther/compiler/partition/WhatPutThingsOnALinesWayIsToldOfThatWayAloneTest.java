@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Spelling;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WrittenLine;
 import souther.compiler.types.ExpansionLineage;
@@ -46,7 +47,7 @@ class WhatPutThingsOnALinesWayIsToldOfThatWayAloneTest {
 
     private static WhereAPartDecides aCase(String which) {
         return new WhereAPartDecides(new PlaceOfALine(PartOfAComparison.of(
-                WrittenLine.THE_COMPARISON), "line"), new Proposition.Truth(
+                WrittenLine.THE_COMPARISON), Spelling.of("line")), new Proposition.Truth(
                 new DecisionSubject.AnInput(TermPath.of(which)), true));
     }
 

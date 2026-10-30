@@ -471,16 +471,26 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                     argument -> Optional.ofNullable(given.at(argument.position())));
         }
 
+        /** The text {@link #spelled} writes, with each term of the dividend held as its own
+         *  spelling ({@link NumericTerm#spelling}). */
+        @Override
+        public Spelling spelling() {
+            List<Object> out = new ArrayList<>();
+            out.add("floorMod(");
+            NumericTerms.entriesInOrder(dividend.coefs()).forEach(each -> {
+                out.add((out.size() == 1 ? "" : " + ") + each.getValue().spelled() + "·");
+                out.add(each.getKey().spelling());
+            });
+            if (dividend.constant().signum() != 0) {
+                out.add(" + " + dividend.constant().spelled());
+            }
+            out.add(", " + divisor + ")");
+            return Spelling.of(out.toArray());
+        }
+
         @Override
         public String spelled() {
-            StringBuilder out = new StringBuilder("floorMod(");
-            NumericTerms.entriesInOrder(dividend.coefs()).forEach(each -> out
-                    .append(out.charAt(out.length() - 1) == '(' ? "" : " + ")
-                    .append(each.getValue().spelled()).append('·').append(each.getKey()));
-            if (dividend.constant().signum() != 0) {
-                out.append(" + ").append(dividend.constant().spelled());
-            }
-            return out.append(", ").append(divisor).append(')').toString();
+            return spelling().toString();
         }
 
         @Override

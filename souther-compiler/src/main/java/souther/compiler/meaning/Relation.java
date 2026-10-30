@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 
 /**
  * A comparison as the relation it states over the quantities a condition is about, in the one
@@ -26,8 +25,8 @@ public sealed interface Relation {
 
     /**
      * This relation's text, held as the pieces it is put together from: the spelling a comparison
-     * over it is told apart and ordered by ({@link Proposition.Compared}). The text is
-     * {@link #toString}'s; each quantity of a form is held as its own spelling
+     * over it is told apart and ordered by ({@link Proposition.Compared}). The text is the one the
+     * relation's {@code toString} writes; each quantity of a form is held as its own spelling
      * ({@link Quantity#spelling}), so a count of a statement in it holds the statement's spelling and
      * not the statement written out.
      */
@@ -55,27 +54,15 @@ public sealed interface Relation {
             }
         }
 
-        /** The text a record of this writes, with the form's text as {@link LinearForm#toString}
-         *  writes it: the constant, then each quantity and its coefficient in the order of the
-         *  quantities' spellings, one entry for each spelling. */
+        /** The text a record of this writes, with the form written from the quantities' spellings
+         *  ({@link LinearForm#writtenAs}), which are ordered as their texts are. */
         @Override
         public Spelling spelling() {
-            Map<Spelling, ExactRatio> named = new TreeMap<>();
-            form.coefs().forEach((atom, coef) -> named.put(atom.spelling(), coef));
-            List<Spelling> pieces = new ArrayList<>(3 * named.size() + 2);
-            pieces.add(Spelling.of("Affine[form=LinearForm[constant=" + form.constant().spelled()
-                    + ", coefs={"));
-            boolean first = true;
-            for (Map.Entry<Spelling, ExactRatio> each : named.entrySet()) {
-                if (!first) {
-                    pieces.add(Spelling.SEPARATOR);
-                }
-                pieces.add(each.getKey());
-                pieces.add(Spelling.of("=" + each.getValue().spelled()));
-                first = false;
-            }
-            pieces.add(Spelling.of("}], proposition=" + proposition + "]"));
-            return Spelling.joined(pieces);
+            List<Object> pieces = new ArrayList<>();
+            pieces.add("Affine[form=");
+            pieces.addAll(form.writtenAs(Quantity::spelling));
+            pieces.add(", proposition=" + proposition + "]");
+            return Spelling.of(pieces.toArray());
         }
     }
 

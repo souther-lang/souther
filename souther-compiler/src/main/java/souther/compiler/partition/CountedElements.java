@@ -9,6 +9,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Spelling;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -297,17 +298,24 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
      * different values stand at {@code differentAt} over the elements meeting the statement,
      * {@code #different container [place] where [statement]} — the container being the one whose
      * elements hold the containers, where the values are of every element of those
-     * ({@code across}), as the quantity is written.
+     * ({@code across}), as the quantity is written. The statement is a {@link Spelling}, held as
+     * itself, or any other text.
      */
-    static String spelled(TermPath container, Optional<Quantity.TheValue> differentAt,
-                          Optional<TermPath> across, String statement) {
-        return differentAt.map(at -> "#different " + across.orElse(container) + " ["
+    static Spelling spelled(TermPath container, Optional<Quantity.TheValue> differentAt,
+                            Optional<TermPath> across, Object statement) {
+        return Spelling.of(differentAt.map(at -> "#different " + across.orElse(container) + " ["
                         + at.spelled() + "] where ")
-                .orElse("#" + container + " ") + "[" + statement + "]";
+                .orElse("#" + container + " ") + "[", statement, "]");
+    }
+
+    /** This count as it is written ({@link #spelled}), with the statement held as its own
+     *  spelling. */
+    public Spelling spelling() {
+        return spelled(container, differentAt, across, meeting.spelling());
     }
 
     @Override
     public String toString() {
-        return spelled(container, differentAt, across, meeting.spelling().toString());
+        return spelling().toString();
     }
 }

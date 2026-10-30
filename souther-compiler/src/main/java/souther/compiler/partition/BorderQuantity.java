@@ -1008,7 +1008,7 @@ public sealed interface BorderQuantity
         @Override
         public String left() {
             String count = CountedElements.spelled(container, counted.differentAt(),
-                    counted.across(), said(meeting));
+                    counted.across(), said(meeting)).toString();
             if (against.coefs().isEmpty()) {
                 return count;
             }
@@ -1041,7 +1041,8 @@ public sealed interface BorderQuantity
                             yield CountedElements.spelled(elements.container().inputPosition(),
                                     AStatementAtARow.differentAt(count),
                                     AStatementAtARow.acrossOf(count),
-                                    said(elements.ofTheElement())) + " " + rel.written() + " "
+                                    said(elements.ofTheElement())).toString() + " "
+                                    + rel.written() + " "
                                     + affine.form().constant().negated().dividedBy(weight)
                                             .map(ExactRatio::spelled).orNull();
                         }
@@ -1055,7 +1056,7 @@ public sealed interface BorderQuantity
                                     + affine.form().constant().negated().dividedBy(weight)
                                             .map(ExactRatio::spelled).orNull();
                         }
-                        yield form == null ? stated.spelling().toString()
+                        yield form == null ? stated.spelledOut()
                                 : OrderedAffineBoundary.spelled(form.coefs()) + " " + rel.written()
                                         + " " + form.constant().negated().spelled();
                     }
@@ -1082,7 +1083,7 @@ public sealed interface BorderQuantity
                      Proposition.StringInside _, Proposition.LastToHold _,
                      Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.WhereItAnswers _ ->
-                        stated.spelling().toString();
+                        stated.spelledOut();
             };
         }
 

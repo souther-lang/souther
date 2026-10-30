@@ -139,15 +139,9 @@ public final class Spelling implements Comparable<Spelling> {
         return result;
     }
 
-    /** Whether {@code piece} itself, and not a copy of its text, is one of the pieces this is put
-     *  together from. */
-    boolean holdsAsAPiece(Spelling piece) {
-        return pieces.stream().anyMatch(each -> each == piece);
-    }
-
     /** Whether {@code piece} itself is held somewhere among the pieces this is put together from,
      *  however deep — each piece looked at once, however many times it is held. */
-    boolean holdsWithin(Spelling piece) {
+    public boolean holdsWithin(Spelling piece) {
         Set<Spelling> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         Deque<Spelling> left = new ArrayDeque<>(pieces);
         while (!left.isEmpty()) {

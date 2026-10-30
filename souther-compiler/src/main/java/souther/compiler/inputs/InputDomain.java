@@ -2104,12 +2104,7 @@ public final class InputDomain {
                 }
                 yield multiplicity;
             }
-            case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer kept -> {
-                if (kept.keptBy() != null) {
-                    throw new IllegalStateException("a clause of a declaration was read as a rule"
-                            + " about how often the value at " + path + " occurs among those kept"
-                            + " by " + kept.keptBy());
-                }
+            case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ -> {
                 NumericTerm.OccurrencesOfItsValue occurrences = NumericTerm.OccurrencesOfItsValue.of(
                         RunSource.overEveryOccurrenceAt(path) instanceof
                                 RunSource.FlattenedOccurrences flat ? flat : null);

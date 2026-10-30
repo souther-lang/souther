@@ -12,6 +12,7 @@ import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Spelling;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhereEachLineDecides;
 import souther.compiler.meaning.WrittenLine;
@@ -198,7 +199,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
             List<DecidingCase> cases,
             Map<Proposition, ComparisonAssessment.InACase> inCases) {
         return ComparisonAssessment.partsOfARelation(new ComparisonAssessment.Several.Part(
-                new PlaceOfALine(PartOfAComparison.of(WrittenLine.THE_COMPARISON), "relation"),
+                new PlaceOfALine(PartOfAComparison.of(WrittenLine.THE_COMPARISON),
+                        Spelling.of("relation")),
                 relation(), cases), relation(), inCases::get);
     }
 
@@ -267,7 +269,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     @Test
     void aRelationNoRowIsInAnyCaseOfItsPartIsOneTheStatementNeverTurnsOn() {
         PlaceOfALine at = new PlaceOfALine(PartOfAComparison.of(WrittenLine.THE_COMPARISON),
-                "relation");
+                Spelling.of("relation"));
         ComparisonAssessment.Several read = new ComparisonAssessment.Several(List.of(
                 new ComparisonAssessment.Several.Part(at, relation(),
                         List.of(DecidingCase.alone(WhereAnApplicationIsMade.nothingAsked())))));
@@ -305,12 +307,14 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         Proposition anywhere = WhereAnApplicationIsMade.nothingAsked();
         ComparisonAssessment.Several read = new ComparisonAssessment.Several(List.of(
                 new ComparisonAssessment.Several.Part(new PlaceOfALine(
-                        PartOfAComparison.of(WrittenLine.THE_COMPARISON), "unworked"), line(),
+                        PartOfAComparison.of(WrittenLine.THE_COMPARISON), Spelling.of("unworked")),
+                        line(),
                         List.of(new DecidingCase(anywhere,
                                 new DecidingCase.Cases.NotTakenApart(
                 CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)))),
                 new ComparisonAssessment.Several.Part(new PlaceOfALine(
-                        PartOfAComparison.of(WrittenLine.THE_COMPARISON), "worked"), line(),
+                        PartOfAComparison.of(WrittenLine.THE_COMPARISON), Spelling.of("worked")),
+                        line(),
                         List.of(DecidingCase.alone(anywhere)))));
 
         ComparisonAssessment.Several narrowed = assertInstanceOf(
@@ -347,7 +351,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     @Test
     void aLineAnotherCaseShowsDecidesIsTheLineThereAndNotWorkedOutBeside() {
         PlaceOfALine both = new PlaceOfALine(PartOfAComparison.of(WrittenLine.THE_COMPARISON),
-                "both");
+                Spelling.of("both"));
         DecidingCase unworked = new DecidingCase(
                 new Proposition.Truth(new DecisionSubject.AnInput(N), true),
                 new DecidingCase.Cases.NotTakenApart(
@@ -391,7 +395,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     @Test
     void aCaseOfWhichSomeDivideSomeDoNotAndSomeStoppedIsTheLineInThoseThatDivide() {
         PlaceOfALine at = new PlaceOfALine(PartOfAComparison.of(WrittenLine.THE_COMPARISON),
-                "mixed");
+                Spelling.of("mixed"));
         Proposition dividing = new Proposition.Truth(new DecisionSubject.AnInput(
                 TermPath.of("a")), true);
         Proposition dividingNone = new Proposition.Truth(new DecisionSubject.AnInput(
@@ -442,7 +446,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     @Test
     void casesOfALineStoppedAtTwoFiguresSayBothInEitherOrder() {
         PlaceOfALine both = new PlaceOfALine(PartOfAComparison.of(WrittenLine.THE_COMPARISON),
-                "both");
+                Spelling.of("both"));
         DecidingCase notTakenApart = new DecidingCase(
                 new Proposition.Truth(new DecisionSubject.AnInput(N), true),
                 new DecidingCase.Cases.NotTakenApart(

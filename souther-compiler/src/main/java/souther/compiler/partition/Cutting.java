@@ -751,9 +751,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             PartOfAComparison.of(WrittenLine.THE_COMPARISON);
 
     /** A statement that is one line, as the place of a line it is: the relation, held. */
-    private static String spelled(Proposition stated) {
-        return (stated instanceof Proposition.Compared compared ? compared.heldSpelling()
-                : stated.spelling()).toString();
+    private static Spelling spelled(Proposition stated) {
+        return stated instanceof Proposition.Compared compared ? compared.heldSpelling()
+                : stated.spelling();
     }
 
     /**
@@ -1132,7 +1132,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         List<Read.Several.Part> parts = new ArrayList<>();
         of.forEach((line, mapping) -> parts.add(new Read.Several.Part(
-                new PlaceOfALine(line, compared.heldSpelling().toString()),
+                new PlaceOfALine(line, compared.heldSpelling()),
                 authored(drawn, mapping, compared),
                 WhereEachLineDecides.takenWhere(
                         List.of(DecidingCase.alone(WhereAnApplicationIsMade.nothingAsked())),
@@ -1161,8 +1161,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             AuthorsLines lines, List<Proposition.Compared> scales, ComparisonClaim written) {
         Map<PartOfAComparison, AuthoredPointMapping> out = new LinkedHashMap<>();
         for (Proposition.Compared relation : scales) {
-            Map<WrittenLine, AuthoredPointMapping> under =
-                    lines.of(relation.heldSpelling().toString());
+            Map<WrittenLine, AuthoredPointMapping> under = lines.of(relation.heldSpelling());
             if (under != null) {
                 under.forEach((line, mapping) ->
                         out.putIfAbsent(PartOfAComparison.of(line), mapping));
@@ -1996,8 +1995,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         TheParts.NotDrawn undrawn = null;
         for (WhereEachLineDecides.Decides each : lines) {
             Read line = lineOf(behavior, each.line(), written, read, reads);
-            PlaceOfALine alone = new PlaceOfALine(THE_COMPARISON,
-                    each.line().spelling().toString());
+            PlaceOfALine alone = new PlaceOfALine(THE_COMPARISON, each.line().spelling());
             if (line == null) {
                 // A relation of the input's values to another value is that, beside the lines,
                 // read as one comparison stating it alone is. One over what a dependency answered
@@ -2042,7 +2040,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
             authorsLines(authors.get(), each.scales(), WrittenLines.claimOf(each.line()))
                     .forEach((of, mapping) -> parts.add(
-                    new Read.Several.Part(new PlaceOfALine(of, each.line().spelling().toString()),
+                    new Read.Several.Part(new PlaceOfALine(of, each.line().spelling()),
                             authored(line, mapping, each.line()),
                             WhereEachLineDecides.takenWhere(each.cases(),
                                     authors.get().takenWhere(mapping.line())),

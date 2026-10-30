@@ -50,6 +50,11 @@ public sealed interface DecisionAtom extends Quantity {
         }
 
         @Override
+        public Spelling spelling() {
+            return term.spelling();
+        }
+
+        @Override
         public String spelled() {
             return term.toString();
         }

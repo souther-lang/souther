@@ -227,11 +227,17 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
         return List.copyOf(out);
     }
 
-    /** What this selects, spelled for a reader and for a coordinate; no identity. The position is
-     *  spelled with its narrowings, as a report spells a position, and the statement by its own
-     *  key, which is what holds two statements apart. */
+    /** What this selects, spelled for a coordinate: the position with its narrowings, as a report
+     *  spells a position, and the statement by its own spelling, which is what holds two
+     *  statements apart — held as that spelling and not written out. */
+    public Spelling spelling() {
+        return Spelling.of(container.inputPosition().discriminated() + " meeting ",
+                meeting.spelling());
+    }
+
+    /** {@link #spelling} written out, for a reader. */
     public String key() {
-        return container.inputPosition().discriminated() + " meeting " + meeting.spelling();
+        return spelling().toString();
     }
 
     /** Two of these are one where they keep the elements of the same container by the same

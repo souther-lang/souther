@@ -117,8 +117,8 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
 
     /** How many of the values standing at {@code position}, in every container it stands inside,
      *  are what the value under consideration is. */
-    public static <P> NumberAt<P> occurrencesOf(P position, String keptBy) {
-        return new NumberAt<>(position, new OfWhatNumber.OfItsOccurrencesInEveryContainer(keptBy));
+    public static <P> NumberAt<P> occurrencesOf(P position) {
+        return new NumberAt<>(position, new OfWhatNumber.OfItsOccurrencesInEveryContainer());
     }
 
     /** How many of the values standing at {@code position}, in every container it stands inside,
@@ -251,8 +251,12 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
          * of the container the place stands inside, and this among all of them put end to end.
          * The same place holds both numbers, and a line drawn on one falls on the other no more
          * than a line on a length falls on the value.
+         *
+         * <p>Every value at the place is counted. A count of only the values a statement keeps is
+         * not said by the place and this kind of number, so it is named by its term
+         * ({@code NumericTerm#atItsPlace}).
          */
-        record OfItsOccurrencesInEveryContainer(String keptBy) implements OfWhatNumber {}
+        record OfItsOccurrencesInEveryContainer() implements OfWhatNumber {}
 
         /**
          * How many of the values standing at the place, in every container it stands inside, are
@@ -340,9 +344,8 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                     "List.get(" + at.index() + ", String.codePoints(" + position + "))";
             case OfWhatNumber.OfTheWholeUnitsOf units -> units.operation() + "(" + position + ")";
             case OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + position + ")";
-            case OfWhatNumber.OfItsOccurrencesInEveryContainer kept -> kept.keptBy() == null
-                    ? "occurrences(" + position + ")"
-                    : "occurrences(" + position + " kept by " + kept.keptBy() + ")";
+            case OfWhatNumber.OfItsOccurrencesInEveryContainer _ ->
+                    "occurrences(" + position + ")";
             case OfWhatNumber.OfTheOccurrencesOfAKey asked ->
                     "occurrences(" + position + " equal to " + asked.key() + ")";
             case OfWhatNumber.OfTheExtremeOfItsKey extremeOf ->
