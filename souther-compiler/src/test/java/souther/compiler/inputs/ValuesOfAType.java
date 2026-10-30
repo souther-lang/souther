@@ -1,5 +1,8 @@
 package souther.compiler.inputs;
 
+import souther.compiler.numeric.ExactCut;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.NumberRegion;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -72,7 +75,16 @@ final class ValuesOfAType {
     private static final Map<Class<?>, Function<ValuesOfAType, List<Object>>> LEAVES = Map.of(
             TypeSymbol.AtModule.class, values -> values.of(TypeKey.class).stream()
                     .<Object>map(key -> TypeSymbols.declared((TypeKey) key))
-                    .toList());
+                    .toList(),
+            NumberRegion.class, _ -> {
+                NumberRegion.Run belowNought =
+                        new NumberRegion.Run(null, ExactCut.exclusive(ExactRatio.ZERO));
+                NumberRegion.Run fromFive =
+                        new NumberRegion.Run(ExactCut.inclusive(ExactRatio.of(5)), null);
+                return List.of(NumberRegion.of(List.of(belowNought)),
+                        NumberRegion.of(List.of(fromFive)),
+                        NumberRegion.of(List.of(belowNought, fromFive)));
+            });
 
     /**
      * The words a string component is offered.
