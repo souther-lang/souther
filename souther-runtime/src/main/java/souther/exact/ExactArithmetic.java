@@ -133,7 +133,9 @@ public final class ExactArithmetic {
     public static ExactParts canonical(BigDecimal written) {
         long exponent = -(long) written.scale();
         if (written.precision() <= MOST_DIGITS_A_LONG_HOLDS) {
-            long unscaled = written.scaleByPowerOfTen(written.scale()).longValueExact();
+            // Moved by its own scale, which leaves a scale of nought, so nothing is refused; and a
+            // whole number of that many digits is the long it narrows to.
+            long unscaled = written.scaleByPowerOfTen(written.scale()).longValue();
             return canonical(new ExactParts(unscaled, 1, exponent, exponent));
         }
         return canonical(written.unscaledValue(), BigInteger.ONE, exponent, exponent);
