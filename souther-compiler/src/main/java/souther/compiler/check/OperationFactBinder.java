@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.abort.GetsPast;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.DeclaredOperation;
@@ -34,7 +35,6 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
-import souther.compiler.values.CollectionExtents;
 import souther.compiler.values.TextExtents;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -945,7 +945,7 @@ final class OperationFactBinder {
     private static BigDecimal valueOf(ResultBound.Limit limit) {
         return switch (limit) {
             case LONGEST_STRING -> BigDecimal.valueOf(TextExtents.LONGEST_STRING);
-            case MOST_ELEMENTS -> BigDecimal.valueOf(CollectionExtents.MOST_ELEMENTS);
+            case MOST_ELEMENTS -> new BigDecimal(GetsPast.MOST_ELEMENTS);
             case EARLIEST_DATE_YEAR -> BigDecimal.valueOf(LocalDate.MIN.getYear());
             case LATEST_DATE_YEAR -> BigDecimal.valueOf(LocalDate.MAX.getYear());
         };

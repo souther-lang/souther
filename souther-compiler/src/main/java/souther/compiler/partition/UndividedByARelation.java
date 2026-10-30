@@ -86,7 +86,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.AdmissibleSet;
-import souther.compiler.values.CollectionExtents;
 import souther.compiler.values.StoppedReading;
 import souther.compiler.values.TextExtents;
 import souther.compiler.values.UnreadReason;
@@ -6222,7 +6221,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NumericDomain.Bounds run = shown == null ? null : region.wholeRunOf(taken);
         // As many as a container holds is where the language stops, which no run the region
         // answers is cut at, so a count shown that far is the run as it stands.
-        return run == null || shown >= CollectionExtents.MOST_ELEMENTS ? run
+        return run == null || shown >= EverySizeAContainerHas.mostHeld() ? run
                 : run.meet(new NumericDomain.Bounds(null, Endpoint.inclusive(Count.of(shown))));
     }
 

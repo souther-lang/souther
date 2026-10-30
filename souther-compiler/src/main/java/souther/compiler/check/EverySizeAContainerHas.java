@@ -1,8 +1,8 @@
 package souther.compiler.check;
 
+import souther.compiler.abort.GetsPast;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
-import souther.compiler.values.CollectionExtents;
 
 /**
  * How many elements a container of one type is shown to be had holding, from nought up.
@@ -80,7 +80,8 @@ public final class EverySizeAContainerHas {
                 : Math.min(mostHeld(), 1L << power);
     }
 
-    private static long mostHeld() {
-        return CollectionExtents.MOST_ELEMENTS;
+    /** How many elements a collection holds at most, which the language states once. */
+    public static long mostHeld() {
+        return GetsPast.MOST_ELEMENTS.longValueExact();
     }
 }
