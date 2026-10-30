@@ -739,11 +739,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              */
             private void tellHeld(Core node, WhereAnOperatorAnswers.WhereItsExactValueIsHeld held,
                                   LinearForm<NumericTerm> form, List<Integer> after) {
-                FormRange range = FormRange.of(form, ofTheInput);
                 UndividedByARelation.IntOperation operation =
                         new UndividedByARelation.IntOperation(form, held.least(), held.greatest(),
                                 after);
-                if ((range == null || !range.liesWithin(held.least(), held.greatest()))
+                if (!FormRange.liesWithin(form, ofTheInput, Map.of(), held.least(), held.greatest())
                         && !told.operations.contains(operation)) {
                     told.add(node, operation);
                 }
@@ -862,8 +861,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (!(where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held)) {
                     return false;
                 }
-                FormRange range = FormRange.of(form, stoppedAt.read(), stoppedAt.ranges());
-                if (range != null && range.liesWithin(held.least(), held.greatest())) {
+                if (FormRange.liesWithin(form, stoppedAt.read(), stoppedAt.ranges(), held.least(),
+                        held.greatest())) {
                     return true;
                 }
                 // The analysis that owns the stopped value answers for where a sum of the addends
@@ -1248,7 +1247,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> number)) {
                     return false;
                 }
-                FormRange before = FormRange.of(number.form(), stoppedAt.read(), stoppedAt.ranges());
+                FormRange before =
+                        FormRange.held(number.form(), stoppedAt.read(), stoppedAt.ranges());
                 ExactRatio least = before == null ? null : rounding.roundedFrom(before.least());
                 ExactRatio greatest = before == null ? null : rounding.roundedFrom(before.greatest());
                 if (least == null || greatest == null) {

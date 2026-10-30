@@ -55,21 +55,49 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
             low = atLeast;
             high = atMost;
         }
-        return new FormRange(low, high).within(form, read, standIns);
+        return new FormRange(low, high);
+    }
+
+    /**
+     * The range of {@code form} held to what the declarations say of it as a whole, or null where
+     * some place has no end to give ({@link #of}).
+     *
+     * <p>Asked of the declarations, which relate the places a form is over: the ends of the places
+     * added one by one say less than the declarations say of their sum, and a bound written in a
+     * clause of a record is seen only there.
+     */
+    static FormRange held(LinearForm<NumericTerm> form, InputReading read,
+                          Map<NumericTerm, FormRange> standIns) {
+        FormRange ends = of(form, read, standIns);
+        return ends == null ? null : ends.within(form, read, standIns);
+    }
+
+    /**
+     * Whether every number {@code form} comes to lies from {@code leastAllowed} to
+     * {@code greatestAllowed}: by the ends of its places where those show it, and by what the
+     * declarations say of the form as a whole where they do not. The declarations are asked only
+     * then, since asking them is the dearer question.
+     */
+    static boolean liesWithin(LinearForm<NumericTerm> form, InputReading read,
+                              Map<NumericTerm, FormRange> standIns, BigInteger leastAllowed,
+                              BigInteger greatestAllowed) {
+        FormRange ends = of(form, read, standIns);
+        return ends != null && (ends.liesWithin(leastAllowed, greatestAllowed)
+                || ends.within(form, read, standIns).liesWithin(leastAllowed, greatestAllowed));
     }
 
     /**
      * This, held to what the rules say of the form as a whole, where every atom of it is a place of
-     * the input. The ends of the places added one by one say less than the rules say of their sum
-     * whenever a rule relates the places: two amounts that together stay within a bound are
-     * together within it, and each alone is only within the bound.
+     * the input.
      */
     private FormRange within(LinearForm<NumericTerm> form, InputReading read,
                              Map<NumericTerm, FormRange> standIns) {
-        if (form.coefs().isEmpty() || form.coefs().keySet().stream().anyMatch(standIns::containsKey)) {
+        if (form.coefs().isEmpty()
+                || form.coefs().keySet().stream().anyMatch(standIns::containsKey)) {
             return this;
         }
-        NumericDomain.Bounds runs = read.quantities().runsBetween(form);        if (runs == null) {
+        NumericDomain.Bounds runs = read.quantities().runsBetween(form);
+        if (runs == null) {
             return this;
         }
         ExactRatio from = tighter(least, runs.min(), true);
