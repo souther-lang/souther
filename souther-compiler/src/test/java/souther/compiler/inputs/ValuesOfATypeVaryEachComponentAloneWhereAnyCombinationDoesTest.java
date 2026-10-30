@@ -127,24 +127,39 @@ class ValuesOfATypeVaryEachComponentAloneWhereAnyCombinationDoesTest {
         assertEquals(List.of(), ValuesOfAType.valuesLeftOut(nearest, every));
     }
 
-    /** A flag that is refused whatever stands beside it, among enough others to count through. */
-    record RefusedEverywhere(boolean a, boolean b, boolean c, boolean d, String never) {
+    /**
+     * A code of minus one that is refused whatever stands beside it, among enough flags to count
+     * through. Nought and one are taken, so the record is made whole when the search is let finish.
+     */
+    record RefusedEverywhere(boolean a, boolean b, boolean c, boolean d, int code) {
 
         RefusedEverywhere {
-            if (never != null) {
-                throw new IllegalArgumentException("only an absence");
+            if (code == -1) {
+                throw new IllegalArgumentException("minus one is never a code");
             }
         }
     }
 
-    /** A record whose search is not finished within the budget is an error, not an absence. */
+    /**
+     * A search not finished within its budget is an error that says so, and one let finish gives
+     * the absence it found. The error is told from the record's other refusal — a component varied
+     * alone in no two values — by the message, and the control is the same record finishing with
+     * room.
+     */
     @Test
     void aSearchOverTooManyCombinationsIsAnErrorAndNotAnAbsence() {
-        ValuesOfAType every = ValuesOfAType.everyCombination(3);
-
         AssertionError error = assertThrows(AssertionError.class,
-                () -> every.of(RefusedEverywhere.class));
-        assertTrue(error.getMessage().contains(RefusedEverywhere.class.getName()), error.getMessage());
+                () -> ValuesOfAType.everyCombination(3).of(RefusedEverywhere.class));
+        assertTrue(error.getMessage().contains("was not finished after 3 constructions"),
+                error.getMessage());
+        assertTrue(error.getMessage().contains(RefusedEverywhere.class.getName()),
+                error.getMessage());
+
+        List<Object> made = ValuesOfAType.everyCombination().of(RefusedEverywhere.class);
+        assertTrue(made.stream().noneMatch(each -> ((RefusedEverywhere) each).code() == -1),
+                "minus one is not made");
+        assertTrue(made.contains(new RefusedEverywhere(false, false, false, false, 1)),
+                "the record is made whole");
     }
 
     /** The same tie, in a record over a type argument. */

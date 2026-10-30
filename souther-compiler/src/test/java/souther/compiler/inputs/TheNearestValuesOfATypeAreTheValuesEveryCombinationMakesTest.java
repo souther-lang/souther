@@ -5,6 +5,7 @@ import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.observe.Figure;
 import souther.compiler.partition.ClassOfAPosition;
+import souther.compiler.partition.ReportedReason;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.values.StoppedReading;

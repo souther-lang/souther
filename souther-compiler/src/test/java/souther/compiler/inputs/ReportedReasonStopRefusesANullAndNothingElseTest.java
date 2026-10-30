@@ -40,6 +40,27 @@ class ReportedReasonStopRefusesANullAndNothingElseTest {
         }
     }
 
+    /**
+     * Each value a component is offered, the ones between the ends among them, beside the first
+     * values of the others: a refusal of one value of a component, which the ends do not reach.
+     */
+    @Test
+    void everyValueOfEveryComponentIsTakenBesideTheFirstValuesOfTheOthers() throws Exception {
+        ValuesOfAType values = new ValuesOfAType();
+        Object[] first = new Object[COMPONENTS.length];
+        for (int i = 0; i < first.length; i++) {
+            first[i] = values.of(COMPONENTS[i].getGenericType()).get(0);
+        }
+        for (int i = 0; i < first.length; i++) {
+            for (Object value : values.of(COMPONENTS[i].getGenericType())) {
+                Object[] arguments = first.clone();
+                arguments[i] = value;
+                assertInstanceOf(ReportedReason.Stop.class, construct(arguments),
+                        COMPONENTS[i].getName() + " = " + value);
+            }
+        }
+    }
+
     @Test
     void aNullInAnyComponentIsRefusedBesideAnyCombinationOfTheEnds() throws Exception {
         for (Object[] arguments : combinationsOfTheEnds()) {
