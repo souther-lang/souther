@@ -40,7 +40,7 @@ class AProductBesideAFactorOfItsOwnIsTheOneProductTest {
         for (long weighed : new long[] {1, -1, 3}) {
             for (long besideWeighed : new long[] {1, -1, -2}) {
                 LinearForm<Quantity> together = FactoredProducts.of(
-                        of(product, weighed, factor, besideWeighed), null);
+                        of(product, weighed, factor, besideWeighed));
                 assertEquals(1, together.coefs().size(), weighed + " and " + besideWeighed
                         + " come to " + together);
                 assertEquals(DecisionAtom.OfTheInput.class,
@@ -53,7 +53,7 @@ class AProductBesideAFactorOfItsOwnIsTheOneProductTest {
     void aProductBesideANumberItHasNoFactorOfIsLeftAsItIsWrittenBeside() {
         LinearForm<Quantity> form = of(new Quantity.ProductOfTwo(A, B), 1,
                 new DecisionAtom.OfTheInput(C), -1);
-        LinearForm<Quantity> together = FactoredProducts.of(form, null);
+        LinearForm<Quantity> together = FactoredProducts.of(form);
         assertEquals(2, together.coefs().size(), together::toString);
         assertEquals(true, together.coefs().containsKey(new DecisionAtom.OfTheInput(C)),
                 together::toString);
@@ -63,6 +63,6 @@ class AProductBesideAFactorOfItsOwnIsTheOneProductTest {
     void aFormWithNoProductInItIsTheSameForm() {
         LinearForm<Quantity> form = of(new DecisionAtom.OfTheInput(A), 1,
                 new DecisionAtom.OfTheInput(B), -1);
-        assertEquals(form, FactoredProducts.of(form, null));
+        assertEquals(form, FactoredProducts.of(form));
     }
 }

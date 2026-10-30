@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Quantity;
@@ -33,13 +32,13 @@ final class FactoredProducts {
      * {@code form} with every product in it that stands beside a factor of its own brought to the
      * one product; the same form where there is none.
      */
-    static LinearForm<Quantity> of(LinearForm<Quantity> form, InputReading read) {
+    static LinearForm<Quantity> of(LinearForm<Quantity> form) {
         if (form.coefs().keySet().stream().noneMatch(FactoredProducts::isAProduct)) {
             return form;
         }
         LinearForm<Quantity> now = asNumbers(form);
         for (boolean changed = true; changed; ) {
-            LinearForm<Quantity> next = once(now, read);
+            LinearForm<Quantity> next = once(now);
             changed = next != null;
             now = changed ? next : now;
         }
@@ -81,7 +80,7 @@ final class FactoredProducts {
     }
 
     /** One product brought together with the factor beside it, or null where there is none. */
-    private static LinearForm<Quantity> once(LinearForm<Quantity> form, InputReading read) {
+    private static LinearForm<Quantity> once(LinearForm<Quantity> form) {
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             if (!(each.getKey() instanceof DecisionAtom.OfTheInput(
                     NumericTerm.ProductOf product))) {
@@ -98,7 +97,7 @@ final class FactoredProducts {
                     continue;
                 }
                 LinearForm<Quantity> together = together(form, each.getKey(), each.getValue(),
-                        alone, product.factors().get(1 - at), beside, weighed, read);
+                        alone, product.factors().get(1 - at), beside, weighed);
                 if (together != null) {
                     return together;
                 }
@@ -123,7 +122,7 @@ final class FactoredProducts {
     private static LinearForm<Quantity> together(LinearForm<Quantity> form, Quantity made,
                                                  ExactRatio ofIt, NumericTerm alone,
                                                  LinearForm<NumericTerm> other, Quantity beside,
-                                                 ExactRatio weighed, InputReading read) {
+                                                 ExactRatio weighed) {
         Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
         for (Map.Entry<NumericTerm, ExactRatio> each : other.coefs().entrySet()) {
             ExactRatio scaled = ofIt.times(each.getValue()).orNull();
@@ -133,13 +132,12 @@ final class FactoredProducts {
             coefs.put(each.getKey(), scaled);
         }
         ExactRatio constant = ofIt.times(other.constant()).flatMap(weighed::plus).orNull();
-        NumericTerm.ProductOf.Signed written = constant == null ? null
+        NumericTerm.ProductOf.Signed product = constant == null ? null
                 : NumericTerm.ProductOf.signed(LinearForm.atom(alone),
                         new LinearForm<>(constant, coefs));
-        if (written == null) {
+        if (product == null) {
             return null;
         }
-        NumericTerm.ProductOf.Signed product = ProductDeclarations.admitted(written, read);
         Map<Quantity, ExactRatio> rest = new LinkedHashMap<>(form.coefs());
         rest.remove(made);
         rest.remove(beside);

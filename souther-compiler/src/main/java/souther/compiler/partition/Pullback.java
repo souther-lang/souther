@@ -6918,16 +6918,17 @@ final class Pullback {
     }
 
     /**
-     * The same, holding how each count it names was read: the ones of {@code read} it still names —
-     * a count written on both sides comes to nought and names none.
+     * The same, holding how each count it names was read: the ones of {@code counted} it still
+     * names — a count written on both sides comes to nought and names none.
      */
     private Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
                                  Rel states,
-                                 Map<Quantity, Derivation.AComparisonRead.Counted> read,
+                                 Map<Quantity, Derivation.AComparisonRead.Counted> counted,
                                  Derivation.AComparisonRead.Facing written) {
         // The relation between the numbers: a product beside a factor of its own is the one
-        // product, which numbers apart are the factors of.
-        form = FactoredProducts.of(form, this.read);
+        // product, which numbers apart are the factors of, and each product stands where the
+        // declarations of the input admit.
+        form = ProductDeclarations.admittedIn(FactoredProducts.of(form), read);
         Relation.OneWay<Quantity> one = Relation.OneWay.of(form, states);
         // Turning the form to face the one way turns it against the written sides as well.
         Derivation.AComparisonRead.Facing facing = switch (written) {
@@ -6939,7 +6940,7 @@ final class Pullback {
         };
         Relation.Affine relation = new Relation.Affine(one.form(), one.proposition());
         List<Derivation.AComparisonRead.Counted> named = new ArrayList<>();
-        read.forEach((count, how) -> {
+        counted.forEach((count, how) -> {
             if (one.form().coefs().containsKey(count)) {
                 named.add(how);
             }

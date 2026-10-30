@@ -4,7 +4,14 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * What the declarations leave the numbers of a product, for choosing where the number beside the
@@ -23,13 +30,31 @@ final class ProductDeclarations implements NumericTerm.ProductOf.Declared {
         this.read = read;
     }
 
-    /** {@code product}, standing where the declarations of {@code read} admit — as it is where
-     *  there is no reading to ask. */
+    /** {@code product}, standing where the declarations of {@code read} admit. */
     static NumericTerm.ProductOf.Signed admitted(NumericTerm.ProductOf.Signed product,
                                                  InputReading read) {
-        return read == null ? product : new NumericTerm.ProductOf.Signed(product.product()
+        return new NumericTerm.ProductOf.Signed(product.product()
                 .standingWhereTheDeclarationsAdmit(new ProductDeclarations(read)),
                 product.sign());
+    }
+
+    /** {@code form} with every product in it standing where the declarations of {@code read}
+     *  admit; the same form where there is none. */
+    static LinearForm<Quantity> admittedIn(LinearForm<Quantity> form, InputReading read) {
+        if (form.coefs().keySet().stream().noneMatch(atom ->
+                atom instanceof DecisionAtom.OfTheInput(NumericTerm.ProductOf _))) {
+            return form;
+        }
+        ProductDeclarations declared = new ProductDeclarations(read);
+        Map<Quantity, ExactRatio> out = new LinkedHashMap<>();
+        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+            Quantity atom = each.getKey() instanceof DecisionAtom.OfTheInput(
+                    NumericTerm.ProductOf product)
+                    ? new DecisionAtom.OfTheInput(product.standingWhereTheDeclarationsAdmit(declared))
+                    : each.getKey();
+            out.merge(atom, each.getValue(), (before, now) -> before.plus(now).orNull());
+        }
+        return new LinearForm<>(form.constant(), out);
     }
 
     @Override

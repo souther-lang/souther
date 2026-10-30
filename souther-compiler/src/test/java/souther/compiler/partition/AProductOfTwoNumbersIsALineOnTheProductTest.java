@@ -499,6 +499,29 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
     }
 
     /**
+     * A product with arithmetic written around it is read, the multiplication still told as the
+     * operation it is: a factor weighed, negated or moved, and a product weighed, moved or
+     * negated, each draw a line on the product at the level the arithmetic moves it to.
+     */
+    @Test
+    void aProductWithArithmeticAroundItIsReadAtTheLevelTheArithmeticMovesItTo() {
+        Map<String, String> level = new LinkedHashMap<>();
+        level.put("2 * price * quantity >= 1000", "1000");
+        level.put("(0 - price) * quantity >= 1000", "-1000");
+        level.put("(price + 1) * quantity >= 1000", "1000");
+        level.put("price * quantity * 2 >= 1000", "1000");
+        level.put("price * quantity - 5 >= 995", "1000");
+        level.put("0 - price * quantity <= 0 - 1000", "1000");
+        for (Map.Entry<String, String> each : level.entrySet()) {
+            Compilation compilation = compiled("", PRICE_AND_QUANTITY, each.getKey());
+            assertEquals(List.of(), unreadReasonsOf(measured(compilation)), each.getKey());
+            assertTrue(linesOf(compilation).stream().anyMatch(line -> line.axis().contains("*")
+                            && line.value().equals(each.getValue())),
+                    each.getKey() + ": " + describe(linesOf(compilation)));
+        }
+    }
+
+    /**
      * Factors a rule of the value they sit in relates are tied, and what one reaches beside the
      * other is not shown: the line is drawn, and neither factor is divided or shown undivided.
      * The rule relating them is a relation of its own, and says so.
