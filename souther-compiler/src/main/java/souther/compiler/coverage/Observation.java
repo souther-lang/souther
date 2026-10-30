@@ -39,15 +39,24 @@ import java.util.Set;
  *                  condition ({@link RecordedVisit#MOST})
  * @param walks     the numbers of the walks the run entered
  * @param walksOn   the numbers of the walks the run took a second element of, each one it entered
+ * @param compared  what the sides of its comparisons of whole numbers came to, on the visits kept
  */
 public record Observation(NumberingIdentity numbering, Set<Integer> arms,
                           Set<RecordedConditionOutcome> outcomes, Set<RecordedVisit> visits,
-                          Set<Integer> walks, Set<Integer> walksOn) {
+                          Set<Integer> walks, Set<Integer> walksOn,
+                          Set<RecordedComparison> compared) {
 
     /** A run that entered no walk. */
     public Observation(NumberingIdentity numbering, Set<Integer> arms,
                        Set<RecordedConditionOutcome> outcomes, Set<RecordedVisit> visits) {
         this(numbering, arms, outcomes, visits, Set.of(), Set.of());
+    }
+
+    /** A run that handed over no side of a comparison. */
+    public Observation(NumberingIdentity numbering, Set<Integer> arms,
+                       Set<RecordedConditionOutcome> outcomes, Set<RecordedVisit> visits,
+                       Set<Integer> walks, Set<Integer> walksOn) {
+        this(numbering, arms, outcomes, visits, walks, walksOn, Set.of());
     }
 
     public Observation {
@@ -60,6 +69,7 @@ public record Observation(NumberingIdentity numbering, Set<Integer> arms,
         visits = visits == null ? Set.of() : Set.copyOf(visits);
         walks = walks == null ? Set.of() : Set.copyOf(walks);
         walksOn = walksOn == null ? Set.of() : Set.copyOf(walksOn);
+        compared = compared == null ? Set.of() : Set.copyOf(compared);
         if (!walks.containsAll(walksOn)) {
             throw new IllegalArgumentException("a walk was taken past its first element and not"
                     + " entered: " + walksOn + " of " + walks);
@@ -83,6 +93,17 @@ public record Observation(NumberingIdentity numbering, Set<Integer> arms,
         }
         for (int raw : walks) {
             requireIssuedTo(numbering, raw, SiteAddress.Walk.class, "a walk");
+        }
+        // The sides of a comparison belong to a visit the way it came out was recorded as, so a
+        // side with no such visit is a hand-over the recording made without the visit it is of.
+        for (RecordedComparison sides : compared) {
+            requireIssuedTo(numbering, sides.at(), SiteAddress.ConditionOutcome.class,
+                    "a comparison");
+            if (!visits.contains(new RecordedVisit(sides.at(), sides.nth(), true))
+                    && !visits.contains(new RecordedVisit(sides.at(), sides.nth(), false))) {
+                throw new IllegalArgumentException("the sides of visit " + sides.nth() + " to "
+                        + sides.at() + " were handed over, and that visit was not recorded");
+            }
         }
     }
 

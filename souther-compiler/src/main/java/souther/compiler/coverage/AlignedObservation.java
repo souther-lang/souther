@@ -1,5 +1,7 @@
 package souther.compiler.coverage;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -43,6 +45,8 @@ public final class AlignedObservation {
 
     private final Set<WalkProbe> walksOn;
 
+    private final Set<SeenComparison> compared;
+
     AlignedObservation(NumberingIdentity numbering, Set<ArmProbe> arms,
                        Set<SeenConditionOutcome> outcomes, Set<SeenVisit> visits) {
         this(numbering, arms, outcomes, visits, Set.of(), Set.of());
@@ -51,6 +55,13 @@ public final class AlignedObservation {
     AlignedObservation(NumberingIdentity numbering, Set<ArmProbe> arms,
                        Set<SeenConditionOutcome> outcomes, Set<SeenVisit> visits,
                        Set<WalkProbe> walks, Set<WalkProbe> walksOn) {
+        this(numbering, arms, outcomes, visits, walks, walksOn, Set.of());
+    }
+
+    AlignedObservation(NumberingIdentity numbering, Set<ArmProbe> arms,
+                       Set<SeenConditionOutcome> outcomes, Set<SeenVisit> visits,
+                       Set<WalkProbe> walks, Set<WalkProbe> walksOn,
+                       Set<SeenComparison> compared) {
         if (numbering == null) {
             throw new IllegalArgumentException(
                     "a run read as places is read as places of some numbering");
@@ -61,6 +72,8 @@ public final class AlignedObservation {
         this.visits = Set.copyOf(visits);
         this.walks = Set.copyOf(walks);
         this.walksOn = Set.copyOf(walksOn);
+        this.compared = Set.copyOf(compared);
+        this.compared.forEach(each -> requireOurs(each.at().numbering(), each));
         this.arms.forEach(each -> requireOurs(each.numbering(), each));
         this.outcomes.forEach(each -> requireOurs(each.at().numbering(), each));
         this.visits.forEach(each -> requireOurs(each.at().numbering(), each));
@@ -135,6 +148,16 @@ public final class AlignedObservation {
         return visits.contains(new SeenVisit(at, nth, held));
     }
 
+    /**
+     * What the sides of the comparison at {@code at} came to on each visit kept, in the order of
+     * the visits — none where it is no comparison of whole numbers, or the run did not reach it.
+     */
+    public List<SeenComparison> comparedAt(ConditionOutcomeSite at) {
+        requireOurs(at.numbering(), at);
+        return compared.stream().filter(each -> each.at().equals(at))
+                .sorted(Comparator.comparingInt(SeenComparison::nth)).toList();
+    }
+
     /** Whether the run reached {@code at} at all, whichever way the condition there came out. */
     public boolean reached(ConditionOutcomeSite at) {
         return saw(at, true) || saw(at, false);
@@ -158,12 +181,13 @@ public final class AlignedObservation {
                         && outcomes.equals(that.outcomes)
                         && visits.equals(that.visits)
                         && walks.equals(that.walks)
-                        && walksOn.equals(that.walksOn));
+                        && walksOn.equals(that.walksOn)
+                        && compared.equals(that.compared));
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(numbering, arms, outcomes, visits, walks, walksOn);
+        return Objects.hash(numbering, arms, outcomes, visits, walks, walksOn, compared);
     }
 
     @Override
