@@ -490,6 +490,16 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks whether the stopped expression is a quotient and where the operator's"
                             + " own account says it answers, so that its operands are told with"
                             + " the rest"),
+            new Held("souther.compiler.partition.AffineReading.1.onlyAddsTheElement",
+                    "asks whether a walk's step is the answer so far and the element added, as"
+                            + " it is written: an operation not written is one no run can stop at"),
+            new Held("souther.compiler.partition.AffineReading.1.multipliesFieldsOf",
+                    "asks whether an expression is fields of the one element multiplied and"
+                            + " nothing else, so that the product is worked out as it is written"),
+            new Held("souther.compiler.inputs.InputNumber.lookedUpBy",
+                    "asks whether a walk's step adds the entry's value times the lookup of the"
+                            + " entry's key in another map, with a written nought where it holds"
+                            + " none, as it is written"),
             new Held("souther.compiler.partition.AffineReading.workingOfEvaluating",
                     "asks whether what a run evaluates is a comparison, whose two sides are"
                             + " worked out whichever way it comes out"),

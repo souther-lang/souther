@@ -97,6 +97,7 @@ class ANumberMovedWhereItStandsIsTheNumberItIsTest {
                         ValueName.Stdlib.operation("List", "sum"), XS, byPosition,
                         Type.Prim.INT, TraversalDirection.FORWARD, NewtypeInners.NONE, SYMBOLS))
                         .source(),
+                new RunSource.JoinedOccurrences(ELEMENT, TermPath.of("ys").element()),
                 RunSource.overTheNodesBelow(TermPath.of("n"), List.of("kids"),
                         List.of("xs")));
     }
