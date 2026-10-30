@@ -23,6 +23,7 @@ import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
+import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
@@ -45,7 +46,9 @@ import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.TypeView;
 import souther.compiler.check.WhatARunMayEndFor;
+import souther.compiler.check.WholeRounding;
 import souther.compiler.check.WholeUnitsBetween;
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
@@ -1197,18 +1200,145 @@ final class Pullback {
             case Core.Binary binary when binary.op() == BinOp.ADD || binary.op() == BinOp.SUB
                     || binary.op() == BinOp.MUL -> AffineForms.outcome(e, reads, quantities());
             case Core.Neg _ -> AffineForms.outcome(e, reads, quantities());
+            // A newtype's construction over a number the arithmetic composes is told with it, and
+            // one over a rounding of such a number as the rounding held to its run; any other is a
+            // value of its own, whose parts are worked out as any node's are.
+            case Core.Construct construct -> {
+                if (!(AffineForms.outcome(e, reads, quantities())
+                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>)) {
+                    madeOfARounding(construct, reads);
+                    operatorsInEveryPartOf(e, reads, apart, ofTheRelation);
+                }
+            }
+            case Core.PreservedCall call -> {
+                oneOperationOfTheLibrary(call, reads);
+                operatorsInEveryPartOf(e, reads, apart, ofTheRelation);
+            }
             case Core.LetIn li -> {
                 if (li.binder() == null || !ofTheRelation.contains(li.binder().binding())) {
                     operatorsIn(li.value(), reads, apart, ofTheRelation);
                 }
                 operatorsIn(li.body(), quantities().inside(li, reads), apart, ofTheRelation);
             }
-            default -> {
-                for (Evaluated.Step step : Evaluated.inOrder(e)) {
-                    if (step instanceof Evaluated.Step.Always(Core part)) {
-                        operatorsIn(part, reads, apart, ofTheRelation);
-                    }
-                }
+            case Core.Block block -> operatorsInEachApplicationOf(block, reads, apart,
+                    ofTheRelation);
+            default -> operatorsInEveryPartOf(e, reads, apart, ofTheRelation);
+        }
+    }
+
+    /**
+     * {@link #operatorsIn} the body of {@code block} on each application a run makes of it, with
+     * its names as that application hands them ({@link #applicationsOf}): {@code x -> x + 1}
+     * handed {@code [a, b]} works out {@code a + 1} and {@code b + 1}, which answer at different
+     * rows.
+     *
+     * <p>Only where every run applies it to every element written out: an application a filter's
+     * truth or an operation that stops early decides is made on some runs only, and its operators
+     * are left where nothing is said of them, as an arm's are. An operator of the body is told of
+     * for the body only where it was told of on every application ({@link Operators#toldOnEach}):
+     * one an application read no form of is left unsaid at all of them.
+     */
+    private void operatorsInEachApplicationOf(Core.Block block, InputReads reads, Core.Read apart,
+                                              Set<BindingId> ofTheRelation) {
+        if (!(applicationsOf(block, reads, read)
+                instanceof InputReads.Applications.Each(var each, var how))
+                || how != HowAClosureIsApplied.TO_EVERY_ELEMENT
+                || each.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
+            return;
+        }
+        InputReads.Applications.Made around = operated.application;
+        try {
+            for (InputReads.Applications.Made one : each) {
+                operated.application = one;
+                operatorsIn(block.body(), one.reads(), apart, ofTheRelation);
+            }
+        } finally {
+            operated.application = around;
+        }
+        operated.toldOnEach(each);
+    }
+
+    /**
+     * {@code call}, an operation of the library answering an {@code Int}, told as the one
+     * operation it is where what stops a run at it is a number the arithmetic composes: a total of
+     * a list written out, which the library holds to the type only once it is added up
+     * ({@link GetsPast.WhereTheTotalFits}), and a number rounded to a whole one, held to the type
+     * once it is rounded. The operations of what it is handed are told by the walk into its parts.
+     */
+    private void oneOperationOfTheLibrary(Core.PreservedCall call, InputReads reads) {
+        if (!Type.INT.equals(call.type())) {
+            return;
+        }
+        if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
+                instanceof GetsPast.WhereTheTotalFits) {
+            LinearForm<Quantity> total = totalOfWrittenOut(call, reads);
+            if (total != null) {
+                operated.tellOverTheInput(call, total,
+                        new Answers.AsAnOperator(WhereAnOperatorAnswers.WHAT_AN_INT_HOLDS));
+            }
+            return;
+        }
+        Rounding rounding = roundingOf(call, reads);
+        if (rounding != null) {
+            operated.tellOverTheInput(call, rounding.before(),
+                    new Answers.Rounded(rounding.way(), WhereAnOperatorAnswers.WHAT_AN_INT_HOLDS));
+        }
+    }
+
+    /**
+     * {@code construct}, where it makes a newtype over a number rounded to a whole one, told as
+     * the rounding held to the run the type's clauses leave
+     * ({@link DeclaredBounds#whereMakingSucceeds}): {@code Yen(Rational.toInt(DOWN, x / 3))}
+     * answers where {@code x / 3} rounds to a number at least nought. Untold where the clauses
+     * leave anything else.
+     */
+    private void madeOfARounding(Core.Construct construct, InputReads reads) {
+        if (construct.values().size() != 1) {
+            return;
+        }
+        TypeView made = TypeView.asWritten(Type.ref(construct.typeName()), read.rules().symbols(),
+                read.rules().declarations().kinds(), read.rules().declarations().sums());
+        Rounding rounding = made.isWrapped()
+                ? roundingOf(construct.values().getFirst().value(), reads) : null;
+        if (rounding == null) {
+            return;
+        }
+        if (ClausesInOrder.at(construct, read.rules()).governsNothing()) {
+            operated.tell(construct, rounding.before(),
+                    new Answers.AsAnOperator(new WhereAnOperatorAnswers.Everywhere()));
+            return;
+        }
+        WhereAnOperatorAnswers.WhereItsExactValueIsHeld run =
+                DeclaredBounds.whereMakingSucceeds(construct, made, read.ruleReading());
+        if (run != null) {
+            operated.tellOverTheInput(construct, rounding.before(),
+                    new Answers.Rounded(rounding.way(), run));
+        }
+    }
+
+    /** A number rounded to a whole one, the form of the number before rounding and the way. */
+    private record Rounding(LinearForm<Quantity> before, WholeRounding way) {}
+
+    /**
+     * {@code e} as a rounding to a whole number with a policy written out
+     * ({@link RoundedToAWholeNumber#written}) of a number the arithmetic composes, or null where
+     * it is none.
+     */
+    private Rounding roundingOf(Core e, InputReads reads) {
+        RoundedToAWholeNumber.Written written = RoundedToAWholeNumber.written(e,
+                policy -> WrittenOutElements.reading(read.rules().symbols(),
+                        read.rules().newtypes()).standing(policy, reads).value());
+        return written != null && AffineForms.outcome(written.value(), reads, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var before)
+                ? new Rounding(before, written.way()) : null;
+    }
+
+    /** {@link #operatorsIn} each part of {@code e} every run that works {@code e} out works out. */
+    private void operatorsInEveryPartOf(Core e, InputReads reads, Core.Read apart,
+                                        Set<BindingId> ofTheRelation) {
+        for (Evaluated.Step step : Evaluated.inOrder(e)) {
+            if (step instanceof Evaluated.Step.Always(Core part)) {
+                operatorsIn(part, reads, apart, ofTheRelation);
             }
         }
     }
@@ -6389,15 +6519,24 @@ final class Pullback {
     }
 
     /**
-     * The operators a reading was told of, in the order it was told, each node once.
+     * The operators a reading was told of, in the order it was told, each node once for each
+     * application of the closures it is written in.
      *
      * <p>Told apart by which node each is and not by the form it came to. An {@code Int} sum and a
      * {@code Decimal} sum over the same numbers come to one form and answer in different places,
-     * and the form alone would keep whichever came first.
+     * and the form alone would keep whichever came first. A node in the body of a closure is one
+     * operator on each application, worked out over what that application is handed, so the node
+     * alone would keep only the first.
      */
     private static final class Operators {
         private final List<Operated> told = new ArrayList<>();
+        /** The nodes told of wherever a run works them out: on every application of the closures
+         *  around them, where there are any. */
         private final Set<Core> nodes = Collections.newSetFromMap(new IdentityHashMap<>());
+        /** For a node inside a closure, the applications it was told of on. */
+        private final Map<Core, Set<InputReads.Applications.Made>> toldOn = new IdentityHashMap<>();
+        /** The application being read, or null outside every closure. */
+        private InputReads.Applications.Made application;
         private final List<Set<TermPath>> unsaidGroups = new ArrayList<>();
         private Set<TermPath> unsaidAt = new LinkedHashSet<>();
         private boolean unsaidElsewhere;
@@ -6410,10 +6549,46 @@ final class Pullback {
             unsaidGroups.add(unsaidAt);
         }
 
-        void tell(Core operation, LinearForm<Quantity> form) {
-            if (nodes.add(operation)) {
-                told.add(new Operated(operation, form));
+        void tell(Core operation, LinearForm<Quantity> form, Answers where) {
+            boolean first = application == null ? nodes.add(operation)
+                    : toldOn.computeIfAbsent(operation,
+                            _ -> Collections.newSetFromMap(new IdentityHashMap<>()))
+                            .add(application);
+            if (first) {
+                told.add(new Operated(operation, form, where));
             }
+        }
+
+        /**
+         * {@code operation} told as {@link #tell} does where {@code form} is over a number of the
+         * input, and left untold where it is a number the same on every run: a total or a
+         * rounding of numbers written out is past what it answers on every run or on none, which
+         * no line on the input says, and what may stop a run at it is asked of its owner.
+         */
+        void tellOverTheInput(Core operation, LinearForm<Quantity> form, Answers where) {
+            if (!form.coefs().isEmpty()) {
+                tell(operation, form, where);
+            }
+        }
+
+        /**
+         * That {@code each}, the applications of one closure, were read: a node of its body told
+         * of on every one of them is told of on the application around them, or wherever a run
+         * works it out where there is none.
+         */
+        void toldOnEach(List<InputReads.Applications.Made> each) {
+            Set<InputReads.Applications.Made> all = Collections.newSetFromMap(
+                    new IdentityHashMap<>());
+            all.addAll(each);
+            toldOn.forEach((node, on) -> {
+                if (on.containsAll(all)) {
+                    if (application == null) {
+                        nodes.add(node);
+                    } else {
+                        on.add(application);
+                    }
+                }
+            });
         }
 
         /** What the next operator not said of may stop a run on is one group of places: it ties
@@ -6576,8 +6751,27 @@ final class Pullback {
         }
     }
 
-    /** One operator a reading was told of, with the form it came to there. */
-    private record Operated(Core operation, LinearForm<Quantity> form) {}
+    /** One operator a reading was told of, with the form it came to there and where it answers,
+     *  which the reading that met it says once. */
+    private record Operated(Core operation, LinearForm<Quantity> form, Answers where) {}
+
+    /**
+     * Where an operator a reading was told of answers, over the form it was told with.
+     *
+     * <p>Either as the language says an operator does, with the form the number it comes to, or
+     * where a number rounded to a whole one lies in a run, with the form the number before
+     * rounding: a rounding past the ends of an {@code Int}, and the making of a value whose
+     * clauses leave a run, stop a run at the rounded number, which is no form of anything.
+     */
+    private sealed interface Answers {
+
+        /** As {@code where} says, of the number the operator comes to. */
+        record AsAnOperator(WhereAnOperatorAnswers where) implements Answers {}
+
+        /** Where the number rounded {@code way} lies in {@code run}. */
+        record Rounded(WholeRounding way, WhereAnOperatorAnswers.WhereItsExactValueIsHeld run)
+                implements Answers {}
+    }
 
     /**
      * Where each of {@code operated} answers, as the language says it does
@@ -6588,48 +6782,62 @@ final class Pullback {
      * <p>Only what is said over these numbers. A form with no number of the input in it answers
      * wherever it answers at all, and an operator whose region is not said is left where nothing
      * here says it.
+     *
+     * <p>A rounding held to a run answers where the number before rounding stands as the way of
+     * rounding puts the ends of the run ({@link RoundedToAWholeNumber#heldBetween}).
      */
     private List<Derivation> whereEachOperatorAnswers(Operators operated) {
         List<Derivation> out = new ArrayList<>();
         for (Operated each : operated.told) {
             LinearForm<Quantity> form = each.form();
-            Core operation = each.operation();
-            WhereAnOperatorAnswers where = switch (operation) {
-                case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
-                        binary.type(), List.of(binary.left().type(), binary.right().type()));
-                case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
-                default -> throw new IllegalStateException(
-                        "the walk tells of an operator and nothing else: " + operation);
+            ConstantComparison held = switch (each.where()) {
+                case Answers.AsAnOperator(WhereAnOperatorAnswers.Everywhere _) ->
+                        new ConstantComparison.Settled(true);
+                case Answers.AsAnOperator(
+                        WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest)) ->
+                        ConstantComparison.both(
+                                new ConstantComparison.Against(Rel.LE, ExactRatio.of(greatest)),
+                                new ConstantComparison.Against(Rel.GE, ExactRatio.of(least)));
+                case Answers.AsAnOperator _ -> null;
+                case Answers.Rounded(var way, var run) ->
+                        RoundedToAWholeNumber.heldBetween(way, run.least(), run.greatest());
             };
             // A count is read with how it was read, which an operator's form does not carry, so a
             // form naming one says nothing of where the operator answers here.
-            if (form.coefs().isEmpty() || where instanceof WhereAnOperatorAnswers.Everywhere) {
+            if (form.coefs().isEmpty()
+                    || (held instanceof ConstantComparison.Settled settled && settled.holds())) {
                 continue;
             }
-            if (!(where instanceof
-                    WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest))
-                    || form.coefs().keySet().stream().anyMatch(quantity ->
-                            quantity instanceof Quantity.HowManyMeet
-                                    || quantity instanceof Quantity.HowManyDifferentMeet)) {
-                operated.beginGroup();
-                operated.leaveUnsaid(form.coefs().keySet(), null);
-                continue;
-            }
-            if (form.minus(LinearForm.constant(ExactRatio.of(greatest)))
-                    instanceof ExactAnswer.Held<LinearForm<Quantity>>(var above)
-                    && form.minus(LinearForm.constant(ExactRatio.of(least)))
-                    instanceof ExactAnswer.Held<LinearForm<Quantity>>(var below)) {
-                out.add(new Derivation.Joined(ConditionJoin.BOTH,
-                        aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, above, Rel.LE,
-                                Derivation.AComparisonRead.Facing.NOTHING_WRITTEN),
-                        aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, below, Rel.GE,
-                                Derivation.AComparisonRead.Facing.NOTHING_WRITTEN)));
+            Derivation answers = held == null || form.coefs().keySet().stream().anyMatch(quantity ->
+                    quantity instanceof Quantity.HowManyMeet
+                            || quantity instanceof Quantity.HowManyDifferentMeet)
+                    ? null : whereItStands(form, held);
+            if (answers != null) {
+                out.add(answers);
             } else {
                 operated.beginGroup();
                 operated.leaveUnsaid(form.coefs().keySet(), null);
             }
         }
         return out;
+    }
+
+    /** {@code form} standing as {@code held} says, over the quantities it is a form of — or null
+     *  where a line of it is past what the exact arithmetic holds, or it holds nowhere. */
+    private Derivation whereItStands(LinearForm<Quantity> form, ConstantComparison held) {
+        return switch (held) {
+            case ConstantComparison.Against(Rel rel, ExactRatio against) ->
+                    form.minus(LinearForm.constant(against))
+                            instanceof ExactAnswer.Held<LinearForm<Quantity>>(var line)
+                            ? aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, line, rel,
+                                    Derivation.AComparisonRead.Facing.NOTHING_WRITTEN)
+                            : null;
+            case ConstantComparison.Both(var first, var second) -> joined(ConditionJoin.BOTH,
+                    whereItStands(form, first), whereItStands(form, second));
+            case ConstantComparison.Either(var first, var second) -> joined(ConditionJoin.EITHER,
+                    whereItStands(form, first), whereItStands(form, second));
+            case ConstantComparison.Settled _ -> null;
+        };
     }
 
     /**
@@ -8952,7 +9160,33 @@ final class Pullback {
             @Override
             public void composed(Core operation, LinearForm<Quantity> form) {
                 if (operated != null) {
-                    operated.tell(operation, form);
+                    operated.tell(operation, form,
+                            new Answers.AsAnOperator(AffineForms.whereItAnswers(operation)));
+                }
+            }
+
+            /**
+             * A newtype's construction, told as the operation it is: it answers where the number
+             * it wraps is in the run its clauses leave, as the reading of a relation tells it
+             * ({@link DeclaredBounds#whereMakingSucceeds}), and everywhere where no clause is
+             * checked. Where they leave anything else it is not told, and is left where nothing
+             * is said of it.
+             */
+            @Override
+            public void constructed(Core.Construct construct, TypeView type,
+                                    LinearForm<Quantity> value) {
+                if (operated == null) {
+                    return;
+                }
+                if (ClausesInOrder.at(construct, read.rules()).governsNothing()) {
+                    operated.tell(construct, value, new Answers.AsAnOperator(
+                            new WhereAnOperatorAnswers.Everywhere()));
+                    return;
+                }
+                WhereAnOperatorAnswers.WhereItsExactValueIsHeld where =
+                        DeclaredBounds.whereMakingSucceeds(construct, type, read.ruleReading());
+                if (where != null) {
+                    operated.tellOverTheInput(construct, value, new Answers.AsAnOperator(where));
                 }
             }
         };

@@ -231,6 +231,18 @@ public final class RoundedToAWholeNumber {
     }
 
     /**
+     * What the number before rounding stands to exactly where its rounding by {@code way} lies
+     * from {@code least} to {@code most}: where a run gets past a rounding, or the making of a
+     * value around it, that stops it outside them.
+     */
+    public static ConstantComparison heldBetween(WholeRounding way, BigInteger least,
+                                                 BigInteger most) {
+        return ConstantComparison.both(
+                ConstantComparison.ofAWholeNumber(Rel.GE, least, way::atLeast),
+                ConstantComparison.ofAWholeNumber(Rel.LE, most, way::atLeast));
+    }
+
+    /**
      * What the number before rounding stands to where its rounding by {@code way} stands
      * {@code rel} to {@code k}, for a rounded number from {@code least} to {@code most}.
      */

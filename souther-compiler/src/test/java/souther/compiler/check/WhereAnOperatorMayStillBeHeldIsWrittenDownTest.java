@@ -180,9 +180,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.PathCompletion.workedOut",
                     "which side of a connective inside an operand a run works out whenever the part"
                             + " is: the left, and not the right"),
-            new Held("souther.compiler.partition.Pullback.whereEachOperatorAnswers",
-                    "hands each operator a closure's body was worked out through to"
-                            + " WhereAnOperatorAnswers, for where an application of it answers"),
             new Held("souther.compiler.partition.Pullback.operatorsIn",
                     "which operators a body works out, which a sum, a difference and a product"
                             + " are and a comparison is not"),
@@ -463,9 +460,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks the operator's own account whether a quotient it composed can still"
                             + " stop a run, so that a reading says it did not tell of every"
                             + " operation"),
-            new Held("souther.compiler.partition.AffineReading.1.composed",
-                    "asks the operator's own account where an operation a comparison works out"
-                            + " answers, so that a row is asked to get past it"),
+            new Held("souther.compiler.check.AffineForms.whereItAnswers",
+                    "asks the operator's own account where an operation a walk composed answers,"
+                            + " for every reading that asks a row to get past what it is told"),
             new Held("souther.compiler.partition.AffineReading.WhatWasTold.addsDecimal",
                     "asks whether an operation a comparison works out is a decimal sum, difference"
                             + " or product, which a row is asked to get past by working it out"),
