@@ -156,21 +156,6 @@ public final class WhatARunMayEndFor {
     }
 
     /**
-     * Whether working {@code e} out ends no run and needs no name to be followed: it ends none
-     * beneath ({@link #endsNoneBeneath}) and reads no name, since what a name stands for was
-     * worked out where it was bound, which is not under {@code e}.
-     */
-    public static boolean endsNoneAndReadsNoNameBeneath(Core e) {
-        Core here = Core.withoutStanding(e);
-        if (here instanceof Core.Read || !itselfApartFromTheClosuresWrittenAtIt(here).endsNone()) {
-            return false;
-        }
-        boolean[] under = {true};
-        Core.forEachChild(here, child -> under[0] &= endsNoneAndReadsNoNameBeneath(child));
-        return under[0];
-    }
-
-    /**
      * Where {@code e} itself answers ({@link GetsPast}), apart from the closures written at it
      * as {@link #itselfApartFromTheClosuresWrittenAtIt} reads it, each from the owner of what it
      * is: an operator's from {@link AbortSites}, a kernel's from {@link KernelContracts}, and an
@@ -233,8 +218,13 @@ public final class WhatARunMayEndFor {
      *  ({@link LibraryEndings}). */
     private static Endings ofTheLibrary(Core.PreservedCall kept) {
         AnOperationApplied applied = AnOperationApplied.of(kept);
-        return applied != null
-                && applied.operation() instanceof ValueName.Stdlib.Operation operation
-                ? LibraryEndings.shipped().of(operation) : new Endings.NotKnown();
+        return applied == null ? new Endings.NotKnown() : ofAnOperation(applied.operation());
+    }
+
+    /** What applying {@code operation} itself, and none of what it is handed, may end a run for:
+     *  an operation of the library's as {@link LibraryEndings} says, and not known of any other. */
+    public static Endings ofAnOperation(ValueName operation) {
+        return operation instanceof ValueName.Stdlib.Operation ofTheLibrary
+                ? LibraryEndings.shipped().of(ofTheLibrary) : new Endings.NotKnown();
     }
 }

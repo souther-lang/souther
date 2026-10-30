@@ -7,6 +7,7 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.values.TextExtents;
 import net.unit8.notation199x.pattern.Meter;
 
@@ -300,6 +301,7 @@ public sealed interface BlockReason {
                 case RelationNotShownReachedAtEveryValue _ -> 26;
                 case OrderedExtentEndIsNoValue _ -> 27;
                 case RelationShownOverARegion _ -> 29;
+                case RelationRowsNotShownComputed _ -> 30;
             };
         }
 
@@ -325,7 +327,8 @@ public sealed interface BlockReason {
                                 ((RelationNotShownWhereTheSearchStopped) other).stoppedAt());
                 case RelationShownOverARegion(boolean atAnyLength, Long longerThan,
                                               Long shorterThan,
-                                              List<String> imagesNotShown) -> {
+                                              List<String> imagesNotShown,
+                                              List<CodePointsLeftOpen> byCodePoints) -> {
                     RelationShownOverARegion them = (RelationShownOverARegion) other;
                     int byLength = Boolean.compare(atAnyLength, them.atAnyLength());
                     if (byLength != 0) {
@@ -348,7 +351,17 @@ public sealed interface BlockReason {
                             yield byName;
                         }
                     }
-                    yield Integer.compare(imagesNotShown.size(), theirs.size());
+                    if (imagesNotShown.size() != theirs.size()) {
+                        yield Integer.compare(imagesNotShown.size(), theirs.size());
+                    }
+                    List<CodePointsLeftOpen> theirCounts = them.byCodePoints();
+                    for (int i = 0; i < Math.min(byCodePoints.size(), theirCounts.size()); i++) {
+                        int byCount = byCodePoints.get(i).compareTo(theirCounts.get(i));
+                        if (byCount != 0) {
+                            yield byCount;
+                        }
+                    }
+                    yield Integer.compare(byCodePoints.size(), theirCounts.size());
                 }
                 // The rank says which statement it is.
                 case WhatItStatesIsNoLine _ -> 0;
@@ -359,7 +372,8 @@ public sealed interface BlockReason {
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
                      RelationNotShownToReachEveryValue _,
-                     RelationNotShownReachedAtEveryValue _, OrderedExtentEndIsNoValue _ -> 0;
+                     RelationNotShownReachedAtEveryValue _, OrderedExtentEndIsNoValue _,
+                     RelationRowsNotShownComputed _ -> 0;
             };
         }
 
@@ -415,7 +429,8 @@ public sealed interface BlockReason {
                      SeveralLinesInOneRule _, WhatItStatesIsNoLine _,
                      RelationNotShownToReachEveryValue _,
                      RelationNotShownWhereTheSearchStopped _,
-                     RelationNotShownReachedAtEveryValue _ -> true;
+                     RelationNotShownReachedAtEveryValue _,
+                     RelationRowsNotShownComputed _ -> true;
             };
         }
 
@@ -457,7 +472,7 @@ public sealed interface BlockReason {
                      LineSideNotWorkedOut _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
                      RelationNotShownToReachEveryValue _, RelationNotShownReachedAtEveryValue _,
-                     RelationShownOverARegion _ ->
+                     RelationShownOverARegion _, RelationRowsNotShownComputed _ ->
                         RunSensitivity.UNAFFECTED;
             };
         }
@@ -490,7 +505,8 @@ public sealed interface BlockReason {
                      LineSideNotWorkedOut _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
                      RelationNotShownToReachEveryValue _,
-                     RelationNotShownReachedAtEveryValue _, RelationShownOverARegion _ -> List.of();
+                     RelationNotShownReachedAtEveryValue _, RelationShownOverARegion _,
+                     RelationRowsNotShownComputed _ -> List.of();
             };
         }
     }
@@ -1332,6 +1348,18 @@ public sealed interface BlockReason {
     record RelationNotShownReachedAtEveryValue() implements RuleReadingStopped {}
 
     /**
+     * What the rule states was read in full, and it relates the value here to another value, and
+     * some numbers here settle it by the terms' ends; but the operations the rows work out were
+     * not all worked out on a row built in them, so no row is shown computed there.
+     *
+     * <p>A fact about what was shown and not about the numbers, and one no reader is told which
+     * numbers it is about: the document says the word and not the region, so nothing here holds
+     * the region either. Apart from {@link RelationNotShownToReachEveryValue}, which says
+     * nothing of rows being computed.
+     */
+    record RelationRowsNotShownComputed() implements RuleReadingStopped {}
+
+    /**
      * What the rule states was read in full, and it relates the value here to another value; the
      * classes it draws here are shown over some of the values, and the rest are shown on neither
      * side of it.
@@ -1365,15 +1393,24 @@ public sealed interface BlockReason {
      *                    length. None where the values left open are left for another reason
      */
     record RelationShownOverARegion(boolean atAnyLength, Long longerThan, Long shorterThan,
-                                    List<String> imagesNotShown)
+                                    List<String> imagesNotShown,
+                                    List<CodePointsLeftOpen> byCodePoints)
             implements RuleReadingStopped {
 
         public RelationShownOverARegion {
-            if (!atAnyLength && longerThan == null && shorterThan == null) {
+            if (!atAnyLength && longerThan == null && shorterThan == null
+                    && byCodePoints.isEmpty()) {
                 throw new IllegalArgumentException("a relation shown over a region leaves some"
                         + " values open");
             }
             imagesNotShown = imagesNotShown.stream().distinct().sorted().toList();
+            byCodePoints = byCodePoints.stream().distinct().sorted().toList();
+        }
+
+        /** The same, with no values left open for how many code points of a class they hold. */
+        public RelationShownOverARegion(boolean atAnyLength, Long longerThan, Long shorterThan,
+                                        List<String> imagesNotShown) {
+            this(atAnyLength, longerThan, shorterThan, imagesNotShown, List.of());
         }
 
         /** Values open for being long, or open at any length. */
@@ -1407,6 +1444,14 @@ public sealed interface BlockReason {
          *  open for ({@code imagesNotShown}). */
         public static RelationShownOverARegion of(List<ValuesWithin> open,
                                                   List<String> imagesNotShown) {
+            return of(open, imagesNotShown, List.of());
+        }
+
+        /** The same, with the values left open for how many code points of a class they hold
+         *  ({@code byCodePoints}), which no length bounds. */
+        public static RelationShownOverARegion of(List<ValuesWithin> open,
+                                                  List<String> imagesNotShown,
+                                                  List<CodePointsLeftOpen> byCodePoints) {
             boolean atAnyLength = open.stream()
                     .anyMatch(each -> each.shortest() == 0 && each.longest() == null);
             Long longerThan = open.stream().filter(each -> each.shortest() > 0)
@@ -1415,7 +1460,41 @@ public sealed interface BlockReason {
                     .filter(each -> each.shortest() == 0 && each.longest() != null)
                     .map(each -> each.longest() + 1).max(Long::compare).orElse(null);
             return new RelationShownOverARegion(atAnyLength, longerThan, shorterThan,
-                    atAnyLength ? imagesNotShown : List.of());
+                    atAnyLength ? imagesNotShown : List.of(), byCodePoints);
+        }
+    }
+
+    /**
+     * Values left open for how many code points of a class they hold: those holding fewer than
+     * {@code fewerThan} of them, or more than {@code moreThan}. A bound on how many and not on
+     * the values, as {@link RelationShownOverARegion} says of lengths.
+     *
+     * @param counted  the code points counted
+     * @param fewerThan the values holding fewer than this many are open; null where none are
+     *                 for holding few
+     * @param moreThan the values holding more than this many are open; null where none are for
+     *                 holding many
+     */
+    record CodePointsLeftOpen(CodePointClass counted, Long fewerThan, Long moreThan)
+            implements Comparable<CodePointsLeftOpen> {
+
+        public CodePointsLeftOpen {
+            Objects.requireNonNull(counted, "the code points counted");
+            if ((fewerThan == null) == (moreThan == null)) {
+                throw new IllegalArgumentException(
+                        "values are open for holding fewer than so many, or more than so many");
+            }
+        }
+
+        @Override
+        public int compareTo(CodePointsLeftOpen other) {
+            int byClass = counted.toString().compareTo(other.counted.toString());
+            if (byClass != 0) {
+                return byClass;
+            }
+            int byFewer = Comparator.nullsFirst(Long::compare).compare(fewerThan, other.fewerThan);
+            return byFewer != 0 ? byFewer
+                    : Comparator.nullsFirst(Long::compare).compare(moreThan, other.moreThan);
         }
     }
 

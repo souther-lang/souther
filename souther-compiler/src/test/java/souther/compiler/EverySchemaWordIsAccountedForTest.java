@@ -55,6 +55,7 @@ import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.RowFailure;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.SourceConstruct;
@@ -1283,7 +1284,9 @@ class EverySchemaWordIsAccountedForTest {
                         new RuleReportAnchor.ByTheModuleThatWroteIt()),
                 ModelOccurrences.NONE, FilingCoordinate.at(TermPath.of("x")),
                 BlockReason.RelationShownOverARegion.of(
-                        List.of(ValuesWithin.longerThan(ValueSet.ANY, 1L))));
+                        List.of(ValuesWithin.longerThan(ValueSet.ANY, 1L)), List.of(),
+                        List.of(new BlockReason.CodePointsLeftOpen(
+                                new CodePointClass.NotWhitespace(), 1L, null))));
     }
 
     /** A rule read far enough to say it restricts the values, and no further. */
@@ -1613,6 +1616,10 @@ class EverySchemaWordIsAccountedForTest {
         // takes, and how the numbers of a key are gathered: each written by a switch over a
         // sealed type's arms for the same reason.
         held.add("/$defs/termId/oneOf/3/properties/class");
+        // The same classes, named where a relation leaves strings open for how many code points of
+        // one they hold: written by the one switch over the sealed classes.
+        held.add("/$defs/partition/properties/unanswered/items/properties/stopped/items"
+                + "/properties/leftOpen/properties/codePoints/items/properties/class");
         held.add("/$defs/termId/oneOf/5/properties/extreme");
         held.add("/$defs/termId/oneOf/6/properties/gathering");
         held.add("/$defs/termId/oneOf/7/properties/gathering");

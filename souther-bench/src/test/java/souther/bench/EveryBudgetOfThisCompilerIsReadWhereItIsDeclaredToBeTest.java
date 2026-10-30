@@ -739,6 +739,15 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/WhyUnread;",
                     "tells a count of the readings of a split how far the figures can tell, and"
                             + " asks the split of what it counted"),
+            // The arithmetic unrolls a walk or a total over a list written out only where each
+            // element is a reading the split would make, one list and all of them together;
+            // past either it reads none of it, and the comparison stops there.
+            Map.entry("souther.compiler.partition.AffineReading$WhatWasTold"
+                            + "#readsElementByElement(I)Z",
+                    "past either figure the arithmetic stops at the walk or the total, and what"
+                            + " the comparison's rows get past is not told: no row is shown"
+                            + " computed. Which figure it was is not said, and the rule that reads"
+                            + " the comparison says why on its own account"),
             Map.entry("souther.compiler.partition.Pullback#<init>("
                             + "Lsouther/compiler/inputs/InputReading;Ljava/util/Optional;)V",
                     "how many readings one reading of a condition makes in all, which every split"

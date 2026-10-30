@@ -1,22 +1,29 @@
 package souther.compiler.check;
 
+import souther.compiler.abort.AbortKind;
+import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.GetsPast;
 import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.core.IntNegation;
+import souther.compiler.core.Kernel;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -157,6 +164,43 @@ public final class AffineForms {
         }
 
         /**
+         * That the walk read {@code e} as the number it folds to, the same on every run, or a
+         * carrier writes it as, and went no further into it. Either says what the number is
+         * ({@link FoldedValue}, {@link Carrier#literalOf}), following a name to the value it
+         * stands as; what working it out runs on the way there, a value bound and never read
+         * included, neither tells. A reader that does not ask is told nothing.
+         */
+        default void folded(Core e, E at) {
+        }
+
+        /**
+         * That the walk read {@code call}, an operation of the library, as {@code form}, the
+         * arithmetic over its arguments the library says it answers, and that a run stops at it
+         * where {@code where} says: it ends one only where its answer is past the ends of its
+         * type, or the library says no more than that it may end one. A reader that does not ask
+         * where is told it was {@link #unobserved} wherever it may end one.
+         */
+        default void answeredByTheLibrary(Core call, LinearForm<A> form,
+                                          WhereAnOperatorAnswers where) {
+            if (!(where instanceof WhereAnOperatorAnswers.Everywhere)) {
+                unobserved(call);
+            }
+        }
+
+        /**
+         * That the walk read the body of {@code binding} without reading the name it binds on the
+         * way it took, though a run works the bound value out first, and working it out may end a
+         * run: on that way the value is read nowhere else. One the body read is read where the
+         * name is, by whatever reads that.
+         *
+         * <p>Told as a node read without telling of every operation, unless the reading reads the
+         * value and tells of what it works out.
+         */
+        default void bound(Core.LetIn binding, E at) {
+            unobserved(binding);
+        }
+
+        /**
          * That the walk read {@code construct}, a newtype's construction, as {@code value}, the
          * form of the number it wraps. Making it checks the clauses of the type, which stops a run
          * where the number is not one they leave.
@@ -194,11 +238,33 @@ public final class AffineForms {
         }
 
         /**
+         * That the walk read {@code call}, the length of a list written out, as the number of its
+         * elements, which the list's shape says whatever the elements are. The call works out
+         * nothing of its own, but the list is built before it is counted, so the {@code elements}
+         * are worked out and a reader that asks where each operation is worked out is told what
+         * building them does.
+         */
+        default void counted(Core call, List<Core> elements, E at) {
+            unobserved(call);
+        }
+
+        /**
          * Whether making {@code construct} ends no run: no clause is checked when it is made. A
          * reader that does not know says it may.
          */
         default boolean makingEndsNoRun(Core.Construct construct) {
             return false;
+        }
+
+        /**
+         * Whether making {@code construct} ends no run, given {@code wrapped}, the value its one
+         * field is given followed as far as it goes, or null where it has no one field. A clause
+         * checked when it is made ends none where the value written satisfies it, which is a
+         * property of the written value and of nothing a run does. A reader that does not know
+         * says what {@link #makingEndsNoRun} does.
+         */
+        default boolean makingEndsNoRunOver(Core.Construct construct, Core wrapped) {
+            return makingEndsNoRun(construct);
         }
 
         /**
@@ -388,6 +454,27 @@ public final class AffineForms {
         }
 
         @Override
+        public void unobserved(Core node) {
+            of.unobserved(node);
+        }
+
+        @Override
+        public void answeredByTheLibrary(Core call, LinearForm<A> form,
+                                         WhereAnOperatorAnswers where) {
+            of.answeredByTheLibrary(call, form, where);
+        }
+
+        @Override
+        public void folded(Core e, E at) {
+            of.folded(e, at);
+        }
+
+        @Override
+        public void bound(Core.LetIn binding, E at) {
+            of.bound(binding, at);
+        }
+
+        @Override
         public void constructed(Core.Construct construct, TypeView type, LinearForm<A> value) {
             of.constructed(construct, type, value);
         }
@@ -400,6 +487,11 @@ public final class AffineForms {
         @Override
         public void totalled(Core call, LinearForm<A> total, List<Core> elements) {
             of.totalled(call, total, elements);
+        }
+
+        @Override
+        public void counted(Core call, List<Core> elements, E at) {
+            of.counted(call, elements, at);
         }
 
         @Override
@@ -434,6 +526,10 @@ public final class AffineForms {
         /** Who is told where the reading ended in a value, or null where nobody asked. */
         private final Consumed<E> told;
 
+        /** How many times the walk has read each name, so that a binding can ask whether the
+         *  body it binds for read it on the way the walk took. */
+        private final Map<BindingId, Integer> namesRead = new HashMap<>();
+
         Walk() {
             this.folds = null;
             this.told = null;
@@ -454,6 +550,16 @@ public final class AffineForms {
             if (told != null) {
                 told.written(expression, at);
             }
+        }
+
+        /** That the walk read {@code name}. */
+        void read(BindingId name) {
+            namesRead.merge(name, 1, Integer::sum);
+        }
+
+        /** How many times the walk has read {@code name} so far. */
+        int timesRead(BindingId name) {
+            return namesRead.getOrDefault(name, 0);
         }
 
     }
@@ -703,6 +809,7 @@ public final class AffineForms {
         if (led == null || !following.enter(r.binding())) {
             return null;
         }
+        following.read(r.binding());
         Outcome<A, E> read = switch (led) {
             // Asked once per question. What a name comes to is the value it was given read in the
             // environment it was given in, and a second occurrence of the name is that same
@@ -976,14 +1083,37 @@ public final class AffineForms {
     }
 
     /**
-     * The reading told that {@code call}, read as arithmetic over its arguments, was read without
-     * telling of what it works out — where its owners say working it out may end a run, or do not
-     * say. A call that ends none is the arithmetic and nothing else.
+     * {@code form}, what {@code call} was read as over its arguments, with the reading told where a
+     * run stops at the call ({@link Reading#answeredByTheLibrary}). A call that ends none is the
+     * arithmetic and nothing else. One whose owners say it ends a run only where its answer has
+     * no place stops where the form is past the ends of the type it answers; any other, where they
+     * do not say.
      */
-    private static <A, E> void unobservedIfItCanStop(Core call, Reading<A, E> reading) {
-        if (!WhatARunMayEndFor.itself(call).endsNone()) {
-            reading.unobserved(call);
+    private static <A, E> LinearForm<A> answeredByTheLibrary(Core call, LinearForm<A> form,
+                                                             Reading<A, E> reading) {
+        reading.answeredByTheLibrary(call, form, whereTheLibraryAnswers(call, reading));
+        return form;
+    }
+
+    private static <A, E> WhereAnOperatorAnswers whereTheLibraryAnswers(Core call,
+                                                                       Reading<A, E> reading) {
+        WhatARunMayEndFor.Endings own = WhatARunMayEndFor.itself(call);
+        if (own.endsNone()) {
+            return new WhereAnOperatorAnswers.Everywhere();
         }
+        if (!(own instanceof WhatARunMayEndFor.Endings.Known(AbortSet kinds))
+                || !kinds.kinds().stream()
+                .allMatch(kind -> kind == AbortKind.REQUIRED_FORM_HAS_NO_PLACE)) {
+            return new WhereAnOperatorAnswers.NotStated("its owners say more than its answer"
+                    + " having no place ends a run");
+        }
+        Carrier answered = Carrier.ofValue(call.type(), reading.declarations());
+        OrderedInterval ends = answered == null ? null : answered.extent();
+        BigInteger least = ends == null ? null : WholeUnitsBetween.wholeNumberOf(ends.low());
+        BigInteger greatest = ends == null ? null : WholeUnitsBetween.wholeNumberOf(ends.high());
+        return least == null || greatest == null
+                ? new WhereAnOperatorAnswers.NotStated("its type has no whole ends")
+                : new WhereAnOperatorAnswers.WhereItsExactValueIsHeld(least, greatest);
     }
 
     /**
@@ -998,6 +1128,16 @@ public final class AffineForms {
             return null;
         }
         return Core.withoutStanding(call.args().get(operand)) instanceof Core.ListLit list
+                ? list : null;
+    }
+
+    /** The list {@code call} counts, where it is {@code List.length} of a list written out; null
+     *  otherwise. */
+    private static Core.ListLit listCountedWrittenOut(Core.PreservedCall call, Symbols symbols) {
+        return call.args().size() == 1
+                && call.operation() instanceof ValueName.Stdlib.Operation operation
+                && symbols.kernelOf(operation) == Kernel.LIST_LENGTH
+                && Core.withoutStanding(call.args().get(0)) instanceof Core.ListLit list
                 ? list : null;
     }
 
@@ -1068,6 +1208,11 @@ public final class AffineForms {
             Core.ListLit list = listAddedUpWrittenOut(call);
             if (list != null) {
                 return totalOfWhatIsWrittenOut(call, list, at, reading, following, stopped);
+            }
+            Core.ListLit counted = listCountedWrittenOut(call, reading.symbols());
+            if (counted != null) {
+                reading.counted(call, counted.elements(), at);
+                return LinearForm.constant(ExactRatio.of(counted.elements().size()));
             }
         }
         return switch (e) {
@@ -1155,7 +1300,7 @@ public final class AffineForms {
                     // Read off the construction that gave the value, whose other parts are worked
                     // out all the same: untold where one of them can end a run.
                     if (!ValueStanding.theConstructionAndItsRestEndNone(fa, at, reading,
-                            following, reading::makingEndsNoRun)) {
+                            following, reading::makingEndsNoRunOver)) {
                         reading.unobserved(e);
                     }
                     yield commonForm(eliminated, e, at, following, stopped);
@@ -1183,8 +1328,22 @@ public final class AffineForms {
             // what it holds is a number is not asked: a binding denotes what it was given whatever
             // kind of value that is, which is what makes the facts a walk recorded about the places
             // under it reach the step that reads them (#867).
-            case Core.LetIn li -> formOf(li.body(), reading.inside(li, at), reading, following,
-                    stopped);
+            case Core.LetIn li -> {
+                BindingId bound = li.binder() == null ? null : li.binder().binding();
+                int readBefore = bound == null ? 0 : following.timesRead(bound);
+                LinearForm<A> body = formOf(li.body(), reading.inside(li, at), reading, following,
+                        stopped);
+                // The value is worked out before the body, read or not, as the other parts of a
+                // construction read through are. One the body read on the way the walk took is
+                // read where its name is; one it did not — never read, or read only in an arm
+                // not taken — is read nowhere else. Where the body composed nothing the walk
+                // stopped in it, and what it stopped at is whoever reads that one's to answer for.
+                if (body != null && (bound == null || following.timesRead(bound) == readBefore)
+                        && !WhatARunMayEndFor.endsNoneBeneath(li.value())) {
+                    reading.bound(li, at);
+                }
+                yield body;
+            }
             default -> null;
         };
     }
@@ -1303,9 +1462,13 @@ public final class AffineForms {
      *  where the walk's caller keeps it. */
     private static <A, E> BigDecimal foldedNumber(Core e, E at, Reading<A, E> reading,
                                                   Walk<A, E> following) {
-        return FoldedValue.number(following.folds == null
+        BigDecimal folded = FoldedValue.number(following.folds == null
                 ? FoldedValue.of(e, at, reading, reading.symbols())
                 : FoldedValue.of(e, at, reading, reading.symbols(), following.folds));
+        if (folded != null) {
+            reading.folded(e, at);
+        }
+        return folded;
     }
 
     /**
@@ -1359,7 +1522,12 @@ public final class AffineForms {
         // once, and what the carrier takes apart is followed where the expression was written.
         Place place = carrier.literalOf(new ValueStanding.Standing<>(e, at, reading),
                 reading.symbols());
-        return place == null ? null : LinearForm.constant(Count.number(place).exactly());
+        if (place == null) {
+            return null;
+        }
+        // Taken by the value it stands as, as a fold is: what working it out runs is not run.
+        reading.folded(e, at);
+        return LinearForm.constant(Count.number(place).exactly());
     }
 
     /**
@@ -1370,7 +1538,6 @@ public final class AffineForms {
     private static <A, E> LinearForm<A> overTheValues(Core call, LinearForm<Core> says, E at,
                                                       Reading<A, E> reading, Walk<A, E> following,
                                                       Stop<A, E> stopped) {
-        unobservedIfItCanStop(call, reading);
         Stop<A, E> inside = new Stop<>();
         LinearForm<A> form = LinearForm.constant(says.constant());
         for (Map.Entry<Core, ExactRatio> each : says.coefs().entrySet()) {
@@ -1386,7 +1553,7 @@ public final class AffineForms {
                 }
             }
         }
-        return form;
+        return answeredByTheLibrary(call, form, reading);
     }
 
     /**
@@ -1401,7 +1568,6 @@ public final class AffineForms {
                                                  E at, Reading<A, E> reading,
                                                  Walk<A, E> following,
                                                  Stop<A, E> stopped) {
-        unobservedIfItCanStop(call, reading);
         java.util.List<Core> args = Terms.argsOf(call);
         // The expansion's own stops, kept off the walk's. What is inside a declared form is not
         // what an author wrote: the arguments stand where they stand because the library says the
@@ -1439,7 +1605,7 @@ public final class AffineForms {
                 }
             }
         }
-        return form;
+        return answeredByTheLibrary(call, form, reading);
     }
 
     /**

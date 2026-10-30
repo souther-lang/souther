@@ -66,7 +66,26 @@ class AListOfOneElementIsShownToBeAValueByTheLawOfItsRuleTest {
                 invariant nonEmpty = List.length(value) >= 1
                 invariant priced = List.all(l -> Decimal.compare(l.net.value, 5.0m) > 0, value)
 
+            data JoinedLines = List<Line>
+                invariant List.length(value) >= 1 && List.allDistinctBy(.product, value)
+
+            data JoinedPairs = List<Line>
+                invariant List.length(value) >= 2 && List.allDistinctBy(.product, value)
+
+            data RepeatedLines = List<Line>
+                invariant List.length(value) >= 1
+                    && Bool.not(List.allDistinctBy(.product, value))
+
             data Quote = { lines: Lines, subtotal: Amount, total: Amount }
+                invariant Decimal.compare(total.value, subtotal.value) <= 0
+
+            data JoinedQuote = { lines: JoinedLines, subtotal: Amount, total: Amount }
+                invariant Decimal.compare(total.value, subtotal.value) <= 0
+
+            data JoinedPairsQuote = { lines: JoinedPairs, subtotal: Amount, total: Amount }
+                invariant Decimal.compare(total.value, subtotal.value) <= 0
+
+            data RepeatedQuote = { lines: RepeatedLines, subtotal: Amount, total: Amount }
                 invariant Decimal.compare(total.value, subtotal.value) <= 0
 
             data PairsQuote = { lines: Pairs, subtotal: Amount, total: Amount }
@@ -92,6 +111,23 @@ class AListOfOneElementIsShownToBeAValueByTheLawOfItsRuleTest {
         assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                 reasonsAt(read, "total"),
                 "so the relation over the amounts is read at every value they take");
+    }
+
+    /**
+     * The same two rules written as the two parts of one clause are the same rules.
+     *
+     * <p>Which of them is a bound on the size and which a call whose law is asked is said of each
+     * part, and the clause is asked with the other part holding. Asked of the rule, the bound was
+     * taken for a call because the call beside it is one the bounds do not hold.
+     */
+    @Test
+    void theTwoRulesWrittenAsOneClauseAreTheSameRules() {
+        assertTrue(readingOf("JoinedQuote").projectionAt(RuleKey.of("total")).isCertified(),
+                () -> readingOf("JoinedQuote").projectionAt(RuleKey.of("total")).toString());
+        assertFalse(readingOf("JoinedPairsQuote").projectionAt(RuleKey.of("total")).isCertified(),
+                "two lines may still share a key");
+        assertFalse(readingOf("RepeatedQuote").projectionAt(RuleKey.of("total")).isCertified(),
+                "a list of one line holds no line twice, which the denied call asks for");
     }
 
     @Test

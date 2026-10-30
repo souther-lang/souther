@@ -2,6 +2,8 @@ package souther.compiler.examples;
 
 import souther.compiler.check.CheckedEnsures;
 import souther.compiler.execute.EvaluationPolicy;
+import souther.compiler.generated.GeneratedLinkage;
+import souther.compiler.generated.GeneratedLinkage.GeneratedClassDefect;
 import souther.compiler.execute.jvm.JvmDeadlines;
 import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
@@ -19,6 +21,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.query.Shapes;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -106,6 +110,30 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
         assertEquals(FailurePhase.INVOCATION, row.failurePhase());
         assertInstanceOf(Applied.GeneratedHere.class, row.run().applied(),
                 "and what entered it is on the record");
+    }
+
+    /**
+     * A defect found inside the applied code is the compiler failing and not the row.
+     *
+     * <p>Applied code may call back into generated code of this compile, and a defect thrown there
+     * comes out of the application wrapped by a reflective call. It must not be read as the
+     * behavior having failed, or as the implementation not having been reached, whichever way the
+     * answerer carries it.
+     */
+    @Test
+    void aDefectFoundInsideAppliedCodeEndsTheRunInsteadOfFailingTheRow() {
+        GeneratedClassDefect found = assertThrows(GeneratedClassDefect.class,
+                () -> GeneratedLinkage.rejectDefect(new VerifyError("Bad type on operand stack")));
+
+        Answerer failing = something(_ -> _ -> applying(_ -> {
+            throw new InvocationFailure(new InvocationTargetException(found));
+        }));
+        assertSame(found, assertThrows(GeneratedClassDefect.class, () -> evaluated(failing)));
+
+        Answerer unreached = something(_ -> _ -> applying(_ -> {
+            throw new ImplementationNotReached("not there", new InvocationTargetException(found));
+        }));
+        assertSame(found, assertThrows(GeneratedClassDefect.class, () -> evaluated(unreached)));
     }
 
     /**

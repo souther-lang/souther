@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.ReachEvidence;
 import souther.compiler.coverage.WalkProbe;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -358,25 +359,18 @@ public final class PathReachability {
          * <p>Every place is held to one rule — seen, and proven unreachable, is a proof shown wrong
          * — and what that weakens is each measure's to say by what it rests on, not this reading's.
          *
-         * @param lit  the probes a row was recorded at, which are places of the numbering this
-         *             reading was made under. A probe of another is one no arm here answers to, so
-         *             the run would correct nothing and every proof would stand — the same answer
-         *             as a run that went nowhere
-         * @param seen the ways a row saw a condition come out, of the same numbering
-         */
-        public AsRun asRunWith(Set<ArmProbe> lit, Set<SeenConditionOutcome> seen) {
-            return asRunWith(lit, seen, Set.of());
-        }
-
-        /**
-         * The same, with the walks a row took a second element of: a walk shown to go over one
-         * element at most is no longer shown so where a run went past its first. Taken back like
-         * the proofs above, and so closing nothing.
+         * <p>And a walk shown to go over one element at most is no longer shown so where a run took
+         * a second element of its list. Taken back like the proofs above, and so closing nothing.
          *
-         * @param wentOn the walks a row took a second element of, of the same numbering
+         * @param observed what the rows did, at places of the numbering this reading was made
+         *                 under. A place of another is one nothing here answers to, so the run
+         *                 would correct nothing and every proof would stand — the same answer as
+         *                 a run that went nowhere
          */
-        public AsRun asRunWith(Set<ArmProbe> lit, Set<SeenConditionOutcome> seen,
-                               Set<WalkProbe> wentOn) {
+        public AsRun asRunWith(ReachEvidence observed) {
+            Set<ArmProbe> lit = observed.arms();
+            Set<SeenConditionOutcome> seen = observed.outcomes();
+            Set<WalkProbe> wentOn = observed.walksOn();
             lit.forEach(probe -> requireNumbering(probe.numbering()));
             seen.forEach(outcome -> requireNumbering(outcome.at().numbering()));
             wentOn.forEach(walk -> requireNumbering(walk.numbering()));

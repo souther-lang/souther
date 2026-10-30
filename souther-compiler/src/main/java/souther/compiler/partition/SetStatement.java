@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.PredicateStatement;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.values.ValueSet;
 import souther.compiler.values.ValuesWithin;
@@ -52,26 +53,56 @@ import java.util.List;
  * @param imagesNotShown the operations of the library whose image over the strings of a side is
  *                  shown only where it is exact, which are why {@code notShown} holds the strings
  *                  it holds
+ * @param notCounted the values holding so few or so many code points of a class that no run gets
+ *                  to the relation with them, which are shown on neither side as the values of
+ *                  {@code notReached} are; kept apart because a length bounds none of them
  */
 public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
                           ValueSet whenFalse, PredicateStatement statement,
                           PredicateOrigin origin, ValueSet notShown,
-                          List<ValuesWithin> notReached, List<String> imagesNotShown) {
+                          List<ValuesWithin> notReached, List<String> imagesNotShown,
+                          List<NotCounted> notCounted) {
+
+    /**
+     * The values holding a number of code points of a class that no run gets to the relation
+     * with.
+     *
+     * @param values the values
+     * @param why    which numbers of the class they are open for
+     */
+    public record NotCounted(ValueSet values, BlockReason.CodePointsLeftOpen why) {
+
+        public NotCounted {
+            if (values == null || why == null) {
+                throw new IllegalArgumentException("some values hold too few or too many");
+            }
+        }
+    }
 
     public SetStatement {
         if (term == null || whenTrue == null || whenFalse == null
                 || statement == null || origin == null || notShown == null
-                || notReached == null || imagesNotShown == null) {
+                || notReached == null || imagesNotShown == null || notCounted == null) {
             throw new IllegalArgumentException(
                     "a statement about a position names some values, and some rule made it");
         }
         notReached = List.copyOf(notReached);
         imagesNotShown = List.copyOf(imagesNotShown);
+        notCounted = List.copyOf(notCounted);
         // Whether the two sides hold anything is not asked here, and cannot be. What a rule leaves
         // is a set of every string there is; what the position holds is what its declarations left
         // it — so a side inhabited among the strings can be empty at the position, and one empty
         // among them cannot be inhabited there. Which of those a rule is, is a question about the
         // position's values, and it is asked where they are known ({@link Classing}).
+    }
+
+    /** The same, with no values open for how many code points of a class they hold. */
+    public SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
+                        ValueSet whenFalse, PredicateStatement statement,
+                        PredicateOrigin origin, ValueSet notShown,
+                        List<ValuesWithin> notReached, List<String> imagesNotShown) {
+        this(term, whenTrue, whenFalse, statement, origin, notShown, notReached, imagesNotShown,
+                List.of());
     }
 
     /** A rule that shows its values at every length a run gets to it at, and whose open values are
@@ -91,9 +122,15 @@ public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTr
         this(term, whenTrue, whenFalse, statement, origin, notShown, notReached, List.of());
     }
 
+    /** The same statement of the same values, about the position {@code at}. */
+    public SetStatement measuredAt(NumericTerm.FromOnePosition at) {
+        return new SetStatement(at, whenTrue, whenFalse, statement, origin, notShown, notReached,
+                imagesNotShown, notCounted);
+    }
+
     /** Whether every value is shown on one side or the other. */
     public boolean showsEveryValue() {
-        return leftOpen().isEmpty();
+        return leftOpen().isEmpty() && notCounted.isEmpty();
     }
 
     /**

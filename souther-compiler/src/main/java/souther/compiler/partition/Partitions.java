@@ -837,7 +837,7 @@ public final class Partitions {
             PredicateOrigin origin = each.statement().origin();
             found.regionUndetermined(origin.cited(), origin.readAt(),
                     new FilingCoordinate.AtPosition(term.position()), each.open(),
-                    each.statement().imagesNotShown());
+                    each.statement().imagesNotShown(), each.byCodePoints());
         }
         // The answer's own population, and not what is left after taking the rest away. Subtracted
         // here, the same question is answered twice — and the day the two subtract differently the
@@ -2345,7 +2345,29 @@ public final class Partitions {
                                 inner))
                         .firstOf(1);
                 met = met.and(stands.met());
-                at = stands.values().stream().filter(each -> !taken.contains(each.text()))
+                // Its part of a value of the fields a rule relating them ties it to first, which no
+                // field chosen at a time against what the rules leave it is: such a rule leaves no
+                // one of them a set. Asked with what the fields given and chosen so far hold, so
+                // that the part is of a value with those and not of one with nothing settled; and
+                // only where it is inside what the rules and a search leave this field.
+                Map<RuleKey, Object> settled = new LinkedHashMap<>();
+                for (String other : fields.keySet()) {
+                    FixtureTemplate written = given.containsKey(other) ? given.get(other)
+                            : chosenByName.get(other);
+                    Object constant = written == null ? null : Witnesses.constantOf(written);
+                    if (constant != null) {
+                        settled.put(RuleKey.of(other), constant);
+                    }
+                }
+                FixtureTemplate tied = Witnesses.writtenAs(
+                        rules.writtenTogether(RuleKey.of(name), settled).get(RuleKey.of(name)),
+                        field.getValue(), reading);
+                List<FixtureTemplate> offered = new ArrayList<>();
+                if (tied != null && Witnesses.heldWithin(tied, limits)) {
+                    offered.add(tied);
+                }
+                offered.addAll(stands.values());
+                at = offered.stream().filter(each -> !taken.contains(each.text()))
                         .findFirst().orElse(null);
                 if (at == null) {
                     within.forgetUnder(within.here());
@@ -4174,7 +4196,7 @@ public final class Partitions {
      * The strings of {@code strings} that have one of {@code lengths}, or null where the allowance
      * of {@code meter} would not pay for them.
      */
-    static Language ofTheLengths(Language strings, LengthsPastTheWay.Lengths lengths,
+    static Language ofTheLengths(Language strings, StringsPastTheWay lengths,
                                  Meter meter) {
         PatternPlan plan = lengths.strings();
         Language counted = plan == null ? null : plan.compile(meter);

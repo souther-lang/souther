@@ -37,6 +37,13 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
             let f (k, m, q) = (Map.get(k, m) |> Option.withDefault(0)) >= q
             """;
 
+    private static final String MAPPED = """
+            module p
+            behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
+            let f (k, m, q) =
+                (Map.get(k, m) |> Option.map(v -> v + 1 - 1) |> Option.withDefault(0)) >= q
+            """;
+
     private static final String WRITTEN_OUT = """
             module p
             behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
@@ -71,20 +78,25 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
      * Nothing is left unread, the threshold included. On the way to the entry the lookup asks
      * which key the map holds an entry under, which says nothing of the value under it, so the
      * entry's value reaches every threshold — written with the default or with the match spelled
-     * out, and with the value moved by a constant before it is compared.
+     * out.
+     *
+     * <p>Moved by a constant in a closure before it is compared, the value is read the same: the
+     * closure's sum is worked out where the entry is held, and it is told where it passes the type.
      */
     @Test
     void aLookupWithADefaultIsReadToTheEnd() {
-        for (String source : List.of(WITH_DEFAULT, WRITTEN_OUT, """
-                module p
-                behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
-                let f (k, m, q) =
-                    (Map.get(k, m) |> Option.map(v -> v + 1) |> Option.withDefault(0)) >= q
-                """)) {
+        for (String source : List.of(WITH_DEFAULT, WRITTEN_OUT)) {
             String report = report(measured(source));
 
             assertEquals(List.of(), notRead(report), report);
         }
+        String moved = report(measured("""
+                module p
+                behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
+                let f (k, m, q) =
+                    (Map.get(k, m) |> Option.map(v -> v + 1) |> Option.withDefault(0)) >= q
+                """));
+        assertEquals(List.of(), notRead(moved), moved);
     }
 
     /**
@@ -162,6 +174,23 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
         assertTrue(called.contains("read as f/q: = 1"), called);
         assertTrue(called.contains("read as f/q: = 0"), called);
         assertTrue(called.contains("read as f/m[*]: = q"), called);
+    }
+
+    /**
+     * The sum a closure works out on the entry stops the run at the greatest {@code Int}, and a
+     * row that stops is no row: held against that number, the line at the entry is drawn but no
+     * row is composed at it, which the report says. Without the closure the same line has its
+     * row.
+     */
+    @Test
+    void theLineAtTheNumberAClosuresSumStopsAtHasNoRowComposedAtIt() {
+        String stops = lineAbout(report(measured(
+                MAPPED.replace(">= q", ">= 9223372036854775807"))), "= 9223372036854775807");
+        assertTrue(stops.contains("nothing composed one: no row composed here was run to an answer"),
+                stops);
+        String reaches = lineAbout(report(measured(MAPPED.replace(">= q", ">= 9223372036854775807")
+                .replace("|> Option.map(v -> v + 1 - 1) ", ""))), "= 9223372036854775807");
+        assertFalse(reaches.contains("nothing composed one"), reaches);
     }
 
     /**

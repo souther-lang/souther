@@ -44,6 +44,7 @@ import souther.compiler.reach.ComparisonArrival;
 import souther.compiler.check.PathReachability;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.ControlPlace;
+import souther.compiler.coverage.Runs;
 import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.types.ConstructOccurrence;
 
@@ -167,7 +168,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         return new ComparisonAssessment.AgainstAnotherValue(line().cutting().over(), List.of(),
                 Set.of(), List.of(), Optional.of(new ComparisonAssessment.DrawnBeside("f",
                         Citation.of(new SourcePos(1, 1)), WrittenLine.THE_COMPARISON,
-                        Optional.empty())), Map.of(), Set.of(), Map.of());
+                        Optional.empty())), Map.of(), Set.of(), Set.of(), Map.of());
     }
 
     private static final Reachability NOT_TAKEN = new Reachability.NothingReaches(
@@ -527,7 +528,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     @Test
     void aRowAtAnApplicationTakesBackThatNothingArrivesThere() {
         PathReachability.Answers.AsRun run = APPLIED.proving(
-                new ComparisonArrival.NothingArrives()).asRunWith(Set.of(), APPLIED.aRowCame());
+                new ComparisonArrival.NothingArrives())
+                .asRunWith(Runs.evidenceOf(Set.of(), APPLIED.aRowCame(), Set.of()));
 
         assertEquals(Set.of(APPLIED.construct()), run.contradicted().emptyArrivals(),
                 "a row answered there, so it came there");
@@ -546,10 +548,10 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         ComparisonArrival proven = APPLIED.proving(new ComparisonArrival.NothingArrives())
                 .arrivals().arrivalAt(APPLIED.construct());
         ComparisonArrival ran = APPLIED.proving(new ComparisonArrival.NothingArrives())
-                .asRunWith(Set.of(), APPLIED.aRowCame()).answers().arrivals()
+                .asRunWith(Runs.evidenceOf(Set.of(), APPLIED.aRowCame(), Set.of())).answers().arrivals()
                 .arrivalAt(APPLIED.construct());
         ComparisonArrival missedAndRan = APPLIED.proving(misses())
-                .asRunWith(Set.of(), APPLIED.aRowCame()).answers().arrivals()
+                .asRunWith(Runs.evidenceOf(Set.of(), APPLIED.aRowCame(), Set.of())).answers().arrivals()
                 .arrivalAt(APPLIED.construct());
 
         assertInstanceOf(ComparisonAssessment.NothingArrivesAtItsLine.class,

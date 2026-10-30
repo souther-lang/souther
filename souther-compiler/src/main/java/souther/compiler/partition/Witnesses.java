@@ -6,6 +6,7 @@ import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.ElementsApart;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.ReadingPolicy;
+import souther.compiler.core.IntNegation;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.ValueSet;
 import souther.compiler.revision.RevisionKnowledge;
@@ -19,6 +20,8 @@ import souther.compiler.check.TypeView;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+
+import java.math.BigDecimal;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -590,6 +593,58 @@ final class Witnesses {
             }
         }
         return out;
+    }
+
+    /**
+     * {@code constant}, as the fold reads one, written at a place of {@code type} under the names
+     * that type wears — or null where there is none, or it is no value a scalar place holds.
+     *
+     * <p>The way back is {@link #constantOf}: a value a reader of the rules wrote down is handed to
+     * a builder this way, and what a builder has written is handed back to that reader the other.
+     */
+    static FixtureTemplate writtenAs(Object constant, Type type, RuleReadingContext reading) {
+        if (constant == null || type == null) {
+            return null;
+        }
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (!(view.shape() instanceof Shape.Scalar)) {
+            return null;
+        }
+        FixtureTemplate written = switch (constant) {
+            case String text -> FixtureTemplate.string(text);
+            case Long number -> FixtureTemplate.integer(number);
+            case BigDecimal number -> FixtureTemplate.decimal(number);
+            case Boolean truth -> FixtureTemplate.bool(truth);
+            default -> null;
+        };
+        return written == null ? null : WornNames.under(view.wrappers(), written, source);
+    }
+
+    /**
+     * The constant {@code written} is, as the fold reads one, with the names written around it
+     * taken off — or null where it is no constant: a record, a collection, a case.
+     */
+    static Object constantOf(FixtureTemplate written) {
+        return constantOf(bare(written.value()));
+    }
+
+    private static Object constantOf(Hir.Expr written) {
+        return switch (written) {
+            case Hir.StringLit text -> text.value();
+            case Hir.BoolLit truth -> truth.value();
+            case Hir.IntLit number -> number.value();
+            case Hir.DecimalLit number -> number.value();
+            case Hir.Neg negated when IntNegation.isTheLeastInt(negated.operand()) ->
+                    Long.MIN_VALUE;
+            case Hir.Neg negated -> switch (constantOf(negated.operand())) {
+                case Long number -> -number;
+                case BigDecimal number -> number.negate();
+                case null, default -> null;
+            };
+            default -> null;
+        };
     }
 
     /** {@code value} with the names a fixture writes around it taken off, so that two values are
@@ -1747,6 +1802,11 @@ final class Witnesses {
      * <p><b>Every value where the rules name finitely many.</b> A finite set the rules leave is an
      * upper bound however much of them was read ({@link AdmissibleSet}), so a value outside it is
      * one the rules refuse — stepped, composed or proposed, it only takes what holds it with it.
+     *
+     * <p><b>A string the place admits, before the classes.</b> A class stands for the values of the
+     * type that fall in it, and a string has one class whatever the rules of the place say of its
+     * strings: so where those rules are a record's and not the type's, what stood for the class was
+     * a string of the type the record refuses, and no value of the record was built at all.
      */
     static Placed placed(Type type, AdmissibleSet atThePlace, RuleReadingContext reading,
                          Set<TypeSymbol> expanding, Partitions.RulesAround around) {
@@ -1754,6 +1814,15 @@ final class Witnesses {
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
         Proposals.Gathering out = Proposals.Gathering.inOrder();
+        if (view.shape() instanceof Shape.Scalar scalar && scalar.prim() == Type.Prim.STRING) {
+            for (String each : atThePlace.approximation().stringsItNames()) {
+                FixtureTemplate written =
+                        WornNames.under(view.wrappers(), FixtureTemplate.string(each), source);
+                if (written != null) {
+                    out.add(written);
+                }
+            }
+        }
         for (PartitionClass each : PartitionClasses.of(
                 PartitionClasses.casesAt(view, atThePlace, reading), view, reading, expanding)) {
             out.addAll(Partitions.standingFor(each.representatives(), reading, expanding, around));
@@ -1781,18 +1850,11 @@ final class Witnesses {
         /** These kept to the numbers {@code limits} leaves, where a value is a number and a range
          *  is known; a value that is no number is not one a range says anything about. */
         Placed within(FieldDomains.ConstructionLimits limits) {
-            NumericDomain.Bounds within = limits.values();
-            OrderedRuns ordered = limits.ordered();
-            if (within == null && ordered == null) {
+            if (limits.values() == null && limits.ordered() == null) {
                 return this;
             }
-            // Between the ends, and in one of the runs the order leaves: a number between the ends
-            // of two runs is one every alternative refuses.
-            return new Placed(offered.map(each ->
-                    !(Counts.writtenIn(each.value()) instanceof Place at)
-                            || ((within == null || within.admits(at))
-                                    && (ordered == null || ordered.admits(at)))
-                            ? each : null), everyValue);
+            return new Placed(offered.map(each -> heldWithin(each, limits) ? each : null),
+                    everyValue);
         }
 
         /** These first, and where they are not every value, {@code otherwise} after them, each
@@ -1829,6 +1891,21 @@ final class Witnesses {
         }
         return placed(type, limits.admits(), reading, expanding, around).within(limits)
                 .before(otherwise);
+    }
+
+    /**
+     * Whether {@code value} is inside the numbers {@code limits} leaves, where it is a number and a
+     * range is known; a value that is no number is not one a range says anything about.
+     *
+     * <p>Between the ends, and in one of the runs the order leaves: a number between the ends of two
+     * runs is one every alternative refuses.
+     */
+    static boolean heldWithin(FixtureTemplate value, FieldDomains.ConstructionLimits limits) {
+        NumericDomain.Bounds within = limits.values();
+        OrderedRuns ordered = limits.ordered();
+        return !(Counts.writtenIn(value.value()) instanceof Place at)
+                || ((within == null || within.admits(at))
+                        && (ordered == null || ordered.admits(at)));
     }
 
     /** Whether {@code admitted} names the values it leaves, and some of them. */

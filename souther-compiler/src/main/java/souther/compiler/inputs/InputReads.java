@@ -1889,6 +1889,22 @@ public final class InputReads {
     }
 
     /**
+     * The closures that made what {@code option} holds, in the order a run applies them, each as
+     * its answer: its body, read where its parameter stands for what it was handed. Empty where
+     * the value was made by none. A closure is applied only where the option holds a value.
+     */
+    public List<Denotation> closuresMakingWhatItHolds(Core option, Symbols symbols,
+                                                      DeclarationNewtypes newtypes) {
+        List<Denotation> applied = new ArrayList<>();
+        WhatItHolds held = whatItHolds(option, symbols, newtypes);
+        while (held instanceof WhatItHolds.MadeByAClosure(Denotation answered, var handed)) {
+            applied.addFirst(answered);
+            held = handed;
+        }
+        return applied;
+    }
+
+    /**
      * How {@link WhatAnOptionHolds} reads an option here: names followed by this reading, a
      * closure's parameter standing for what it is handed ({@link #holding}), and what only an input
      * has answered here — the entry a lookup in the input's map picks, and what stands at a position
@@ -4525,6 +4541,29 @@ public final class InputReads {
      */
     public Optional<Object> folded(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
         return FoldedValue.of(e, this, new Followed(symbols, newtypes, new HashSet<>()), symbols);
+    }
+
+    /**
+     * This, where each field of a declaration stands for what a construction handed it, by its
+     * binding in {@code given}. A value is read where the construction is, {@code reads}, and the
+     * clause that names the field where the declaration is written: the two are not one tree, and
+     * a value that is substituted into the clause is read as if they were.
+     */
+    public InputReads handingTheFields(Map<BindingId, Core> given, InputReads reads,
+                                       DeclarationNewtypes newtypes) {
+        InputReads out = this;
+        for (Map.Entry<BindingId, Core> field : given.entrySet()) {
+            out = out.handing(field.getKey(), new Denotation(field.getValue(), reads), newtypes);
+        }
+        return out;
+    }
+
+    /** The same, with what each name came to held in {@code kept} from one fold to the next, for
+     *  a reader that folds many expressions over the same names ({@link FoldedValue.Kept}). */
+    public Optional<Object> folded(Core e, Symbols symbols, DeclarationNewtypes newtypes,
+                                   FoldedValue.Kept kept) {
+        return FoldedValue.of(e, this, new Followed(symbols, newtypes, new HashSet<>()), symbols,
+                kept);
     }
 
     /** Where an element handed to {@code binding} stands ({@link InputPath#elementAt}), at a

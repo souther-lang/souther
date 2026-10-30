@@ -8156,6 +8156,54 @@
                             "type": "string"
                           },
                           "description": "The functions of the library the other value is derived through whose image over the strings of the position is not shown, so the values they take it to are not among those the classes hold. Present only where some are open whatever their length, and sorted."
+                        },
+                        "codePoints": {
+                          "type": "array",
+                          "minItems": 1,
+                          "uniqueItems": true,
+                          "description": "The values left open for how many of their code points are in a class, which no length bounds: a run that gets to the relation holds some of the class in the string, so the values holding fewer than `fewerThan` of them, or more than `moreThan`, are shown on neither side. Absent where no value is open for that, and sorted.",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "class"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "class": {
+                                "enum": [
+                                  "not_whitespace",
+                                  "not_whitespace_nor_equal_to",
+                                  "one_of"
+                                ]
+                              },
+                              "separator": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "ranges": {
+                                "type": "array",
+                                "items": {
+                                  "type": "array",
+                                  "minItems": 2,
+                                  "maxItems": 2,
+                                  "items": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  }
+                                }
+                              },
+                              "fewerThan": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "description": "Values holding fewer than this many code points of the class are open."
+                              },
+                              "moreThan": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "description": "Values holding more than this many code points of the class are open."
+                              }
+                            }
+                          }
                         }
                       }
                     }

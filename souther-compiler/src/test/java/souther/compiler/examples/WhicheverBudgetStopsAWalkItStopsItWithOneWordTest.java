@@ -213,7 +213,8 @@ class WhicheverBudgetStopsAWalkItStopsItWithOneWordTest {
         return ObservedValues.of(live, symbols,
                 new NeutralForm(symbols, ScopedDeclarations.sumsOf(symbols),
                         ScopedDeclarations.kindsOf(symbols),
-                        FieldTypes.over(new CheckedDeclarations(_ -> null, _ -> null))), limits);
+                        FieldTypes.over(new CheckedDeclarations(_ -> null, _ -> null)),
+                        ValueOwnership.none()), limits);
     }
 
     private static List<Object> longs(int count) {
