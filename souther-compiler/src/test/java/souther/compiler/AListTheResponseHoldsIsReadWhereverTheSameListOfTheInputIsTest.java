@@ -6,7 +6,9 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 
 import java.util.List;
 import java.util.Map;
@@ -218,7 +220,8 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
             if (shape.startsWith("List.fold")) {
                 assertFalse(input.contains("not read: comparison"), "over the input: " + shape
                         + "\n" + input);
-                assertTrue(input.contains("its rows are placed by what their runs worked out"),
+                assertTrue(input.contains(WhyAPlaceIsUndividedIsSaid.of(
+                                UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS)),
                         "over the input: " + shape + "\n" + input);
             } else {
                 assertTrue(input.contains("not read: comparison"), "over the input: " + shape

@@ -27,6 +27,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.query.RowObservation;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -2774,7 +2775,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(
                         compilation.texts())).lines().map(String::strip)
                 .filter(line -> line.startsWith("· no line")
-                        && line.contains("its rows are placed by what their runs worked out")
+                        && line.contains(WhyAPlaceIsUndividedIsSaid.of(
+                                UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS))
                         && line.endsWith("about `" + place + "`"))
                 .toList();
     }

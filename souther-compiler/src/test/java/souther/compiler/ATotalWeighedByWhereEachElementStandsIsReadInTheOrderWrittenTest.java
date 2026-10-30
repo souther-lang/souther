@@ -8,7 +8,9 @@ import tools.jackson.databind.json.JsonMapper;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -229,7 +231,8 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
                     """.formatted(BRANCH, walked));
             // Read as no weighing: the total a call works out places a row by what its run did.
             assertFalse(human.contains("not read: comparison"), walked + "\n" + human);
-            assertTrue(human.contains("its rows are placed by what their runs worked out"),
+            assertTrue(human.contains(WhyAPlaceIsUndividedIsSaid.of(
+                            UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS)),
                     walked + "\n" + human);
             assertFalse(human.contains("the position"), walked + "\n" + human);
         }

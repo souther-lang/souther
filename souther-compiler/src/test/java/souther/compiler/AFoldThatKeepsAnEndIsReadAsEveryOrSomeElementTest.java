@@ -4,8 +4,10 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
+import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -473,7 +475,8 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
                     + " worked out";
 
     /** What it says of a fold read as keeping no end: what its runs worked out places the rows. */
-    private static final String ON_ITS_RUNS = "its rows are placed by what their runs worked out";
+    private static final String ON_ITS_RUNS =
+            WhyAPlaceIsUndividedIsSaid.of(UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS);
 
     /** What it says of a relation to another value shown to divide none of the values here. */
     private static final String RELATES_ANOTHER_VALUE =

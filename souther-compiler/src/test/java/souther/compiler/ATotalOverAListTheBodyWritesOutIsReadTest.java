@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 
 import java.util.List;
 import java.util.Set;
@@ -48,7 +50,8 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     private static final String SUM = "a.pay + b.pay + c.pay";
 
     /** What the report says of a walk not unrolled: it is measured on what its runs worked out. */
-    private static final String ON_ITS_RUNS = "its rows are placed by what their runs worked out";
+    private static final String ON_ITS_RUNS =
+            WhyAPlaceIsUndividedIsSaid.of(UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS);
 
     /**
      * {@code report} without where every run is shown to stop. A sum written out tells each

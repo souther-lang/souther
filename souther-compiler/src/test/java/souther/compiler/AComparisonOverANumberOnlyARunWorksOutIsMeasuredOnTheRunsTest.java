@@ -6,8 +6,10 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
+import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 
 import java.util.List;
 import java.util.Map;
@@ -68,7 +70,8 @@ class AComparisonOverANumberOnlyARunWorksOutIsMeasuredOnTheRunsTest {
     private static final String PAST_THE_LINE = "([0, 0, 0, 0]) -> true";
 
     /** What the report says of the places such a comparison names. */
-    static final String MEASURED_ON_ITS_RUNS = "its rows are placed by what their runs worked out";
+    static final String MEASURED_ON_ITS_RUNS =
+            WhyAPlaceIsUndividedIsSaid.of(UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS);
 
     private static Compilation compiled(String model, List<String> rows) {
         String source = model + "\nexample out\n" + rows.stream().map(row -> "    | " + row)

@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 
 import java.util.List;
 
@@ -71,7 +73,8 @@ class AFieldOfARecordAFoldCarriesIsReadAsAFoldOfThatFieldTest {
             + " zeros = if x == 0 then s.zeros + 1 else s.zeros"
             + " }, State { score = 0, misses = 0, zeros = 0 }, xs)";
 
-    private static final String ON_ITS_RUNS = "its rows are placed by what their runs worked out";
+    private static final String ON_ITS_RUNS =
+            WhyAPlaceIsUndividedIsSaid.of(UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS);
 
     @Test
     void aFieldThatOnlyAddsIsTheTotalOfWhatItAdds() {
