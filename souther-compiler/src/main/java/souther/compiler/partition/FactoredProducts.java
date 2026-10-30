@@ -3,10 +3,13 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -61,22 +64,24 @@ final class FactoredProducts {
         if (form.coefs().size() < 2) {
             return form;
         }
-        Map<Quantity, ExactRatio> out = new LinkedHashMap<>();
+        List<LinearForm<Quantity>> parts = new ArrayList<>();
+        parts.add(LinearForm.constant(form.constant()));
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             if (each.getKey() instanceof Quantity.ProductOfTwo two
                     && NumericTerm.ProductOf.signed(LinearForm.atom(two.one()),
                             LinearForm.atom(two.other()))
-                    instanceof NumericTerm.ProductOf.Signed made) {
-                ExactRatio weight = each.getValue().times(made.sign()).orNull();
-                if (weight != null) {
-                    out.merge(new DecisionAtom.OfTheInput(made.product()), weight,
-                            (before, now) -> before.plus(now).orNull());
-                    continue;
-                }
+                    instanceof NumericTerm.ProductOf.Signed made
+                    && each.getValue().times(made.sign())
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio weight)) {
+                parts.add(LinearForm.weighing(new DecisionAtom.OfTheInput(made.product()), weight));
+            } else {
+                parts.add(LinearForm.weighing(each.getKey(), each.getValue()));
             }
-            out.put(each.getKey(), each.getValue());
         }
-        return new LinearForm<>(form.constant(), out);
+        // Two writings of one product are one atom with the weights added, and a sum the exact
+        // arithmetic cannot hold is no reason to drop the atom: the form is left as it was.
+        return LinearForm.sum(parts) instanceof ExactAnswer.Held<LinearForm<Quantity>>(
+                LinearForm<Quantity> together) ? together : form;
     }
 
     /** One product brought together with the factor beside it, or null where there is none. */
@@ -138,11 +143,17 @@ final class FactoredProducts {
         if (product == null) {
             return null;
         }
-        Map<Quantity, ExactRatio> rest = new LinkedHashMap<>(form.coefs());
-        rest.remove(made);
-        rest.remove(beside);
-        rest.merge(new DecisionAtom.OfTheInput(product.product()), product.sign(),
-                (before, now) -> before.plus(now).orNull());
-        return new LinearForm<>(form.constant(), rest);
+        List<LinearForm<Quantity>> parts = new ArrayList<>();
+        parts.add(LinearForm.constant(form.constant()));
+        form.coefs().forEach((atom, weight) -> {
+            if (!atom.equals(made) && !atom.equals(beside)) {
+                parts.add(LinearForm.weighing(atom, weight));
+            }
+        });
+        parts.add(LinearForm.weighing(new DecisionAtom.OfTheInput(product.product()),
+                product.sign()));
+        // A form the weights of which cannot be added is not brought together.
+        return LinearForm.sum(parts) instanceof ExactAnswer.Held<LinearForm<Quantity>>(
+                LinearForm<Quantity> together) ? together : null;
     }
 }

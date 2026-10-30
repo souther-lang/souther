@@ -384,6 +384,39 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         assertTrue(fromTheLeast.timesEach(ExactRatio.of(2)) != null);
     }
 
+    /**
+     * The number beside the one alone stands inside its run on its own order: a rate of whole
+     * numbers strictly between nought and three has a middle of one and a half, which no whole
+     * number is, and strictly between nought and four a middle of two.
+     */
+    @Test
+    void aNumberOfWholeNumbersIsHeldInsideTheRunOnlyAtAWholeNumber() {
+        NumericTerm price = new NumericTerm.ValueOf(TermPath.of("price"));
+        NumericTerm rate = new NumericTerm.ValueOf(TermPath.of("rate"));
+        NumericTerm.ProductOf product = NumericTerm.ProductOf.of(LinearForm.atom(price),
+                new LinearForm<>(ExactRatio.ONE, Map.of(rate, ExactRatio.of(-1))));
+        assertEquals(product, product.standingWhereTheDeclarationsAdmit(
+                wholeBetween("0", "3")));
+        assertEquals(ExactRatio.of(2), product.standingWhereTheDeclarationsAdmit(
+                wholeBetween("0", "4")).atAValue().at());
+    }
+
+    /** The same, with {@code rate} counted in whole numbers and {@code price} in decimals. */
+    private static NumericTerm.ProductOf.Declared wholeBetween(String low, String high) {
+        NumericTerm.ProductOf.Declared dense = between(low, high);
+        return new NumericTerm.ProductOf.Declared() {
+            @Override
+            public NumericDomain.Bounds runOf(NumericTerm number) {
+                return dense.runOf(number);
+            }
+
+            @Override
+            public boolean isDense(NumericTerm number) {
+                return !number.toString().equals("rate");
+            }
+        };
+    }
+
     /** The declarations leave {@code rate} the values strictly between {@code low} and
      *  {@code high}, and every number is counted on decimals. */
     private static NumericTerm.ProductOf.Declared between(String low, String high) {

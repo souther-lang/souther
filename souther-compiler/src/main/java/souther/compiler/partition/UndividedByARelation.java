@@ -909,7 +909,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 case Quantity.ProductOfTwo product -> NumericTerm.ProductOf.signed(
                         LinearForm.atom(product.one()), LinearForm.atom(product.other()))
                         instanceof NumericTerm.ProductOf.Signed made
-                        ? ofTheInput(made.product(), each.getValue().times(made.sign()).orNull())
+                        && each.getValue().times(made.sign())
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio weight)
+                        ? ofTheInput(made.product(), weight)
                         : new Side(List.of(), each.getValue(), null, null, null);
                 case Quantity.WhatAnOperationAnswers answers -> new Side(
                         answers.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),

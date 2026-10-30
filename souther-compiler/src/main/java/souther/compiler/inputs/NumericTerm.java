@@ -2035,6 +2035,11 @@ public sealed interface NumericTerm
                 return this;
             }
             ExactRatio inside = insideOf(run);
+            // The number beside stands at the value on its own order: a whole number between two
+            // whole numbers is not in the middle of them where they are an odd distance apart.
+            if (inside != null && !declared.isDense(way.fixed()) && !inside.isWhole()) {
+                inside = null;
+            }
             ProductOf there = inside == null ? null : new ProductOf(one, other, inside);
             AtAValue made = there == null ? null : there.atAValue();
             // The number alone stands at the value over the scale, and a row is built with its

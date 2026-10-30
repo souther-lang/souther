@@ -6,6 +6,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 
@@ -13,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A product beside a factor of its own is the one product of that number and the form beside it:
@@ -57,6 +59,24 @@ class AProductBesideAFactorOfItsOwnIsTheOneProductTest {
         assertEquals(2, together.coefs().size(), together::toString);
         assertEquals(true, together.coefs().containsKey(new DecisionAtom.OfTheInput(C)),
                 together::toString);
+    }
+
+    /**
+     * Two writings of one product are one atom with the weights added; where the exact arithmetic
+     * cannot add them the form is left as it was. A sum that went unheld is not a sum of nothing,
+     * and an atom taken out of a form is a relation with a term gone.
+     */
+    @Test
+    void weightsThatCannotBeAddedLeaveTheFormAsItWas() {
+        ExactRatio wide = ExactRatio.tenTo(Long.MAX_VALUE / 4);
+        assertTrue(wide.plus(ExactRatio.of(-1)) instanceof ExactAnswer.Unheld<ExactRatio>,
+                "the weights below are ones the arithmetic cannot add");
+        Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(new Quantity.ProductOfTwo(A, B), wide);
+        coefs.put(new DecisionAtom.OfTheInput(NumericTerm.ProductOf.of(
+                LinearForm.atom(A), LinearForm.atom(B))), ExactRatio.of(-1));
+        LinearForm<Quantity> form = new LinearForm<>(ExactRatio.ZERO, coefs);
+        assertEquals(form, FactoredProducts.of(form));
     }
 
     @Test

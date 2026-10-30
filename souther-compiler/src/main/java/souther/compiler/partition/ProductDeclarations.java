@@ -6,11 +6,13 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -46,15 +48,19 @@ final class ProductDeclarations implements NumericTerm.ProductOf.Declared {
             return form;
         }
         ProductDeclarations declared = new ProductDeclarations(read);
-        Map<Quantity, ExactRatio> out = new LinkedHashMap<>();
+        List<LinearForm<Quantity>> parts = new ArrayList<>();
+        parts.add(LinearForm.constant(form.constant()));
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             Quantity atom = each.getKey() instanceof DecisionAtom.OfTheInput(
                     NumericTerm.ProductOf product)
                     ? new DecisionAtom.OfTheInput(product.standingWhereTheDeclarationsAdmit(declared))
                     : each.getKey();
-            out.merge(atom, each.getValue(), (before, now) -> before.plus(now).orNull());
+            parts.add(LinearForm.weighing(atom, each.getValue()));
         }
-        return new LinearForm<>(form.constant(), out);
+        // Two products that stand at one place are one atom with the weights added. Weights that
+        // cannot be added leave the form as it was, with each product where it stood.
+        return LinearForm.sum(parts) instanceof ExactAnswer.Held<LinearForm<Quantity>>(
+                LinearForm<Quantity> admitted) ? admitted : form;
     }
 
     @Override
