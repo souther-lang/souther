@@ -3,6 +3,7 @@ package souther.compiler.meaning;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.TermPath;
+import souther.test.OnItsOwnStack;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -111,7 +112,7 @@ class ASpellingIsItsTextWithoutWritingItOutTest {
     /** Read a piece at a time with a stack of its own: a spelling nested deeper than a small
      *  thread's stack goes is compared, measured and written on that thread. */
     @Test
-    void aSpellingDeeperThanTheStackIsReadWhole() throws InterruptedException {
+    void aSpellingDeeperThanTheStackIsReadWhole() {
         int depth = 20_000;
         Spelling one = Spelling.of("x");
         Spelling other = Spelling.of("x");
@@ -122,18 +123,8 @@ class ASpellingIsItsTextWithoutWritingItOutTest {
         String text = "(".repeat(depth) + "x" + ")".repeat(depth);
         Spelling deep = one;
         Spelling alike = other;
-        List<Object> seen = new ArrayList<>();
-        Thread small = new Thread(null, () -> {
-            try {
-                seen.add(deep.length());
-                seen.add(deep.equals(alike));
-                seen.add(deep.toString());
-            } catch (StackOverflowError e) {
-                seen.add(e);
-            }
-        }, "a small stack", 64 * 1024);
-        small.start();
-        small.join();
+        List<Object> seen = OnItsOwnStack.ask("a deep spelling read", 64 * 1024,
+                () -> List.of(deep.length(), deep.equals(alike), deep.toString()));
         assertEquals(List.of((long) text.length(), true, text), seen);
         assertEquals(text.hashCode(), deep.hashCode());
     }
