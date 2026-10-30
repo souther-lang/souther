@@ -504,6 +504,11 @@ final class ReadQuantities implements Quantities {
         // absent, so a term of another input comes back with an order on one end and nothing on the
         // other — an answer about no reading, wearing this one's name.
         held(term);
+        return contexts.ordersOf(term, this);
+    }
+
+    /** {@link #ordersOf}, worked out from where {@code term} sits. */
+    private TermOrders ordersWorkedOut(NumericTerm term) {
         if (term instanceof NumericTerm.ProductOf product) {
             // Counted on the order its factors' numbers are, each read on its own.
             return TermOrdering.ofAProduct(product, this::ordersOf);
@@ -806,6 +811,28 @@ final class ReadQuantities implements Quantities {
                 STANDINGS_WORKED_OUT.incrementAndGet();
                 return whereTermsStand(listed);
             });
+        }
+
+        /**
+         * Both orders of each term a reading has been asked about ({@link #ordersOf}).
+         *
+         * <p>Kept here for the reason {@link #runs} is: what a term is measured on is a fact about
+         * where it sits, the same for every refinement of the reading, and every quantity read at
+         * a row asks it of each of its terms again.
+         */
+        private final Map<NumericTerm, TermOrders> orders = new ConcurrentHashMap<>();
+
+        /** The orders of {@code term}, the ones worked out before or the ones {@code asking} works
+         *  out. Put once worked out rather than worked out inside the table: the orders of a
+         *  product are asked of its factors. */
+        TermOrders ordersOf(NumericTerm term, ReadQuantities asking) {
+            TermOrders had = orders.get(term);
+            if (had != null) {
+                return had;
+            }
+            TermOrders made = asking.ordersWorkedOut(term);
+            TermOrders raced = orders.putIfAbsent(term, made);
+            return raced == null ? made : raced;
         }
 
         NumericDomain.Bounds runOf(NumericTerm.TakenOver over, ReadQuantities asking) {

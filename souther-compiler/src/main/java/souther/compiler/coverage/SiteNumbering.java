@@ -1,5 +1,7 @@
 package souther.compiler.coverage;
 
+import souther.compiler.collect.HeldOnce;
+
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -25,6 +27,16 @@ import java.util.Set;
  * it out to the other family.
  */
 public final class SiteNumbering {
+
+    /**
+     * What runs saw, each held once for every run that saw the same ({@link #align}).
+     *
+     * <p>The rows of a search go the same ways through the same places, and what a run is kept as
+     * is read back here for every row; most of what one run read back, another already had.
+     */
+    private static final HeldOnce<SeenConditionOutcome> WAYS_SEEN = new HeldOnce<>(14);
+    private static final HeldOnce<SeenVisit> VISITS_SEEN = new HeldOnce<>(14);
+    private static final HeldOnce<SeenComparison> COMPARISONS_SEEN = new HeldOnce<>(14);
 
     private final NumberingIdentity identity;
 
@@ -111,11 +123,12 @@ public final class SiteNumbering {
         }
         Set<SeenConditionOutcome> ways = new LinkedHashSet<>();
         for (RecordedConditionOutcome way : seen.outcomes()) {
-            ways.add(new SeenConditionOutcome(outcome(way.at()), way.held()));
+            ways.add(WAYS_SEEN.held(new SeenConditionOutcome(outcome(way.at()), way.held())));
         }
         Set<SeenVisit> visits = new LinkedHashSet<>();
         for (RecordedVisit visit : seen.visits()) {
-            visits.add(new SeenVisit(outcome(visit.at()), visit.nth(), visit.held()));
+            visits.add(VISITS_SEEN.held(new SeenVisit(outcome(visit.at()), visit.nth(),
+                    visit.held())));
         }
         Set<WalkProbe> walks = new LinkedHashSet<>();
         for (int raw : seen.walks()) {
@@ -127,8 +140,8 @@ public final class SiteNumbering {
         }
         Set<SeenComparison> compared = new LinkedHashSet<>();
         for (RecordedComparison sides : seen.compared()) {
-            compared.add(new SeenComparison(outcome(sides.at()), sides.nth(), sides.left(),
-                    sides.right()));
+            compared.add(COMPARISONS_SEEN.held(new SeenComparison(outcome(sides.at()),
+                    sides.nth(), sides.left(), sides.right())));
         }
         Set<ConditionOutcomeSite> pastTheKept = new LinkedHashSet<>();
         for (int raw : seen.pastTheKept()) {

@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.CasesLeft;
-import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.CasesHeldTo;
@@ -112,10 +111,10 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
     /**
      * This, put to rows: each relation it is over, as the quantity a row is read at.
      *
-     * @param quantities the reading of the input, which says which order each number is on
+     * @param subject the input the rows are of, whose reading says which order each number is on
      */
-    AskedOfRows askedOfRows(String behavior, Quantities quantities) {
-        return new AskedOfRows(AStatementAtARow.of(decides, behavior, quantities));
+    AskedOfRows askedOfRows(String behavior, MeasuredInput subject) {
+        return new AskedOfRows(subject.putToRows(decides, behavior));
     }
 
     /** Where a line decides, ready to be asked of rows. */

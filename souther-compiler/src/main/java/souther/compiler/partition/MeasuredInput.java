@@ -11,6 +11,7 @@ import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.RuleRoots;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Today;
@@ -138,6 +139,17 @@ public final class MeasuredInput {
      * makes two of these one, for the reason {@link #offered} is not.
      */
     private final Map<TermPath, List<List<String>>> keptApart = new ConcurrentHashMap<>();
+    /**
+     * The relations of the statements put to the rows of this input ({@link #putToRows}).
+     *
+     * <p>Kept because every reading of every line where a part of a statement decides puts that
+     * part to rows again: the statements are many, one for each place a line decides, and the
+     * relations in them are the comparisons of the model, each met again in every statement of the
+     * lines it decides. What one comes to put to rows is the relation's and this reading's
+     * quantities', and nothing a line brings. No part of what makes two of these one, for the
+     * reason {@link #offered} is not.
+     */
+    private final AStatementAtARow.RelationsOfAnInput relations;
 
     /** A position as what it is offered turns on: where the value stops and the runs it is in, how
      *  much it holds, the class it is held to and the values its rules name — and not the rest of
@@ -163,6 +175,7 @@ public final class MeasuredInput {
         this.divided = divided;
         this.reach = reach;
         this.ruleRoots = ruleRoots;
+        this.relations = new AStatementAtARow.RelationsOfAnInput();
     }
 
     /**
@@ -268,6 +281,14 @@ public final class MeasuredInput {
     /** What the rules reaching this input leave its numbers. */
     public Quantities quantities() {
         return quantities;
+    }
+
+    /**
+     * {@code stated}, ready to be asked of the rows of this input ({@link AStatementAtARow#of}),
+     * with each of its relations read once for this input however many statements hold it.
+     */
+    AStatementAtARow putToRows(Proposition stated, String behavior) {
+        return AStatementAtARow.readBy(stated, behavior, quantities, relations);
     }
 
     /**

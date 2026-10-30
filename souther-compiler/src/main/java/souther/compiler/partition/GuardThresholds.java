@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.collect.LatelyAsked;
 import souther.compiler.check.SeededWalk;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.types.BindingId;
@@ -277,10 +278,12 @@ public final class GuardThresholds {
                 case EmittedComparisonState.Instrumented at -> {
                     // What each case puts on the way, once however many ask it: the lines of one
                     // statement are asked over the same parts, a case kept is one that was asked
-                    // while it was chosen, and its way is filed under it after that.
-                    Map<Proposition, ReachingCuts.Stating> putOnTheWay = new HashMap<>();
+                    // while it was chosen, and its way is filed under it after that. Kept as the
+                    // ways to the cases are, while it is among those asked last.
+                    LatelyAsked<Proposition, ReachingCuts.Stating> putOnTheWay =
+                            new LatelyAsked<>(WaysToACase.CASES_KEPT);
                     Function<Proposition, ReachingCuts.Stating> aCase = decides -> putOnTheWay
-                            .computeIfAbsent(decides, _ -> each.aCasePutOnTheWay(decides, read));
+                            .answer(decides, asked -> each.aCasePutOnTheWay(asked, read));
                     switch (each.standing()) {
                         case BoundaryPolicy.Standing.Admitted admitted -> {
                             // The same reading on the narrower region a row at the line is in:

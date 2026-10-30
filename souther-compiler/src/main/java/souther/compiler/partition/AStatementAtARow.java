@@ -37,8 +37,10 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 /**
@@ -317,15 +319,62 @@ final class AStatementAtARow {
      * @param quantities the reading of the input, which says which order each number is on
      */
     static AStatementAtARow of(Proposition stated, String behavior, Quantities quantities) {
+        return readBy(stated, behavior, quantities, new RelationsOfAnInput());
+    }
+
+    /**
+     * The same, with each relation read by {@code reading}, which may have read it before.
+     *
+     * @param reading what has been read of the relations of this input, over {@code quantities}
+     *                every time
+     */
+    static AStatementAtARow readBy(Proposition stated, String behavior, Quantities quantities,
+                                   RelationsOfAnInput reading) {
         Map<Relation, OneRelation> relations = new LinkedHashMap<>();
         Map<Spelling,OverTheElements> elements = new LinkedHashMap<>();
         Set<TermPath> positions = new LinkedHashSet<>();
-        gather(stated, behavior, quantities, relations, elements, positions);
+        gather(stated, behavior, quantities, reading, relations, elements, positions);
         return new AStatementAtARow(stated, relations, elements, positions);
     }
 
+    /**
+     * The relations put to the rows of one input, each read once ({@link OneRelation#of}).
+     *
+     * <p>For a reader that puts many statements to the same rows. What a relation comes to put to
+     * rows is the relation's and the quantities' of the input, and nothing the statement holding it
+     * brings; so a relation met again in another statement is the one read before, and the
+     * statements share it. Nothing put to a row changes one. The quantities are the holder's, which
+     * reads every relation over the same ones.
+     *
+     * <p>Equal by what it holds, the relations read so far, as a value carried in what a compile
+     * keeps has to be.
+     *
+     * @param read each relation read so far, by the relation and the behavior it was read for
+     */
+    record RelationsOfAnInput(Map<RelationOf, OneRelation> read) {
+
+        /** A relation as it is read: of which behavior's input. */
+        private record RelationOf(Relation relation, String behavior) {}
+
+        /** Nothing read yet. */
+        RelationsOfAnInput() {
+            this(new ConcurrentHashMap<>());
+        }
+
+        private OneRelation of(Relation relation, String behavior, Quantities quantities) {
+            RelationOf key = new RelationOf(relation, behavior);
+            OneRelation had = read.get(key);
+            if (had != null) {
+                return had;
+            }
+            OneRelation made = OneRelation.of(relation, behavior, quantities);
+            OneRelation raced = read.putIfAbsent(key, made);
+            return raced == null ? made : raced;
+        }
+    }
+
     private static void gather(Proposition stated, String behavior, Quantities quantities,
-                               Map<Relation, OneRelation> into,
+                               RelationsOfAnInput reading, Map<Relation, OneRelation> into,
                                Map<Spelling,OverTheElements> elements, Set<TermPath> positions) {
         switch (stated) {
             case Proposition.Always _, Proposition.LastToHold _ -> { }
@@ -342,31 +391,31 @@ final class AStatementAtARow {
                 positions.add(other);
             }
             case Proposition.All all -> all.parts().forEach(part ->
-                    gather(part, behavior, quantities, into, elements, positions));
+                    gather(part, behavior, quantities, reading, into, elements, positions));
             case Proposition.Any any -> any.parts().forEach(part ->
-                    gather(part, behavior, quantities, into, elements, positions));
+                    gather(part, behavior, quantities, reading, into, elements, positions));
             case Proposition.WhereItAnswers where -> {
-                gather(where.answers(), behavior, quantities, into, elements, positions);
-                gather(where.states(), behavior, quantities, into, elements, positions);
+                gather(where.answers(), behavior, quantities, reading, into, elements, positions);
+                gather(where.states(), behavior, quantities, reading, into, elements, positions);
             }
             case Proposition.SoManyHold counted -> counted.statements().forEach(part ->
-                    gather(part, behavior, quantities, into, elements, positions));
-            case Proposition.OfTheWays ways ->
-                    gather(ways.written(), behavior, quantities, into, elements, positions);
+                    gather(part, behavior, quantities, reading, into, elements, positions));
+            case Proposition.OfTheWays ways -> gather(ways.written(), behavior, quantities,
+                    reading, into, elements, positions);
             case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
                     _ -> new OverTheElements(some.container().inputPosition(),
-                            of(some.ofTheElement(), behavior, quantities), Optional.empty(),
-                            Optional.empty()));
+                            readBy(some.ofTheElement(), behavior, quantities, reading),
+                            Optional.empty(), Optional.empty()));
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
                     && countIn(affine) instanceof Quantity count ->
                     elements.computeIfAbsent(keyOf(count), _ -> new OverTheElements(
                             elementsOf(count).container().inputPosition(),
-                            of(meetingOf(count), behavior, quantities), differentAt(count),
-                            acrossOf(count)));
+                            readBy(meetingOf(count), behavior, quantities, reading),
+                            differentAt(count), acrossOf(count)));
             case Proposition.Compared compared when askable(compared) ->
                     into.computeIfAbsent(compared.relation(),
-                            relation -> OneRelation.of(relation, behavior, quantities));
+                            relation -> reading.of(relation, behavior, quantities));
             // Put to no row: answered as not known where it is asked ({@link #notAsked}).
             case Proposition.Compared _, Proposition.Truth _, Proposition.Present _,
                  Proposition.InCases _, Proposition.InTheStrings _, Proposition.SameValue _,
@@ -2177,7 +2226,7 @@ final class AStatementAtARow {
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(stated, relations, elements, positions);
+        return Objects.hash(stated, relations, elements, positions);
     }
 
     /** Every relation over the input's own numbers this reads, for the quantities a reader of it

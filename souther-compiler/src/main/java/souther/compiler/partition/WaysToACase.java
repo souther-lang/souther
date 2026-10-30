@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.collect.LatelyAsked;
 import souther.compiler.meaning.Proposition;
 
 import java.util.HashMap;
@@ -21,11 +22,24 @@ import java.util.function.Function;
  * <p>Whether rows cross is keyed by the line's {@link Cutting} and not by the line: two lines of
  * the statement reached along different arms of the choices before the comparison are two lines
  * and one cutting.
+ *
+ * <p>A way is kept while it is among the {@link #CASES_KEPT} asked last, and not for as long as the
+ * comparison is read. Each is a reading of the whole region with the case taken in, and a statement
+ * of several is asked in thousands of cases; the lines asking one case are read one after another,
+ * so a way is asked again soon after it was worked out or not at all. One asked again after it was
+ * let go is worked out again, and is the way it was.
  */
 final class WaysToACase {
 
+    /**
+     * How many cases' ways are kept, and what each case puts on the way: more than the cases the
+     * lines asking one case put in between in the models measured, so none of those is worked out
+     * twice there.
+     */
+    static final int CASES_KEPT = 512;
+
     private final Function<Proposition, Reachability> reading;
-    private final Map<Proposition, Reachability> ways = new HashMap<>();
+    private final LatelyAsked<Proposition, Reachability> ways = new LatelyAsked<>(CASES_KEPT);
     private final Map<Cutting, Map<Proposition, Boolean>> crossings = new HashMap<>();
 
     /**
@@ -37,12 +51,7 @@ final class WaysToACase {
 
     /** The way to the comparison with {@code decides} taken in beside it. */
     Reachability apply(Proposition decides) {
-        Reachability had = ways.get(decides);
-        if (had == null) {
-            had = reading.apply(decides);
-            ways.put(decides, had);
-        }
-        return had;
+        return ways.answer(decides, reading);
     }
 
     /**
