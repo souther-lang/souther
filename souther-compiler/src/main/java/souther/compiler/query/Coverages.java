@@ -1074,12 +1074,16 @@ final class Coverages {
             MeasuredInput.BorderReading read = lines.at(border.border());
             WayToTheBorder way = wayTo(border.border(), reaching);
             OneSearchOfABorder search = searching(border.border(), read, input, probe,
-                    realizer, way, false);
-            // The way a class the line cuts is looked for along where the walk to the case the
-            // line decides in has no value to stand at: the class runs over the whole of the
-            // quantity, and the case is only where the line is read. Worked out at the first point
-            // that asks, so that a border none of whose points come to that pays for one walk.
-            OneSearchOfABorder inTheClasses = null;
+                    realizer, way);
+            // The second search of a class the line cuts, along the way to the comparison. The
+            // first is along the way to the case the line decides in. Where that proves the class
+            // has no value in the case, the class lies wholly outside it, and a row there is a row
+            // of the class by the answer the comparison came out with: nothing in the case could
+            // be one, so a row outside it does not stand in for a row inside. Where the class has
+            // values in the case, a search that fell short settles nothing about rows outside it,
+            // and none is looked for. Made at the first point that asks, so that a border none of
+            // whose points come to that pays for one walk.
+            OneSearchOfABorder overTheComparison = null;
             java.util.Map<DomainPoint, ItemAssessment> items = new java.util.LinkedHashMap<>();
             for (DomainPoint point : border.items().keySet()) {
                 ItemAssessment item = border.at(point);
@@ -1089,17 +1093,25 @@ final class Coverages {
                 // search stopped at one call would come out stopped at every call of the line.
                 if (item instanceof ItemAssessment.Owed owed && owed.worthSearching()) {
                     String label = border.border().label(point);
-                    SearchOutcomes outcomes = search.search(owed.criterion(), label);
-                    if (!point.againstTheLine() && outcomes.provesInfeasible()) {
-                        if (inTheClasses == null) {
-                            WayToTheBorder wayToTheClasses =
-                                    reaching.wayToTheClassesOf(border.border().origin());
-                            inTheClasses = wayToTheClasses.equals(way) ? search
+                    Optional<Boolean> answeredAs = answeredAs(border.border(), point);
+                    SearchOutcomes outcomes =
+                            search.search(owed.criterion(), label, Optional.empty());
+                    if (answeredAs.isPresent() && outcomes.provesInfeasible()) {
+                        if (overTheComparison == null) {
+                            WayToTheBorder toTheComparison =
+                                    reaching.wayToTheComparison(border.border().origin());
+                            overTheComparison = toTheComparison.equals(way) ? search
                                     : searching(border.border(), read, input, probe, realizer,
-                                            wayToTheClasses, true);
+                                            toTheComparison);
                         }
-                        if (inTheClasses != search) {
-                            outcomes = inTheClasses.search(owed.criterion(), label);
+                        if (overTheComparison != search) {
+                            // Contains the first. A proof it reaches settles the class, a row it
+                            // finds is a row of it, and anything else leaves the class open for
+                            // what each of the two stopped at.
+                            SearchOutcomes wider =
+                                    overTheComparison.search(owed.criterion(), label, answeredAs);
+                            outcomes = wider.certified() || wider.provesInfeasible() ? wider
+                                    : outcomes.plus(wider);
                         }
                     }
                     items.put(point, owed.settledBy(outcomes.readAt(border.readAt())));
@@ -1306,6 +1318,20 @@ final class Coverages {
     }
 
     /**
+     * For a point of a class the line cuts, the answer the rule comes out with there: that it holds
+     * in the class inside the partition and that it does not in the one outside. Empty for a point
+     * against the line, whose row is read where the line decides.
+     *
+     * <p>One definition for measuring and for searching. A row is at such a point by being in the
+     * class and by the rule having come out as the class says, whichever case it is in, whether
+     * somebody wrote it or a search composed it.
+     */
+    private static Optional<Boolean> answeredAs(Border border, DomainPoint point) {
+        return point.againstTheLine() ? Optional.empty()
+                : Optional.of(border.roleOf(point).inside());
+    }
+
+    /**
      * How a row for one border came to be looked for where it is.
      *
      * <p>Beside the border and not part of it. What a border is is what the rows are owed at, and it
@@ -1337,7 +1363,15 @@ final class Coverages {
     private interface OneShapeOfBorder {
 
         /** Whether one of {@code rows} meets {@code criterion}, and whether that could be told. */
-        StandingAtAPoint.Met met(Criterion criterion, List<ObservedInputs> rows);
+        StandingAtAPoint.Met met(Optional<Boolean> answeredAs, Criterion criterion,
+                                 List<ObservedInputs> rows);
+
+        /**
+         * Whether the region the line is read in leaves {@code criterion}'s class no value: the
+         * class lies wholly outside the case the line decides in. The proof a search reaches the
+         * same fact by ({@link LevelRealizer#leavesNoValue}), asked without looking for a row.
+         */
+        boolean classLiesOutsideTheCase(Criterion criterion);
 
         /** What the lines beside this one are asked of at this reading: those same rows, read
          *  through the same walk over them, and the way they took here. */
@@ -1366,8 +1400,13 @@ final class Coverages {
          * one held back by a figure of this compiler's and one that composed nothing are not each
          * other's representatives ({@link SearchOutcomes}). Answered with one, the point would
          * carry whichever way was tried first.
+         *
+         * @param answeredAs for a point of a class the line cuts, the answer the rule comes out with
+         *                   there, which is what a row is read back against
+         *                   ({@link StandingAtAPoint.AtALine#forAClass}); empty for a point against
+         *                   the line
          */
-        SearchOutcomes search(Criterion criterion, String label);
+        SearchOutcomes search(Criterion criterion, String label, Optional<Boolean> answeredAs);
 
         /**
          * What looking for a row that rules out {@code direction} on one side of this line came to.
@@ -1454,7 +1493,8 @@ final class Coverages {
                 case Demand.NotWorkedOut not -> new ItemAssessment.NotWorkedOut(not.why());
                 case Demand.Owed owed -> {
                     Measurement<ItemAssessment.Coverage> coverage = absent != null ? absent
-                            : standingAt(shape, owed.criterion(), put, guard, border, observed);
+                            : standingAtPoint(shape, border, point, owed.criterion(), put, guard,
+                                    observed);
                     // No search. Nothing was searched for here, and that is said by there being no
                     // search rather than by a search saying nobody asked: whether a value was
                     // composed is a fact about who asked for one, and a measurement that carried it
@@ -1711,6 +1751,35 @@ final class Coverages {
     }
 
     /**
+     * What the rows come to at one point of a border.
+     *
+     * <p>Read where the line decides, which is how a row shows where the line falls. A point of a
+     * class the line cuts is read again by the answer the comparison came out with where that
+     * finds no row and the class lies wholly outside the case the line is read in
+     * ({@link OneShapeOfBorder#classLiesOutsideTheCase}): nothing in the case can then stand at
+     * it, so a row outside the case is a row of the class. It is the definition a search reads a
+     * row back against at the same point ({@link #searched}).
+     */
+    private static Measurement<ItemAssessment.Coverage> standingAtPoint(
+            OneShapeOfBorder shape, Border border, DomainPoint point, Criterion criterion,
+            RowsPutToTheLines put, boolean guard, Adequacy.RowReading observed) {
+        Measurement<ItemAssessment.Coverage> read =
+                standingAt(shape, Optional.empty(), criterion, put, guard, border, observed);
+        Optional<Boolean> answeredAs = answeredAs(border, point);
+        if (answeredAs.isEmpty() || put.all().isEmpty() || isAHit(read)
+                || !shape.classLiesOutsideTheCase(criterion)) {
+            return read;
+        }
+        Measurement<ItemAssessment.Coverage> asAClass =
+                standingAt(shape, answeredAs, criterion, put, guard, border, observed);
+        return isAHit(asAClass) ? asAClass : read;
+    }
+
+    private static boolean isAHit(Measurement<ItemAssessment.Coverage> coverage) {
+        return coverage.made().filter(ItemAssessment.Coverage.Hit.class::isInstance).isPresent();
+    }
+
+    /**
      * What the rows come to at one point, with which rows stand there as far as whether they are
      * all rows that do not hold.
      *
@@ -1722,30 +1791,31 @@ final class Coverages {
      * asked the one question it always was.
      */
     private static Measurement<ItemAssessment.Coverage> standingAt(
-            OneShapeOfBorder shape, Criterion criterion, RowsPutToTheLines put, boolean guard,
-            Border border, Adequacy.RowReading observed) {
+            OneShapeOfBorder shape, Optional<Boolean> answeredAs, Criterion criterion,
+            RowsPutToTheLines put, boolean guard, Border border, Adequacy.RowReading observed) {
         if (put.notHolding().isEmpty()) {
-            return verdictOf(shape.met(criterion, put.all()), () -> RowWitnesses.ANOTHER_ROW,
-                    guard, border, observed);
+            return verdictOf(shape.met(answeredAs, criterion, put.all()),
+                    () -> RowWitnesses.ANOTHER_ROW, guard, border, observed);
         }
-        StandingAtAPoint.Met byOthers = shape.met(criterion, put.others());
+        StandingAtAPoint.Met byOthers = shape.met(answeredAs, criterion, put.others());
         if (byOthers instanceof StandingAtAPoint.Met.Reached) {
             return verdictOf(byOthers, () -> RowWitnesses.ANOTHER_ROW, guard, border, observed);
         }
-        return verdictOf(shape.met(criterion, put.all()),
-                () -> onlyRowsThatDoNotHoldAt(shape, criterion, put.notHolding()),
+        return verdictOf(shape.met(answeredAs, criterion, put.all()),
+                () -> onlyRowsThatDoNotHoldAt(shape, answeredAs, criterion, put.notHolding()),
                 guard, border, observed);
     }
 
     /** Which of {@code notHolding} stand at a point every row was found to meet and no other row
      *  does. */
     private static RowWitnesses onlyRowsThatDoNotHoldAt(OneShapeOfBorder shape,
+                                                        Optional<Boolean> answeredAs,
                                                         Criterion criterion,
                                                         List<WitnessedRow> notHolding) {
         RowWitnesses.Gathering found = new RowWitnesses.Gathering();
         boolean any = false;
         for (WitnessedRow row : notHolding) {
-            if (shape.met(criterion, List.of(row.observed()))
+            if (shape.met(answeredAs, criterion, List.of(row.observed()))
                     instanceof StandingAtAPoint.Met.Reached) {
                 found.add(row.by());
                 any = true;
@@ -1804,8 +1874,27 @@ final class Coverages {
         return new OneShapeOfBorder() {
 
             @Override
-            public StandingAtAPoint.Met met(Criterion criterion, List<ObservedInputs> rows) {
-                return toRows.met(rows, criterion);
+            public StandingAtAPoint.Met met(Optional<Boolean> answeredAs, Criterion criterion,
+                                            List<ObservedInputs> rows) {
+                return answeredAs.map(toRows::forAClass).orElse(toRows).met(rows, criterion);
+            }
+
+            /** Worked out at the first class that asks and kept: it is the region of the line,
+             *  which is the same for every point of it. */
+            private Reachability.Reaching region;
+            private boolean regionAsked;
+
+            @Override
+            public boolean classLiesOutsideTheCase(Criterion criterion) {
+                if (!regionAsked) {
+                    regionAsked = true;
+                    if (Reachability.of(way, declarations) instanceof Reachability.Reaching able) {
+                        region = able;
+                    }
+                }
+                return region != null && new LevelRealizer().leavesNoValue(
+                        line.quantity().searchGoalAt(criterion).alongTheWay(region),
+                        region.region());
             }
 
             @Override
@@ -1919,23 +2008,19 @@ final class Coverages {
      * other: what the rows already established is read whatever anybody asked for, and building a
      * value is work somebody asked for and pays for.
      *
-     * @param inTheRegion whether a row is put to the points as one of a class the line cuts, which
-     *                    asks nothing of it that is only where the line decides
-     *                    ({@link StandingAtAPoint.AtALine#inTheRegion})
+     * @param within the way rows are composed along: what a row has to do to arrive, which is a
+     *               region to look in and says nothing of what makes a row a witness of a point
      */
     private static OneSearchOfABorder searching(Border border, MeasuredInput.BorderReading line,
                                                 MeasuredInput input,
                                                 Probe probe, LevelRealizer realizer,
-                                                souther.compiler.partition.WayToTheBorder within,
-                                                boolean inTheRegion) {
+                                                souther.compiler.partition.WayToTheBorder within) {
         souther.compiler.inputs.Quantities rules = input.quantities();
         BorderQuantity quantity = line.quantity();
         List<ConditionOutcomeSite> site =
                 border.origin().recordedAt();
         // Put to rows once for every row a point is searched with.
-        StandingAtAPoint.AtALine toRows = inTheRegion
-                ? StandingAtAPoint.putToRows(line, site).inTheRegion()
-                : StandingAtAPoint.putToRows(line, site);
+        StandingAtAPoint.AtALine toRows = StandingAtAPoint.putToRows(line, site);
         // Built here and gone when the search is. What a row has to be to arrive is a way of asking
         // about values rather than something that says what it is, so it is what the walk runs
         // against and never what the answer keeps; the account it was built from is what travels.
@@ -1951,15 +2036,17 @@ final class Coverages {
         return new OneSearchOfABorder() {
 
             @Override
-            public SearchOutcomes search(Criterion criterion, String label) {
-                return looked(criterion, label, UnaryOperator.identity()).outcomes();
+            public SearchOutcomes search(Criterion criterion, String label,
+                                         Optional<Boolean> answeredAs) {
+                return looked(criterion, label, UnaryOperator.identity(),
+                        answeredAs.map(toRows::forAClass).orElse(toRows)).outcomes();
             }
 
             @Override
             public ARowTellingTheLinesApart.AtOneReading tellingApart(
                     Criterion criterion, String label, AnotherLineTheRowsAllow.Stands line,
                     UnaryOperator<SearchRegion> narrowing) {
-                Looked looked = looked(criterion, label, narrowing);
+                Looked looked = looked(criterion, label, narrowing, toRows);
                 return ARowTellingTheLinesApart.of(border, line, looked.composed(),
                         looked.outcomes());
             }
@@ -1974,7 +2061,8 @@ final class Coverages {
              * twice, the second would be the first without whatever the first learned since.
              */
             private Looked looked(Criterion criterion, String label,
-                                  UnaryOperator<SearchRegion> narrowing) {
+                                  UnaryOperator<SearchRegion> narrowing,
+                                  StandingAtAPoint.AtALine rows) {
                 // Nothing to build against. Told apart from nobody having asked, which is not a
                 // state anything here can be in: this runs because somebody asked.
                 if (probe == null) {
@@ -2007,7 +2095,7 @@ final class Coverages {
                 // way whole came to: one of them coming to nothing says nothing of the others, and
                 // the way whole is the account every one of them is inside.
                 if (able.along().isEmpty()) {
-                    return lookedAlong(criterion, label, narrowing, able);
+                    return lookedAlong(criterion, label, narrowing, rows, able);
                 }
                 // Past the figure the way whole is looked along first where a condition it was not
                 // split at is composed against whole there — a statement the elements of one
@@ -2017,14 +2105,14 @@ final class Coverages {
                 Looked whole = null;
                 if (able.ways() instanceof Reachability.Ways.Whole past
                         && past.composedAgainstWhole(line.quantity().behavior())) {
-                    whole = lookedAlong(criterion, label, narrowing, able);
+                    whole = lookedAlong(criterion, label, narrowing, rows, able);
                     if (whole.witness().isPresent()) {
                         return whole;
                     }
                 }
                 SearchOutcomes alongEach = SearchOutcomes.none();
                 for (Reachability.Reaching along : able.along()) {
-                    Looked one = lookedAlong(criterion, label, narrowing, along);
+                    Looked one = lookedAlong(criterion, label, narrowing, rows, along);
                     if (one.witness().isPresent()) {
                         return one;
                     }
@@ -2038,12 +2126,14 @@ final class Coverages {
                         && alongEach.provesInfeasible()) {
                     return new Looked(alongEach, null, Optional.empty());
                 }
-                return whole != null ? whole : lookedAlong(criterion, label, narrowing, able);
+                return whole != null ? whole
+                        : lookedAlong(criterion, label, narrowing, rows, able);
             }
 
             /** What looking for a row at {@code criterion} along {@code able} came to. */
             private Looked lookedAlong(Criterion criterion, String label,
                                        UnaryOperator<SearchRegion> narrowing,
+                                       StandingAtAPoint.AtALine rows,
                                        Reachability.Reaching able) {
                 // A reading of the line under a case this way does not take. A line at a name the
                 // cases of a sum share is read under each case, and a way split at the cases a
@@ -2075,7 +2165,7 @@ final class Coverages {
                 int askings = quantity.searchGoalAt(criterion).askedAtMost();
                 int value = 0;
                 do {
-                    Searching came = searchingWith(criterion, label, able, region, tried);
+                    Searching came = searchingWith(criterion, label, rows, able, region, tried);
                     if (came.witness().isPresent()) {
                         return new Looked(came.outcomes(), came.realized(), came.witness());
                     }
@@ -2246,6 +2336,7 @@ final class Coverages {
             }
 
             private Searching searchingWith(Criterion criterion, String label,
+                    StandingAtAPoint.AtALine rows,
                     souther.compiler.partition.Reachability.Reaching able,
                     SearchRegion region, ValuesTried tried) {
                 Realization answered = realized(criterion, able, region, tried);
@@ -2278,7 +2369,7 @@ final class Coverages {
                         ItemAssessment.Attempt.Certified witness = null;
                         for (souther.compiler.partition.Generator.BoundaryAttempt each : made) {
                             ItemAssessment.Attempt came = whatCameOfIt(each, label, within,
-                                    () -> standingThere(probe, toRows, criterion,
+                                    () -> standingThere(probe, rows, criterion,
                                             (souther.compiler.partition.Generator
                                                     .BoundaryAttempt.Built) each));
                             if (witness == null

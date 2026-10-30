@@ -289,7 +289,7 @@ public final class StandingAtAPoint {
      */
     public static AtALine putToRows(MeasuredInput.BorderReading line,
                                     List<ConditionOutcomeSite> watched) {
-        return new AtALine(line, watched, whereItDecides(line), metOn(line));
+        return new AtALine(line, watched, whereItDecides(line), metOn(line), Optional.empty());
     }
 
     /** One line put to rows ({@link #putToRows}). */
@@ -302,42 +302,48 @@ public final class StandingAtAPoint {
         private final Optional<WhereAPartDecides.AskedOfRows> decides;
         /** Which elements of the input a run gets an answer out of the line's rule on. */
         private final MetOnARow reached;
+        /** For a point of a class the line cuts: the answer the rule comes out with in it. Empty
+         *  for a point against the line. */
+        private final Optional<Boolean> answeredAs;
 
         private AtALine(MeasuredInput.BorderReading line, List<ConditionOutcomeSite> watched,
-                        Optional<WhereAPartDecides.AskedOfRows> decides, MetOnARow reached) {
+                        Optional<WhereAPartDecides.AskedOfRows> decides, MetOnARow reached,
+                        Optional<Boolean> answeredAs) {
             this.line = line;
             this.watched = List.copyOf(watched);
             this.decides = decides;
             this.reached = reached;
+            this.answeredAs = answeredAs;
         }
 
         /**
-         * This line put to rows for a point of a class it cuts, and not for a point against it.
+         * This line put to rows for a point of a class it cuts, the class where the rule
+         * {@code holds} or the one where it does not.
          *
-         * <p>A row outside the case the line decides in does not show where the line falls, and is
-         * still a row of the class: it reaches the comparison and gets an answer out of it. Only
-         * the relations over numbers are let go, and only where the line decides in nothing else:
-         * a case of a value is where the quantity stands, and so is where its classes stand. The
-         * quantity standing in the class and the comparison having been answered are asked as
-         * they are.
+         * <p>A row is at such a point by being in the class and by the run having had the rule
+         * come out as the class says. Where the line decides is no part of it: that says where
+         * the line falls, and a class lies over the whole of the quantity. A row the rule comes
+         * out the other way for is at the other class or at none, whichever case it is in, and a
+         * row the run never put to the rule is at neither.
+         *
+         * <p>The same line where nothing records a run through the rule, which an invariant's is:
+         * there writing the value is the whole of reaching it.
          */
-        public AtALine inTheRegion() {
-            boolean overNumbersOnly =
-                    line.border().origin() instanceof LineOrigin.ComparisonOrigin comparison
-                            && comparison.part().map(WhereAPartDecides::statesNoCaseOfAValue)
-                                    .orElse(false);
-            return overNumbersOnly ? new AtALine(line, watched, Optional.empty(), reached) : this;
+        public AtALine forAClass(boolean holds) {
+            return watched.isEmpty() ? this
+                    : new AtALine(line, watched, Optional.empty(), reached, Optional.of(holds));
         }
 
         /** {@link StandingAtAPoint#met}, of this line. */
         public Met met(List<ObservedInputs> observed, Criterion criterion) {
-            return StandingAtAPoint.met(line, decides, reached, observed, criterion, watched);
+            return StandingAtAPoint.met(line, decides, reached, observed, criterion,
+                    new Arrival(watched, answeredAs));
         }
 
         /** {@link StandingAtAPoint#valuesOf}, of this line. */
         public RowsRead valuesOf(List<ObservedInputs> observed) {
-            return StandingAtAPoint.valuesOf(line, decides, reached, observed, watched,
-                    Optional.empty());
+            return StandingAtAPoint.valuesOf(line, decides, reached, observed,
+                    new Arrival(watched, answeredAs), Optional.empty());
         }
 
         /**
@@ -351,15 +357,34 @@ public final class StandingAtAPoint {
          * second time and answered by whatever the caller made of it.
          */
         public RowsRead valuesAt(List<ObservedInputs> observed, Criterion criterion) {
-            return StandingAtAPoint.valuesOf(line, decides, reached, observed, watched,
-                    Optional.of(criterion));
+            return StandingAtAPoint.valuesOf(line, decides, reached, observed,
+                    new Arrival(watched, answeredAs), Optional.of(criterion));
+        }
+    }
+
+    /**
+     * What a run has to have done at the places it is recorded at for a row to have reached the
+     * rule.
+     *
+     * @param watched    every place a run through the rule is recorded; empty where writing the
+     *                   value is the whole of reaching it
+     * @param answeredAs for a point of a class the line cuts, the answer the rule came out with;
+     *                   empty where any answer reaches it
+     */
+    private record Arrival(List<ConditionOutcomeSite> watched, Optional<Boolean> answeredAs) {
+
+        boolean by(AlignedObservation account) {
+            return answeredAs
+                    .map(held -> watched.stream().anyMatch(site -> account.saw(site, held)))
+                    .orElseGet(() -> gotAnAnswerOutOfTheRule(watched, account));
         }
     }
 
     private static Met met(MeasuredInput.BorderReading line,
                            Optional<WhereAPartDecides.AskedOfRows> decides, MetOnARow reached,
                            List<ObservedInputs> observed, Criterion criterion,
-                           List<ConditionOutcomeSite> watched) {
+                           Arrival arrival) {
+        List<ConditionOutcomeSite> watched = arrival.watched();
         BorderQuantity quantity = line.quantity();
         BehaviorInputs where = line.subject().inputs();
         Set<ReadingGap> unreadable = new LinkedHashSet<>();
@@ -392,7 +417,7 @@ public final class StandingAtAPoint {
                 }
                 switch (one.watched()) {
                     case Generator.Watched.Ran(var account) -> {
-                        if (gotAnAnswerOutOfTheRule(watched, account)) {
+                        if (arrival.by(account)) {
                             return Met.REACHED;
                         }
                     }
@@ -518,8 +543,8 @@ public final class StandingAtAPoint {
     private static RowsRead valuesOf(MeasuredInput.BorderReading line,
                                      Optional<WhereAPartDecides.AskedOfRows> decides,
                                      MetOnARow reached, List<ObservedInputs> observed,
-                                     List<ConditionOutcomeSite> watched,
-                                     Optional<Criterion> at) {
+                                     Arrival arrival, Optional<Criterion> at) {
+        List<ConditionOutcomeSite> watched = arrival.watched();
         // A row's numbers are read position by position, and only a form has positions to read
         // them at. A line on any other quantity is not one another line is written beside, and
         // the reader that would hold one against the rows asks that first.
@@ -537,7 +562,7 @@ public final class StandingAtAPoint {
             if (!watched.isEmpty()) {
                 switch (one.watched()) {
                     case Generator.Watched.Ran(var account) -> {
-                        if (!gotAnAnswerOutOfTheRule(watched, account)) {
+                        if (!arrival.by(account)) {
                             continue;   // it ran and never met this rule, so it says nothing here
                         }
                     }

@@ -84,19 +84,6 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
         return cases.atoms().stream().map(Refinement::spelled).collect(Collectors.joining(" or "));
     }
 
-    /**
-     * Whether where the line decides says nothing of which case a value is, only relations over
-     * numbers.
-     *
-     * <p>Then the classes the line cuts are not in the case: the case does not say where the
-     * quantity stands, it says where the line turns the statement, and a class of the quantity
-     * lies over the whole of it. Where it names a case of a value the quantity stands in that case
-     * alone, and so do its classes.
-     */
-    public boolean statesNoCaseOfAValue() {
-        return CasesHeldTo.of(decides).isEmpty();
-    }
-
     /** Whether a row is somewhere the line decides, or what kept that from being read. */
     sealed interface AtARow {
 
