@@ -104,8 +104,12 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
         }
 
         /**
-         * The construct to say beside the words for {@code one}, where another rewrite of this body
-         * reads the same without it; nothing where its words already differ.
+         * What to say beside the words for {@code one}, where another rewrite of this body reads
+         * the same without it; nothing where its words already differ.
+         *
+         * <p>What and not how: the numbers that tell the rewrites apart, and no words for them.
+         * A page, a warning in either language and a generated row each say them in their own,
+         * so what the measure decides stays the same whichever of them is written.
          *
          * <p>The numbers the document writes as {@code construct} and {@code lowered}, and no
          * place: a definition this build holds no source of has no line to give, and one made up
@@ -126,19 +130,19 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
          * fork's own; where the words only name the definition it is the construct's. A body
          * answering one value is told from another by the value and is never alike.
          */
-        public String constructSaidBeside(Replacement one) {
+        public Optional<ToldApartBy> toldApartBy(Replacement one) {
             Rewrite asked = rewrites.stream().filter(each -> each.replacement().equals(one))
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException(
                             "not a rewrite of this body: " + one));
             Object reading = readingOf(asked);
             if (reading == null) {
-                return "";
+                return Optional.empty();
             }
             List<Rewrite> alike = rewrites.stream()
                     .filter(each -> reading.equals(readingOf(each))).toList();
             if (alike.size() <= 1) {
-                return "";
+                return Optional.empty();
             }
             SourceConstructOrigin of = constructOf(one);
             // Two arms of one construct the words cannot part, which the construct cannot either:
@@ -146,17 +150,22 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
             // does. Nothing is left to read alike, so no line is printed twice.
             boolean sameConstruct = alike.stream()
                     .filter(each -> constructOf(each.replacement()).equals(of)).count() > 1;
-            String arms = sameConstruct && one instanceof Replacement.OfAnArm arm
-                    ? ", arm " + arm.part() + " as " + arm.with() : "";
-            return " (construct " + of.ordinal()
-                    + (of.lowered() == 0 ? "" : ", lowered " + of.lowered()) + arms + ")";
+            Optional<ToldApartBy.Arms> arms = sameConstruct && one instanceof Replacement.OfAnArm arm
+                    ? Optional.of(new ToldApartBy.Arms(arm.part(), arm.with())) : Optional.empty();
+            return Optional.of(new ToldApartBy(of.ordinal(), of.lowered(), arms));
         }
 
-        /** What the words for a rewrite are made of, and so what two rewrites alike share. */
+        /**
+         * What the words for a rewrite are made of, and so what two rewrites alike share.
+         *
+         * <p>An arm as a reader is shown it: the cases a {@code match} arm names, by name, because
+         * two types of two modules named alike are said alike. What the words are made of is asked
+         * of {@link SourceOutcome.Matched#named}, which every word for the arm is made from.
+         */
         private static Object readingOf(Rewrite one) {
             return switch (one.written()) {
                 case ReplacementAsWritten.OfAnArm it -> new AnArmRead(it.writtenBy(),
-                        it.replacement().fork().kind(), it.arm(), it.sibling(),
+                        it.replacement().fork().kind(), shown(it.arm()), shown(it.sibling()),
                         pointedAt(one.reportAt(), it.replacement().fork()));
                 case ReplacementAsWritten.OfAWalk it -> new AWalkRead(it.writtenBy(),
                         it.replacement().how(),
@@ -184,9 +193,12 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
         /** Where in a source a construct is, which a construct lowered into several forks shares. */
         private record Place(WrittenOwner owner, int ordinal) {}
 
-        private record AnArmRead(ValueName.Helper writtenBy, SourceConstruct kind,
-                                 SourceOutcome.Arm arm, SourceOutcome.Arm sibling,
-                                 Place pointedAt) {}
+        private static Object shown(SourceOutcome.Arm arm) {
+            return arm instanceof SourceOutcome.Matched matched ? matched.named() : arm;
+        }
+
+        private record AnArmRead(ValueName.Helper writtenBy, SourceConstruct kind, Object arm,
+                                 Object sibling, Place pointedAt) {}
 
         private record AWalkRead(ValueName.Helper writtenBy, WalkRewrite how, Place pointedAt) {}
 
@@ -204,6 +216,21 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
         public long undecided() {
             return rewrites.stream().filter(each -> each.outcome() instanceof Undecided).count();
         }
+    }
+
+    /**
+     * What tells a rewrite from others whose words read the same: the construct it is of, which
+     * of the forks the construct was lowered into where it was, and, where even the construct says
+     * the same of both, the arms it is counted by.
+     */
+    public record ToldApartBy(int construct, int lowered, Optional<Arms> arms) {
+
+        public ToldApartBy {
+            Objects.requireNonNull(arms, "the arms are given or are not");
+        }
+
+        /** Arm {@code part} answering as arm {@code with} does, as the construct counts them. */
+        public record Arms(int part, int with) {}
     }
 
     /** One rewrite, where a report about it is shown, and what the rows came to about it. */

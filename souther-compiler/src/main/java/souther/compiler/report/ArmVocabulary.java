@@ -4,10 +4,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.OutcomeName;
 import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.types.SourceConstruct;
-import souther.compiler.types.TypeSymbol;
 
-import java.util.List;
-import java.util.stream.Collectors;
 import java.util.Locale;
 
 /**
@@ -45,7 +42,7 @@ public final class ArmVocabulary {
      */
     public static String label(SourceConstruct construct, SourceOutcome outcome) {
         return switch (outcome) {
-            case SourceOutcome.Matched(List<TypeSymbol> cases) -> "case " + namesOf(cases);
+            case SourceOutcome.Matched matched -> "case " + matched.named();
             // The word the author put the departure under, and the clause where they named one. The
             // name of this outcome is `departure`, which says what happened rather than what is
             // written there; a reader of a table is looking at the file.
@@ -55,11 +52,6 @@ public final class ArmVocabulary {
             case SourceOutcome.Held _, SourceOutcome.Failed _ ->
                     OutcomeName.of(construct, outcome).name().toLowerCase(Locale.ROOT);
         };
-    }
-
-    private static String namesOf(List<TypeSymbol> cases) {
-        return cases.stream().map(TypeSymbol::name)
-                .collect(Collectors.joining(" | "));
     }
 
     private ArmVocabulary() {}

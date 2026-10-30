@@ -528,12 +528,12 @@ public final class GeneratedRows {
                     switch (reportAt) {
                         case ReplacementReportAnchor.AtTheFork _ ->
                                 Adequacy.placeOf(db, module, finding).said(rendering, declaredIn)
-                                        + Replacements.constructSaidBeside(db, module, behavior,
-                                                rewrite);
+                                        + RewriteVocabulary.apart(Replacements.toldApartBy(db,
+                                                module, behavior, rewrite));
                         case ReplacementReportAnchor.AtTheBehavior _ ->
                                 RewriteVocabulary.outOfSight(rewrite, module)
-                                        + Replacements.constructSaidBeside(db, module, behavior,
-                                                rewrite);
+                                        + RewriteVocabulary.apart(Replacements.toldApartBy(db,
+                                                module, behavior, rewrite));
                         case ReplacementReportAnchor.AtTheWalk _ -> throw new IllegalStateException(
                                 "a rewrite of an arm shown at a walk: " + rewrite);
                     }));
@@ -544,12 +544,12 @@ public final class GeneratedRows {
                     switch (reportAt) {
                         case ReplacementReportAnchor.AtTheWalk _ ->
                                 Adequacy.placeOf(db, module, finding).said(rendering, declaredIn)
-                                        + Replacements.constructSaidBeside(db, module, behavior,
-                                                rewrite);
+                                        + RewriteVocabulary.apart(Replacements.toldApartBy(db,
+                                                module, behavior, rewrite));
                         case ReplacementReportAnchor.AtTheBehavior _ ->
                                 RewriteVocabulary.outOfSight(rewrite, module)
-                                        + Replacements.constructSaidBeside(db, module, behavior,
-                                                rewrite);
+                                        + RewriteVocabulary.apart(Replacements.toldApartBy(db,
+                                                module, behavior, rewrite));
                         case ReplacementReportAnchor.AtTheFork _ -> throw new IllegalStateException(
                                 "a rewrite of a walk shown at a fork: " + rewrite);
                     }));

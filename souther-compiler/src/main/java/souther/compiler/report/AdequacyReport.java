@@ -690,7 +690,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
          *
          * <p>One saying for both, so that a rewrite is said the same whichever of the two lines
          * it is on. Which rewrites read alike is the measure's own answer
-         * ({@link ReplacementEvidence.Summary#constructSaidBeside}), the one a warning and a
+         * ({@link ReplacementEvidence.Summary#toldApartBy}), the one a warning and a
          * generated row ask as well. Never left alike: two lines a reader cannot tell apart are
          * the defect that answer is here to stop, so a pair it did not part is raised.
          *
@@ -708,8 +708,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
                 said.put(each.replacement(), rewriteSaid(each.written(), each.reportAt(),
                         at.said(rendering, declaredIn), module, rendering)
-                        + evidence.replacement().measured().made().orElseThrow()
-                                .constructSaidBeside(each.replacement()));
+                        + RewriteVocabulary.apart(evidence.replacement().measured().made()
+                                .orElseThrow().toldApartBy(each.replacement())));
             }
             if (new HashSet<>(said.values()).size() != said.size()) {
                 throw new IllegalStateException("two rewrites of `" + name + "` are said alike: "

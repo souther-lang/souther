@@ -9922,8 +9922,8 @@ public final class Adequacy {
                                                     phraseFor(construct, rewrite.arm()),
                                                     phraseFor(construct, rewrite.sibling()),
                                                     rewrite.writtenBy().saidIn(module),
-                                                    Replacements.constructSaidBeside(db, module,
-                                                            behavior, rewrite),
+                                                    toldApart(Replacements.toldApartBy(db, module,
+                                                            behavior, rewrite)),
                                                     behavior);
                                     case ReplacementReportAnchor.AtTheWalk _ ->
                                             throw new IllegalStateException(
@@ -9944,8 +9944,8 @@ public final class Adequacy {
                                         };
                                 case ReplacementReportAnchor.AtTheBehavior _ -> {
                                     String definition = rewrite.writtenBy().saidIn(module);
-                                    String construct = Replacements.constructSaidBeside(db, module,
-                                            behavior, rewrite);
+                                    Localizable construct = toldApart(Replacements.toldApartBy(db,
+                                            module, behavior, rewrite));
                                     yield switch (rewrite.replacement().how()) {
                                         case STOPS_AFTER_ONE_STEP -> new ExampleMessage
                                                 .NoRowTellsAFoldOutOfSightFromItsFirstStep(
@@ -10289,6 +10289,33 @@ public final class Adequacy {
         }
 
         /**
+         * What tells a rewrite from one whose words read the same, as a phrase in the reader's
+         * language; an empty one where its words already differ. The numbers are the measure's
+         * ({@link ReplacementEvidence.ToldApartBy}) and the words for them are the message
+         * file's, so the two languages say the same numbers in their own.
+         */
+        private static Localizable toldApart(Optional<ReplacementEvidence.ToldApartBy> by) {
+            if (by.isEmpty()) {
+                return Localizable.of("rewrite.apart.none");
+            }
+            ReplacementEvidence.ToldApartBy it = by.get();
+            boolean lowered = it.lowered() != 0;
+            String construct = String.valueOf(it.construct());
+            String loweredNumber = String.valueOf(it.lowered());
+            if (it.arms().isPresent()) {
+                String part = String.valueOf(it.arms().get().part());
+                String with = String.valueOf(it.arms().get().with());
+                return lowered
+                        ? Localizable.of("rewrite.apart.lowered.arms", construct, loweredNumber,
+                                part, with)
+                        : Localizable.of("rewrite.apart.arms", construct, part, with);
+            }
+            return lowered
+                    ? Localizable.of("rewrite.apart.lowered", construct, loweredNumber)
+                    : Localizable.of("rewrite.apart.construct", construct);
+        }
+
+        /**
          * One condition of a decision rule, said under the sentence about the rule.
          *
          * <p>Exhaustive with no {@code default}, so a shape added to the reading is one somebody
@@ -10458,11 +10485,7 @@ public final class Adequacy {
         }
 
         private static String casesOf(SourceOutcome outcome) {
-            return outcome instanceof SourceOutcome.Matched matched
-                    ? matched.cases().stream()
-                            .map(TypeSymbol::name)
-                            .collect(Collectors.joining(" | "))
-                    : "";
+            return outcome instanceof SourceOutcome.Matched matched ? matched.named() : "";
         }
 
         private static Optional<String> clauseOf(SourceOutcome outcome) {

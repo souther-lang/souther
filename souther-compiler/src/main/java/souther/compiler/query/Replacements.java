@@ -320,14 +320,14 @@ public final class Replacements {
     }
 
     /**
-     * The construct to say beside a rewrite's words, where another rewrite of the body reads the
-     * same without it: the measure's own answer, which every surface that words a rewrite asks, so
-     * that a rewrite is said the same way on each.
+     * What tells a rewrite from the others of its body whose words read the same: the measure's
+     * own answer, which every surface that words a rewrite asks, so that a rewrite is told apart
+     * the same way on each.
      */
-    public static String constructSaidBeside(Db db, String module, String behavior,
-                                             ReplacementAsWritten rewrite) {
+    public static Optional<ReplacementEvidence.ToldApartBy> toldApartBy(
+            Db db, String module, String behavior, ReplacementAsWritten rewrite) {
         return summaryOf(db, module, behavior)
-                .map(summary -> summary.constructSaidBeside(rewrite.replacement())).orElse("");
+                .flatMap(summary -> summary.toldApartBy(rewrite.replacement()));
     }
 
     /** The replacement measure of every behavior of one module. */

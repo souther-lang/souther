@@ -109,6 +109,32 @@ class ARewriteIsSaidApartFromEveryOtherOfTheReportTest {
                 () -> "no two warnings are the same sentence: " + said);
     }
 
+    /**
+     * And in the reader's language: what tells the two apart is said in the words of that
+     * language, with no word of another in the sentence.
+     */
+    @Test
+    void theWarningsAreToldApartInJapaneseInJapanese() {
+        Compilation compilation = compiled(CLAMPED_TWICE);
+        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
+        compilation.answerEverything();
+
+        List<String> said = compilation.warnings().stream()
+                .map(Located::diagnostic)
+                .filter(d -> "E1939".equals(d.code().toString()))
+                .map(d -> Messages.render(d.said(), Locale.JAPANESE))
+                .filter(sentence -> sentence.contains("souther.int.clamp"))
+                .toList();
+
+        assertTrue(said.size() >= 2, () -> "forks of the library definition are warned of: " + said);
+        assertEquals(said.size(), new HashSet<>(said).size(),
+                () -> "no two warnings are the same sentence: " + said);
+        assertTrue(said.stream().anyMatch(sentence -> sentence.contains("構文")),
+                () -> "what tells them apart is said in Japanese: " + said);
+        assertTrue(said.stream().noneMatch(sentence -> sentence.contains("construct")),
+                () -> "and in no other language: " + said);
+    }
+
     private static AdequacyReport reported(Compilation compilation) {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
