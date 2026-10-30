@@ -31,6 +31,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.RuleSite;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.ReadMeaning;
@@ -72,6 +73,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -682,7 +684,21 @@ public final class GuardThresholds {
                                                         Arrivals answering) {
         return new Cutting.Read.Stopped(
                 leftAtEachPlace(comparison, stopped, read, reads, answering),
-                whereItStopped(stopped, read));
+                whereItStopped(stopped, read), stoppedAtThe(stopped));
+    }
+
+    /**
+     * The expression the arithmetic stopped at, as the construct its author wrote — none where it
+     * is a call no author wrote, which is not a place anybody can be sent to.
+     */
+    private static SequencedSet<RuleSite> stoppedAtThe(
+            AffineReading.OfAComparison.Stopped stopped) {
+        SequencedSet<RuleSite> out = new LinkedHashSet<>();
+        if (Core.withoutStanding(stopped.node()) instanceof Core.PreservedCall call
+                && call.occurrence().origin().isWritten()) {
+            out.add(new RuleSite.AConstructTheAuthorWrote(call.occurrence().origin()));
+        }
+        return out;
     }
 
     /**
@@ -1080,7 +1096,7 @@ public final class GuardThresholds {
         // reading stopped there is nothing that was determined and nothing that could have been.
         read.whatEachPlaceIsLeftWith().forEach(left -> {
             if (left.why() instanceof BlockReason.RuleReadingStopped stopped) {
-                out.unclassified(cited, readAt, left.at(), stopped);
+                out.unclassified(cited, readAt, left.at(), stopped, left.stoppedAt());
             } else {
                 out.add(RuleWithoutALine.of(cited, readAt, left.at(), left.why()));
             }

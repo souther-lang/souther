@@ -16,6 +16,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.RuleSite;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
@@ -51,6 +52,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -818,6 +820,7 @@ sealed interface ComparisonAssessment {
                     new LinkedHashMap<>();
             boolean allStopped = true;
             WhereAReadingStopped where = WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT;
+            SequencedSet<RuleSite> stoppedAt = new LinkedHashSet<>();
             for (Part part : parts) {
                 Unread stopped = notDrawn(part.line());
                 if (stopped == null) {
@@ -828,11 +831,12 @@ sealed interface ComparisonAssessment {
                             ? new Part(part.id(), against.partedBy(List.of()), List.of()) : part);
                 } else {
                     stopped.why().forEach(why::putIfAbsent);
+                    stoppedAt.addAll(stopped.stoppedAt());
                     where = where.and(stopped.where());
                     each.add(new Part(part.id(), stopped, List.of()));
                 }
             }
-            return allStopped ? new Unread(why, where) : new Several(each);
+            return allStopped ? new Unread(why, where, stoppedAt) : new Several(each);
         }
 
         /**
@@ -899,9 +903,12 @@ sealed interface ComparisonAssessment {
      *            part that was not read
      * @param where where the reading stopped, as the reader that stopped saw it: in what a run
      *              works out, the comparison is a line on the runs ({@link #onItsRuns})
+     * @param stoppedAt the expressions its author wrote that the arithmetic stopped at, as
+     *                  {@link Cutting.Read.Stopped} says
      */
     record Unread(SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why,
-                  WhereAReadingStopped where) implements ComparisonAssessment {
+                  WhereAReadingStopped where, SequencedSet<RuleSite> stoppedAt)
+            implements ComparisonAssessment {
 
         public Unread {
             if (why == null || why.isEmpty()) {
@@ -909,6 +916,13 @@ sealed interface ComparisonAssessment {
             }
             Objects.requireNonNull(where, "a reading that stopped stopped somewhere");
             why = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(why));
+            stoppedAt = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(stoppedAt));
+        }
+
+        /** A reading that stopped with no expression of the author's to name. */
+        Unread(SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why,
+               WhereAReadingStopped where) {
+            this(why, where, new LinkedHashSet<>());
         }
     }
 
@@ -989,8 +1003,8 @@ sealed interface ComparisonAssessment {
             // over the expression is the only account of what the rule is about, which is what it
             // is for.
             case Cutting.Read.Stopped stopped ->
-                    besideWhereTheValuesCameFrom(stopped.why(), stopped.where(), comparison,
-                            reads, read.newtypes());
+                    besideWhereTheValuesCameFrom(stopped.why(), stopped.where(),
+                            stopped.stoppedAt(), comparison, reads, read.newtypes());
         };
     }
 
@@ -1054,7 +1068,8 @@ sealed interface ComparisonAssessment {
                                     ? Optional.empty()
                                     : Optional.of(new DrawnBeside(behavior, at,
                                             part.id().line().line(), claim)), witnesses);
-                    case Cutting.Read.Stopped stopped -> new Unread(stopped.why(), stopped.where());
+                    case Cutting.Read.Stopped stopped ->
+                            new Unread(stopped.why(), stopped.where(), stopped.stoppedAt());
                     case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
                          Cutting.Read.NumberNoRatioHolds _, Cutting.Read.CutsNothing _,
                          Cutting.Read.AnswersNowhere _, Cutting.Read.Several _,
@@ -1600,7 +1615,7 @@ sealed interface ComparisonAssessment {
                                                         InputReads reads,
                                                         DeclarationNewtypes newtypes) {
         return besideWhereTheValuesCameFrom(new LinkedHashMap<>(), WhereAReadingStopped.ELSEWHERE,
-                comparison, reads, newtypes);
+                new LinkedHashSet<>(), comparison, reads, newtypes);
     }
 
     /**
@@ -1620,12 +1635,12 @@ sealed interface ComparisonAssessment {
      */
     private static ComparisonAssessment besideWhereTheValuesCameFrom(
             SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> filed,
-            WhereAReadingStopped where, StatedComparison comparison, InputReads reads,
-            DeclarationNewtypes newtypes) {
+            WhereAReadingStopped where, SequencedSet<RuleSite> stoppedAt,
+            StatedComparison comparison, InputReads reads, DeclarationNewtypes newtypes) {
         SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why =
                 new LinkedHashMap<>(filed);
         GuardThresholds.cameFrom(comparison, reads, newtypes, why);
-        return why.isEmpty() ? new NoInput() : new Unread(why, where);
+        return why.isEmpty() ? new NoInput() : new Unread(why, where, stoppedAt);
     }
 
     /**
@@ -2007,7 +2022,7 @@ sealed interface ComparisonAssessment {
             // the reading came back as a rule that relates two positions — a sentence saying no
             // measure is short of anything, over a model missing a border.
             case Unread unread -> unread.why().entrySet().stream()
-                    .map(each -> new LeftAt(each.getKey(), each.getValue()))
+                    .map(each -> new LeftAt(each.getKey(), each.getValue(), unread.stoppedAt()))
                     .toList();
             // Nothing about this rule fell short, and nothing about this rule is what happened. The
             // rules of the input admit no value between them, which is one fact about the behavior
@@ -2058,12 +2073,20 @@ sealed interface ComparisonAssessment {
      *
      * @param at  the place
      * @param why what is left there, in the words of the line that left it
+     * @param stoppedAt the expressions its author wrote that the reading stopped at, where it
+     *                  stopped; empty otherwise
      */
-    record LeftAt(FilingCoordinate at, BlockReason.RuleWithoutLineReason why) {
+    record LeftAt(FilingCoordinate at, BlockReason.RuleWithoutLineReason why,
+                  SequencedSet<RuleSite> stoppedAt) {
 
         public LeftAt {
             Objects.requireNonNull(at, "something is left somewhere");
             Objects.requireNonNull(why, "something left somewhere is left for a reason");
+            stoppedAt = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(stoppedAt));
+        }
+
+        LeftAt(FilingCoordinate at, BlockReason.RuleWithoutLineReason why) {
+            this(at, why, new LinkedHashSet<>());
         }
     }
 

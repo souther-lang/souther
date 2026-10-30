@@ -2134,6 +2134,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 if (each instanceof PartitionEvidence.NotRead.ARule rule) {
                     take.accept(rule.finding().sentTo());
                 }
+                if (each instanceof PartitionEvidence.NotRead.AnUnclassifiedRule rule) {
+                    take.accept(rule.sentTo());
+                }
             });
         }
         if (found != null) {
@@ -3982,11 +3985,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         sentTo(it.finding().sentTo(), parts, rendering, declaredIn)));
             }
             if (f.about() instanceof About.ARuleNothingClassified(var it)) {
-                out.append(String.format("      %s not read: %s — %s%s, about `%s`%s%n",
+                out.append(String.format("      %s not read: %s — %s%s, about `%s`%s%s%n",
                         mark(f), cited(it.cited(), rendering, declaredIn, places),
                         whyUnread(it.reason()), stoppedAt(it.figures()), it.at(),
                         inCopies(it.finding().readAt(), behavior.conditionPlaces().copies(),
-                                rendering, declaredIn)));
+                                rendering, declaredIn),
+                        sentTo(it.sentTo(), parts, rendering, declaredIn)));
             }
         }
         // And a rule that a run may stop in. Whatever else is said of the rule, and whatever line it
@@ -8650,6 +8654,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 RuleHandleSurface.NOT_READ_RULE.put(
                         row, PublishedRuleHandle.of(handle(rule.cited(), places), places), sources.rendering(), null);
                 ruleId(said.putObject("ruleId"), rule.rule());
+                sentTo(said, rule.sentTo(), parts, sources);
             }
         });
     }

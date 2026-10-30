@@ -5,6 +5,7 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.types.ModelOccurrences;
 import souther.compiler.values.ValuesWithin;
 
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -191,6 +192,25 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
         public void unclassified(RuleCitation cited, ModelOccurrences readAt,
                                  FilingCoordinate at, BlockReason.RuleReadingStopped why) {
             asked(StandingQuestion.NothingClassifiesIt.of(cited, readAt, at, why));
+        }
+
+        /**
+         * The same, from a reader that knows which expressions the reading stopped at.
+         *
+         * <p>One question for each, since what makes two of them one includes where a reader is
+         * sent: two expressions that stopped one rule at one place with one limit are two things
+         * to look at, and one filed under the first would leave the second unsaid. The rule itself
+         * where the reading names none.
+         */
+        public void unclassified(RuleCitation cited, ModelOccurrences readAt,
+                                 FilingCoordinate at, BlockReason.RuleReadingStopped why,
+                                 Collection<RuleSite> stoppedAt) {
+            if (stoppedAt.isEmpty()) {
+                unclassified(cited, readAt, at, why);
+                return;
+            }
+            stoppedAt.forEach(sentTo -> asked(StandingQuestion.NothingClassifiesIt
+                    .of(cited, readAt, at, sentTo, why)));
         }
 
         /**
