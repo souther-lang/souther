@@ -261,13 +261,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             public Stopped {
                 why = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(why));
                 Objects.requireNonNull(where, "a reading that stopped stopped somewhere");
-                stoppedAt = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(stoppedAt));
+                stoppedAt = RuleSite.held(stoppedAt);
             }
 
             /** A reading that stopped with no expression of the author's to name. */
             public Stopped(SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why,
                            WhereAReadingStopped where) {
-                this(why, where, new LinkedHashSet<>());
+                this(why, where, RuleSite.NO_SITES);
             }
         }
 

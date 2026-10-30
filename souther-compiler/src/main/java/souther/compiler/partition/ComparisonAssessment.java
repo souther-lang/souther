@@ -916,13 +916,13 @@ sealed interface ComparisonAssessment {
             }
             Objects.requireNonNull(where, "a reading that stopped stopped somewhere");
             why = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(why));
-            stoppedAt = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(stoppedAt));
+            stoppedAt = RuleSite.held(stoppedAt);
         }
 
         /** A reading that stopped with no expression of the author's to name. */
         Unread(SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why,
                WhereAReadingStopped where) {
-            this(why, where, new LinkedHashSet<>());
+            this(why, where, RuleSite.NO_SITES);
         }
     }
 
@@ -1615,7 +1615,7 @@ sealed interface ComparisonAssessment {
                                                         InputReads reads,
                                                         DeclarationNewtypes newtypes) {
         return besideWhereTheValuesCameFrom(new LinkedHashMap<>(), WhereAReadingStopped.ELSEWHERE,
-                new LinkedHashSet<>(), comparison, reads, newtypes);
+                RuleSite.NO_SITES, comparison, reads, newtypes);
     }
 
     /**
@@ -2082,11 +2082,11 @@ sealed interface ComparisonAssessment {
         public LeftAt {
             Objects.requireNonNull(at, "something is left somewhere");
             Objects.requireNonNull(why, "something left somewhere is left for a reason");
-            stoppedAt = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(stoppedAt));
+            stoppedAt = RuleSite.held(stoppedAt);
         }
 
         LeftAt(FilingCoordinate at, BlockReason.RuleWithoutLineReason why) {
-            this(at, why, new LinkedHashSet<>());
+            this(at, why, RuleSite.NO_SITES);
         }
     }
 

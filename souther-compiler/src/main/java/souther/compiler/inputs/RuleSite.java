@@ -5,7 +5,10 @@ import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
 import souther.compiler.types.SourceConstructOrigin;
 
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.SequencedSet;
 
 /**
  * Where inside a rule a reader is sent, said as what an author wrote rather than as where it is.
@@ -104,6 +107,22 @@ public sealed interface RuleSite {
 
     /** The one of those, since it holds nothing and two of them say the same thing. */
     RuleSite THE_RULE_ITSELF = new TheRuleItself();
+
+    /** No site, shared: most readings stop at no expression an author wrote. */
+    SequencedSet<RuleSite> NO_SITES =
+            Collections.unmodifiableSequencedSet(new LinkedHashSet<>());
+
+    /**
+     * These sites, in the order they were met, for a value to hold.
+     *
+     * <p>Copied only when there is something to copy, because a reading that stopped at no
+     * expression of an author's is the common one and every record that carries sites is built
+     * once for each place it is filed at.
+     */
+    static SequencedSet<RuleSite> held(SequencedSet<RuleSite> sites) {
+        return sites.isEmpty() ? NO_SITES
+                : Collections.unmodifiableSequencedSet(new LinkedHashSet<>(sites));
+    }
 
     /**
      * Where this stands among these, for a reader putting some of them in a steady order.
