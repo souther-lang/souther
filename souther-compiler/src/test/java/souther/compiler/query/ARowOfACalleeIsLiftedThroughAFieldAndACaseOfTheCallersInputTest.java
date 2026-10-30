@@ -78,7 +78,7 @@ class ARowOfACalleeIsLiftedThroughAFieldAndACaseOfTheCallersInputTest {
             let inspect (item, score) = item.score == score
             example inspect
                 | (S { score = 50 }, 50) -> true
-                | (S { score = 50 }, 49) -> false
+                | (S { score = 7 }, 49) -> false
             behavior f : (s: S) -> Bool
             let f (s) = inspect(s, s.score)
             """;
@@ -90,7 +90,7 @@ class ARowOfACalleeIsLiftedThroughAFieldAndACaseOfTheCallersInputTest {
             let inspect (score, item) = item.score == score
             example inspect
                 | (50, S { score = 50 }) -> true
-                | (49, S { score = 50 }) -> false
+                | (49, S { score = 7 }) -> false
             behavior f : (s: S) -> Bool
             let f (s) = inspect(s.score, s)
             """;
@@ -106,6 +106,88 @@ class ARowOfACalleeIsLiftedThroughAFieldAndACaseOfTheCallersInputTest {
             behavior f : (ss: List<S>) -> Bool
             let f (ss) = List.fold((acc, s) -> acc && inspect(ss, s.score), true, ss)
             """;
+
+    private static final String TWO_FIELDS_OF_ONE_ELEMENT = """
+            module repro.lift
+            data P = { a: Int, b: Int }
+            behavior inspect : (items: List<P>, a: Int, b: Int) -> Bool
+            let inspect (items, a, b) = a == b
+            example inspect
+                | ([P { a = 1, b = 2 }, P { a = 3, b = 4 }], 1, 4) -> false
+                | ([P { a = 1, b = 2 }, P { a = 5, b = 6 }], 1, 2) -> false
+            behavior f : (ps: List<P>) -> Bool
+            let f (ps) = List.fold((acc, p) -> acc && inspect(ps, p.a, p.b), true, ps)
+            """;
+
+    private static final String A_SUM_AND_A_FIELD_OF_ITS_CASE = """
+            module repro.lift
+            data Playing = { score: Int }
+            data State = Playing | Out
+            behavior inspect : (item: State, score: Int) -> Bool
+            let inspect (item, score) =
+                match item with
+                    | Out -> false
+                    | Playing as q -> q.score == score
+            example inspect
+                | (Playing { score = 50 }, 50) -> true
+                | (Playing { score = 7 }, 49) -> false
+            behavior f : (s: State) -> Bool
+            let f (s) =
+                match s with
+                    | Out -> false
+                    | Playing as p -> inspect(s, p.score)
+            """;
+
+    private static final String A_FIELD_OF_A_NEWTYPE = """
+            module repro.lift
+            data Score = Int
+            data S = { score: Score }
+            behavior inspect : (item: S, score: Score) -> Bool
+            let inspect (item, score) = item.score == score
+            example inspect
+                | (S { score = Score(50) }, Score(50)) -> true
+                | (S { score = Score(7) }, Score(49)) -> false
+            behavior f : (s: S) -> Bool
+            let f (s) = inspect(s, s.score)
+            """;
+
+    private static final String A_MAP_AND_AN_ENTRY_OF_IT = """
+            module repro.lift
+            behavior inspect : (all: Map<String, Int>, key: String, n: Int) -> Bool
+            let inspect (all, key, n) = Map.size(all) == n
+            example inspect
+                | ([("a", 1), ("b", 2)], "a", 1) -> false
+                | ([("c", 1), ("d", 2)], "c", 2) -> false
+            behavior f : (m: Map<String, Int>) -> Bool
+            let f (m) = Map.size(Map.filterEntries((k, v) -> inspect(m, k, v), m)) == 0
+            """;
+
+    @Test
+    void twoFieldsOfOneElementAreHandedTheListOnlyWhenOneElementHoldsBoth() {
+        assertEquals(List.of("[[P { a = 1, b = 2 }, P { a = 5, b = 6 }]]"),
+                seededInputs(TWO_FIELDS_OF_ONE_ELEMENT),
+                "the row whose two values are in two elements is no call of the caller's");
+    }
+
+    @Test
+    void aSumAndAFieldOfOneOfItsCasesAreHandedTheCaseTheRowHolds() {
+        assertEquals(List.of("[Playing { score = 50 }]"),
+                seededInputs(A_SUM_AND_A_FIELD_OF_ITS_CASE));
+    }
+
+    @Test
+    void aFieldOfANewtypeIsReadAsTheDeclarationsWearIt() {
+        List<String> rows = seededInputs(A_FIELD_OF_A_NEWTYPE);
+        assertEquals(1, rows.size(), () -> "only the row that agrees with itself: " + rows);
+        assertTrue(rows.getFirst().contains("50"), rows::toString);
+    }
+
+    @Test
+    void aMapAndAnEntryOfItAreHandedTheMapOnlyWhenOneEntryHoldsBoth() {
+        List<String> rows = seededInputs(A_MAP_AND_AN_ENTRY_OF_IT);
+        assertEquals(1, rows.size(), () -> "the key and the value are of one entry: " + rows);
+        assertTrue(rows.getFirst().contains("(\"a\", 1)"), rows::toString);
+    }
 
     @Test
     void aListAndTheFieldOfOneOfItsElementsAreTheListWhenSomeElementHoldsTheValue() {

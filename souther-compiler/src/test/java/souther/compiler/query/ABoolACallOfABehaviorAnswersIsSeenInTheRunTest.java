@@ -165,6 +165,10 @@ class ABoolACallOfABehaviorAnswersIsSeenInTheRunTest {
     @Test
     void aCallInAClosureIsMeasured() {
         assertMeasuresWithoutError(IN_A_CLOSURE);
+        DecisionEvidence evidence = evidenceOf(IN_A_CLOSURE, "all");
+        assertTrue(evidence.rules().size() >= 1, () -> "a rule is read: " + evidence.read());
+        assertTrue(evidence.took().made().isPresent(),
+                () -> "the rows are read against the rules: " + evidence.took());
     }
 
     private static void assertMeasuresWithoutError(String model) {

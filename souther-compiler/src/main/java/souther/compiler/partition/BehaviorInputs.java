@@ -204,6 +204,65 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
     }
 
     /**
+     * Whether {@code inputs} read as {@code expected} at every one of its positions at once.
+     *
+     * <p>Once, and not once for each position: a position inside a container is read at an
+     * element, and two positions under one element are read at the same one. Each position is
+     * asked for the values it has that come to what is expected, and the answer is yes where one
+     * of each can be chosen that {@link ElementsTaken#agreesWith agree} — which is the reading of
+     * the row a caller's one call makes, and which asking position by position cannot tell from
+     * two calls. A position the walk cannot take, because the value is not the case the path
+     * narrows to or is not what the declarations say stands there, has no value and the answer
+     * is no.
+     *
+     * <p>Read the way a written row is ({@link #occurrencesAt}), so a newtype, a map, and a
+     * narrowing to a case are what the walk says they are and not a second reading of them.
+     *
+     * @param inputs   one value for each parameter, of which only those {@code expected} is
+     *                 read at need be read
+     * @param expected the value each position is to read as
+     */
+    public boolean readAtEachPositionAs(List<ObservedValue> inputs,
+                                        Map<TermPath, ObservedValue> expected) {
+        Map<Type, TypeView> views = new HashMap<>();
+        List<List<Occurrence>> candidates = new ArrayList<>();
+        for (Map.Entry<TermPath, ObservedValue> each : expected.entrySet()) {
+            switch (occurrencesAt(inputs, each.getKey(), views)) {
+                case WalkResult.Reached(List<Occurrence> found) -> {
+                    List<Occurrence> equal = found.stream()
+                            .filter(one -> one.value().equals(each.getValue())).toList();
+                    if (equal.isEmpty()) {
+                        return false;
+                    }
+                    candidates.add(equal);
+                }
+                case WalkResult.CouldNotWalk<List<Occurrence>> _ -> {
+                    return false;
+                }
+            }
+        }
+        return oneOfEachThatAgree(candidates, 0, new ArrayList<>());
+    }
+
+    private static boolean oneOfEachThatAgree(List<List<Occurrence>> candidates, int next,
+                                              List<ElementsTaken> chosen) {
+        if (next == candidates.size()) {
+            return true;
+        }
+        for (Occurrence each : candidates.get(next)) {
+            if (chosen.stream().allMatch(each.at()::agreesWith)) {
+                chosen.add(each.at());
+                boolean rest = oneOfEachThatAgree(candidates, next + 1, chosen);
+                chosen.removeLast();
+                if (rest) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * One value the walk arrived at, with the type the reading exposes at its position.
      *
      * <p>For a reader that writes the value somewhere else. The value says which case it is and
