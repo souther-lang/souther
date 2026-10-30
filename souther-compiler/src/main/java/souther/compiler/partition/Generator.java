@@ -13358,6 +13358,9 @@ public final class Generator {
         private final Map<TermPath, Type> typeAt = new HashMap<>();
         private final Set<Map<TermPath, String>> refused = new HashSet<>();
 
+        /** What each value built so far came to, by how it is written at each position. */
+        private final Map<Map<TermPath, String>, ComposedValue> composedBefore = new HashMap<>();
+
         /** Why each value built and passed over for not holding what two positions are asked to
          *  hold did not, in the order they were built. */
         private final List<String> notHeld = new ArrayList<>();
@@ -13461,7 +13464,11 @@ public final class Generator {
          * class was never going to be.
          */
         Tried attempt(Map<TermPath, FixtureTemplate> assigned, Budget budget) {
-            Tried put = put(assigned, budget);
+            // One assignment is what the bound counts, however many ways it is written: the bound
+            // is how many assignments a search tries ({@link #MAX_TUPLES}), and a search that
+            // tried every one it had has not stopped short for having written some twice.
+            boolean[] spent = {false};
+            Tried put = put(assigned, budget, spent);
             if (!(put instanceof Tried.Refused || put instanceof Tried.Known)) {
                 return put;
             }
@@ -13471,8 +13478,7 @@ public final class Generator {
                 if (completed == null) {
                     continue;
                 }
-                Tried again = put(completed, budget);
-                if (again instanceof Tried.Built || again instanceof Tried.OutOfBudget) {
+                Tried again = put(completed, budget, spent);                if (again instanceof Tried.Built || again instanceof Tried.OutOfBudget) {
                     return again;
                 }
             }
@@ -13514,8 +13520,17 @@ public final class Generator {
             return out.equals(assigned) ? null : out;
         }
 
-        /** What putting {@code chosen} to the decoder came to, or that it did not need putting. */
-        private Tried put(Map<TermPath, FixtureTemplate> chosen, Budget budget) {
+        /**
+         * What putting {@code chosen} to the decoder came to, or that it did not need putting.
+         *
+         * <p>Put once whatever asks for it again: what was built is handed back as built, and what
+         * was refused is known refused. Two assignments the model refuses may be written as the
+         * same value of the places a rule ties together, and that value is one build.
+         *
+         * @param spent whether the assignment this writes has spent its place under the bound
+         *              already, which a second way of writing it does not spend again
+         */
+        private Tried put(Map<TermPath, FixtureTemplate> chosen, Budget budget, boolean[] spent) {
             Map<TermPath, String> written = new HashMap<>();
             for (Map.Entry<TermPath, FixtureTemplate> each : chosen.entrySet()) {
                 if (refusedAlone(each.getKey(), each.getValue())) {
@@ -13526,8 +13541,15 @@ public final class Generator {
             if (refused.contains(written)) {
                 return new Tried.Known();
             }
-            if (!budget.spend()) {
-                return new Tried.OutOfBudget();
+            ComposedValue already = composedBefore.get(written);
+            if (already != null) {
+                return new Tried.Built(already);
+            }
+            if (!spent[0]) {
+                if (!budget.spend()) {
+                    return new Tried.OutOfBudget();
+                }
+                spent[0] = true;
             }
             FromTheAssignment values = new FromTheAssignment(chosen, plan, here);
             Proposals built = compose(plan.root(), values, reading);
@@ -13550,7 +13572,9 @@ public final class Generator {
                         lastBuilt = builtAt;
                         yield new Tried.NotHeld();
                     }
-                    yield new Tried.Built(new ComposedValue(composed, read));
+                    ComposedValue made = new ComposedValue(composed, read);
+                    composedBefore.put(written, made);
+                    yield new Tried.Built(made);
                 }
                 case HandedOn.Came.Refused _ -> {
                     refused.add(written);
@@ -13612,8 +13636,7 @@ public final class Generator {
                     ? value : null;
         }
         ConstructionPlan.Slot position = positions.get(index);
-        TermPath where = position.at();
-        for (FixtureTemplate candidate
+        TermPath where = position.at();        for (FixtureTemplate candidate
                 : candidatesAt(position, settled, decided, candidates)) {
             // Refused by its own type, so refused in every assignment under this branch: the branch
             // is not walked ({@link Composing} says why).
@@ -14169,8 +14192,7 @@ public final class Generator {
 
     /** The ordinary passes: what the positions offer, and then what they held back as well. */
     private static Outcome ordinarily(Choices choices, Composing composing, ValueTaking taking) {
-        Outcome tried = over(choices.at(), choices.values(), composing, taking);
-        // Only where the ordinary assignments ran out. A search that stopped at the bound has not
+        Outcome tried = over(choices.at(), choices.values(), composing, taking);        // Only where the ordinary assignments ran out. A search that stopped at the bound has not
         // tried them all, and starting a wider one in front of the ones it never reached would spend
         // what is left on assignments further from what the model says the row is about, while the
         // nearer ones stay untried.
@@ -14221,6 +14243,13 @@ public final class Generator {
         // Whether some value was composed and passed over, which is what tells a walk that ran out
         // of values the model takes from one that ran out of values the caller takes.
         boolean passed = false;
+        // The values already handed to the caller, by how the value built is written. Not by the
+        // assignment it was built from: an assignment the model refuses is built again written
+        // another way ({@link Composing#attempt}), and two assignments may come to one value. The
+        // walk below starts again from the first assignment over what is left, which composes the
+        // value the caller has just passed over, and asking it twice is a second run for the same
+        // answer.
+        Set<String> handed = new LinkedHashSet<>();
         if (composing.attempt(assigned(at, offered, first), budget)
                 instanceof Composing.Tried.Built(var value)) {
             switch (taking.take(value)) {
@@ -14230,7 +14259,10 @@ public final class Generator {
                 case STOPPED -> {
                     return new Outcome.Halted();
                 }
-                case PASSED -> passed = true;
+                case PASSED -> {
+                    passed = true;
+                    handed.add(value.value().text());
+                }
             }
         }
         List<List<FixtureTemplate>> values = new ArrayList<>();
@@ -14248,13 +14280,6 @@ public final class Generator {
         Set<String> seen = new LinkedHashSet<>();
         next.add(first);
         seen.add(Arrays.toString(first));
-        // The values already handed to the caller, by how they are written. The walk below starts
-        // again from the first assignment over what is left, which composes the value the caller
-        // has just passed over, and asking it twice is a second run for the same answer.
-        Set<List<String>> handed = new LinkedHashSet<>();
-        if (passed) {
-            handed.add(writtenAs(assigned(at, offered, first)));
-        }
 
         // Recorded where the bound is reached rather than read afterwards off what was left behind.
         // A walk that stopped and a walk that ran out are told apart by the queue today and would go
@@ -14265,7 +14290,7 @@ public final class Generator {
             Map<TermPath, FixtureTemplate> chosen = assigned(at, values, assignment);
             switch (composing.attempt(chosen, budget)) {
                 case Composing.Tried.Built(var value) -> {
-                    if (handed.add(writtenAs(chosen))) {
+                    if (handed.add(value.value().text())) {
                         switch (taking.take(value)) {
                             case TAKEN -> {
                                 return new Outcome.Built(value);
@@ -14307,13 +14332,6 @@ public final class Generator {
         return passed ? new Outcome.PassedOver()
                 : new Outcome.Unresolved(UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
                         null);
-    }
-
-    /** An assignment as the values it puts at each position are written, in the positions' order. */
-    private static List<String> writtenAs(Map<TermPath, FixtureTemplate> chosen) {
-        List<String> out = new ArrayList<>();
-        chosen.forEach((at, value) -> out.add(at + "=" + value.text()));
-        return out;
     }
 
     /** What one assignment puts at each position. */
