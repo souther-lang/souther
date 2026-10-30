@@ -392,7 +392,8 @@ public sealed interface ExampleMessage extends Message {
      */
     @Code(DiagnosticCode.E1939)
     record NoRowTellsAnArmOutOfSightFromItsSibling(Localizable arm, Localizable sibling,
-                                                   String definition, String behavior)
+                                                   String definition, String construct,
+                                                   String behavior)
             implements ExampleMessage, Reported {}
 
     /**
@@ -430,12 +431,14 @@ public sealed interface ExampleMessage extends Message {
      * what tells two folds out of sight apart.
      */
     @Code(DiagnosticCode.E1939)
-    record NoRowTellsAFoldOutOfSightFromItsFirstStep(String definition, String behavior)
+    record NoRowTellsAFoldOutOfSightFromItsFirstStep(String definition, String construct,
+                                                     String behavior)
             implements ExampleMessage, Reported {}
 
     /** The same as {@link NoRowTellsTheFoldFromStepsOnTheSeed}, of a fold out of sight. */
     @Code(DiagnosticCode.E1939)
-    record NoRowTellsAFoldOutOfSightFromStepsOnTheSeed(String definition, String behavior)
+    record NoRowTellsAFoldOutOfSightFromStepsOnTheSeed(String definition, String construct,
+                                                       String behavior)
             implements ExampleMessage, Reported {}
 
     /**

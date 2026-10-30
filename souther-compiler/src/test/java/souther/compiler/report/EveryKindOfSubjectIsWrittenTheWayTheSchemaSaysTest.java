@@ -134,7 +134,7 @@ class EveryKindOfSubjectIsWrittenTheWayTheSchemaSaysTest {
                 new PublishedSubject.AtAnArm(armId),
                 new PublishedSubject.OfAMeasure("m", "b", MeasureWord.BRANCH),
                 new PublishedSubject.OfAnAxisMeasure("m", "b", "r.cost"),
-                new PublishedSubject.OfAReplacement(rewriteId));
+                new PublishedSubject.OfAReplacement("m", rewriteId));
     }
 
     /**

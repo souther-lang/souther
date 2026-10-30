@@ -199,7 +199,7 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
      * rewrite each is, and the two are two lines.
      */
     @Test
-    void twoRewritesOfOneBodyLeftOpenAreTwoLinesEachSayingWhichRewriteItIs() throws Exception {
+    void twoRewritesOfOneBodyLeftOpenAreTwoLinesEachSayingWhichRewriteItIs() {
         Compilation compilation = Compilation.ofSources(List.of("""
                 module repro.allopen
 
@@ -244,22 +244,19 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
         assertTrue(undecided.stream().anyMatch(line -> line.contains("handed each step the seed")),
                 () -> "the fold handed the seed is named: " + undecided);
 
+        // Only what is said of the rewrite, up to the reason it was left open: the reasons differ
+        // between the two folds, so a line compared whole would be told apart by them even if the
+        // rewrite were not named.
         List<String> keepingItOpen = lines.stream()
-                .filter(line -> line.startsWith("done, where the fold"))
+                .filter(line -> line.startsWith("repro.allopen.done, where the fold"))
+                .map(line -> line.substring(0, line.indexOf(" — stopped at")))
                 .toList();
-        assertEquals(2, keepingItOpen.stream().distinct().count(),
-                () -> "what keeps the verdict open names each of the two: " + keepingItOpen);
-
-        tools.jackson.databind.JsonNode kept = tools.jackson.databind.json.JsonMapper.builder()
-                .build().readTree(report.json(rendering)).get("keptOpenBy");
-        List<String> ids = new java.util.ArrayList<>();
-        for (tools.jackson.databind.JsonNode each : kept) {
-            if (each.get("about").get("kind").asString().equals("replacement")) {
-                ids.add(each.get("about").get("replacementId").toString());
-            }
-        }
-        assertEquals(2, ids.stream().distinct().count(),
-                () -> "the document names which rewrite each entry is about: " + ids);
+        assertEquals(2, keepingItOpen.size(), () -> "one line per rewrite: " + lines);
+        assertTrue(keepingItOpen.stream().anyMatch(line -> line.endsWith("stopped after its first element")),
+                () -> "what keeps the verdict open names the fold that stopped early: "
+                        + keepingItOpen);
+        assertTrue(keepingItOpen.stream().anyMatch(line -> line.endsWith("handed each step the seed in place of what the step before it answered")),
+                () -> "and the fold handed the seed: " + keepingItOpen);
     }
 
     private static ReplacementEvidence.Undecided.Way wayOf(ReplacementEvidence.Undecided open,

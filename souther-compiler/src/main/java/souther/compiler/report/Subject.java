@@ -143,6 +143,11 @@ public sealed interface Subject {
      * are two things to write a row for, and named by the behavior they would be one line printed
      * twice. The identity is the one the replacement entry of the document is told apart by, so an
      * entry that keeps the verdict open and the entry under the measure join on it.
+     *
+     * <p>With the module, which that identity is within and does not hold: two modules may declare
+     * a behavior of one name that calls one library definition, and their rewrites are then the
+     * same obligation identity in two places.
      */
-    record OfAReplacement(ObligationIdentity.OfAReplacement obligation) implements Subject {}
+    record OfAReplacement(String module, ObligationIdentity.OfAReplacement obligation)
+            implements Subject {}
 }

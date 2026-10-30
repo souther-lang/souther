@@ -9921,7 +9921,10 @@ public final class Adequacy {
                                                     .NoRowTellsAnArmOutOfSightFromItsSibling(
                                                     phraseFor(construct, rewrite.arm()),
                                                     phraseFor(construct, rewrite.sibling()),
-                                                    rewrite.writtenBy().saidIn(module), behavior);
+                                                    rewrite.writtenBy().saidIn(module),
+                                                    Replacements.constructSaidBeside(db, module,
+                                                            behavior, rewrite),
+                                                    behavior);
                                     case ReplacementReportAnchor.AtTheWalk _ ->
                                             throw new IllegalStateException(
                                                     "a rewrite of an arm shown at a walk: "
@@ -9941,13 +9944,15 @@ public final class Adequacy {
                                         };
                                 case ReplacementReportAnchor.AtTheBehavior _ -> {
                                     String definition = rewrite.writtenBy().saidIn(module);
+                                    String construct = Replacements.constructSaidBeside(db, module,
+                                            behavior, rewrite);
                                     yield switch (rewrite.replacement().how()) {
                                         case STOPS_AFTER_ONE_STEP -> new ExampleMessage
                                                 .NoRowTellsAFoldOutOfSightFromItsFirstStep(
-                                                definition, behavior);
+                                                definition, construct, behavior);
                                         case STEPS_FROM_THE_SEED -> new ExampleMessage
                                                 .NoRowTellsAFoldOutOfSightFromStepsOnTheSeed(
-                                                definition, behavior);
+                                                definition, construct, behavior);
                                     };
                                 }
                                 case ReplacementReportAnchor.AtTheFork _ ->

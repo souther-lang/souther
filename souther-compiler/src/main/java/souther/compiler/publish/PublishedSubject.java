@@ -309,8 +309,10 @@ public sealed interface PublishedSubject {
      * <p>The obligation's id and nothing beside it, so an entry that holds the verdict open joins
      * the rewrite it is about by the same value the measure's entry is told apart by. Under a key
      * of its own, as an arm's is: a point's {@code obligationId} is another shape.
+     *
+     * <p>With the module, because that id is told apart within a module's behaviors only.
      */
-    record OfAReplacement(ObjectNode replacementId) implements PublishedSubject {
+    record OfAReplacement(String module, ObjectNode replacementId) implements PublishedSubject {
 
         @Override
         public SubjectWord kind() {
@@ -319,7 +321,7 @@ public sealed interface PublishedSubject {
 
         @Override
         public String identity() {
-            return replacementId.toString();
+            return module + "/" + replacementId;
         }
     }
 }

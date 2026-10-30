@@ -308,6 +308,28 @@ public final class Replacements {
         }
     }
 
+    /**
+     * Every rewrite of one behavior's body and what the rows came to about it, or nothing where the
+     * measure has no value for it.
+     */
+    public static Optional<ReplacementEvidence.Summary> summaryOf(Db db, String module,
+                                                                   String behavior) {
+        Map<String, ReplacementEvidence> all = db.ask(new Measured(module)).value();
+        ReplacementEvidence its = all == null ? null : all.get(behavior);
+        return its == null ? Optional.empty() : its.measured().made();
+    }
+
+    /**
+     * The construct to say beside a rewrite's words, where another rewrite of the body reads the
+     * same without it: the measure's own answer, which every surface that words a rewrite asks, so
+     * that a rewrite is said the same way on each.
+     */
+    public static String constructSaidBeside(Db db, String module, String behavior,
+                                             ReplacementAsWritten rewrite) {
+        return summaryOf(db, module, behavior)
+                .map(summary -> summary.constructSaidBeside(rewrite.replacement())).orElse("");
+    }
+
     /** The replacement measure of every behavior of one module. */
     public record Measured(String name) implements Key<Map<String, ReplacementEvidence>> {
 
@@ -369,7 +391,7 @@ public final class Replacements {
                             each.reportAt(), outcomeOf(each.standing(),
                                     searched == null ? null : searched.get(each.replacement()))));
                 }
-                return ReplacementEvidence.measured(named, rewrites,
+                return ReplacementEvidence.measured(name, named, rewrites,
                         Adequacy.BranchCoverage.rowsBehind(observed));
             });
         }

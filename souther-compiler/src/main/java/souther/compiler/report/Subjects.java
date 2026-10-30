@@ -113,7 +113,7 @@ final class Subjects {
                     new Subject.OfABehavior(it.behavior());
             // The rewrite, as the obligation the replacement measure owes it. Two rewrites of one
             // body left open are two entries; why each was left open travels as the reason.
-            case Weakening.RewriteUndecided it -> new Subject.OfAReplacement(
+            case Weakening.RewriteUndecided it -> new Subject.OfAReplacement(it.module(),
                     new ObligationIdentity.OfAReplacement(it.behavior(), it.replacement()));
         };
     }

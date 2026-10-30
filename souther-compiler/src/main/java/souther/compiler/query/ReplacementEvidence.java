@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.coverage.WalkRewrite;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.observe.RowRef;
@@ -10,6 +11,9 @@ import souther.compiler.observe.RowIdentity;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -96,6 +100,85 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
         public Summary {
             rewrites = List.copyOf(rewrites);
         }
+
+        /**
+         * The construct to say beside the words for {@code one}, where another rewrite of this body
+         * reads the same without it; nothing where its words already differ.
+         *
+         * <p>The numbers the document writes as {@code construct} and {@code lowered}, and no
+         * place: a definition this build holds no source of has no line to give, and one made up
+         * would send a reader to code that is not there. They tell the lines apart and are not
+         * where to look.
+         *
+         * <p>Asked of the body's every rewrite whatever the rows came to about each, so that a
+         * rewrite is said the same way on every surface that says it, a page and a warning and a
+         * generated row alike: a surface that asked only of the rewrites it happens to print
+         * would say one rewrite with its construct here and without it there.
+         *
+         * <p>Two rewrites read alike when they differ only in the construct they are of, within
+         * what the words can tell apart. Words name the arms (or how the fold is run) and the
+         * definition that wrote the construct; where this build holds the source, they also point
+         * at the construct, which a construct lowered into several forks shares. So the number to
+         * say is the fork's own where the words point at one and cannot part two lowerings of it,
+         * and the construct's where the words only name the definition. A body answering one value
+         * is told from another by the value and is never alike.
+         */
+        public String constructSaidBeside(Replacement one) {
+            Object reading = readingOf(one, reportAtOf(one));
+            if (reading == null) {
+                return "";
+            }
+            long alike = rewrites.stream()
+                    .filter(each -> reading.equals(readingOf(each.replacement(), each.reportAt())))
+                    .count();
+            if (alike <= 1) {
+                return "";
+            }
+            SourceConstructOrigin of = constructOf(one);
+            return " (construct " + of.ordinal()
+                    + (of.lowered() == 0 ? "" : ", lowered " + of.lowered()) + ")";
+        }
+
+        private ReplacementReportAnchor reportAtOf(Replacement one) {
+            return rewrites.stream().filter(each -> each.replacement().equals(one))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "not a rewrite of this body: " + one))
+                    .reportAt();
+        }
+
+        /** What the words for a rewrite say of it, and so what two rewrites alike share. */
+        private static Object readingOf(Replacement one, ReplacementReportAnchor reportAt) {
+            return switch (one) {
+                case Replacement.OfAnArm it -> new AnArmRead(it.fork().owner(), it.fork().kind(),
+                        it.part(), it.with(), pointedAt(reportAt, it.fork()));
+                case Replacement.OfAWalk it -> new AWalkRead(it.walk().owner(), it.walk().kind(),
+                        it.how(), pointedAt(reportAt, it.walk()));
+                case Replacement.ByOneAnswer _ -> null;
+            };
+        }
+
+        /** The construct the words point at, or nothing where they name only the definition. */
+        private static Integer pointedAt(ReplacementReportAnchor reportAt,
+                                         SourceConstructOrigin construct) {
+            return reportAt instanceof ReplacementReportAnchor.AtTheBehavior
+                    ? null : construct.ordinal();
+        }
+
+        private static SourceConstructOrigin constructOf(Replacement one) {
+            return switch (one) {
+                case Replacement.OfAnArm it -> it.fork();
+                case Replacement.OfAWalk it -> it.walk();
+                case Replacement.ByOneAnswer _ -> throw new IllegalArgumentException(
+                        "a body answering one value is of no construct: " + one);
+            };
+        }
+
+        private record AnArmRead(WrittenOwner owner, SourceConstruct kind, int part, int with,
+                                 Integer pointedAt) {}
+
+        private record AWalkRead(WrittenOwner owner, SourceConstruct kind, WalkRewrite how,
+                                 Integer pointedAt) {}
 
         /** The rewrites some row tells from the body. */
         public long noticed() {
@@ -391,13 +474,14 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
      * not read, and where some rewrite was left open: neither leaves a gap, and both leave the
      * verdict waiting on something.
      */
-    public static ReplacementEvidence measured(String behavior, List<Rewrite> rewrites,
-                                               WeakeningSet rowsBehind) {
+    public static ReplacementEvidence measured(String module, String behavior,
+                                               List<Rewrite> rewrites, WeakeningSet rowsBehind) {
         Summary summary = new Summary(rewrites);
         List<Weakening> open = new ArrayList<>(rowsBehind.causes());
         for (Rewrite each : rewrites) {
             if (each.outcome() instanceof Undecided(Undecided.LeftOpen why)) {
-                open.add(new Weakening.RewriteUndecided(behavior, each.replacement(), why));
+                open.add(new Weakening.RewriteUndecided(module, behavior, each.replacement(),
+                        why));
             }
         }
         WeakeningSet by = WeakeningSet.ofAll(open);
