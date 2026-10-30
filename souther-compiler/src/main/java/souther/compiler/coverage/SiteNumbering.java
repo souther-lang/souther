@@ -38,6 +38,17 @@ public final class SiteNumbering {
     private static final HeldOnce<SeenVisit> VISITS_SEEN = new HeldOnce<>(14);
     private static final HeldOnce<SeenComparison> COMPARISONS_SEEN = new HeldOnce<>(14);
 
+    /**
+     * The numberings made, each held once while it is held at all.
+     *
+     * <p>A numbering is derived again whenever the store asks, and every place a run was seen at
+     * carries one: what is held above was made under whichever numbering came first, and every
+     * reader holds the place it is handed against its own. Two equal numberings are equal only by
+     * every place and every body they hold, so held as one they are told equal by being one, and
+     * the walk of both is made once, where the second is made.
+     */
+    private static final HeldOnce<NumberingIdentity> NUMBERINGS = new HeldOnce<>(10);
+
     private final NumberingIdentity identity;
 
     private SiteNumbering(NumberingIdentity identity) {
@@ -220,7 +231,8 @@ public final class SiteNumbering {
          *  What holds two builds of one module together is this being a value — the same places
          *  under the same numbers over the same executable. */
         SiteNumbering finish(String module, Map<String, ExecutableIdentity> executable) {
-            return new SiteNumbering(new NumberingIdentity(module, executable, byNumber));
+            return new SiteNumbering(
+                    NUMBERINGS.held(new NumberingIdentity(module, executable, byNumber)));
         }
 
     }
