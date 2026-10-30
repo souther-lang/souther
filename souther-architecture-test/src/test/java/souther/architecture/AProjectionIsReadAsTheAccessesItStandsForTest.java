@@ -743,6 +743,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "takes the field accesses over the call of a walk one at a time, and asks of the"
                         + " call what its step answers: a projection over the call is a field"
                         + " taken of a field, which is no walk to ask it of, and it is not read");
+        row(out, c + "partition/Pullback", "sizeOfAFieldOfACallsAnswer", "(" + core + reads
+                + ")L" + c + "partition/Pullback$Sized;", Reading.ONE_ACCESS,
+                "is handed one access and asks of it and its target, which is the call whose answer"
+                        + " holds the field: a projection reaches it as its last access");
         row(out, c + "partition/Pullback", "measuredByCases", "(L" + c + "inputs/Denotation;"
                 + "Ljava/util/Map;)L" + c + "partition/Pullback$SizedByCases;", Reading.STRUCTURE,
                 CHOICES_AND_CALLS);

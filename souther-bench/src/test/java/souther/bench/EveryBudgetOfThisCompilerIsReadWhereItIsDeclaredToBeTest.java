@@ -981,6 +981,16 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "how many counts of a run's values or of a tree's nodes are composed for,"
                             + " and whether they were all the set admits"),
+            Map.entry("souther.compiler.partition.TermRealizations#aLineToTheValue("
+                            + "Lsouther/compiler/inputs/NumericTerm$TakenOver;"
+                            + "Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/partition/AskedAt;"
+                            + "Lsouther/compiler/inputs/Quantities;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "how many lengths of a line a tree is composed for, and whether they were all"
+                            + " the set admits"),
             Map.entry("souther.compiler.partition.TermRealizations#holdingThatManyOfAClass("
                             + "Lsouther/compiler/semantics/CodePointClass;"
                             + "Lsouther/compiler/semantics/CaseMapping;"

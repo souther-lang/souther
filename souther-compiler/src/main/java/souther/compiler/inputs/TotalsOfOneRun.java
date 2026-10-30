@@ -147,7 +147,7 @@ public final class TotalsOfOneRun {
                 each = computed == null ? null : inputs.typeAt(run.subjectPath(), source);
             }
             case RunSource.FlattenedOccurrences _, RunSource.ReachableNodes _,
-                 RunSource.JoinedOccurrences _ -> {
+                 RunSource.JoinedOccurrences _, RunSource.SearchedLine _ -> {
                 return null;
             }
         }

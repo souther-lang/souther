@@ -1772,6 +1772,11 @@ public sealed interface NumericTerm
                     || (how instanceof TakenAs.HowManyItHolds && source.isInOneContainer())) {
                 return null;
             }
+            // The values of a line are nodes, of which only how many there are is a number.
+            if (source instanceof RunSource.SearchedLine
+                    && !(how instanceof TakenAs.HowManyItHolds)) {
+                return null;
+            }
             return how.takenOf(over, answers) ? new TakenOver(operation, source) : null;
         }
 
@@ -2352,7 +2357,7 @@ public sealed interface NumericTerm
                         new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(over.operation(),
                                 TakenArguments.NONE, ValueTransformation.NONE);
                 case RunSource.ComputedOccurrences _, RunSource.ReachableNodes _,
-                     RunSource.JoinedOccurrences _ -> null;
+                     RunSource.JoinedOccurrences _, RunSource.SearchedLine _ -> null;
             };
             // What each element contributes is a number made of it, which the place does not say
             // even where it reads one field: the field read as another kind of number is another

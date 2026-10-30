@@ -7297,6 +7297,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         ArrayNode container = over.putArray("container");
                         run.container().forEach(container::add);
                     }
+                    case RunSource.SearchedLine run -> {
+                        over.put("kind", "searched_line");
+                        over.put("root", run.root().discriminated());
+                        over.put("through", run.through());
+                        ArrayNode matchAt = over.putArray("match_at");
+                        run.matchAt().forEach(matchAt::add);
+                        over.put("key", run.key().discriminated());
+                    }
                 }
             }
         }
