@@ -1141,6 +1141,16 @@ public sealed interface Core {
             return occurrence.origin();
         }
 
+        /**
+         * Whether this is a call of a behavior of the model whose answer is a truth the model
+         * states where it is written: the one place a run is recorded at, and the one place a
+         * reading of the rules is sent to, for such a call.
+         */
+        public boolean isAWrittenCallOfABehaviorAnsweringATruth() {
+            return Type.BOOL.equals(type) && occurrence.isWritten()
+                    && fn instanceof Reached reached && reached.denotes() instanceof ValueName.Behavior;
+        }
+
         /** What emitting a call does with a function it is handed. */
         public enum FunctionArgument {
             /** Run as the loop body: no class is made for it, and what it closes over is read from

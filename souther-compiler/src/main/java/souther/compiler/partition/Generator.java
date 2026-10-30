@@ -12635,6 +12635,66 @@ public final class Generator {
     }
 
     /**
+     * The value of each parameter that holds the values {@code fixed} puts at positions of it, and
+     * is built the way the model builds any other: the records, the cases and the containers
+     * around a position come from the parameter's declarations and not from the caller.
+     *
+     * <p>A path under a refinement fixes the value and requires the case it is taken under, so a
+     * value fixed at {@code s@Playing.score} is a {@code Playing}. Empty where two positions of
+     * one parameter are fixed at different values, where the cases they require cannot both
+     * hold, or where nothing the model builds holds them; a parameter no path names has no entry.
+     *
+     * <p>Each parameter on its own, as {@link #valueFor} composes one: the check is the model's
+     * constructor for that one type.
+     *
+     * <p>A position is fixed once: a position inside another that is fixed is two accounts of one
+     * place, and nothing is composed for it. A caller holding the wider value says what it holds
+     * at the narrower one itself.
+     */
+    public static Optional<Map<Integer, FixtureTemplate>> composeWithFixedValues(
+            MeasuredInput subject, Map<TermPath, FixtureTemplate> fixed, CandidateCheck check) {
+        for (TermPath outer : fixed.keySet()) {
+            for (TermPath inner : fixed.keySet()) {
+                if (!outer.equals(inner) && inner.isAtOrUnder(outer)) {
+                    return Optional.empty();
+                }
+            }
+        }
+        Map<Integer, FixtureTemplate> out = new LinkedHashMap<>();
+        for (int p = 0; p < subject.parameters().size(); p++) {
+            String head = subject.parameters().get(p);
+            Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
+            Requirements required = Requirements.NONE;
+            for (Map.Entry<TermPath, FixtureTemplate> each : fixed.entrySet()) {
+                if (!each.getKey().head().equals(head)) {
+                    continue;
+                }
+                here.put(each.getKey(), List.of(each.getValue()));
+                if (!(required.merge(each.getKey().requirements())
+                        instanceof Requirements.Merge.Merged merged)) {
+                    return Optional.empty();
+                }
+                required = merged.requirements();
+            }
+            if (here.isEmpty()) {
+                continue;
+            }
+            FixtureTemplate[] taken = {null};
+            Outcome tried = valueAt(subject, p, here, Map.of(), settledIn(here), required,
+                    new Handed(ContentsAsked.NONE, ValuesHandedOn.NONE), check, new FoundOut(),
+                    value -> {
+                        taken[0] = value.value();
+                        return Acceptance.TAKEN;
+                    });
+            if (!(tried instanceof Outcome.Built) || taken[0] == null) {
+                return Optional.empty();
+            }
+            out.put(p, taken[0]);
+        }
+        return Optional.of(out);
+    }
+
+    /**
      * The positions a caller fixed at one number.
      *
      * <p>Only where the position has a single value to take. A class offers one value to stand for

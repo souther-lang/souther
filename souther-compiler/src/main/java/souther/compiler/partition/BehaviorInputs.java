@@ -204,6 +204,123 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
     }
 
     /**
+     * Whether {@code inputs} read as {@code expected} at every one of its positions at once.
+     *
+     * <p>Once, and not once for each position: a position inside a container is read at an
+     * element, and two positions under one element are read at the same one. Each position is
+     * asked for the values it has that come to what is expected, and the answer is yes where one
+     * of each can be chosen that {@link ElementsTaken#agreesWith agree} — which is the reading of
+     * the row a caller's one call makes, and which asking position by position cannot tell from
+     * two calls. A position the walk cannot take, because the value is not the case the path
+     * narrows to or is not what the declarations say stands there, has no value and the answer
+     * is no.
+     *
+     * <p>Read the way a written row is ({@link #occurrencesAt}), so a newtype, a map, and a
+     * narrowing to a case are what the walk says they are and not a second reading of them.
+     *
+     * <p>Whether a value is the expected one is {@code same}'s to say, which is where the language
+     * says what two values being the same is: this reads where a value stands and does not
+     * compare what it is.
+     *
+     * <p>The readings that are left are exactly the ones every other position has a reading to
+     * agree with ({@link #agreeingReadingsRemain}), which is the whole of the question and not
+     * a search for it: positions under containers are positions under a tree, so two positions
+     * agreeing pair by pair agree together.
+     *
+     * @param inputs   one value for each parameter, of which only those {@code expected} is
+     *                 read at need be read
+     * @param expected the value each position is to read as; a position may be named twice, and
+     *                 is then read as both
+     * @param same     whether a value found at a position of this type is the one expected
+     */
+    public boolean readAtEachPositionAs(List<ObservedValue> inputs, List<ExpectedAt> expected,
+                                        SameValue same) {
+        List<List<ElementsTaken>> candidates = new ArrayList<>();
+        for (ExpectedAt each : expected) {
+            int parameter = indexOf(each.at());
+            if (parameter < 0 || parameter >= inputs.size()) {
+                return false;
+            }
+            switch (observedAt(inputs.get(parameter), each.at())) {
+                case WalkResult.Reached(List<ObservedAt> found) -> {
+                    List<ElementsTaken> readings = found.stream()
+                            .filter(one -> same.at(one.value(), each.value(), one.type()))
+                            .map(ObservedAt::at).toList();
+                    if (readings.isEmpty()) {
+                        return false;
+                    }
+                    candidates.add(readings);
+                }
+                case WalkResult.CouldNotWalk<List<ObservedAt>> _ -> {
+                    return false;
+                }
+            }
+        }
+        return agreeingReadingsRemain(candidates);
+    }
+
+    /** Whether a value found at a position of a type is the value expected there. */
+    @FunctionalInterface
+    public interface SameValue {
+        boolean at(ObservedValue found, ObservedValue expected, Type type);
+    }
+
+    /** A value a position is to read as. */
+    public record ExpectedAt(TermPath at, ObservedValue value) {}
+
+    /**
+     * Whether every position keeps a reading that some reading of each other position agrees with,
+     * once the readings with none are taken away and that is asked again of what is left.
+     *
+     * <p>That is the whole of the question and not a way into it. A reading is a choice of an
+     * element at each container a position is under, and the containers a position is under
+     * are a chain from the outermost in: the positions of an input are chains in one tree of
+     * containers. A set of relations over such chains is one that agreeing pair by pair settles
+     * together (Beeri, Fagin, Maier and Yannakakis, "On the desirability of acyclic database
+     * schemes"), so what survives is a reading of the whole and what does not leaves none. Nothing
+     * is tried that has to be undone, and nothing is bounded: the work is that of comparing the
+     * readings of each pair, as often as a pass takes one away.
+     *
+     * <p>Positions that share no container agree whatever they are read as, which is why they
+     * are not a product of their readings here.
+     */
+    private static boolean agreeingReadingsRemain(List<List<ElementsTaken>> candidates) {
+        List<List<ElementsTaken>> left = new ArrayList<>();
+        candidates.forEach(each -> left.add(new ArrayList<>(each)));
+        boolean taken;
+        do {
+            taken = false;
+            for (int position = 0; position < left.size(); position++) {
+                List<ElementsTaken> kept = new ArrayList<>();
+                for (ElementsTaken reading : left.get(position)) {
+                    if (everyOtherPositionHasOneAgreeingWith(left, position, reading)) {
+                        kept.add(reading);
+                    }
+                }
+                if (kept.isEmpty()) {
+                    return false;
+                }
+                if (kept.size() != left.get(position).size()) {
+                    left.set(position, kept);
+                    taken = true;
+                }
+            }
+        } while (taken);
+        return true;
+    }
+
+    private static boolean everyOtherPositionHasOneAgreeingWith(List<List<ElementsTaken>> left,
+                                                               int position,
+                                                               ElementsTaken reading) {
+        for (int other = 0; other < left.size(); other++) {
+            if (other != position && left.get(other).stream().noneMatch(reading::agreesWith)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * One value the walk arrived at, with the type the reading exposes at its position.
      *
      * <p>For a reader that writes the value somewhere else. The value says which case it is and
