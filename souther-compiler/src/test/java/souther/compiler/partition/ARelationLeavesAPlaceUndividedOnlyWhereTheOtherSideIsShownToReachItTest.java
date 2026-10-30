@@ -71,6 +71,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *  model, and only reads it. */
     private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
 
+    private static final Map<Compilation, String> REPORTS = new ConcurrentHashMap<>();
+
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
      *  statically is held for every class after this one. */
     @AfterAll
@@ -156,8 +158,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     private static Map<String, String> leftIn(Compilation compilation, String at) {
-        String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        // The report does not depend on the place asked of it, which only picks lines out of it.
+        String report = REPORTS.computeIfAbsent(compilation, each -> AdequacyReport.of(each)
+                .human(SourceRendering.namedByIdentity(each.texts())));
         Map<String, String> out = new LinkedHashMap<>();
         for (String line : report.lines().map(String::strip).toList()) {
             if (!line.contains("comparison@" + at + " ") || !line.contains("about `")) {
