@@ -174,14 +174,18 @@ final class IntrinsicNumericFacts {
      * answer, and what they are read as is the naming's answer — a name given a constant is that
      * constant, here as everywhere.
      */
-    static List<NumericConstraint> ofCall(Core.PreservedCall call, FactSubject atom, Denotations at,
-                                          Terms terms) {
+    static Carried ofCall(Core.PreservedCall call, FactSubject atom, Denotations at, Terms terms) {
         List<NumericConstraint> out = new ArrayList<>();
-        bounding(DischargeRules.boundsOn(call, arg -> constantOf(arg, at, terms)), atom,
-                ref -> terms.affineOf(CallArguments.of(ref, call), at), out);
+        DischargeRules.BoundRows rows =
+                DischargeRules.boundRowsOn(call, arg -> constantOf(arg, at, terms));
+        bounding(rows.holding(), atom, ref -> terms.affineOf(CallArguments.of(ref, call), at), out);
         shifted(call, atom, at, terms, out);
-        return out;
+        return new Carried(out, whereTheArgumentsAre(rows.heldBack(), call, atom, at, terms));
     }
+
+    /** What a call's answer carries whatever its arguments are, and what it carries where its
+     * arguments stand a way the call does not settle. */
+    record Carried(List<NumericConstraint> always, List<ConditionalConstraint> where) {}
 
     /**
      * The rows as what they say about {@code atom}, keeping the relation to the argument each names.
@@ -225,16 +229,17 @@ final class IntrinsicNumericFacts {
      * What the answer of {@code call} carries where the arguments stand a way the call does not
      * settle: a remainder by a divisor above nought is not negative and is below the divisor.
      *
-     * <p>The rows {@link #ofCall} leaves out, each with its condition as a relation of the argument
-     * it names. Whether it holds is not the call's to say — a divisor that is no constant is above
-     * nought on the path that guarded it and not on another — so each is filed beside what it
-     * would state ({@link ConditionalConstraint}) and taken in by a reading that has the condition.
+     * <p>The rows the call's arguments do not meet as constants, each with its condition as a
+     * relation of the argument it names. Whether it holds is not the call's to say — a divisor that
+     * is no constant is above nought on the path that guarded it and not on another — so each is
+     * filed beside what it would state ({@link ConditionalConstraint}) and taken in by a reading
+     * that has the condition.
      */
-    static List<ConditionalConstraint> whereTheArgumentsAre(Core.PreservedCall call, FactSubject atom,
-                                                           Denotations at, Terms terms) {
+    private static List<ConditionalConstraint> whereTheArgumentsAre(
+            List<ResultBound<DeclaredArgument>> heldBack, Core.PreservedCall call, FactSubject atom,
+            Denotations at, Terms terms) {
         List<ConditionalConstraint> out = new ArrayList<>();
-        for (ResultBound<DeclaredArgument> bound
-                : DischargeRules.boundsHeldBack(call, arg -> constantOf(arg, at, terms))) {
+        for (ResultBound<DeclaredArgument> bound : heldBack) {
             NumericConstraint premise = premiseOf(bound.provided(), call, at, terms);
             NumericConstraint stated = stating(bound, atom,
                     ref -> terms.affineOf(CallArguments.of(ref, call), at));

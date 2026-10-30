@@ -299,33 +299,32 @@ final class DischargeRules {
     }
 
     /**
-     * The bounds {@code call}'s result has here: the operation's rows, less those whose condition on
-     * the arguments this call does not meet.
+     * The operation's rows for {@code call}, in the two halves the call's arguments make of them.
+     *
+     * @param holding  the rows whose condition on the arguments this call meets as constants, which
+     *                 are the bounds its result has here
+     * @param heldBack the rest. A reading that settles the condition some other way — by what a
+     *                 guard established of the argument — is the one to take them in.
+     */
+    record BoundRows(List<ResultBound<DeclaredArgument>> holding,
+                     List<ResultBound<DeclaredArgument>> heldBack) {}
+
+    /**
+     * {@code call}'s rows, each asked once.
      *
      * @param constant what an argument reads as, or null where it reads as no constant. Asked of the
      *                 caller because what a value is read as is the reading's answer and not a
      *                 property of the syntax at the call.
      */
-    static List<ResultBound<DeclaredArgument>> boundsOn(Core.PreservedCall call,
-                                                        Function<Core, BigDecimal> constant) {
-        return boundsOn(call.operation(), CallArguments.readAs(call, constant));
-    }
-
-    /**
-     * The rows {@link #boundsOn} leaves out: the operation's bounds whose condition on the arguments
-     * this call does not meet as constants. A reading that settles the condition some other way —
-     * by what a guard established of the argument — is the one to take them in.
-     */
-    static List<ResultBound<DeclaredArgument>> boundsHeldBack(
-            Core.PreservedCall call, Function<Core, BigDecimal> constant) {
+    static BoundRows boundRowsOn(Core.PreservedCall call, Function<Core, BigDecimal> constant) {
         ConstantArguments<DeclaredArgument> constants = CallArguments.readAs(call, constant);
-        List<ResultBound<DeclaredArgument>> held = new ArrayList<>();
-        for (ResultBound<DeclaredArgument> row : facts().boundsOnTheResult(call.operation())) {
-            if (!constants.satisfy(row.provided())) {
-                held.add(row);
-            }
+        List<ResultBound<DeclaredArgument>> rows = facts().boundsOnTheResult(call.operation());
+        List<ResultBound<DeclaredArgument>> holding = new ArrayList<>(rows.size());
+        List<ResultBound<DeclaredArgument>> heldBack = new ArrayList<>();
+        for (ResultBound<DeclaredArgument> row : rows) {
+            (constants.satisfy(row.provided()) ? holding : heldBack).add(row);
         }
-        return held;
+        return new BoundRows(holding, heldBack);
     }
 
     /**

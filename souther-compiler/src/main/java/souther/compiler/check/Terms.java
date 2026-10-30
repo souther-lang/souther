@@ -1191,8 +1191,10 @@ final class Terms {
             // atom and no tree has it. Asked of the operation the value came from, whichever surface
             // it was written on — the same normalisation the recipe is read through.
             if (asOperator(e) instanceof Core.PreservedCall call) {
-                carrying(atom, IntrinsicNumericFacts.ofCall(call, atom, at, this));
-                carryingWhere(atom, IntrinsicNumericFacts.whereTheArgumentsAre(call, atom, at, this));
+                IntrinsicNumericFacts.Carried carried =
+                        IntrinsicNumericFacts.ofCall(call, atom, at, this);
+                carrying(atom, carried.always());
+                carryingWhere(atom, carried.where());
             }
         }
         return atom;
