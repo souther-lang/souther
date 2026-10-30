@@ -542,7 +542,10 @@ final class TermReading {
             }
         }
         if (term.source() instanceof RunSource.SearchedLine line) {
-            return lineFound(values, line);
+            // How many nodes the line holds is the one number of it, and any other account of a
+            // line is no number of the row.
+            return term.takenAs() instanceof TakenAs.HowManyItHolds
+                    ? lineFound(values, line) : new Reading.NotNumber();
         }
         if (term.source() instanceof RunSource.ReachableNodes nodes) {
             List<ObservedValue> held = new ArrayList<>();

@@ -37,6 +37,7 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -194,6 +195,15 @@ class HowLongThePathASearchAnswersIsReadTest {
         Proposition stated = stated(PATH_TO,
                 "List.all(t -> List.length(pathTo(t, i.w)) >= 2, i.ts)");
         assertFalse(stated.key().contains("line below"), () -> "read as " + stated);
+    }
+
+    /** The values of a line are nodes, of which only how many there are is a number. */
+    @Test
+    void aLineIsNoRunToAddUp() {
+        assertNull(NumericTerm.TakenOver.of(ValueName.Stdlib.operation("List", "sum"), LINE,
+                Type.Prim.INT, NewtypeInners.NONE, SYMBOLS));
+        assertInstanceOf(NumericTerm.TakenOver.class, NumericTerm.TakenOver.howManyOf(LINE,
+                Type.Prim.INT, NewtypeInners.NONE, SYMBOLS));
     }
 
     @Test
@@ -368,6 +378,30 @@ class HowLongThePathASearchAnswersIsReadTest {
     }
 
     /**
+     * A search that goes down the elements from the last is run by the language in that order, so
+     * where two elements below hold the value it stops at the later one. The rows say what the
+     * language does: the line is two nodes long here, and the one read from the first element
+     * would be three.
+     */
+    @Test
+    void aSearchFromTheLastElementIsNotTheLineToTheFirstNode() {
+        String fromTheEnd = SEARCH.replace("List.fold((found, r) ->", "List.foldRight((r, found) ->");
+        assertTrue(fromTheEnd.contains("foldRight"), fromTheEnd);
+        String model = DEEPEST_LINE_MODEL.formatted(fromTheEnd, "")
+                .replace("let tree = Node { v = 1, below = [ Node { v = 2, below = [] } ] }",
+                        "let tree = Node { v = 1, below = [ Node { v = 2, below = [ Node { v = 3, below = [] } ] }, Node { v = 3, below = [] } ] }")
+                .replace("| \"a\" : (tree, 2) -> Yes", "| \"a\" : (tree, 3) -> No")
+                .replace(">= 2", ">= 3");
+        Compilation compilation = measuredModel(model);
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList());
+        String json = AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        assertFalse(json.contains("searched_line"), humanOf(compilation));
+        assertTrue(json.contains("rule_about_a_derived_value"), humanOf(compilation));
+    }
+
+    /**
      * A search that asks the nodes below before the node answers the same on every row above, and
      * a different line wherever a node and one below it both hold the value: the line is not read,
      * and the old reason stays.
@@ -486,6 +520,87 @@ class HowLongThePathASearchAnswersIsReadTest {
         // Said as what was tried and refused, and never as a point no value can stand at.
         assertTrue(human.contains("every value tried"), human);
         assertFalse(human.contains("no row can stand at the IN point"), human);
+    }
+
+    /**
+     * A border far past what a row is worth writing is a figure of this compiler's that was
+     * reached, and not a tree built of that many nodes: the point is left undecided under the
+     * figure and is not said to be a point no value can stand at.
+     */
+    @Test
+    void aBorderFarPastWhatARowIsWorthWritingStopsAtTheFigure() {
+        Compilation compilation = measuredModel(
+                DEEPEST_LINE_MODEL.formatted(SEARCH, "").replace(">= 2", ">= 100000")
+                        .replace("| \"a\" : (tree, 2) -> Yes", "| \"a\" : (tree, 2) -> No"));
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList());
+        String human = humanOf(compilation);
+        assertTrue(human.contains("how many elements a proposed collection holds"), human);
+        assertFalse(human.contains("no row can stand at the"), human);
+    }
+
+    private static final String ONE_VALUE_MODEL = """
+            module demo
+
+            data Tag = Int
+                invariant value == 1
+            data Node = { v: Tag, below: List<Node> }
+            data Yes
+            data No
+
+            let pathTo (node: Node, w: Tag): List<Tag> =
+                if node.v == w
+                    then [ node.v ]
+                    else {
+                        let below = List.fold((found, r) ->
+                                if List.isEmpty(found) then pathTo(r, w) else found,
+                            [], node.below)
+                        if List.isEmpty(below) then [] else [ node.v ] ++ below
+                    }
+
+            behavior f : (root: Node, w: Tag) -> Yes | No
+            let f (root, w) =
+                if List.length(pathTo(root, w)) >= 2 then Yes else No
+
+            %s""";
+
+    /**
+     * A field that has one value can hold the value searched for and no other: a row at the line
+     * of one node is offered and meets its point, and the points past it and below it are said to
+     * lack another value to write, which is no reason to offer nothing.
+     *
+     * <p>This is the report's side of it. The row at the line of one is also what the trees
+     * composed from the type alone come to when every node holds the one value, so the report
+     * would show it even if the chain were refused; what the chain is asked for is in
+     * {@code TermRealizations#aLineToTheValue}, which asks for another value only where the line
+     * is not of one.
+     */
+    @Test
+    void aFieldThatHasOneValueIsOfferedARowAtTheLineOfOne() {
+        // With no row at the line of one, so that it is owed.
+        Compilation before = measuredModel(ONE_VALUE_MODEL.formatted(""));
+        assertEquals(List.of(), before.errors().stream()
+                .map(each -> each.diagnostic().code()).toList());
+        List<String> offered = Adequacy.offeredFor(before.db(),
+                        OfferingRequest.overTheModule("demo"))
+                .rowsByBehavior().getOrDefault("f", List.of()).stream()
+                .map(row -> String.join(", ",
+                        row.inputs().stream().map(FixtureTemplate::text).toList()))
+                .toList();
+        assertFalse(offered.isEmpty(), () -> "a row for the line of one: " + humanOf(before));
+        StringBuilder written = new StringBuilder("example f\n");
+        int named = 0;
+        for (String inputs : offered) {
+            written.append("    | \"offered ").append(named++).append("\" : (").append(inputs)
+                    .append(") -> No\n");
+        }
+        Compilation after = measuredModel(ONE_VALUE_MODEL.formatted(written));
+        assertEquals(List.of(), after.errors().stream()
+                .map(each -> each.diagnostic().code()).toList());
+        String human = humanOf(after);
+        assertTrue(human.contains("borders 1   obligations 1/4"), human);
+        // And what no node can be written for is said as what it is.
+        assertTrue(human.contains("no other value than the one searched for"), human);
     }
 
     private static Compilation measuredModel(String source) {

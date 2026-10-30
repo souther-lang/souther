@@ -237,7 +237,11 @@ final class LineDownATree {
          * from the first element that has something to answer.
          */
         private Abs evalWalk(SeededWalk walk, InputReads here, Map<BindingId, Abs> env) {
-            if (!(eval(walk.seed(), here, env) instanceof Abs.Nothing)
+            // The first node is the first in the order the elements are handed to the step, and a
+            // row is read from the first element of a field to the last: a walk that says nothing
+            // of its order, or hands them from the last, is a search for another node.
+            if (!walk.inTheContainersOrder()
+                    || !(eval(walk.seed(), here, env) instanceof Abs.Nothing)
                     || !(here.pathOf(walk.container(), newtypes) instanceof PathResolution.At(
                             TermPath over))
                     || over.steps().size() != root.steps().size() + 1

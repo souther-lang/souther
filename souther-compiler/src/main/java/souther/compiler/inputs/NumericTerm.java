@@ -1772,6 +1772,11 @@ public sealed interface NumericTerm
                     || (how instanceof TakenAs.HowManyItHolds && source.isInOneContainer())) {
                 return null;
             }
+            // The values of a line are nodes, of which only how many there are is a number.
+            if (source instanceof RunSource.SearchedLine
+                    && !(how instanceof TakenAs.HowManyItHolds)) {
+                return null;
+            }
             return how.takenOf(over, answers) ? new TakenOver(operation, source) : null;
         }
 

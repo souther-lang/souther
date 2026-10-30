@@ -368,10 +368,13 @@ public sealed interface RunSource {
 
     /**
      * The nodes on the line from the node at {@code root} down to the first node a search finds,
-     * the search going to the elements of the field {@code through} of each node in turn and
-     * stopping at the first node whose value at {@code matchAt} is the value standing at
-     * {@code key}: that node and each node above it down from the root, or none where no node of
-     * the tree has that value.
+     * the search going to the elements of the field {@code through} of each node in turn, first
+     * element to last and each element's nodes before the next element's, and stopping at the
+     * first node whose value at {@code matchAt} is the value standing at {@code key}: that node
+     * and each node above it down from the root, or none where no node of the tree has that
+     * value. The order is part of which node is first, so what reads the search, what reads a row
+     * and what writes one all take it ({@code TermReading#lineFound}); a search that takes the
+     * elements in another order is not this run.
      *
      * <p>Not {@link ReachableNodes}. That is every node of the tree and a search finds one of them,
      * so a tree of a given height holds lines of every length up to it and the search answers one

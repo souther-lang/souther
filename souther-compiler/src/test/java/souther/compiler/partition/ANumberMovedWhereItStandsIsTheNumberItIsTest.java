@@ -77,6 +77,11 @@ class ANumberMovedWhereItStandsIsTheNumberItIsTest {
             AStatementAtARow.of(FLAGGED, "f", null));
 
     private static NumericTerm.TakenOver totalOver(RunSource run) {
+        // The values of a line are nodes, so what is taken of a line is how many there are.
+        if (run instanceof RunSource.SearchedLine) {
+            return NumericTerm.TakenOver.howManyOf(run, Type.Prim.INT, NewtypeInners.NONE,
+                    SYMBOLS);
+        }
         return NumericTerm.TakenOver.of(ValueName.Stdlib.operation("List", "sum"), run,
                 Type.Prim.INT, NewtypeInners.NONE, SYMBOLS);
     }

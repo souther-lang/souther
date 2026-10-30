@@ -2372,13 +2372,6 @@ final class TermRealizations {
         FixtureTemplate sought = WornNames.under(matchView.wrappers(),
                 FixtureTemplate.on(keyOrders.observed(), on, ruleSource.symbols().scope()::reach),
                 ruleSource);
-        FixtureTemplate other = Witnesses.distinctValuesOf(matchType, 2, reading, Set.of())
-                .values().stream().filter(each -> !each.text().equals(sought.text()))
-                .findFirst().orElse(null);
-        if (other == null) {
-            return linesNotWritten("no other value than the one searched for is there to write"
-                    + " above the node it stops at");
-        }
         TypeView rootView = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
@@ -2389,6 +2382,21 @@ final class TermRealizations {
                     if (nodes < 0) {
                         return new Realization.None(
                                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    // A chain of this many nodes holds that many elements, one below another, and
+                    // is held to how many a value built here holds like any other.
+                    CompositionBudget past = Witnesses.pastTheElements(nodes);
+                    if (past != null) {
+                        return new Realization.Stopped(CompositionShortfall.of(List.of(past)));
+                    }
+                    // Another value than the one searched for is wanted above the node the search
+                    // stops at and for a line of none; a line of one is the node holding it alone.
+                    FixtureTemplate other = nodes == 1 ? null
+                            : anotherValueThan(sought, matchType, reading);
+                    if (nodes != 1 && other == null) {
+                        return linesNotWritten("no other value than the one searched for is there"
+                                + " to write " + (nodes == 0 ? "in a tree without it"
+                                        : "above the node the search stops at"));
                     }
                     FixtureTemplate chain = null;
                     CompositionShortfall met = CompositionShortfall.NONE;
@@ -2412,6 +2420,13 @@ final class TermRealizations {
                     return new Realization.Built(List.of(WornNames.under(rootView.wrappers(), chain,
                             ruleSource)), met);
                 });
+    }
+
+    /** A value of {@code type} other than {@code sought}, or null where there is none to write. */
+    private static FixtureTemplate anotherValueThan(FixtureTemplate sought, Type type,
+                                                    RuleReadingContext reading) {
+        return Witnesses.distinctValuesOf(type, 2, reading, Set.of()).values().stream()
+                .filter(each -> !each.text().equals(sought.text())).findFirst().orElse(null);
     }
 
     /** A tree whose search finds a line of a given length that this does not write. */
