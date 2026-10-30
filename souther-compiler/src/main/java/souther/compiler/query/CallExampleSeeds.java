@@ -69,6 +69,13 @@ final class CallExampleSeeds {
         boolean standsAtTheInputThroughout() {
             return at.stream().allMatch(Optional::isPresent);
         }
+
+        /** Whether a lift through this call asks the generator to build a value, which an
+         *  argument at a field or a case does and one at an element or a parameter does not. */
+        boolean buildsAroundAPosition() {
+            return at.stream().anyMatch(each -> each.orElseThrow().steps().stream()
+                    .anyMatch(step -> !(step instanceof TermPath.Step.Element)));
+        }
     }
 
     /**
@@ -79,6 +86,11 @@ final class CallExampleSeeds {
      */
     static List<Call> callsIn(AnalysisBody analysis, InputReading input,
                               Predicate<ValueName.Behavior> worthReading) {
+        List<AnOperationApplied> any = new ArrayList<>();
+        collect(analysis.core(), worthReading, any);
+        if (any.isEmpty()) {
+            return List.of();
+        }
         InputReads reads = InputReads.ofParametersWhereCallsStand(
                 input.domain().parameterReads(), input.declared(),
                 ElementBindings.of(analysis, input.newtypes()), input.domain().dependencies());
@@ -195,6 +207,12 @@ final class CallExampleSeeds {
                 }
                 List<Optional<FixtureTemplate>> inputsWritten = written.computeIfAbsent(
                         new WrittenRow(call.callee(), at), _ -> writtenInputs(row, callee, subject));
+                // A lift that builds around a position asks the decoder before the key is known,
+                // so it is a row tried whether or not the author wrote it.
+                boolean counted = call.buildsAroundAPosition();
+                if (counted && tried++ == limit) {
+                    return List.copyOf(out.values());
+                }
                 Optional<Map<Integer, FixtureTemplate>> lifted =
                         lifted(call, inputsWritten, subject, check);
                 List<FixtureTemplate> inputs = lifted.isEmpty() ? List.of()
@@ -208,7 +226,7 @@ final class CallExampleSeeds {
                 if (lifted.isPresent() && alreadyWritten.contains(key) && considered.add(key)) {
                     continue;
                 }
-                if (tried++ == limit) {
+                if (!counted && tried++ == limit) {
                     return List.copyOf(out.values());
                 }
                 if (lifted.isEmpty() || inputs.contains(null) || !considered.add(key)

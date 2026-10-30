@@ -8,6 +8,7 @@ import souther.compiler.partition.Generator;
 import souther.compiler.partition.MeasuredInput;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -102,6 +103,57 @@ class ARowOfACalleeIsLiftedThroughAFieldAndACaseOfTheCallersInputTest {
     @Test
     void anArgumentComputedFromAFieldIsNoRow() {
         assertEquals(List.of(), seededInputs(A_COMPUTED_ARGUMENT));
+    }
+
+    @Test
+    void theDecoderIsAskedAboutNoMoreRowsThanTheLimitHoweverManyTheCalleeWrites() {
+        int fewRows = decoderAskedFor(rowsOfACallee(10), 3);
+        int manyRows = decoderAskedFor(rowsOfACallee(40), 3);
+        assertEquals(fewRows, manyRows,
+                "what the decoder is asked depends on the limit and not on the rows written");
+    }
+
+    private static String rowsOfACallee(int rows) {
+        StringBuilder out = new StringBuilder("""
+                module repro.lift
+                data S = { score: Int }
+                behavior f : (s: S) -> Bool
+                let f (s) = isFifty(s.score)
+                behavior isFifty : (n: Int) -> Bool
+                let isFifty (n) = n == 50
+                example isFifty
+                """);
+        for (int i = 0; i < rows; i++) {
+            out.append("    | (").append(100 + i).append(") -> false\n");
+        }
+        // The caller has written every row the lift would offer, which is the rows it skips
+        // without asking the decoder when nothing is built around a position.
+        out.append("example f\n");
+        for (int i = 0; i < rows; i++) {
+            out.append("    | (S { score = ").append(100 + i).append(" }) -> false\n");
+        }
+        return out.toString();
+    }
+
+    /** How many times the decoder is asked to build a value while {@code f} is seeded. */
+    private static int decoderAskedFor(String source, int limit) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Db db = compilation.db();
+        var behavior = Adequacy.specOf(db.ask(new Shapes.CheckSurface("repro.lift")).value(), "f");
+        InputReading input = Adequacy.inputReadingOf(db, "repro.lift", behavior);
+        AnalysisBody analysis = db.ask(new Bodies.Observable("repro.lift")).value()
+                .analysisBodies().get("f");
+        MeasuredInput subject = Adequacy.subjectOf(db, "repro.lift", behavior, input);
+        AtomicInteger asked = new AtomicInteger();
+        Generator.CandidateCheck check = (_, _) -> {
+            asked.incrementAndGet();
+            return new Generator.CandidateCheck.Built.NothingBuiltIt();
+        };
+        CallExampleSeeds.rowsFor(db, "repro.lift", subject, input, analysis, check, List.of(),
+                true, limit);
+        return asked.get();
     }
 
     /** The inputs, written, of each row {@code f} is offered from the rows of its callees. */
