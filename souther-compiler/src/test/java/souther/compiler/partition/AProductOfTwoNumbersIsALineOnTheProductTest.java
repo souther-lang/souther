@@ -222,6 +222,35 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
     }
 
     /**
+     * Where the declarations leave the factor beside the number alone no place it comes to one, the
+     * number alone stands at the value over what the factor comes to inside the run: a rate
+     * strictly between nought and one is at a half, and a price of two pennies leaves a penny.
+     */
+    @Test
+    void aFactorThatCannotBeOneIsHeldInsideTheRunItIsLeft() {
+        String prelude = """
+                data Price = Decimal
+                    invariant value >= 0.00m
+
+                data Rate = Decimal
+                    invariant value > 0.00m && value < 1.00m
+                """;
+        Compilation compilation = compiled(prelude, "price: Price, rate: Rate",
+                "Decimal.compare(Decimal.subtract(price.value,"
+                        + " Decimal.multiply(price.value, rate.value)), 0.01m) >= 0");
+        List<BorderAssessment> lines = linesOf(compilation);
+        assertTrue(lines.stream().anyMatch(line -> line.axis().contains("*")), describe(lines));
+        for (BorderAssessment line : lines) {
+            if (line.axis().contains("*")) {
+                assertEquals(List.of(), pointsWithNoRow(line));
+            }
+        }
+        assertTrue(certifiedRows(lines).stream().anyMatch(row ->
+                row.inputs().equals(List.of("Price(0.02m)", "Rate(0.5m)"))),
+                certifiedRows(lines).toString());
+    }
+
+    /**
      * A whole number made a decimal is a number a row holds as it is, so a decimal operation over
      * it is one a row is asked to get past: every position of the rule is shown to reach it.
      */
@@ -305,6 +334,39 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         fold.measure(Adequacy.Asked.fullReport());
         fold.answerEverything();
         assertEquals(List.of(), unreadReasonsOf(measured(fold)));
+    }
+
+    /**
+     * A construction worked out before the comparison that stops a run for some rate keeps the
+     * comparison from being shown reached: {@code Refund(Decimal.min(fee, gross))} is refused
+     * for a negative rate, the minimum being the fee, so a row with that rate never gets to the
+     * comparison and the positions are not shown to.
+     */
+    @Test
+    void aConstructionBeforeTheComparisonThatStopsForSomeRateKeepsItNotShownReached() {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Refund = Decimal
+                    invariant value >= 0.0m
+                data Money = Decimal
+                    invariant value >= 0.0m
+                data Plan = { fee: Refund, within: Bool }
+
+                behavior f : (gross: Money, rate: Decimal, c: Money) -> Plan
+                    constructs Plan, Refund
+                let f (gross, rate, c) = {
+                    let fee = Decimal.multiply(gross.value, rate)
+                    Plan {
+                        fee = Refund(Decimal.min(fee, gross.value)),
+                        within = Decimal.compare(Decimal.subtract(gross.value, fee), c.value) <= 0
+                    }
+                }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE),
+                unreadReasonsOf(measured(compilation)));
     }
 
     /** A decimal times itself is no product of two numbers apart, and is named as a product. */

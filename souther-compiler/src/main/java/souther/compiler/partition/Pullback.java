@@ -6521,7 +6521,7 @@ final class Pullback {
      * wherever it answers at all, and an operator whose region is not said is left where nothing
      * here says it.
      */
-    private static List<Derivation> whereEachOperatorAnswers(Operators operated) {
+    private List<Derivation> whereEachOperatorAnswers(Operators operated) {
         List<Derivation> out = new ArrayList<>();
         for (Operated each : operated.told) {
             LinearForm<Quantity> form = each.form();
@@ -6912,8 +6912,8 @@ final class Pullback {
      *                right, the other way about, or neither where no two written sides were read
      *                into it
      */
-    private static Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
-                                        Rel states, Derivation.AComparisonRead.Facing written) {
+    private Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
+                                 Rel states, Derivation.AComparisonRead.Facing written) {
         return aRelation(by, form, states, Map.of(), written);
     }
 
@@ -6921,13 +6921,13 @@ final class Pullback {
      * The same, holding how each count it names was read: the ones of {@code read} it still names —
      * a count written on both sides comes to nought and names none.
      */
-    private static Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
-                                        Rel states,
-                                        Map<Quantity, Derivation.AComparisonRead.Counted> read,
-                                        Derivation.AComparisonRead.Facing written) {
+    private Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
+                                 Rel states,
+                                 Map<Quantity, Derivation.AComparisonRead.Counted> read,
+                                 Derivation.AComparisonRead.Facing written) {
         // The relation between the numbers: a product beside a factor of its own is the one
         // product, which numbers apart are the factors of.
-        form = FactoredProducts.of(form);
+        form = FactoredProducts.of(form, this.read);
         Relation.OneWay<Quantity> one = Relation.OneWay.of(form, states);
         // Turning the form to face the one way turns it against the written sides as well.
         Derivation.AComparisonRead.Facing facing = switch (written) {
@@ -10901,8 +10901,12 @@ final class Pullback {
         }
         LinearForm<NumericTerm> left = AffineReading.formOf(written.left(), at, read);
         LinearForm<NumericTerm> right = AffineReading.formOf(written.right(), at, read);
-        NumericTerm.ProductOf.Signed product = NumericTerm.ProductOf.signed(left, right);
-        return product == null ? null : new LinearForm<>(ExactRatio.ZERO,
+        NumericTerm.ProductOf.Signed made = NumericTerm.ProductOf.signed(left, right);
+        if (made == null) {
+            return null;
+        }
+        NumericTerm.ProductOf.Signed product = ProductDeclarations.admitted(made, read);
+        return new LinearForm<>(ExactRatio.ZERO,
                 Map.of(new DecisionAtom.OfTheInput(product.product()), product.sign()));
     }
 

@@ -1870,10 +1870,15 @@ public sealed interface NumericTerm
 
         private final LinearForm<NumericTerm> one;
         private final LinearForm<NumericTerm> other;
+        /** Where the number of the factor beside the one alone stands to hold the product at a
+         *  value, or null where it stands where that factor is one. */
+        private final ExactRatio fixedAt;
 
-        private ProductOf(LinearForm<NumericTerm> one, LinearForm<NumericTerm> other) {
+        private ProductOf(LinearForm<NumericTerm> one, LinearForm<NumericTerm> other,
+                          ExactRatio fixedAt) {
             this.one = one;
             this.other = other;
+            this.fixedAt = fixedAt;
         }
 
         /**
@@ -1930,8 +1935,8 @@ public sealed interface NumericTerm
                 sign = sign.negated();
             }
             boolean firstFirst = String.valueOf(first).compareTo(String.valueOf(second)) <= 0;
-            return new Signed(firstFirst ? new ProductOf(first, second)
-                    : new ProductOf(second, first), sign);
+            return new Signed(firstFirst ? new ProductOf(first, second, null)
+                    : new ProductOf(second, first, null), sign);
         }
 
         /**
@@ -1977,9 +1982,75 @@ public sealed interface NumericTerm
          *
          * @param carrier the number alone that stands at the value
          * @param fixed   the number of the other factor
-         * @param at      where {@code fixed} stands, so that the other factor comes to one
+         * @param at      where {@code fixed} stands, so that the other factor comes to
+         *                {@code scale}
+         * @param scale   what the other factor comes to there: one unless the declarations leave
+         *                the number no place it is one at, and then the carrier stands at the
+         *                value over this
          */
-        public record AtAValue(NumericTerm carrier, NumericTerm fixed, ExactRatio at) {}
+        public record AtAValue(NumericTerm carrier, NumericTerm fixed, ExactRatio at,
+                               ExactRatio scale) {}
+
+        /**
+         * What the declarations leave the numbers of a product, asked where the place a number
+         * stands at is chosen ({@link #standingWhereTheDeclarationsAdmit}).
+         */
+        public interface Declared {
+
+            /** The values the declarations leave {@code number}, or null where that is not
+             *  shown. */
+            NumericDomain.Bounds runOf(NumericTerm number);
+
+            /** Whether {@code number} is counted on decimals, whose every value between its
+             *  ends is one it can take. */
+            boolean isDense(NumericTerm number);
+        }
+
+        /**
+         * The same product, with the number beside the one alone standing inside the run the
+         * declarations leave it where it cannot stand at the value that makes its factor one —
+         * and this product where it can, or where no value inside is found.
+         *
+         * <p>Only where the number alone is counted on decimals: it then stands at the value
+         * over what the factor beside comes to, and takes every value that is held. The product
+         * is held at a value by one pair of numbers either way, so what reads it and what writes
+         * it agree.
+         */
+        public ProductOf standingWhereTheDeclarationsAdmit(Declared declared) {
+            AtAValue way = fixedAt == null ? atAValue() : null;
+            if (way == null || !declared.isDense(way.carrier())) {
+                return this;
+            }
+            NumericDomain.Bounds run = declared.runOf(way.fixed());
+            if (run == null || run.admits(way.at())) {
+                return this;
+            }
+            ExactRatio inside = insideOf(run);
+            ProductOf there = inside == null ? null : new ProductOf(one, other, inside);
+            return there == null || there.atAValue() == null ? this : there;
+        }
+
+        /** A value inside {@code run}, written as a decimal, nearest its middle; null where none
+         *  is found. */
+        private static ExactRatio insideOf(NumericDomain.Bounds run) {
+            ExactRatio low = run.min() != null && run.min().at() instanceof Count from
+                    ? from.exactly() : null;
+            ExactRatio high = run.max() != null && run.max().at() instanceof Count to
+                    ? to.exactly() : null;
+            ExactRatio inside;
+            if (low != null && high != null) {
+                inside = low.plus(high).flatMap(sum -> sum.dividedBy(ExactRatio.of(2))).orNull();
+            } else if (low != null) {
+                inside = low.plus(ExactRatio.ONE).orNull();
+            } else if (high != null) {
+                inside = high.minus(ExactRatio.ONE).orNull();
+            } else {
+                inside = null;
+            }
+            return inside != null && run.admits(inside)
+                    && Count.written(inside) instanceof ExactAnswer.Held<Optional<Count>>(
+                            Optional<Count> written) && written.isPresent() ? inside : null;
+        }
 
         /**
          * The way a given value of this product is held, or null where neither factor is a number
@@ -1997,12 +2068,19 @@ public sealed interface NumericTerm
                 }
                 Map.Entry<NumericTerm, ExactRatio> number =
                         beside.coefs().entrySet().iterator().next();
-                ExactRatio makingOne = number.getValue().isZero() ? null
+                if (number.getValue().isZero()) {
+                    continue;
+                }
+                ExactRatio standsAt = fixedAt != null ? fixedAt
                         : ExactRatio.ONE.minus(beside.constant())
                                 .flatMap(left -> left.dividedBy(number.getValue())).orNull();
-                if (makingOne != null) {
+                ExactRatio scale = standsAt == null ? null
+                        : fixedAt == null ? ExactRatio.ONE
+                        : number.getValue().times(standsAt).flatMap(beside.constant()::plus)
+                                .orNull();
+                if (standsAt != null && scale != null && !scale.isZero()) {
                     return new AtAValue(alone.coefs().keySet().iterator().next(), number.getKey(),
-                            makingOne);
+                            standsAt, scale);
                 }
             }
             return null;
@@ -2039,12 +2117,12 @@ public sealed interface NumericTerm
         @Override
         public boolean equals(Object that) {
             return that instanceof ProductOf product && one.equals(product.one)
-                    && other.equals(product.other);
+                    && other.equals(product.other) && Objects.equals(fixedAt, product.fixedAt);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(ProductOf.class, one, other);
+            return Objects.hash(ProductOf.class, one, other, fixedAt);
         }
 
         @Override

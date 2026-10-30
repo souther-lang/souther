@@ -7067,24 +7067,37 @@ public final class Generator {
                     && formsOne.isPresent()) {
                 RealizationTarget carrier = RealizationTarget.of(way.carrier());
                 RealizationTarget other = RealizationTarget.of(way.fixed());
+                Place alone = standingOverTheScale(each.getValue(), way.scale());
                 Place had = out.get(carrier);
                 Place otherHad = out.get(other);
-                if ((had == null || had.equals(each.getValue()))
+                if (alone != null && (had == null || had.equals(alone))
                         && (otherHad == null || otherHad.equals(formsOne.get()))) {
                     out.remove(each.getKey());
-                    out.put(carrier, each.getValue());
+                    out.put(carrier, alone);
                     out.put(other, formsOne.get());
                     beside.put(way.carrier(), carrier);
                     beside.put(way.fixed(), other);
                     // A total of the products of two maps' values that carries the product is
                     // written with the map looked into as any such total is.
-                    withTheMapLookedInto(carrier, each.getValue(), subject, out, beside);
+                    withTheMapLookedInto(carrier, alone, subject, out, beside);
                 }
                 continue;
             }
             withTheMapLookedInto(each.getKey(), each.getValue(), subject, out, beside);
         }
         return new NumbersWrittenBeside(out, beside);
+    }
+
+    /** {@code product} over {@code scale}: the place the number alone stands at to hold the
+     *  product there, or null where that is no number a place can be written at. */
+    private static Place standingOverTheScale(Place product, ExactRatio scale) {
+        if (ExactRatio.ONE.equals(scale)) {
+            return product;
+        }
+        ExactRatio over = Count.number(product).exactly().dividedBy(scale).orNull();
+        return over != null && Count.written(over)
+                instanceof ExactAnswer.Held<Optional<Count>>(Optional<Count> written)
+                && written.isPresent() ? written.get() : null;
     }
 
     /**

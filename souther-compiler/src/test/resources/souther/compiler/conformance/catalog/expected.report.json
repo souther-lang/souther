@@ -2052,8 +2052,8 @@
             },
             "relation" : "=",
             "against" : "0.01",
-            "knownWritable" : false,
-            "writableBecause" : [ ],
+            "knownWritable" : true,
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "complete",
             "hit" : false
           }, {
@@ -2126,12 +2126,11 @@
             "lowered" : 0
           },
           "relation" : "=",
-          "knownWritable" : false,
-          "writableBecause" : [ ],
+          "knownWritable" : true,
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "complete",
           "hit" : false,
-          "disposition" : "undecided",
-          "undecidedAbout" : [ "whether_a_row_can_be_written" ],
+          "disposition" : "unmet",
           "readings" : [ {
             "behavior" : "discount",
             "axis" : "discount/item.price * (1 + -1 * rate)",
@@ -2377,6 +2376,35 @@
         } ]
       },
       "findings" : [ {
+        "kind" : "boundary_unmet",
+        "disposition" : "refused",
+        "subject" : "ON point of comparison@0:68:15",
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "comparison",
+              "rule" : {
+                "kind" : "comparison",
+                "declaredIn" : "conformance.catalog",
+                "definition" : "discount",
+                "behavior" : "discount",
+                "ordinal" : 3,
+                "lowered" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "location" : {
+            "kind" : "at_the_line"
+          }
+        },
+        "code" : "E1916"
+      }, {
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
         "subject" : "item.note@Some"

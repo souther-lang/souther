@@ -1798,7 +1798,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * around it names — or, where {@code aRuleMayNameIt}, that rules name only so that its ends
      * are the whole of what they leave it.
      */
-    private static NumericDomain.Bounds everyValueTheDeclarationsLeave(
+    static NumericDomain.Bounds everyValueTheDeclarationsLeave(
             NumericTerm.ValueOf value, InputReading read, boolean aRuleMayNameIt) {
         // A number is given a value only on an order that is a count or a decimal, whose
         // every whole number between its ends is one of its values; a string's place on
@@ -6341,7 +6341,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 beside, narrowedByTheRun, heldWhole, statedOfIt);
         NumericDomain.Bounds fixed = realizedFactor(way.fixed(), read, region, declared,
                 beside, narrowedByTheRun, heldWhole, statedOfIt);
-        return carried != null && fixed != null && fixed.admits(way.at()) ? carried : null;
+        if (carried == null || fixed == null || !fixed.admits(way.at())) {
+            return null;
+        }
+        // The number alone stands at the value over what the other factor comes to there.
+        return ExactRatio.ONE.equals(way.scale()) ? carried : carried.timesEach(way.scale());
     }
 
     /**

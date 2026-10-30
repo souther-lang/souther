@@ -1112,11 +1112,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 LinearForm<NumericTerm> left = composedBy(mul.left(), at, this);
                 LinearForm<NumericTerm> right =
                         left == null ? null : composedBy(mul.right(), at, this);
-                NumericTerm.ProductOf.Signed product =
+                NumericTerm.ProductOf.Signed made =
                         right == null ? null : NumericTerm.ProductOf.signed(left, right);
-                if (product == null) {
+                if (made == null) {
                     return null;
                 }
+                NumericTerm.ProductOf.Signed product =
+                        ProductDeclarations.admitted(made, ofTheInput);
                 named.add(product.product());
                 LinearForm<NumericTerm> atom = product.asAForm();
                 if (mul.type() == Type.DECIMAL) {

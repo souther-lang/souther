@@ -172,8 +172,11 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
         for (Object key : List.copyOf(standing.keySet())) {
             if (key instanceof NumericTerm.ProductOf product
                     && product.atAValue() instanceof NumericTerm.ProductOf.AtAValue way) {
-                standing.putIfAbsent(way.carrier(), standing.get(key));
-                standing.putIfAbsent(way.fixed(), way.at());
+                ExactRatio alone = standing.get(key).dividedBy(way.scale()).orNull();
+                if (alone != null) {
+                    standing.putIfAbsent(way.carrier(), alone);
+                    standing.putIfAbsent(way.fixed(), way.at());
+                }
             }
         }
         boolean more = true;
