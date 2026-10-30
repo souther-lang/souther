@@ -809,7 +809,8 @@ public final class WhatARelationLeavesUndivided {
             return leavesOfADenseTerm(terms, at, constant, asking, overlap, independent,
                     arithmetic);
         }
-        Settling free = settlingOf(terms, at, constant, asking, granularity, arithmetic);
+        Settling free = settlingOf(terms, at, constant, asking, granularity, arithmetic, overlap,
+                independent);
         Leaves shownFree = shown(free, terms, at, constant, asking, overlap, independent,
                 jointly, arithmetic);
         if (free == null) {
@@ -824,7 +825,8 @@ public final class WhatARelationLeavesUndivided {
         List<Term<P>> withinTheirOrders = withinTheSums(terms.stream()
                 .map(WhatARelationLeavesUndivided::withinItsOrder).toList(), operations.sums());
         Settling bounded = withinTheirOrders.equals(terms) ? null
-                : settlingOf(withinTheirOrders, at, constant, asking, granularity, arithmetic);
+                : settlingOf(withinTheirOrders, at, constant, asking, granularity, arithmetic,
+                        overlap, independent);
         List<Line> model = free.lines();
         // Shown already, and drawing no line the free runs do not: nothing is left to ask.
         if (bounded == null || (shownFree != null && model.containsAll(bounded.lines()))) {
@@ -1031,16 +1033,20 @@ public final class WhatARelationLeavesUndivided {
      * <p>A row is computed where the sizes it adds up are, in whatever order and with whichever
      * sign ({@link RowsComputed#computesAsTheFormIsAdded}); or, where the operations of the
      * relation are all told,
-     * where each of them holds at it ({@link Operations}). The row is found in one of two
-     * ways: the other terms each nearest nought with the value of the run nearest nought; or the
+     * where each of them holds at it ({@link Operations}). The row is found in one of three
+     * ways: the other terms each nearest nought with the value of the run nearest nought; the
      * rows at the two ends of the run, which are rows of every value between, each operation
-     * being with the others held still a straight function of the term's value.
+     * being with the others held still a straight function of the term's value; or, where one
+     * other term stands beside it, some value that term is shown to take
+     * ({@link #theOtherTermCompletesTheRow}).
      *
      * <p>The second is not asked of a run open at an end the term holds no end at.
      */
     private static <P> boolean aRowOfTheRunComputes(RowsComputed arithmetic, List<Term<P>> terms,
                                                     int at, SettledRun run, WholeRun held,
-                                                    ExactRatio[] row, ExactRatio nearest) {
+                                                    ExactRatio[] row, ExactRatio nearest,
+                                                    BiPredicate<P, P> overlap,
+                                                    Independence independent) {
         if (!arithmetic.tellsEveryOperation()) {
             // Not every operation is told: the sizes of the form say a row is computed for a
             // program taken to add it, and for none that was read.
@@ -1048,7 +1054,44 @@ public final class WhatARelationLeavesUndivided {
         }
         return computedAtBothEnds(arithmetic, terms, at, run, held)
                 || arithmetic.computedAt(() -> valuesByKey(terms,
-                        i -> i == at ? nearest : heldNearestNought(terms.get(i))));
+                        i -> i == at ? nearest : heldNearestNought(terms.get(i))))
+                || theOtherTermCompletesTheRow(arithmetic, terms, at, nearest, overlap,
+                        independent);
+    }
+
+    /**
+     * Whether a value the one other term is shown to take completes every operation with the term
+     * at {@code at} standing at {@code value}. The row nearest nought is one row of the others:
+     * a date moved by a count past the calendar's length stops there, and does not at a date the
+     * calendar's other end is nearer to. Which values of the other complete the operations is
+     * worked out from the operations ({@link RowsComputed#aWholeValueCompletes}), and not by
+     * trying values.
+     *
+     * <p>The row is a row only where the two stand at their values together: the term at
+     * {@code at} takes {@code value} ({@link #takesTheValue}), and the other is free
+     * ({@link #freeOf}) — apart from it and tied to it by nothing — so that it stands at any value
+     * it takes whatever the first is. Those are the values it is shown to take
+     * ({@link Term#realizes}), on the order it is counted on, and where it is now held.
+     */
+    static <P> boolean theOtherTermCompletesTheRow(RowsComputed arithmetic, List<Term<P>> terms,
+                                                   int at, ExactRatio value,
+                                                   BiPredicate<P, P> overlap,
+                                                   Independence independent) {
+        if (terms.size() != 2 || !freeOf(terms, at, overlap, independent)[1 - at]
+                || !takesTheValue(terms.get(at), value)) {
+            return false;
+        }
+        Term<P> other = terms.get(1 - at);
+        WholeRun taken = other.spacing() == Granularity.DISCRETE && other.realizes() != null
+                ? WholeRun.ofTheValues(other.realizes()) : null;
+        WholeRun order = other.runsTo() == null ? null : WholeRun.ofTheValues(other.runsTo());
+        WholeRun held = WholeRun.ofTheValues(other.holds());
+        if (taken == null || held == null || (other.runsTo() != null && order == null)) {
+            return false;
+        }
+        WholeRun within = (order == null ? taken : taken.meet(order)).meet(held);
+        return within.holdsAWholeNumber() && arithmetic.aWholeValueCompletes(
+                terms.get(at).key(), value, other.key(), within.low, within.high);
     }
 
     /**
@@ -1105,7 +1148,8 @@ public final class WhatARelationLeavesUndivided {
      */
     private static <P> Settling settlingOf(List<Term<P>> terms, int at, ExactRatio constant,
                                            Asking asking, Granularity granularity,
-                                           RowsComputed arithmetic) {
+                                           RowsComputed arithmetic, BiPredicate<P, P> overlap,
+                                           Independence independent) {
         Term<P> it = terms.get(at);
         if (granularity != Granularity.DISCRETE || constant == null) {
             return null;
@@ -1153,7 +1197,8 @@ public final class WhatARelationLeavesUndivided {
         for (SettledRun each : runs) {
             ExactRatio nearest = nearestValue(new Interval(each.from(), each.to()));
             row[at] = weighedAt(nearest, it.weight());
-            if (!aRowOfTheRunComputes(arithmetic, terms, at, each, held, row, nearest)) {
+            if (!aRowOfTheRunComputes(arithmetic, terms, at, each, held, row, nearest, overlap,
+                    independent)) {
                 return null;
             }
         }
