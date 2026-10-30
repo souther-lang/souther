@@ -96,6 +96,70 @@ class AListWrittenOutPastAFigureNamesTheFigureTest {
                 saidOf(String.join(" + ", within) + " >= k"));
     }
 
+    /** A walk written inside the step of another: the outer one has a rule, and what keeps it
+     *  from being read is the figure the inner one was declined at. */
+    private static String walkWithin(String inner) {
+        return "List.fold((acc, x) -> acc + " + inner + ", 0, [1])";
+    }
+
+    @Test
+    void aListPastTheFigureInsideAStepNamesItAtTheWalkAroundIt() {
+        int most = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
+        assertEquals(List.of(), saidOf(walkWithin(walkOver(3)) + " >= k"),
+                "within the figure, the walk around it is read");
+        assertNames(BlockReason.WhatItStatesIsNoLine.Why.MORE_READINGS_THAN_ARE_MADE,
+                saidOf(walkWithin(walkOver(most + 1)) + " >= k"));
+    }
+
+    @Test
+    void listsPastTheFigureOfAllInsideAStepNameIt() {
+        int each = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
+        int all = CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum();
+        // The outer walk reads one element, and the two inside it the rest of the figure.
+        int first = Math.min(each, all - 1);
+        int second = all - 1 - first;
+        assertEquals(List.of(), saidOf(walkWithin("(" + walkOver(3) + " + " + walkOver(3) + ")")
+                + " >= k"), "within the figure, the walk around it is read");
+        String inside = walkOver(first) + " + " + walkOver(second);
+        assertNames(BlockReason.WhatItStatesIsNoLine.Why.MORE_TOTAL_READINGS_THAN_ARE_MADE,
+                saidOf(walkWithin("(" + inside + " + " + walkOver(1) + ")") + " >= k"));
+    }
+
+    /**
+     * One walk written once is read once for each element of the walk around it, each time where
+     * the element stands for another value. It is within the figure of one list on every
+     * application, and declined at the figure of all on the one that goes past it: the reason is
+     * the one of that application, and not the one of an earlier reading of the same walk.
+     */
+    @Test
+    void aWalkReadOnceForEachElementIsDeclinedAtTheFigureTheLastOnePassed() {
+        int each = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
+        int all = CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum();
+        // Three applications of the inner walk, with the three elements of the outer one, are past
+        // the figure of all, and two of them with their two are not.
+        int inner = all / 3;
+        assertTrue(inner <= each, "the inner walk is within the figure of one list");
+        String twice = "List.fold((acc, x) -> acc + List.fold((s, y) -> s + y + x, 0, [n"
+                + ", 1".repeat(inner - 1) + "]), 0, [1, 2])";
+        assertEquals(List.of(), saidOf(twice + " >= k"),
+                "two applications are within the figure of all");
+        assertNames(BlockReason.WhatItStatesIsNoLine.Why.MORE_TOTAL_READINGS_THAN_ARE_MADE,
+                saidOf(twice.replace("[1, 2]", "[1, 2, 3]") + " >= k"));
+    }
+
+    /**
+     * The length of a list written out past the figure is still a number the arithmetic reads:
+     * what its elements work out is not told, which is not a stop of the reading.
+     */
+    @Test
+    void theLengthOfAListPastTheFigureIsStillANumber() {
+        int most = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
+        String length = "List.length([n" + ", 1".repeat(most) + "])";
+        ReadComparisons read =
+                ReadComparisons.ofTheAnalysis(SOURCE.formatted(length + " >= k"), "classify");
+        assertFalse(stopped(read.only(), read), "the length of a list is its length");
+    }
+
     @Test
     void aFormTheCompilerDoesNotReadIsStillReportedAsSuch() {
         List<BlockReason.RuleReadingStopped> said = saidOf("n * n >= k");

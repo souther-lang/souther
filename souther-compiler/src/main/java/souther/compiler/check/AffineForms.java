@@ -101,12 +101,15 @@ public final class AffineForms {
         }
 
         /**
-         * The figure of this compiler's work the reading of {@code e} was declined at, where
-         * {@link #leafOf} came to nothing for that reason and not for want of a rule: the call has
-         * one, and the work of reading it was more than the figure allows.
+         * What {@link #leafOf} comes to, with the stop it comes to where the caller has a rule
+         * for {@code e} and its reading stopped: the answer and the reason are one value, so a
+         * reader that has the answer has the reason and asks nothing later of anything else.
+         *
+         * <p>A reading with a stop to give overrides this. The default knows only a form or none.
          */
-        default Optional<WhyUnread> declinedAt(Core e, E at) {
-            return Optional.empty();
+        default Leaf<A, E> leaf(Core e, E at, Outcome.StoppedAt<A, E> inside) {
+            LinearForm<A> form = leafOf(e, at, inside);
+            return form == null ? new Leaf.None<>() : new Leaf.Form<>(form);
         }
 
         @Override
@@ -419,8 +422,8 @@ public final class AffineForms {
         }
 
         @Override
-        public Optional<WhyUnread> declinedAt(Core e, E at) {
-            return of.declinedAt(e, at);
+        public Leaf<A, E> leaf(Core e, E at, Outcome.StoppedAt<A, E> inside) {
+            return of.leaf(e, at, inside);
         }
 
         @Override
@@ -622,6 +625,35 @@ public final class AffineForms {
     }
 
     /**
+     * What a caller says of an expression nothing here composes.
+     *
+     * <p>A stop is a third answer beside a form and none: the caller has a rule for the
+     * expression and its reading stopped, which is not the same as having no rule. The stop is at
+     * the expression asked about, so that it is reported where the author wrote it.
+     */
+    public sealed interface Leaf<A, E> {
+
+        /** The expression is this form: an atom, or a value read through. */
+        record Form<A, E>(LinearForm<A> form) implements Leaf<A, E> {
+
+            public Form {
+                Objects.requireNonNull(form, "a leaf that is a form has one");
+            }
+        }
+
+        /** The caller can say nothing of the expression. */
+        record None<A, E>() implements Leaf<A, E> {}
+
+        /** The caller has a rule for the expression, and reading by it stopped. */
+        record Stopped<A, E>(Outcome.StoppedAt<A, E> stop) implements Leaf<A, E> {
+
+            public Stopped {
+                Objects.requireNonNull(stop, "a leaf that stopped stopped somewhere");
+            }
+        }
+    }
+
+    /**
      * Why the walk stopped at an expression, from the closed set of ways it can.
      *
      * <p>Only the first is about the expression being one this walk has no words for. The rest are
@@ -707,8 +739,9 @@ public final class AffineForms {
         record ValuesDisagree<A, E>() implements Halt<A, E> {}
 
         /**
-         * An argument of a call the library says the form of did not compose; reported at the call,
-         * which is what an author wrote, and stopped for what stopped the argument.
+         * A part of a call did not compose — an argument of a call the library says the form of, or
+         * a part the caller reads a call through; reported at the call, which is what an author
+         * wrote, and stopped for what stopped the part.
          */
         record AnArgumentStopped<A, E>(Outcome.StoppedAt<A, E> argument) implements Halt<A, E> {
 
@@ -772,15 +805,19 @@ public final class AffineForms {
         // so the leaf question is asked either way. Where it has none, what stopped the reading is
         // what was found inside the name rather than the name — that is the expression with no rule
         // here, and the one an author would have to change.
-        LinearForm<A> leaf = reading.leafOf(e, at,
+        Leaf<A, E> leaf = reading.leaf(e, at,
                 denoted instanceof Outcome.StoppedAt<A, E> inside ? inside : stopped.at);
-        if (leaf != null) {
-            return new Outcome.Composed<>(leaf);
+        if (leaf instanceof Leaf.Form<A, E>(var form)) {
+            return new Outcome.Composed<>(form);
         }
         // Nothing named it, so this is a stop — reported at the most particular expression that has
         // no rule here. A sum whose left term nothing reads is not what an author would change.
         if (stopped.at != null) {
             return stopped.at;
+        }
+        // A rule the caller has for the expression, which stopped, is the expression's own reason.
+        if (leaf instanceof Leaf.Stopped<A, E>(var stop)) {
+            return stop;
         }
         return denoted != null ? denoted : noRule(e, at, reading, following);
     }
@@ -798,10 +835,6 @@ public final class AffineForms {
                     && inside.why().nonAffineOperation().isPresent()) {
                 return new Outcome.StoppedAt<>(e, at, new Halt.AnArgumentStopped<>(inside));
             }
-        }
-        Optional<WhyUnread> declined = reading.declinedAt(e, at);
-        if (declined.isPresent()) {
-            return new Outcome.StoppedAt<>(e, at, new Halt.DeclinedAtAFigure<>(declined.get()));
         }
         return new Outcome.StoppedAt<>(e, at, new Halt.NoRule<>());
     }
@@ -994,8 +1027,8 @@ public final class AffineForms {
         }
 
         @Override
-        public Optional<WhyUnread> declinedAt(Core e, E at) {
-            return of.declinedAt(e, at);
+        public Leaf<A, E> leaf(Core e, E at, Outcome.StoppedAt<A, E> inside) {
+            return of.leaf(e, at, inside);
         }
 
         @Override
@@ -1534,11 +1567,14 @@ public final class AffineForms {
         if (folded != null) {
             return new Outcome.Composed<>(LinearForm.constant(ExactRatio.of(folded)));
         }
-        LinearForm<A> leaf = reading.leafOf(p, at, stopped.at);
-        if (leaf != null) {
-            return new Outcome.Composed<>(leaf);
+        Leaf<A, E> leaf = reading.leaf(p, at, stopped.at);
+        if (leaf instanceof Leaf.Form<A, E>(var form)) {
+            return new Outcome.Composed<>(form);
         }
-        return stopped.at != null ? stopped.at
+        if (stopped.at != null) {
+            return stopped.at;
+        }
+        return leaf instanceof Leaf.Stopped<A, E>(var stop) ? stop
                 : new Outcome.StoppedAt<>(p, at, new Halt.NoRule<>());
     }
 
