@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.coverage.WalkRewrite;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.MeasureReason;
@@ -13,6 +14,7 @@ import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.ValueName;
 import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
@@ -115,54 +117,59 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
          * generated row alike: a surface that asked only of the rewrites it happens to print
          * would say one rewrite with its construct here and without it there.
          *
-         * <p>Two rewrites read alike when they differ only in the construct they are of, within
-         * what the words can tell apart. Words name the arms (or how the fold is run) and the
-         * definition that wrote the construct; where this build holds the source, they also point
-         * at the construct, which a construct lowered into several forks shares. So the number to
-         * say is the fork's own where the words point at one and cannot part two lowerings of it,
-         * and the construct's where the words only name the definition. A body answering one value
-         * is told from another by the value and is never alike.
+         * <p>Two rewrites read alike when everything the words are made of is the same: the
+         * definition that wrote the construct, what each arm means as the source wrote it (or how
+         * the fold is run) and, where this build holds the source and the words point at the
+         * construct, which construct that is. Asked of those and not of the numbers the arms are
+         * counted by, which two arms the words cannot part also differ in. A construct lowered
+         * into several forks shares the place the words point at, so the number to say is the
+         * fork's own; where the words only name the definition it is the construct's. A body
+         * answering one value is told from another by the value and is never alike.
          */
         public String constructSaidBeside(Replacement one) {
-            Object reading = readingOf(one, reportAtOf(one));
+            Rewrite asked = rewrites.stream().filter(each -> each.replacement().equals(one))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "not a rewrite of this body: " + one));
+            Object reading = readingOf(asked);
             if (reading == null) {
                 return "";
             }
-            long alike = rewrites.stream()
-                    .filter(each -> reading.equals(readingOf(each.replacement(), each.reportAt())))
-                    .count();
-            if (alike <= 1) {
+            List<Rewrite> alike = rewrites.stream()
+                    .filter(each -> reading.equals(readingOf(each))).toList();
+            if (alike.size() <= 1) {
                 return "";
             }
             SourceConstructOrigin of = constructOf(one);
+            // Two arms of one construct the words cannot part, which the construct cannot either:
+            // the arms are then told apart by the numbers they are counted by, the last thing that
+            // does. Nothing is left to read alike, so no line is printed twice.
+            boolean sameConstruct = alike.stream()
+                    .filter(each -> constructOf(each.replacement()).equals(of)).count() > 1;
+            String arms = sameConstruct && one instanceof Replacement.OfAnArm arm
+                    ? ", arm " + arm.part() + " as " + arm.with() : "";
             return " (construct " + of.ordinal()
-                    + (of.lowered() == 0 ? "" : ", lowered " + of.lowered()) + ")";
+                    + (of.lowered() == 0 ? "" : ", lowered " + of.lowered()) + arms + ")";
         }
 
-        private ReplacementReportAnchor reportAtOf(Replacement one) {
-            return rewrites.stream().filter(each -> each.replacement().equals(one))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "not a rewrite of this body: " + one))
-                    .reportAt();
-        }
-
-        /** What the words for a rewrite say of it, and so what two rewrites alike share. */
-        private static Object readingOf(Replacement one, ReplacementReportAnchor reportAt) {
-            return switch (one) {
-                case Replacement.OfAnArm it -> new AnArmRead(it.fork().owner(), it.fork().kind(),
-                        it.part(), it.with(), pointedAt(reportAt, it.fork()));
-                case Replacement.OfAWalk it -> new AWalkRead(it.walk().owner(), it.walk().kind(),
-                        it.how(), pointedAt(reportAt, it.walk()));
-                case Replacement.ByOneAnswer _ -> null;
+        /** What the words for a rewrite are made of, and so what two rewrites alike share. */
+        private static Object readingOf(Rewrite one) {
+            return switch (one.written()) {
+                case ReplacementAsWritten.OfAnArm it -> new AnArmRead(it.writtenBy(),
+                        it.replacement().fork().kind(), it.arm(), it.sibling(),
+                        pointedAt(one.reportAt(), it.replacement().fork()));
+                case ReplacementAsWritten.OfAWalk it -> new AWalkRead(it.writtenBy(),
+                        it.replacement().how(),
+                        pointedAt(one.reportAt(), it.replacement().walk()));
+                case ReplacementAsWritten.ByOneAnswer _ -> null;
             };
         }
 
         /** The construct the words point at, or nothing where they name only the definition. */
-        private static Integer pointedAt(ReplacementReportAnchor reportAt,
-                                         SourceConstructOrigin construct) {
+        private static Place pointedAt(ReplacementReportAnchor reportAt,
+                                       SourceConstructOrigin construct) {
             return reportAt instanceof ReplacementReportAnchor.AtTheBehavior
-                    ? null : construct.ordinal();
+                    ? null : new Place(construct.owner(), construct.ordinal());
         }
 
         private static SourceConstructOrigin constructOf(Replacement one) {
@@ -174,11 +181,14 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
             };
         }
 
-        private record AnArmRead(WrittenOwner owner, SourceConstruct kind, int part, int with,
-                                 Integer pointedAt) {}
+        /** Where in a source a construct is, which a construct lowered into several forks shares. */
+        private record Place(WrittenOwner owner, int ordinal) {}
 
-        private record AWalkRead(WrittenOwner owner, SourceConstruct kind, WalkRewrite how,
-                                 Integer pointedAt) {}
+        private record AnArmRead(ValueName.Helper writtenBy, SourceConstruct kind,
+                                 SourceOutcome.Arm arm, SourceOutcome.Arm sibling,
+                                 Place pointedAt) {}
+
+        private record AWalkRead(ValueName.Helper writtenBy, WalkRewrite how, Place pointedAt) {}
 
         /** The rewrites some row tells from the body. */
         public long noticed() {
