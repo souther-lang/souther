@@ -159,7 +159,6 @@ final class CallExampleSeeds {
                 base == null ? List.of() : base.answers(),
                 db.ask(new Names.FakeTables(module)).value());
         Set<List<String>> considered = new HashSet<>();
-        Set<List<String>> skipped = new HashSet<>();
         Map<WrittenRow, List<Optional<FixtureTemplate>>> written = new HashMap<>();
         int tried = 0;
         for (Call call : calls) {
@@ -182,9 +181,10 @@ final class CallExampleSeeds {
                 List<String> key = inputs.stream()
                         .map(each -> each == null ? null : each.text()).toList();
                 // A row the author has written costs no build, so the first lift to it takes none
-                // of the rows tried. One written row is skipped once, so the rows looked at past
-                // the limit are no more than the rows the author wrote.
-                if (lifted.isPresent() && alreadyWritten.contains(key) && skipped.add(key)) {
+                // of the rows tried, and the rows looked at past the limit are no more than the
+                // rows the author wrote. It is considered at once, so a later lift to it takes a
+                // row tried and is never offered.
+                if (lifted.isPresent() && alreadyWritten.contains(key) && considered.add(key)) {
                     continue;
                 }
                 if (tried++ == limit) {

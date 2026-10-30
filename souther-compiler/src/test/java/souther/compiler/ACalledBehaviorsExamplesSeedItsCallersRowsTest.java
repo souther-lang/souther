@@ -284,6 +284,75 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
     }
 
     @Test
+    void aRowTheCallerHasWrittenIsNotOfferedAgainWhenASecondCalleeLiftsToIt() {
+        String twoCallees = """
+                module repro.twice
+
+                behavior f : (n: Int) -> Int
+                let f (n) = n
+                example f
+                    | (1) -> 1
+
+                behavior g : (n: Int) -> Int
+                let g (n) = n
+                example g
+                    | (1) -> 1
+
+                behavior h : (n: Int) -> Int
+                let h (n) = f(n) + g(n)
+                example h
+                    | (1) -> 2
+                """;
+        assertTrue(!offered(twoCallees, "repro.twice", "h").contains("1"),
+                () -> "h(1) is written: " + offered(twoCallees, "repro.twice", "h"));
+    }
+
+    @Test
+    void aRowTheCallerHasWrittenIsNotOfferedAgainWhenTwoRowsOfOneCalleeLiftToIt() {
+        // The two calls hand f their arguments in either order, so f(1, 2) and f(2, 1) both lift
+        // to h(1, 2).
+        String swapped = """
+                module repro.twice
+
+                behavior f : (a: Int, b: Int) -> Int
+                let f (a, b) = a - b
+                example f
+                    | (1, 2) -> -1
+                    | (2, 1) -> 1
+
+                behavior h : (a: Int, b: Int) -> Int
+                let h (a, b) = f(a, b) + f(b, a)
+                example h
+                    | (1, 2) -> 0
+                """;
+        List<String> offered = offered(swapped, "repro.twice", "h");
+        assertTrue(!offered.contains("1, 2") && offered.contains("2, 1"),
+                () -> "h(1, 2) is written and h(2, 1) is not: " + offered);
+    }
+
+    @Test
+    void aRowNobodyHasWrittenIsOfferedOnceWhenTwoCalleesLiftToIt() {
+        String twoCallees = """
+                module repro.twice
+
+                behavior f : (n: Int) -> Int
+                let f (n) = n
+                example f
+                    | (1) -> 1
+
+                behavior g : (n: Int) -> Int
+                let g (n) = n
+                example g
+                    | (1) -> 1
+
+                behavior h : (n: Int) -> Int
+                let h (n) = f(n) + g(n)
+                """;
+        assertEquals(1, offered(twoCallees, "repro.twice", "h").stream()
+                .filter("1"::equals).count());
+    }
+
+    @Test
     void aRowTheCallerHasWrittenAgainstTheModulesTableIsNotOfferedAgain() {
         String written = WITH_A_DEPENDENCY + """
 

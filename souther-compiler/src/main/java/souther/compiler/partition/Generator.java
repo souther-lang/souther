@@ -12977,7 +12977,7 @@ public final class Generator {
         // One for every pass below, so what one of them found refused is known to the others.
         Composing composing =
                 new Composing(p, plan, subject.inputs(), subject.ruleReading(), check,
-                        handed.asked(), here, found);
+                        handed.asked(), here, found, rules, fixed.keySet());
         through[0] = composing;
         Outcome product = walk(choices, composing, taking, subject.ruleReading());
         // A value taken is the answer, and so is every value composed being passed over or the
@@ -13358,6 +13358,9 @@ public final class Generator {
         private final Map<TermPath, Type> typeAt = new HashMap<>();
         private final Set<Map<TermPath, String>> refused = new HashSet<>();
 
+        /** What each value built so far came to, by how it is written at each position. */
+        private final Map<Map<TermPath, String>, ComposedValue> composedBefore = new HashMap<>();
+
         /** Why each value built and passed over for not holding what two positions are asked to
          *  hold did not, in the order they were built. */
         private final List<String> notHeld = new ArrayList<>();
@@ -13380,9 +13383,17 @@ public final class Generator {
          */
         private final FoundOut found;
 
+        /** The rules of every value reaching a position, which say what a position tied to others
+         *  takes beside what the axes put at them ({@link #completedTogether}). */
+        private final ConstructionRules rules;
+
+        /** The positions the caller decided: what a row is about, which nothing here writes. */
+        private final Set<TermPath> decided;
+
         Composing(int parameter, ConstructionPlan plan, BehaviorInputs inputs,
                   RuleReadingContext reading, CandidateCheck check, ContentsAsked asked,
-                  ContentsAsked.Here here, FoundOut found) {
+                  ContentsAsked.Here here, FoundOut found, ConstructionRules rules,
+                  Set<TermPath> decided) {
             this.parameter = parameter;
             this.plan = plan;
             this.inputs = inputs;
@@ -13390,6 +13401,8 @@ public final class Generator {
             this.check = check;
             this.here = here;
             this.found = found;
+            this.rules = rules;
+            this.decided = Set.copyOf(decided);
             this.handedOn = asked.handedOnFrom(plan.root().at().head());
             for (ConstructionPlan.Slot each : plan.slots()) {
                 typeAt.put(each.at(), each.type());
@@ -13433,8 +13446,91 @@ public final class Generator {
             return lastBuilt;
         }
 
-        /** What putting one assignment to the decoder came to, or that it did not need putting. */
-        Tried attempt(Map<TermPath, FixtureTemplate> chosen, Budget budget) {
+        /**
+         * What putting one assignment to the decoder came to, or that it did not need putting.
+         *
+         * <p>Where the model refuses it, the assignment is put again with the places a rule ties to
+         * others written as one value of them ({@link #completedTogether}): first with what the axes
+         * put there held, then with those places written as well. Chosen a position at a time, no
+         * position of such a value would be: a rule relating two strings leaves no one of them a
+         * set to choose from. The first of them that builds, or reaches the bound on the way, is
+         * what the assignment came to.
+         *
+         * <p>Neither says which classes the row stands in. What an axis decided is a class, and the
+         * value an assignment put there is one value of it; a row written another way is read back
+         * by its values, and a row outside a class it was composed for is passed over as any other
+         * is. What the second puts at an axis's place is a value the rules hold of beside the
+         * others, which may well be inside the class, where the value the assignment chose for that
+         * class was never going to be.
+         */
+        Tried attempt(Map<TermPath, FixtureTemplate> assigned, Budget budget) {
+            // One assignment is what the bound counts, however many ways it is written: the bound
+            // is how many assignments a search tries ({@link #MAX_TUPLES}), and a search that
+            // tried every one it had has not stopped short for having written some twice.
+            boolean[] spent = {false};
+            Tried put = put(assigned, budget, spent);
+            if (!(put instanceof Tried.Refused || put instanceof Tried.Known)) {
+                return put;
+            }
+            for (boolean holdingTheAxes : new boolean[] {true, false}) {
+                Map<TermPath, FixtureTemplate> completed =
+                        completedTogether(assigned, holdingTheAxes);
+                if (completed == null) {
+                    continue;
+                }
+                Tried again = put(completed, budget, spent);                if (again instanceof Tried.Built || again instanceof Tried.OutOfBudget) {
+                    return again;
+                }
+            }
+            return put;
+        }
+
+        /**
+         * {@code assigned} with each position a rule ties to other places given its part of one
+         * value of those places — or null where it writes nothing {@code assigned} does not
+         * already hold.
+         *
+         * <p>Holding the axes, a position an axis decided is not written: the value the assignment
+         * put there is held, and the rest are written beside it. Not holding them, every such
+         * position is written. The positions written are asked together, with the same values held,
+         * so that their parts are of one value.
+         */
+        private Map<TermPath, FixtureTemplate> completedTogether(
+                Map<TermPath, FixtureTemplate> assigned, boolean holdingTheAxes) {
+            Map<TermPath, Object> held = new LinkedHashMap<>();
+            if (holdingTheAxes) {
+                assigned.forEach((at, value) -> {
+                    Object constant = decided.contains(at) ? Witnesses.constantOf(value) : null;
+                    if (constant != null) {
+                        held.put(at, constant);
+                    }
+                });
+            }
+            Map<TermPath, FixtureTemplate> out = new LinkedHashMap<>(assigned);
+            for (TermPath at : assigned.keySet()) {
+                if (holdingTheAxes && decided.contains(at)) {
+                    continue;
+                }
+                FixtureTemplate part = Witnesses.writtenAs(rules.writtenTogetherAt(at, held),
+                        typeAt.get(at), reading);
+                if (part != null) {
+                    out.put(at, part);
+                }
+            }
+            return out.equals(assigned) ? null : out;
+        }
+
+        /**
+         * What putting {@code chosen} to the decoder came to, or that it did not need putting.
+         *
+         * <p>Put once whatever asks for it again: what was built is handed back as built, and what
+         * was refused is known refused. Two assignments the model refuses may be written as the
+         * same value of the places a rule ties together, and that value is one build.
+         *
+         * @param spent whether the assignment this writes has spent its place under the bound
+         *              already, which a second way of writing it does not spend again
+         */
+        private Tried put(Map<TermPath, FixtureTemplate> chosen, Budget budget, boolean[] spent) {
             Map<TermPath, String> written = new HashMap<>();
             for (Map.Entry<TermPath, FixtureTemplate> each : chosen.entrySet()) {
                 if (refusedAlone(each.getKey(), each.getValue())) {
@@ -13445,8 +13541,15 @@ public final class Generator {
             if (refused.contains(written)) {
                 return new Tried.Known();
             }
-            if (!budget.spend()) {
-                return new Tried.OutOfBudget();
+            ComposedValue already = composedBefore.get(written);
+            if (already != null) {
+                return new Tried.Built(already);
+            }
+            if (!spent[0]) {
+                if (!budget.spend()) {
+                    return new Tried.OutOfBudget();
+                }
+                spent[0] = true;
             }
             FromTheAssignment values = new FromTheAssignment(chosen, plan, here);
             Proposals built = compose(plan.root(), values, reading);
@@ -13469,7 +13572,9 @@ public final class Generator {
                         lastBuilt = builtAt;
                         yield new Tried.NotHeld();
                     }
-                    yield new Tried.Built(new ComposedValue(composed, read));
+                    ComposedValue made = new ComposedValue(composed, read);
+                    composedBefore.put(written, made);
+                    yield new Tried.Built(made);
                 }
                 case HandedOn.Came.Refused _ -> {
                     refused.add(written);
@@ -13531,8 +13636,7 @@ public final class Generator {
                     ? value : null;
         }
         ConstructionPlan.Slot position = positions.get(index);
-        TermPath where = position.at();
-        for (FixtureTemplate candidate
+        TermPath where = position.at();        for (FixtureTemplate candidate
                 : candidatesAt(position, settled, decided, candidates)) {
             // Refused by its own type, so refused in every assignment under this branch: the branch
             // is not walked ({@link Composing} says why).
@@ -14088,8 +14192,7 @@ public final class Generator {
 
     /** The ordinary passes: what the positions offer, and then what they held back as well. */
     private static Outcome ordinarily(Choices choices, Composing composing, ValueTaking taking) {
-        Outcome tried = over(choices.at(), choices.values(), composing, taking);
-        // Only where the ordinary assignments ran out. A search that stopped at the bound has not
+        Outcome tried = over(choices.at(), choices.values(), composing, taking);        // Only where the ordinary assignments ran out. A search that stopped at the bound has not
         // tried them all, and starting a wider one in front of the ones it never reached would spend
         // what is left on assignments further from what the model says the row is about, while the
         // nearer ones stay untried.
@@ -14140,6 +14243,13 @@ public final class Generator {
         // Whether some value was composed and passed over, which is what tells a walk that ran out
         // of values the model takes from one that ran out of values the caller takes.
         boolean passed = false;
+        // The values already handed to the caller, by how the value built is written. Not by the
+        // assignment it was built from: an assignment the model refuses is built again written
+        // another way ({@link Composing#attempt}), and two assignments may come to one value. The
+        // walk below starts again from the first assignment over what is left, which composes the
+        // value the caller has just passed over, and asking it twice is a second run for the same
+        // answer.
+        Set<String> handed = new LinkedHashSet<>();
         if (composing.attempt(assigned(at, offered, first), budget)
                 instanceof Composing.Tried.Built(var value)) {
             switch (taking.take(value)) {
@@ -14149,7 +14259,10 @@ public final class Generator {
                 case STOPPED -> {
                     return new Outcome.Halted();
                 }
-                case PASSED -> passed = true;
+                case PASSED -> {
+                    passed = true;
+                    handed.add(value.value().text());
+                }
             }
         }
         List<List<FixtureTemplate>> values = new ArrayList<>();
@@ -14167,13 +14280,6 @@ public final class Generator {
         Set<String> seen = new LinkedHashSet<>();
         next.add(first);
         seen.add(Arrays.toString(first));
-        // The values already handed to the caller, by how they are written. The walk below starts
-        // again from the first assignment over what is left, which composes the value the caller
-        // has just passed over, and asking it twice is a second run for the same answer.
-        Set<List<String>> handed = new LinkedHashSet<>();
-        if (passed) {
-            handed.add(writtenAs(assigned(at, offered, first)));
-        }
 
         // Recorded where the bound is reached rather than read afterwards off what was left behind.
         // A walk that stopped and a walk that ran out are told apart by the queue today and would go
@@ -14184,7 +14290,7 @@ public final class Generator {
             Map<TermPath, FixtureTemplate> chosen = assigned(at, values, assignment);
             switch (composing.attempt(chosen, budget)) {
                 case Composing.Tried.Built(var value) -> {
-                    if (handed.add(writtenAs(chosen))) {
+                    if (handed.add(value.value().text())) {
                         switch (taking.take(value)) {
                             case TAKEN -> {
                                 return new Outcome.Built(value);
@@ -14226,13 +14332,6 @@ public final class Generator {
         return passed ? new Outcome.PassedOver()
                 : new Outcome.Unresolved(UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
                         null);
-    }
-
-    /** An assignment as the values it puts at each position are written, in the positions' order. */
-    private static List<String> writtenAs(Map<TermPath, FixtureTemplate> chosen) {
-        List<String> out = new ArrayList<>();
-        chosen.forEach((at, value) -> out.add(at + "=" + value.text()));
-        return out;
     }
 
     /** What one assignment puts at each position. */

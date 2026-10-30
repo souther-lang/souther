@@ -326,6 +326,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "Witnesses", "varied",
                     "(" + TYPE + CONTEXT + ")Ljava/util/function/IntFunction;",
+                    THE_POSITION),
+            row(PARTITION + "Witnesses", "writtenAs",
+                    "(Ljava/lang/Object;" + TYPE + CONTEXT + ")L" + PARTITION
+                            + "FixtureTemplate;",
                     THE_POSITION));
 
     private static String row(String owner, String name, String descriptor, String way) {
