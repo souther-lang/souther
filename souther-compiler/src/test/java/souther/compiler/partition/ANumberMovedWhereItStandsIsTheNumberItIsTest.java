@@ -99,7 +99,9 @@ class ANumberMovedWhereItStandsIsTheNumberItIsTest {
                         .source(),
                 new RunSource.JoinedOccurrences(ELEMENT, TermPath.of("ys").element()),
                 RunSource.overTheNodesBelow(TermPath.of("n"), List.of("kids"),
-                        List.of("xs")));
+                        List.of("xs")),
+                RunSource.overTheLineDown(TermPath.of("n"), "kids", List.of("id"),
+                        TermPath.of("who")));
     }
 
     /** At least one number of each kind, a selection and a key chosen by case among them. */

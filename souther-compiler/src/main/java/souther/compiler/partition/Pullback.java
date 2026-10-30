@@ -2903,6 +2903,11 @@ final class Pullback {
         if (!(AnOperationApplied.of(Core.withoutStanding(made.value()))
                 instanceof AnOperationApplied applied
                 && applied.operation() instanceof ValueName.Stdlib operation)) {
+            Sized ofTheAnswer = sizeOfAFieldOfACallsAnswer(Core.withoutStanding(made.value()),
+                    made.at());
+            if (ofTheAnswer != null) {
+                return ofTheAnswer;
+            }
             return new Sized.NotSized(
                     new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT));
         }
@@ -10271,10 +10276,106 @@ final class Pullback {
             return null;
         }
         try {
-            return sizeOfASearch(helper, args, reads);
+            Sized searched = sizeOfASearch(helper, args, reads);
+            return searched != null ? searched : sizeOfALine(helper, args, reads);
         } finally {
             recursing.remove(helper);
         }
+    }
+
+    /**
+     * How many {@code field} of {@code e} holds, where {@code e} is a field of what a call of a
+     * behavior answers and the behavior's body builds that case in one place only: how many what
+     * it builds there holds, read in the body with its parameters standing for what the call
+     * handed ({@link #intoACall}) — or null where it is not so.
+     *
+     * <p>One place, because the field is then the same value whichever run built it; a case built
+     * in two places holds a different number in each, which is no one number of the call.
+     */
+    private Sized sizeOfAFieldOfACallsAnswer(Core e, InputReads at) {
+        if (!(e instanceof Core.FieldAccess access)) {
+            return null;
+        }
+        Denotation target = at.standing(access.target(), read.rules().symbols(),
+                read.rules().newtypes());
+        Inside.ACall called = intoACall(target);
+        if (called == null) {
+            return null;
+        }
+        List<Denotation> built = new ArrayList<>();
+        if (!fieldsBuiltIn(called.body(), access.target().type(), access.field(), built)
+                || built.size() != 1) {
+            return null;
+        }
+        return sizeOf(built.getFirst().value(), built.getFirst().at());
+    }
+
+    /**
+     * What {@code field} is of each value of type {@code built} that {@code answer} builds, put
+     * into {@code out} — or false where some way the answer is made is not one that builds a value
+     * outright: a name, a call, anything not followed to a construction.
+     */
+    private boolean fieldsBuiltIn(Denotation answer, Type built, String field,
+                                  List<Denotation> out) {
+        Denotation chosen = chosenAt(answer);
+        if (chosen != null) {
+            List<Denotation> arms = new ArrayList<>();
+            for (Choice.Arm arm : Choice.of(Core.withoutStanding(chosen.value())).arms()) {
+                InputReads inside = chosen.at().choosing(arm.decidedBy(), read.rules().symbols(),
+                        read.rules().newtypes());
+                if (!fieldsBuiltIn(new Denotation(arm.answers(), inside), built, field, arms)) {
+                    return false;
+                }
+            }
+            out.addAll(arms);
+            return true;
+        }
+        Denotation stands = answer.at().standing(answer.value(), read.rules().symbols(),
+                read.rules().newtypes());
+        if (!(Core.withoutStanding(stands.value()) instanceof Core.Construct made)) {
+            return false;
+        }
+        if (!built.equals(made.type())) {
+            return true;
+        }
+        for (Core.FieldValue each : made.values()) {
+            if (each.field().equals(field)) {
+                out.add(new Denotation(each.value(), stands.at()));
+            }
+        }
+        return true;
+    }
+
+    /**
+     * How many nodes the line holds that a search down a tree answers ({@link LineDownATree}),
+     * where it answers the nodes from the one it is handed down to the first that holds the value
+     * it is handed beside it — or null where it is not read so.
+     *
+     * <p>A number of the tree and the value together, which no sum over the nodes comes to: the
+     * line stops at the first node holding the value in the order the search goes down.
+     */
+    private Sized sizeOfALine(ValueName.Helper helper, List<Core> args, InputReads reads) {
+        ARecursion recursion =
+                read.rules().declarations().answers().recursionOf(helper).orElse(null);
+        LineDownATree.Line line = recursion == null ? null : LineDownATree.of(reads, args,
+                recursion, read.rules().symbols(), read.rules().newtypes());
+        if (line == null || !comparesAsTheyStand(line.matched())) {
+            return null;
+        }
+        RunSource run = RunSource.overTheLineDown(line.root(), line.through(), line.matchAt(),
+                line.key());
+        Type nodeType = args.get(recursion.search().orElseThrow().node()).type();
+        NumericTerm.TakenOver count = run == null ? null
+                : InputNumber.howManyHeld(run, nodeType, read.rules());
+        return count == null ? null
+                : new Sized.AsAForm(LinearForm.atom(new DecisionAtom.OfTheInput(count)));
+    }
+
+    /** Whether two values of {@code type} are one value where they stand the same, which is what
+     *  a row says of them. */
+    private boolean comparesAsTheyStand(Type type) {
+        Type base = TypeOps.base(type, read.rules().inners());
+        return Type.INT.equals(base) || Type.STRING.equals(base) || Type.BOOL.equals(base);
     }
 
     /**

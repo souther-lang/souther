@@ -1356,6 +1356,39 @@
                       }
                     }
                   }
+                },
+                {
+                  "type": "object",
+                  "description": "The nodes on the line from the node at `root` down to the first node a search finds: the search goes to the elements of the field `through` of each node in turn and stops at the first node whose value at `match_at` is the value standing at `key`. That node and each node above it down from the root are the values, or none where no node of the tree has that value. Not every node of the tree: a tree of a given height holds lines of every length up to it, and the search answers one of them.",
+                  "required": [
+                    "kind",
+                    "root",
+                    "through",
+                    "match_at",
+                    "key"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "const": "searched_line"
+                    },
+                    "root": {
+                      "type": "string"
+                    },
+                    "through": {
+                      "type": "string"
+                    },
+                    "match_at": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "key": {
+                      "type": "string"
+                    }
+                  }
                 }
               ]
             }
@@ -6884,6 +6917,7 @@
                           "elements_a_computed_total_is_solved_for",
                           "mixes_of_cases_a_total_is_spread_over",
                           "trees_written_for_a_count",
+                          "trees_written_for_a_line",
                           "strings_a_case_conversion_is_written_for",
                           "maps_written_with_one_entry",
                           "elements_with_the_other_fields_held_still"

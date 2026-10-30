@@ -2255,6 +2255,12 @@ final class TermRealizations {
             // How many keys two maps share is a number nothing here asks of a row.
             case RunSource.JoinedOccurrences _ -> new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            case RunSource.SearchedLine _ -> {
+                nothingInside(inside);
+                yield new Realization.Unexhausted(CompositionShortfall.writing(
+                        Set.of(CompositionRepertoire.TREES_WRITTEN_FOR_A_LINE)),
+                        "nothing here writes a tree whose search finds a line of a given length");
+            }
         };
     }
 
