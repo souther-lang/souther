@@ -876,30 +876,102 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 "data Unused = Int", "k > List.length(xs)", "4:19"));
         assertEquals(Map.of("Set.size(xs)", RELATES), left("k: Int, xs: Set<Int>",
                 "data Unused = Int", "k > Set.size(xs)", "4:19"));
-        assertEquals(Map.of("Set.size(xs)", RELATES, "k", NOT_SHOWN),
+        // A set of booleans is capped at two, which the type shows, so the sizes it is compared
+        // with are the ones it has and the number is parted where they stop.
+        assertEquals(Map.of("Set.size(xs)", RELATES),
                 left("k: Int, xs: Set<Bool>", "data Unused = Int", "k > Set.size(xs)", "4:19"));
+        assertEquals(List.of("k/x <= 0", "k/0 < x < 3", "k/3 <= x"),
+                classesAt("k: Int, xs: Set<Bool>", "data Unused = Int", "k > Set.size(xs)", "k"));
+        // A name the module declares is shown no value, so its containers are shown the empty one
+        // and no more.
+        assertEquals(Map.of("Set.size(xs)", RELATES, "k", NOT_SHOWN),
+                left("k: Int, xs: Set<Unit>", "data Unit", "k > Set.size(xs)", "4:19"));
     }
 
     /**
-     * The element an index written down picks of a list stands at the list's elements, as the one
-     * a walk is handed does, and so does a field of it. A list whose rules say what its elements
+     * The element an index written down picks of a list is read as that element: the number
+     * compared with it is read as it is with any value the elements may take, and the element
+     * itself, which is at no place of its own, is not. A list whose rules say what its elements
      * are to one another leaves the number compared with one unread.
      */
     @Test
-    void anElementAnIndexPicksStandsWhereTheElementsOfTheListDo() {
-        String get = "match List.get(0, xs) with | Some v -> v == n | None -> false";
-        assertEquals(Map.of("n", RELATES, "xs[*]", RELATES),
-                left("n: Int, xs: List<Int>", UNUSED, get, "4:58"));
-        assertEquals(Map.of("n", RELATES, "xs[*].a", RELATES),
+    void anElementAnIndexPicksIsReadAsThatElement() {
+        assertEquals(Map.of("n", RELATES), left("n: Int, xs: List<Int>", UNUSED,
+                "match List.get(0, xs) with | Some v -> v == n | None -> false", "4:58"));
+        assertEquals(Map.of("n", RELATES), left("n: Int, xs: List<Int>", UNUSED,
+                "match List.get(3, xs) with | Some v -> v == n | None -> false", "4:58"));
+        // A field of the element is read where the element is shown to exist, which a name the
+        // module declares is not.
+        assertEquals(Map.of("n", NOT_SHOWN),
                 left("n: Int, xs: List<Rec>", "data Rec = { a: Int }",
                         "match List.get(0, xs) with | Some r -> r.a == n | None -> false",
                         "4:60"));
+        assertEquals(Map.of("n", RELATES),
+                left("n: Int, h: Holder", "data Holder = { items: List<Int> }",
+                        "match List.get(0, h.items) with | Some v -> v == n | None -> false",
+                        "4:62"));
         String same = "data Same = { value: List<Int> } invariant"
                 + " List.all(x -> x == 1, value) || List.length(value) == 0";
-        assertEquals(Map.of("xs.value[*]", RELATES, "n", NOT_SHOWN),
+        assertEquals(Map.of("n", NOT_SHOWN),
                 left("n: Int, xs: Same", same,
                         "match List.get(0, xs.value) with | Some v -> v > n | None -> false",
                         "4:64"));
+        // And a container the rules keep shorter than the index has no element to be compared:
+        // no row takes the way to the comparison, which is said and not read as a relation.
+        String few = "data Few = { value: List<Int> } invariant List.length(value) <= 2";
+        assertTrue(left("n: Int, xs: Few", few,
+                "match List.get(5, xs.value) with | Some v -> v > n | None -> false", "4:64")
+                .get("n").contains("no row that arrives at it takes the way to the comparison"));
+    }
+
+    /** The report's own example: a requested position past the end of a list, with the rows the
+     *  generator offers for it, is adequate and leaves nothing unread. */
+    @Test
+    void aPositionPastTheEndOfAListWithItsRowsIsAdequate() {
+        Compilation compilation = Compilation.ofSource("""
+                module repro.relational
+
+                behavior pastEnd : (k: Int, xs: List<Int>) -> Bool
+
+                let pastEnd (k, xs) = k > List.length(xs)
+
+                example pastEnd
+                    | (1, []) -> true
+                    | (0, []) -> false
+                    | (2, []) -> true
+                    | (-1, []) -> false
+                    | (2, [0]) -> true
+                    | (2, [0, 0]) -> false
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(0, compilation.errors().size());
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertTrue(report.contains("adequacy: satisfied"), report);
+        assertFalse(report.contains("not read"), report);
+    }
+
+    /**
+     * Which element, and not the elements: rows that put values only at the first element of a
+     * list say nothing of a comparison made of the second, and no class of the elements is covered
+     * by them.
+     */
+    @Test
+    void rowsAtAnotherElementCoverNothingOfThePickedOne() {
+        Compilation compilation = measured("""
+                module w1
+                behavior f : (xs: List<Int>) -> Bool
+                let f (xs) = match List.get(1, xs) with | Some v -> v >= 5 | None -> false
+                example f
+                    | ([5]) -> false
+                    | ([4]) -> false
+                    | ([]) -> false
+                """);
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertFalse(report.contains("equivalence partitions"), report);
+        assertFalse(report.contains("borders"), report);
     }
 
     /**

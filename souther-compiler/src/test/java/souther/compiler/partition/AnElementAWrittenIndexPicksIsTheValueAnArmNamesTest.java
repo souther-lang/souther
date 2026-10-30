@@ -156,11 +156,10 @@ class AnElementAWrittenIndexPicksIsTheValueAnArmNamesTest {
                 """), "check/x"), "the names are followed to what they were given");
     }
 
-    /** A list that is an input is no list written out, and its element is no written number: it
-     *  stands at the list's elements, and a line is drawn where that element puts it. */
+    /** A list that is an input is no list written out, and its element is no number this reads. */
     @Test
-    void anElementOfAnInputStandsAtTheElementsOfTheList() {
-        assertEquals(Set.of("xs[*] + 4", "xs[*] + 5"), pointsOn(reportOf("""
+    void anElementOfAnInputIsNotAWrittenNumber() {
+        assertEquals(Set.of(), pointsOn(reportOf("""
                 module probe
 
                 data Bad

@@ -2794,26 +2794,52 @@ final class Pullback {
     }
 
     /**
-     * Where the elements of the list stand, and the fields under them {@code steps} read, where
-     * {@code name} is the element an index written down picks of a list of the input that is no
-     * one of many — or null where it is not, or a step goes anywhere but into a field.
+     * What {@code name} is read off a container's elements as — what a walk hands its step, or the
+     * element an index written down picks — or empty where it is neither.
      */
-    private TermPath elementPickedAtAnIndex(Core.Read name, List<TermPath.Step> steps,
-                                            InputReads at) {
+    private Optional<Quantity.ReadOffABinding> readOffAContainer(Core.Read name,
+                                                                 List<TermPath.Step> steps,
+                                                                 InputReads at) {
+        Optional<Quantity.ReadOffABinding> handed = steps.isEmpty()
+                ? handedToTheStep(name, at).map(each -> (Quantity.ReadOffABinding) each)
+                : Optional.empty();
+        return handed.isPresent() ? handed : pickedAtAnIndex(name, steps, at);
+    }
+
+    /**
+     * The element {@code name} is, where it is the one an index written down picks of a list of
+     * the input that no other container holds, read through the fields {@code steps} go into —
+     * or empty where it is not, or a step goes anywhere but into a field.
+     *
+     * <p>Which element, and not only where the elements stand: a number read at the place of the
+     * elements is read of whichever a row puts there, and a comparison made of the one at an index
+     * is not about any of the others ({@link Quantity.PickedAtAnIndex}).
+     */
+    private Optional<Quantity.ReadOffABinding> pickedAtAnIndex(Core.Read name,
+                                                               List<TermPath.Step> steps,
+                                                               InputReads at) {
         InputReads.PickedAtAnIndex picked = at.pickedAtAnIndex(name);
         if (picked == null || !(picked.list().at().pathOf(picked.list().value(),
                 read.rules().newtypes()) instanceof PathResolution.At(var list))
                 || list.insideAContainer()) {
-            return null;
+            return Optional.empty();
         }
         List<String> fields = new ArrayList<>();
         for (TermPath.Step step : steps) {
             if (!(step instanceof TermPath.Step.Field field)) {
-                return null;
+                return Optional.empty();
             }
             fields.add(field.name());
         }
-        return list.element().then(fields);
+        Sized size = sizeOf(picked.list().value(), picked.list().at());
+        if (!(size instanceof Sized.AsAForm(LinearForm<Quantity> form))
+                || !(soleQuantity(form) instanceof DecisionAtom.OfTheInput(
+                        NumericTerm.FromOnePosition count))
+                || !Quantity.PositionInTheWalk.counts(count, list)) {
+            return Optional.empty();
+        }
+        return Optional.of(new Quantity.PickedAtAnIndex(list, picked.index(),
+                list.element().then(fields), count));
     }
 
     /**
@@ -8768,13 +8794,6 @@ final class Pullback {
                                 node.type(), Optional.empty(), Optional.of(underAKey.get())));
                     }
                 }
-                // The element an index written down picks of a list of the input stands at the
-                // list's elements, as the one a walk is handed does.
-                TermPath picked = elementPickedAtAnIndex(name, steps, at);
-                if (picked != null) {
-                    return LinearForm.atom(new DecisionAtom.OfTheInput(
-                            new NumericTerm.ValueOf(picked)));
-                }
                 return switch (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
                     case ReadMeaning.Element _, ReadMeaning.OneOf _, ReadMeaning.NoneHeld _,
                          ReadMeaning.MoreThanAreWrittenOut _, ReadMeaning.Position _ -> null;
@@ -8801,10 +8820,11 @@ final class Pullback {
                             Optional.ofNullable(inside).map(Pullback.this::noFormOf),
                             Optional.empty()));
                     // A name nothing is bound to here may still be what a walk hands its step,
-                    // which says where its value lies.
+                    // which says where its value lies, or the element an index written down
+                    // picks, which says which element it is.
                     case ReadMeaning.Unknown _ -> LinearForm.atom(new Quantity.OfABinding(
                             name.binding(), steps, node.type(), Optional.empty(),
-                            steps.isEmpty() ? handedToTheStep(name, at) : Optional.empty()));
+                            readOffAContainer(name, steps, at)));
                 };
             }
 

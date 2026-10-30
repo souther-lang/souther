@@ -86,6 +86,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.CollectionExtents;
 import souther.compiler.values.StoppedReading;
 import souther.compiler.values.TextExtents;
 import souther.compiler.values.UnreadReason;
@@ -727,6 +728,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return along instanceof Quantity.PositionInTheWalk position ? position : null;
         }
 
+        /** The element an index written down picks, where this is that; null otherwise. */
+        Quantity.PickedAtAnIndex picked() {
+            return along instanceof Quantity.PickedAtAnIndex picked ? picked : null;
+        }
+
         /**
          * The number as one position's, or null where it is no number of one position.
          *
@@ -822,6 +828,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * them differently. No one place stands for the others.
      */
     private static Source sourceOfSide(Side each, InputReading read) {
+        if (each.picked() != null) {
+            return sourceOf(new NumericTerm.ValueOf(each.picked().element()), read);
+        }
         List<NumericTerm.FromOnePosition> places = each.measuresOfItsEnd(read);
         if (places == null) {
             return null;
@@ -855,6 +864,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (places.isEmpty()) {
             NumericTerm.FromOnePosition countedAs = each.readOff() != null ? each.readOff()
                     : each.position() != null ? each.position().howMany()
+                    : each.picked() != null ? new NumericTerm.ValueOf(each.picked().element())
                     : summedAs(each.number());
             TermOrders orders = countedAs == null ? null : read.quantities().ordersOf(countedAs);
             return orders == null ? null : orders.answered();
@@ -1572,6 +1582,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             }
             case Quantity.PositionInTheWalk position -> out.add(position.container());
+            case Quantity.PickedAtAnIndex picked -> {
+                out.add(picked.container());
+                out.add(picked.element());
+            }
             case Quantity.HowManyMeet counted -> {
                 Optional<List<TermPath>> read = PositionsAStatementReads.of(counted.ofTheElement());
                 if (read.isEmpty() || !(counted.container() instanceof DecisionSubject.AnInput(
@@ -1747,6 +1761,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     }
                 }
                 case Quantity.PositionInTheWalk position -> out.add(position.container());
+                case Quantity.PickedAtAnIndex picked -> {
+                    out.add(picked.container());
+                    out.add(picked.element());
+                }
                 case Quantity.HowManyMeet counted -> {
                     Optional<List<TermPath>> reads =
                             PositionsAStatementReads.of(counted.ofTheElement());
@@ -4669,6 +4687,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         conditions, stating.get(i), heldWhole));
                 continue;
             }
+            if (each.picked() != null) {
+                terms.add(pickedAlong(each, sources.get(i), carriers.get(i), region, read,
+                        conditions, heldWhole));
+                continue;
+            }
             // Where it lies is asked of the number whatever it is a number of: a total over a run
             // lies where what the values it walks guarantee leave it. What it is shown to take is
             // asked of a position's, and of a total only as the totals of one element
@@ -4723,6 +4746,43 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
+     * The element an index written down picks as a term of the relation: it lies where the
+     * declarations leave the elements of its container, and takes the values the elements are
+     * shown to take on a row whose container holds more than the index.
+     *
+     * <p>Shown only where nothing on the way picks out some of the container's elements, so that
+     * a row putting a value at the elements puts it at this one; where the way states anything
+     * of the elements, what it states is of this one as it is of any. And only where the sizes
+     * that put an element at the index are themselves shown ({@link #positionsReached}), which a
+     * container the rules keep shorter than the index never has.
+     *
+     * @param ofElement what the declarations leave the elements
+     */
+    private WhatARelationLeavesUndivided.Term<FilingCoordinate> pickedAlong(
+            Side side, Source ofElement, Carrier carrier, SearchRegion region, InputReading read,
+            List<OnAWay> conditions, boolean heldWhole) {
+        Quantity.PickedAtAnIndex picked = side.picked();
+        NumericTerm.ValueOf element = new NumericTerm.ValueOf(picked.element());
+        NumericDomain.Bounds holds = region.projectionOf(element)
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
+                ? within : NumericDomain.Bounds.OPEN;
+        NumericDomain.Bounds realizes = null;
+        NumericDomain.Bounds positions = ofElement == null ? null
+                : positionsReached(picked.container(), picked.howMany(), read, region, conditions,
+                        heldWhole);
+        if (positions != null && positions.holdsAValue()
+                && CountDomain.mostFrom(positions.max()) >= picked.index()) {
+            Way way = wayOf(element, ofElement.named()
+                    ? statingAnythingOfItsParameter(element, conditions, read)
+                    : statingAnythingOf(element, conditions));
+            realizes = way == Way.TIES ? null : realized(element, ofElement, region, way);
+        }
+        return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
+                asARelationReadsIt(holds, carrier), asARelationReadsIt(realizes, carrier), null,
+                false, spacingOf(carrier), whereItStops(carrier));
+    }
+
+    /**
      * Every position a walk over {@code position}'s container hands its step in some row, or null
      * where that is not shown.
      *
@@ -4735,9 +4795,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private NumericDomain.Bounds positionsReached(Quantity.PositionInTheWalk position,
                                                   InputReading read, SearchRegion region,
                                                   List<OnAWay> conditions, boolean heldWhole) {
-        NumericTerm.FromOnePosition size = position.howMany();
+        return positionsReached(position.container(), position.howMany(), read, region,
+                conditions, heldWhole);
+    }
+
+    /** The same, of the container and the number of its elements. */
+    private NumericDomain.Bounds positionsReached(TermPath container,
+                                                  NumericTerm.FromOnePosition size,
+                                                  InputReading read, SearchRegion region,
+                                                  List<OnAWay> conditions, boolean heldWhole) {
         Source source = heldWhole ? sourceOf(size, read) : null;
-        if (source == null || picksOut(conditions, position.container(), Set.of())) {
+        if (source == null || picksOut(conditions, container, Set.of())) {
             return null;
         }
         Way way = wayOf(size, source.named()
@@ -5537,6 +5605,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (side.position() != null) {
             return List.of(FilingCoordinate.of(side.position().howMany()));
         }
+        if (side.picked() != null) {
+            return List.of(FilingCoordinate.of(new NumericTerm.ValueOf(side.picked().element())));
+        }
         if (side.kept() == null) {
             return side.madeOf();
         }
@@ -6121,11 +6192,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case NumericTerm.ValueOf value -> every
                     ? way == Way.UNTOUCHED ? NumericDomain.Bounds.OPEN : region.wholeRunOf(value)
                     : source.onlyItsEnds() ? region.wholeRunOf(value) : null;
-            case NumericTerm.TakenOf taken -> every && (DefaultBoundOperationFacts.get()
-                    .everyAnswerItCanGiveHasASourceValue(taken.operation())
-                    || (source.takes() instanceof Takes.Every(var type)
-                            && EverySizeAContainerHas.isTakenBy(taken.operation(), type)))
-                    ? region.wholeRunOf(taken) : null;
+            case NumericTerm.TakenOf taken -> every ? realizedSizes(taken, source, region) : null;
             // Every step of the answer's order has a value of the position's order in it, so the
             // steps the value falls in fill the answer's run wherever the value takes every value
             // its type holds.
@@ -6135,6 +6202,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
                  NumericTerm.CodePointAt _ -> null;
         };
+    }
+
+    /**
+     * The run of a number taken of an unrestricted value that the region shows it fills, or null
+     * where none is shown: every number the operation could answer is one some value answers where
+     * it declares so ({@code EveryAnswerItCanGiveHasASourceValue}), and for a count of what a
+     * container holds, as far as its type is shown to be given that many elements
+     * ({@link EverySizeAContainerHas}).
+     */
+    private static NumericDomain.Bounds realizedSizes(NumericTerm.TakenOf taken, Source source,
+                                                      SearchRegion region) {
+        if (DefaultBoundOperationFacts.get()
+                .everyAnswerItCanGiveHasASourceValue(taken.operation())) {
+            return region.wholeRunOf(taken);
+        }
+        Long shown = source.takes() instanceof Takes.Every(var type)
+                ? EverySizeAContainerHas.greatestShown(taken.takenAs(), type) : null;
+        NumericDomain.Bounds run = shown == null ? null : region.wholeRunOf(taken);
+        // As many as a container holds is where the language stops, which no run the region
+        // answers is cut at, so a count shown that far is the run as it stands.
+        return run == null || shown >= CollectionExtents.MOST_ELEMENTS ? run
+                : run.meet(new NumericDomain.Bounds(null, Endpoint.inclusive(Count.of(shown))));
     }
 
     /**

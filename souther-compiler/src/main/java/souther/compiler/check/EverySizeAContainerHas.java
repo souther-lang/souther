@@ -1,66 +1,86 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
-import souther.compiler.types.ValueName;
+import souther.compiler.values.CollectionExtents;
 
 /**
- * Whether every size a container of one type could have is the size of some value of it.
+ * How many elements a container of one type is shown to be had holding, from nought up.
  *
- * <p>Decided by the type and not by the operation, which is why it is not
- * {@code EveryAnswerItCanGiveHasASourceValue}: a {@code List<Int>} of any length is written by
- * repeating an element, and a {@code List<Never>} of one has none. The type is read only as far as
- * it proves a value, and a type it does not read is not shown to have any, so a name the module
- * declares, which may carry rules or none to satisfy, leaves the sizes of the containers over it to
- * a row.
+ * <p>What a container holds is the operation's to say ({@link TakenAs.HowManyItHolds}), and how
+ * many of them a type can be given is this type's: a {@code List<Int>} of any length is written by
+ * repeating an element, a {@code List<Never>} of one has none, and a {@code Set<Bool>} is capped at
+ * two by how many booleans there are. So the question is asked of the way the number is taken and
+ * of the shape of what is taken it of, and not of an operation by its name.
  *
- * <p>A set of three needs three elements that differ and a map of three three keys that differ, so
- * for those it is the element that has to be one the language never runs out of. A {@code Set<Bool>}
- * is capped at two and is none of these.
+ * <p>A lower bound on what exists and never an upper bound on what does not. A type this reads no
+ * values of is shown to have none, which leaves its containers the empty one, and says nothing of
+ * whether it has any: a name the module declares may carry rules, or none to satisfy, and a count
+ * of values this does not work out is not a count of none ({@link Cardinality}).
  */
 public final class EverySizeAContainerHas {
-
-    private static final ValueName LIST_LENGTH = ValueName.Stdlib.operation("List", "length");
-    private static final ValueName SET_SIZE = ValueName.Stdlib.operation("Set", "size");
-    private static final ValueName MAP_SIZE = ValueName.Stdlib.operation("Map", "size");
 
     private EverySizeAContainerHas() {
     }
 
-    /** Whether {@code operation}, taken of a value of {@code container} that nothing restricts,
-     *  answers every size some such value has. */
-    public static boolean isTakenBy(ValueName operation, Type container) {
-        if (operation.equals(LIST_LENGTH)) {
-            return container instanceof Type.ListOf list && hasAValue(list.element());
+    /**
+     * The greatest size such that every size from nought up to it is the size of some value of
+     * {@code container}, or null where {@code how} is no count of what a container of that shape
+     * holds.
+     *
+     * @param how       how the number is taken of the container
+     * @param container the type of the container, which nothing restricts
+     */
+    public static Long greatestShown(TakenAs how, Type container) {
+        if (!(how instanceof TakenAs.HowManyItHolds)) {
+            return null;
         }
-        if (operation.equals(SET_SIZE)) {
-            return container instanceof Type.SetOf set && hasAsManyAsOneLikes(set.element());
-        }
-        if (operation.equals(MAP_SIZE)) {
-            return container instanceof Type.MapOf map
-                    && hasAsManyAsOneLikes(map.key()) && hasAValue(map.value());
-        }
-        return false;
-    }
-
-    /** Whether a value of {@code type} is shown to exist. */
-    private static boolean hasAValue(Type type) {
-        return switch (type) {
-            case Type.Prim _, Type.ListOf _, Type.SetOf _, Type.MapOf _, Type.OptionOf _ -> true;
-            case Type.TupleOf tuple -> tuple.elements().stream().allMatch(
-                    EverySizeAContainerHas::hasAValue);
-            default -> false;
+        return switch (container) {
+            case Type.ListOf list -> distinctShown(list.element()) >= 1 ? mostHeld() : 0L;
+            case Type.SetOf set -> distinctShown(set.element());
+            case Type.MapOf map -> distinctShown(map.value()) >= 1 ? distinctShown(map.key()) : 0L;
+            default -> null;
         };
     }
 
-    /** Whether values of {@code type} that differ are shown to be had in any number. */
-    private static boolean hasAsManyAsOneLikes(Type type) {
+    /**
+     * At least this many values of {@code type} that differ are shown to exist, ending at the most
+     * a container holds: a count past it is no more to the question asked. Nought where none is
+     * shown.
+     */
+    private static long distinctShown(Type type) {
         return switch (type) {
             case Type.Prim prim -> switch (prim) {
-                case INT, STRING, DECIMAL, RATIONAL -> true;
-                case BOOL, DATE, TIME, DATETIME, INSTANT -> false;
+                case INT, STRING, DECIMAL, RATIONAL -> mostHeld();
+                case BOOL, DATE, TIME, DATETIME, INSTANT -> 2L;
             };
-            case Type.ListOf list -> hasAValue(list.element());
-            default -> false;
+            case Type.ListOf list -> distinctShown(list.element()) >= 1 ? mostHeld() : 1L;
+            case Type.SetOf set -> powerOfTwo(distinctShown(set.element()));
+            case Type.MapOf map -> distinctShown(map.key()) >= 1 && distinctShown(map.value()) >= 1
+                    ? 2L : 1L;
+            case Type.OptionOf option -> Math.min(mostHeld(), 1 + distinctShown(option.element()));
+            case Type.TupleOf tuple -> {
+                long product = 1;
+                for (Type each : tuple.elements()) {
+                    long shown = distinctShown(each);
+                    if (shown == 0) {
+                        yield 0L;
+                    }
+                    product = shown > mostHeld() / product ? mostHeld() : product * shown;
+                }
+                yield product;
+            }
+            default -> 0L;
         };
+    }
+
+    /** Two to the {@code power}, ending at the most a container holds. */
+    private static long powerOfTwo(long power) {
+        return power >= Long.numberOfLeadingZeros(mostHeld()) - 1 ? mostHeld()
+                : Math.min(mostHeld(), 1L << power);
+    }
+
+    private static long mostHeld() {
+        return CollectionExtents.MOST_ELEMENTS;
     }
 }
