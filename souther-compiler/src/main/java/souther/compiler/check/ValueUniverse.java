@@ -23,9 +23,19 @@ import java.util.List;
  * falling to whichever arm this happened to end with. Where the values cannot be counted out the
  * answer is nothing at all, which is what leaves a rule about them saying only what it excludes.
  */
-final class ValueUniverse {
+public final class ValueUniverse {
 
     private ValueUniverse() {}
+
+    /**
+     * How many values of {@code type} differ, where they can be counted out — or minus one where
+     * they cannot, which is not that there are many.
+     */
+    public static long howManyDiffer(Type type, NewtypeInners inners, DeclarationKinds kinds,
+                                     SumCases sums) {
+        List<Value> every = of(type, inners, kinds, sums);
+        return every == null ? -1 : every.size();
+    }
 
     /**
      * The values of {@code type} in the order the model writes them, or null where they are not

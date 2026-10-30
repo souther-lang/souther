@@ -103,6 +103,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumberRegion;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.observe.Disposition;
@@ -5227,6 +5228,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // nothing here found anything out about one.
             case ReadingGap.CouldNotWalk _ -> "the walk to that position could not be taken";
             case ReadingGap.CouldNotReadRow _ -> "no row came back to read there";
+            // The values were there and are numbers; which keys the maps hold in common is what
+            // the observation of a key does not say.
+            case ReadingGap.KeysNotTold _ -> "the keys the maps hold their values under could not"
+                    + " be told apart there";
             // The value was read; what is not known is whether the run compared anything through
             // the element it stands in, and what that turned on is what is said.
             case ReadingGap.ReachNotRead(ReadingGap.ReachNotRead.Why unread) -> "whether the run"
@@ -7121,6 +7126,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 into.put("kind", "value");
                 into.put("position", it.position().discriminated());
             }
+            // Two forms multiplied: each as the numbers it is of at their weights, and its
+            // constant.
+            case NumericTerm.ProductOf it -> {
+                into.put("kind", "product");
+                ArrayNode factors = into.putArray("factors");
+                for (LinearForm<NumericTerm> form : it.factors()) {
+                    ObjectNode factor = factors.addObject();
+                    factor.put("constant", form.constant().spelled());
+                    ArrayNode weighed = factor.putArray("terms");
+                    for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+                        ObjectNode one = weighed.addObject();
+                        termId(one.putObject("term"), each.getKey());
+                        one.put("coefficient", each.getValue().spelled());
+                    }
+                }
+            }
             // And what the operation was given beside the value, by where each argument stands in
             // the call: a quotient by two and a quotient by three are two numbers of one place.
             case NumericTerm.TakenOf it -> {
@@ -7258,6 +7279,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         if (run.order() != null) {
                             over.put("handed", wire(run.order().direction()));
                         }
+                    }
+                    case RunSource.JoinedOccurrences run -> {
+                        over.put("kind", "joined_occurrences");
+                        over.put("elements", run.elements().discriminated());
+                        over.put("alongside", run.alongside().discriminated());
                     }
                     case RunSource.ReachableNodes run -> {
                         over.put("kind", "reachable_nodes");
@@ -10531,8 +10557,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // One word, and the reason underneath keeps which of the two it was. A position
                 // that was read and holds nothing is news about the row; neither of these is, and a
                 // reader weighing the document acts on both the same way.
-                case ReadingGap.CouldNotWalk _, ReadingGap.CouldNotReadRow _ ->
-                        WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
+                case ReadingGap.CouldNotWalk _, ReadingGap.CouldNotReadRow _,
+                     ReadingGap.KeysNotTold _ -> WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
                 // The value was read and whether the run got to it through that element was not:
                 // no news about the row either, and acted on the same way.
                 case ReadingGap.ReachNotRead _ -> WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;

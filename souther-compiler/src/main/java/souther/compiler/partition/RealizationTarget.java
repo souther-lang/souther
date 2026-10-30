@@ -124,7 +124,35 @@ public sealed interface RealizationTarget {
             case NumericTerm.OccurrencesOfAKey asked -> new AmongEveryOccurrenceEqualToAKey(asked);
             case NumericTerm.FromOnePosition one -> new AtOnePosition(one);
             case NumericTerm.TakenOver over -> new OverARun(over);
+            case NumericTerm.ProductOf product -> new OfAProduct(product);
         };
+    }
+
+    /**
+     * What two forms come to multiplied, realized by the number alone that carries the value
+     * standing at it while the other factor's number stands where that factor is one
+     * ({@link NumericTerm.ProductOf#atAValue}).
+     *
+     * <p>Not rebuilt as one value: the product is made of the numbers of two forms, each realized
+     * as it is anywhere, so the row stands at it by the numbers standing and the target of
+     * the product is replaced by theirs before a row is composed ({@code Generator}). The root
+     * here is the carrier's, which is where the value is written.
+     */
+    record OfAProduct(NumericTerm.ProductOf term) implements OfANumber {
+
+        @Override
+        public TermPath writeRoot() {
+            NumericTerm.ProductOf.AtAValue way = term.atAValue();
+            if (way == null) {
+                throw new IllegalStateException(term + " is held at no value by one number");
+            }
+            return RealizationTarget.of(way.carrier()).writeRoot();
+        }
+
+        @Override
+        public String toString() {
+            return term.toString();
+        }
     }
 
     /** A number of the row, which the rules hold a range of and a search can put to them. */

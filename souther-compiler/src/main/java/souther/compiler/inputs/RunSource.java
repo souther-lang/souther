@@ -39,7 +39,7 @@ public sealed interface RunSource {
     default boolean isInOneContainer() {
         return switch (this) {
             case ProjectedOccurrences _, ComputedOccurrences _ -> true;
-            case FlattenedOccurrences _, ReachableNodes _ -> false;
+            case FlattenedOccurrences _, ReachableNodes _, JoinedOccurrences _ -> false;
         };
     }
 
@@ -65,6 +65,13 @@ public sealed interface RunSource {
             // inside a container it is one tree of many.
             case ReachableNodes nodes ->
                     overTheNodesBelow(at, nodes.through(), nodes.container());
+            // Both maps are handed to the move, and the join is the same one only where each is
+            // still the one container's values.
+            case JoinedOccurrences joined -> {
+                TermPath beside = moved.put(joined.alongside());
+                yield namesOneRun(at) && beside != null && namesOneRun(beside)
+                        && !at.equals(beside) ? new JoinedOccurrences(at, beside) : null;
+            }
         };
     }
 
@@ -255,6 +262,47 @@ public sealed interface RunSource {
             return "{" + computation + " | " + elements
                     + (order != null && order.direction() == TraversalDirection.REVERSE
                             ? " from the far end" : "") + "}";
+        }
+    }
+
+    /**
+     * The products of the values two maps hold under one key: for each key both hold, the value
+     * standing at {@code elements} times the value standing at {@code alongside}.
+     *
+     * <p>As many values as there are keys the two maps share, each made of the entry of one map
+     * and the entry of the other under that key. A key only one of them holds makes none, which is
+     * what a lookup in the other falling back on nought comes to when the entry is multiplied by
+     * it. The two maps are two inputs and neither is made of the other, so the run stands at
+     * both: it is read from {@code elements}, the map walked, and the map looked into is
+     * {@code alongside}.
+     *
+     * <p>Not {@link ComputedOccurrences}: that is one value for each element of one container,
+     * made of that element alone, and what the other map holds under the element's key is no field
+     * of the element. Nothing here is a field of one entry, and no entry is read apart from the
+     * key that joins it to the other map's.
+     *
+     * @param elements  where each value of the map walked stands
+     * @param alongside where each value of the map looked into stands
+     */
+    record JoinedOccurrences(TermPath elements, TermPath alongside) implements RunSource {
+
+        public JoinedOccurrences {
+            requireOneRun(elements);
+            requireOneRun(alongside);
+            if (elements.head().equals(alongside.head()) && elements.equals(alongside)) {
+                throw new IllegalArgumentException("a map joined to itself is no join of two: "
+                        + elements);
+            }
+        }
+
+        @Override
+        public TermPath subjectPath() {
+            return elements;
+        }
+
+        @Override
+        public String toString() {
+            return "{" + elements + " * " + alongside + " under one key}";
         }
     }
 

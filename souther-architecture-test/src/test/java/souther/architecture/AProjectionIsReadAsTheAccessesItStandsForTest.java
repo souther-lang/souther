@@ -560,6 +560,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "query/CallExampleSeeds", "collect", "(" + core
                 + "Ljava/util/function/Predicate;Ljava/util/List;)V", Reading.EACH_SUBEXPRESSION,
                 ASKS_EACH);
+        row(out, c + "query/CallExampleSeeds", "collect", "(" + core + reads + "L" + c
+                + "inputs/InputReading;Ljava/util/function/Predicate;Ljava/util/List;)V",
+                Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "inputs/InputUses$Walk", "takenOff", "(" + core + reads + ")V",
                 Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "inputs/InputUses$Walk", "fieldOf", "(" + core + ")" + core,
@@ -671,11 +674,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node what it ends a run for, and goes down to its parts and along the"
                         + " names it reads: a name read off a value ends none, so what a projection"
                         + " may end one for is what its base may");
-        row(out, c + "check/WhatARunMayEndFor", "endsNoneBeneath", "(" + core + ")Z",
-                Reading.STRUCTURE,
-                "asks each node what it ends a run for, and goes down to its parts: a name read"
-                        + " off a value ends none, so what a projection may end one for is what"
-                        + " its base may");
+        row(out, c + "check/WhatARunMayEndFor", "endsNoneBeneathApart",
+                "(" + core + "Ljava/util/Set;)Z", Reading.STRUCTURE,
+                "asks each node what it ends a run for, and goes down to its parts apart from those"
+                        + " it is told of: a name read off a value ends none, so what a projection"
+                        + " may end one for is what its base may");
         row(out, c + "partition/NumbersOnTheWayToATotal", "readOffWhatItIsHanded",
                 "(" + core + "Ljava/util/Set;Ljava/util/Set;)Z", Reading.STRUCTURE,
                 "asks whether a value is a name a closure is handed or a run of fields read off"
@@ -694,6 +697,14 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + "L" + c + "inputs/InputReads;)Z", Reading.STRUCTURE,
                 "asks each part of the stopped expression whether it is the operand read by its"
                         + " form or ends no run: a projection's one part is its base");
+        row(out, c + "partition/AffineReading$1", "multipliesFieldsOf",
+                "(" + core + "L" + c + "types/BindingId;)Z", Reading.STRUCTURE,
+                "asks whether an expression is fields of one name multiplied: a projection's one"
+                        + " part is its base, down to the name");
+        row(out, c + "inputs/InputNumber", "namedIn", "(" + core + "Ljava/util/Map;)V",
+                Reading.STRUCTURE,
+                "records each name a node binds, going down to its parts: a projection binds none"
+                        + " and has its base for its one part");
         row(out, c + "partition/AffineReading$WhatLiesBesideTheStop", "collectUnder",
                 "(" + core + "Ljava/util/Set;)V", Reading.STRUCTURE,
                 "records each node and goes down to its parts: a projection is held where its"

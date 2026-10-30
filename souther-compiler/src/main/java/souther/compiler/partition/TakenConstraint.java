@@ -175,7 +175,8 @@ public sealed interface TakenConstraint {
         public java.util.Set<NumericTerm> terms() {
             if (form.coefs().keySet().stream().noneMatch(term ->
                     term instanceof NumericTerm.OccurrencesOfAKey
-                            || term instanceof NumericTerm.GatheredUnderAKey)) {
+                            || term instanceof NumericTerm.GatheredUnderAKey
+                            || term instanceof NumericTerm.ProductOf)) {
                 return form.coefs().keySet();
             }
             Set<NumericTerm> out = new LinkedHashSet<>();
@@ -185,6 +186,9 @@ public sealed interface TakenConstraint {
                             out.add(new NumericTerm.ValueOf(asked.key()));
                     case NumericTerm.GatheredUnderAKey asked ->
                             out.add(new NumericTerm.ValueOf(asked.asked()));
+                    // The numbers either form is of are composed for the product to stand.
+                    case NumericTerm.ProductOf product -> product.factors().forEach(
+                            form -> out.addAll(form.coefs().keySet()));
                     case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _,
                          NumericTerm.OfAnElementsNeighbours _, NumericTerm.OccurrencesOfItsValue _,
                          NumericTerm.GatheredUnderItsKey _ -> { }

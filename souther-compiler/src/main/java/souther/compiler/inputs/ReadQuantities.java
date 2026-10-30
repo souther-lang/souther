@@ -502,6 +502,10 @@ final class ReadQuantities implements Quantities {
         // absent, so a term of another input comes back with an order on one end and nothing on the
         // other — an answer about no reading, wearing this one's name.
         held(term);
+        if (term instanceof NumericTerm.ProductOf product) {
+            // Counted on the order its factors' numbers are, each read on its own.
+            return TermOrdering.ofAProduct(product, this::ordersOf);
+        }
         if (term instanceof NumericTerm.TakenOver over
                 && over.source() instanceof RunSource.ComputedOccurrences computed) {
             // What a computed value stands as is what the computation made, and no position of the
@@ -1674,19 +1678,35 @@ final class ReadQuantities implements Quantities {
         return carrier == null ? null : carrier.space();
     }
 
+    /**
+     * Where each form this reading has been asked about runs ({@link #runsBetween}). Kept because
+     * the readings of one comparison ask the same operations of the same places over and over,
+     * and what the declarations leave a form does not turn on which reading asks.
+     *
+     * <p>Not {@code computeIfAbsent}: working out a projection asks other questions of this
+     * reading, which would update the map from inside its own update.
+     */
+    private final Map<LinearForm<NumericTerm>, NumericDomain.Bounds> runsOfForms =
+            new ConcurrentHashMap<>();
+
     @Override
     public NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form) {
         if (form.coefs().isEmpty()) {
             return null;
         }
-        // What the declarations were read to prove. Where they admit no value there are no lines
-        // owed, which a range cannot say, so a reader drawing lines asks
-        // projectionOfTheDeclarations; a caller looking for somewhere to put a value asks the
-        // region face. Both keep the difference ({@link #projectionOf}).
-        return switch (projectionOf(form, false, List.of())) {
-            case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) -> bounds;
-            case NumericDomain.FormProjection.NothingIsLeft _ -> NumericDomain.Bounds.OPEN;
-        };
+        NumericDomain.Bounds had = runsOfForms.get(form);
+        if (had == null) {
+            // What the declarations were read to prove. Where they admit no value there are no
+            // lines owed, which a range cannot say, so a reader drawing lines asks
+            // projectionOfTheDeclarations; a caller looking for somewhere to put a value asks the
+            // region face. Both keep the difference ({@link #projectionOf}).
+            had = switch (projectionOf(form, false, List.of())) {
+                case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) -> bounds;
+                case NumericDomain.FormProjection.NothingIsLeft _ -> NumericDomain.Bounds.OPEN;
+            };
+            runsOfForms.put(form, had);
+        }
+        return had;
     }
 
     @Override
@@ -2721,6 +2741,8 @@ final class ReadQuantities implements Quantities {
             // Of the elements of one key, which are some of the run's: where they are bounded.
             case NumericTerm.GatheredUnderAKey asked ->
                     whereItsValuesAre(asked.gathered());
+            // Made of the numbers of two forms, which bound it only together.
+            case NumericTerm.ProductOf _ -> null;
         };
     }
 

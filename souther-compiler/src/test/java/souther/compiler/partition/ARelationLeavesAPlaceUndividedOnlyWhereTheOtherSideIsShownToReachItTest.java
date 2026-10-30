@@ -62,6 +62,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     private static final String NOT_SHOWN = "not shown";
 
+    /** A parameter's type as written after its name: a name, or a name with the types it holds,
+     *  which a map holds two of. */
+    private static final String PARAMETER_TYPE = ": [A-Za-z]+(<[A-Za-z, ]+>)?";
+
     private static final String OVER_A_RUN = "over a run";
 
     private static final String NOT_REACHED = "not reached";
@@ -93,7 +97,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 behavior m : (%s) -> %s
                 let m (%s) = %s
                 """.formatted(declarations, inputs, answers,
-                        inputs.replaceAll(": [A-Za-z<>]+", ""), body));
+                        inputs.replaceAll(PARAMETER_TYPE, ""), body));
     }
 
     /**
@@ -663,7 +667,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     private static Map<String, String> pastAWayOffAValue(String inputs, String declarations,
                                                          String kept) {
         String body = "if " + kept + " then false else a.value + b.value >= 30";
-        String head = "let m (" + inputs.replaceAll(": [A-Za-z<>]+", "") + ") = ";
+        String head = "let m (" + inputs.replaceAll(PARAMETER_TYPE, "") + ") = ";
         Map<String, String> out = new LinkedHashMap<>(leftAt(inputs, declarations, body,
                 head.length() + body.indexOf(">= 30") + 1));
         for (String place : List.of("a", "b")) {
@@ -886,14 +890,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         // value, so a set of it holds none or that one.
         assertEquals(List.of("k/x <= 0", "k/0 < x < 2", "k/2 <= x"),
                 classesAt("k: Int, xs: Set<Unit>", "data Unit", "k > Set.size(xs)", "k"));
-        // And as many as its rules are read to leave: a rule that is nothing but ends leaves the
-        // whole numbers between them, and any other rule is not read to leave a value, so the
-        // sizes it would put in a set are not shown.
-        assertEquals(List.of("k/x <= 0", "k/0 < x < 4", "k/4 <= x"), classesAt(
-                "k: Int, xs: Set<Digit>", "data Digit = Int invariant value >= 1 && value <= 3",
-                "k > Set.size(xs)", "k"));
+        // A name with a rule is shown the one value the rule leaves it, and a set of it is shown
+        // no more than that: how many differ is asked only of a type nothing is written on and of
+        // one whose values are counted out.
         assertEquals(Map.of("Set.size(xs)", RELATES, "k", NOT_SHOWN), left(
-                "k: Int, xs: Set<Odd>", "data Odd = Int invariant Int.floorMod(value, 2) == 1",
+                "k: Int, xs: Set<Digit>", "data Digit = Int invariant value >= 1 && value <= 3",
                 "k > Set.size(xs)", "4:19"));
         // A rule with a hole in it is not read as the numbers between its ends.
         assertEquals(Map.of("Set.size(xs)", RELATES, "k", NOT_SHOWN), left(
@@ -941,8 +942,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 left("n: Int, xs: List<Rec>", "data Rec = { a: Int }",
                         "match List.get(0, xs) with | Some r -> r.a == n | None -> false",
                         "4:60"));
-        // And not where a rule over its fields may leave it none.
-        assertEquals(Map.of("n", NOT_SHOWN),
+        // A rule over its fields that some value meets leaves it one, and a field of it any value
+        // the rule lets that field have.
+        assertEquals(Map.of("n", RELATES),
                 left("n: Int, xs: List<Span>",
                         "data Span = { from: Int, to: Int } invariant from <= to",
                         "match List.get(0, xs) with | Some r -> r.from == n | None -> false",
@@ -1082,6 +1084,162 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("List.sum(ns[*])", RELATES, "a", RELATES),
                 left("a: Nat, ns: List<Nat>", NAT, alone,
                         atThe(">=", NAT, "a: Nat, ns: List<Nat>", alone)));
+    }
+
+    /**
+     * A count of a list's elements, and what they sum to, are terms of the relation beside an input
+     * the list does not hold: a list of as many whole numbers as asked is a row at each count, and
+     * a list of one whole number is a row at that number. Where the declarations hold the list to
+     * two elements or more no list of one is a row, so the total is shown to reach nothing and
+     * the input beside it is left unshown, as the count is shown only from two.
+     */
+    @Test
+    void aCountAndATotalOfAListAreReachedWhereTheListMayHoldWhatTheyAreAskedAt() {
+        String inputs = "limit: Int, xs: List<Int>";
+        String count = "limit >= List.length(xs)";
+        assertEquals(Map.of("List.length(xs)", RELATES),
+                left(inputs, NAT, count, atThe(">=", NAT, inputs, count)));
+        String total = "limit >= List.sum(xs)";
+        assertEquals(Map.of("List.sum(xs)", RELATES, "limit", RELATES),
+                left(inputs, NAT, total, atThe(">=", NAT, inputs, total)));
+        String pairs = "data Pair = List<Int> invariant List.length(value) >= 2";
+        String held = "limit: Int, p: Pair";
+        String heldTotal = "limit >= List.sum(p.value)";
+        assertEquals(Map.of("List.sum(p)", RELATES, "limit", NOT_SHOWN),
+                left(held, pairs, heldTotal, atThe(">=", pairs, held, heldTotal)));
+    }
+
+    /**
+     * A walk adding each element as it stands runs a total on the way that a sum does not, and
+     * that total passes the end of an {@code Int} for elements whose final total does not. A row
+     * of one element runs none, so the total is reached where one element may stand at it; a
+     * walk that adds anything else of each element, or a container the relation asks about
+     * elsewhere, has rows of more than one element and is not claimed.
+     */
+    @Test
+    void aWalkAddingEachElementIsReachedAsAnElementWrittenAloneIs() {
+        String list = "limit: Int, xs: List<Int>";
+        String added = "limit >= List.fold((acc, x) -> acc + x, 0, xs)";
+        assertEquals(Map.of("List.sum(xs)", RELATES, "limit", RELATES),
+                left(list, NAT, added, atThe(">=", NAT, list, added)));
+        String map = "limit: Int, ms: Map<String, Int>";
+        String entries = "limit >= Map.fold((acc, k, q) -> acc + q, 0, ms)";
+        assertEquals(Map.of("List.sum(ms)", RELATES, "limit", RELATES),
+                left(map, NAT, entries, atThe(">=", NAT, map, entries)));
+        String doubled = "limit >= List.fold((acc, x) -> acc + x * 2, 0, xs)";
+        assertEquals(Map.of("List.sum({2·the element itself + 0 | xs[*]})", NOT_SHOWN,
+                "limit", NOT_SHOWN), left(list, NAT, doubled, atThe(">=", NAT, list, doubled)));
+        String beside = "limit >= List.length(xs) + List.fold((acc, x) -> acc + x, 0, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN, "List.sum(xs)", NOT_SHOWN,
+                "limit", NOT_SHOWN), left(list, NAT, beside, atThe(">=", NAT, list, beside)));
+        // A step composed to the same form with operations that were written is worked out with
+        // them: the product of an element by a million passes the end of an Int where the element
+        // alone does not.
+        String worked = "limit >= List.fold((acc, x) -> acc + x * 1000000 - x * 999999, 0, xs)";
+        assertEquals(Map.of("List.sum(xs)", NOT_SHOWN, "limit", NOT_SHOWN),
+                left(list, NAT, worked, atThe(">=", NAT, list, worked)));
+        String seeded = "limit >= List.fold((acc, x) -> acc + x, 1 - 1, xs)";
+        assertEquals(Map.of("List.sum(xs)", NOT_SHOWN, "limit", NOT_SHOWN),
+                left(list, NAT, seeded, atThe(">=", NAT, list, seeded)));
+        String two = "limit: Int, xs: List<Int>, ys: List<Int>";
+        String untold = "limit >= List.fold((acc, x) -> acc + x, 0, xs)"
+                + " + List.fold((acc, y) -> acc + y * 2, 0, ys)";
+        assertEquals(Map.of("List.sum(xs)", NOT_SHOWN, "limit", NOT_SHOWN,
+                "List.sum({2·the element itself + 0 | ys[*]})", NOT_SHOWN),
+                left(two, NAT, untold, atThe(">=", NAT, two, untold)));
+        String other = "limit: Int, xs: List<Int>, k: Int";
+        String quotient = "limit >= List.fold((acc, x) -> acc + x, 0, xs) + k / 3";
+        assertEquals(Map.of("List.sum(xs)", NOT_SHOWN, "k", NOT_SHOWN, "limit", NOT_SHOWN),
+                left(other, NAT, quotient, atThe(">=", NAT, other, quotient)));
+        String pairs = "data Pair = List<Int> invariant List.length(value) >= 2";
+        String held = "limit: Int, p: Pair";
+        String heldAdded = "limit >= List.fold((acc, x) -> acc + x, 0, p.value)";
+        assertEquals(Map.of("List.sum(p)", NOT_SHOWN, "limit", NOT_SHOWN),
+                left(held, pairs, heldAdded, atThe(">=", pairs, held, heldAdded)));
+    }
+
+    /**
+     * A total of products of fields of each element, which one element reaches with every field
+     * but one at one. That needs the fields apart: a rule tying them, or a step that works out
+     * more than the product, leaves the value of the total to more than one element.
+     */
+    @Test
+    void aTotalOfProductsOfFieldsIsReachedAsAnElementWrittenAloneIs() {
+        String line = "data Line = { price: Int, qty: Int }";
+        String inputs = "lines: List<Line>, limit: Int";
+        String summed = "limit >= List.sum(List.map(l -> l.price * l.qty, lines))";
+        String walked = "limit >= List.fold((acc, l) -> acc + l.price * l.qty, 0, lines)";
+        for (String body : List.of(summed, walked)) {
+            assertEquals(Map.of("List.sum({1·price·qty + 0 | lines[*]})", RELATES,
+                    "limit", RELATES), left(inputs, line, body, atThe(">=", line, inputs, body)));
+        }
+        String tied = line + " invariant price >= qty";
+        for (String body : List.of(summed, walked)) {
+            Map<String, String> held = left(inputs, tied, body, atThe(">=", tied, inputs, body));
+            assertTrue(held.containsValue(NOT_SHOWN), held.toString());
+        }
+        String more = "limit >= List.sum(List.map(l -> l.price * l.qty + l.price * l.qty"
+                + " - l.price * l.qty, lines))";
+        String moreWalked = "limit >= List.fold((acc, l) -> acc + (l.price * l.qty + l.price * l.qty"
+                + " - l.price * l.qty), 0, lines)";
+        for (String body : List.of(more, moreWalked)) {
+            Map<String, String> worked =
+                    left(inputs, line, body, atThe(">=", line, inputs, body));
+            assertTrue(worked.containsValue(NOT_SHOWN), worked.toString());
+        }
+    }
+
+    /**
+     * What two maps hold under one key is multiplied and added up by a walk over one of them: each
+     * entry's value times what the other holds under the entry's key, or nought. The total is
+     * reached with one key in both maps, the entry of the first at one and the entry of the
+     * second at the number. Another step is another number, and a lookup that is not of the
+     * entry's own key in another map of the same keys is no join.
+     */
+    @Test
+    void theProductsOfTwoMapsValuesUnderOneKeyAreReachedAsOneKeyInBothIs() {
+        String inputs = "limit: Int, agreed: Map<String, Int>, prices: Map<String, Int>";
+        String price = "(Map.get(k, prices) |> Option.withDefault(0))";
+        String joined = "limit >= Map.fold((acc, k, q) -> acc + q * " + price + ", 0, agreed)";
+        String swapped = "limit >= Map.fold((acc, k, q) -> acc + " + price + " * q, 0, agreed)";
+        for (String body : List.of(joined, swapped)) {
+            assertEquals(Map.of("List.sum({agreed[*] * prices[*] under one key})", RELATES,
+                    "limit", RELATES), left(inputs, NAT, body, atThe(">=", NAT, inputs, body)));
+        }
+        List<String> otherwise = List.of(
+                "limit >= Map.fold((acc, k, q) -> acc + q * " + price + " + 1, 0, agreed)",
+                "limit >= Map.fold((acc, k, q) -> acc + q * (Map.get(k, prices)"
+                        + " |> Option.withDefault(1)), 0, agreed)",
+                "limit >= Map.fold((acc, k, q) -> acc + q * (Map.get(\"a\", prices)"
+                        + " |> Option.withDefault(0)), 0, agreed)",
+                "limit >= Map.fold((acc, k, q) -> acc + q * (Map.get(k, agreed)"
+                        + " |> Option.withDefault(0)), 0, agreed)");
+        for (String body : otherwise) {
+            assertFalse(linesAbout(measured(inputs, NAT, "Bool", body), "limit").isEmpty(), body);
+        }
+    }
+
+    /**
+     * A step is the shape of a join only where everything it works out is a part of that shape.
+     * A binding is worked out whether or not anything reads it, so one the product does not read
+     * may stop a run — {@code Int.floorMod(1, d)} does where {@code d} is nought — and the walk is
+     * then no join, as a walk over one map with the same binding is not a total. A binding the
+     * product reads is a part of the shape.
+     */
+    @Test
+    void aBindingTheStepWorksOutAndNothingReadsKeepsItFromBeingAJoin() {
+        String inputs = "limit: Int, d: Int, agreed: Map<String, Int>, prices: Map<String, Int>";
+        String looked = "(Map.get(k, prices) |> Option.withDefault(0))";
+        String read = "limit >= Map.fold((acc, k, q) -> {\n    let price = " + looked
+                + "\n    acc + q * price\n}, 0, agreed)";
+        assertEquals(Map.of("List.sum({agreed[*] * prices[*] under one key})", RELATES,
+                "limit", RELATES), left(inputs, NAT, read, atThe(">=", NAT, inputs, read)));
+        String unread = "limit >= Map.fold((acc, k, q) -> {\n    let unused = Int.floorMod(1, d)\n"
+                + "    acc + q * " + looked + "\n}, 0, agreed)";
+        assertFalse(linesAbout(measured(inputs, NAT, "Bool", unread), "limit").isEmpty(), unread);
+        // Not recognised as a join at all, and not merely reported unread for another reason.
+        assertTrue(left(inputs, NAT, unread, atThe(">=", NAT, inputs, unread)).keySet().stream()
+                .noneMatch(term -> term.contains("under one key")), unread);
     }
 
     private static final String FORECAST = """
@@ -1585,7 +1743,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *  {@code declarations}. */
     private static String atThe(String operator, String declarations, String inputs,
                                 String body) {
-        String head = "let m (" + inputs.replaceAll(": [A-Za-z<>]+", "") + ") = ";
+        String head = "let m (" + inputs.replaceAll(PARAMETER_TYPE, "") + ") = ";
         return (declarations.lines().count() + 3) + ":" + (head.length() + body.indexOf(operator)
                 + 1);
     }
@@ -2461,7 +2619,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String taking = beside ? inputs + THE_FIVE : inputs;
         String body = "if " + (beside ? FIVE_APART + " && " : "") + guard + " then " + comparison
                 + " else false";
-        int at = ("let m (" + taking.replaceAll(": [A-Za-z<>]+", "") + ") = ").length()
+        int at = ("let m (" + taking.replaceAll(PARAMETER_TYPE, "") + ") = ").length()
                 + body.indexOf(comparison) + comparison.indexOf("==") + 1;
         return left(taking, declarations, body, "4:" + at);
     }
@@ -2542,7 +2700,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String inputs = "x: Int, y: Int, z: Int, w: Bool" + THE_FIVE;
         String body = "if (z >= 1 || w) && " + FIVE_APART + " && (z >= 1 || w) then x == y"
                 + " else false";
-        int from = ("let m (" + inputs.replaceAll(": [A-Za-z<>]+", "") + ") = ").length() + 1;
+        int from = ("let m (" + inputs.replaceAll(PARAMETER_TYPE, "") + ") = ").length() + 1;
         Compilation compilation = measured(inputs, UNUSED, "Bool", body);
         assertEquals(Map.of("x", RELATES, "y", RELATES),
                 leftIn(compilation, "4:" + (from + body.indexOf("=="))));

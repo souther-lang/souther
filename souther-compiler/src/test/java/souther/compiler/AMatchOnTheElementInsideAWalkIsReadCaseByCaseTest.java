@@ -215,14 +215,13 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
     }
 
     /**
-     * A report with where each part stands left out: the two spellings differ in length. And what
-     * is said of the classes of the element left out: a count looks at no case, and a match whose
-     * arms answer alike still looks at each, so they are two programs about the deductions that
-     * give one count, and it is the count this holds the two to.
+     * A report with where each part stands left out, the two spellings differing in length, and
+     * with what is said of how the position is read left out: a {@code match} on the element
+     * reads which case it is, which a count does not, though every arm answers alike.
      */
     private static String withoutWhere(String report) {
         return report.replaceAll("\\d+:\\d+", "").lines()
-                .filter(line -> !line.contains("without telling them apart"))
+                .filter(line -> !line.contains("reads it without telling them apart"))
                 .collect(Collectors.joining("\n"));
     }
 

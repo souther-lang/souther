@@ -167,6 +167,7 @@ class AGapNamesEveryFigureItReachedTest {
                 case "NoValue" -> out.add(ReadingGap.NO_VALUE);
                 case "CouldNotWalk" -> out.add(ReadingGap.COULD_NOT_WALK);
                 case "CouldNotReadRow" -> out.add(ReadingGap.COULD_NOT_READ_ROW);
+                case "KeysNotTold" -> out.add(ReadingGap.KEYS_NOT_TOLD);
                 case "CouldNotWorkOut" -> {
                     for (UnheldNumber why : UnheldNumber.values()) {
                         out.add(ReadingGap.of(why));
