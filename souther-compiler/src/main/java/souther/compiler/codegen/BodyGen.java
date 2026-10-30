@@ -176,14 +176,6 @@ final class BodyGen {
          */
         private int carrying = 0;
 
-        /**
-         * The slots the two sides of the comparison just emitted were kept in, where it is one of
-         * whole numbers a coverage plan numbers, for the probe after it to hand over; null
-         * elsewhere. Set as the comparison is emitted and taken by the probe that follows it, with
-         * nothing emitted between the two.
-         */
-        private int[] sidesKept;
-
         BodyGen(CodegenContext ctx, CodeBuilder code, Hir.Data data, ClassDesc cdName, int firstSlot,
                 Places places) {
             this.places = places;
@@ -643,9 +635,7 @@ final class BodyGen {
          * <p>Absent is ordinary here, unlike an arm's: what has a site is every comparison of a
          * condition this plan instruments, and the emitter walks comparisons everywhere else too.
          */
-        private void comparisonProbe(Core.Binary bin) {
-            int[] sides = sidesKept;
-            sidesKept = null;
+        private void comparisonProbe(Core.Binary bin, int[] sides) {
             if (!probed(bin)) {
                 return;
             }
@@ -661,12 +651,14 @@ final class BodyGen {
         /**
          * The right side of a comparison of two whole numbers whose left side is on the stack,
          * pushed after it — each kept in a slot on the way where {@code keep} says the run is
-         * recorded, so that the probe after the comparison hands both over ({@link #sidesKept}).
+         * recorded, so that the probe after the comparison hands both over ({@link Compared}).
+         *
+         * @return the two slots, left then right; null where nothing was kept
          */
-        private void rightOfTwoWholeNumbers(Comparison comparison, boolean keep) {
+        private int[] rightOfTwoWholeNumbers(Comparison comparison, boolean keep) {
             if (!keep) {
                 operand(comparison, comparison.right());
-                return;
+                return null;
             }
             int left = slot(Type.INT);
             code.lstore(left);
@@ -675,7 +667,7 @@ final class BodyGen {
             code.lstore(right);
             code.lload(left);
             code.lload(right);
-            sidesKept = new int[] {left, right};
+            return new int[] {left, right};
         }
 
         /**
@@ -952,8 +944,8 @@ final class BodyGen {
                 case Core.Tuple t -> tuple(t);
                 case Core.TupleGet tg -> tupleGet(tg);
                 case Core.Binary bin -> {
-                    if (binary(bin) != null) {
-                        comparisonProbe(bin);
+                    if (binary(bin) instanceof Compared compared) {
+                        comparisonProbe(bin, compared.sides());
                     }
                 }
                 case Core.Construct nd -> construct(nd);
@@ -2068,10 +2060,10 @@ final class BodyGen {
          * type. What is wanted here is that an operator added to the language stops the compile
          * until this has decided what to emit for it, and only an expression asks javac for that.
          *
-         * <p>What comes back is what a probe records, so a caller has the recognition rather than
-         * the node and a lookup that answers for everything else.
+         * <p>What comes back is what the probe after a comparison records, so a caller has it
+         * from the emission rather than from the node and a lookup that answers for everything else.
          */
-        private Comparison binary(Core.Binary bin) {
+        private Compared binary(Core.Binary bin) {
             return switch (bin.op()) {
                 // Left to right, stopping as soon as the answer is settled. Not an optimisation:
                 // `/` aborts on a zero divisor and `Int` overflows, so a left operand is how the
@@ -2159,11 +2151,21 @@ final class BodyGen {
                     // that law stops holding for is said rather than emitted against.
                     Comparison comparison =
                             Comparison.of(bin).orElseThrow(() -> placedNothing(bin));
-                    emitComparison(comparison, probed(bin));
-                    yield comparison;
+                    yield new Compared(emitComparison(comparison, probed(bin)));
                 }
             };
         }
+
+        /**
+         * A comparison just emitted, and the slots its two sides were kept in for the probe after
+         * it — null where they were not kept: the sides are no pair of whole numbers a coverage plan
+         * numbers, or no run through the comparison is recorded.
+         *
+         * <p>Handed back from the emission and not left in a field for the probe to find. Left
+         * there, which comparison the slots were of was a matter of nothing being emitted between
+         * the two, and a comparison emitted with no probe after it left its slots for the next.
+         */
+        private record Compared(int[] sides) {}
 
         /** That an operator this arm names as one that compares placed nothing, which is the law
          *  above having stopped holding for it. */
@@ -2270,12 +2272,14 @@ final class BodyGen {
          * <p>Each operand is pushed as the pair is read ({@link #operand}), which says how far it
          * is opened. Where {@code recorded} says a run through it is recorded and the two are whole
          * numbers, what each came to is kept for the probe after it.
+         *
+         * @return the slots the two sides were kept in, left then right; null where none were
          */
-        private void emitComparison(Comparison comparison, boolean recorded) {
-            switch (comparison.claim()) {
+        private int[] emitComparison(Comparison comparison, boolean recorded) {
+            return switch (comparison.claim()) {
                 case ComparisonClaim.Cut cut -> ordered(comparison, cut, recorded);
                 case ComparisonClaim.Singled singled -> same(comparison, singled, recorded);
-            }
+            };
         }
 
         /**
@@ -2308,18 +2312,21 @@ final class BodyGen {
          * <p>The switch carries no {@code default}: reading the representation instead is what let
          * {@code StageN < StageN} fall past every ordering arm into an equality test, and an order
          * added to {@link Ordering} would fall the same way through an {@code instanceof} chain.
+         *
+         * @return the slots two whole numbers were kept in, left then right; null where none were
          */
-        private void ordered(Comparison comparison, ComparisonClaim.Cut cut, boolean recorded) {
+        private int[] ordered(Comparison comparison, ComparisonClaim.Cut cut, boolean recorded) {
             // Whether the two may be compared at all, and what orders them, was settled by
             // BinaryElaborator against the types as written; this lowers that order.
             Core.OrderingBasis basis = comparison.ordering().orElseThrow(
                     () -> new IllegalStateException("a comparison the checker admitted says what"
                             + " orders it: " + comparison.left().type() + " "
                             + cut.statedRelation() + " " + comparison.right().type()));
+            int[] kept = null;
             switch (Ordering.ofBasis(basis)) {
                 case Ordering.Longs _ -> {
                     operand(comparison, comparison.left());
-                    rightOfTwoWholeNumbers(comparison, recorded);
+                    kept = rightOfTwoWholeNumbers(comparison, recorded);
                     comparisonMaterialize(cut.statedRelation(), true);
                 }
                 case Ordering.Strings _ -> {
@@ -2367,6 +2374,7 @@ final class BodyGen {
                 case Ordering.Wrapped _ -> throw new IllegalStateException(
                         "an opened order is never a wrapped one: " + comparison.left().type());
             }
+            return kept;
         }
 
         /**
@@ -2375,23 +2383,26 @@ final class BodyGen {
          * <p>{@link ComparisonClaim.Singled#holdsAtTheValue} says which of the two classes the
          * comparison selects, so a comparison met where the value is not the one named is this test
          * inverted.
+         *
+         * @return the slots two whole numbers were kept in, left then right; null where none were
          */
-        private void same(Comparison comparison, ComparisonClaim.Singled singled,
-                          boolean recorded) {
+        private int[] same(Comparison comparison, ComparisonClaim.Singled singled,
+                           boolean recorded) {
             // Read at their exact values, the two are Rationals, equal by exact mathematical value,
             // which is what the runtime value's own equality is: one representation per value, so
             // `Values.equal` asking it is asking this.
             Type lt = operand(comparison, comparison.left());
             if (lt == Type.INT) {
-                rightOfTwoWholeNumbers(comparison, recorded);
-            } else {
-                operand(comparison, comparison.right());
+                int[] kept = rightOfTwoWholeNumbers(comparison, recorded);
+                comparisonMaterialize(singled.statedRelation(), true);
+                return kept;
             }
+            operand(comparison, comparison.right());
             if (lt == Type.STRING && !ctx.counting()) {
                 code.invokevirtual(CD_String, "equals",
                         MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
                 selecting(singled);
-                return;
+                return null;
             }
             if (isReference(lt)) {
                 // What sameness is, is the runtime's to say: a data compares by its fields, an
@@ -2401,9 +2412,10 @@ final class BodyGen {
                 // them is as long as they are and passes nothing.
                 emitValueEquals(ctx, code, lt == Type.DECIMAL);
                 selecting(singled);
-                return;
+                return null;
             }
-            comparisonMaterialize(singled.statedRelation(), lt == Type.INT);
+            comparisonMaterialize(singled.statedRelation(), false);
+            return null;
         }
 
         /** Turns a test of sameness into the class the comparison selects: the one it is met at is
