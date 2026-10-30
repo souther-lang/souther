@@ -50,6 +50,14 @@ final class ExactRounding {
         if (of.isZero()) {
             return BigInteger.ZERO;
         }
+        // Only where nobody counts the brackets, as for the order: a value the long route settles can
+        // be one the brackets refine, and a caller paying for each bracket pays for those.
+        if (widened == ExactOrder.NOBODY_ASKS) {
+            BigInteger inLongs = roundedInLongs(of, scale, towards);
+            if (inLongs != null) {
+                return inLongs;
+            }
+        }
         try {
             return rounded(of, scale, towards, widened);
         } catch (ArithmeticException e) {
@@ -89,6 +97,40 @@ final class ExactRounding {
         return ExactOrder.asWideAsItTakes(
                 width -> roundedFromBracketsAt(of, byTwiceTheTwos, byFives, towards, width),
                 () -> "round a value", widened);
+    }
+
+    /**
+     * {@link #roundedTimesTenTo}, worked out in longs where the value at that scale is a quotient of two
+     * numbers the long route holds, and null where it is not — which is no refusal: the rounding at any
+     * width answers it, or refuses where it has no answer.
+     *
+     * <p>One division: the quotient is the whole part, and where the value stands against half of the way
+     * to the next is where twice the remainder stands against the divisor, which a long holds because
+     * both are below two to the sixty-two.
+     */
+    static @Nullable BigInteger roundedInLongs(ExactParts of, int scale, RoundingMode towards) {
+        if (of.isZero() || !of.inLongs() || of.denominatorInALong() <= 0
+                || of.numeratorInALong() == Long.MIN_VALUE) {
+            return null;
+        }
+        long twos = of.twos() + (long) scale;
+        long fives = of.fives() + (long) scale;
+        if (((of.twos() ^ twos) & (scale ^ twos)) < 0 || ((of.fives() ^ fives) & (scale ^ fives)) < 0) {
+            return null;
+        }
+        long up = ExactArithmetic.raised(Math.abs(of.numeratorInALong()),
+                Math.max(twos, 0), Math.max(fives, 0));
+        long down = ExactArithmetic.raised(of.denominatorInALong(),
+                twos < 0 ? -twos : 0, fives < 0 ? -fives : 0);
+        if (up == 0 || down == 0) {
+            return null;
+        }
+        long whole = up / down;
+        long left = up % down;
+        if (left == 0) {
+            return signedLike(of, BigInteger.valueOf(whole));
+        }
+        return roundedFrom(of, BigInteger.valueOf(whole), Long.compare(2 * left, down), towards);
     }
 
     /**

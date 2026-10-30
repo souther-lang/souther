@@ -1,5 +1,6 @@
 package souther.exact;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.Map;
@@ -86,7 +87,8 @@ public final class ExactArithmetic {
             numerator = numerator.negate();
             denominator = denominator.negate();
         }
-        if (numerator.bitLength() < Long.SIZE - 1 && denominator.bitLength() < Long.SIZE - 1) {
+        if (numerator.bitLength() < Long.SIZE && denominator.bitLength() < Long.SIZE
+                && numerator.longValue() != Long.MIN_VALUE) {
             return canonical(numerator.longValue(), denominator.longValue(), twos, fives, null);
         }
         BigInteger common = commonFactor(numerator, denominator);
@@ -121,6 +123,26 @@ public final class ExactArithmetic {
     }
 
     /**
+     * The one canonical form of the value a written decimal is: its unscaled value times two and five
+     * to the negated scale, so the scale moves into the exponents and nothing is built.
+     *
+     * <p>A decimal of eighteen digits or fewer holds its unscaled value as a long, and is read as one
+     * rather than through {@link BigDecimal#unscaledValue}, which makes a {@code BigInteger} of it every
+     * time it is asked.
+     */
+    public static ExactParts canonical(BigDecimal written) {
+        long exponent = -(long) written.scale();
+        if (written.precision() <= MOST_DIGITS_A_LONG_HOLDS) {
+            long unscaled = written.scaleByPowerOfTen(written.scale()).longValueExact();
+            return canonical(new ExactParts(unscaled, 1, exponent, exponent));
+        }
+        return canonical(written.unscaledValue(), BigInteger.ONE, exponent, exponent);
+    }
+
+    /** The most decimal digits every one of which a long holds whatever they are. */
+    private static final int MOST_DIGITS_A_LONG_HOLDS = 18;
+
+    /**
      * The one canonical form of the value {@code parts} are, which is {@code parts} itself where they
      * are in it already — as the product and the quotient of two canonical values are, and as a
      * value handed back unchanged is — so that asking costs no new parts.
@@ -131,10 +153,11 @@ public final class ExactArithmetic {
         if (parts.isZero()) {
             return ExactParts.ZERO;
         }
-        if (inLongs(parts)) {
+        if (parts.inLongs() && parts.numeratorInALong() != Long.MIN_VALUE
+                && parts.denominatorInALong() != Long.MIN_VALUE) {
             long numerator = parts.numeratorInALong();
             long denominator = parts.denominatorInALong();
-            // Within the long route's sixty-three bits, so the negation of either is held.
+            // Neither is the least long, so the negation of either is held.
             return denominator < 0
                     ? canonical(-numerator, -denominator, parts.twos(), parts.fives(), null)
                     : canonical(numerator, denominator, parts.twos(), parts.fives(), parts);
@@ -190,14 +213,15 @@ public final class ExactArithmetic {
     }
 
     /**
-     * The same canonical form, of a numerator and a positive denominator a long holds with a bit to
-     * spare, worked out in longs.
+     * The same canonical form, of a numerator other than the least long and a positive denominator,
+     * worked out in longs.
      *
      * <p>Nearly every value the constraint algebra and a model's rationals make is this small, and
      * the steps are the ones above: the common factor off, then the twos where the bits stop, then
      * the fives one division each. In longs none of them allocates, where each division of a
-     * {@code BigInteger} answers a new one, and a remainder check answers two. The spare bit is what
-     * lets the magnitude of the numerator be taken without the least long, which has none.
+     * {@code BigInteger} answers a new one, and a remainder check answers two. The least long is left
+     * to the wide route because its magnitude is the one a long does not hold, and the numbers that
+     * bound an {@code Int} are the ones beside it, which this takes.
      *
      * @param handed the parts these four numbers came from, handed back where they are canonical
      *               already, or null
@@ -276,8 +300,8 @@ public final class ExactArithmetic {
         return out;
     }
 
-    /** Whether both whole numbers of {@code parts} take the long route: a long holds each with a
-     *  bit to spare, as it does for {@link #canonical(long, long, long, long, ExactParts)}. */
+    /** Whether both whole numbers of {@code parts} take the long route of a sum, a product or a
+     *  quotient: a long holds each with a bit to spare, which the working of those is formed in. */
     private static boolean inLongs(ExactParts parts) {
         return parts.inLongs() && bits(parts.numeratorInALong()) < Long.SIZE - 1
                 && bits(parts.denominatorInALong()) < Long.SIZE - 1;
@@ -317,7 +341,7 @@ public final class ExactArithmetic {
      * the distance still, and far past any that is built here. {@code whole} is not nought, so
      * nought says nothing but that this went wide.
      */
-    private static long raised(long whole, long twos, long fives) {
+    public static long raised(long whole, long twos, long fives) {
         if (Long.compareUnsigned(twos, Long.SIZE - 2) > 0
                 || Long.compareUnsigned(fives, FIVES.length - 1) > 0) {
             return 0;
@@ -510,8 +534,10 @@ public final class ExactArithmetic {
         if (of.isZero()) {
             throw new IllegalArgumentException("nought has no reciprocal");
         }
-        return new ExactParts(of.denominator(), of.numerator(),
-                ExactPowers.negated(of.twos()), ExactPowers.negated(of.fives()));
+        long twos = ExactPowers.negated(of.twos());
+        long fives = ExactPowers.negated(of.fives());
+        return of.inLongs() ? new ExactParts(of.denominatorInALong(), of.numeratorInALong(), twos, fives)
+                : new ExactParts(of.denominator(), of.numerator(), twos, fives);
     }
 
     /**
@@ -1077,8 +1103,52 @@ public final class ExactArithmetic {
         if (bySign != 0) {
             return bySign;
         }
-        int byMagnitude = ExactOrder.magnitudes(a, b, widened);
+        // Only where nobody counts the brackets: a pair this settles can be one the brackets refine,
+        // and a caller paying for each bracket pays for the work the order takes at any width.
+        int byMagnitude = widened == ExactOrder.NOBODY_ASKS ? magnitudesInLongs(a, b) : UNDECIDED;
+        if (byMagnitude == UNDECIDED) {
+            byMagnitude = ExactOrder.magnitudes(a, b, widened);
+        }
         return a.signum() > 0 ? byMagnitude : -byMagnitude;
+    }
+
+    /** What {@link #magnitudesInLongs} answers where the long route does not hold the pair. */
+    static final int UNDECIDED = 2;
+
+    /** The widest exponent whose difference from another is read as a long without checking. */
+    private static final long NEAR = 1L << 31;
+
+    /** Whether {@code exponent} is within {@link #NEAR} of nought — asked of its two ends and not of
+     *  its magnitude, which the least long has none of. */
+    private static boolean near(long exponent) {
+        return exponent >= -NEAR && exponent <= NEAR;
+    }
+
+    /**
+     * Where the magnitude of {@code a} stands against that of {@code b}, by cross-multiplying longs,
+     * or {@link #UNDECIDED} where the numbers do not fit them.
+     *
+     * <p>The order of {@code |n₁|·d₂·2^t₁·5^f₁} against {@code |n₂|·d₁·2^t₂·5^f₂}: dividing both by the
+     * lesser power of each prime leaves only the differences of the exponents, and where those are
+     * small and every product fits a long, that is a few multiplications and nothing made.
+     */
+    static int magnitudesInLongs(ExactParts a, ExactParts b) {
+        if (!inLongs(a) || !inLongs(b) || a.denominatorInALong() <= 0 || b.denominatorInALong() <= 0
+                || !near(a.twos()) || !near(b.twos()) || !near(a.fives()) || !near(b.fives())) {
+            return UNDECIDED;
+        }
+        long twosApart = a.twos() - b.twos();
+        long fivesApart = a.fives() - b.fives();
+        long mine = raised(Math.abs(a.numeratorInALong()), Math.max(twosApart, 0),
+                Math.max(fivesApart, 0));
+        long theirs = raised(Math.abs(b.numeratorInALong()), Math.max(-twosApart, 0),
+                Math.max(-fivesApart, 0));
+        if (mine == 0 || theirs == 0
+                || !multipliesInALong(mine, b.denominatorInALong())
+                || !multipliesInALong(theirs, a.denominatorInALong())) {
+            return UNDECIDED;
+        }
+        return Long.compare(mine * b.denominatorInALong(), theirs * a.denominatorInALong());
     }
 
     /**
@@ -1120,6 +1190,12 @@ public final class ExactArithmetic {
      */
     public static boolean canBeWritten(BigInteger whole, BigInteger twos, BigInteger fives) {
         return ExactPowers.writable(whole, twos, fives);
+    }
+
+    /** {@link #canBeWritten(BigInteger, BigInteger, BigInteger)} of the numerator of {@code parts},
+     *  with two exponents at or above nought that a long holds. */
+    public static boolean canBeWritten(ExactParts parts, long twos, long fives) {
+        return ExactPowers.writable(parts.numeratorMagnitudeBits(), twos, fives);
     }
 
     /** An exponent negated, which the least long is not. */

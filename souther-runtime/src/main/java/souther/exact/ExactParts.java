@@ -162,7 +162,7 @@ public final class ExactParts {
 
     @Override
     public String toString() {
-        return "ExactParts[numerator=" + numerator() + ", denominator=" + denominator()
+        return "ExactParts[numerator=" + numeratorSpelled() + ", denominator=" + denominatorSpelled()
                 + ", twos=" + twos + ", fives=" + fives + "]";
     }
 
@@ -173,6 +173,68 @@ public final class ExactParts {
     /** Whether the number below the line is one. */
     public boolean overOne() {
         return wideDenominator == null && denominator == 1;
+    }
+
+    /** {@link BigInteger#bitLength} of the number above the line, read off the long it is held as
+     *  where it is one. */
+    public long numeratorBits() {
+        return wideNumerator != null ? wideNumerator.bitLength() : bitLengthOf(numerator);
+    }
+
+    /** How many bits the magnitude of the number above the line takes, as the bit length of its
+     *  absolute value counts them. */
+    public long numeratorMagnitudeBits() {
+        return wideNumerator != null ? wideNumerator.abs().bitLength()
+                : Long.SIZE - Long.numberOfLeadingZeros(Math.abs(numerator));
+    }
+
+    /** {@link BigInteger#bitLength} of the number below the line. */
+    public long denominatorBits() {
+        return wideDenominator != null ? wideDenominator.bitLength() : bitLengthOf(denominator);
+    }
+
+    /** {@link BigInteger#bitLength} of a whole number a long holds: of its magnitude where it is not
+     *  below nought, and of the magnitude less one where it is. */
+    private static int bitLengthOf(long whole) {
+        return Long.SIZE - Long.numberOfLeadingZeros(whole < 0 ? ~whole : whole);
+    }
+
+    /** These parts with the sign turned, which canonical parts are again. */
+    public ExactParts negated() {
+        if (wideNumerator == null && numerator != Long.MIN_VALUE) {
+            return wideDenominator == null
+                    ? new ExactParts(-numerator, denominator, twos, fives)
+                    : new ExactParts(BigInteger.valueOf(-numerator), wideDenominator, twos, fives);
+        }
+        return new ExactParts(numerator().negate(), denominator(), twos, fives);
+    }
+
+    /** The same two whole numbers, with the exponents given. */
+    public ExactParts withExponents(long twos, long fives) {
+        return inLongs() ? new ExactParts(numerator, denominator, twos, fives)
+                : new ExactParts(numerator(), denominator(), twos, fives);
+    }
+
+    /** The number above the line over one, with the exponents given. */
+    public ExactParts numeratorOverOne(long twos, long fives) {
+        return wideNumerator == null ? new ExactParts(numerator, 1, twos, fives)
+                : new ExactParts(wideNumerator, BigInteger.ONE, twos, fives);
+    }
+
+    /** The number below the line over one, with the exponents given. */
+    public ExactParts denominatorOverOne(long twos, long fives) {
+        return wideDenominator == null ? new ExactParts(denominator, 1, twos, fives)
+                : new ExactParts(wideDenominator, BigInteger.ONE, twos, fives);
+    }
+
+    /** The number above the line in decimal digits, as {@link BigInteger#toString} writes it. */
+    public String numeratorSpelled() {
+        return wideNumerator != null ? wideNumerator.toString() : Long.toString(numerator);
+    }
+
+    /** The number below the line in decimal digits. */
+    public String denominatorSpelled() {
+        return wideDenominator != null ? wideDenominator.toString() : Long.toString(denominator);
     }
 
     public int signum() {

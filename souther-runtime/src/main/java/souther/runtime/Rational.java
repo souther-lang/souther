@@ -95,8 +95,7 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * has one of these, the negation of a thirty-two-bit scale being a sixty-four-bit exponent.
      */
     public static Rational of(BigDecimal written) {
-        long exponent = -(long) written.scale();
-        return new Rational(written.unscaledValue(), BigInteger.ONE, exponent, exponent);
+        return from(ExactArithmetic.canonical(written));
     }
 
     private ExactParts parts() {

@@ -138,8 +138,7 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      * digits as it has, and this holds the value it was given without spelling them.
      */
     public static ExactRatio of(BigDecimal at) {
-        long scale = at.scale();
-        return new ExactRatio(at.unscaledValue(), BigInteger.ONE, -scale, -scale);
+        return new ExactRatio(ExactArithmetic.canonical(at));
     }
 
     /**
@@ -215,8 +214,7 @@ public final class ExactRatio implements Comparable<ExactRatio> {
     /** The number above this ratio's line, as a ratio — so that a caller going on to compute with it
      *  is handed the factors rather than the digits. */
     ExactRatio numeratorAsRatio() {
-        return new ExactRatio(numeratorWithoutUnits(), BigInteger.ONE,
-                Math.max(twos(), 0), Math.max(fives(), 0));
+        return from(parts.numeratorOverOne(Math.max(twos(), 0), Math.max(fives(), 0)));
     }
 
     /**
@@ -234,7 +232,7 @@ public final class ExactRatio implements Comparable<ExactRatio> {
         ExactParts scaled;
         try {
             scaled = ExactArithmetic.times(
-                    parts, new ExactParts(other.denominatorWithoutUnits(), BigInteger.ONE, 0, 0));
+                    parts, other.parts.denominatorOverOne(0, 0));
         } catch (ExactFailure failure) {
             return ExactAnswer.unheld(UnheldNumber.of(failure));
         }
@@ -243,8 +241,8 @@ public final class ExactRatio implements Comparable<ExactRatio> {
         if (!fitsALong(scaledTwos) || !fitsALong(scaledFives)) {
             return ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS);
         }
-        return ExactAnswer.of(() -> from(new ExactParts(scaled.numerator(), scaled.denominator(),
-                scaledTwos.longValue(), scaledFives.longValue())));
+        return ExactAnswer.of(() -> from(
+                scaled.withExponents(scaledTwos.longValue(), scaledFives.longValue())));
     }
 
     /** How many of a prime the denominator carries for this exponent, as a whole number because the
@@ -266,18 +264,33 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      * to be held — whether it is whole, whether it is a decimal — can be answered where the quotient
      * itself has no representation.
      */
-    private record QuotientShape(BigInteger denominator, BigInteger twos, BigInteger fives) {}
+    private record QuotientShape(boolean overOne, BigInteger twos, BigInteger fives) {}
 
     private QuotientShape quotientShape(ExactRatio other) {
+        return new QuotientShape(quotientOverOne(other),
+                BigInteger.valueOf(twos()).subtract(BigInteger.valueOf(other.twos())),
+                BigInteger.valueOf(fives()).subtract(BigInteger.valueOf(other.fives())));
+    }
+
+    /**
+     * Whether the fraction this over {@code other} stands over is one: each fraction being in lowest
+     * terms, that is this one's denominator dividing the other's and the other's numerator dividing
+     * this one's — asked of the longs they are where a long holds every one of them.
+     */
+    private boolean quotientOverOne(ExactRatio other) {
+        if (parts.inLongs() && other.parts.inLongs()
+                && parts.numeratorInALong() != Long.MIN_VALUE
+                && other.parts.numeratorInALong() != Long.MIN_VALUE) {
+            return other.parts.denominatorInALong() % parts.denominatorInALong() == 0
+                    && parts.numeratorInALong() % other.parts.numeratorInALong() == 0;
+        }
         BigInteger acrossOne = ExactArithmetic.commonFactor(
                 numeratorWithoutUnits(), other.numeratorWithoutUnits());
         BigInteger acrossTwo = ExactArithmetic.commonFactor(
                 denominatorWithoutUnits(), other.denominatorWithoutUnits());
-        return new QuotientShape(
-                denominatorWithoutUnits().divide(acrossTwo)
-                        .multiply(other.numeratorWithoutUnits().abs().divide(acrossOne)),
-                BigInteger.valueOf(twos()).subtract(BigInteger.valueOf(other.twos())),
-                BigInteger.valueOf(fives()).subtract(BigInteger.valueOf(other.fives())));
+        return denominatorWithoutUnits().divide(acrossTwo)
+                .multiply(other.numeratorWithoutUnits().abs().divide(acrossOne))
+                .equals(BigInteger.ONE);
     }
 
     /**
@@ -294,8 +307,7 @@ public final class ExactRatio implements Comparable<ExactRatio> {
             return true;
         }
         QuotientShape shape = quotientShape(other);
-        return shape.denominator().equals(BigInteger.ONE)
-                && shape.twos().signum() >= 0 && shape.fives().signum() >= 0;
+        return shape.overOne() && shape.twos().signum() >= 0 && shape.fives().signum() >= 0;
     }
 
     /**
@@ -313,8 +325,7 @@ public final class ExactRatio implements Comparable<ExactRatio> {
         }
         QuotientShape shape = quotientShape(other);
         BigInteger leastScale = shape.twos().negate().max(shape.fives().negate());
-        return shape.denominator().equals(BigInteger.ONE)
-                && leastScale.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) <= 0;
+        return shape.overOne() && leastScale.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) <= 0;
     }
 
     /**
@@ -342,9 +353,8 @@ public final class ExactRatio implements Comparable<ExactRatio> {
         long perTwos = perOf(twos());
         long perFives = perOf(fives());
         return new Terms(
-                new ExactRatio(numeratorWithoutUnits(), BigInteger.ONE,
-                        twos() + perTwos, fives() + perFives),
-                new ExactRatio(denominatorWithoutUnits(), BigInteger.ONE, perTwos, perFives));
+                from(parts.numeratorOverOne(twos() + perTwos, fives() + perFives)),
+                from(parts.denominatorOverOne(perTwos, perFives)));
     }
 
     /** How much of one prime a value written per so much stands over: none for an exponent at or
@@ -536,88 +546,11 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      */
     @Override
     public int compareTo(ExactRatio other) {
-        int quickly = quickly(other);
-        return quickly != UNDECIDED ? quickly : ExactArithmetic.compare(parts, other.parts);
+        return ExactArithmetic.compare(parts, other.parts);
     }
-
-    /** What {@link #quickly} answers where it has not the room to: no order is this. */
-    private static final int UNDECIDED = 2;
 
     /** What {@link #times} answers where the product is more than a long holds. */
     private static final long TOO_LARGE = -1;
-
-    /** The most two is raised to, and five, in the products {@link #quickly} forms. */
-    private static final int MOST_TWOS = 62;
-    private static final int MOST_FIVES = 27;
-
-    private static final long[] POWERS_OF_FIVE = powersOfFive();
-
-    private static long[] powersOfFive() {
-        long[] out = new long[MOST_FIVES + 1];
-        out[0] = 1;
-        for (int at = 1; at < out.length; at++) {
-            out[at] = out[at - 1] * 5;
-        }
-        return out;
-    }
-
-    /** The widest exponent whose difference from another this reads as a long without checking. */
-    private static final long NEAR = 1L << 31;
-
-    /**
-     * Where this stands against {@code other} by cross-multiplying longs, or {@link #UNDECIDED}
-     * where the numbers do not fit them.
-     *
-     * <p>The order of two values is the order of {@code |n₁|·d₂·2^t₁·5^f₁} against
-     * {@code |n₂|·d₁·2^t₂·5^f₂} under their common sign, and dividing both by the smaller power of
-     * each prime leaves only the differences of the exponents. Where those are small and the integers
-     * and their products fit a long, that is a few multiplications and no allocation; the order that
-     * brackets values of any size ({@link ExactArithmetic#compare}) is for every other pair.
-     */
-    private int quickly(ExactRatio other) {
-        int sign = signum();
-        int bySign = Integer.compare(sign, other.signum());
-        if (bySign != 0) {
-            return bySign;
-        }
-        if (sign == 0) {
-            return 0;
-        }
-        long twos = twos();
-        long fives = fives();
-        long otherTwos = other.twos();
-        long otherFives = other.fives();
-        if (twos < -NEAR || twos > NEAR || otherTwos < -NEAR || otherTwos > NEAR
-                || fives < -NEAR || fives > NEAR || otherFives < -NEAR || otherFives > NEAR
-                || !parts.inLongs() || !other.parts.inLongs()
-                || parts.denominatorInALong() <= 0
-                || other.parts.denominatorInALong() <= 0
-                || bitsOf(parts.numeratorInALong()) > 62
-                || bitsOf(other.parts.numeratorInALong()) > 62
-                || bitsOf(parts.denominatorInALong()) > 62
-                || bitsOf(other.parts.denominatorInALong()) > 62) {
-            return UNDECIDED;
-        }
-        long twosApart = twos - otherTwos;
-        long fivesApart = fives - otherFives;
-        if (twosApart > MOST_TWOS || twosApart < -MOST_TWOS
-                || fivesApart > MOST_FIVES || fivesApart < -MOST_FIVES) {
-            return UNDECIDED;
-        }
-        long mine = times(times(Math.abs(parts.numeratorInALong()),
-                other.parts.denominatorInALong()),
-                times(1L << Math.max(twosApart, 0),
-                        POWERS_OF_FIVE[(int) Math.max(fivesApart, 0)]));
-        long theirs = times(times(Math.abs(other.parts.numeratorInALong()),
-                parts.denominatorInALong()),
-                times(1L << Math.max(-twosApart, 0),
-                        POWERS_OF_FIVE[(int) Math.max(-fivesApart, 0)]));
-        if (mine == TOO_LARGE || theirs == TOO_LARGE) {
-            return UNDECIDED;
-        }
-        int byMagnitude = Long.compare(mine, theirs);
-        return sign > 0 ? byMagnitude : -byMagnitude;
-    }
 
     /** How many bits the magnitude of {@code whole} takes, as {@link BigInteger#bitLength} counts
      *  them for any but the least long, which this counts as sixty-four. */
@@ -809,6 +742,11 @@ public final class ExactRatio implements Comparable<ExactRatio> {
         if (scale < Integer.MIN_VALUE || scale > Integer.MAX_VALUE) {
             return false;
         }
+        long twos = twos() + scale;
+        long fives = fives() + scale;
+        if (((twos() ^ twos) & (scale ^ twos)) >= 0 && ((fives() ^ fives) & (scale ^ fives)) >= 0) {
+            return twos >= 0 && fives >= 0 && ExactArithmetic.canBeWritten(parts, twos, fives);
+        }
         BigInteger byTwos = byTwosAt(scale);
         BigInteger byFives = byFivesAt(scale);
         if (byTwos.signum() < 0 || byFives.signum() < 0) {
@@ -867,9 +805,32 @@ public final class ExactRatio implements Comparable<ExactRatio> {
             return null;
         }
         long scale = scaleOfTheDecimal();
+        long digits = digitsInALong(scale);
+        if (digits != 0) {
+            return BigDecimal.valueOf(digits, (int) scale);
+        }
         return new BigDecimal(
                 ExactArithmetic.written(numeratorWithoutUnits(), byTwosAt(scale), byFivesAt(scale)),
                 (int) scale);
+    }
+
+    /**
+     * The numerator with two and five to its exponents moved by {@code scale} multiplied in, where a
+     * long holds it and both are at or above nought; nought where not, which this value is not, so
+     * nought says only that the digits are wider than a long.
+     */
+    private long digitsInALong(long scale) {
+        if (!parts.inLongs() || parts.numeratorInALong() == Long.MIN_VALUE) {
+            return 0;
+        }
+        long byTwos = twos() + scale;
+        long byFives = fives() + scale;
+        if (((twos() ^ byTwos) & (scale ^ byTwos)) < 0 || ((fives() ^ byFives) & (scale ^ byFives)) < 0
+                || byTwos < 0 || byFives < 0) {
+            return 0;
+        }
+        long magnitude = ExactArithmetic.raised(Math.abs(parts.numeratorInALong()), byTwos, byFives);
+        return parts.numeratorInALong() < 0 ? -magnitude : magnitude;
     }
 
     /**
@@ -890,7 +851,7 @@ public final class ExactRatio implements Comparable<ExactRatio> {
         if (isZero()) {
             return ZERO;
         }
-        return new ExactRatio(numeratorWithoutUnits().abs(), denominatorWithoutUnits(), 0, 0);
+        return from((signum() < 0 ? parts.negated() : parts).withExponents(0, 0));
     }
 
     /**
@@ -923,7 +884,7 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      * reason to spell a millionth out.
      */
     public String key() {
-        return numeratorWithoutUnits() + "/" + denominatorWithoutUnits() + ";" + twos() + ";" + fives();
+        return parts.numeratorSpelled() + "/" + parts.denominatorSpelled() + ";" + twos() + ";" + fives();
     }
 
     /**
@@ -1013,6 +974,10 @@ public final class ExactRatio implements Comparable<ExactRatio> {
         if (isZero()) {
             return "0";
         }
+        String inALong = spelledFromALong();
+        if (inALong != null) {
+            return inALong;
+        }
         // Held wider than a long: the exponents' difference can be past what one holds.
         BigInteger tens = BigInteger.valueOf(Math.min(twos(), fives()));
         BigInteger twosLeft = BigInteger.valueOf(twos()).subtract(tens);
@@ -1034,6 +999,47 @@ public final class ExactRatio implements Comparable<ExactRatio> {
             return inTens(ExactArithmetic.written(numeratorWithoutUnits(), twosLeft, fivesLeft), tens);
         }
         return inFactors(tens, twosLeft, fivesLeft);
+    }
+
+    /**
+     * {@link #spelled} of a finite decimal whose digits a long holds once ten is taken out of its two
+     * exponents — a count, an amount, a decimal of a few places — written from that long; and null for
+     * any other value, which is spelled from whole numbers of any width. A decimal of those digits at
+     * that scale is the one the wider route makes, so the spelling is the same.
+     */
+    private String spelledFromALong() {
+        if (!parts.inLongs() || parts.numeratorInALong() == Long.MIN_VALUE
+                || parts.denominatorInALong() <= 0) {
+            return null;
+        }
+        if (!parts.overOne()) {
+            // The quotient of two whole numbers, each with the powers on its side of the line in it,
+            // as asFraction writes it where both are short enough to spell.
+            if (twos() <= Integer.MIN_VALUE || fives() <= Integer.MIN_VALUE) {
+                return null;
+            }
+            long up = ExactArithmetic.raised(Math.abs(parts.numeratorInALong()),
+                    Math.max(twos(), 0), Math.max(fives(), 0));
+            long down = ExactArithmetic.raised(parts.denominatorInALong(),
+                    Math.max(-twos(), 0), Math.max(-fives(), 0));
+            if (up == 0 || down == 0) {
+                return null;
+            }
+            return (parts.numeratorInALong() < 0 ? "-" : "") + up + "/" + down;
+        }
+        long tens = Math.min(twos(), fives());
+        if (tens <= Integer.MIN_VALUE || tens > -(long) Integer.MIN_VALUE - 1
+                || Math.max(twos(), fives()) > (long) Integer.MAX_VALUE) {
+            return null;
+        }
+        long magnitude = ExactArithmetic.raised(Math.abs(parts.numeratorInALong()),
+                twos() - tens, fives() - tens);
+        if (magnitude == 0) {
+            return null;
+        }
+        long digits = parts.numeratorInALong() < 0 ? -magnitude : magnitude;
+        return ExactDecimals.spelledBounded(
+                ExactDecimals.leastDigits(BigDecimal.valueOf(digits, (int) -tens)));
     }
 
     /**
