@@ -360,6 +360,35 @@ final class OperationFactBinder {
             case OperationFact.BoundsItsResult bounded ->
                     new BoundOperationFact.BoundsItsResult(operation,
                             holdBound(declaration, bounded.bound()));
+            case OperationFact.BoundsEachElementOfItsResult bounded -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.LIST_OF_INTS,
+                        "a list of whole numbers each of which a bound holds of");
+                ResultBound<ArgumentRef> bound = bounded.bound();
+                yield new BoundOperationFact.BoundsEachElementOfItsResult(operation,
+                        new ResultBound<>(holdToTheDeclaration(declaration, bound.against(), null,
+                                TypeRequirement.EXACT,
+                                "the argument a bound on each element is held against"),
+                                bound.offset(), bound.rel(), new ResultBound.Provided.Always<>(),
+                                bound.origin()));
+            }
+            // A value found among the elements of a container, and a truth the closure answers.
+            case OperationFact.AnswersAnElementWhereTheClosureHolds found -> {
+                if (stdlib.intrinsicOf(theLibraryOperation(operation.operation())) == null) {
+                    throw new IllegalStateException(operation.operation() + " is written in the"
+                            + " language, and what it finds is its body's to say");
+                }
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.OPTIONAL,
+                        "an option of an element a closure holds of");
+                DeclaredArgument source = holdToTheDeclaration(declaration, found.source(),
+                        new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                        "what the value found is an element of");
+                DeclaredArgument closure = holdToTheDeclaration(declaration,
+                        new ArgumentRef.TheClosure(), new ArgumentRef.TheClosure(),
+                        TypeRequirement.CLOSURE, "what holds of the value found");
+                holdTheClosureToTheElementFound(declaration, source, closure);
+                yield new BoundOperationFact.AnswersAnElementWhereTheClosureHolds(operation, source,
+                        closure);
+            }
             case OperationFact.BuildsItsResultFrom builds ->
                     new BoundOperationFact.BuildsItsResultFrom(operation,
                             holdBuilding(declaration, builds));
@@ -1090,6 +1119,32 @@ final class OperationFactBinder {
                     + " of " + Type.show(option.stands()) + " and its closure is "
                     + Type.show(fn) + ", which is not a closure from what the one holds to what"
                     + " the other does");
+        }
+    }
+
+    /**
+     * Holds an operation said to find an element of {@code source} the closure holds of to its
+     * signature: the closure takes one element of the source and answers a truth, and the answer is
+     * an option of an element of the source.
+     */
+    private static void holdTheClosureToTheElementFound(CompleteSignature declaration,
+                                                        DeclaredArgument source,
+                                                        DeclaredArgument closure) {
+        String name = ((ValueName.Stdlib) declaration.declaring().operation()).qualified();
+        ClosurePositions handed = Combinators.positionsOf(declaration.declaring().operation());
+        if (handed == null || handed.containerArg() != source.position()) {
+            throw new IllegalStateException(name + " is said to find an element of argument "
+                    + (source.position() + 1) + ", and its signature hands no closure those");
+        }
+        Type held = Type.elementOf(source.stands());
+        if (!(declaration.params().get(closure.position()) instanceof Type.FnOf fn)
+                || fn.params().size() != 1 || !fn.params().getFirst().equals(held)
+                || !Type.BOOL.equals(fn.result())
+                || !(declaration.result() instanceof Type.OptionOf(Type found))
+                || !found.equals(held)) {
+            throw new IllegalStateException(name + " answers " + Type.show(declaration.result())
+                    + " of " + Type.show(source.stands()) + ", which is not an option of an element"
+                    + " a closure from the elements to a truth holds of");
         }
     }
 

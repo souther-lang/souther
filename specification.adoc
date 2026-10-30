@@ -1687,7 +1687,7 @@ This is bounded to a field *copied*. A field the closure computes from others �
 
 <<invariant-discharge-preservation>> says what carries across an operation from what it was built from. An operation also says something on its own: `+Int.clamp(0, 100, x)+` is between 0 and 100 whatever `+x+` is, and a construction standing over it owes nothing a guard would have to restate. What each operation guarantees is stated here, in the same way and for the same reason: an author predicts which constructions are judged safe by reading it.
 
-A guarantee takes one of four forms.
+A guarantee takes one of five forms.
 
 *A bound on the result.* It holds wherever the call is written, and is read into the clause as it stands.
 
@@ -1696,11 +1696,11 @@ A guarantee takes one of four forms.
 | the operation | what holds of its result
 
 | `+Int.abs+`, `+Decimal.abs+` | not negative
-| `+Int.floorMod(x, k)+` | not negative, and below `+k+` where `+k+` reads as a constant above zero; not positive, and above `+k+` where `+k+` reads as a constant below zero
+| `+Int.floorMod(x, k)+` | not negative, and below `+k+` where `+k+` is above zero; not positive, and above `+k+` where `+k+` is below zero
 | `+Decimal.toInt(mode, d)+`, `+Rational.toInt(mode, r)+` | within one of what it rounds, whichever mode it is handed
 |===
 
-Neither end is known without the divisor: `+Int.floorMod+` takes the sign of its divisor, so a divisor that could be negative puts the result the other side of zero — `+Int.floorMod(1, 0 - 3)+` is `+-2+`, between the divisor and nought — and one the check cannot read says nothing about either end. A name given a constant is that constant, so `+let k = 100+` and a written `+100+` are one divisor. A divisor that is above zero for some other reason — a parameter whose type says so — is not read here: what an operation guarantees holds wherever it is called, and that one holds where the caller happens to have such a value.
+Neither end is known without the divisor: `+Int.floorMod+` takes the sign of its divisor, so a divisor that could be negative puts the result the other side of zero — `+Int.floorMod(1, 0 - 3)+` is `+-2+`, between the divisor and nought — and one the check cannot read says nothing about either end. A name given a constant is that constant, so `+let k = 100+` and a written `+100+` are one divisor. A divisor is above zero wherever what is known where the clause is read says so: a guard (`+if n > 0 then Idx(Int.floorMod(a, n))+`), a value the path pins (`+n == 7+`), or a parameter whose type says so. The guarantee is the operation's and holds wherever the call is written, but whether its condition holds is the path's, so it is taken in at the construction and not where the remainder is named — `+let r = Int.floorMod(a, n)+` followed by `+if n > 0 then Idx(r) else Idx(0)+` is read the same as the call written inside the guard. Taken in on the paths where the divisor is above zero and on no other, so a divisor nothing puts on either side of zero still says nothing about either end.
 
 *One of the values it was given.* What such an operation answers depends on what it was given, so it is stated as the cases its definition is written in, and a clause holds of the result when it holds in every case.
 
@@ -1745,6 +1745,32 @@ Over the cases that are reached, the clause is established where every one of th
 `+Date.addMonths+` and `+Date.addYears+` state nothing: months and years hold different numbers of days, so neither moves a date by a count `+Date.daysBetween+` can name.
 
 *A value it was already given.* `+Decimal.fromInt(n)+` answers the number `+n+` is, so a clause about the call and a guard about `+n+` are about one value rather than two.
+
+*What it hands its closure, or answers of its elements.* An operation that applies a closure says something of the values it hands it, and one that answers a list or an option says something of the values in it. A construction from such a value is read under that.
+
+[cols="2,3"]
+|===
+| the operation | what holds
+
+| `+List.mapIndexed(f, xs)+` | the index `+f+` is handed is at or above zero and below `+List.length(xs)+`
+| `+List.rangeInclusive(from, to)+` | every element is at or above `+from+` and at or below `+to+`
+| `+List.filter(p, xs)+` | every element answered meets `+p+`
+| `+List.find(p, xs)+` | the value found, where there is one, meets `+p+`
+|===
+
+[,souther]
+----
+data Idx = Int
+    invariant value >= 0
+
+behavior positions : (xs: List<Int>) -> List<Idx>
+let positions (xs) = List.mapIndexed((i, x) -> Idx(i), xs) // discharged: an index is not negative
+
+behavior kept : (xs: List<Int>) -> List<Idx>
+let kept (xs) = List.map(x -> Idx(x), List.filter(x -> x >= 0, xs)) // discharged: every element kept is not negative
+----
+
+What a construction over an answer keeps is what it keeps of the elements: `+List.take+`, `+List.drop+`, `+List.reverse+` and `+List.sort+` hand on what held of the elements they were given, and `+List.map+` does not, since its elements are new ones. The answer may be named first. For `+List.find+` the guarantee is about the value of the `+Some+` arm and nothing is assumed in the `+None+` arm. That some element meets `+p+` is what makes the answer a `+Some+`, and it names no element.
 
 An operation not named here guarantees nothing that can be relied on, and a clause over what it answered is left to the run-time check. What is known of the arguments at one call is a different question: it is what the path establishes, and it is read where the clause is.
 

@@ -5,6 +5,7 @@ import souther.compiler.check.DischargeRules.Carrying;
 import souther.compiler.check.DischargeRules.Projection;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.check.DischargeRules.Source;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
@@ -16,6 +17,7 @@ import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -49,12 +51,13 @@ final class Predicates {
 
     /** The relations known of every element of {@code container}: those stated of it as written, and
      * those stated of a container it was built from that travel every construction in between. */
-    List<Quantified> elementRelations(Core container, Known k, Denotations at) {
-        List<Quantified> found = new ArrayList<>();
+    List<ElementRelation> elementRelations(Core container, Known k, Denotations at) {
+        List<ElementRelation> found = new ArrayList<>();
         Set<ElementShape> crossed = EnumSet.noneOf(ElementShape.class);
         Core source = container;
+        Denotations here = at;
         while (true) {
-            FactSubject key = terms.subjectOf(source, at);
+            FactSubject key = terms.subjectOf(source, here);
             if (key != null) {
                 for (Quantified q : k.quantified()) {
                     if (key.equals(q.container()) && q.through().containsAll(crossed)) {
@@ -63,7 +66,25 @@ final class Predicates {
                 }
             }
             if (!(Core.withoutStanding(source) instanceof Core.PreservedCall call)) {
-                return found;
+                // A name stands for the call it was given, read where that call was written.
+                Terms.Given given = terms.originating(source, here, new HashSet<>());
+                if (given == null || !(Core.withoutStanding(given.value())
+                        instanceof Core.PreservedCall)) {
+                    return found;
+                }
+                source = given.value();
+                here = given.at();
+                continue;
+            }
+            // What an operation guarantees of the elements it answers holds of every element it
+            // answers, and of every element of a construction over it that keeps the elements it
+            // was given. A construction that makes new ones says nothing of them.
+            if (EnumSet.of(ElementShape.PERMUTES, ElementShape.SUBSET).containsAll(crossed)) {
+                Core.Block kept = DischargeRules.keptWhereItHolds(call, here);
+                if (kept != null && key != null) {
+                    found.add(new Quantified(key, Set.copyOf(crossed), kept));
+                }
+                found.addAll(DischargeRules.boundsOnEachElement(call));
             }
             Source built = DischargeRules.builtFrom(call);
             if (built == null) {
@@ -72,6 +93,28 @@ final class Predicates {
             crossed.add(built.shape());
             source = built.container();
         }
+    }
+
+    /** What {@code relation} says of the value at {@code element}, taken into {@code k}. */
+    Known instantiate(ElementRelation relation, Core element, Known k, Denotations at) {
+        return switch (relation) {
+            case Quantified q -> instantiate(q, element, k, at);
+            case ElementBound bound -> instantiate(bound, element, k, at);
+        };
+    }
+
+    /** {@code k} also holding that the value at {@code element} stands where {@code bound} puts
+     * it. As a quantifier's predicate is, it is taken as the path's: it is stated of an element a
+     * closure is handed, and says nothing the values alone decide. */
+    private Known instantiate(ElementBound bound, Core element, Known k, Denotations at) {
+        LinearForm<FactSubject> against = Terms.add(terms.affineOf(element, at),
+                terms.affineOf(bound.against(), at), true);
+        if (against != null && against.minus(LinearForm.constant(ExactRatio.of(bound.offset())))
+                instanceof ExactAnswer.Held<LinearForm<FactSubject>> stands) {
+            return k.taking(stands.value(), bound.rel(), Known.Held.ON_THE_PATH,
+                    terms.spacesOf(stands.value()));
+        }
+        return k;
     }
 
     /** What {@code q} says of the value at {@code element}, taken into {@code k}. The predicate is
@@ -89,6 +132,29 @@ final class Predicates {
         // weaker of the two readings: a violation it decides is reported as one the values alone did
         // not decide, which holds either way. It is why nothing downstream says a guard decided it.
         return assume(assumed(stated, at, false), k, Known.Held.ON_THE_PATH).and(nested);
+    }
+
+    /**
+     * {@code k} also holding that {@code position} is a place in {@code container}: at or above
+     * nought and below how many it holds.
+     *
+     * <p>Of the value and not of the path, as a size's own bound is: the position is the one an
+     * operation hands its closure for an element of the container, whatever was settled before.
+     */
+    Known placeIn(Core.Read position, Core container, Known k, Denotations at) {
+        LinearForm<FactSubject> place = terms.affineOf(position, at);
+        if (place == null) {
+            return k;
+        }
+        Known out = k.taking(place, Rel.GE, Known.Held.OF_THE_VALUE, terms.spacesOf(place));
+        ValueName counting = NumericMeasures.takenOf(container.type(), terms.newtypeInners());
+        FactSubject size = counting == null ? null : terms.sizeAtomFor(counting, container, at);
+        if (size != null && place.minus(LinearForm.atom(size))
+                instanceof ExactAnswer.Held<LinearForm<FactSubject>> below) {
+            out = out.taking(below.value(), Rel.LT, Known.Held.OF_THE_VALUE,
+                    terms.spacesOf(below.value()));
+        }
+        return out;
     }
 
     /** What {@code raw}, asserted with polarity {@code positive}, says of every element of a

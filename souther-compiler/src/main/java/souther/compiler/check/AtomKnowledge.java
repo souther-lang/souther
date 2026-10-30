@@ -46,24 +46,33 @@ import java.util.Set;
  *                    not ranges, because a relation is the same statement in every domain and what
  *                    it comes to is the domain's answer — and because half of these relate this
  *                    value to another one rather than bounding it
+ * @param conditional what holds of the value where another relation does. The statement is the
+ *                    value's and the same in every domain; whether its condition holds is the
+ *                    domain's, so it is taken in by a reading that has the condition and by no other
  */
-record AtomKnowledge(Computation computation, List<NumericConstraint> intrinsic) {
+record AtomKnowledge(Computation computation, List<NumericConstraint> intrinsic,
+                     List<ConditionalConstraint> conditional) {
 
     AtomKnowledge {
         intrinsic = List.copyOf(intrinsic);
+        conditional = List.copyOf(conditional);
     }
 
     /** An atom nothing has been recorded about yet. */
     static AtomKnowledge nothing() {
-        return new AtomKnowledge(Computation.None.INSTANCE, List.of());
+        return new AtomKnowledge(Computation.None.INSTANCE, List.of(), List.of());
     }
 
     AtomKnowledge computedBy(Computation how) {
-        return new AtomKnowledge(how, intrinsic);
+        return new AtomKnowledge(how, intrinsic, conditional);
     }
 
     AtomKnowledge carrying(List<NumericConstraint> facts) {
-        return new AtomKnowledge(computation, facts);
+        return new AtomKnowledge(computation, facts, conditional);
+    }
+
+    AtomKnowledge carryingWhere(List<ConditionalConstraint> facts) {
+        return new AtomKnowledge(computation, intrinsic, facts);
     }
 
     /**
@@ -84,6 +93,11 @@ record AtomKnowledge(Computation computation, List<NumericConstraint> intrinsic)
             out.addAll(form.coefs().keySet());
         }
         for (NumericConstraint fact : intrinsic) {
+            out.addAll(fact.atoms());
+        }
+        // The values a guarantee waits on are read too, since the reading that has them is the one
+        // that can say whether it holds.
+        for (ConditionalConstraint fact : conditional) {
             out.addAll(fact.atoms());
         }
         out.remove(self);

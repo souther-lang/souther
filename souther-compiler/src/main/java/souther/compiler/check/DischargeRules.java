@@ -9,6 +9,7 @@ import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.NumericResult;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.BinOp;
@@ -311,6 +312,23 @@ final class DischargeRules {
     }
 
     /**
+     * The rows {@link #boundsOn} leaves out: the operation's bounds whose condition on the arguments
+     * this call does not meet as constants. A reading that settles the condition some other way —
+     * by what a guard established of the argument — is the one to take them in.
+     */
+    static List<ResultBound<DeclaredArgument>> boundsHeldBack(
+            Core.PreservedCall call, Function<Core, BigDecimal> constant) {
+        ConstantArguments<DeclaredArgument> constants = CallArguments.readAs(call, constant);
+        List<ResultBound<DeclaredArgument>> held = new ArrayList<>();
+        for (ResultBound<DeclaredArgument> row : facts().boundsOnTheResult(call.operation())) {
+            if (!constants.satisfy(row.provided())) {
+                held.add(row);
+            }
+        }
+        return held;
+    }
+
+    /**
      * The same, for a reader holding the operation and not a call to it: the rows whose condition is
      * met by what {@code constants} can say about the arguments.
      *
@@ -405,6 +423,50 @@ final class DischargeRules {
     static Carrying carried(Core.PreservedCall call) {
         BoundOperationFact.ReadsItsContainer carried = facts().readsItsContainer(call.operation());
         return carried == null ? null : new Carrying(call, carried.container(), carried.through());
+    }
+
+    /**
+     * The predicate the value {@code call} answers meets where it answers one, or null where the
+     * operation says nothing of the value it finds — or where what stands in the closure argument is
+     * not a one-parameter block this can read.
+     */
+    static Core.Block foundWhereItHolds(Core.PreservedCall call, Denotations at) {
+        BoundOperationFacts.Found found = facts().answersAnElementWhereTheClosureHolds(
+                call.operation());
+        if (found == null) {
+            return null;
+        }
+        Core.Block predicate = Terms.blockOf(CallArguments.of(found.closure(), call), at);
+        return predicate == null || predicate.params().size() != 1 ? null : predicate;
+    }
+
+    /** Where every element {@code call} answers stands, as the operation keeps them. */
+    static List<ElementBound> boundsOnEachElement(Core.PreservedCall call) {
+        List<ElementBound> out = new ArrayList<>();
+        for (ResultBound<DeclaredArgument> row
+                : facts().boundsOnEachElementOfTheResult(call.operation())) {
+            out.add(new ElementBound(CallArguments.of(row.against(), call), row.offset(),
+                    row.rel()));
+        }
+        return out;
+    }
+
+    /**
+     * The predicate every element {@code call} answers meets, or null where the operation does not
+     * answer the elements of a container where a closure holds of them — or where what stands in
+     * the closure argument is not a one-parameter block this can read.
+     *
+     * <p>Read off the piece the operation assembles, which the library proves of its body, so an
+     * operation that keeps elements by a predicate states it here by being declared to and by no
+     * name this spells.
+     */
+    static Core.Block keptWhereItHolds(Core.PreservedCall call, Denotations at) {
+        BoundOperationFacts.Assembled assembled = facts().assembles(call.operation());
+        if (assembled == null || assembled.piece() != PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS) {
+            return null;
+        }
+        Core.Block predicate = Terms.blockOf(CallArguments.of(assembled.closure(), call), at);
+        return predicate == null || predicate.params().size() != 1 ? null : predicate;
     }
 
     /** The projection {@code call}'s predicate is stated over, or null where it is stated over the

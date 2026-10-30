@@ -287,7 +287,35 @@ final class PathEngine {
                 assuming(answeredBy(scrutinee, in.at()), answered(arm, scrutinee),
                         guard -> impliedBy(guard, arm.pattern()), in));
         Known lawful = whatItsLawSaysOfTheArm(arm, scrutinee, taken.known(), at);
-        return new Entered(takingItsCases(arm, scrutinee, lawful, at), taken.at());
+        Known found = whatItFoundMeets(arm, scrutinee, lawful, at, taken.at());
+        return new Entered(takingItsCases(arm, scrutinee, found, at), taken.at());
+    }
+
+    /**
+     * {@code k} with what the operation that answered the optional {@code scrutinee} guarantees of
+     * the value it holds, where {@code arm} is taken because it holds one: {@code List.find(p, xs)}
+     * is {@code Some(x)} only for an {@code x} with {@code p(x)}.
+     *
+     * <p>Of the value the arm binds and of no other. That some element of the container meets the
+     * predicate is the law of whether the answer holds one, which {@link #whatItsLawSaysOfTheArm}
+     * reads, and it names no element; the predicate holds of the one found. The predicate is read
+     * where the call was written, as the law's arguments are, and the value is the one the arm binds
+     * where it is entered ({@code inside}).
+     */
+    private Known whatItFoundMeets(Core.Case arm, Core scrutinee, Known k, Denotations at,
+                                   Denotations inside) {
+        if (arm.binder() == null || !Boolean.TRUE.equals(LawAtACall.presentWhereTaken(arm))) {
+            return k;
+        }
+        Terms.Given called = terms.originating(scrutinee, at, new HashSet<>());
+        Core.Block predicate = called == null
+                || !(Core.withoutStanding(called.value()) instanceof Core.PreservedCall call)
+                ? null : DischargeRules.foundWhereItHolds(call, called.at());
+        if (predicate == null) {
+            return k;
+        }
+        Core.Read found = Terms.read(arm.binder(), arm.bindType(), arm.pos());
+        return predicates.instantiate(new Quantified(null, Set.of(), predicate), found, k, inside);
     }
 
     /**

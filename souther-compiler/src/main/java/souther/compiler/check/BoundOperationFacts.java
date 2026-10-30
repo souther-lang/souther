@@ -92,6 +92,7 @@ public final class BoundOperationFacts {
             new LinkedHashMap<>();
     private final Map<ValueName, List<ResultBound<DeclaredArgument>>> bounds;
     private final Map<ValueName, List<ResultBound<DeclaredArgument>>> linesOfTheOperation;
+    private final Map<ValueName, List<ResultBound<DeclaredArgument>>> eachElementBounds;
     private final Map<ValueName, List<DeclaredArgument>> noSmallerThan;
     private final Map<ValueName, List<DefinitionCase<DeclaredArgument>>> cases;
     private final Map<BinOp, List<ValueName>> writtenAs;
@@ -156,6 +157,8 @@ public final class BoundOperationFacts {
         bounds = projected(BoundOperationFact.BoundsItsResult.class,
                 BoundOperationFact.BoundsItsResult::bound);
         linesOfTheOperation = ofTheOperation(bounds);
+        eachElementBounds = projected(BoundOperationFact.BoundsEachElementOfItsResult.class,
+                BoundOperationFact.BoundsEachElementOfItsResult::bound);
         cases =projected(BoundOperationFact.IsDefinedByCases.class,
                 BoundOperationFact.IsDefinedByCases::one);
     }
@@ -396,6 +399,32 @@ public final class BoundOperationFacts {
     public List<ResultBound<DeclaredArgument>> everyBoundOnTheResult(ValueName operation) {
         return operation == null ? List.of() : bounds.getOrDefault(operation, List.of());
     }
+
+    /** What holds of every number in the list {@code operation} answers, wherever it is called, in
+     *  the order declared. */
+    public List<ResultBound<DeclaredArgument>> boundsOnEachElementOfTheResult(ValueName operation) {
+        return operation == null ? List.of() : eachElementBounds.getOrDefault(operation, List.of());
+    }
+
+    /** The operations something holds of each element of the result of. */
+    public Set<ValueName> boundsOnEachElementOfTheResult() {
+        return eachElementBounds.keySet();
+    }
+
+    /**
+     * The container {@code operation} finds an element of and the closure that element is found
+     * by, where what it answers holds, if it holds a value, an element of that container the closure
+     * answers true on — or null where it says no such thing
+     * ({@link BoundOperationFact.AnswersAnElementWhereTheClosureHolds}).
+     */
+    public Found answersAnElementWhereTheClosureHolds(ValueName operation) {
+        BoundOperationFact.AnswersAnElementWhereTheClosureHolds held =
+                one(BoundOperationFact.AnswersAnElementWhereTheClosureHolds.class, operation);
+        return held == null ? null : new Found(held.source(), held.closure());
+    }
+
+    /** The container an element is found among, and the closure it is found by. */
+    public record Found(DeclaredArgument source, DeclaredArgument closure) {}
 
     /** The operations something holds of the result of. */
     public Set<ValueName> boundsOnTheResult() {

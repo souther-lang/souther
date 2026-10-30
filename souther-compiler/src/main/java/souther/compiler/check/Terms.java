@@ -272,6 +272,22 @@ final class Terms {
     }
 
     /**
+     * Records that {@code atom} carries {@code facts} where the conditions beside them hold, whatever
+     * reached it. Answered once whoever named it, for the reason {@link #carrying} gives.
+     */
+    void carryingWhere(FactSubject atom, List<ConditionalConstraint> facts) {
+        AtomKnowledge had = knowledgeOf(atom);
+        if (facts.isEmpty()) {
+            return;
+        }
+        if (!had.conditional().isEmpty() && !sameConditionals(had.conditional(), facts)) {
+            throw new OneTermTwoIntrinsicAnswers("atom `" + atom.rendered() + "` carries "
+                    + had.conditional() + " and carries " + facts);
+        }
+        knowledge.put(atom, had.carryingWhere(facts));
+    }
+
+    /**
      * Every atom {@code form} reaches: the ones it names, and the ones a recipe filed against those
      * is read from, however deep.
      *
@@ -1176,6 +1192,7 @@ final class Terms {
             // it was written on — the same normalisation the recipe is read through.
             if (asOperator(e) instanceof Core.PreservedCall call) {
                 carrying(atom, IntrinsicNumericFacts.ofCall(call, atom, at, this));
+                carryingWhere(atom, IntrinsicNumericFacts.whereTheArgumentsAre(call, atom, at, this));
             }
         }
         return atom;
@@ -2003,6 +2020,20 @@ final class Terms {
      * numbers and not on the records' own equality, for the reason a recipe is: {@code 0.10} and
      * {@code 0.1} are one number, and two readings differing in nothing but a scale are not this
      * check disagreeing with itself. */
+    private static boolean sameConditionals(List<ConditionalConstraint> a,
+                                            List<ConditionalConstraint> b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        for (int i = 0; i < a.size(); i++) {
+            if (!sameFacts(List.of(a.get(i).premise(), a.get(i).consequence()),
+                    List.of(b.get(i).premise(), b.get(i).consequence()))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static boolean sameFacts(List<NumericConstraint> a, List<NumericConstraint> b) {
         if (a.size() != b.size()) {
             return false;

@@ -15,6 +15,7 @@ import souther.compiler.numeric.Rel;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -355,16 +356,35 @@ final class DerivedNumericFacts {
      *
      * <p>Not an inference and not a round. What is taken in holds of the values whatever any of it
      * comes to, so nothing here is read back to reach anything else — the closure is over what the
-     * naming recorded, and it is walked once.
+     * naming recorded, and it is walked once. What a value carries only where a condition holds is
+     * taken in after those, for each condition this reading holds ({@link ConditionalConstraint}).
      */
     static ReadingDomain readingOf(NumericDomain<FactSubject> base, Terms terms,
                                    Set<FactSubject> asked) {
         Set<FactSubject> from = new LinkedHashSet<>(asked);
         from.addAll(base.atomsSpokenOf());
         NumericDomain<FactSubject> out = base;
+        List<ConditionalConstraint> waiting = new ArrayList<>();
         for (FactSubject atom : terms.reachedFrom(from)) {
             for (NumericConstraint fact : terms.knowledgeOf(atom).intrinsic()) {
                 out = out.assume(fact.form(), fact.rel(), terms.spacesOf(fact.form()));
+            }
+            waiting.addAll(terms.knowledgeOf(atom).conditional());
+        }
+        // What holds where a condition does is taken in where this reading holds the condition.
+        // Until nothing more is taken in, because one consequence can settle another's condition:
+        // the remainder a remainder is taken of. Each is taken in once, so this ends.
+        boolean taken = true;
+        while (taken && !waiting.isEmpty()) {
+            taken = false;
+            for (Iterator<ConditionalConstraint> each = waiting.iterator(); each.hasNext();) {
+                ConditionalConstraint one = each.next();
+                if (out.entails(one.premise().form(), one.premise().rel())) {
+                    out = out.assume(one.consequence().form(), one.consequence().rel(),
+                            terms.spacesOf(one.consequence().form()));
+                    each.remove();
+                    taken = true;
+                }
             }
         }
         return new ReadingDomain(out);

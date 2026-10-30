@@ -7,6 +7,7 @@ import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -206,6 +207,10 @@ public final class OperationFacts {
             // a half — is not a bound on the result: it is read from the mode where a comparison
             // of the result is, and only where the mode is one case there (`roundsToAWholeNumber`
             // below).
+            // And of each element a list answers, where the list is the numbers between two:
+            // `rangeInclusive` holds none below its first argument or above its second.
+            about("List", "rangeInclusive", eachElementBounded(Rel.GE, at(0))),
+            about("List", "rangeInclusive", eachElementBounded(Rel.LE, at(1))),
             about("Int", "abs", bounded(Rel.GE, 0)),
             about("Decimal", "abs", bounded(Rel.GE, 0)),
             about("Int", "floorMod", bounded(Rel.GE, 0, aboveZero(at(1)))),
@@ -426,6 +431,10 @@ public final class OperationFacts {
                     some(CONTAINER, answers(false)).denied()),
                     iff(isTrue(the(CARRIED)), some(WALKED, answers(false)).denied()))),
             about("List", "find", law(AnswerAspect.PRESENCE, some(CONTAINER, answers(true)))),
+            // And what it finds, which the law of its presence does not say: the value is an
+            // element the closure holds of.
+            about("List", "find",
+                    new OperationFact.AnswersAnElementWhereTheClosureHolds(CONTAINER)),
             // And how many a filter keeps: as many elements as its closure holds of. A set's or a
             // map's filter puts each kept one in, and one put in is one more only where it was
             // not there: no element of a set is walked twice, and no key of a map, so what was
@@ -1464,6 +1473,12 @@ public final class OperationFacts {
                                          ResultBound.Provided<ArgumentRef> provided) {
         return new OperationFact.BoundsItsResult(
                 new ResultBound<>(against, java.math.BigDecimal.valueOf(offset), rel, provided));
+    }
+
+    /** Each element of the result stands against {@code against} as {@code rel} says. */
+    private static OperationFact eachElementBounded(Rel rel, ArgumentRef against) {
+        return new OperationFact.BoundsEachElementOfItsResult(
+                new ResultBound<>(against, BigDecimal.ZERO, rel, always()));
     }
 
     /** The result stops at the limit the language keeps, on the side {@code rel} says. */
