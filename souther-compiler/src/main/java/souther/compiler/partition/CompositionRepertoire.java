@@ -210,11 +210,12 @@ public enum CompositionRepertoire {
      * The trees written for how long the line is that a search down them finds: from the root to
      * the first node, in the order the search goes down, that holds the value it is for.
      *
-     * <p>Such a tree has the value of the node it stops at set to the value the search is for and
-     * the values of the nodes above it set to others, and a tree is written for how many nodes it
-     * holds with no value it holds placed against another input's. A line no tree makes is not
-     * said by this: what would reach it is a way of writing the nodes, and raising no figure
-     * does.
+     * <p>Written as a chain: each node the only element below the one above it, the last holding
+     * the value the search is for at one field and the nodes above it holding another value there,
+     * as many nodes as the line asked for. A line past those is not written — a value held at a
+     * field of a field of the node, nodes below a node that are not a list, a value searched for
+     * that stands at no one value — and none of it is a line no tree makes: what would reach it
+     * is a way of writing the nodes, and raising no figure does.
      */
     TREES_WRITTEN_FOR_A_LINE,
 

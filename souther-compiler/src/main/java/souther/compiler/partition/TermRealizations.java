@@ -46,6 +46,7 @@ import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeReachName;
 import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
@@ -353,6 +354,11 @@ final class TermRealizations {
         if (numbers.stream()
                 .anyMatch(each -> each.term() instanceof NumericTerm.OccurrencesOfAKey)) {
             return amongEveryOccurrenceEqualToAKey(targets, numbers);
+        }
+        if (targets.size() == 1 && numbers.getFirst().term() instanceof NumericTerm.TakenOver over
+                && over.source() instanceof RunSource.SearchedLine) {
+            return new JointRealization.Supported(
+                    new JointBuilder.ALineToTheValue(numbers.getFirst()));
         }
         if (targets.size() == 1) {
             return new JointRealization.Supported(
@@ -873,6 +879,27 @@ final class TermRealizations {
                                     RuleReadingContext reading, DemandsInside inside) {
                 return satisfying(sourceType, keptApart, measuring.ordersOf(number.term()),
                         demands.get(number), within, reading, inside);
+            }
+        }
+
+        /**
+         * A tree whose search finds a line of the length asked, to the node holding the value the
+         * row stands at for the search.
+         *
+         * <p>Apart from {@link OneNumberOnItsOwn} because the tree is written against another
+         * parameter's value: the nodes above the one the search stops at are written holding
+         * another value than it, and the node it stops at holds it.
+         */
+        record ALineToTheValue(RealizationTarget.OfANumber number) implements JointBuilder {
+
+            @Override
+            public Realization from(Type sourceType, List<List<String>> keptApart,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                return aLineToTheValue((NumericTerm.TakenOver) number.term(), sourceType,
+                        demands.get(number), measuring, within, reading);
             }
         }
 
@@ -1773,7 +1800,8 @@ final class TermRealizations {
                  JointBuilder.AtThoseTimeParts _, JointBuilder.OnThoseDateParts _,
                  JointBuilder.SolvingForTheirQuotients _,
                  JointBuilder.SolvingForTheirRemainders _,
-                 JointBuilder.ItsOwnValueAndWhatIsTakenOfIt _ -> false;
+                 JointBuilder.ItsOwnValueAndWhatIsTakenOfIt _,
+                 JointBuilder.ALineToTheValue _ -> false;
         };
     }
 
@@ -2289,6 +2317,107 @@ final class TermRealizations {
                 ? treesNotWritten("a tree of " + many + " nodes is deeper than a root and the"
                         + " nodes below it")
                 : below;
+    }
+
+    /**
+     * A tree whose search finds a line of as many nodes as one of the numbers asked: none where no
+     * node holds the value searched for, and otherwise a chain of as many nodes, each the only
+     * element below the one above it, of which the last holds that value and none above it does.
+     *
+     * <p>The value is the one the row stands at for the search, which is fixed before the tree is
+     * written ({@link RealizationTarget#keyAskedFor}); the nodes above the last hold another value
+     * of the same field. Each node is otherwise written from its type, with the two fields given.
+     * Where a part of this is not one the type lets be written — the field is not a single field of
+     * the node, the nodes below are not a list, no other value than the one searched for is there
+     * to write — it is said as a tree this does not write, and never as a length no tree has.
+     */
+    private static Realization aLineToTheValue(NumericTerm.TakenOver over, Type sourceType,
+                                               AskedAt asked, Quantities measuring,
+                                               SearchRegion within, RuleReadingContext reading) {
+        RunSource.SearchedLine line = (RunSource.SearchedLine) over.source();
+        TermOrders orders = measuring.ordersOf(over);
+        TermOrders keyOrders = measuring.ordersOf(new NumericTerm.ValueOf(line.key()));
+        Place key = within == null ? null : CardinalityComposer.settled(within,
+                new NumericTerm.ValueOf(line.key()));
+        RuleReadingSource ruleSource = reading.source();
+        if (orders == null || keyOrders == null || key == null) {
+            return linesNotWritten("`" + line.key() + "` stands at no one value, so the node the"
+                    + " search stops at is not known");
+        }
+        if (line.matchAt().size() != 1
+                || !(sourceType instanceof Type.Ref named
+                        && named.name() instanceof TypeSymbol.AtModule record)
+                || !(TypeView.shapeOf(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                        ruleSource.kinds(), ruleSource.sums())
+                        instanceof Shape.Product(TypeSymbol _, SequencedMap<String, Type> fields))
+                || !(ruleSource.symbols().scope().reach(record)
+                        instanceof TypeReachName.Written written)) {
+            return linesNotWritten("the node is not a record holding the value searched for at"
+                    + " one of its fields");
+        }
+        Type matchType = fields.get(line.matchAt().getFirst());
+        Type throughType = fields.get(line.through());
+        if (matchType == null || throughType == null
+                || !(TypeView.shapeOf(throughType, ruleSource.inners(), ruleSource.symbols(),
+                        ruleSource.kinds(), ruleSource.sums()) instanceof Shape.Sequence below
+                        && below.kind() == Shape.Sequence.Kind.LIST)) {
+            return linesNotWritten("the nodes below a node are not a list");
+        }
+        Place on = keyOrders.observed().onTheGrid(key);
+        if (on == null || !(namesOf(matchType, ruleSource) instanceof WornNames.Spelled)) {
+            return linesNotWritten("the value searched for is not one this writes at the node");
+        }
+        TypeView matchView = TypeView.of(matchType, ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums());
+        FixtureTemplate sought = WornNames.under(matchView.wrappers(),
+                FixtureTemplate.on(keyOrders.observed(), on, ruleSource.symbols().scope()::reach),
+                ruleSource);
+        FixtureTemplate other = Witnesses.distinctValuesOf(matchType, 2, reading, Set.of())
+                .values().stream().filter(each -> !each.text().equals(sought.text()))
+                .findFirst().orElse(null);
+        if (other == null) {
+            return linesNotWritten("no other value than the one searched for is there to write"
+                    + " above the node it stops at");
+        }
+        TypeView rootView = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums());
+        return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                wholeNumbers(asked.walking(), orders.answered(), 0, Integer.MAX_VALUE,
+                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(), UsualPlace.NONE),
+                count -> {
+                    int nodes = CountDomain.asCount(count);
+                    if (nodes < 0) {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    FixtureTemplate chain = null;
+                    CompositionShortfall met = CompositionShortfall.NONE;
+                    // No line is one node that does not hold the value, with nothing below it.
+                    for (int depth = Math.max(nodes, 1); depth >= 1; depth--) {
+                        SequencedMap<String, FixtureTemplate> given = new LinkedHashMap<>();
+                        given.put(line.matchAt().getFirst(), depth == nodes ? sought : other);
+                        given.put(line.through(), FixtureTemplate.collection(
+                                chain == null ? List.of() : List.of(chain)));
+                        Partitions.FieldsChosen chosen = Partitions.fieldsOf(record, record,
+                                reading, Set.of(), given, Partitions.RulesAround.NONE);
+                        met = met.and(chosen.met());
+                        if (chosen.fields() == null) {
+                            return new Realization.Unexhausted(met.and(CompositionShortfall
+                                    .writing(Set.of(CompositionRepertoire.TREES_WRITTEN_FOR_A_LINE))),
+                                    "a node of the line is not written inside what its rules leave"
+                                            + " the fields beside the two given");
+                        }
+                        chain = FixtureTemplate.record(written, chosen.fields());
+                    }
+                    return new Realization.Built(List.of(WornNames.under(rootView.wrappers(), chain,
+                            ruleSource)), met);
+                });
+    }
+
+    /** A tree whose search finds a line of a given length that this does not write. */
+    private static Realization linesNotWritten(String why) {
+        return new Realization.Unexhausted(CompositionShortfall.writing(
+                Set.of(CompositionRepertoire.TREES_WRITTEN_FOR_A_LINE)), why);
     }
 
     /** What a tree this writes none of is said as: a population written in part. */

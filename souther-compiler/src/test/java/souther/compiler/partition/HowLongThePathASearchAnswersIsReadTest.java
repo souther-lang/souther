@@ -31,6 +31,7 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -396,39 +397,107 @@ class HowLongThePathASearchAnswersIsReadTest {
      */
     @Test
     void theRowsOfEachLengthStandAtThePointsOfTheBorderTheyWereWrittenFor() {
-        Compilation compilation = Compilation.ofSource("""
-                module demo
-
-                data Node = { v: Int, below: List<Node> }
-                data Yes
-                data No
-
-                %s
-
-                behavior f : (root: Node, w: Int) -> Yes | No
-                let f (root, w) =
-                    if List.length(pathTo(root, w)) >= 2 then Yes else No
-
-                let tree = Node { v = 1, below = [ Node { v = 2, below = [] } ] }
-
-                example f
-                    | "a" : (tree, 2) -> Yes
-                    | "b" : (tree, 1) -> No
-                    | "c" : (tree, 9) -> No
-                """.formatted(SEARCH), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList());
-        String human = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String human = humanReportOf(DEEPEST_LINE_MODEL.formatted(SEARCH, ""));
         // Four points are owed, and the three the rows write are met. The fourth is the one above
         // the border, which needs a tree written for a line of three nodes or more.
         assertTrue(human.contains("borders 1   obligations 3/4"), human);
-        assertTrue(human.contains("at the IN point"), human);
+        assertTrue(human.contains("at an IN point"), human);
         assertTrue(human.contains("in 2 < List.length("), human);
         assertFalse(human.contains("at the ON point") || human.contains("at the OFF point")
                 || human.contains("at the OUT point"), human);
+    }
+
+    private static final String DEEPEST_LINE_MODEL = """
+            module demo
+
+            data Node = { v: Int, below: List<Node> }
+            data Yes
+            data No
+
+            %s
+
+            behavior f : (root: Node, w: Int) -> Yes | No
+            let f (root, w) =
+                if List.length(pathTo(root, w)) >= 2 then Yes else No
+
+            let tree = Node { v = 1, below = [ Node { v = 2, below = [] } ] }
+
+            example f
+                | "a" : (tree, 2) -> Yes
+                | "b" : (tree, 1) -> No
+                | "c" : (tree, 9) -> No
+            %s""";
+
+    /**
+     * The row offered for the point above the border is a tree whose search finds a line past two
+     * nodes: written back as an example it is run by the language, which answers what a line past
+     * the border does, and the point is read to be met by it.
+     */
+    @Test
+    void theRowOfferedAboveTheBorderIsATreeTheSearchFindsALongLineIn() {
+        Compilation before = measuredModel(DEEPEST_LINE_MODEL.formatted(SEARCH, ""));
+        List<String> offered = Adequacy.offeredFor(before.db(),
+                        OfferingRequest.overTheModule("demo"))
+                .rowsByBehavior().getOrDefault("f", List.of()).stream()
+                .map(row -> String.join(", ",
+                        row.inputs().stream().map(FixtureTemplate::text).toList()))
+                .toList();
+        assertFalse(offered.isEmpty(), () -> "a row is offered: " + humanOf(before));
+        // A chain past two nodes: the root holds a node that holds a node.
+        assertTrue(offered.stream().anyMatch(row -> row.split("below = \\[Node", -1).length >= 3),
+                () -> "offered " + offered);
+        StringBuilder written = new StringBuilder();
+        int named = 0;
+        for (String inputs : offered) {
+            written.append("    | \"offered ").append(named++).append("\" : (").append(inputs)
+                    .append(") -> Yes\n");
+        }
+        Compilation after = measuredModel(DEEPEST_LINE_MODEL.formatted(SEARCH, written));
+        String human = humanOf(after);
+        assertTrue(human.contains("borders 1   obligations 4/4"), human);
+        assertEquals(List.of(), after.errors().stream()
+                .map(each -> each.diagnostic().code()).toList());
+    }
+
+    /**
+     * A node that may hold nothing below it has no line past one node, and a row written with a
+     * node below it would be one the declarations refuse: the point above the border is not met,
+     * and no row is offered for it.
+     */
+    @Test
+    void aNodeThatMayHoldNothingBelowItHasNoRowOfferedForALineBeyondIt() {
+        String model = DEEPEST_LINE_MODEL.formatted(SEARCH, "")
+                .replace("data Node = { v: Int, below: List<Node> }", """
+                        data Node = { v: Int, below: List<Node> }
+                            invariant List.length(below) == 0""")
+                .replace("let tree = Node { v = 1, below = [ Node { v = 2, below = [] } ] }\n",
+                        "let tree = Node { v = 1, below = [] }\n")
+                .replace("| \"a\" : (tree, 2) -> Yes", "| \"a\" : (tree, 1) -> No");
+        Compilation compilation = measuredModel(model);
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList());
+        assertEquals(List.of(), Adequacy.offeredFor(compilation.db(),
+                        OfferingRequest.overTheModule("demo"))
+                .rowsByBehavior().getOrDefault("f", List.of()).stream()
+                .filter(row -> row.inputs().stream().map(FixtureTemplate::text)
+                        .anyMatch(text -> text.contains("below = [Node")))
+                .toList());
+        String human = humanOf(compilation);
+        // Said as what was tried and refused, and never as a point no value can stand at.
+        assertTrue(human.contains("every value tried"), human);
+        assertFalse(human.contains("no row can stand at the IN point"), human);
+    }
+
+    private static Compilation measuredModel(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation;
+    }
+
+    private static String humanOf(Compilation compilation) {
+        return AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     /** A behavior that answers a case holding the line, and a behavior that asks how long it is. */
@@ -580,6 +649,19 @@ class HowLongThePathASearchAnswersIsReadTest {
         String ofTheChain = human.substring(human.indexOf("  approvalChainFor "));
         assertFalse(ofTheChain.contains("not read"), human);
         assertTrue(ofTheChain.contains("borders 3"), human);
+        // Rows are offered for the points of every role's border, down to a line of five nodes
+        // for the role that needs three above the submitter, each holding the submitter only at
+        // its last node.
+        List<String> offered = Adequacy.offeredFor(compilation.db(),
+                        OfferingRequest.overTheModule("demo"))
+                .rowsByBehavior().getOrDefault("approvalChainFor", List.of()).stream()
+                .map(row -> String.join(", ",
+                        row.inputs().stream().map(FixtureTemplate::text).toList()))
+                .toList();
+        assertTrue(offered.stream().anyMatch(row ->
+                        row.split("reports = \\[RoleNode", -1).length >= 5
+                                && row.endsWith("Cfo")),
+                () -> "offered " + offered);
     }
 
     // The proposition and its helpers.
