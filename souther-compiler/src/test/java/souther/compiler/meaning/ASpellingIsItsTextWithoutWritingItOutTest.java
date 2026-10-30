@@ -11,6 +11,7 @@ import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A spelling put together from pieces is the text those pieces write, to everything that tells two
@@ -125,8 +126,28 @@ class ASpellingIsItsTextWithoutWritingItOutTest {
         Spelling alike = other;
         List<Object> seen = OnItsOwnStack.ask("a deep spelling read", 64 * 1024,
                 () -> List.of(deep.length(), deep.equals(alike), deep.toString()));
-        assertEquals(List.of((long) text.length(), true, text), seen);
+        assertEquals(List.of(text.length(), true, text), seen);
         assertEquals(text.hashCode(), deep.hashCode());
+    }
+
+    /**
+     * A piece written twice, and that twice over, is a text that doubles with each object made: past
+     * what a String holds it would have no String's hash or order, and past what a long counts its
+     * length would come round to nought — where every text of that length is the empty one. So the
+     * doubling that passes a String's length is refused where it is made, and every one before it is
+     * counted exactly.
+     */
+    @Test
+    void aSpellingLongerThanAStringHoldsIsNotMade() {
+        Spelling doubled = Spelling.of("x");
+        for (int i = 0; i < 30; i++) {
+            doubled = Spelling.of(doubled, doubled);
+        }
+        assertEquals(1 << 30, doubled.length());
+        Spelling atTheEdge = doubled;
+        assertThrows(IllegalArgumentException.class, () -> Spelling.of(atTheEdge, atTheEdge));
+        assertThrows(IllegalArgumentException.class,
+                () -> Spelling.of(atTheEdge, atTheEdge.denied(), Spelling.of("x")));
     }
 
     /** Turning a statement over and back writes nothing: the spelling of it holding is the one
