@@ -58,7 +58,6 @@ import souther.compiler.partition.ThresholdOfADerivedValue;
 import souther.compiler.partition.LevelRealizer;
 import souther.compiler.partition.PointSearchGoal;
 import souther.compiler.partition.Realization;
-import souther.compiler.partition.Standing;
 import souther.compiler.partition.RealizationTarget;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
@@ -2041,8 +2040,10 @@ final class Coverages {
                 ValuesTried tried = ValuesTried.NONE;
                 SearchOutcomes last = null;
                 Realization.Found first = null;
-                for (int value = 0;
-                        value < CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH.maximum(); value++) {
+                // As many askings as the way the row is found says, which is said where what is
+                // asked is ({@link PointSearchGoal#askedAtMost}).
+                int askings = quantity.searchGoalAt(criterion).askedAtMost();
+                for (int value = 0; value < askings; value++) {
                     Searching came = searchingWith(criterion, label, able, region, tried);
                     if (came.witness().isPresent()) {
                         return new Looked(came.outcomes(), came.realized(), came.witness());
@@ -2094,14 +2095,8 @@ final class Coverages {
             private Realization realized(Criterion criterion,
                                          souther.compiler.partition.Reachability.Reaching able,
                                          SearchRegion region, ValuesTried tried) {
-                return switch (quantity.searchGoalAt(criterion)) {
-                    case PointSearchGoal.ByConstraints(Standing constraint) -> realizer.realize(
-                            constraint.alongTheWay(able), region, looking, tried);
-                    // A candidate, which the row built at it is run for and read back like any
-                    // other value a point is tried with.
-                    case PointSearchGoal.ByObservation observed ->
-                            realizer.candidateRun(observed, region, tried);
-                };
+                return realizer.realize(quantity.searchGoalAt(criterion).alongTheWay(able),
+                        region, looking, tried);
             }
 
             /**

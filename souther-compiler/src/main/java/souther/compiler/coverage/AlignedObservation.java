@@ -54,6 +54,8 @@ public final class AlignedObservation {
      *  reading of a row at every point, so put in order once. */
     private final Map<ConditionOutcomeSite, List<SeenComparison>> comparedBySite;
 
+    private final Set<ConditionOutcomeSite> pastTheKept;
+
     AlignedObservation(NumberingIdentity numbering, Set<ArmProbe> arms,
                        Set<SeenConditionOutcome> outcomes, Set<SeenVisit> visits) {
         this(numbering, arms, outcomes, visits, Set.of(), Set.of());
@@ -62,13 +64,13 @@ public final class AlignedObservation {
     AlignedObservation(NumberingIdentity numbering, Set<ArmProbe> arms,
                        Set<SeenConditionOutcome> outcomes, Set<SeenVisit> visits,
                        Set<WalkProbe> walks, Set<WalkProbe> walksOn) {
-        this(numbering, arms, outcomes, visits, walks, walksOn, Set.of());
+        this(numbering, arms, outcomes, visits, walks, walksOn, Set.of(), Set.of());
     }
 
     AlignedObservation(NumberingIdentity numbering, Set<ArmProbe> arms,
                        Set<SeenConditionOutcome> outcomes, Set<SeenVisit> visits,
                        Set<WalkProbe> walks, Set<WalkProbe> walksOn,
-                       Set<SeenComparison> compared) {
+                       Set<SeenComparison> compared, Set<ConditionOutcomeSite> pastTheKept) {
         if (numbering == null) {
             throw new IllegalArgumentException(
                     "a run read as places is read as places of some numbering");
@@ -87,6 +89,8 @@ public final class AlignedObservation {
                         .add(each));
         bySite.replaceAll((_, ofOne) -> List.copyOf(ofOne));
         this.comparedBySite = Map.copyOf(bySite);
+        this.pastTheKept = Set.copyOf(pastTheKept);
+        this.pastTheKept.forEach(each -> requireOurs(each.numbering(), each));
         this.arms.forEach(each -> requireOurs(each.numbering(), each));
         this.outcomes.forEach(each -> requireOurs(each.at().numbering(), each));
         this.visits.forEach(each -> requireOurs(each.at().numbering(), each));
@@ -170,6 +174,17 @@ public final class AlignedObservation {
         return comparedBySite.getOrDefault(at, List.of());
     }
 
+    /**
+     * Whether every visit the run made to the condition at {@code at} is one the recording kept.
+     *
+     * <p>The recording's word and not a count: a run that visited as many times as are kept and
+     * stopped kept every visit, and one that went on did not, and only the recording saw which.
+     */
+    public boolean keptEveryVisit(ConditionOutcomeSite at) {
+        requireOurs(at.numbering(), at);
+        return !pastTheKept.contains(at);
+    }
+
     /** Whether the run reached {@code at} at all, whichever way the condition there came out. */
     public boolean reached(ConditionOutcomeSite at) {
         return saw(at, true) || saw(at, false);
@@ -194,12 +209,14 @@ public final class AlignedObservation {
                         && visits.equals(that.visits)
                         && walks.equals(that.walks)
                         && walksOn.equals(that.walksOn)
-                        && compared.equals(that.compared));
+                        && compared.equals(that.compared)
+                        && pastTheKept.equals(that.pastTheKept));
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(numbering, arms, outcomes, visits, walks, walksOn, compared);
+        return Objects.hash(numbering, arms, outcomes, visits, walks, walksOn, compared,
+                pastTheKept);
     }
 
     @Override

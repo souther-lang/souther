@@ -34,9 +34,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class ARowStandsWhereItsRunWorkedTheSidesOutTest {
 
-    private static final SiteNumbering NUMBERING = Numberings.of(Numberings.Family.COMPARISON);
+    private static final SiteNumbering NUMBERING =
+            Numberings.of(Numberings.Family.COMPARISON, Numberings.Family.COMPARISON);
 
     private static final ConditionOutcomeSite SITE = NUMBERING.outcome(0);
+
+    /** A second place the same comparison is recorded at, as a helper called twice writes it. */
+    private static final ConditionOutcomeSite OTHER_SITE = NUMBERING.outcome(1);
 
     private static final BorderQuantity.ComparedOnARun APART = new BorderQuantity.ComparedOnARun(
             "out", new ModelOccurrence(new SourceConstructOrigin(new WrittenOwner.Body("m", "out"),
@@ -51,13 +55,28 @@ class ARowStandsWhereItsRunWorkedTheSidesOutTest {
         return at(BigInteger.valueOf(level));
     }
 
-    /** A row whose run worked the sides out to each pair in {@code sides}, one visit apiece. */
+    /** A row whose run worked the sides out to each pair in {@code sides}, one visit apiece, and
+     *  kept every visit it made. */
     private static BorderQuantity.Observation ran(long[]... sides) {
+        return ran(true, sides);
+    }
+
+    /** The same, where the recording says whether it kept every visit. */
+    private static BorderQuantity.Observation ran(boolean everyVisitKept, long[]... sides) {
         List<SeenComparison> visits = new ArrayList<>();
         for (int nth = 0; nth < sides.length; nth++) {
             visits.add(new SeenComparison(SITE, nth, sides[nth][0], sides[nth][1]));
         }
-        return new Unwalked(Optional.of(visits));
+        return new Unwalked(Optional.of(new BorderQuantity.SidesOnARun(visits, everyVisitKept)));
+    }
+
+    /** {@code times} visits, all at {@code left} against three. */
+    private static long[][] times(int times, long left) {
+        long[][] sides = new long[times][];
+        for (int i = 0; i < times; i++) {
+            sides[i] = new long[] {left, 3};
+        }
+        return sides;
     }
 
     @Test
@@ -80,18 +99,39 @@ class ARowStandsWhereItsRunWorkedTheSidesOutTest {
         assertEquals(BorderQuantity.Stands.NO, APART.standsAt(at(1), row));
     }
 
-    /** A run past the visits kept may have come out at the level on one nobody kept. */
+    /** A run the recording says went past the visits kept may have come out at the level on one
+     *  nobody kept. */
     @Test
     void aRunPastTheVisitsKeptCouldNotBeTold() {
-        long[][] sides = new long[RecordedVisit.MOST][];
-        for (int i = 0; i < sides.length; i++) {
-            sides[i] = new long[] {0, 3};
-        }
-        BorderQuantity.Observation row = ran(sides);
+        BorderQuantity.Observation row = ran(false, times(RecordedVisit.MOST, 0));
 
         assertEquals(BorderQuantity.Stands.YES, APART.standsAt(at(-3), row));
         assertEquals(BorderQuantity.Stands.couldNotTell(ReadingGap.COULD_NOT_READ_ROW),
                 APART.standsAt(at(0), row));
+    }
+
+    /** As many visits as are kept, every one kept, is a run that stands nowhere else. */
+    @Test
+    void aRunOfAsManyVisitsAsAreKeptIsReadToTheEnd() {
+        BorderQuantity.Observation row = ran(times(RecordedVisit.MOST, 0));
+
+        assertEquals(BorderQuantity.Stands.NO, APART.standsAt(at(0), row));
+    }
+
+    /** Places the comparison is recorded at that kept every visit are read to the end, however
+     *  many visits they hold between them. */
+    @Test
+    void visitsOfSeveralPlacesPastTheKeptOfOneAreReadToTheEnd() {
+        List<SeenComparison> visits = new ArrayList<>();
+        for (ConditionOutcomeSite site : List.of(SITE, OTHER_SITE)) {
+            for (int nth = 0; nth < RecordedVisit.MOST - 1; nth++) {
+                visits.add(new SeenComparison(site, nth, 0, 3));
+            }
+        }
+        BorderQuantity.Observation row =
+                new Unwalked(Optional.of(new BorderQuantity.SidesOnARun(visits, true)));
+
+        assertEquals(BorderQuantity.Stands.NO, APART.standsAt(at(0), row));
     }
 
     @Test
@@ -107,7 +147,7 @@ class ARowStandsWhereItsRunWorkedTheSidesOutTest {
     }
 
     /** A row read for its run and for no value it wrote. */
-    private record Unwalked(Optional<List<SeenComparison>> compared)
+    private record Unwalked(Optional<BorderQuantity.SidesOnARun> compared)
             implements BorderQuantity.Observation {
 
         @Override
@@ -126,7 +166,7 @@ class ARowStandsWhereItsRunWorkedTheSidesOutTest {
         }
 
         @Override
-        public Optional<List<SeenComparison>> comparedOnTheRun() {
+        public Optional<BorderQuantity.SidesOnARun> comparedOnTheRun() {
             return compared;
         }
     }

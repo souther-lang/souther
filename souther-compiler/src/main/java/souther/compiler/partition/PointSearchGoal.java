@@ -23,6 +23,37 @@ import java.util.List;
  */
 public sealed interface PointSearchGoal {
 
+    /**
+     * This, where {@code way} asks of the numbers it is at what the search chooses among: a
+     * constraint is narrowed to the way, and a run's goal is the run's whatever way it took.
+     */
+    default PointSearchGoal alongTheWay(Reachability.Reaching way) {
+        return switch (this) {
+            case ByConstraints(Standing constraint) ->
+                    new ByConstraints(constraint.alongTheWay(way));
+            case ByObservation observed -> observed;
+        };
+    }
+
+    /**
+     * How many values a search for a row here is asked for before it is said what ended it.
+     *
+     * <p>Said with what is searched, because the two are one decision: a solver is held to a
+     * figure of this compiler's ({@link CompositionBudget#VALUES_A_POINT_IS_TRIED_WITH}), and the
+     * candidates a run is tried with are few and finite, so every one of them is tried — cut at a
+     * figure laid down elsewhere, the order they come in would decide which of them are ever
+     * tried, and a candidate in the population would be one no search reaches.
+     *
+     * <p>Once at least, so that a goal with no candidate is asked and answers that it has none.
+     */
+    default int askedAtMost() {
+        return switch (this) {
+            case ByConstraints _ -> CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH.maximum();
+            case ByObservation observed ->
+                    Math.max(1, RowsARunIsTriedFor.candidates(observed).size());
+        };
+    }
+
     /** A row whose numbers meet {@code constraint}, which the solver solves for. */
     record ByConstraints(Standing constraint) implements PointSearchGoal {
 

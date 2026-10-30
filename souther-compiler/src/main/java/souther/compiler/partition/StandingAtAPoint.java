@@ -667,7 +667,7 @@ public final class StandingAtAPoint {
         }
 
         @Override
-        public final Optional<List<SeenComparison>> comparedOnTheRun() {
+        public final Optional<BorderQuantity.SidesOnARun> comparedOnTheRun() {
             return walk.comparedOnTheRun();
         }
 
@@ -1095,7 +1095,7 @@ public final class StandingAtAPoint {
         private final List<ConditionOutcomeSite> recordedAt;
 
         /** What {@link #comparedOnTheRun} answered, once it was asked; null before. */
-        private Optional<List<SeenComparison>> comparedOnTheRun;
+        private Optional<BorderQuantity.SidesOnARun> comparedOnTheRun;
 
         RowWalk(BehaviorInputs where, ObservedInputs observed) {
             this(where, observed, Set.of());
@@ -1117,13 +1117,16 @@ public final class StandingAtAPoint {
          * What the sides of the comparison came to on the row's run, every visit kept at every
          * place it is recorded — or empty where the row's run was not watched.
          */
-        Optional<List<SeenComparison>> comparedOnTheRun() {
+        Optional<BorderQuantity.SidesOnARun> comparedOnTheRun() {
             // Every reading of the row asks, and the run is the row's: put together once.
             if (comparedOnTheRun == null) {
                 if (observed.watched() instanceof Generator.Watched.Ran(AlignedObservation run)) {
                     List<SeenComparison> out = new ArrayList<>();
                     recordedAt.forEach(site -> out.addAll(run.comparedAt(site)));
-                    comparedOnTheRun = Optional.of(List.copyOf(out));
+                    // Every place on its own word: one place visited past the kept leaves the
+                    // comparison's visits short, whatever the others kept between them.
+                    comparedOnTheRun = Optional.of(new BorderQuantity.SidesOnARun(out,
+                            recordedAt.stream().allMatch(run::keptEveryVisit)));
                 } else {
                     comparedOnTheRun = Optional.empty();
                 }

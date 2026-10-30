@@ -438,14 +438,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/ValuesTried;)"
                             + "Lsouther/compiler/partition/Realization;",
                     "stops walking a line at the places it tries and says which figure"),
-            Map.entry("souther.compiler.query.Coverages$2#lookedAlong("
-                            + "Lsouther/compiler/partition/Criterion;Ljava/lang/String;"
-                            + "Ljava/util/function/UnaryOperator;"
-                            + "Lsouther/compiler/partition/Reachability$Reaching;)"
-                            + "Lsouther/compiler/query/Coverages$2$Looked;",
-                    "stops asking a point for another value to stand a row on, along the whole way"
-                            + " or one of the ways it is, and answers with what the values it did"
-                            + " try came to"),
+            Map.entry("souther.compiler.partition.PointSearchGoal#askedAtMost()I",
+                    "says how many values a point solved for is asked for, to the search that"
+                            + " stops asking it for another value to stand a row on, along the"
+                            + " whole way or one of the ways it is, and answers with what the"
+                            + " values it did try came to"),
             // The pairs of a number of the input and the answer composed for it. The figure bounds
             // how many are offered, and what it hands over is whether some were left out, which the
             // search that composed for none of them answers with.

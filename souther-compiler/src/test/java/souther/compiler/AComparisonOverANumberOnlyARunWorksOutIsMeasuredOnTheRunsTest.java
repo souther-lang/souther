@@ -5,9 +5,12 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.GeneratedRows;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -67,12 +70,19 @@ class AComparisonOverANumberOnlyARunWorksOutIsMeasuredOnTheRunsTest {
     /** What the report says of the places such a comparison names. */
     static final String MEASURED_ON_ITS_RUNS = "its rows are placed by what their runs worked out";
 
-    private static String report(String model, List<String> rows) {
+    private static Compilation compiled(String model, List<String> rows) {
         String source = model + "\nexample out\n" + rows.stream().map(row -> "    | " + row)
                 .collect(Collectors.joining("\n")) + "\n";
         Compilation compilation = Compilation.ofSource(source, "Main");
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        return compilation;
+    }
+
+    private static String report(String model, List<String> rows) {
+        Compilation compilation = compiled(model, rows);
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -114,6 +124,68 @@ class AComparisonOverANumberOnlyARunWorksOutIsMeasuredOnTheRunsTest {
         assertEquals("adequacy: satisfied",
                 adequacy(report(THROUGH_A_CALL, and(ROWS, PAST_THE_LINE))));
         assertEquals("adequacy: satisfied", adequacy(report(INLINE, and(ROWS, PAST_THE_LINE))));
+    }
+
+    /** What is offered for the row past the line is a row whose run is past it. */
+    @Test
+    void theRowOfferedPastTheLineIsOneWhoseRunIsPastIt() {
+        Compilation compilation = compiled(THROUGH_A_CALL, ROWS);
+        String offered = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
+                        OfferingRequest.overTheModule("m")), Map.of(),
+                SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+
+        assertTrue(offered.contains("([0, 0, 0, 0])"), offered);
+    }
+
+    /**
+     * A point reached only by moving a whole number and a list together is reached: every
+     * candidate is tried, and none is left out by the order they come in.
+     */
+    @Test
+    void aPointOnlyANumberAndALengthTogetherReachIsFound() {
+        String report = report("""
+                module m
+
+                behavior misses : (xs: List<Int>) -> Int
+
+                let misses (xs) = List.fold((n, x) -> if x == 0 then n + 1 else 0, 0, xs)
+
+                behavior out : (xs: List<Int>, n: Int) -> Bool
+
+                let out (xs, n) = misses(xs) + n >= 7
+                """, List.of("([], 0) -> false", "([0], 0) -> false"));
+
+        assertTrue(report.contains("no row is at the ON point"), report);
+        assertTrue(report.contains("no row is at an IN point"), report);
+        assertFalse(report.contains("could show a row can be written"), report);
+    }
+
+    /**
+     * A comparison a closure handed to {@code List.all} holds is visited once for each element it
+     * gets to, and a row stands where some visit its run made came out. An element past the first
+     * that fails is never visited: a run that stopped there says nothing of the elements after.
+     */
+    @Test
+    void onlyTheVisitsARunMadePlaceARow() {
+        String model = """
+                module m
+
+                behavior streak : (xs: List<Int>, p: Int) -> Int
+
+                let streak (xs, p) = List.fold((n, x) -> if x == p then n + 1 else 0, 0, xs)
+
+                behavior out : (xs: List<Int>, ps: List<Int>) -> Bool
+
+                let out (xs, ps) = List.all(p -> streak(xs, p) >= 2, ps)
+                """;
+        String atTheLine = "read as out/streak(xs, p) - 2: = 0";
+
+        String stoppedBefore = report(model, List.of("([0, 0], [1, 0]) -> false"));
+        assertTrue(stoppedBefore.contains(atTheLine), stoppedBefore);
+
+        String visited = report(model, List.of("([0, 0], [1, 0]) -> false",
+                "([0, 0], [0, 1]) -> false"));
+        assertFalse(visited.contains(atTheLine), visited);
     }
 
     /** The row at three is the one at the line, and the row at two the one beside it. */

@@ -130,7 +130,12 @@ public final class SiteNumbering {
             compared.add(new SeenComparison(outcome(sides.at()), sides.nth(), sides.left(),
                     sides.right()));
         }
-        return new AlignedObservation(identity, arms, ways, visits, walks, walksOn, compared);
+        Set<ConditionOutcomeSite> pastTheKept = new LinkedHashSet<>();
+        for (int raw : seen.pastTheKept()) {
+            pastTheKept.add(outcome(raw));
+        }
+        return new AlignedObservation(identity, arms, ways, visits, walks, walksOn, compared,
+                pastTheKept);
     }
 
     private SiteAddress at(int raw) {

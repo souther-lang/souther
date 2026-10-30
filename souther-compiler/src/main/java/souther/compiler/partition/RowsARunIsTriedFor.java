@@ -17,13 +17,17 @@ import java.util.Map;
  * values of the places the comparison names, and the search that asks for one runs it and reads
  * what the run worked out — the same building, running and reading every point a search finds a
  * value for goes through. Which is why each is a place for each number, as a solver's answer is,
- * and is offered the way every placement is ({@link LevelRealizer#candidateRun}).
+ * and is offered the way every placement is ({@link LevelRealizer#realize(PointSearchGoal,
+ * SearchRegion, WitnessSearch, ValuesTried)}).
  *
  * <p>A candidate is every container among those places holding one number of elements, which are
  * written the way a row's values are written where nothing asks anything of them, and every
- * whole number among those places outside a container at one value. Each value is tried at every
- * size from none before the next value is, so a number a run counts up over the elements — how
- * many of them there are, how many in a row at the end — reaches each count it can come to.
+ * whole number among those places outside a container at one value. The population is every
+ * size crossed with every value, and every one of them is tried ({@link
+ * PointSearchGoal#askedAtMost}): it is small, and cut at a figure the order would decide which
+ * sizes and values are ever reached. The order decides only how soon: each size is tried with
+ * every value before the next size is, so a size is reached at every value at once and the sizes
+ * a count is made of come early.
  *
  * <p>What none of them found is not that nothing is there: a row a run comes to the item at only
  * with elements of other values, elements unlike one another, or a size or value past these, is
@@ -38,8 +42,7 @@ final class RowsARunIsTriedFor {
     /**
      * The most elements a container is written holding: the edge of the population the
      * candidates are, which {@link CompositionRepertoire#ROWS_A_RUN_IS_TRIED_FOR} says, and not a
-     * figure a search stops at — the values a point is tried with are
-     * ({@link CompositionBudget#VALUES_A_POINT_IS_TRIED_WITH}).
+     * figure a search stops at — every candidate inside it is tried.
      */
     private static final int MOST_ELEMENTS = 6;
 
@@ -52,8 +55,8 @@ final class RowsARunIsTriedFor {
             return out;
         }
         int most = goal.lengths().isEmpty() ? 0 : MOST_ELEMENTS;
-        for (long value : VALUES) {
-            for (int size = 0; size <= most; size++) {
+        for (int size = 0; size <= most; size++) {
+            for (long value : VALUES) {
                 Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
                 for (NumericTerm.FromOnePosition length : goal.lengths()) {
                     fixing.put(RealizationTarget.of(length), Count.of(size));

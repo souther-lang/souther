@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
-import souther.compiler.coverage.RecordedVisit;
 import souther.compiler.coverage.SeenComparison;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
@@ -1765,24 +1764,24 @@ public sealed interface BorderQuantity
          * where some visit came out at a level it holds.
          *
          * <p>A visit not kept is not a visit that came out elsewhere. Where every kept visit is
-         * away from the item and the run went past those kept, it could not be told; where no
-         * run of the row was watched, nothing was there to read.
+         * away from the item and the recording says the run went past those kept, it could not be
+         * told; where no run of the row was watched, nothing was there to read.
          */
         @Override
         public Stands standsAt(Criterion where, Observation row) {
-            Optional<List<SeenComparison>> seen = row.comparedOnTheRun();
+            Optional<SidesOnARun> seen = row.comparedOnTheRun();
             if (seen.isEmpty()) {
                 return Stands.couldNotTell(ReadingGap.COULD_NOT_READ_ROW);
             }
-            for (SeenComparison visit : seen.get()) {
+            for (SeenComparison visit : seen.get().visits()) {
                 ExactRatio apart = ExactRatio.of(BigInteger.valueOf(visit.left())
                         .subtract(BigInteger.valueOf(visit.right())));
                 if (where.holds(new Level.OfTheQuantity(apart))) {
                     return Stands.YES;
                 }
             }
-            return seen.get().size() >= RecordedVisit.MOST
-                    ? Stands.couldNotTell(ReadingGap.COULD_NOT_READ_ROW) : Stands.NO;
+            return seen.get().everyVisitKept() ? Stands.NO
+                    : Stands.couldNotTell(ReadingGap.COULD_NOT_READ_ROW);
         }
 
         /** No number of the row is read: what is read is the run. */
@@ -2450,7 +2449,7 @@ public sealed interface BorderQuantity
          * <p>Of the run and not of the values the row wrote: a number the run works out is not a
          * value at any place of the row.
          */
-        default Optional<List<SeenComparison>> comparedOnTheRun() {
+        default Optional<SidesOnARun> comparedOnTheRun() {
             return Optional.empty();
         }
 
@@ -2523,6 +2522,25 @@ public sealed interface BorderQuantity
          */
         default boolean choseAnElement() {
             return true;
+        }
+    }
+
+    /**
+     * What the sides of one comparison came to on a run, on each visit kept, and whether those are
+     * every visit the run made.
+     *
+     * <p>Whether they are all of them is the recording's word ({@code keptEveryVisit}) and is never
+     * read off how many were kept: a run that visited as many times as are kept kept every visit,
+     * and one that went on did not.
+     *
+     * @param visits         the visits kept, in the order of the visits at each place
+     * @param everyVisitKept whether no place the comparison is recorded at was visited past the
+     *                       visits kept
+     */
+    record SidesOnARun(List<SeenComparison> visits, boolean everyVisitKept) {
+
+        public SidesOnARun {
+            visits = List.copyOf(visits);
         }
     }
 

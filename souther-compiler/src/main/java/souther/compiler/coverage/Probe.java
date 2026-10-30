@@ -79,6 +79,10 @@ public final class Probe {
         /** Which visits of each site {@link #compared} holds the sides of, a bit per visit. */
         private long[] comparedOn = new long[0];
 
+        /** The sites visited again after the visits kept were all taken: what the recording says
+         *  of itself where it stopped keeping, so that no reader works it out from a count. */
+        private final BitSet pastTheKept = new BitSet();
+
         private Recording(NumberingIdentity numbering) {
             this.numbering = numbering;
         }
@@ -94,6 +98,7 @@ public final class Probe {
             }
             int nth = answered[site];
             if (nth >= RecordedVisit.MOST) {
+                pastTheKept.set(site);
                 return -1;
             }
             visits[site] |= 1L << (2 * nth + (held ? 1 : 0));
@@ -252,8 +257,13 @@ public final class Probe {
                         recording.compared[site][2 * nth + 1]));
             }
         }
+        Set<Integer> pastTheKept = new LinkedHashSet<>();
+        for (int at = recording.pastTheKept.nextSetBit(0); at >= 0;
+                at = recording.pastTheKept.nextSetBit(at + 1)) {
+            pastTheKept.add(at);
+        }
         return new Observation(recording.numbering, arms, outcomes, visits, walks, walksOn,
-                compared);
+                compared, pastTheKept);
     }
 
     /** Stops collecting, and lets go of the recording. A worker thread outlives the row it ran, so a
