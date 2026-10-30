@@ -102,6 +102,40 @@ class TwoRewritesReadAlikeWhereTheirWordsAreMadeOfTheSameTest {
     }
 
     /**
+     * An attempted construction under an {@code if} and under a {@code guard} are two constructs
+     * and one pair of words, {@code constructed} and {@code else}. Alike to a reader, so each says
+     * what tells it apart.
+     */
+    @Test
+    void anAttemptUnderAnIfAndUnderAGuardAreAlikeToAReader() {
+        SourceOutcome.Arm built = new SourceOutcome.Held(new SourceOutcome.HeldBy.Construction());
+        SourceOutcome.Arm refused = new SourceOutcome.Failed(
+                new SourceOutcome.FailedBy.Construction(Optional.empty()));
+        ReplacementEvidence.Summary summary = new ReplacementEvidence.Summary(List.of(
+                arm(construct(1, SourceConstruct.IF), 0, 1, built, refused),
+                arm(construct(2, SourceConstruct.GUARD), 0, 1, built, refused)));
+
+        assertEquals(List.of(
+                        Optional.of(new ReplacementEvidence.ToldApartBy(1, 0, Optional.empty())),
+                        Optional.of(new ReplacementEvidence.ToldApartBy(2, 0, Optional.empty()))),
+                toldApart(summary));
+    }
+
+    /**
+     * And where the two constructs call their ways through them differently, as they do for a
+     * condition — {@code then} against {@code continued} — nothing more is said: the words part
+     * them already.
+     */
+    @Test
+    void aConditionUnderAnIfAndUnderAGuardAreNotAlike() {
+        ReplacementEvidence.Summary summary = new ReplacementEvidence.Summary(List.of(
+                arm(construct(1, SourceConstruct.IF), 0, 1, HELD, FAILED),
+                arm(construct(2, SourceConstruct.GUARD), 0, 1, HELD, FAILED)));
+
+        assertEquals(List.of(Optional.empty(), Optional.empty()), toldApart(summary));
+    }
+
+    /**
      * Two types of two modules named alike are two types to the compiler and one word to a
      * reader. Arms of one {@code match} that name them answer as each other in words that are the
      * same, so they are alike, and are told apart by the numbers they are counted by.

@@ -1,11 +1,9 @@
 package souther.compiler.report;
 
+import souther.compiler.coverage.ArmWord;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.coverage.OutcomeName;
 import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.types.SourceConstruct;
-
-import java.util.Locale;
 
 /**
  * What the reports written in one language call one way through a construct.
@@ -41,17 +39,7 @@ public final class ArmVocabulary {
      * arm a rewrite names and the same arm a branch line names are one word.
      */
     public static String label(SourceConstruct construct, SourceOutcome outcome) {
-        return switch (outcome) {
-            case SourceOutcome.Matched matched -> "case " + matched.named();
-            // The word the author put the departure under, and the clause where they named one. The
-            // name of this outcome is `departure`, which says what happened rather than what is
-            // written there; a reader of a table is looking at the file.
-            case SourceOutcome.Failed(SourceOutcome.FailedBy.Construction(var clause)) ->
-                    clause.map(c -> "else " + c).orElse("else");
-            case SourceOutcome.Compared(var op) -> op.toString();
-            case SourceOutcome.Held _, SourceOutcome.Failed _ ->
-                    OutcomeName.of(construct, outcome).name().toLowerCase(Locale.ROOT);
-        };
+        return ArmWord.of(construct, outcome);
     }
 
     private ArmVocabulary() {}

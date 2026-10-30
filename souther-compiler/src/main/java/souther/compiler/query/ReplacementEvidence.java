@@ -1,6 +1,6 @@
 package souther.compiler.query;
 
-import souther.compiler.coverage.SourceOutcome;
+import souther.compiler.coverage.ArmWord;
 import souther.compiler.coverage.WalkRewrite;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.MeasureReason;
@@ -158,15 +158,20 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
         /**
          * What the words for a rewrite are made of, and so what two rewrites alike share.
          *
-         * <p>An arm as a reader is shown it: the cases a {@code match} arm names, by name, because
-         * two types of two modules named alike are said alike. What the words are made of is asked
-         * of {@link SourceOutcome.Matched#named}, which every word for the arm is made from.
+         * <p>An arm as a reader is shown it: the word for it ({@link ArmWord}), and not the
+         * construct and the outcome it is made from. An {@code if} and a {@code guard} that
+         * attempt a construction call their ways through it alike, and two types of two modules
+         * named alike are one word; asked of anything finer, those would be taken for different
+         * and said twice.
          */
         private static Object readingOf(Rewrite one) {
             return switch (one.written()) {
-                case ReplacementAsWritten.OfAnArm it -> new AnArmRead(it.writtenBy(),
-                        it.replacement().fork().kind(), shown(it.arm()), shown(it.sibling()),
-                        pointedAt(one.reportAt(), it.replacement().fork()));
+                case ReplacementAsWritten.OfAnArm it -> {
+                    SourceConstruct kind = it.replacement().fork().kind();
+                    yield new AnArmRead(it.writtenBy(), ArmWord.of(kind, it.arm()),
+                            ArmWord.of(kind, it.sibling()),
+                            pointedAt(one.reportAt(), it.replacement().fork()));
+                }
                 case ReplacementAsWritten.OfAWalk it -> new AWalkRead(it.writtenBy(),
                         it.replacement().how(),
                         pointedAt(one.reportAt(), it.replacement().walk()));
@@ -193,12 +198,8 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
         /** Where in a source a construct is, which a construct lowered into several forks shares. */
         private record Place(WrittenOwner owner, int ordinal) {}
 
-        private static Object shown(SourceOutcome.Arm arm) {
-            return arm instanceof SourceOutcome.Matched matched ? matched.named() : arm;
-        }
-
-        private record AnArmRead(ValueName.Helper writtenBy, SourceConstruct kind, Object arm,
-                                 Object sibling, Place pointedAt) {}
+        private record AnArmRead(ValueName.Helper writtenBy, String arm, String sibling,
+                                 Place pointedAt) {}
 
         private record AWalkRead(ValueName.Helper writtenBy, WalkRewrite how, Place pointedAt) {}
 
