@@ -249,11 +249,15 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
         return constraints.leavesNoRow();
     }
 
-    /** This with every condition on the path left out: what holds of the values wherever they are
-     * named, and no choice held. */
+    /**
+     * What is known of the values wherever they are named, with nothing a condition on the path
+     * said: the numbers and predicates {@link Unguarded} holds, and none of what a path adds beside
+     * them — the quantifiers a guard stated, the terms a guard spoke of, the cases it narrowed, the
+     * choices it held. A question asked of this one that comes out refuted is refuted by the values.
+     */
     Known ofTheValuesAlone() {
-        return new Known(unguarded.constraints(), quantified, spoken, unguarded, cases,
-                Choices.NONE);
+        return new Known(unguarded.constraints(), List.of(), AppendOnly.empty(), unguarded,
+                Map.of(), Choices.NONE);
     }
 
     /** How far a fact reaches: a value's type and a name's binding say something wherever that value

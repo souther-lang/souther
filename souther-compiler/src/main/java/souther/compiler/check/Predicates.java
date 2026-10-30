@@ -864,6 +864,14 @@ final class Predicates {
                         && carried.clause().equals(VIOLATED))) {
             return owed;
         }
+        // A guard that states the choice by name already establishes it, and the path is not asked
+        // what it has just answered.
+        for (Part each : owed.parts()) {
+            if (each instanceof Part.Carried carried && carried.clause().fact() != null
+                    && carried.clause().fact().entailedBy(k.facts())) {
+                return owed;
+            }
+        }
         Choice answer = choiceAt(choice, k, at);
         List<Part> parts = new ArrayList<>();
         for (Part each : owed.parts()) {
@@ -881,23 +889,40 @@ final class Predicates {
      * Whether the path leaves a run on which {@code choice} holds, and one on which it does not.
      *
      * <p>Each is the choice (or its denial) taken in over the path, and a path it leaves nothing of
-     * is one no run takes. A path that already leaves nothing is not asked: every question has an
-     * answer there, both of these included, and a clause that is established and refused at once
-     * says nothing. Taking the choice in is bounded, and a look that was given up leaves a run, so
-     * it neither establishes nor refuses.
+     * is one no run takes. A path that already leaves nothing is not asked: both questions have an
+     * answer there, and a clause that is established and refused at once says nothing. Taking the
+     * choice in is bounded, and a look that was given up leaves a run, so it neither establishes
+     * nor refuses.
      */
     private Choice choiceAt(ClauseExpr.Joined choice, Known k, Denotations at) {
         if (k.reachesNothing()) {
             return Choice.UNDECIDED;
         }
-        boolean proved = assumeShape(choice.denied(), k, at).known().reachesNothing();
-        boolean refuted = assumeShape(choice, k, at).known().reachesNothing();
-        if (proved && refuted) {
-            return Choice.UNDECIDED;
+        // A path that leaves no run with the choice denied establishes it. Asking whether it also
+        // leaves none with the choice stated would only find the path reaching nothing, which is
+        // asked above, so the second question is spent on a choice that is not established.
+        if (leavesNoRun(assumeShape(choice.denied(), k, at).known())) {
+            return new Choice(true, false, false);
         }
+        boolean refuted = leavesNoRun(assumeShape(choice, k, at).known());
         boolean alone = refuted
-                && assumeShape(choice, k.ofTheValuesAlone(), at).known().reachesNothing();
-        return new Choice(proved, refuted, alone);
+                && leavesNoRun(assumeShape(choice, k.ofTheValuesAlone(), at).known());
+        return new Choice(false, refuted, alone);
+    }
+
+    /**
+     * Whether nothing stands where {@code asked} does, as a construction is judged against it: the
+     * conditions cannot all hold, or cannot once what follows about the arithmetic outside the
+     * affine fragment is taken as holding too ({@link DerivedNumericFacts#refine}).
+     *
+     * <p>Derived from the state that was asked, and for each state apart. What follows about a
+     * product is a function of what its factors are bounded by in that state, so a bound derived
+     * under the path is not one the values alone carry, and the two questions are never answered
+     * from one derivation.
+     */
+    private boolean leavesNoRun(Known asked) {
+        return asked.reachesNothing()
+                || DerivedNumericFacts.refine(asked.numbers(), terms, Set.of()).isBottom();
     }
 
     /** What one part of a clause owes, read as the comparison it states. */
