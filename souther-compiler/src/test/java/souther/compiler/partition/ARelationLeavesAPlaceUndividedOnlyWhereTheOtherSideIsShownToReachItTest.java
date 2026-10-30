@@ -949,6 +949,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String beside = "limit >= List.length(xs) + List.fold((acc, x) -> acc + x, 0, xs)";
         assertEquals(Map.of("List.length(xs)", NOT_SHOWN, "List.sum(xs)", NOT_SHOWN,
                 "limit", NOT_SHOWN), left(list, NAT, beside, atThe(">=", NAT, list, beside)));
+        // A step composed to the same form with operations that were written is worked out with
+        // them: the product of an element by a million passes the end of an Int where the element
+        // alone does not.
+        String worked = "limit >= List.fold((acc, x) -> acc + x * 1000000 - x * 999999, 0, xs)";
+        assertEquals(Map.of("List.sum(xs)", NOT_SHOWN, "limit", NOT_SHOWN),
+                left(list, NAT, worked, atThe(">=", NAT, list, worked)));
+        String seeded = "limit >= List.fold((acc, x) -> acc + x, 1 - 1, xs)";
+        assertEquals(Map.of("List.sum(xs)", NOT_SHOWN, "limit", NOT_SHOWN),
+                left(list, NAT, seeded, atThe(">=", NAT, list, seeded)));
         String two = "limit: Int, xs: List<Int>, ys: List<Int>";
         String untold = "limit >= List.fold((acc, x) -> acc + x, 0, xs)"
                 + " + List.fold((acc, y) -> acc + y * 2, 0, ys)";
@@ -964,6 +973,37 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String heldAdded = "limit >= List.fold((acc, x) -> acc + x, 0, p.value)";
         assertEquals(Map.of("List.sum(p)", NOT_SHOWN, "limit", NOT_SHOWN),
                 left(held, pairs, heldAdded, atThe(">=", pairs, held, heldAdded)));
+    }
+
+    /**
+     * A total of products of fields of each element, which one element reaches with every field
+     * but one at one. That needs the fields apart: a rule tying them, or a step that works out
+     * more than the product, leaves the value of the total to more than one element.
+     */
+    @Test
+    void aTotalOfProductsOfFieldsIsReachedAsAnElementWrittenAloneIs() {
+        String line = "data Line = { price: Int, qty: Int }";
+        String inputs = "lines: List<Line>, limit: Int";
+        String summed = "limit >= List.sum(List.map(l -> l.price * l.qty, lines))";
+        String walked = "limit >= List.fold((acc, l) -> acc + l.price * l.qty, 0, lines)";
+        for (String body : List.of(summed, walked)) {
+            assertEquals(Map.of("List.sum({1·price·qty + 0 | lines[*]})", RELATES,
+                    "limit", RELATES), left(inputs, line, body, atThe(">=", line, inputs, body)));
+        }
+        String tied = line + " invariant price >= qty";
+        for (String body : List.of(summed, walked)) {
+            Map<String, String> held = left(inputs, tied, body, atThe(">=", tied, inputs, body));
+            assertTrue(held.containsValue(NOT_SHOWN), held.toString());
+        }
+        String more = "limit >= List.sum(List.map(l -> l.price * l.qty + l.price * l.qty"
+                + " - l.price * l.qty, lines))";
+        String moreWalked = "limit >= List.fold((acc, l) -> acc + (l.price * l.qty + l.price * l.qty"
+                + " - l.price * l.qty), 0, lines)";
+        for (String body : List.of(more, moreWalked)) {
+            Map<String, String> worked =
+                    left(inputs, line, body, atThe(">=", line, inputs, body));
+            assertTrue(worked.containsValue(NOT_SHOWN), worked.toString());
+        }
     }
 
     private static final String FORECAST = """

@@ -2143,8 +2143,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 datePartsTogether(sources, stating, heldWhole, left.years());
         WhatARelationLeavesUndivided.Operations operations =
                 operationsOverTheSides(read, conditions, heldWhole,
-                        totalsWrittenByOneElement(terms));
-        for (int at = 0; at < sides.size(); at++) {
+                        totalsWrittenByOneElement(terms));        for (int at = 0; at < sides.size(); at++) {
             WhatARelationLeavesUndivided.Leaves each = offItsLine
                     ? WhatARelationLeavesUndivided.leavesOffItsLine(terms, at, constant, relation,
                             overlapping, independent,
@@ -6224,9 +6223,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                              List<OnAWay> conditions,
                                                              boolean heldWhole, Carrier carrier) {
         List<NumericTerm.ValueOf> elements = valuesOfOneElement(over);
-        if (!heldWhole || carrier == null || elements.isEmpty()
+        if (!heldWhole || carrier == null
                 || !SUMMED.equals(DefaultBoundOperationFacts.get().accumulation(over.operation()))) {
             return null;
+        }
+        if (elements.isEmpty()) {
+            return summedOverProductsOfOneElement(over, read, region, conditions, carrier);
         }
         List<TermPath> containers = over.subjectPath().containersHoldingIt();
         if (containers.size() != 1) {
@@ -6234,6 +6236,80 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         return shownOfAnElementAlone(elements, containers.getFirst(), read, region, conditions,
                 carrier);
+    }
+
+    /**
+     * A run every value of which the total {@code over} of products of fields of its elements is
+     * shown to take — or null where none is shown: the total of one element whose fields are
+     * multiplied, one field at the value and every other at one.
+     *
+     * <p>Only a total of the one product of at least two fields, each weighed one, over a
+     * container of one container deep. The element is then written with the fields at one but the
+     * field the value is asked at, and the product is that field's number. A field is the one the
+     * value is asked at only where every other field may stand at one, so each run taken is
+     * the run one field is shown to take with nothing but that field asked of the element; and the
+     * runs are one run only where they are alike. No rule of the declarations ties two of the
+     * fields to one another ({@link #tiedByARule}): the fields are then written apart, each at
+     * the number it is asked at.
+     */
+    private static NumericDomain.Bounds summedOverProductsOfOneElement(
+            NumericTerm.TakenOver over, InputReading read, SearchRegion region,
+            List<OnAWay> conditions, Carrier carrier) {
+        if (!(over.source() instanceof RunSource.ComputedOccurrences computed)
+                || !(computed.computation() instanceof ElementValue.Multilinear product)
+                || !product.form().constant().isZero() || product.form().coefs().size() != 1) {
+            return null;
+        }
+        Map.Entry<ElementValue.Monomial, ExactRatio> only =
+                product.form().coefs().entrySet().iterator().next();
+        List<TermPath> containers = over.subjectPath().containersHoldingIt();
+        if (!ExactRatio.ONE.equals(only.getValue()) || only.getKey().rounding() != null
+                || only.getKey().fields().size() < 2 || containers.size() != 1) {
+            return null;
+        }
+        List<NumericTerm.FromOnePosition> factors = new ArrayList<>();
+        for (ElementProjection field : only.getKey().fields()) {
+            factors.add(new NumericTerm.ValueOf(field.from(computed.elements())));
+        }
+        for (int i = 0; i < factors.size(); i++) {
+            for (int j = i + 1; j < factors.size(); j++) {
+                if (tiedByARule(factors.get(i).position(), factors.get(j).position(), read)) {
+                    return null;
+                }
+            }
+        }
+        List<NumericDomain.Bounds> runs = new ArrayList<>();
+        for (NumericTerm.FromOnePosition factor : factors) {
+            Source source = sourceOf(factor, read);
+            if (source == null
+                    || wayOf(factor, statingAnythingOf(factor, conditions)) != Way.UNTOUCHED) {
+                return null;
+            }
+            NumericDomain.Bounds run = realized(factor, source, region, Way.UNTOUCHED);
+            if (run == null || !run.holdsAValue()) {
+                return null;
+            }
+            runs.add(run);
+        }
+        NumericDomain.Bounds asked = null;
+        for (int at = 0; at < runs.size(); at++) {
+            boolean restAtOne = true;
+            for (int other = 0; other < runs.size(); other++) {
+                restAtOne &= other == at || runs.get(other).admits(Count.of(1));
+            }
+            if (!restAtOne) {
+                continue;
+            }
+            if (asked != null && !asked.equals(runs.get(at))) {
+                return null;
+            }
+            asked = runs.get(at);
+        }
+        NumericDomain.Bounds held = howManyAreHeld(containers.getFirst(), read, region);
+        if (asked == null || held == null || !held.admits(Count.of(1))) {
+            return null;
+        }
+        return held.admits(Count.ZERO) ? withNought(asked, carrier) : asked;
     }
 
     /**

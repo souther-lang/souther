@@ -4,7 +4,10 @@ import souther.compiler.abort.GetsPast;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ClausesInOrder;
+import souther.compiler.check.CallArguments;
+import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.StatedComparison;
@@ -20,6 +23,7 @@ import souther.compiler.core.Evaluated;
 import souther.compiler.core.Kernel;
 import souther.compiler.inputs.DecimalOperation;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.inputs.InputDomain;
@@ -30,6 +34,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TotalsOfOneRun;
 import souther.compiler.inputs.WrittenOutElements;
@@ -38,6 +43,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.BinOp;
@@ -880,7 +886,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     // a binding of one of them is answered for here.
                     if (!NumbersOnTheWayToATotal.completeWhereTheAnswerHasAPlace(node, numbers,
                             ofTheInput, at)) {
-                        told.exact = false;
+                        NumericTerm total = addedAsItIs(numbers);
+                        if (total instanceof NumericTerm.TakenOver && sumsProductsOfFields(node,
+                                total)) {
+                            tellAnIntTotal(node, numbers, List.of());
+                            told.partials.add(total);
+                        } else {
+                            told.exact = false;
+                        }
                     }
                     told.readByATerm(node);
                     if (isAPlainRead(node)) {
@@ -1092,7 +1105,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     tellAnIntTotal(node, answer, List.of());
                 } else {
                     NumericTerm total = addedAsItIs(walk.added());
-                    if (total == null) {
+                    if (total == null || !onlyAddsTheElement(node, total)) {
                         told.exact = false;
                     } else {
                         tellAnIntTotal(node, answer, List.of());
@@ -1104,19 +1117,133 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             /**
+             * Whether {@code node} is a walk from a written number whose step is the answer so
+             * far and what {@code total} adds up of the element, written as that and no more: the
+             * element itself for a total of the elements, the product of fields of it for a
+             * total of products. The reading composes a step as a form, which leaves out the
+             * operations that were written to get to it, and an operation not written is one no
+             * run can stop at.
+             */
+            private static boolean onlyAddsTheElement(Core node, NumericTerm total) {
+                SeededWalk walk = SeededWalk.of(node, closure -> Core.withoutStanding(closure)
+                        instanceof Core.Block block ? block : null);
+                if (walk == null || !(Core.withoutStanding(walk.seed()) instanceof Core.Int)
+                        || !(Core.withoutStanding(walk.step().body())
+                                instanceof Core.Binary sum) || sum.op() != BinOp.ADD) {
+                    return false;
+                }
+                BindingId carried = walk.accumulator().binding();
+                BindingId element = walk.element().binding();
+                return (isRead(sum.left(), carried) && writtenAs(sum.right(), element, total))
+                        || (isRead(sum.right(), carried) && writtenAs(sum.left(), element, total));
+            }
+
+            private static boolean isRead(Core e, BindingId name) {
+                return Core.withoutStanding(e) instanceof Core.Read read
+                        && name.equals(read.binding());
+            }
+
+            /**
+             * Whether {@code e} is what {@code total} adds up of the element {@code element}, as
+             * it is written: the element, or a product of fields of it.
+             */
+            private static boolean writtenAs(Core e, BindingId element, NumericTerm total) {
+                return total instanceof NumericTerm.TakenOf ? isRead(e, element)
+                        : multipliesFieldsOf(e, element);
+            }
+
+            /** Whether {@code e} is fields of {@code element} multiplied, and nothing else. */
+            private static boolean multipliesFieldsOf(Core e, BindingId element) {
+                Core here = Core.withoutStanding(e);
+                if (here instanceof Core.Binary product && product.op() == BinOp.MUL
+                        && product.type() == Type.INT) {
+                    return multipliesFieldsOf(product.left(), element)
+                            && multipliesFieldsOf(product.right(), element);
+                }
+                while (true) {
+                    switch (here) {
+                        case Core.Read read -> {
+                            return element.equals(read.binding());
+                        }
+                        case Core.FieldAccess access -> here = Core.withoutStanding(access.target());
+                        case Core.FieldProjection projection ->
+                                here = Core.withoutStanding(projection.base());
+                        default -> {
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            /**
              * The total of a container's elements that {@code added} is, where a walk adds each
-             * element as it stands and nothing else — or null where it adds anything beside that.
-             * Nothing is then worked out of an element before it is added, so the one thing a
-             * run can stop at besides the answer is a running total.
+             * element as it stands, or the product of fields of it, and nothing else — or null
+             * where it adds anything beside that. Nothing is then worked out of an element before
+             * it is added, so the one thing a run can stop at besides the answer is a running
+             * total.
              */
             private static NumericTerm addedAsItIs(LinearForm<NumericTerm> added) {
                 if (added.coefs().size() != 1 || !added.constant().isZero()) {
                     return null;
                 }
                 Map.Entry<NumericTerm, ExactRatio> only = added.coefs().entrySet().iterator().next();
-                return only.getKey() instanceof NumericTerm.TakenOf taken
-                        && taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
-                        && ExactRatio.ONE.equals(only.getValue()) ? taken : null;
+                return ExactRatio.ONE.equals(only.getValue()) && isATotalOfProductsOrElements(
+                        only.getKey()) ? only.getKey() : null;
+            }
+
+            /** Whether {@code term} adds up the elements of a container, or one product of fields
+             *  of each element at the weight one. */
+            private static boolean isATotalOfProductsOrElements(NumericTerm term) {
+                return switch (term) {
+                    case NumericTerm.TakenOf taken ->
+                            taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
+                    case NumericTerm.TakenOver over -> aProductOfFieldsPerElement(over);
+                    default -> false;
+                };
+            }
+
+            /** Whether {@code over} adds up, over the elements of a container, one product of at
+             *  least two fields of each at the weight one. */
+            private static boolean aProductOfFieldsPerElement(NumericTerm.TakenOver over) {
+                if (!(over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)
+                        || !(over.source() instanceof RunSource.ComputedOccurrences computed)
+                        || !(computed.computation() instanceof ElementValue.Multilinear product)
+                        || !product.form().constant().isZero()
+                        || product.form().coefs().size() != 1) {
+                    return false;
+                }
+                Map.Entry<ElementValue.Monomial, ExactRatio> only =
+                        product.form().coefs().entrySet().iterator().next();
+                return ExactRatio.ONE.equals(only.getValue()) && only.getKey().rounding() == null
+                        && only.getKey().fields().size() >= 2;
+            }
+
+            /**
+             * Whether {@code node} is the total of a closure's answers over a container, the
+             * closure a product of fields of the element and nothing else, as {@code total} is
+             * read: {@code List.sum(List.map(l -> l.price * l.qty, lines))}.
+             */
+            private static boolean sumsProductsOfFields(Core node, NumericTerm total) {
+                if (!aProductOfFieldsPerElement((NumericTerm.TakenOver) total)
+                        || !(Core.withoutStanding(node) instanceof Core.PreservedCall sum)
+                        || sum.args().size() != 1
+                        || !(Core.withoutStanding(sum.args().getFirst())
+                                instanceof Core.PreservedCall map)) {
+                    return false;
+                }
+                BuiltFrom<DeclaredArgument> built =
+                        DefaultBoundOperationFacts.get().buildsItsResultFrom(map.operation());
+                DeclaredArgument mapped = built == null ? null : built.mapsEachElementOf();
+                int over = mapped == null ? -1 : CallArguments.positionOf(mapped, map.operation());
+                if (over < 0 || over >= map.args().size() || map.args().size() != 2) {
+                    return false;
+                }
+                Core closure = Core.withoutStanding(map.args().get(1 - over));
+                return closure instanceof Core.Block block && block.params().size() == 1
+                        && block.params().getFirst() != null
+                        && block.params().getFirst().binding() != null
+                        && multipliesFieldsOf(block.body(),
+                                block.params().getFirst().binding());
             }
 
             /**
