@@ -4,8 +4,10 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
+import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -286,7 +288,7 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     void whatHoldsOfOneElementIsNotTakenOfTheOnesTheEndWasKeptOf() {
         String guarded = report(folded("if l.discount <= 5 then (if l.discount > w then"
                 + " l.discount else w) else w", BELOW, "<= 10"));
-        assertTrue(guarded.contains(MADE_FROM_IT), guarded);
+        assertTrue(guarded.contains(ON_ITS_RUNS), guarded);
         assertTrue(guarded.contains(NOT_SHOWN_TO_REACH), guarded);
         String another = report(model("List.any(m -> m.discount <= 5 && List.fold((w, l) ->"
                 + " if l.discount >= w then l.discount else w, %d, lines) <= 10, lines)"
@@ -354,7 +356,7 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
                 "Int.max(w, l.discount) + 1",
                 "{ let d = w + 1  if l.discount > d then l.discount else d }")) {
             String report = report(folded(step, 0, "<= 10"));
-            assertTrue(report.contains(MADE_FROM_IT), () -> step + ": " + report);
+            assertTrue(report.contains(ON_ITS_RUNS), () -> step + ": " + report);
         }
     }
 
@@ -364,7 +366,7 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     void aWalkOverWhatAFilterKeptIsNotReadAsEveryElementOfTheList() {
         String report = report(model("List.fold((w, l) -> %s, 0, List.filter(l -> l.discount > 3,"
                 .formatted(GREATER) + " lines)) <= 10"));
-        assertTrue(report.contains(MADE_FROM_IT), report);
+        assertTrue(report.contains(ON_ITS_RUNS), report);
     }
 
     /**
@@ -471,6 +473,10 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     private static final String MADE_FROM_IT =
             "it is about a value made from this one, and what it says about the values here is not"
                     + " worked out";
+
+    /** What it says of a fold read as keeping no end: what its runs worked out places the rows. */
+    private static final String ON_ITS_RUNS =
+            WhyAPlaceIsUndividedIsSaid.of(UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS);
 
     /** What it says of a relation to another value shown to divide none of the values here. */
     private static final String RELATES_ANOTHER_VALUE =

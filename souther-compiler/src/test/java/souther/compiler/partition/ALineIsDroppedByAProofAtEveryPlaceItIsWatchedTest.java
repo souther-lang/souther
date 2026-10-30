@@ -372,7 +372,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                                             new BlockReason.WhereALineDecidesNotWorkedOut(
                                                     CompositionBudget
                                                             .CASES_A_LINE_IS_TAKEN_APART_INTO
-                                                            .figure()))),
+                                                            .figure())),
+                                            WhereAReadingStopped.ELSEWHERE),
                                     List.of())),
                     narrowed.parts(),
                     () -> "the line in the case that showed it, and not worked out in the other,"
@@ -420,7 +421,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                         new ComparisonAssessment.Several.Part(at, line(),
                                 List.of(DecidingCase.alone(dividing))),
                         new ComparisonAssessment.Several.Part(at, new ComparisonAssessment.Unread(
-                                ComparisonAssessment.atEachOf(line().cutting().over(), stopped)),
+                                ComparisonAssessment.atEachOf(line().cutting().over(), stopped),
+                                WhereAReadingStopped.ELSEWHERE),
                                 List.of())),
                 narrowed.parts(), "the line in the case that divides rows, and not worked out");
         assertEquals(List.of(new WhereAPartDecides(at, dividing)),

@@ -244,12 +244,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
          * stopped, each place the walk met is a separate question — a position met inside an
          * expression this did not take apart says nothing about what that position carries — and
          * one answer handed to all of them told a position about the carrier of another.
+         *
+         * @param where where the reading stopped, as the reader that stopped saw it
          */
-        record Stopped(SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why)
-                implements Read {
+        record Stopped(SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why,
+                       WhereAReadingStopped where) implements Read {
 
             public Stopped {
                 why = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(why));
+                Objects.requireNonNull(where, "a reading that stopped stopped somewhere");
             }
         }
 
@@ -610,6 +613,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                           Optional<ExpansionLineage> writtenIn) {
         SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> stopped =
                 new LinkedHashMap<>();
+        WhereAReadingStopped stoppedWhere = WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT;
         List<FilingCoordinate> settled = new ArrayList<>();
         List<FilingCoordinate> answeringNowhere = new ArrayList<>();
         List<FilingCoordinate> against = new ArrayList<>();
@@ -624,7 +628,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             Pullback.OnTheInput onTheInput = conditions.comparison(comparison, one.reads(), read);
             switch (readOnce(behavior, comparison, read, one.reads(), answering, onTheInput,
                     writtenIn)) {
-                case Read.Stopped alone -> alone.why().forEach(stopped::putIfAbsent);
+                case Read.Stopped alone -> {
+                    alone.why().forEach(stopped::putIfAbsent);
+                    stoppedWhere = stoppedWhere.and(alone.where());
+                }
                 case Read.StatesNoRelation _ -> {
                     if (statingNoRelation == null) {
                         statingNoRelation = one.reads();
@@ -668,7 +675,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
         }
         if (!stopped.isEmpty()) {
-            return new Read.Stopped(stopped);
+            return new Read.Stopped(stopped, stoppedWhere);
         }
         // Every application's statement is a line or none of them is drawn, and one that relates
         // the input to another value is no line.
@@ -732,7 +739,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     && onOne.merge(cuts.cutting().of(), 1, Integer::sum) > figure.maximum()) {
                 return new Read.Stopped(ComparisonAssessment.atEachOf(
                         GuardThresholds.filedAt(comparison, read, reads, answering),
-                        new BlockReason.WhereALineDecidesNotWorkedOut(figure.figure())));
+                        new BlockReason.WhereALineDecidesNotWorkedOut(figure.figure())),
+                        WhereAReadingStopped.ELSEWHERE);
             }
         }
         return null;
@@ -1265,13 +1273,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (decided != null) {
             List<FilingCoordinate> at = GuardThresholds.filedAt(comparison, read, reads, answering);
             if (!at.isEmpty()) {
-                return new Read.Stopped(ComparisonAssessment.atEachOf(at, decided));
+                return new Read.Stopped(ComparisonAssessment.atEachOf(at, decided),
+                        WhereAReadingStopped.ELSEWHERE);
             }
             SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> from =
                     new LinkedHashMap<>();
             GuardThresholds.cameFrom(comparison, reads, read.newtypes(), from);
             from.replaceAll((place, was) -> decided);
-            return new Read.Stopped(from);
+            return new Read.Stopped(from, WhereAReadingStopped.ELSEWHERE);
         }
         BlockReason.WhatItStatesIsNoLine said = whatItStates(stated, stops);
         // A number no position holds is all the statement says of what it relates. Which number
@@ -1281,8 +1290,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 || said.why() == BlockReason.WhatItStatesIsNoLine.Why.A_NUMBER_NO_POSITION_HOLDS;
         if (placeWords
                 && arithmetic.get() instanceof AffineReading.OfAComparison.Stopped stopped) {
-            return new Read.Stopped(GuardThresholds.whatEachPlaceIsLeftWith(
-                    comparison, stopped, read, reads, answering));
+            return GuardThresholds.whatEachPlaceIsLeftWith(comparison, stopped, read, reads,
+                    answering);
         }
         BlockReason.WhatItStatesIsNoLine why = said != null ? said
                 : new BlockReason.WhatItStatesIsNoLine(
@@ -1290,7 +1299,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         List<FilingCoordinate> filed =
                 GuardThresholds.filedAt(comparison, read, reads, answering);
         if (!filed.isEmpty()) {
-            return new Read.Stopped(ComparisonAssessment.atEachOf(filed, why));
+            return new Read.Stopped(ComparisonAssessment.atEachOf(filed, why),
+                    WhereAReadingStopped.ELSEWHERE);
         }
         // Where the values came from, and which of several containers' elements a value may be,
         // which is a fact about where the rule is filed and stays as that. A value filed where it
@@ -1301,7 +1311,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         GuardThresholds.cameFrom(comparison, reads, read.newtypes(), out);
         out.replaceAll((at, was) -> was instanceof BlockReason.RuleAboutADerivedValue
                 && why.why() != BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ ? why : was);
-        return new Read.Stopped(out);
+        return new Read.Stopped(out, WhereAReadingStopped.ELSEWHERE);
     }
 
     /**
@@ -1584,7 +1594,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                         InputReads reads, Arrivals answering) {
         return new Read.Stopped(ComparisonAssessment.atEachOf(
                 GuardThresholds.filedAt(comparison, read, reads, answering),
-                new BlockReason.SeveralLinesInOneRule()));
+                new BlockReason.SeveralLinesInOneRule()), WhereAReadingStopped.ELSEWHERE);
     }
 
     /**
@@ -1615,7 +1625,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case CountsWrittenOut.PastAFigure(CompositionBudget figure) ->
                     new Read.Stopped(ComparisonAssessment.atEachOf(
                             GuardThresholds.filedAt(comparison, read, reads, answering),
-                            new BlockReason.WhereALineDecidesNotWorkedOut(figure.figure())));
+                            new BlockReason.WhereALineDecidesNotWorkedOut(figure.figure())),
+                            WhereAReadingStopped.ELSEWHERE);
             case CountsWrittenOut.Written(Proposition written) ->
                     switch (several(behavior, comparison.left(), written, read, reads, authors,
                             relation -> {
@@ -2020,8 +2031,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             if (line instanceof Read.Cuts cuts && !each.cases().stream()
                     .allMatch(one -> AStatementAtARow.askable(one.condition()))) {
                 parts.add(new Read.Several.Part(alone, new Read.Stopped(ComparisonAssessment
-                        .atEachOf(cuts.cutting().over(), new BlockReason.SeveralLinesInOneRule())),
-                        List.of()));
+                        .atEachOf(cuts.cutting().over(), new BlockReason.SeveralLinesInOneRule()),
+                        WhereAReadingStopped.ELSEWHERE), List.of()));
                 continue;
             }
             if (authors.isEmpty()) {

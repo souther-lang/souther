@@ -2852,6 +2852,53 @@ public final class LevelRealizer {
     }
 
     /**
+     * Where a row would stand at an item, by the way such a row is found ({@link PointSearchGoal}),
+     * leaving out the places already tried — or why nothing is offered.
+     *
+     * <p><b>The one way in, whichever way the row is found.</b> What the rules prove before
+     * anything is looked for is proved here first for both: a region shown to hold nothing holds
+     * no row, solved for or run. Each way of finding one asked apart, a way added later would have
+     * to remember the proof, and a search that did not would say a candidate was missing where
+     * the model leaves nothing.
+     *
+     * <p>Then the item's own: a constraint is solved for, with the proofs only a constraint can
+     * make ({@link #realize(Standing, SearchRegion, WitnessSearch, ValuesTried)}); a number only a
+     * run works out is offered its next candidate ({@link RowsARunIsTriedFor}), held to the rules
+     * as every placement is, and nothing is solved for or run here. What a row built at it works
+     * out is read where it is run.
+     */
+    public Realization realize(PointSearchGoal goal, SearchRegion within, WitnessSearch looking,
+                               ValuesTried tried) {
+        if (within == null || looking == null) {
+            throw new IllegalArgumentException("a search looks inside a region, at positions whose"
+                    + " values it asks what they admit: " + within + ", " + looking);
+        }
+        if (within.emptiness().isPresent()) {
+            return new Realization.Impossible();
+        }
+        return switch (goal) {
+            case PointSearchGoal.ByConstraints(Standing constraint) ->
+                    realize(constraint, within, looking, tried);
+            case PointSearchGoal.ByObservation observed -> nextCandidate(observed, within, tried);
+        };
+    }
+
+    /**
+     * The first candidate for {@code goal} that was not tried and the rules were not shown to
+     * refuse, or that every one of them was: the population is said, and nothing is proved of it.
+     */
+    private Realization nextCandidate(PointSearchGoal.ByObservation goal, SearchRegion within,
+                                      ValuesTried tried) {
+        for (Map<RealizationTarget, Place> each : RowsARunIsTriedFor.candidates(goal)) {
+            if (found(each, within, tried) instanceof Realization.Found offered) {
+                return offered;
+            }
+        }
+        return Realization.Unknown.searchLeftSomethingUntried(Set.of(),
+                Set.of(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR));
+    }
+
+    /**
      * A placement handed back, or nothing composed where the rules were shown to leave none.
      *
      * <p><b>The one place a placement becomes an answer.</b> What a search may hand back is the same

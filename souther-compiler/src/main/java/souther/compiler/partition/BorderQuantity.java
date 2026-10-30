@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.coverage.SeenComparison;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.Quantities;
@@ -26,6 +27,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.ModelOccurrence;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -51,7 +53,7 @@ import java.util.stream.Collectors;
  *
  * <p><b>Everything a border's readers ask is asked here, and which of these it is is asked
  * nowhere.</b> How the quantity's own values are ordered ({@link #levels}), whether a row stands at
- * one item ({@link #standsAt}), what a search has to solve to put a row there ({@link #standingAt}),
+ * one item ({@link #standsAt}), what a search for a row there is asked to find ({@link #searchGoalAt}),
  * and how a report names it ({@link #left} and {@link #writtenAt}). A reader outside this file that
  * asked which of the variants it was holding would be asking the same question the old two shapes of
  * line asked, under a new name — and that question is what made a second shape cost a copy of the
@@ -64,7 +66,8 @@ import java.util.stream.Collectors;
  */
 public sealed interface BorderQuantity
         permits LinearQuantity, BorderQuantity.HowMany, BorderQuantity.RemainderOfAForm,
-        BorderQuantity.RemainderOfAPair, BorderQuantity.ProductOfAPair {
+        BorderQuantity.RemainderOfAPair, BorderQuantity.ProductOfAPair,
+        BorderQuantity.ComparedOnARun {
 
     /**
      * The number one position holds, which is the position's own values.
@@ -987,8 +990,8 @@ public sealed interface BorderQuantity
             }
         }
 
-        @Override
-        public Standing standingAt(Criterion where) {
+        /** What a search has to solve to put a row at one item. */
+        Standing standingAt(Criterion where) {
             return against.coefs().isEmpty()
                     ? new Standing.OfACount(counted, numbers(), where)
                     : new Standing.OfACountAndAForm(counted, against,
@@ -1316,8 +1319,8 @@ public sealed interface BorderQuantity
             }
         }
 
-        @Override
-        public Standing standingAt(Criterion where) {
+        /** What a search has to solve to put a row at one item. */
+        Standing standingAt(Criterion where) {
             return added.coefs().isEmpty()
                     ? new Standing.OfARemainder(wholeDividend(),
                             LinearQuantity.answeredOn(dividend.on()), levels(), divisor, where)
@@ -1517,8 +1520,8 @@ public sealed interface BorderQuantity
             factors.lookAt(row);
         }
 
-        @Override
-        public Standing standingAt(Criterion where) {
+        /** What a search has to solve to put a row at one item. */
+        Standing standingAt(Criterion where) {
             List<NumericTerm> both = terms();
             return new Standing.OfAProduct(both.get(0).atOnePosition(),
                     both.get(1).atOnePosition(), LinearQuantity.answeredOn(factors.on()),
@@ -1664,8 +1667,8 @@ public sealed interface BorderQuantity
             both.lookAt(row);
         }
 
-        @Override
-        public Standing standingAt(Criterion where) {
+        /** What a search has to solve to put a row at one item. */
+        Standing standingAt(Criterion where) {
             return new Standing.OfARemainderByAnInput(dividend.atOnePosition(),
                     divisor.atOnePosition(), LinearQuantity.answeredOn(both.on()), levels(),
                     where);
@@ -1700,6 +1703,126 @@ public sealed interface BorderQuantity
         public BoundaryTarget.Shape shape() {
             return BoundaryTarget.Shape.REMAINDER_BY_AN_INPUT;
         }
+    }
+
+    /**
+     * How far apart the two sides of one comparison of whole numbers came out on a run: the left
+     * less the right, a whole number of any size.
+     *
+     * <p>A number only a run works out. The reading of the comparison stopped short of the input —
+     * a fold, a call, a remainder of an index — so nothing says where the input's numbers stand
+     * for it to come to a value, and a row stands at a value of it where its run worked the sides
+     * out to that far apart. Read off what the run recorded at the comparison
+     * ({@link Observation#comparedOnTheRun}), and never worked out again.
+     *
+     * <p>The difference and not the left side alone, so that every comparison is held against
+     * nought on one order whatever its other side is, and is taken exactly: two sides each an
+     * {@code Int} may stand further apart than an {@code Int} holds, and the comparison answers
+     * all the same. It is a coordinate of the comparison, and nothing the program works out.
+     *
+     * <p>One quantity for one comparison of the model, however many times the tree that runs
+     * writes it. Which places a run records it at is the line's ({@link LineOrigin}), and a
+     * reading asks the run for those.
+     *
+     * <p>Where a row is looked for, candidates are written at the numbers of the places the
+     * comparison names — how many a container holds, and the whole numbers outside a container —
+     * and run ({@link RowsARunIsTriedFor}). Which numbers those are is said here, where the places
+     * were read, so that the search writes at the places the reading looked at and at no others.
+     *
+     * @param behavior   whose input the rows are of
+     * @param comparison which comparison of the model this is
+     * @param spelled    the two sides as an author would read them, which a report names it by
+     * @param filed      where a rule on it is filed: the places the comparison names
+     * @param lengths    how many each container among those places holds, a candidate written
+     *                   at each
+     * @param values     the whole numbers at those places outside a container, a candidate
+     *                   written at each
+     */
+    record ComparedOnARun(String behavior, ModelOccurrence comparison, String spelled,
+                          List<FilingCoordinate> filed,
+                          List<NumericTerm.FromOnePosition> lengths,
+                          List<NumericTerm.FromOnePosition> values) implements BorderQuantity {
+
+        public ComparedOnARun {
+            if (behavior == null || comparison == null || spelled == null || filed == null
+                    || lengths == null || values == null) {
+                throw new IllegalArgumentException(
+                        "a comparison read on its runs is one comparison, named and filed");
+            }
+            filed = List.copyOf(filed);
+            lengths = List.copyOf(lengths);
+            values = List.copyOf(values);
+        }
+
+        /** Every whole number. */
+        @Override
+        public LevelSpace levels() {
+            return LevelSpace.steppingBy(ExactRatio.ONE);
+        }
+
+        /**
+         * Where the row stands, read off what its run worked out at the comparison: at the item
+         * where some visit came out at a level it holds.
+         *
+         * <p>A visit not kept is not a visit that came out elsewhere. Where every kept visit is
+         * away from the item and the recording says the run went past those kept, it could not be
+         * told; where no run of the row was watched, nothing was there to read.
+         */
+        @Override
+        public Stands standsAt(Criterion where, Observation row) {
+            Optional<SidesOnARun> seen = row.comparedOnTheRun();
+            if (seen.isEmpty()) {
+                return Stands.couldNotTell(ReadingGap.COULD_NOT_READ_ROW);
+            }
+            for (SeenComparison visit : seen.get().visits()) {
+                ExactRatio apart = ExactRatio.of(BigInteger.valueOf(visit.left())
+                        .subtract(BigInteger.valueOf(visit.right())));
+                if (where.holds(new Level.OfTheQuantity(apart))) {
+                    return Stands.YES;
+                }
+            }
+            return seen.get().everyVisitKept() ? Stands.NO
+                    : Stands.couldNotTell(ReadingGap.COULD_NOT_READ_ROW);
+        }
+
+        /** No number of the row is read: what is read is the run. */
+        @Override
+        public void lookAt(Observation row) {}
+
+        @Override
+        public String named() {
+            return new AxisId(behavior, left()).toString();
+        }
+
+        @Override
+        public String left() {
+            return spelled;
+        }
+
+        @Override
+        public String writtenAt(Level level) {
+            if (!(level instanceof Level.OfTheQuantity apart)) {
+                throw new IllegalStateException("how far apart two sides came out was asked to"
+                        + " write a level that is not a number: " + level);
+            }
+            return apart.at().spelled();
+        }
+
+        @Override
+        public BoundaryTarget.Shape shape() {
+            return BoundaryTarget.Shape.COMPARED_ON_A_RUN;
+        }
+    }
+
+    /**
+     * How far apart the sides of the comparison {@code comparison} come out on a run
+     * ({@link ComparedOnARun}).
+     */
+    static BorderQuantity comparedOnARun(String behavior, ModelOccurrence comparison,
+                                         String spelled, List<FilingCoordinate> filed,
+                                         List<NumericTerm.FromOnePosition> lengths,
+                                         List<NumericTerm.FromOnePosition> values) {
+        return new ComparedOnARun(behavior, comparison, spelled, filed, lengths, values);
     }
 
     /** How this quantity's own values are ordered, and which of them it can take. */
@@ -1746,6 +1869,8 @@ public sealed interface BorderQuantity
             // ask ({@link UndividedByARelation}).
             case HowMany count -> at instanceof Level.OfTheQuantity(ExactRatio level)
                     ? count.relationAt(level, relation) : UndividedByARelation.SHOWING_NOTHING;
+            // A number only a run works out is no relation of the input's numbers.
+            case ComparedOnARun _ -> UndividedByARelation.SHOWING_NOTHING;
         };
     }
 
@@ -1773,6 +1898,8 @@ public sealed interface BorderQuantity
             case ProductOfAPair _ -> false;
             // And a remainder by an input's number between what the divisors' range allows.
             case RemainderOfAPair _ -> false;
+            // And how far apart two sides came out between whatever the run works out.
+            case ComparedOnARun _ -> false;
         };
     }
 
@@ -1800,11 +1927,31 @@ public sealed interface BorderQuantity
             case Apart _, OverAForm _, HowMany _, RemainderOfAForm _, RemainderOfAPair _,
                  ProductOfAPair _ ->
                     NumbersAskedFor.onlyTogether(new QuantityInRegion(this, where.region()));
+            // Nothing the item says is about a number of the row: which rows stand at it is the
+            // run's to say, and a candidate is written at any of them.
+            case ComparedOnARun _ -> NumbersAskedFor.ANYTHING;
         };
     }
 
-    /** What a search has to solve to put a row at one item. */
-    Standing standingAt(Criterion where);
+    /**
+     * What a search for a row at one item is asked to find: what it has to solve, where the
+     * quantity is one this compiler reads of the input's numbers, and what a run has to work out,
+     * where it is a number only a run works out ({@link PointSearchGoal}).
+     */
+    default PointSearchGoal searchGoalAt(Criterion where) {
+        return switch (this) {
+            case LinearQuantity form -> new PointSearchGoal.ByConstraints(form.standingAt(where));
+            case HowMany count -> new PointSearchGoal.ByConstraints(count.standingAt(where));
+            case RemainderOfAForm remainder ->
+                    new PointSearchGoal.ByConstraints(remainder.standingAt(where));
+            case RemainderOfAPair remainder ->
+                    new PointSearchGoal.ByConstraints(remainder.standingAt(where));
+            case ProductOfAPair product ->
+                    new PointSearchGoal.ByConstraints(product.standingAt(where));
+            case ComparedOnARun run ->
+                    new PointSearchGoal.ByObservation(run.lengths(), run.values(), where);
+        };
+    }
 
     /**
      * Whether the row {@code row} is a reading of stands at one item of a border on this quantity,
@@ -1842,6 +1989,9 @@ public sealed interface BorderQuantity
             case RemainderOfAForm remainder -> remainder.left();
             case RemainderOfAPair remainder -> remainder.left();
             case ProductOfAPair product -> product.left();
+            // The comparison of the model, which is what one of these is: two comparisons
+            // spelled alike are two numbers two runs work out.
+            case ComparedOnARun run -> run.comparison().toString();
         };
     }
 
@@ -1852,8 +2002,8 @@ public sealed interface BorderQuantity
     default ExactRatio per() {
         return switch (this) {
             case LinearQuantity form -> QuantityKey.per(form.direction());
-            case HowMany _, RemainderOfAForm _, RemainderOfAPair _, ProductOfAPair _ ->
-                    ExactRatio.ONE;
+            case HowMany _, RemainderOfAForm _, RemainderOfAPair _, ProductOfAPair _,
+                 ComparedOnARun _ -> ExactRatio.ONE;
         };
     }
 
@@ -1871,6 +2021,8 @@ public sealed interface BorderQuantity
             case RemainderOfAForm remainder -> remainder.allNumbers();
             case RemainderOfAPair remainder -> remainder.terms();
             case ProductOfAPair product -> product.terms();
+            // A run is read, and no number of the row.
+            case ComparedOnARun _ -> List.of();
         };
     }
 
@@ -1886,6 +2038,8 @@ public sealed interface BorderQuantity
             case ProductOfAPair product -> ProductOfAPair.across(
                     quantities.runsBetween(product.alone(0)),
                     quantities.runsBetween(product.alone(1)));
+            // Nothing the rules say of the input reaches what a run works out of it.
+            case ComparedOnARun _ -> NumericDomain.Bounds.OPEN;
         };
     }
 
@@ -1944,6 +2098,9 @@ public sealed interface BorderQuantity
                 yield new NumericDomain.FormProjection.Within(ProductOfAPair.across(each[0],
                         each[1]));
             }
+            // No relation a region holds is about what a run works out.
+            case ComparedOnARun _ ->
+                    new NumericDomain.FormProjection.Within(NumericDomain.Bounds.OPEN);
         };
     }
 
@@ -1974,7 +2131,7 @@ public sealed interface BorderQuantity
                             remainder.divisor, values));
             case ProductOfAPair product -> HeldValues.OfAForm.of(region, product.terms(),
                     values -> OrderedAffineBoundary.productAt(product.terms(), values));
-            case HowMany _ -> HeldValues.NONE;
+            case HowMany _, ComparedOnARun _ -> HeldValues.NONE;
         };
     }
 
@@ -1987,6 +2144,8 @@ public sealed interface BorderQuantity
             case LinearQuantity form -> AffineReading.filedAt(form.direction().coefs().keySet());
             case HowMany _, RemainderOfAForm _, RemainderOfAPair _, ProductOfAPair _ ->
                     AffineReading.filedAt(numbers());
+            // The places the comparison names, which is where the reading that stopped looked.
+            case ComparedOnARun run -> run.filed();
         };
     }
 
@@ -2008,7 +2167,7 @@ public sealed interface BorderQuantity
             case Apart apart -> apart.counts();
             case OfACoordinate coordinate -> coordinate.of().answered().counts();
             case OverAForm _, HowMany _, RemainderOfAForm _, RemainderOfAPair _,
-                 ProductOfAPair _ -> true;
+                 ProductOfAPair _, ComparedOnARun _ -> true;
         };
     }
 
@@ -2024,7 +2183,7 @@ public sealed interface BorderQuantity
         return switch (this) {
             case OverAForm form -> form.terms().size() > 1 ? Optional.of(form) : Optional.empty();
             case OfACoordinate _, Apart _, HowMany _, RemainderOfAForm _, RemainderOfAPair _,
-                 ProductOfAPair _ -> Optional.empty();
+                 ProductOfAPair _, ComparedOnARun _ -> Optional.empty();
         };
     }
 
@@ -2048,6 +2207,8 @@ public sealed interface BorderQuantity
             case LinearQuantity _, HowMany _ -> readOverARun()
                     ? new BlockReason.ComparisonOverARun()
                     : new BlockReason.ComparisonRelatingTwoValues();
+            // A number a run works out of the values here, which nothing read back to them.
+            case ComparedOnARun _ -> new BlockReason.ComparisonMeasuredOnItsRuns();
         };
     }
 
@@ -2070,6 +2231,7 @@ public sealed interface BorderQuantity
             case RemainderOfAForm remainder -> remainder.dividend().direction().coefs().keySet()
                     .stream().anyMatch(term -> term.atOnePosition() == null);
             case ProductOfAPair _, RemainderOfAPair _ -> false;
+            case ComparedOnARun _ -> true;
         };
     }
 
@@ -2081,7 +2243,8 @@ public sealed interface BorderQuantity
         return switch (this) {
             case LinearQuantity form -> form.direction().coefs().size() == 1
                     ? form.carrierOf(form.direction().coefs().keySet().iterator().next()) : null;
-            case HowMany _, RemainderOfAForm _, RemainderOfAPair _, ProductOfAPair _ -> null;
+            case HowMany _, RemainderOfAForm _, RemainderOfAPair _, ProductOfAPair _,
+                 ComparedOnARun _ -> null;
         };
     }
 
@@ -2179,6 +2342,8 @@ public sealed interface BorderQuantity
             case ProductOfAPair _ -> true;
             // What one number leaves of another, which is the call's and not a position's.
             case RemainderOfAPair _ -> true;
+            // How far apart the sides came out, which is the comparison's and not a position's.
+            case ComparedOnARun _ -> true;
         };
     }
 
@@ -2278,6 +2443,18 @@ public sealed interface BorderQuantity
         WalkResult<java.util.List<ObservedValue>> everyValueAt(TermPath path);
 
         /**
+         * What the sides of the comparison the line being read was drawn from came to on this
+         * row's run, on each visit kept in the order of the visits — or empty where no run of the
+         * row was watched, which is no run that went elsewhere.
+         *
+         * <p>Of the run and not of the values the row wrote: a number the run works out is not a
+         * value at any place of the row.
+         */
+        default Optional<SidesOnARun> comparedOnTheRun() {
+            return Optional.empty();
+        }
+
+        /**
          * One observation per element of the container at {@code container}, each the row with
          * that element chosen and whatever this one chose of the other containers.
          *
@@ -2346,6 +2523,25 @@ public sealed interface BorderQuantity
          */
         default boolean choseAnElement() {
             return true;
+        }
+    }
+
+    /**
+     * What the sides of one comparison came to on a run, on each visit kept, and whether those are
+     * every visit the run made.
+     *
+     * <p>Whether they are all of them is the recording's word ({@code keptEveryVisit}) and is never
+     * read off how many were kept: a run that visited as many times as are kept kept every visit,
+     * and one that went on did not.
+     *
+     * @param visits         the visits kept, in the order of the visits at each place
+     * @param everyVisitKept whether no place the comparison is recorded at was visited past the
+     *                       visits kept
+     */
+    record SidesOnARun(List<SeenComparison> visits, boolean everyVisitKept) {
+
+        public SidesOnARun {
+            visits = List.copyOf(visits);
         }
     }
 

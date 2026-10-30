@@ -353,6 +353,7 @@ class AQuotientIsALineWhereItsDivisorIsAConstantTest {
             case BorderQuantity.RemainderOfAForm remainder -> remainder.left();
             case BorderQuantity.RemainderOfAPair remainder -> remainder.left();
             case BorderQuantity.ProductOfAPair product -> product.left();
+            case BorderQuantity.ComparedOnARun run -> run.left();
         };
     }
 }

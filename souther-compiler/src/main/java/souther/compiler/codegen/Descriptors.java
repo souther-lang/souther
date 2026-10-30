@@ -124,6 +124,9 @@ final class Descriptors {
      * taking a copy of that value off the stack and leaving the original where it was. */
     static final MethodTypeDesc MTD_Probe_condition = MethodTypeDesc.of(ConstantDescs.CD_void,
             ConstantDescs.CD_boolean, ConstantDescs.CD_int);
+    static final MethodTypeDesc MTD_Probe_compared = MethodTypeDesc.of(ConstantDescs.CD_void,
+            ConstantDescs.CD_boolean, ConstantDescs.CD_long, ConstantDescs.CD_long,
+            ConstantDescs.CD_int);
     /**
      * What a run of the measuring classes is asked to answer with at an arm that carries its
      * siblings. Reached the way {@link #CD_Probe} is, and for the same reason.

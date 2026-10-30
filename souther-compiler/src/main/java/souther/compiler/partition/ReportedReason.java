@@ -357,6 +357,9 @@ public final class ReportedReason {
             // neither relates two positions nor is read over a run.
             case BlockReason.ComparisonOnARemainder _ ->
                     UndividedPosition.Reason.RULE_ABOUT_A_REMAINDER;
+            // Its own word again: the reading stopped, and the border is measured on the runs.
+            case BlockReason.ComparisonMeasuredOnItsRuns _ ->
+                    UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS;
             // Its own word again, and the one furthest from the two above. Those two are rules
             // that leave the position where they found it; this one holds it to what the rule
             // admits, which is a fact a reader acts on — the value written here is one of those.

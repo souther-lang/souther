@@ -250,6 +250,9 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // And its own word beside that one: the line is drawn on what a division leaves of the
         // values, which is a number of its own and no run of any position's.
         table.put("ComparisonOnARemainder", "RULE_ABOUT_A_REMAINDER/-");
+        // And its own word beside those: the reading stopped, and the line is drawn on how far
+        // apart the comparison's sides come out on a run, which no position's values are.
+        table.put("ComparisonMeasuredOnItsRuns", "RULE_MEASURED_ON_ITS_RUNS/-");
         // A row of its own, and here is what it is for. The three above are rules that leave the
         // position where they found it: the quantity is empty, the line falls outside it, or the
         // number is over a run. This one holds the position to the values it admits, and everything
@@ -600,6 +603,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.ComparisonRelatingTwoValues(),
                 new BlockReason.ComparisonOverARun(),
                 new BlockReason.ComparisonOnARemainder(),
+                new BlockReason.ComparisonMeasuredOnItsRuns(),
                 new BlockReason.RuleRestrictingToAdmittedValues(),
                 new BlockReason.PredicateTellingNothingApart(),
                 new BlockReason.ClassesNotComposed(),

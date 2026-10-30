@@ -68,25 +68,26 @@ class HowManyDifferentValuesAWalkGathersAcrossItsElementsIsReadTest {
     /**
      * A union's law counts what its second argument adds to its first, so a walk carrying its
      * answer in the second is no walk this reads: that the two may be swapped is stated nowhere.
-     * And one adding a set that is no element's is no number of the elements.
+     * And one adding a set that is no element's is no number of the elements. None of them is read
+     * as a count of the elements, and each is measured on what its runs worked out.
      */
     @Test
     void aWalkThatIsNotTheElementsSetsAddedToWhatItCarriedIsNotReadSo() {
-        assertEquals(List.of("meetings RULE_ABOUT_A_DERIVED_VALUE",
-                "meetings[*].attendees RULE_ABOUT_A_DERIVED_VALUE"), notRead("""
+        assertEquals(List.of("meetings RULE_MEASURED_ON_ITS_RUNS",
+                "meetings[*].attendees RULE_MEASURED_ON_ITS_RUNS"), notRead("""
                 behavior f : (meetings: List<Meeting>) -> Bool
                 let f (meetings) = Set.size(List.fold((acc, m) -> Set.union(m.attendees.value, acc),
                     Set.empty, meetings)) <= 1
                 """, "f"));
-        assertEquals(List.of("meetings RULE_ABOUT_A_DERIVED_VALUE",
-                "meetings[*].attendees RULE_ABOUT_A_DERIVED_VALUE"), notRead("""
+        assertEquals(List.of("meetings RULE_MEASURED_ON_ITS_RUNS",
+                "meetings[*].attendees RULE_MEASURED_ON_ITS_RUNS"), notRead("""
                 behavior f : (meetings: List<Meeting>) -> Bool
                 let f (meetings) = Set.size(List.fold(
                     (acc, m) -> Set.union(m.attendees.value, m.attendees.value), Set.empty,
                     meetings)) <= 1
                 """, "f"));
-        assertEquals(List.of("meetings RULE_ABOUT_A_DERIVED_VALUE",
-                "others RULE_ABOUT_A_DERIVED_VALUE"), notRead("""
+        assertEquals(List.of("meetings RULE_MEASURED_ON_ITS_RUNS",
+                "others RULE_MEASURED_ON_ITS_RUNS"), notRead("""
                 behavior f : (meetings: List<Meeting>, others: Attendees) -> Bool
                 let f (meetings, others) = Set.size(List.fold(
                     (acc, m) -> Set.union(acc, others.value), Set.empty, meetings)) <= 1

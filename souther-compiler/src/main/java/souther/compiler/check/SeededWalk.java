@@ -4,7 +4,9 @@ import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
@@ -70,6 +72,89 @@ public record SeededWalk(Core seed, Core container, Core.Block step, Core.Binder
                 ? null : new SeededWalk(walk.seed(), walk.container(), walk.step(),
                         walk.accumulator(), walk.element(), walk.applied(),
                         walk.inTheContainersOrder());
+    }
+
+    /**
+     * This walk read for {@code field} of the record it carries alone, where that field is a walk
+     * of its own — or null where it is not.
+     *
+     * <p>A walk whose seed and step each build the record with every field written out ends with
+     * the record whose {@code field} is what that field's own walk ends with, where the step's
+     * value for it reads what was carried only as that field. Then the other fields are no part of
+     * it, by induction over the walk: what the field comes to after an element is the field's step
+     * on what it came to before, and nothing else carried. So the field's walk is this one with the
+     * seed the field's seed and the step the field's value in the step, what was carried read
+     * there as the field. A field whose step reads another field of what was carried, or the
+     * record whole, is no walk of its own, and is not read as one.
+     */
+    public SeededWalk ofTheField(String field) {
+        if (!(Core.withoutStanding(seed) instanceof Core.Construct seeded)
+                || !(Core.withoutStanding(step.body()) instanceof Core.Construct stepped)
+                || !seeded.typeName().equals(stepped.typeName())) {
+            return null;
+        }
+        Core seedValue = valueGiven(seeded, field);
+        Core stepValue = valueGiven(stepped, field);
+        if (seedValue == null || stepValue == null) {
+            return null;
+        }
+        BindingId carried = accumulator.binding();
+        Core.Read itself = new Core.Read(accumulator.name(), carried, stepValue.type(),
+                stepValue.pos());
+        Core body = theFieldAsCarried(stepValue, carried, field, itself);
+        if (body == null) {
+            return null;
+        }
+        int at = step.params().indexOf(accumulator);
+        if (at < 0) {
+            return null;
+        }
+        List<Type> types = new ArrayList<>(step.paramTypes());
+        types.set(at, stepValue.type());
+        return new SeededWalk(seedValue, container,
+                new Core.Block(step.params(), types, body, step.pos()), accumulator, element,
+                applied, inTheContainersOrder);
+    }
+
+    /** What {@code built} gives {@code field}, or null where it gives it nothing. */
+    private static Core valueGiven(Core.Construct built, String field) {
+        for (Core.FieldValue each : built.values()) {
+            if (each.field().equals(field)) {
+                return each.value();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * {@code e} with {@code field} of what was carried read as {@code itself}; null where what
+     * was carried is read any other way, which no walk of the field alone reads.
+     */
+    private static Core theFieldAsCarried(Core e, BindingId carried, String field,
+                                          Core.Read itself) {
+        Core node = Core.withoutStanding(e);
+        Core.FieldAccess access = switch (node) {
+            case Core.FieldAccess one -> one;
+            case Core.FieldProjection projection -> projection.lastAccess();
+            default -> null;
+        };
+        if (access != null && Core.withoutStanding(access.target()) instanceof Core.Read name
+                && carried.equals(name.binding())) {
+            return access.field().equals(field) ? itself : null;
+        }
+        if (node instanceof Core.Read name && carried.equals(name.binding())) {
+            return null;
+        }
+        boolean[] lost = {false};
+        Core out = Core.mapAll(node, child -> {
+            Core done = theFieldAsCarried(child, carried, field, itself);
+            if (done == null) {
+                lost[0] = true;
+                return child;
+            }
+            return done;
+        }, name -> name);
+        return lost[0] ? null : out;
     }
 
     /**

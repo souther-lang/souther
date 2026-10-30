@@ -279,10 +279,13 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
                 behavior f : (fs: List<Forecast>) -> Int
                 let f (fs) = if %s then 1 else 0
                 """;
+        // Read as no count of a place's values, and measured on what each run worked out.
         Said worked = of(model.formatted(
                 "Set.size(List.fold((acc, f) -> Set.insert(f.amount + 1, acc), Set.empty, fs))"
                         + " == 1"), "f");
-        assertEquals(List.of("rule_unread"), worked.weakening());
+        assertEquals(List.of(), worked.weakening());
+        assertEquals(List.of("fs RULE_MEASURED_ON_ITS_RUNS",
+                "fs[*].amount RULE_MEASURED_ON_ITS_RUNS"), worked.notRead());
         for (String condition : List.of(
                 "Set.size(List.fold((acc, f) -> Set.insert(f.currency, acc), Set.empty,"
                         + " List.filter(f -> f.amount > 0, fs))) == 1",
@@ -303,7 +306,11 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
                     Set.empty, List.flatMap(d -> List.map(.currency, d.forecasts), l.desks))) == 1,
                         floors)
                 """, "f");
-        assertEquals(List.of("rule_unread"), inEachFloor.weakening());
+        assertEquals(List.of(), inEachFloor.weakening());
+        assertFalse(inEachFloor.notRead().isEmpty());
+        assertTrue(inEachFloor.notRead().stream()
+                .allMatch(each -> each.endsWith(" RULE_MEASURED_ON_ITS_RUNS")),
+                inEachFloor.notRead().toString());
     }
 
     /**

@@ -617,6 +617,7 @@ final class WhatABodyTellsApart {
             case BlockReason.ComparisonRelatingTwoValues _,
                  BlockReason.ComparisonOverARun _,
                  BlockReason.ComparisonOnARemainder _,
+                 BlockReason.ComparisonMeasuredOnItsRuns _,
                  BlockReason.RuleRestrictingToAdmittedValues _,
                  BlockReason.ClassesNotComposed _ -> false;
         };

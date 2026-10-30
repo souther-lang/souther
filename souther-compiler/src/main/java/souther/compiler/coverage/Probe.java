@@ -71,11 +71,25 @@ public final class Probe {
          *  more is recorded: a count that went on would come round to a visit already past. */
         private int[] answered = new int[INITIAL_SITES];
 
+        /** What the two sides of a comparison of whole numbers came to, indexed by site and then
+         *  {@code 2 * visit} for the left and the next for the right, for the visits kept. Null at a
+         *  site whose comparison handed nothing over, which is every site of most runs. */
+        private long[][] compared = new long[0][];
+
+        /** Which visits of each site {@link #compared} holds the sides of, a bit per visit. */
+        private long[] comparedOn = new long[0];
+
+        /** The sites visited again after the visits kept were all taken: what the recording says
+         *  of itself where it stopped keeping, so that no reader works it out from a count. */
+        private final BitSet pastTheKept = new BitSet();
+
         private Recording(NumberingIdentity numbering) {
             this.numbering = numbering;
         }
 
-        private void sees(int site, boolean held) {
+        /** Records the way the condition at {@code site} came out, and answers which visit it was
+         *  kept as, or −1 where it was past those kept. */
+        private int sees(int site, boolean held) {
             outcomes.set(2 * site + (held ? 1 : 0));
             if (site >= answered.length) {
                 int size = Math.max(site + 1, 2 * answered.length);
@@ -83,10 +97,31 @@ public final class Probe {
                 visits = Arrays.copyOf(visits, size);
             }
             int nth = answered[site];
-            if (nth < RecordedVisit.MOST) {
-                visits[site] |= 1L << (2 * nth + (held ? 1 : 0));
-                answered[site] = nth + 1;
+            if (nth >= RecordedVisit.MOST) {
+                pastTheKept.set(site);
+                return -1;
             }
+            visits[site] |= 1L << (2 * nth + (held ? 1 : 0));
+            answered[site] = nth + 1;
+            return nth;
+        }
+
+        private void compared(int site, boolean held, long left, long right) {
+            int nth = sees(site, held);
+            if (nth < 0) {
+                return;
+            }
+            if (site >= compared.length) {
+                int size = Math.max(site + 1, 2 * compared.length);
+                compared = Arrays.copyOf(compared, size);
+                comparedOn = Arrays.copyOf(comparedOn, size);
+            }
+            if (compared[site] == null) {
+                compared[site] = new long[2 * RecordedVisit.MOST];
+            }
+            compared[site][2 * nth] = left;
+            compared[site][2 * nth + 1] = right;
+            comparedOn[site] |= 1L << nth;
         }
     }
 
@@ -144,6 +179,25 @@ public final class Probe {
     }
 
     /**
+     * Called by probed code in place of {@link #condition} where the condition is a comparison of
+     * two whole numbers: the way it came out and what each side came to, as one visit.
+     *
+     * <p>One call and not a condition and the sides after it. Handed over apart, a side of one
+     * visit could be put beside the way another came out — a comparison inside a closure handed to
+     * {@code List.all} is visited once for each element it gets to — and the recording would hold
+     * a pair no visit made. The sides were kept by the probed code as they were worked out, so
+     * nothing is worked out twice.
+     *
+     * <p>The sides are kept for the visits the way is kept for, and dropped past them.
+     */
+    public static void compared(boolean held, long left, long right, int site) {
+        Recording recording = RECORDING.get();
+        if (recording != null) {
+            recording.compared(site, held, left, right);
+        }
+    }
+
+    /**
      * Starts collecting on this thread, of classes numbered by {@code numbering}.
      *
      * <p>Said here because here is where it can be. The numbers a probed class writes are the
@@ -195,7 +249,21 @@ public final class Probe {
                 at = recording.walksOn.nextSetBit(at + 1)) {
             walksOn.add(at);
         }
-        return new Observation(recording.numbering, arms, outcomes, visits, walks, walksOn);
+        Set<RecordedComparison> compared = new LinkedHashSet<>();
+        for (int site = 0; site < recording.comparedOn.length; site++) {
+            for (long bits = recording.comparedOn[site]; bits != 0; bits &= bits - 1) {
+                int nth = Long.numberOfTrailingZeros(bits);
+                compared.add(new RecordedComparison(site, nth, recording.compared[site][2 * nth],
+                        recording.compared[site][2 * nth + 1]));
+            }
+        }
+        Set<Integer> pastTheKept = new LinkedHashSet<>();
+        for (int at = recording.pastTheKept.nextSetBit(0); at >= 0;
+                at = recording.pastTheKept.nextSetBit(at + 1)) {
+            pastTheKept.add(at);
+        }
+        return new Observation(recording.numbering, arms, outcomes, visits, walks, walksOn,
+                compared, pastTheKept);
     }
 
     /** Stops collecting, and lets go of the recording. A worker thread outlives the row it ran, so a
