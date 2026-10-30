@@ -400,16 +400,20 @@ public final class ValueStanding {
     }
 
     /**
-     * Whether working out {@code written} ends no run, everything a run works out for it
-     * included ({@link Evaluated}), apart from the expressions in {@code apart}, which the reading
-     * of the field tells of itself.
+     * Whether working out {@code written} ends no run, apart from the expressions in
+     * {@code apart}, which the reading of the field tells of itself.
      *
      * <p>A name is worked out where it was bound, so it is followed to the expression it was given
      * as that expression is written, and one that stands for several is followed into each of
-     * them. A name the environment says nothing of is one this cannot judge. A call the
-     * environment enters is its arguments and then its body; a construction ends none where
+     * them. A name the environment says nothing of is one this cannot judge. A call or a choice
+     * the environment enters is what {@link Evaluated} says it works out and then the part it
+     * enters; a {@code let} is its value and its body; a construction ends none where
      * {@code makingEndsNone} says so of it over the one value it wraps, and its parts are worked
      * out all the same.
+     *
+     * <p>Where the environment does not say which part of a node is entered, every part of it is
+     * asked. That may refuse a run that never works one of them out, and never accepts one that
+     * does: the answer is no more than the nodes written under {@code written} allow.
      */
     private static <E, N extends Names<E, N>> boolean endsNoneWhenWorkedOut(
             Standing<E, N> written, Set<Core> apart,

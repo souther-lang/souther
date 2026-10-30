@@ -101,6 +101,10 @@ class ARowOfATableWhoseOtherFieldsAreWrittenOutLeavesItsLookupReadTest {
     private static final List<String> EVERY_PLACE_OF_THE_TOTAL =
             List.of("r.base", "r.commute", "r.excl", "r.sched", "r.variable");
 
+    /** What the helpers below are handed. One more than it is overflows an {@code Int}, so the
+     *  helper that adds one to it stops the run it is called in, whatever else is true of it. */
+    private static final String THE_GREATEST_INT = "9223372036854775807";
+
     /** The control: what the helper works out before it answers five ends no run. */
     @Test
     void aWorkingOutBeforeTheNumberThatEndsNoRunIsFollowed() {
@@ -109,12 +113,12 @@ class ARowOfATableWhoseOtherFieldsAreWrittenOutLeavesItsLookupReadTest {
                     let unused = 7
                     Yen(5)
                 }
-                """, "Row { std = five(0), lowerBound = Yen(0) }",
-                "Row { std = five(0), lowerBound = Yen(100) }"));
+                """, "Row { std = five(" + THE_GREATEST_INT + "), lowerBound = Yen(0) }",
+                "Row { std = five(" + THE_GREATEST_INT + "), lowerBound = Yen(100) }"));
     }
 
     /** What the helper works out before it answers five is worked out all the same: the number
-     *  it answers is five whatever that is, and a run can stop before it is answered. */
+     *  it answers is five whatever that is, and the run stops before it is answered. */
     @Test
     void anOperationBeforeTheNumberIsStillWorkedOut() {
         assertEquals(EVERY_PLACE_OF_THE_TOTAL, unreadStoppingBeforeTheNumber("""
@@ -122,8 +126,8 @@ class ARowOfATableWhoseOtherFieldsAreWrittenOutLeavesItsLookupReadTest {
                     let unused = n + 1
                     Yen(5)
                 }
-                """, "Row { std = five(0), lowerBound = Yen(0) }",
-                "Row { std = five(0), lowerBound = Yen(100) }"));
+                """, "Row { std = five(" + THE_GREATEST_INT + "), lowerBound = Yen(0) }",
+                "Row { std = five(" + THE_GREATEST_INT + "), lowerBound = Yen(100) }"));
     }
 
     /** The same before the row itself is made: the row is what the helper answers last. */
@@ -134,7 +138,8 @@ class ARowOfATableWhoseOtherFieldsAreWrittenOutLeavesItsLookupReadTest {
                     let unused = n + 1
                     Row { std = Yen(5), lowerBound = Yen(lowerBound) }
                 }
-                """, "rowAt(0, 0)", "rowAt(0, 100)"));
+                """, "rowAt(" + THE_GREATEST_INT + ", 0)",
+                "rowAt(" + THE_GREATEST_INT + ", 100)"));
     }
 
     /** The control for the row: what the helper works out before it answers ends no run. */
@@ -145,7 +150,8 @@ class ARowOfATableWhoseOtherFieldsAreWrittenOutLeavesItsLookupReadTest {
                     let unused = 7
                     Row { std = Yen(5), lowerBound = Yen(lowerBound) }
                 }
-                """, "rowAt(0, 0)", "rowAt(0, 100)"));
+                """, "rowAt(" + THE_GREATEST_INT + ", 0)",
+                "rowAt(" + THE_GREATEST_INT + ", 100)"));
     }
 
     @Test
