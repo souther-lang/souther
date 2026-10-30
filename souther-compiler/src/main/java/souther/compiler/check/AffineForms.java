@@ -67,6 +67,20 @@ import java.util.function.Predicate;
 public final class AffineForms {
 
     /**
+     * A list written in the source, and the environment its elements are read in.
+     *
+     * @param list the list
+     * @param at   where the names its elements read stand, which is where the list was reached
+     *             and not always where it was asked for
+     */
+    public record ListWrittenOut<E>(Core.ListLit list, E at) {
+
+        public ListWrittenOut {
+            Objects.requireNonNull(list, "a list written out is a list");
+        }
+    }
+
+    /**
      * The answers this walk asks its caller for: what depends on the caller's environment, and
      * nothing else.
      *
@@ -221,6 +235,18 @@ public final class AffineForms {
          */
         default boolean readsATotalOfWhatIsWrittenOut() {
             return false;
+        }
+
+        /**
+         * The list written in the source that {@code container} is, with where its elements are
+         * read, or empty where it is any other container.
+         *
+         * <p>A reader that follows names and the helpers whose body answers a list says so for a
+         * list reached that way; one that does not takes only a list written at the place.
+         */
+        default Optional<ListWrittenOut<E>> listWrittenOut(Core container, E at) {
+            return Core.withoutStanding(container) instanceof Core.ListLit list
+                    ? Optional.of(new ListWrittenOut<>(list, at)) : Optional.empty();
         }
 
         /**
@@ -492,6 +518,11 @@ public final class AffineForms {
         @Override
         public void counted(Core call, List<Core> elements, E at) {
             of.counted(call, elements, at);
+        }
+
+        @Override
+        public Optional<ListWrittenOut<E>> listWrittenOut(Core container, E at) {
+            return of.listWrittenOut(container, at);
         }
 
         @Override
@@ -1121,24 +1152,24 @@ public final class AffineForms {
      * the numbers it adds up is no {@code Int} ({@link GetsPast.WhereTheTotalFits}) and the list
      * is written out; null otherwise.
      */
-    private static Core.ListLit listAddedUpWrittenOut(Core.PreservedCall call) {
+    private static <A, E> Optional<ListWrittenOut<E>> listAddedUpWrittenOut(
+            Core.PreservedCall call, E at, Reading<A, E> reading) {
         if (!(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
                 instanceof GetsPast.WhereTheTotalFits(int operand))
                 || operand >= call.args().size()) {
-            return null;
+            return Optional.empty();
         }
-        return Core.withoutStanding(call.args().get(operand)) instanceof Core.ListLit list
-                ? list : null;
+        return reading.listWrittenOut(call.args().get(operand), at);
     }
 
-    /** The list {@code call} counts, where it is {@code List.length} of a list written out; null
+    /** The list {@code call} counts, where it is {@code List.length} of a list written out; empty
      *  otherwise. */
-    private static Core.ListLit listCountedWrittenOut(Core.PreservedCall call, Symbols symbols) {
+    private static <A, E> Optional<ListWrittenOut<E>> listCountedWrittenOut(
+            Core.PreservedCall call, E at, Reading<A, E> reading) {
         return call.args().size() == 1
                 && call.operation() instanceof ValueName.Stdlib.Operation operation
-                && symbols.kernelOf(operation) == Kernel.LIST_LENGTH
-                && Core.withoutStanding(call.args().get(0)) instanceof Core.ListLit list
-                ? list : null;
+                && reading.symbols().kernelOf(operation) == Kernel.LIST_LENGTH
+                ? reading.listWrittenOut(call.args().get(0), at) : Optional.empty();
     }
 
     /**
@@ -1146,14 +1177,16 @@ public final class AffineForms {
      * elements and told as the one operation it is ({@link Reading#totalled}); null where an
      * element does not compose.
      */
-    private static <A, E> LinearForm<A> totalOfWhatIsWrittenOut(Core call, Core.ListLit list, E at,
+    private static <A, E> LinearForm<A> totalOfWhatIsWrittenOut(Core call,
+                                                                ListWrittenOut<E> written, E at,
                                                                 Reading<A, E> reading,
                                                                 Walk<A, E> following,
                                                                 Stop<A, E> stopped) {
+        Core.ListLit list = written.list();
         Stop<A, E> inside = new Stop<>();
         LinearForm<A> total = LinearForm.constant(ExactRatio.ZERO);
         for (Core element : list.elements()) {
-            LinearForm<A> value = formOf(element, at, reading, following, inside);
+            LinearForm<A> value = formOf(element, written.at(), reading, following, inside);
             if (value == null) {
                 return halted(call, at, new Halt.AnArgumentStopped<>(inside.at), stopped);
             }
@@ -1205,14 +1238,15 @@ public final class AffineForms {
             return written;
         }
         if (e instanceof Core.PreservedCall call && reading.readsATotalOfWhatIsWrittenOut()) {
-            Core.ListLit list = listAddedUpWrittenOut(call);
-            if (list != null) {
-                return totalOfWhatIsWrittenOut(call, list, at, reading, following, stopped);
+            Optional<ListWrittenOut<E>> list = listAddedUpWrittenOut(call, at, reading);
+            if (list.isPresent()) {
+                return totalOfWhatIsWrittenOut(call, list.get(), at, reading, following, stopped);
             }
-            Core.ListLit counted = listCountedWrittenOut(call, reading.symbols());
-            if (counted != null) {
-                reading.counted(call, counted.elements(), at);
-                return LinearForm.constant(ExactRatio.of(counted.elements().size()));
+            Optional<ListWrittenOut<E>> counted = listCountedWrittenOut(call, at, reading);
+            if (counted.isPresent()) {
+                List<Core> elements = counted.get().list().elements();
+                reading.counted(call, elements, counted.get().at());
+                return LinearForm.constant(ExactRatio.of(elements.size()));
             }
         }
         return switch (e) {

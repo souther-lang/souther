@@ -1963,8 +1963,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : null;
         // The rules of the declarations a row at this line needs nothing of leave the numbers they
         // relate as the way's own statements do: each is read over the run the region answers.
-        Roomy room = offItsLine ? Roomy.NONE
-                : rulesLeavingRoomAroundTheLine(read, placesTheWayTouches(conditions, past));        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
+        Roomy room = offItsLine ? Roomy.NONE : rulesLeavingRoomAroundTheLine(read);
+        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
                 termsAlong(read, withoutWhatARowAtTheLineNeeds(sources, room, read), carriers,
                         beside.along().withoutTheRelationOf(room.parts()),
                         beside.declared().withoutTheRelationOf(room.parts()),
@@ -4277,66 +4277,32 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * rule is applied at the one place of its parameter. A rule that fails one stays in the
      * reading and ties as it did.
      */
-    private Roomy rulesLeavingRoomAroundTheLine(InputReading read, Set<TermPath> touched) {
+    private Roomy rulesLeavingRoomAroundTheLine(InputReading read) {
         TakenConstraint.Affine asked = askedAsAStatement();
         if (asked == null) {
             return Roomy.NONE;
         }
-        Map<TiedOnTheWay.Rule, ClauseMeaning.Stated> leaving = new LinkedHashMap<>();
+        Set<Object> nodes = new LinkedHashSet<>();
+        Map<String, Set<RuleRef>> refs = new LinkedHashMap<>();
+        Map<String, Set<PartId<RuleRef.Invariant>>> parts = new LinkedHashMap<>();
         for (Side side : sides) {
             for (FilingCoordinate place : placesAsked(side)) {
                 for (Object node : reachedByTheDeclarations(place.path(), read).nodes().ties()) {
                     if (node instanceof TiedOnTheWay.Rule rule && rule.clause() >= 0
-                            && !leaving.containsKey(rule)) {
-                        leaving.put(rule, leavingRoomAroundTheLine(rule, asked, touched, read));
+                            && !nodes.contains(rule)) {
+                        ClauseMeaning.Stated stated = leavingRoomAroundTheLine(rule, asked, read);
+                        if (stated != null) {
+                            nodes.add(rule);
+                            refs.computeIfAbsent(rule.at().head(), _ -> new LinkedHashSet<>())
+                                    .add(new RuleRef.Invariant(stated.ref()));
+                            parts.computeIfAbsent(rule.at().head(), _ -> new LinkedHashSet<>())
+                                    .addAll(stated.parts().ids());
+                        }
                     }
                 }
             }
         }
-        Set<Object> nodes = new LinkedHashSet<>();
-        Map<String, Set<RuleRef>> refs = new LinkedHashMap<>();
-        Map<String, Set<PartId<RuleRef.Invariant>>> parts = new LinkedHashMap<>();
-        leaving.forEach((rule, stated) -> {
-            // A rule is put aside by its declaration, at every place the declaration holds at. So
-            // it is put aside only if the rule at every place of it this reads is one that leaves
-            // room, and no place of it is left to be widened that this does not read.
-            if (stated != null && leaving.entrySet().stream().allMatch(other ->
-                    !sameClause(other.getKey(), rule) || other.getValue() != null)) {
-                nodes.add(rule);
-                refs.computeIfAbsent(rule.at().head(), _ -> new LinkedHashSet<>())
-                        .add(new RuleRef.Invariant(stated.ref()));
-                parts.computeIfAbsent(rule.at().head(), _ -> new LinkedHashSet<>())
-                        .addAll(stated.parts().ids());
-            }
-        });
         return new Roomy(nodes, refs, parts);
-    }
-
-    /** Whether {@code one} and {@code other} are the same clause of one declaration, at any
-     *  places of a parameter. */
-    private static boolean sameClause(TiedOnTheWay.Rule one, TiedOnTheWay.Rule other) {
-        return one.at().head().equals(other.at().head()) && one.worn().equals(other.worn())
-                && one.clause() == other.clause();
-    }
-
-    /**
-     * The places of the input a way states something of, or the run narrows: a rule of a
-     * declaration put aside leaves them as they are, and no other place that rule holds at is
-     * a place they speak of.
-     */
-    private Set<TermPath> placesTheWayTouches(List<OnAWay> conditions,
-                                              DemandReading.Answered past) {
-        Set<TermPath> out = new LinkedHashSet<>();
-        for (OnAWay each : conditions) {
-            out.addAll(each.positions());
-            if (each.relation() != null) {
-                each.relation().terms().forEach(term -> out.add(term.subjectPath()));
-            }
-        }
-        for (TakenConstraint each : past.narrowing()) {
-            each.terms().forEach(term -> out.add(term.subjectPath()));
-        }
-        return out;
     }
 
     /**
@@ -4369,7 +4335,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *  null otherwise. */
     private static ClauseMeaning.Stated leavingRoomAroundTheLine(TiedOnTheWay.Rule rule,
                                                                  TakenConstraint.Affine asked,
-                                                                 Set<TermPath> touched,
                                                                  InputReading read) {
         if (!(rule.worn() instanceof TypeSymbol.AtModule name)) {
             return null;
@@ -4385,11 +4350,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // The one place the rule is applied in its parameter: the region is read again without it
         // by declaration, and a second place it holds at is a place the proof below was not made
         // for.
-        for (TermPath other : appliedAt(rule, read)) {
-            if (!other.equals(rule.at())
-                    && touched.stream().anyMatch(place -> place.isAtOrUnder(other))) {
-                return null;
-            }
+        if (appliedAt(rule, read).size() != 1) {
+            return null;
         }
         List<TakenConstraint.Affine> statements = new ArrayList<>();
         for (ClauseAffineMeaning.Comparison each : exact.conjuncts()) {
@@ -4404,55 +4366,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             statements.add(new TakenConstraint.Affine(
                     new LinearForm<>(each.form().constant(), coefs), each.rel()));
         }
-        for (TakenConstraint.Affine each : statements) {
-            if (WhatStatementsOfOneFormDecide.leavingRoomAroundTheLine(List.of(each), asked)
-                    .isEmpty() && !leavesRoomAsAPartOf(each, asked, read)) {
-                return null;
-            }
-        }
-        return stated;
-    }
-
-    /**
-     * Whether {@code statement}, an order on some of the numbers {@code asked} is a form of, holds
-     * of every row near the line of {@code asked}.
-     *
-     * <p>A row near the line has the form of {@code asked} within the greatest weight of it. The
-     * numbers the statement does not name come to no less (or no more) than the ends they have,
-     * so what the statement's numbers come to, weighed as {@code asked} weighs them, lies from the
-     * line less that greatest weight and less the most the rest comes to, to the line plus that
-     * weight and less the least the rest comes to. The statement holds there when it holds at the
-     * end it is an order towards: a bound above is met at the top of that range and a bound below
-     * at the bottom of it.
-     */
-    private static boolean leavesRoomAsAPartOf(TakenConstraint.Affine statement,
-                                               TakenConstraint.Affine asked, InputReading read) {
-        Map<NumericTerm, ExactRatio> whole = asked.form().coefs();
-        Map<NumericTerm, ExactRatio> named = new LinkedHashMap<>();
-        Map<NumericTerm, ExactRatio> rest = new LinkedHashMap<>();
-        whole.forEach((term, weight) ->
-                (statement.form().coefs().containsKey(term) ? named : rest).put(term, weight));
-        if (rest.isEmpty() || named.size() != statement.form().coefs().size()
-                || statement.rel() == Rel.EQ || statement.rel() == Rel.NE
-                || !WhatStatementsOfOneFormDecide.outsideEveryContainer(statement)) {
-            return false;
-        }
-        ExactRatio weighs = WhatStatementsOfOneFormDecide.factorBetween(named,
-                statement.form().coefs());
-        FormRange others = FormRange.of(new LinearForm<>(ExactRatio.ZERO, rest), read);
-        ExactRatio reach = whole.values().stream().map(ExactRatio::abs)
-                .max(ExactRatio::compareTo).orElse(null);
-        if (weighs == null || weighs.signum() <= 0 || others == null || reach == null) {
-            return false;
-        }
-        ExactRatio line = asked.form().constant().negated();
-        boolean bounded =statement.rel() == Rel.LE || statement.rel() == Rel.LT;
-        ExactRatio end = bounded
-                ? line.plus(reach).flatMap(top -> top.minus(others.least())).orNull()
-                : line.minus(reach).flatMap(bottom -> bottom.minus(others.greatest())).orNull();
-        ExactRatio value = end == null ? null : weighs.times(end)
-                .flatMap(scaled -> scaled.plus(statement.form().constant())).orNull();
-        return value != null && statement.rel().holds(value.signum());
+        return WhatStatementsOfOneFormDecide.leavingRoomAroundTheLine(statements, asked).size()
+                == statements.size() ? stated : null;
     }
 
     /** The relation as a statement is held, the sides weighed and added to the constant and held
@@ -4768,7 +4683,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (way == Way.UNTOUCHED && sources.get(i) != null && sources.get(i).relaxed()) {
                 way = Way.NARROWED;
             }
-            Source source = way == Way.TIES ? null : sources.get(i);            // A statement shown to leave a part alone is taken into the region, which then does not
+            Source source = way == Way.TIES ? null : sources.get(i);
+            // A statement shown to leave a part alone is taken into the region, which then does not
             // answer for that part: it is answered by what the declarations leave it.
             SearchRegion answering = way == Way.UNTOUCHED && conditions.stream()
                     .anyMatch(statement -> statement.leavesAlone(each.atOnePosition()))
@@ -6738,7 +6654,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // position under each case, which would update the map from inside its own update.
         Optional<Source> kept = left.byPosition.get(value.position());
         if (kept == null) {
-            kept = Optional.ofNullable(worksOut(value, read, Set.of(), false));
+            kept = Optional.ofNullable(worksOut(value, read, Set.of()));
             left.byPosition.put(value.position(), kept);
         }
         return kept.orElse(null);
@@ -6755,7 +6671,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * every case shows that of it.
      */
     private static Source worksOut(NumericTerm.ValueOf value, InputReading read,
-                                   Set<RuleRef> except, boolean tiedToNoOtherTerm) {
+                                   Set<RuleRef> except) {
         Position at = read.domain().at(value.position().position());
         if (at == null) {
             return read.domain().reach().standingOf(value.position())
@@ -6767,8 +6683,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // where no end of its order cuts them.
         Named named = namedByTheDeclarations(value.position(), read);
         if (named == Named.UNSEEN || (named == Named.BY_A_RULE
-                && (!(certifiedAsideFromTheRelationOf(at.projection(), except)
-                        || (tiedToNoOtherTerm && onlyRelationsAreUnstated(at.projection())))
+                && (!certifiedAsideFromTheRelationOf(at.projection(), except)
                         || !wholeOnItsOrder(value, read)))) {
             return null;
         }
@@ -6786,29 +6701,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                         .allMatch(each -> endsOf(each, true) == null)));
         Takes takes = every ? new Takes.Every(at.type())
                 : new Takes.Some(at.type(), admitted, ends);
-        // Related to numbers this reading asks nothing beside: the ends are the values the
-        // position takes, and the relation only says which of them go with the others'.
-        boolean relatedOnlyToOthers = byARule && tiedToNoOtherTerm
-                && !certifiedAsideFromTheRelationOf(at.projection(), except)
-                && onlyRelationsAreUnstated(at.projection());
-        return new Source(takes,
-                !every && (relatedOnlyToOthers || onlyItsEnds(at, value, byARule, except)),
-                byARule, byARule && !at.projection().isCertified());
-    }
-
-    /**
-     * Whether all the bounds fail to state of the rules is how the position is related to others.
-     * Each end is then the end of the values the position takes, and what is lost is which of
-     * those the others take beside it: a reader that asks a number alone, whose rules relate it to
-     * no other number it is asked beside, loses nothing.
-     */
-    private static boolean onlyRelationsAreUnstated(ProjectionEvidence projection) {
-        return projection instanceof ProjectionEvidence.NotCertified unproved
-                && !unproved.causes().isEmpty()
-                && unproved.causes().stream().allMatch(cause ->
-                        cause instanceof ProjectionEvidence.Cause.Lossy lossy
-                                && lossy.unstated().equals(
-                                        Set.of(ProjectionEvidence.Cause.Unstated.A_RELATION)));
+        return new Source(takes, !every && onlyItsEnds(at, value, byARule, except), byARule,
+                byARule && !at.projection().isCertified());
     }
 
     /**
@@ -6845,31 +6739,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private List<Source> withoutWhatARowAtTheLineNeeds(List<Source> sources, Roomy room,
                                                        InputReading read) {
+        if (room.refs().isEmpty()) {
+            return sources;
+        }
         List<Source> out = new ArrayList<>(sources);
         for (int i = 0; i < sides.size(); i++) {
             Side side = sides.get(i);
             if (sources.get(i) == null && side.kept() == null
                     && side.atOnePosition() instanceof NumericTerm.ValueOf value) {
-                Source relaxed = worksOut(value, read, room.refsOf(value.position().head()),
-                        apartFromEveryOtherSide(i, sources, read, room.rules()));
+                Source relaxed = worksOut(value, read, room.refsOf(value.position().head()));
                 if (relaxed != null) {
                     out.set(i, relaxed);
                 }
             }
         }
         return out;
-    }
-
-    /** Whether no rule of the declarations, besides those in {@code ignoring}, ties the side at
-     *  {@code at} to any other side. */
-    private boolean apartFromEveryOtherSide(int at, List<Source> sources, InputReading read,
-                                            Set<Object> ignoring) {
-        for (int other = 0; other < sides.size(); other++) {
-            if (other != at && !apartByTheDeclarations(at, other, sources, read, ignoring)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /** Whether the order {@code value} is counted on leaves a run the arithmetic gives it whole

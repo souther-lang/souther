@@ -56,6 +56,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -831,6 +832,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             @Override
+            public Optional<AffineForms.ListWrittenOut<InputReads>> listWrittenOut(
+                    Core container, InputReads at) {
+                return WrittenOutElements.listWrittenOut(new Denotation(container, at),
+                        ruleSource.symbols(), ruleSource.newtypes())
+                        .map(found -> new AffineForms.ListWrittenOut<>(
+                                (Core.ListLit) Core.withoutStanding(found.value()), found.at()));
+            }
+
+            @Override
             public boolean makingEndsNoRun(Core.Construct construct) {
                 return ClausesInOrder.at(construct, ruleSource).governsNothing();
             }
@@ -1054,13 +1064,18 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return null;
                 }
                 Core.ListLit list = null;
+                InputReads listAt = at;
                 for (Core argument : making.args()) {
-                    Core bare = Core.withoutStanding(argument);
-                    if (bare instanceof Core.ListLit written && list == null) {
-                        list = written;
-                    } else if (!(bare instanceof Core.Block)) {
+                    if (Core.withoutStanding(argument) instanceof Core.Block) {
+                        continue;
+                    }
+                    Optional<AffineForms.ListWrittenOut<InputReads>> written = list != null
+                            ? Optional.empty() : listWrittenOut(argument, at);
+                    if (written.isEmpty()) {
                         return null;
                     }
+                    list = written.get().list();
+                    listAt = written.get().at();
                 }
                 if (list == null
                         || !(WrittenOutElements.of(new Denotation(making, at),
@@ -1072,7 +1087,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return null;
                 }
                 int from = told.operations.size();
-                builtFrom(list.elements(), at);
+                builtFrom(list.elements(), listAt);
                 LinearForm<NumericTerm> total = LinearForm.constant(ExactRatio.ZERO);
                 for (ReadMeaning.Occurrence occurrence : each.asWritten()) {
                     if (!(AffineForms.outcome(occurrence.value().value(), occurrence.value().at(),

@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -217,6 +218,31 @@ public final class ElementsWrittenOut {
 
         /** Not a container this walk writes out. */
         record NotWrittenOut<E>() implements Walked<E> {}
+    }
+
+    /**
+     * The list written in the source that {@code container} is, standing where its elements are
+     * read, or empty where it is any other container.
+     *
+     * <p>Followed through the names it was given and the helpers whose body answers it: a helper
+     * is read where its parameters are the values it was handed, so long as handing them works
+     * nothing out that may stop a run. The elements of such a list are the ones the walk of it
+     * writes out ({@link #of}), whichever way it was reached.
+     */
+    public static <E> Optional<Stood<E>> listWrittenOut(Stood<E> container, Reading<E> reading) {
+        Stood<E> here = reading.standing(container.value(), container.at());
+        Core value = Core.withoutStanding(here.value());
+        if (value instanceof Core.ListLit) {
+            return Optional.of(here);
+        }
+        if (value instanceof Core.LetIn binding && binding.binder() != null
+                && binding.binder().binding().owner() instanceof BindingOwner.Expansion
+                && WhatARunMayEndFor.endsNoneBeneath(binding.value())) {
+            Stood<E> given = reading.standing(binding.value(), here.at());
+            return listWrittenOut(new Stood<>(binding.body(),
+                    reading.handing(here.at(), binding.binder().binding(), given)), reading);
+        }
+        return Optional.empty();
     }
 
     /** Every element {@code container} holds. */

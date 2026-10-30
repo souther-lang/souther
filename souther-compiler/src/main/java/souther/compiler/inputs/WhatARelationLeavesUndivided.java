@@ -2118,6 +2118,9 @@ public final class WhatARelationLeavesUndivided {
             }
         }
         return (!arithmetic.mayStopARow() && reachedWithoutEnd(terms, relation, free))
+                || (within == null
+                        && reachedByTheOthersAddedUp(terms, at, constant, relation, free,
+                                arithmetic))
                 || (within == null && reachedTogether(terms, at, constant, relation, free,
                         jointly))
                 || (within == null && reachedPieceByPiece(terms, at, constant, relation, free,
@@ -2280,6 +2283,79 @@ public final class WhatARelationLeavesUndivided {
         ExactRatio cancelling(int term) {
             return cancelling[term];
         }
+    }
+
+    /**
+     * Whether an equality comes out either way wherever the term at {@code at} stands, because
+     * the others, each apart from every other and tied to none, add up to every value it needs
+     * and to a value beside it.
+     *
+     * <p>Each of the others takes every whole number of a run it is shown to take, weighed one or
+     * minus one, so the constant and what they come to together take every whole number from the
+     * least they come to to the greatest ({@code [0, 9] + [0, 9]} takes all of {@code 0..18}).
+     * The term at {@code at} stands where the others come to the number that cancels its weighed
+     * value; the equality holds there and, the others taking more than one number, fails at
+     * another. No term alone need reach a value that takes more than one of them.
+     *
+     * <p>Every row in the box the terms' runs make is a row only where the arithmetic gets past
+     * it, whatever the order the sums are made in, so the farthest sizes together must be
+     * computed ({@link RowsComputed#farthestRowsAreComputed}): then no row of the box is one the
+     * arithmetic refuses.
+     *
+     * <p>An equality only: an order is monotone in the others' sum, and
+     * {@link #reachedTogether} asks it of the two ends.
+     */
+    private static <P> boolean reachedByTheOthersAddedUp(List<Term<P>> terms, int at,
+                                                         ExactRatio constant, Rel relation,
+                                                         boolean[] free,
+                                                         RowsComputed arithmetic) {
+        if ((relation != Rel.EQ && relation != Rel.NE) || terms.size() < 3 || constant == null
+                || !constant.isWhole()) {
+            return false;
+        }
+        Term<P> it = terms.get(at);
+        Interval run = Interval.of(it.holds());
+        if (run == null || run.low() == null || run.high() == null || !run.low().isWhole()
+                || !run.high().isWhole() || it.spacing() != Granularity.DISCRETE
+                || !it.weight().abs().equals(ExactRatio.ONE)) {
+            return false;
+        }
+        ExactRatio least = constant;
+        ExactRatio greatest = constant;
+        List<ExactRatio> sizes = new ArrayList<>(List.of(constant.abs()));
+        sizes.add(farthestOf(run, it.weight()));
+        for (int other = 0; other < terms.size() && least != null && greatest != null; other++) {
+            if (other == at) {
+                continue;
+            }
+            Term<P> each = terms.get(other);
+            Interval taken = each.realizes() == null ? null : Interval.of(each.realizes());
+            if (!free[other] || taken == null || taken.low() == null || taken.high() == null
+                    || !taken.low().isWhole() || !taken.high().isWhole()
+                    || each.spacing() != Granularity.DISCRETE
+                    || !each.weight().abs().equals(ExactRatio.ONE)) {
+                return false;
+            }
+            boolean added = each.weight().signum() > 0;
+            least = least.plus(added ? taken.low() : taken.high().negated()).orNull();
+            greatest = greatest.plus(added ? taken.high() : taken.low().negated()).orNull();
+            sizes.add(farthestOf(taken, each.weight()));
+        }
+        if (sizes.contains(null)
+                || !arithmetic.farthestRowsAreComputed(terms, constant,
+                        sizes.toArray(ExactRatio[]::new))) {
+            return false;
+        }
+        // More than one number, so that the equality fails somewhere.
+        if (least == null || greatest == null || least.compareTo(greatest) >= 0) {
+            return false;
+        }
+        // The numbers the others have to come to, over every value of the term: its weighed value
+        // moved to the other side.
+        boolean up = it.weight().signum() > 0;
+        ExactRatio needFrom = up ? run.high().negated() : run.low();
+        ExactRatio needTo = up ? run.low().negated() : run.high();
+        return needFrom.compareTo(least) >= 0 && needTo.compareTo(greatest) <= 0;
     }
 
     /**

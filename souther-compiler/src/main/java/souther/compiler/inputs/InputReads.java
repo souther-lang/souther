@@ -30,6 +30,7 @@ import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.TypeSymbol;
@@ -4459,8 +4460,18 @@ public final class InputReads {
      */
     static Denotation standing(Denotation from, Symbols symbols,
                                DeclarationNewtypes newtypes, Set<BindingId> met) {
-        ValueStanding.Standing<InputReads, Followed> stands =
-                ValueStanding.one(from.value(), from.at(), new Followed(symbols, newtypes, met));
+        return standing(from, symbols, newtypes, met, false);
+    }
+
+    /**
+     * The same, following only the names a helper's expansion introduced where
+     * {@code throughExpansionsOnly}: the parameters a helper was handed its arguments by. A name the
+     * author wrote is a value worked out where it was given, which is not where it is read.
+     */
+    static Denotation standing(Denotation from, Symbols symbols, DeclarationNewtypes newtypes,
+                               Set<BindingId> met, boolean throughExpansionsOnly) {
+        ValueStanding.Standing<InputReads, Followed> stands = ValueStanding.one(from.value(),
+                from.at(), new Followed(symbols, newtypes, met, throughExpansionsOnly));
         return new Denotation(stands.value(), stands.at());
     }
 
@@ -4472,15 +4483,24 @@ public final class InputReads {
      * {@link #meaningOf}, which follows a container to its elements by this same walk, so the two
      * stop at the same names.
      */
-    private record Followed(Symbols symbols, DeclarationNewtypes newtypes, Set<BindingId> met)
+    private record Followed(Symbols symbols, DeclarationNewtypes newtypes, Set<BindingId> met,
+                            boolean throughExpansionsOnly)
             implements ValueStanding.Names<InputReads, Followed> {
 
         private Followed {
             Objects.requireNonNull(newtypes, "a name is followed knowing what each name wraps");
         }
 
+        Followed(Symbols symbols, DeclarationNewtypes newtypes, Set<BindingId> met) {
+            this(symbols, newtypes, met, false);
+        }
+
         @Override
         public ValueStanding.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
+            if (throughExpansionsOnly
+                    && !(read.binding().owner() instanceof BindingOwner.Expansion)) {
+                return null;
+            }
             if (!met.add(read.binding())
                     || !(at.meaningOf(read, symbols, newtypes, met)
                             instanceof ReadMeaning.Through through)) {
