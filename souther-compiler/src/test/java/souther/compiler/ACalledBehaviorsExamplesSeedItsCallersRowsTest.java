@@ -284,6 +284,52 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
     }
 
     @Test
+    void aRowTheCallerHasWrittenIsNotOfferedAgainWhenASecondCalleeLiftsToIt() {
+        String twoCallees = """
+                module repro.twice
+
+                behavior f : (n: Int) -> Int
+                let f (n) = n
+                example f
+                    | (1) -> 1
+
+                behavior g : (n: Int) -> Int
+                let g (n) = n
+                example g
+                    | (1) -> 1
+
+                behavior h : (n: Int) -> Int
+                let h (n) = f(n) + g(n)
+                example h
+                    | (1) -> 2
+                """;
+        assertTrue(!offered(twoCallees, "repro.twice", "h").contains("1"),
+                () -> "h(1) is written: " + offered(twoCallees, "repro.twice", "h"));
+    }
+
+    @Test
+    void aRowNobodyHasWrittenIsOfferedOnceWhenTwoCalleesLiftToIt() {
+        String twoCallees = """
+                module repro.twice
+
+                behavior f : (n: Int) -> Int
+                let f (n) = n
+                example f
+                    | (1) -> 1
+
+                behavior g : (n: Int) -> Int
+                let g (n) = n
+                example g
+                    | (1) -> 1
+
+                behavior h : (n: Int) -> Int
+                let h (n) = f(n) + g(n)
+                """;
+        assertEquals(1, offered(twoCallees, "repro.twice", "h").stream()
+                .filter("1"::equals).count());
+    }
+
+    @Test
     void aRowTheCallerHasWrittenAgainstTheModulesTableIsNotOfferedAgain() {
         String written = WITH_A_DEPENDENCY + """
 
