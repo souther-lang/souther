@@ -1065,6 +1065,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String unread = "limit >= Map.fold((acc, k, q) -> {\n    let unused = Int.floorMod(1, d)\n"
                 + "    acc + q * " + looked + "\n}, 0, agreed)";
         assertFalse(linesAbout(measured(inputs, NAT, "Bool", unread), "limit").isEmpty(), unread);
+        // Not recognised as a join at all, and not merely reported unread for another reason.
+        assertTrue(left(inputs, NAT, unread, atThe(">=", NAT, inputs, unread)).keySet().stream()
+                .noneMatch(term -> term.contains("under one key")), unread);
     }
 
     private static final String FORECAST = """

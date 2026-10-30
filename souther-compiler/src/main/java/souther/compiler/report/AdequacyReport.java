@@ -5106,6 +5106,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // nothing here found anything out about one.
             case ReadingGap.CouldNotWalk _ -> "the walk to that position could not be taken";
             case ReadingGap.CouldNotReadRow _ -> "no row came back to read there";
+            // The values were there and are numbers; which keys the maps hold in common is what
+            // the observation of a key does not say.
+            case ReadingGap.KeysNotTold _ -> "the keys the maps hold their values under could not"
+                    + " be told apart there";
             // The value was read; what is not known is whether the run compared anything through
             // the element it stands in, and what that turned on is what is said.
             case ReadingGap.ReachNotRead(ReadingGap.ReachNotRead.Why unread) -> "whether the run"
@@ -10413,8 +10417,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // One word, and the reason underneath keeps which of the two it was. A position
                 // that was read and holds nothing is news about the row; neither of these is, and a
                 // reader weighing the document acts on both the same way.
-                case ReadingGap.CouldNotWalk _, ReadingGap.CouldNotReadRow _ ->
-                        WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
+                case ReadingGap.CouldNotWalk _, ReadingGap.CouldNotReadRow _,
+                     ReadingGap.KeysNotTold _ -> WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
                 // The value was read and whether the run got to it through that element was not:
                 // no news about the row either, and acted on the same way.
                 case ReadingGap.ReachNotRead _ -> WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;

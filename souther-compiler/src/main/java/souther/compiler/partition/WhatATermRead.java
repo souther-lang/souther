@@ -472,8 +472,12 @@ sealed interface WhatATermRead {
             if (left.stopped() != null) {
                 return left.stopped();
             }
-            return first == null || second == null ? new CameToNothing(ReadingGap.COULD_NOT_WALK)
-                    : of(on.readJoined(first, second));
+            if (first == null || second == null) {
+                return new CameToNothing(ReadingGap.COULD_NOT_WALK);
+            }
+            return on.canTellTheKeysApart(first, second)
+                    ? of(on.readJoined(first, second))
+                    : new CameToNothing(ReadingGap.KEYS_NOT_TOLD);
         }
 
         /** What the map whose values stand at {@code values} holds, or null where it is not read. */

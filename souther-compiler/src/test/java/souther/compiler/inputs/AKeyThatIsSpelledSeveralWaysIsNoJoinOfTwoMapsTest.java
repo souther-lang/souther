@@ -13,7 +13,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Two maps hold a value under one key where the language says the keys are one, and the reading of
@@ -22,8 +24,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  * <p>That holds for the keys that cross the boundary, which the language writes one way. A decimal
  * key is the amount it stands for, so {@code 1.0} and {@code 1.00} are one key of a map and two
  * observations; read as two, the total of the products would be nought where the walk adds
- * some. A join over keys that are not spelled one way is then no number, and is not read as the
- * sum of nothing.
+ * some. Whether the keys can be told apart is asked before the join is read, and a join over keys
+ * that cannot is not read at all: it is no number of the row, which a reading that came to nothing
+ * would say, and it is not the sum of no products.
  */
 class AKeyThatIsSpelledSeveralWaysIsNoJoinOfTwoMapsTest {
 
@@ -36,29 +39,35 @@ class AKeyThatIsSpelledSeveralWaysIsNoJoinOfTwoMapsTest {
 
     @Test
     void keysTheLanguageWritesOneWayAreJoinedWhereTheyAreEqual() {
-        NumericTerm.Reading read = TermReading.joined(ON,
-                List.of(entry(new ObservedValue.Text("a"), 2), entry(new ObservedValue.Text("b"), 5)),
-                List.of(entry(new ObservedValue.Text("a"), 3)));
-        assertEquals(new NumericTerm.Reading.Number(Count.of(6)), read);
+        List<TermOrders.KeyedEntry> first = List.of(
+                entry(new ObservedValue.Text("a"), 2), entry(new ObservedValue.Text("b"), 5));
+        List<TermOrders.KeyedEntry> second = List.of(entry(new ObservedValue.Text("a"), 3));
+        assertTrue(ON.canTellTheKeysApart(first, second));
+        assertEquals(new NumericTerm.Reading.Number(Count.of(6)), TermReading.joined(ON, first,
+                second));
     }
 
     @Test
-    void keysOfDecimalsAreNoJoinWhateverScaleTheyAreWrittenAt() {
+    void keysOfDecimalsCannotBeToldApartWhateverScaleTheyAreWrittenAt() {
         ObservedValue tenths = new ObservedValue.Decimal(new BigDecimal("1.0"));
         ObservedValue hundredths = new ObservedValue.Decimal(new BigDecimal("1.00"));
         for (ObservedValue other : List.of(tenths, hundredths)) {
-            assertInstanceOf(NumericTerm.Reading.NotNumber.class,
-                    TermReading.joined(ON, List.of(entry(tenths, 2)), List.of(entry(other, 3))),
-                    other::toString);
+            List<TermOrders.KeyedEntry> first = List.of(entry(tenths, 2));
+            List<TermOrders.KeyedEntry> second = List.of(entry(other, 3));
+            assertFalse(ON.canTellTheKeysApart(first, second), other::toString);
+            // A join of them is not read, and so is not read as a total of nothing.
+            assertThrows(IllegalArgumentException.class,
+                    () -> TermReading.joined(ON, first, second), other::toString);
         }
     }
 
     @Test
-    void aKeyThatHoldsADecimalIsNoJoinEither() {
+    void aKeyThatHoldsADecimalCannotBeToldApartEither() {
         ObservedValue wornTenths = new ObservedValue.Constructed(
                 TypeSymbols.declared(new TypeKey("demo", "Amount")),
                 Map.of("value", new ObservedValue.Decimal(new BigDecimal("1.0"))));
-        assertInstanceOf(NumericTerm.Reading.NotNumber.class,
-                TermReading.joined(ON, List.of(entry(wornTenths, 2)), List.of(entry(wornTenths, 3))));
+        assertFalse(ON.canTellTheKeysApart(List.of(entry(wornTenths, 2)),
+                List.of(entry(wornTenths, 3))));
     }
+
 }

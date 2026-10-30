@@ -305,6 +305,15 @@ public final class TermOrders {
     public record KeyedEntry(ObservedValue key, ObservedValue value) {}
 
     /**
+     * Whether the observations of the keys of two maps tell which keys are one: the language writes
+     * a key one way when it is the same key. Asked before {@link #readJoined}, which is of keys
+     * that are, and a join over any other is not read.
+     */
+    public boolean canTellTheKeysApart(List<KeyedEntry> first, List<KeyedEntry> second) {
+        return TermReading.keysCanBeTold(first, second);
+    }
+
+    /**
      * The products of the values two maps hold under one key, for a term over
      * {@link RunSource.JoinedOccurrences}: the entries of the map walked and of the map looked
      * into.

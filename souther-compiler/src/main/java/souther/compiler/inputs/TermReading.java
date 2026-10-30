@@ -1124,6 +1124,12 @@ final class TermReading {
      * collection. No key that reaches this is one of those today, and one that did would be read
      * as the sum of no products where the walk adds some.
      */
+    static boolean keysCanBeTold(List<TermOrders.KeyedEntry> first,
+                                 List<TermOrders.KeyedEntry> second) {
+        return first.stream().allMatch(each -> spelledOneWay(each.key()))
+                && second.stream().allMatch(each -> spelledOneWay(each.key()));
+    }
+
     private static boolean spelledOneWay(ObservedValue key) {
         return switch (key) {
             case ObservedValue.Decimal _, ObservedValue.Sequence _,
@@ -1148,12 +1154,10 @@ final class TermReading {
             return new Reading.NotNumber();
         }
         List<ExactRatio> terms = new ArrayList<>();
-        List<TermOrders.KeyedEntry> held = new ArrayList<>(first);
-        held.addAll(second);
-        for (TermOrders.KeyedEntry each : held) {
-            if (!spelledOneWay(each.key())) {
-                return new Reading.NotNumber();
-            }
+        if (!keysCanBeTold(first, second)) {
+            throw new IllegalArgumentException("a join is read of keys that are told apart by"
+                    + " their observations, which the caller asks first ("
+                    + "TermOrders#canTellTheKeysApart)");
         }
         for (TermOrders.KeyedEntry one : first) {
             for (TermOrders.KeyedEntry other : second) {
@@ -1174,11 +1178,12 @@ final class TermReading {
                     }
                     pair[at++] = count.exactly();
                 }
-                if (!(pair[0].times(pair[1]) instanceof ExactAnswer.Held<ExactRatio>(
-                        ExactRatio product))) {
-                    return new Reading.NotNumber();
+                switch (pair[0].times(pair[1])) {
+                    case ExactAnswer.Held<ExactRatio>(ExactRatio product) -> terms.add(product);
+                    case ExactAnswer.Unheld<ExactRatio> unheld -> {
+                        return new Reading.NotWorkedOut(unheld.why());
+                    }
                 }
-                terms.add(product);
             }
         }
         return sumOf(terms, elements);
