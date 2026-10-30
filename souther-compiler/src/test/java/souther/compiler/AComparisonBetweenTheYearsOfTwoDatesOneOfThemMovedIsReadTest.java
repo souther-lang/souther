@@ -345,9 +345,9 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
      * <p>Moving the date is told as what it is, an operation a run stops at where the date passes
      * the ends of the calendar, and a row is shown to get past it only where it holds at the row.
      * The date nearest nought is no date such a row stands at for a count past the calendar's
-     * length, so the rows are also asked with the date at either end of the dates it holds, and
-     * the count is related with the region where every run stops said. The date has no spacing
-     * and is never shown.
+     * length, so the operations are solved for the dates the date takes, and the count is related
+     * with the region where every run stops said, on either side of the calendar. The date has no
+     * spacing and is never shown.
      */
     @Test
     void aShiftByACountAnotherInputSuppliesIsNotAShiftOfOnePosition() {
@@ -365,6 +365,8 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
                 + " dividing the values here, about `days`"), report);
         assertTrue(report.contains("every run stops in birthday + days where birthday + days is"
                 + " at least 365241780472"), report);
+        assertTrue(report.contains("in birthday + days where birthday + days is at most"
+                + " -365243219163"), report);
         assertTrue(report.contains("relates the value here to another value not shown to reach"
                 + " every value here, so which values here settle it on their own is not worked"
                 + " out, about `birthday`"), report);
