@@ -24,6 +24,7 @@ import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.check.ValueUniverse;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.CasesLeft;
@@ -44,6 +45,7 @@ import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
@@ -55,6 +57,7 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -752,6 +755,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return along instanceof Quantity.PositionInTheWalk position ? position : null;
         }
 
+        /** The element an index written down picks, where this is that; null otherwise. */
+        Quantity.PickedAtAnIndex picked() {
+            return along instanceof Quantity.PickedAtAnIndex picked ? picked : null;
+        }
+
         /**
          * The number as one position's, or null where it is no number of one position.
          *
@@ -847,6 +855,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * them differently. No one place stands for the others.
      */
     private static Source sourceOfSide(Side each, InputReading read) {
+        if (each.picked() != null) {
+            return sourceOf(new NumericTerm.ValueOf(each.picked().element()), read);
+        }
         List<NumericTerm.FromOnePosition> places = each.measuresOfItsEnd(read);
         if (places == null) {
             return null;
@@ -879,6 +890,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         if (places.isEmpty()) {
             NumericTerm.FromOnePosition countedAs = each.readOff() != null ? each.readOff()
+                    : each.position() != null ? each.position().howMany()
+                    : each.picked() != null ? new NumericTerm.ValueOf(each.picked().element())
                     : summedAs(each.number());
             // A product of two forms is counted on the order its factors are.
             NumericTerm countedOn = countedAs != null ? countedAs
@@ -1676,6 +1689,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             }
             case Quantity.PositionInTheWalk position -> out.add(position.container());
+            case Quantity.PickedAtAnIndex picked -> {
+                out.add(picked.container());
+                out.add(picked.element());
+            }
             case Quantity.HowManyMeet counted -> {
                 Optional<List<TermPath>> read = PositionsAStatementReads.of(counted.ofTheElement());
                 if (read.isEmpty() || !(counted.container() instanceof DecisionSubject.AnInput(
@@ -1851,6 +1868,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     }
                 }
                 case Quantity.PositionInTheWalk position -> out.add(position.container());
+                case Quantity.PickedAtAnIndex picked -> {
+                    out.add(picked.container());
+                    out.add(picked.element());
+                }
                 case Quantity.HowManyMeet counted -> {
                     Optional<List<TermPath>> reads =
                             PositionsAStatementReads.of(counted.ofTheElement());
@@ -4774,6 +4795,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         conditions, stating.get(i), heldWhole));
                 continue;
             }
+            if (each.picked() != null) {
+                terms.add(pickedAlong(each, sources.get(i), carriers.get(i), region, read,
+                        conditions, heldWhole));
+                continue;
+            }
             // Where it lies is asked of the number whatever it is a number of: a total over a run
             // lies where what the values it walks guarantee leave it. What it is shown to take is
             // asked of a position's, and of a total only as the totals of one element
@@ -4781,7 +4807,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             NumericDomain.Bounds holds = asARelationReadsIt(each.number() != null
                     && region.projectionOf(each.number())
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
-                    ? within : NumericDomain.Bounds.OPEN, carriers.get(i));
+                    ? within : each.position() != null ? positionsLie(each.position(), region)
+                    : NumericDomain.Bounds.OPEN, carriers.get(i));
             Way way = each.atOnePosition() == null || !heldWhole ? Way.TIES
                     : wayOf(each.atOnePosition(), stating.get(i));
             if (way == Way.UNTOUCHED && narrowedByTheRun.stream().anyMatch(past ->
@@ -4816,14 +4843,130 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : isAnEndOfAKey(each.number())
                     ? asARelationReadsIt(shownOfAnEnd(each.number(), read, region, conditions,
                             heldWhole), carriers.get(i))
+                    : each.position() != null
+                    ? asARelationReadsIt(positionsReached(each.position(), read, region,
+                            conditions, heldWhole), carriers.get(i))
                     : null;
             Takes takes = source != null && way == Way.UNTOUCHED
                     && each.number() instanceof NumericTerm.ValueOf ? source.takes() : null;
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
                     realizes, takes, each.number() instanceof NumericTerm.ValueOf,
-                    spacingOf(carriers.get(i)), whereItStops(carriers.get(i)), each.number()));
+                    spacingOf(carriers.get(i)),
+                    each.position() != null
+                            ? positionsOrderStops(each.position(), carriers.get(i))
+                            : whereItStops(carriers.get(i)),
+                    each.number() != null ? each.number() : each.position()));
         }
         return terms;
+    }
+
+    /**
+     * The element an index written down picks as a term of the relation: it lies where the
+     * declarations leave the elements of its container, and takes the values the elements are
+     * shown to take on a row whose container holds more than the index.
+     *
+     * <p>Shown only where nothing on the way picks out some of the container's elements, so that
+     * a row putting a value at the elements puts it at this one; where the way states anything
+     * of the elements, what it states is of this one as it is of any. And only where the counts
+     * the container is held at reach the index ({@link #positionsReached}), which a container the
+     * rules keep shorter than the index never does.
+     *
+     * @param ofElement what the declarations leave the elements
+     */
+    private WhatARelationLeavesUndivided.Term<FilingCoordinate> pickedAlong(
+            Side side, Source ofElement, Carrier carrier, SearchRegion region, InputReading read,
+            List<OnAWay> conditions, boolean heldWhole) {
+        Quantity.PickedAtAnIndex picked = side.picked();
+        NumericTerm.ValueOf element = new NumericTerm.ValueOf(picked.element());
+        NumericDomain.Bounds holds = region.projectionOf(element)
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
+                ? within : NumericDomain.Bounds.OPEN;
+        NumericDomain.Bounds realizes = null;
+        NumericDomain.Bounds positions = ofElement == null ? null
+                : positionsReached(picked.container(), picked.howMany(), read, region, conditions,
+                        heldWhole);
+        if (positions != null && positions.holdsAValue()
+                && CountDomain.mostFrom(positions.max()) >= picked.index()) {
+            Way way = wayOf(element, ofElement.named()
+                    ? statingAnythingOfItsParameter(element, conditions, read)
+                    : statingAnythingOf(element, conditions));
+            realizes = way == Way.TIES ? null : realized(element, ofElement, region, way);
+        }
+        return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
+                asARelationReadsIt(holds, carrier), asARelationReadsIt(realizes, carrier), null,
+                false, spacingOf(carrier), whereItStops(carrier));
+    }
+
+    /**
+     * Every position a walk over {@code position}'s container hands its step in some row, or null
+     * where that is not shown.
+     *
+     * <p>A position is reached wherever the container holds more than it, so the positions the
+     * rows reach run from nought to one below the most the container is shown to be held at
+     * ({@link #howManyAreHeld}), and with no most, from nought up. Shown only where every position
+     * is handed in every row the way reaches ({@link #picksOut}).
+     */
+    private NumericDomain.Bounds positionsReached(Quantity.PositionInTheWalk position,
+                                                  InputReading read, SearchRegion region,
+                                                  List<OnAWay> conditions, boolean heldWhole) {
+        return positionsReached(position.container(), position.howMany(), read, region,
+                conditions, heldWhole);
+    }
+
+    /** The same, of the container and the number of its elements. */
+    private NumericDomain.Bounds positionsReached(TermPath container,
+                                                  NumericTerm.FromOnePosition size,
+                                                  InputReading read, SearchRegion region,
+                                                  List<OnAWay> conditions, boolean heldWhole) {
+        if (!heldWhole || picksOut(conditions, container, Set.of())) {
+            return null;
+        }
+        NumericDomain.Bounds sizes = howManyAreHeld(container, read, region);
+        return sizes == null ? null : positionsIn(sizes, size, true);
+    }
+
+    /** Where the positions a walk hands its step lie: below how many the region leaves the
+     *  container holding, and open where that is not read. Not ended where the language ends a
+     *  container, which is no distinction a model made. */
+    private static NumericDomain.Bounds positionsLie(Quantity.PositionInTheWalk position,
+                                                     SearchRegion region) {
+        NumericDomain.Bounds lie = region.projectionOf(position.howMany())
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds sizes)
+                ? positionsIn(sizes, position.howMany(), false) : null;
+        return lie == null ? NumericDomain.Bounds.OPEN : lie;
+    }
+
+    /**
+     * Where the order the positions are counted on stops: at the last position of the most a
+     * container holds, which the language ends ({@link RepresentationBounds}) and an arithmetic on
+     * a position is held to.
+     */
+    private static NumericDomain.Bounds positionsOrderStops(Quantity.PositionInTheWalk position,
+                                                            Carrier carrier) {
+        NumericDomain.Bounds last = positionsIn(NumericDomain.Bounds.OPEN, position.howMany(), true);
+        NumericDomain.Bounds order = whereItStops(carrier);
+        return order == null || last == null ? last : order.meet(last);
+    }
+
+    /**
+     * The positions a container holding a number of elements in {@code sizes} has, or null where
+     * it holds none. {@code size} is the number of them, which the language ends where a container
+     * stops ({@link RepresentationBounds}) when {@code ended} says so.
+     */
+    private static NumericDomain.Bounds positionsIn(NumericDomain.Bounds sizes,
+                                                    NumericTerm.FromOnePosition size,
+                                                    boolean ended) {
+        Endpoint most = (ended ? sizes.meet(RepresentationBounds.of(size)) : sizes).max();
+        if (most == null) {
+            return new NumericDomain.Bounds(Endpoint.inclusive(new Count(BigDecimal.ZERO)), null);
+        }
+        int held = CountDomain.asCount(most.at());
+        int last = most.inclusive() ? held - 1 : held - 2;
+        if (held < 0 || last < 0) {
+            return null;
+        }
+        return new NumericDomain.Bounds(Endpoint.inclusive(new Count(BigDecimal.ZERO)),
+                Endpoint.inclusive(new Count(BigDecimal.valueOf(last))));
     }
 
     /**
@@ -5580,6 +5723,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /** The places what the declarations and a way say of {@code side} are asked at: its own, or
      *  the place of the element's number a walk kept an end of and of a seed the input holds. */
     private static List<FilingCoordinate> placesAsked(Side side) {
+        if (side.position() != null) {
+            return List.of(FilingCoordinate.of(side.position().howMany()));
+        }
+        if (side.picked() != null) {
+            return List.of(FilingCoordinate.of(new NumericTerm.ValueOf(side.picked().element())));
+        }
         if (side.kept() == null) {
             return side.madeOf();
         }
@@ -6824,14 +6973,48 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (!anElementShown && !entry.stream().allMatch(part ->
                 aValueIsShownToExist(read.domain().typeAt(part, rules), read))) {
             most = 0;
-        } else if (apart.found || !read.domain().holdsAnElementOverAgain(container, rules)) {
+        } else if (apart.found) {
             most = 1;
+        } else if (!read.domain().holdsAnElementOverAgain(container, rules)) {
+            // A set holds a value once, and a map a key: as many as the type has that differ.
+            most = differingShown(type, read);
+            if (most < 0) {
+                return run;
+            }
         } else {
             return run;
         }
         NumericDomain.Bounds upTo = run.meet(new NumericDomain.Bounds(null,
                 Endpoint.inclusive(Count.of(most))));
         return upTo.holdsAValue() ? upTo : null;
+    }
+
+    /**
+     * How many values that differ a set, or the keys of a map, of {@code container} can be given:
+     * as many as its element or key type has where they are counted out
+     * ({@link ValueUniverse}), without end for a number or a string no rule is written on, and
+     * otherwise the one that is shown to exist. Minus one for without end.
+     */
+    private static int differingShown(Type container, InputReading read) {
+        RuleReadingSource rules = read.rules();
+        Type each = switch (TypeView.shapeOf(container, rules.inners(), rules.symbols(),
+                rules.kinds(), rules.sums())) {
+            case Shape.Sequence sequence -> sequence.element();
+            case Shape.Mapping map -> map.key();
+            default -> null;
+        };
+        if (each == null) {
+            return 1;
+        }
+        long counted = ValueUniverse.howManyDiffer(each, read.ruleReading());
+        if (counted >= 0) {
+            return (int) Math.min(counted, Integer.MAX_VALUE);
+        }
+        boolean unwritten = !(TypeOps.outermost(each, rules.inners()) instanceof TypeOps.Unwrapped);
+        return unwritten && TypeView.shapeOf(each, rules.inners(), rules.symbols(), rules.kinds(),
+                rules.sums()) instanceof Shape.Scalar(Type.Prim prim)
+                && (prim == Type.Prim.INT || prim == Type.Prim.STRING
+                        || prim == Type.Prim.DECIMAL || prim == Type.Prim.RATIONAL) ? -1 : 1;
     }
 
     /**
