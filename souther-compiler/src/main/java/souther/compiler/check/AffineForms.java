@@ -23,8 +23,10 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1258,7 +1260,32 @@ public final class AffineForms {
                 || operand >= call.args().size()) {
             return Optional.empty();
         }
-        return reading.listWrittenOut(call.args().get(operand), at);
+        return listWrittenOutBy(call.args().get(operand), at, reading);
+    }
+
+    /**
+     * The list {@code container} is, where it is a list written out and reaching it works out
+     * nothing that may end a run apart from its elements, which the reading of the list tells of
+     * itself; empty otherwise.
+     *
+     * <p>Where a list stands is a question of values, and the standing of a {@code let} is the
+     * value its body ends at, which leaves out the initializer: it is worked out all the same. So
+     * the list is taken as written only where the container, as it is written, ends no run beyond
+     * its elements. A name the container reads is not asked: what it is bound to is worked out
+     * where it is bound, which the walk that reached the container has read.
+     */
+    public static <A, E> Optional<ListWrittenOut<E>> listWrittenOutBy(Core container, E at,
+                                                                      Reading<A, E> reading) {
+        Optional<ListWrittenOut<E>> written = reading.listWrittenOut(container, at);
+        if (written.isEmpty()) {
+            return written;
+        }
+        Set<Core> elements = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Core element : written.get().list().elements()) {
+            elements.add(Core.withoutStanding(element));
+        }
+        return WhatARunMayEndFor.endsNoneBeneathApart(container, elements)
+                ? written : Optional.empty();
     }
 
     /** The list {@code call} counts, where it is {@code List.length} of a list written out; empty
@@ -1268,7 +1295,7 @@ public final class AffineForms {
         return call.args().size() == 1
                 && call.operation() instanceof ValueName.Stdlib.Operation operation
                 && reading.symbols().kernelOf(operation) == Kernel.LIST_LENGTH
-                ? reading.listWrittenOut(call.args().get(0), at) : Optional.empty();
+                ? listWrittenOutBy(call.args().get(0), at, reading) : Optional.empty();
     }
 
     /**

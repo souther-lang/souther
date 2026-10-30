@@ -1159,7 +1159,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         continue;
                     }
                     Optional<AffineForms.ListWrittenOut<InputReads>> written = list != null
-                            ? Optional.empty() : listWrittenOut(argument, at);
+                            ? Optional.empty() : AffineForms.listWrittenOutBy(argument, at, this);
                     if (written.isEmpty()) {
                         return new Attempt.NotApplicable();
                     }
@@ -1242,7 +1242,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              */
             private boolean roundingWorkedOut(Core node, InputReads at,
                                               StoppedValues.Held aside) {
-                RoundedToAWholeNumber.Written rounding = RoundedToAWholeNumber.written(node);
+                RoundedToAWholeNumber.Written rounding = RoundedToAWholeNumber.written(node,
+                        policy -> WrittenOutElements.reading(ruleSource.symbols(),
+                                ruleSource.newtypes()).standing(policy, at).value());
                 if (rounding == null || !(AffineForms.outcome(rounding.value(), at, this)
                         instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> number)) {
                     return false;

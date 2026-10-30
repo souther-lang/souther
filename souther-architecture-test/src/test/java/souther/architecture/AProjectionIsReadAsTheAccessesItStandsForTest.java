@@ -671,11 +671,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node what it ends a run for, and goes down to its parts and along the"
                         + " names it reads: a name read off a value ends none, so what a projection"
                         + " may end one for is what its base may");
-        row(out, c + "check/WhatARunMayEndFor", "endsNoneBeneath", "(" + core + ")Z",
-                Reading.STRUCTURE,
-                "asks each node what it ends a run for, and goes down to its parts: a name read"
-                        + " off a value ends none, so what a projection may end one for is what"
-                        + " its base may");
+        row(out, c + "check/WhatARunMayEndFor", "endsNoneBeneathApart",
+                "(" + core + "Ljava/util/Set;)Z", Reading.STRUCTURE,
+                "asks each node what it ends a run for, and goes down to its parts apart from those"
+                        + " it is told of: a name read off a value ends none, so what a projection"
+                        + " may end one for is what its base may");
         row(out, c + "partition/NumbersOnTheWayToATotal", "readOffWhatItIsHanded",
                 "(" + core + "Ljava/util/Set;Ljava/util/Set;)Z", Reading.STRUCTURE,
                 "asks whether a value is a name a closure is handed or a run of fields read off"

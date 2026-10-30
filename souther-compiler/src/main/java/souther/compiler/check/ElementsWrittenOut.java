@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -225,24 +224,16 @@ public final class ElementsWrittenOut {
      * read, or empty where it is any other container.
      *
      * <p>Followed through the names it was given and the helpers whose body answers it: a helper
-     * is read where its parameters are the values it was handed, so long as handing them works
-     * nothing out that may stop a run. The elements of such a list are the ones the walk of it
-     * writes out ({@link #of}), whichever way it was reached.
+     * is read where its parameters are the values it was handed. The elements of such a list are
+     * the ones the walk of it writes out ({@link #of}), whichever way it was reached. What a run
+     * works out to reach the list is not asked here, since the value a name or a {@code let}
+     * stands at leaves it out; a reader that tells the elements asks it of the container as it is
+     * written ({@link AffineForms#listWrittenOutBy}).
      */
     public static <E> Optional<Stood<E>> listWrittenOut(Stood<E> container, Reading<E> reading) {
         Stood<E> here = reading.standing(container.value(), container.at());
         Core value = Core.withoutStanding(here.value());
-        if (value instanceof Core.ListLit) {
-            return Optional.of(here);
-        }
-        if (value instanceof Core.LetIn binding && binding.binder() != null
-                && binding.binder().binding().owner() instanceof BindingOwner.Expansion
-                && WhatARunMayEndFor.endsNoneBeneath(binding.value())) {
-            Stood<E> given = reading.standing(binding.value(), here.at());
-            return listWrittenOut(new Stood<>(binding.body(),
-                    reading.handing(here.at(), binding.binder().binding(), given)), reading);
-        }
-        return Optional.empty();
+        return value instanceof Core.ListLit ? Optional.of(here) : Optional.empty();
     }
 
     /** Every element {@code container} holds. */

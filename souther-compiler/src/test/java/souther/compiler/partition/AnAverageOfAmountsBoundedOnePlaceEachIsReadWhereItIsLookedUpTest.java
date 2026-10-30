@@ -8,6 +8,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -65,8 +67,8 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
                 Yen(Rational.toInt(DOWN,
                     List.sum(List.map(p -> totalOf(p).value, records)) / List.length(records)))""";
 
-    /** The places the report says nothing is read of. */
-    private static List<String> unread(String bounds, String helpers, String looked) {
+    /** The report of the model, line by line. */
+    private static List<String> report(String bounds, String helpers, String looked) {
         Compilation compilation = Compilation.ofSource(
                 SOURCE.formatted(bounds, helpers, looked), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -74,24 +76,125 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .human(SourceRendering.namedByIdentity(compilation.texts())).lines().toList();
+    }
+
+    /** The places the report says nothing is read of. */
+    private static List<String> unread(String bounds, String helpers, String looked) {
+        return report(bounds, helpers, looked).stream()
                 .filter(line -> line.contains("not read:"))
                 .map(line -> line.replaceAll(".*about `([^`]*)`.*", "$1"))
                 .toList();
     }
 
+    private static final Pattern A_POINT_OF_THE_LOOKUP =
+            Pattern.compile("read as f/.*: = (\\S+) in gradeRowFor");
+
+    /**
+     * The values of the average the lookup's borders are at: where it equals a lower bound of the
+     * table, and where it is the least below it. That they are these is what reading the average
+     * as a number of the amounts comes to, which no absence of a {@code not read} line says.
+     */
+    private static List<String> bordersOfTheLookup(String bounds, String helpers, String looked) {
+        return report(bounds, helpers, looked).stream()
+                .map(A_POINT_OF_THE_LOOKUP::matcher)
+                .filter(Matcher::find)
+                .map(found -> found.group(1))
+                .sorted()
+                .toList();
+    }
+
+    private static final List<String> THE_BORDERS_OF_THE_TABLE =
+            List.of("100", "200", "299/3", "599/3");
+
     @Test
     void anAverageOfMonthsWrittenAtTheLookupIsRead() {
         assertEquals(List.of(), unread(BOUNDS, "", AVERAGE_WRITTEN_AT_THE_CALL));
+        assertEquals(THE_BORDERS_OF_THE_TABLE,
+                bordersOfTheLookup(BOUNDS, "", AVERAGE_WRITTEN_AT_THE_CALL));
     }
 
     /** The months are what a helper answers: a list is written out where the helper's body writes
      *  it, with the parameter it was handed read as the value it was handed. */
     @Test
     void anAverageOfMonthsAHelperListsIsRead() {
-        assertEquals(List.of(), unread(BOUNDS, MONTHS_HELPER, """
+        String looked = """
                 Yen(Rational.toInt(DOWN,
-                    List.sum(List.map(p -> totalOf(p).value, monthsOf(w))) / 3))"""));
+                    List.sum(List.map(p -> totalOf(p).value, monthsOf(w))) / 3))""";
+        assertEquals(List.of(), unread(BOUNDS, MONTHS_HELPER, looked));
+        assertEquals(THE_BORDERS_OF_THE_TABLE, bordersOfTheLookup(BOUNDS, MONTHS_HELPER, looked));
+    }
+
+    private static final String AVERAGE_OVER_THE_HELPERS_MONTHS = """
+            Yen(Rational.toInt(DOWN,
+                List.sum(List.map(p -> totalOf(p).value, monthsOf(w))) / 3))""";
+
+    /** A {@code let} before the list works nothing out that can stop a run: the months are the same
+     *  list, and are read as they are without it. */
+    @Test
+    void aHelperThatBindsAValueBeforeItsListIsRead() {
+        String helper = """
+                let monthsOf (w: Window): List<Pay> = {
+                    let first = w.first
+                    [ first, w.second, w.third ]
+                }""";
+        assertEquals(List.of(), unread(BOUNDS, helper, AVERAGE_OVER_THE_HELPERS_MONTHS));
+        assertEquals(THE_BORDERS_OF_THE_TABLE,
+                bordersOfTheLookup(BOUNDS, helper, AVERAGE_OVER_THE_HELPERS_MONTHS));
+    }
+
+    /**
+     * A {@code let} before the list whose value can pass the ends of an {@code Int} is worked out
+     * all the same, whether or not the list reads it: a run stops there, and the months the list
+     * names are not all the runs that get to the lookup. The list a helper answers is the same
+     * list as in the test above.
+     */
+    @Test
+    void aHelperThatWorksOutAValueThatCanStopBeforeItsListIsNotRead() {
+        String helper = """
+                let monthsOf (w: Window): List<Pay> = {
+                    let unused = w.first.base.value + 9223372036854775807
+                    [ w.first, w.second, w.third ]
+                }""";
+        assertFalse(unread(BOUNDS, helper, AVERAGE_OVER_THE_HELPERS_MONTHS).isEmpty());
+    }
+
+    /** The same where the list is written at the lookup and not answered by a helper. */
+    @Test
+    void aListWrittenAfterAValueThatCanStopIsNotRead() {
+        assertFalse(unread(BOUNDS, "", """
+                Yen(Rational.toInt(DOWN,
+                    List.sum(List.map(p -> totalOf(p).value, {
+                        let unused = w.first.base.value + 9223372036854775807
+                        [ w.first, w.second, w.third ]
+                    })) / 3))""").isEmpty());
+    }
+
+    /** And where the list is only counted. */
+    @Test
+    void aListCountedAfterAValueThatCanStopIsNotRead() {
+        String helper = """
+                let monthsOf (w: Window): List<Pay> = {
+                    let unused = w.first.base.value + 9223372036854775807
+                    [ w.first, w.second, w.third ]
+                }""";
+        assertFalse(unread(BOUNDS, helper, """
+                Yen(Rational.toInt(DOWN,
+                    List.sum(List.map(p -> totalOf(p).value, [ w.first, w.second, w.third ]))
+                        / List.length(monthsOf(w))))""").isEmpty());
+    }
+
+    /** A rounding in a helper is handed its policy by a name, which stands at the case it was
+     *  handed: the way it rounds is the same as when the case is written at the call. */
+    @Test
+    void aRoundingAHelperIsHandedItsPolicyToIsRead() {
+        String helper = """
+                let roundedWith (mode: RoundingMode, x: Rational): Int = Rational.toInt(mode, x)""";
+        String looked = """
+                Yen(roundedWith(DOWN,
+                    List.sum(List.map(p -> totalOf(p).value, [ w.first, w.second, w.third ])) / 3))""";
+        assertEquals(List.of(), unread(BOUNDS, helper, looked));
+        assertEquals(THE_BORDERS_OF_THE_TABLE, bordersOfTheLookup(BOUNDS, helper, looked));
     }
 
     /** The average is a helper's, handed the list a second helper answers, and divides by the
