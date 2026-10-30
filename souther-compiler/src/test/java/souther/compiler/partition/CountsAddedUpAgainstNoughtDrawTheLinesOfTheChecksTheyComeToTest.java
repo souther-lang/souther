@@ -155,10 +155,11 @@ class CountsAddedUpAgainstNoughtDrawTheLinesOfTheChecksTheyComeToTest {
     void aSumOfSizesOfTheInputIsALineOnTheSum() {
         JsonNode report = reportOf("List.length(xs) + List.length(ys) >= 1");
         List<JsonNode> lines = boundaries(report);
-        assertEquals(1, lines.size(), () -> "one line: " + lines);
-        assertEquals(2, lines.getFirst().path("lineId").path("target").path("quantity")
-                .path("terms").size(), () -> "on the sum: " + lines);
-        assertEquals(Set.of("comparison"), Set.copyOf(notReadAt(report)));
+        assertEquals(List.of(1, 1, 2), lines.stream().map(line -> line.path("lineId")
+                .path("target").path("quantity").path("terms").size()).sorted().toList(),
+                () -> "a line on each count, which settles the sum on its own, and one on the sum: "
+                        + lines);
+        assertEquals(List.of(), notReadAt(report));
     }
 
     /** The lines both draw, the same apart from which comparison of each is which. */

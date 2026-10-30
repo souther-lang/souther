@@ -192,8 +192,14 @@ public final class OperationFacts {
             about("String", "length", bounded(Rel.GE, 0)),
             about("String", "length",
                     boundedByTheRepresentation(Rel.LE, ResultBound.Limit.LONGEST_STRING)),
+            about("List", "length",
+                    boundedByTheRepresentation(Rel.LE, ResultBound.Limit.MOST_ELEMENTS)),
             about("Set", "size", bounded(Rel.GE, 0)),
+            about("Set", "size",
+                    boundedByTheRepresentation(Rel.LE, ResultBound.Limit.MOST_ELEMENTS)),
             about("Map", "size", bounded(Rel.GE, 0)),
+            about("Map", "size",
+                    boundedByTheRepresentation(Rel.LE, ResultBound.Limit.MOST_ELEMENTS)),
 
             // And the ones every answer of which some value it could be given answers. A string of
             // any length is written by repeating a character; every hour of the day is an hour some

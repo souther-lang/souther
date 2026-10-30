@@ -113,6 +113,9 @@ public record ResultBound<A>(A against, BigDecimal offset, Rel rel, Provided<A> 
          *  longest string is no distinction a model made, and a relation between two lengths would
          *  hold it as a class only a string of that length can fill. */
         LONGEST_STRING(false),
+        /** The most elements a list or a set holds, and the most entries a map does. Not an end of
+         *  the classes of a size, for the reason the longest string is not one. */
+        MOST_ELEMENTS(false),
         /** The earliest year a date is written at. The first date is an end of the type, which
          *  every position of it is already divided at, so the year of a date runs to it. */
         EARLIEST_DATE_YEAR(true),

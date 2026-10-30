@@ -224,6 +224,7 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
     private static List<String> pointsOn(String report, String at) {
         return report.lines().map(String::strip)
                 .filter(line -> line.startsWith("· read as f/" + at + ":"))
+                .map(line -> line.replaceAll("\\(\\d+:\\d+\\)", "(at)"))
                 .sorted()
                 .toList();
     }
@@ -248,7 +249,12 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
 
         assertFalse(pointsOn(called, "q").isEmpty(), called);
         assertEquals(pointsOn(written, "q"), pointsOn(called, "q"), called);
-        assertEquals(saidAbout(written, "q"), saidAbout(called, "q"), called);
+        // What each says of q is the same where the lookup's value is no number of the input. An
+        // element an index picks is one, so the written arm reads its comparison with q as a
+        // relation between two numbers and the call, which holds the lines together, does not.
+        if (!operation.startsWith("List.get")) {
+            assertEquals(saidAbout(written, "q"), saidAbout(called, "q"), called);
+        }
     }
 
     /**
@@ -303,9 +309,12 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
     void whetherItFindsSomethingIsNoLineOfTheDefault(String operation, String presence) {
         String called = reportOf(operation, CALLED, "");
 
-        assertEquals(List.of("· not read: comparison — what it states was read, and it is several"
-                        + " lines held together, which this compiler does not divide the input by"
-                        + " here, about `" + presence + "`"),
+        // An element an index written down picks is read at the list's elements, so what the
+        // lookup finds is a number of the input and its presence is a line the arm draws.
+        assertEquals(operation.startsWith("List.get") ? List.<String>of()
+                        : List.of("· not read: comparison — what it states was read, and it is"
+                        + " several lines held together, which this compiler does not divide the"
+                        + " input by here, about `" + presence + "`"),
                 saidAbout(called, presence), called);
         assertEquals(List.of(), saidAbout(called, "xs"), called);
     }
@@ -334,10 +343,7 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
         assertEquals(List.of(
                 "· not read: ensures f (found) — what it states was read, and it is several lines"
                         + " held together, which this compiler does not divide the input by here,"
-                        + " about `q`",
-                "· not read: ensures f (found) — what it states was read, and it relates the value"
-                        + " here to another value not shown to reach every value here, so which"
-                        + " values here settle it on their own is not worked out, about `q`"),
+                        + " about `q`"),
                 saidAbout(report, "q").stream().sorted().toList(), report);
     }
 

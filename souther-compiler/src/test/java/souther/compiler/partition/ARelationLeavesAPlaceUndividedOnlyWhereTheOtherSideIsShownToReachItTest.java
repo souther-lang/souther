@@ -862,6 +862,65 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "n.value == String.length(s)", "4:24"));
     }
 
+    /** A list of any length is an element repeated, as a string of any length is a character
+     *  repeated, so a position past a length is left as it is past a string's. Over an element
+     *  nothing here shows a value of, or a set whose elements run out, the sizes are not shown. */
+    @Test
+    void aSizeOfAContainerIsReachedWhereTheTypeShowsAValueForEachSize() {
+        Map<String, String> past = left("k: Int, s: String", "data Unused = Int",
+                "k > String.length(s)", "4:18");
+        assertEquals(Map.of("String.length(s)", RELATES), past);
+        assertEquals(Map.of("List.length(xs)", RELATES), left("k: Int, xs: List<Int>",
+                "data Unused = Int", "k > List.length(xs)", "4:19"));
+        assertEquals(Map.of("List.length(xs)", RELATES), left("k: Int, xs: List<Bool>",
+                "data Unused = Int", "k > List.length(xs)", "4:19"));
+        assertEquals(Map.of("Set.size(xs)", RELATES), left("k: Int, xs: Set<Int>",
+                "data Unused = Int", "k > Set.size(xs)", "4:19"));
+        assertEquals(Map.of("Set.size(xs)", RELATES, "k", NOT_SHOWN),
+                left("k: Int, xs: Set<Bool>", "data Unused = Int", "k > Set.size(xs)", "4:19"));
+    }
+
+    /**
+     * The element an index written down picks of a list stands at the list's elements, as the one
+     * a walk is handed does, and so does a field of it. A list whose rules say what its elements
+     * are to one another leaves the number compared with one unread.
+     */
+    @Test
+    void anElementAnIndexPicksStandsWhereTheElementsOfTheListDo() {
+        String get = "match List.get(0, xs) with | Some v -> v == n | None -> false";
+        assertEquals(Map.of("n", RELATES, "xs[*]", RELATES),
+                left("n: Int, xs: List<Int>", UNUSED, get, "4:58"));
+        assertEquals(Map.of("n", RELATES, "xs[*].a", RELATES),
+                left("n: Int, xs: List<Rec>", "data Rec = { a: Int }",
+                        "match List.get(0, xs) with | Some r -> r.a == n | None -> false",
+                        "4:60"));
+        String same = "data Same = { value: List<Int> } invariant"
+                + " List.all(x -> x == 1, value) || List.length(value) == 0";
+        assertEquals(Map.of("xs.value[*]", RELATES, "n", NOT_SHOWN),
+                left("n: Int, xs: Same", same,
+                        "match List.get(0, xs.value) with | Some v -> v > n | None -> false",
+                        "4:64"));
+    }
+
+    /**
+     * Every position a walk hands its step is reached in some row, from nought to one below the
+     * most a container holds, so a number compared with one is read, and with the position moved
+     * by a constant. The most a container holds is where the language stops, so a size moved by a
+     * constant is read as a string's length is.
+     */
+    @Test
+    void aPositionInAWalkIsReachedAcrossTheRowsAndASizeIsEndedWhereTheLanguageEndsIt() {
+        String inputs = "n: Int, xs: List<Int>";
+        String same = "List.mapIndexed((i, _) -> i == n, xs)";
+        assertEquals(Map.of(), left(inputs, UNUSED, "List<Bool>", same, "4:45"));
+        String moved = "List.mapIndexed((i, _) -> i + 1 == n, xs)";
+        assertEquals(Map.of(), left(inputs, UNUSED, "List<Bool>", moved, "4:49"));
+        assertEquals(Map.of("String.length(s)", RELATES), left("n: Int, s: String", UNUSED,
+                "String.length(s) + 1 == n", "4:37"));
+        assertEquals(Map.of("List.length(xs)", RELATES),
+                left(inputs, UNUSED, "List.length(xs) + 1 == n", "4:37"));
+    }
+
     private static final String NAT = "data Nat = Int invariant value >= 0";
 
     private static final String TOTAL = "List.sum(List.map(n -> n.value, ns))";
@@ -1637,9 +1696,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     @Test
     void aLineTheModelDrawsWhereFewPositionsComputeIsDrawn() {
         String inputs = "xs: List<Int>";
-        String body = STANDING.formatted("i - List.length(xs) + 9223372036854775806 <= 0");
-        assertEquals(List.of("List.length(xs)/0 <= x <= 9223372036854775805",
-                        "List.length(xs)/9223372036854775805 < x"),
+        String body = STANDING.formatted("i - List.length(xs) + 2147483646 <= 0");
+        assertEquals(List.of("List.length(xs)/0 <= x <= 2147483645",
+                        "List.length(xs)/2147483645 < x"),
                 classesAt(inputs, UNUSED, "List<Int>", body, "List.length(xs)"));
     }
 
@@ -1812,7 +1871,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /**
      * Against another list's length, where an element of the walked list stands is no number
-     * of it, and nothing is shown. Nor where the way picks out some of the elements: the walk is
+     * of it: the positions reach every value a longer list is compared at, so that length is
+     * parted at nought, where no position is compared, and nowhere else. Nothing is shown where the way picks out some of
+     * the elements: the walk is
      * handed every position, and the comparison is asked at those of the elements the way lets
      * through, which may leave out the last.
      */
@@ -1820,8 +1881,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void whereAnElementStandsIsReadOnlyAgainstItsOwnListAllOfWhichTheWayLeaves() {
         String inputs = "xs: List<Int>, ys: List<Int>";
         String another = STANDING.formatted("i == List.length(ys) - 1");
-        assertEquals(Map.of("List.length(ys)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>",
-                another, atThe("==", UNUSED, inputs, another)));
+        assertEquals(List.of("List.length(ys)/0 <= x <= 0", "List.length(ys)/0 < x < 2147483648"),
+                classesAt(inputs, UNUSED, "List<Int>", another, "List.length(ys)"));
         String picked = "if List.all(x -> x > 0, xs) then "
                 + STANDING.formatted("i == List.length(xs) - 1") + " else []";
         assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left("xs: List<Int>", UNUSED,

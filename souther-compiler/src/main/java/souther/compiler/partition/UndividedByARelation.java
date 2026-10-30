@@ -10,6 +10,7 @@ import souther.compiler.check.ContainerSizesUnderAWitness;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementsApart;
+import souther.compiler.check.EverySizeAContainerHas;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NumericMeasures;
@@ -44,6 +45,7 @@ import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
@@ -55,6 +57,7 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -851,6 +854,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         if (places.isEmpty()) {
             NumericTerm.FromOnePosition countedAs = each.readOff() != null ? each.readOff()
+                    : each.position() != null ? each.position().howMany()
                     : summedAs(each.number());
             TermOrders orders = countedAs == null ? null : read.quantities().ordersOf(countedAs);
             return orders == null ? null : orders.answered();
@@ -4672,7 +4676,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             NumericDomain.Bounds holds = asARelationReadsIt(each.number() != null
                     && region.projectionOf(each.number())
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
-                    ? within : NumericDomain.Bounds.OPEN, carriers.get(i));
+                    ? within : each.position() != null ? positionsLie(each.position(), region)
+                    : NumericDomain.Bounds.OPEN, carriers.get(i));
             Way way = each.atOnePosition() == null || !heldWhole ? Way.TIES
                     : wayOf(each.atOnePosition(), stating.get(i));
             if (way == Way.UNTOUCHED && narrowedByTheRun.stream().anyMatch(past ->
@@ -4704,6 +4709,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : isAnEndOfAKey(each.number())
                     ? asARelationReadsIt(shownOfAnEnd(each.number(), read, region, conditions,
                             heldWhole), carriers.get(i))
+                    : each.position() != null
+                    ? asARelationReadsIt(positionsReached(each.position(), read, region,
+                            conditions, heldWhole), carriers.get(i))
                     : null;
             Takes takes = source != null && way == Way.UNTOUCHED
                     && each.number() instanceof NumericTerm.ValueOf ? source.takes() : null;
@@ -4712,6 +4720,64 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     spacingOf(carriers.get(i)), whereItStops(carriers.get(i)), each.number()));
         }
         return terms;
+    }
+
+    /**
+     * Every position a walk over {@code position}'s container hands its step in some row, or null
+     * where that is not shown.
+     *
+     * <p>A position is reached wherever the container holds more than it, so the positions the
+     * rows reach run from nought to one below the most the container is shown to hold, and with
+     * no most, from nought up. Shown only where every position is handed in every row the way
+     * reaches ({@link #picksOut}) and the container's size is itself shown to take every value of
+     * a run: a position is no more reached than the sizes that put an element there are.
+     */
+    private NumericDomain.Bounds positionsReached(Quantity.PositionInTheWalk position,
+                                                  InputReading read, SearchRegion region,
+                                                  List<OnAWay> conditions, boolean heldWhole) {
+        NumericTerm.FromOnePosition size = position.howMany();
+        Source source = heldWhole ? sourceOf(size, read) : null;
+        if (source == null || picksOut(conditions, position.container(), Set.of())) {
+            return null;
+        }
+        Way way = wayOf(size, source.named()
+                ? statingAnythingOfItsParameter(size, conditions, read)
+                : statingAnythingOf(size, conditions));
+        NumericDomain.Bounds sizes = way == Way.TIES ? null : realized(size, source, region, way);
+        if (sizes == null) {
+            return null;
+        }
+        return positionsIn(sizes, size);
+    }
+
+    /** Where the positions a walk hands its step lie: below how many the region leaves the
+     *  container holding, and open where that is not read. */
+    private static NumericDomain.Bounds positionsLie(Quantity.PositionInTheWalk position,
+                                                     SearchRegion region) {
+        NumericDomain.Bounds lie = region.projectionOf(position.howMany())
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds sizes)
+                ? positionsIn(sizes, position.howMany()) : null;
+        return lie == null ? NumericDomain.Bounds.OPEN : lie;
+    }
+
+    /**
+     * The positions a container holding a number of elements in {@code sizes} has, or null where
+     * it holds none. {@code size} is the number of them, which the language ends where a container
+     * stops ({@link RepresentationBounds}).
+     */
+    private static NumericDomain.Bounds positionsIn(NumericDomain.Bounds sizes,
+                                                    NumericTerm.FromOnePosition size) {
+        Endpoint most = sizes.meet(RepresentationBounds.of(size)).max();
+        if (most == null) {
+            return new NumericDomain.Bounds(Endpoint.inclusive(new Count(BigDecimal.ZERO)), null);
+        }
+        int held = CountDomain.asCount(most.at());
+        int last = most.inclusive() ? held - 1 : held - 2;
+        if (held < 0 || last < 0) {
+            return null;
+        }
+        return new NumericDomain.Bounds(Endpoint.inclusive(new Count(BigDecimal.ZERO)),
+                Endpoint.inclusive(new Count(BigDecimal.valueOf(last))));
     }
 
     /**
@@ -5468,6 +5534,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /** The places what the declarations and a way say of {@code side} are asked at: its own, or
      *  the place of the element's number a walk kept an end of and of a seed the input holds. */
     private static List<FilingCoordinate> placesAsked(Side side) {
+        if (side.position() != null) {
+            return List.of(FilingCoordinate.of(side.position().howMany()));
+        }
         if (side.kept() == null) {
             return side.madeOf();
         }
@@ -6052,8 +6121,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case NumericTerm.ValueOf value -> every
                     ? way == Way.UNTOUCHED ? NumericDomain.Bounds.OPEN : region.wholeRunOf(value)
                     : source.onlyItsEnds() ? region.wholeRunOf(value) : null;
-            case NumericTerm.TakenOf taken -> every && DefaultBoundOperationFacts.get()
+            case NumericTerm.TakenOf taken -> every && (DefaultBoundOperationFacts.get()
                     .everyAnswerItCanGiveHasASourceValue(taken.operation())
+                    || (source.takes() instanceof Takes.Every(var type)
+                            && EverySizeAContainerHas.isTakenBy(taken.operation(), type)))
                     ? region.wholeRunOf(taken) : null;
             // Every step of the answer's order has a value of the position's order in it, so the
             // steps the value falls in fill the answer's run wherever the value takes every value

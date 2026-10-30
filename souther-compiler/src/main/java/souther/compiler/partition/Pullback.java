@@ -2794,6 +2794,29 @@ final class Pullback {
     }
 
     /**
+     * Where the elements of the list stand, and the fields under them {@code steps} read, where
+     * {@code name} is the element an index written down picks of a list of the input that is no
+     * one of many — or null where it is not, or a step goes anywhere but into a field.
+     */
+    private TermPath elementPickedAtAnIndex(Core.Read name, List<TermPath.Step> steps,
+                                            InputReads at) {
+        InputReads.PickedAtAnIndex picked = at.pickedAtAnIndex(name);
+        if (picked == null || !(picked.list().at().pathOf(picked.list().value(),
+                read.rules().newtypes()) instanceof PathResolution.At(var list))
+                || list.insideAContainer()) {
+            return null;
+        }
+        List<String> fields = new ArrayList<>();
+        for (TermPath.Step step : steps) {
+            if (!(step instanceof TermPath.Step.Field field)) {
+                return null;
+            }
+            fields.add(field.name());
+        }
+        return list.element().then(fields);
+    }
+
+    /**
      * The piece {@code side} is, where it is the element a list lookup at an index written down
      * picks of the pieces of a string of the input — or null where it is not.
      *
@@ -8744,6 +8767,13 @@ final class Pullback {
                         return LinearForm.atom(new Quantity.OfABinding(name.binding(), steps,
                                 node.type(), Optional.empty(), Optional.of(underAKey.get())));
                     }
+                }
+                // The element an index written down picks of a list of the input stands at the
+                // list's elements, as the one a walk is handed does.
+                TermPath picked = elementPickedAtAnIndex(name, steps, at);
+                if (picked != null) {
+                    return LinearForm.atom(new DecisionAtom.OfTheInput(
+                            new NumericTerm.ValueOf(picked)));
                 }
                 return switch (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
                     case ReadMeaning.Element _, ReadMeaning.OneOf _, ReadMeaning.NoneHeld _,
