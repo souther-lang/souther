@@ -365,6 +365,19 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         assertEquals(product, product.standingWhereTheDeclarationsAdmit(between("0.2", "0.4")));
     }
 
+    /**
+     * A run times a scale has the ends it is written with, and none where an end would need more
+     * places than a decimal holds: half of the least scale there is, is no decimal.
+     */
+    @Test
+    void aRunTimesAScaleHasNoEndPastWhatADecimalHolds() {
+        NumericDomain.Bounds fromTheLeast = new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(new BigDecimal("1E-2147483647"))), null);
+        ExactRatio aHalf = ExactRatio.of(new BigDecimal("0.5"));
+        assertEquals(null, fromTheLeast.timesEach(aHalf));
+        assertTrue(fromTheLeast.timesEach(ExactRatio.of(2)) != null);
+    }
+
     /** The declarations leave {@code rate} the values strictly between {@code low} and
      *  {@code high}, and every number is counted on decimals. */
     private static NumericTerm.ProductOf.Declared between(String low, String high) {
