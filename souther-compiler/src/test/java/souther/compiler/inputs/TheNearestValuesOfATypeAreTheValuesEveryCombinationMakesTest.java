@@ -5,15 +5,11 @@ import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.observe.Figure;
 import souther.compiler.partition.ClassOfAPosition;
-import souther.compiler.partition.ReportedReason;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.values.StoppedReading;
 import souther.test.Nightly;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.RecordComponent;
-import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -41,35 +37,15 @@ class TheNearestValuesOfATypeAreTheValuesEveryCombinationMakesTest {
      * The types a steady order is asked over ({@code ASteadyOrderTellsApartWhateverEqualityTellsApartTest},
      * {@code ReasonsComeOutInASteadyOrderWhicheverWayTheyWereMetTest}), but {@link ReportedReason.Stop}.
      *
-     * <p>Stop's constructor refuses a null and nothing else, so its components are not tied to one
-     * another and there is no value that only some combination takes — {@link
-     * #stopTiesNoComponentToAnother} holds that. Every combination of its components is the
-     * product of what they are offered, and a null refused at every one of them is asked all.
+     * <p>Stop's constructor refuses a null and nothing else, so there is no value that only some
+     * combination of its components takes, and every combination of them is the product of what
+     * they are offered. {@code ReportedReasonStopRefusesANullAndNothingElseTest} holds that on every
+     * run.
      */
     private static final List<Class<?>> ASKED = List.of(BlockReason.RuleReadingStopped.class,
             RuleReasons.Said.class, RuleSite.class, WrittenOwner.class, SourceConstructOrigin.class,
             QuotedFrom.class, SourceProvenance.class, StoppedReading.class,
             ClassOfAPosition.class, Figure.class);
-
-    @Test
-    void stopTiesNoComponentToAnother() throws Exception {
-        RecordComponent[] components = ReportedReason.Stop.class.getRecordComponents();
-        ValuesOfAType values = new ValuesOfAType();
-        Object[] first = new Object[components.length];
-        for (int i = 0; i < first.length; i++) {
-            first[i] = values.of(components[i].getGenericType()).get(0);
-        }
-        Constructor<?> canonical = ReportedReason.Stop.class.getDeclaredConstructor(
-                Arrays.stream(components).map(RecordComponent::getType).toArray(Class<?>[]::new));
-        canonical.newInstance(first);
-        for (int i = 0; i < first.length; i++) {
-            for (Object value : values.of(components[i].getGenericType())) {
-                Object[] moved = first.clone();
-                moved[i] = value;
-                canonical.newInstance(moved);
-            }
-        }
-    }
 
     @Test
     void everyValueOfAComponentAnyCombinationTakesIsInSomeValueTheNearestMake() {
