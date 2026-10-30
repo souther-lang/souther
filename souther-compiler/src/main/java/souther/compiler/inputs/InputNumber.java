@@ -30,9 +30,11 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -1114,11 +1116,12 @@ public final class InputNumber {
                 key = each.binding();
             }
         }
-        Map<BindingId, Core> names = new LinkedHashMap<>(reads.heldByTheBody());
-        namedIn(walk.step().body(), names);
+        Following names = new Following(reads.heldByTheBody());
+        namedIn(walk.step().body(), names.given);
         TermPath alongside = lookedUpBy(walk.step().body(), accumulator, value, key, names, reads,
                 source);
-        if (alongside == null || alongside.containersHoldingIt().size() != 1
+        if (alongside == null || !names.everyBindingWasRead()
+                || alongside.containersHoldingIt().size() != 1
                 || !isAMapOfWholeNumbersKeyedAlike(walked, alongside, inputs, source)) {
             return null;
         }
@@ -1152,22 +1155,57 @@ public final class InputNumber {
         Core.forEachChild(here, child -> namedIn(child, into));
     }
 
-    /** {@code e} with every name it is given followed to what it was given. */
-    private static Core followed(Core e, Map<BindingId, Core> names) {
-        Core here = Core.withoutStanding(e);
-        for (int guard = 0; guard < 64; guard++) {
-            if (here instanceof Core.Read name && names.get(name.binding()) != null) {
-                here = Core.withoutStanding(names.get(name.binding()));
-            } else if (here instanceof Core.LetIn binding) {
-                here = Core.withoutStanding(binding.body());
-            } else {
-                return here;
-            }
+    /**
+     * What a step is followed through to reach the shape it is recognised as: the names it reads
+     * are followed to what they were given, and a binding written around a body is stepped past.
+     *
+     * <p>A binding is worked out whether or not anything reads it, so stepping past one is
+     * recognising the step as a shape that leaves out what the binding does. It is only the shape
+     * where every binding stepped past was read on the way, which makes its value a part of the
+     * shape; one nothing read may stop the run, and the step is then no such shape
+     * ({@link #everyBindingWasRead}).
+     */
+    private static final class Following {
+
+        /** What each name the step binds was given, with those the body holds. */
+        private final Map<BindingId, Core> given;
+        private final Set<BindingId> read = new HashSet<>();
+        private final List<Core.LetIn> steppedPast = new ArrayList<>();
+
+        private Following(Map<BindingId, Core> held) {
+            this.given = new LinkedHashMap<>(held);
         }
-        return here;
+
+        private Core followed(Core e) {
+            Core here = Core.withoutStanding(e);
+            for (int guard = 0; guard < 64; guard++) {
+                if (here instanceof Core.Read name && given.get(name.binding()) != null) {
+                    read.add(name.binding());
+                    here = Core.withoutStanding(given.get(name.binding()));
+                } else if (here instanceof Core.LetIn binding) {
+                    steppedPast.add(binding);
+                    here = Core.withoutStanding(binding.body());
+                } else {
+                    return here;
+                }
+            }
+            return here;
+        }
+
+        /** Whether every binding stepped past was read on the way to the shape. */
+        private boolean everyBindingWasRead() {
+            return steppedPast.stream().allMatch(binding -> binding.binder() != null
+                    && binding.binder().binding() != null
+                    && read.contains(binding.binder().binding()));
+        }
     }
 
-    private static boolean isTheName(Core e, BindingId name, Map<BindingId, Core> names) {
+    /** {@code e} with every name it is given followed to what it was given. */
+    private static Core followed(Core e, Following names) {
+        return names.followed(e);
+    }
+
+    private static boolean isTheName(Core e, BindingId name, Following names) {
         return name != null && followed(e, names) instanceof Core.Read read
                 && name.equals(read.binding());
     }
@@ -1178,7 +1216,7 @@ public final class InputNumber {
      * holds none — or null where the step is anything else.
      */
     private static TermPath lookedUpBy(Core step, BindingId accumulator, BindingId value,
-                                       BindingId key, Map<BindingId, Core> names, InputReads reads,
+                                       BindingId key, Following names, InputReads reads,
                                        RuleReadingSource source) {
         if (!(followed(step, names) instanceof Core.Binary sum) || sum.op() != BinOp.ADD) {
             return null;

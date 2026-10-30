@@ -2037,12 +2037,15 @@ public sealed interface NumericTerm
             ExactRatio inside = insideOf(run);
             ProductOf there = inside == null ? null : new ProductOf(one, other, inside);
             AtAValue made = there == null ? null : there.atAValue();
-            // The number alone stands at the value over the scale. Every decimal value is a
-            // value the number alone can stand at only where one over the scale is a decimal
-            // too: seven tenths leaves a hundredth no decimal to stand at.
+            // The number alone stands at the value over the scale, and a row is built with its
+            // numbers at few places (DecimalOperation.PLACES_A_ROW_IS_BUILT_AT) whatever the
+            // operations of the comparison are asked at. Over a whole number of times the
+            // value is as many places as the value: a half leaves twice, a tenth ten times.
+            // Seven tenths leaves a hundredth no decimal to stand at, and four fifths leaves a
+            // number five places further out than the value was written at.
             ExactRatio over = made == null ? null
                     : ExactRatio.ONE.dividedBy(made.scale()).orNull();
-            return over == null || !over.terminates() ? this : there;
+            return over == null || !over.isWhole() ? this : there;
         }
 
         /** A value inside {@code run}, written as a decimal, nearest its middle; null where none

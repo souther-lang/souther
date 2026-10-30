@@ -6312,6 +6312,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * ({@link NumericTerm.ProductOf#atAValue}). The two numbers are apart, and no rule of the
      * declarations ties their places to one another ({@link #tiedByARule}), so each stands where
      * it is asked at whatever the other is.
+     *
+     * <p>A run of decimals is the values a row is written at, as every run of a dense term is:
+     * numbers written at few places, which is the room the operations of the comparison are shown
+     * for ({@code DecimalOperation#allowAClaimOver}). It claims no number that needs more places
+     * than a row is built with, so the product is no more claimed at one than the term alone.
+     * Where the number alone stands over a scale, the scale is a whole number's inverse and adds
+     * no place ({@link NumericTerm.ProductOf#standingWhereTheDeclarationsAdmit}).
      */
     private static NumericDomain.Bounds realizedProduct(NumericTerm.ProductOf product,
                                                         InputReading read, SearchRegion region,

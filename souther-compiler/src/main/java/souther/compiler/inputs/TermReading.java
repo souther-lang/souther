@@ -1114,6 +1114,29 @@ final class TermReading {
     }
 
     /**
+     * Whether a key is the same key as another exactly where the two observations are equal.
+     *
+     * <p>A map of the input is keyed by what crosses the boundary: strings, temporals, enumerations,
+     * and newtypes over those. The language writes each of those one way when it is the same key,
+     * so the observation of one is equal to the observation of the other. A decimal is the amount
+     * it stands for whatever scale it is written at, and two observations of it differ where the
+     * amounts do not, so keys of one would be told apart that the map holds as one; the same of a
+     * collection. No key that reaches this is one of those today, and one that did would be read
+     * as the sum of no products where the walk adds some.
+     */
+    private static boolean spelledOneWay(ObservedValue key) {
+        return switch (key) {
+            case ObservedValue.Decimal _, ObservedValue.Sequence _,
+                 ObservedValue.Mapping _ -> false;
+            case ObservedValue.Constructed constructed -> constructed.fields().values().stream()
+                    .allMatch(TermReading::spelledOneWay);
+            case ObservedValue.Bool _, ObservedValue.Integer _, ObservedValue.Text _,
+                 ObservedValue.Temporal _, ObservedValue.Unit _ -> true;
+            default -> false;
+        };
+    }
+
+    /**
      * What the products of the values two maps hold under one key add up to, for a term over
      * {@link RunSource.JoinedOccurrences}: each key both hold makes one product, and a key only
      * one holds makes none. Nought where they share none, as an empty total is.
@@ -1125,6 +1148,13 @@ final class TermReading {
             return new Reading.NotNumber();
         }
         List<ExactRatio> terms = new ArrayList<>();
+        List<TermOrders.KeyedEntry> held = new ArrayList<>(first);
+        held.addAll(second);
+        for (TermOrders.KeyedEntry each : held) {
+            if (!spelledOneWay(each.key())) {
+                return new Reading.NotNumber();
+            }
+        }
         for (TermOrders.KeyedEntry one : first) {
             for (TermOrders.KeyedEntry other : second) {
                 if (!one.key().equals(other.key())) {

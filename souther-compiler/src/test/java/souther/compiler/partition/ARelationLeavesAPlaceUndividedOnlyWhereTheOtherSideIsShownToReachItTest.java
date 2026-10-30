@@ -1047,6 +1047,26 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         }
     }
 
+    /**
+     * A step is the shape of a join only where everything it works out is a part of that shape.
+     * A binding is worked out whether or not anything reads it, so one the product does not read
+     * may stop a run — {@code Int.floorMod(1, d)} does where {@code d} is nought — and the walk is
+     * then no join, as a walk over one map with the same binding is not a total. A binding the
+     * product reads is a part of the shape.
+     */
+    @Test
+    void aBindingTheStepWorksOutAndNothingReadsKeepsItFromBeingAJoin() {
+        String inputs = "limit: Int, d: Int, agreed: Map<String, Int>, prices: Map<String, Int>";
+        String looked = "(Map.get(k, prices) |> Option.withDefault(0))";
+        String read = "limit >= Map.fold((acc, k, q) -> {\n    let price = " + looked
+                + "\n    acc + q * price\n}, 0, agreed)";
+        assertEquals(Map.of("List.sum({agreed[*] * prices[*] under one key})", RELATES,
+                "limit", RELATES), left(inputs, NAT, read, atThe(">=", NAT, inputs, read)));
+        String unread = "limit >= Map.fold((acc, k, q) -> {\n    let unused = Int.floorMod(1, d)\n"
+                + "    acc + q * " + looked + "\n}, 0, agreed)";
+        assertFalse(linesAbout(measured(inputs, NAT, "Bool", unread), "limit").isEmpty(), unread);
+    }
+
     private static final String FORECAST = """
             module w1
 

@@ -363,6 +363,12 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         assertEquals(ExactRatio.of(new BigDecimal("0.5")), aHalf.atAValue().scale());
 
         assertEquals(product, product.standingWhereTheDeclarationsAdmit(between("0.2", "0.4")));
+        // Four fifths over one is a number a row of few places has five more places in: a
+        // decimal, but one the row was not built with.
+        assertEquals(product, product.standingWhereTheDeclarationsAdmit(between("0.1", "0.3")));
+        // Three quarters leaves a quarter, and four times a value has the places the value has.
+        assertEquals(ExactRatio.of(new BigDecimal("0.75")),
+                product.standingWhereTheDeclarationsAdmit(between("0.7", "0.8")).atAValue().at());
     }
 
     /**
