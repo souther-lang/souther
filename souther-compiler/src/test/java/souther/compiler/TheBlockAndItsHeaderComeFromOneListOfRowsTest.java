@@ -69,8 +69,11 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
      * sum nor a product of the fields as they are. Each of those is a rule the composing now
      * reasons through — it finds {@code rate = 0, cap = 10} for the sum and
      * {@code rate = 10, cap = 1} for the product — and the block it produces has rows in it, which
-     * is the right answer and the wrong fixture. What is wanted here is a rule outside what the
-     * algebra reasons in.
+     * is the right answer and the wrong fixture. So does a weighed product, now that a value of
+     * the two fields a rule ties together is written down and held to what a row puts at either:
+     * {@code rate = 20, cap = 1}. What is wanted here is a rule outside what the algebra reasons
+     * in and outside what a value written down is worked out by: a remainder, which the fold does
+     * not work out, of a product the example holds it of.
      *
      * <p>Here for the shape of the block it produces — explanations and no rows — and not for why the
      * search failed. Whether that failure may be read as a fact about the model is #602's question.
@@ -80,7 +83,7 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
 
             behavior fee""", """
                 }
-                invariant together = 2 * rate.value * cap.value >= 20
+                invariant together = Int.floorMod(rate.value * cap.value, 7) == 2
 
             behavior fee""");
 

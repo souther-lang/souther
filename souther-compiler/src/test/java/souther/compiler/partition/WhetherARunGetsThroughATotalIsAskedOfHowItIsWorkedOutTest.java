@@ -243,15 +243,23 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
     }
 
     /**
-     * A value looked up under a key and handed to a closure is read for the number the closure
-     * answers, which says nothing of whether the closure gets through: {@code v + 1 - 1} answers
-     * {@code v} and stops at the greatest {@code Int}.
+     * A value looked up under a key and handed to a closure gets through the closure only where
+     * what the closure works out is told: {@code v + 1 - 1} answers {@code v} and stops at the
+     * greatest {@code Int}, and its sum is worked out where the entry is held, so the lines are
+     * drawn on the sum as written ({@code v >= q} is on {@code q}, not on {@code q - 1}). A
+     * closure whose stop nothing tells is not taken to get through.
      */
     @Test
-    void aValueLookedUpAndHandedToAClosureIsNotTakenToGetThroughTheClosure() {
-        String report = report("k: String, m: Map<String, Int>, q: Int", UNUSED,
+    void aValueLookedUpAndHandedToAClosureIsTakenToGetThroughOnlyWhatIsTold() {
+        String inputs = "k: String, m: Map<String, Int>, q: Int";
+        String told = report(inputs, UNUSED,
                 "(Map.get(k, m) |> Option.map(v -> v + 1 - 1) |> Option.withDefault(0)) >= q");
-        assertEquals(Set.of(), related(report), report);
+        assertEquals(Set.of("m[*]"), related(told), told);
+        assertEquals(Set.of(), notShown(told), told);
+        String untold = report(inputs, UNUSED,
+                "(Map.get(k, m) |> Option.map(v -> Int.abs(v)) |> Option.withDefault(0)) >= q");
+        assertEquals(Set.of(), related(untold), untold);
+        assertEquals(Set.of("m[*]", "q"), notShown(untold), untold);
     }
 
     /**

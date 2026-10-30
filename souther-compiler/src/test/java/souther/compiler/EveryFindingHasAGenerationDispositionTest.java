@@ -366,12 +366,12 @@ class EveryFindingHasAGenerationDispositionTest {
             assertEquals(2, java.util.Set.copyOf(each.readings()).size(),
                     "and they are two readings, which is what a walk of them has to see");
         }
-        // Both points of the line, each searched at both positions. The line and the run beside it
-        // are two rows to write and neither is composable here, so each of them is answered from
-        // both readings rather than from whichever the walk reached first.
+        // The line, searched at both positions. No string of one character is three letters, so
+        // the row on the line is composable at neither, and is answered from both readings rather
+        // than from whichever the walk reached first. The run beside it is written with three
+        // letters, which is what the record's rules admit at each field.
         assertEquals(List.of(
-                        List.of("String.length(x.a) = 1", "String.length(x.b) = 1"),
-                        List.of("1 < String.length(x.a)", "1 < String.length(x.b)")),
+                        List.of("String.length(x.a) = 1", "String.length(x.b) = 1")),
                 coverage.stream()
                         .map(each -> each.attempted().stream()
                                 .map(souther.compiler.partition.Generator

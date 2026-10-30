@@ -77,8 +77,9 @@ final class OperandRunner {
             // What the generated code ended with, carried out as it came. What it means — whether
             // the evaluation went over its budget, whether the stack ran out, whether the value the
             // row wanted simply is not there — is read where the row is evaluated, which is what
-            // holds the phase and the position to say it against.
-            throw new InvocationFailure(ite.getCause());
+            // holds the phase and the position to say it against. A class of this compile that will
+            // not link is not something the evaluation ended with, and is said before it is carried.
+            throw InvocationFailure.ofGeneratedCode(ite.getCause());
         } catch (ReflectiveOperationException e) {
             // Not the generated program failing: this compiler could not reach its own output.
             throw new FixtureException(

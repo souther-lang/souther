@@ -17,6 +17,7 @@ import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
+import souther.compiler.core.Kernel;
 import souther.compiler.inputs.DecimalOperation;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ElementsMet;
@@ -42,6 +43,7 @@ import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -587,7 +589,36 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (reached.endsNoRun(new Denotation(binding.value(), at))) {
                     return;
                 }
+                if (tellsTheClosuresMakingAnOption(binding.value(), at)) {
+                    return;
+                }
                 told.exact = false;
+            }
+
+            /**
+             * Whether {@code value} is an option made by closures applied to what another holds,
+             * and so worked out as they are: each closure's body, read where its parameter stands
+             * for what it was handed, tells its operations. A closure is applied only where the
+             * option holds a value, which a row of the entry it holds is at. What else
+             * {@code value} works out must end no run.
+             */
+            private boolean tellsTheClosuresMakingAnOption(Core value, InputReads at) {
+                List<Denotation> closures = at.closuresMakingWhatItHolds(value,
+                        ruleSource.symbols(), ruleSource.newtypes());
+                if (closures.isEmpty()) {
+                    return false;
+                }
+                for (Denotation closure : closures) {
+                    if (AffineForms.outcome(closure.value(), closure.at(), this)
+                            instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>
+                            && !reached.endsNoRun(closure)) {
+                        told.exact = false;
+                    }
+                }
+                if (!restEndsNoRun(value, at, reached, closures)) {
+                    told.exact = false;
+                }
+                return true;
             }
 
             @Override
@@ -605,6 +636,19 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             public void totalled(Core call, LinearForm<NumericTerm> total,
                                  List<Core> elements) {
                 tellAnIntTotal(call, total, told.workedOutOf(elements));
+            }
+
+            /**
+             * The length of a list written out, whose elements are worked out as the list is
+             * built. Past the figure a list is read element by element up to, they are not told.
+             */
+            @Override
+            public void counted(Core call, List<Core> elements, InputReads at) {
+                if (told.readsElementByElement(elements.size())) {
+                    builtFrom(elements, at);
+                } else {
+                    told.exact = false;
+                }
             }
 
             /**
@@ -677,15 +721,49 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             private boolean theStopIsAnsweredFor(Core node, InputReads at) {
                 return reached.endsOnlyWhereItsAnswerHasNoPlace(new Denotation(node, at))
                         || stoppedAt.answersFor(node)
-                        || addsUpTheFormItIsReadAs(node, at);
+                        || addsUpTheFormItIsReadAs(node, at)
+                        || countsAListThatEndsOnlyWhereItHasNoPlace(node, at);
+            }
+
+            /**
+             * Whether {@code node} is the count of a list whose working out ends a run only where
+             * the list it makes has no place, and so is answered for where the comparison's line
+             * on the count is at a count a list holds: a row on that line has a list with a place,
+             * so working the list out ends no run there. That the count has a place says nothing of
+             * the list's where the line is past what a list holds. The line is the form of the
+             * whole comparison, which is not known until it is read, so it is asked of it then
+             * ({@link WhatLiesBesideTheStop}).
+             */
+            private boolean countsAListThatEndsOnlyWhereItHasNoPlace(Core node, InputReads at) {
+                if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)
+                        || call.args().size() != 1
+                        || !(call.operation() instanceof ValueName.Stdlib.Operation operation)
+                        || ruleSource.symbols().kernelOf(operation) != Kernel.LIST_LENGTH
+                        || !theListEndsOnlyWhereItHasNoPlace(
+                                new Denotation(call.args().get(0), at))) {
+                    return false;
+                }
+                told.countsOverTheStop.add(stoppedAt.holdAside(node).atom);
+                return true;
+            }
+
+            /** Whether {@code list}, or what a name it is was given, ends a run only where the
+             *  list it makes has no place. */
+            private boolean theListEndsOnlyWhereItHasNoPlace(Denotation list) {
+                if (Core.withoutStanding(list.value()) instanceof Core.Read) {
+                    List<Denotation> given = reached.boundTo(list);
+                    return !given.isEmpty() && given.stream()
+                            .allMatch(this::theListEndsOnlyWhereItHasNoPlace);
+                }
+                return reached.endsOnlyWhereItsAnswerHasNoPlace(list);
             }
 
             /**
              * Whether working {@code node} out does no more than the analysis that drew the lines
              * reads it by: the form of one operand, which it builds its rows where adding up is
-             * worked out. Read apart, the operand composes, every operation on the way adds up
-             * addends of its form, and nothing is left untold; every other part of {@code node}
-             * ends no run.
+             * worked out. Read apart, the operand composes and nothing is left untold; every
+             * other part of {@code node} ends no run. Every operation on the way adds up addends
+             * of its form, or is told as an operation of its own.
              */
             private boolean addsUpTheFormItIsReadAs(Core node, InputReads at) {
                 Core operand = stoppedAt.readByTheFormOf(node);
@@ -698,10 +776,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 WhatWasTold apart = new WhatWasTold();
                 LinearForm<NumericTerm> form = rest[0] ? composedBy(operand, at,
                         reading(ofTheInput, new LinkedHashSet<>(), met.copied(), apart)) : null;
-                return form != null && apart.exact && apart.partials.isEmpty()
-                        && apart.decimals.isEmpty()
-                        && apart.operations.stream().allMatch(
-                                each -> WhatLiesBesideTheStop.areAddendsOf(each.form(), form));
+                if (form == null || !apart.exact || !apart.partials.isEmpty()
+                        || !apart.decimals.isEmpty()) {
+                    return false;
+                }
+                // An operation that is no addend of the form, a sum with a number it is moved
+                // by, is one the analysis asks of its own rows, so it is told here.
+                if (!apart.operations.stream().allMatch(
+                        each -> WhatLiesBesideTheStop.areAddendsOf(each.form(), form))) {
+                    told.absorb(apart);
+                }
+                return true;
             }
 
             /** The form {@code e} composes to as {@code by} reads it, or null where it does not. */
@@ -1181,6 +1266,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** The forms of the operations over a stopped value that are told of nowhere, to be asked
          *  of the form of the comparison. */
         private final List<LinearForm<NumericTerm>> sumsOverTheStop = new ArrayList<>();
+        /** The counts of a list whose working out is answered for only where the line the
+         *  comparison draws on the count is at a count a list holds, to be asked of the form of
+         *  the comparison. */
+        private final List<NumericTerm> countsOverTheStop = new ArrayList<>();
         /** The last operation told before the step of a walk being unrolled, by the accumulator
          *  that step reads the answer so far on: what the steps before worked out. */
         private final Map<BindingId, Integer> carriedAfter = new HashMap<>();
@@ -1269,6 +1358,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             apart.resultOf.forEach((form, where) -> resultOf.put(form, where + ofDecimals));
             inputReads.addAll(apart.inputReads);
             sumsOverTheStop.addAll(apart.sumsOverTheStop);
+            countsOverTheStop.addAll(apart.countsOverTheStop);
             readByATerm.addAll(apart.readByATerm);
             exact &= apart.exact;
             partials.addAll(apart.partials);
@@ -1459,6 +1549,32 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
         }
         return told.working();
+    }
+
+    /** Whether what {@code expression} works out ends no run, apart from the closures
+     *  {@code told}, whose bodies are read of their own. A closure written anywhere else in it is
+     *  applied by the call it is written at, and where that stops is no one's but that closure's. */
+    private static boolean restEndsNoRun(Core expression, InputReads at,
+                                         WorkedOutToReachIt reached, List<Denotation> told) {
+        Core here = Core.withoutStanding(expression);
+        if (!(here instanceof Core.PreservedCall call)
+                || !WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(call).endsNone()) {
+            return reached.endsNoRun(new Denotation(expression, at));
+        }
+        for (Core argument : call.args()) {
+            boolean ends = Core.withoutStanding(argument) instanceof Core.Block closure
+                    ? isTold(closure, told)
+                    : restEndsNoRun(argument, at, reached, told);
+            if (!ends) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isTold(Core.Block closure, List<Denotation> told) {
+        Core body = Core.withoutStanding(closure.body());
+        return told.stream().anyMatch(each -> Core.withoutStanding(each.value()) == body);
     }
 
     /** What {@code side} comes to once the bindings written around it are taken off. */
@@ -1673,6 +1789,26 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             Core.forEachChild(here, child -> collectUnder(child, into));
         }
 
+        /**
+         * Whether the comparison {@code whole} is a cut of draws its line on {@code count} alone,
+         * at a count a list holds: the form is the count and nothing else, so the line is one
+         * count whatever the rest of the input is, and that count and the one above it are
+         * counts of a list, the whole numbers up to {@code Integer.MAX_VALUE}. The rows on the
+         * line then hold lists a run can make. {@code List.length(found) + 100 >= 1} is a line at
+         * a count below nought, which no list is at.
+         */
+        static boolean lineIsAtACountAListHolds(LinearForm<NumericTerm> whole,
+                                                NumericTerm count) {
+            if (whole == null || whole.coefs().size() != 1
+                    || !whole.coefs().containsKey(count)) {
+                return false;
+            }
+            return whole.constant().negated().dividedBy(whole.coefs().get(count)).orNull()
+                    instanceof ExactRatio line && line.isWhole()
+                    && line.signum() >= 0
+                    && line.compareTo(ExactRatio.of(Integer.MAX_VALUE)) < 0;
+        }
+
         private UndividedByARelation.Working beside(StoppedValues stoppedAt) {
             WhatWasTold told = new WhatWasTold();
             AffineForms.Reading<NumericTerm, InputReads> reading = reading(ofTheInput,
@@ -1691,6 +1827,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     .orNull() : null;
             for (LinearForm<NumericTerm> sum : told.sumsOverTheStop) {
                 if (!areAddendsOf(sum, whole)) {
+                    told.exact = false;
+                }
+            }
+            for (NumericTerm count : told.countsOverTheStop) {
+                if (!lineIsAtACountAListHolds(whole, count)) {
                     told.exact = false;
                 }
             }
