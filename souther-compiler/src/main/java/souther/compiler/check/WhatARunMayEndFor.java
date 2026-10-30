@@ -156,21 +156,6 @@ public final class WhatARunMayEndFor {
     }
 
     /**
-     * Whether working {@code e} out ends no run and needs no name to be followed: it ends none
-     * beneath ({@link #endsNoneBeneath}) and reads no name, since what a name stands for was
-     * worked out where it was bound, which is not under {@code e}.
-     */
-    public static boolean endsNoneAndReadsNoNameBeneath(Core e) {
-        Core here = Core.withoutStanding(e);
-        if (here instanceof Core.Read || !itselfApartFromTheClosuresWrittenAtIt(here).endsNone()) {
-            return false;
-        }
-        boolean[] under = {true};
-        Core.forEachChild(here, child -> under[0] &= endsNoneAndReadsNoNameBeneath(child));
-        return under[0];
-    }
-
-    /**
      * Where {@code e} itself answers ({@link GetsPast}), apart from the closures written at it
      * as {@link #itselfApartFromTheClosuresWrittenAtIt} reads it, each from the owner of what it
      * is: an operator's from {@link AbortSites}, a kernel's from {@link KernelContracts}, and an

@@ -4286,8 +4286,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         SearchRegion declared = answered.leaving(read.quantities().region());
         SearchRegion along = offItsLine ? declared : rest != null ? rest : region;
         LeftToTheCalendar left = leavingPartsAlone(stated, read);
-        return new WayRead(along, declared, left, stating(sources, left.conditions(), heldWhole),
-                answered.narrowing());
+        return new WayRead(along, declared, left,
+                stating(sources, left.conditions(), heldWhole, read), answered.narrowing());
     }
 
     /**
@@ -4684,7 +4684,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** What the way states of each side, asked once and read by both readings. */
     private List<List<OnAWay>> stating(List<Source> sources, List<OnAWay> conditions,
-                                       boolean heldWhole) {
+                                       boolean heldWhole, InputReading read) {
         List<List<OnAWay>> out = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
@@ -4698,7 +4698,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Set<OnAWay> stated = new LinkedHashSet<>();
             for (NumericTerm.FromOnePosition term : readOff) {
                 stated.addAll(sources.get(i) != null && sources.get(i).named()
-                        ? statingAnythingOfItsParameter(term, conditions)
+                        ? statingAnythingOfItsParameter(term, conditions, read)
                         : statingAnythingOf(term, conditions));
             }
             out.add(List.copyOf(stated));
@@ -5442,7 +5442,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 Source source = sourceOf(number, read);
                 Way way = !heldWhole || source == null ? Way.TIES
                         : wayOf(number, source.named()
-                                ? statingAnythingOfItsParameter(number, conditions)
+                                ? statingAnythingOfItsParameter(number, conditions, read)
                                 : statingAnythingOf(number, conditions));
                 yield new Start(seed, way == Way.TIES ? null
                         : realized(number, source, region, way), true);
@@ -5803,19 +5803,38 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * read off, other than what stands at a value around the term. A rule naming the term holds it
      * beside the places it names, so an end on one of those moves where the term runs, and a
      * statement about one of those and another parameter ties the term to that parameter.
+     *
+     * <p>A place of the parameter moves the term only where it is the term's own place, or a rule
+     * of the declarations relates the two ({@link #tiedByARule}): a rule that reads the term alone
+     * holds it beside nothing, so a statement about a place no rule reads with it says nothing of
+     * the values it takes.
      */
     private static List<OnAWay> statingAnythingOfItsParameter(NumericTerm.FromOnePosition term,
-                                                              List<OnAWay> conditions) {
-        Set<String> heads = new LinkedHashSet<>();
-        term.placesReadOff().forEach(place -> heads.add(place.head()));
+                                                              List<OnAWay> conditions,
+                                                              InputReading read) {
         List<OnAWay> out = new ArrayList<>();
         for (OnAWay each : conditions) {
-            boolean inIt = each.positions().stream().anyMatch(at -> heads.contains(at.head()));
-            if (inIt && !saysNothingOfTheValuesOf(term, each, true)) {
+            if (movesWithAPlaceOfItsParameter(term, each, read)
+                    && !saysNothingOfTheValuesOf(term, each, true)) {
                 out.add(each);
             }
         }
         return out;
+    }
+
+    /** Whether {@code statement} is about a place in a parameter {@code term} is read off that is
+     *  the term's own, or one a rule of the declarations relates to a place the term is read off. */
+    private static boolean movesWithAPlaceOfItsParameter(NumericTerm.FromOnePosition term,
+                                                         OnAWay statement, InputReading read) {
+        for (TermPath at : statement.positions()) {
+            for (TermPath place : term.placesReadOff()) {
+                if (place.head().equals(at.head())
+                        && (overlap(place, at) || tiedByARule(place, at, read))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

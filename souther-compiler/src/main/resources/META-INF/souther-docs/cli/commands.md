@@ -510,6 +510,14 @@ refuses `not_satisfied` and nothing else, which is the same set of findings `com
 all --warnings error` refuses. It decides the exit status and no more: the report is the
 same whether or not it was written.
 
+`undetermined` is not, by itself, evidence that the model is inadequate. It means at least one
+measure that was asked for could not reach a conclusion, or was not made. For a rewrite, the
+compiler may have neither found a row that tells it apart nor proved there is none; for a point,
+it may not know whether a row is required; a rule it could not read leaves what depends on it open.
+A search that stopped at a figure of the compiler's own has not looked past it. That a row may exist
+is not that one does, and an empty `--generate` does not show that no further row is needed. Exit
+status 0 under `--strict` means no gap was established, not that every measure was completed.
+
 The report prints more findings than a build refuses over, and says which is which. A line under `!`
 is one of them; a line under `·` is something measured and named and not gated on — a class no row is
 in, a position the model divides no way. The two read alike and are a sentence apart: `no row uses

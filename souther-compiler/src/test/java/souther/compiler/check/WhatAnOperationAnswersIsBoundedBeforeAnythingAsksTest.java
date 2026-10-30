@@ -139,7 +139,7 @@ class WhatAnOperationAnswersIsBoundedBeforeAnythingAsksTest {
                 null, BigDecimal.ZERO, Rel.EQ, new ResultBound.Provided.Always<>(), limit));
         assertThrows(IllegalArgumentException.class, () -> new ResultBound<>(
                 null, BigDecimal.ZERO, Rel.LE,
-                new ResultBound.Provided.ConstantAboveZero<>(new ArgumentRef.At(0)), limit));
+                new ResultBound.Provided.ArgumentStands<>(new ArgumentRef.At(0), Rel.GT), limit));
     }
 
     /** And its number is the language's, so a declaration that writes one is refused when it is

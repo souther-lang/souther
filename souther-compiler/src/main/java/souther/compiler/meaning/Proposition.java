@@ -63,6 +63,27 @@ public sealed interface Proposition {
     String key();
 
     /**
+     * {@code kind} and the spellings of {@code parts} in a list, built in one pass over a buffer
+     * of the length it comes to. A part's spelling holds its own parts', so a spelling made by
+     * collecting the parts' into a list and joining that copies every character once for each
+     * step, at every level of a proposition as deep as its conjunctions and disjunctions.
+     */
+    private static String spellingOf(String kind, List<Proposition> parts) {
+        int length = kind.length() + 2 + 2 * (parts.size() - 1);
+        for (Proposition each : parts) {
+            length += each.key().length();
+        }
+        StringBuilder out = new StringBuilder(length).append(kind).append('[');
+        for (int at = 0; at < parts.size(); at++) {
+            if (at > 0) {
+                out.append(", ");
+            }
+            out.append(parts.get(at).key());
+        }
+        return out.append(']').toString();
+    }
+
+    /**
      * The spelling of {@link #denied}, for a reader that wants no more of it than that.
      *
      * <p>A denial is made whole to be asked its spelling, and a part's spelling is asked for every
@@ -804,7 +825,7 @@ public sealed interface Proposition {
             if (parts.size() < 2) {
                 throw new IllegalArgumentException("a conjunction is of two or more parts");
             }
-            key = "all" + parts.stream().map(Proposition::key).toList();
+            key = spellingOf("all", parts);
         }
 
         @Override
@@ -843,7 +864,7 @@ public sealed interface Proposition {
             if (parts.size() < 2) {
                 throw new IllegalArgumentException("a disjunction is of two or more parts");
             }
-            key = "any" + parts.stream().map(Proposition::key).toList();
+            key = spellingOf("any", parts);
         }
 
         /** Every part failing — which {@link #all} keeps as the cases of a condition where the

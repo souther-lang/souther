@@ -174,14 +174,18 @@ final class IntrinsicNumericFacts {
      * answer, and what they are read as is the naming's answer — a name given a constant is that
      * constant, here as everywhere.
      */
-    static List<NumericConstraint> ofCall(Core.PreservedCall call, FactSubject atom, Denotations at,
-                                          Terms terms) {
+    static Carried ofCall(Core.PreservedCall call, FactSubject atom, Denotations at, Terms terms) {
         List<NumericConstraint> out = new ArrayList<>();
-        bounding(DischargeRules.boundsOn(call, arg -> constantOf(arg, at, terms)), atom,
-                ref -> terms.affineOf(CallArguments.of(ref, call), at), out);
+        DischargeRules.BoundRows rows =
+                DischargeRules.boundRowsOn(call, arg -> constantOf(arg, at, terms));
+        bounding(rows.holding(), atom, ref -> terms.affineOf(CallArguments.of(ref, call), at), out);
         shifted(call, atom, at, terms, out);
-        return out;
+        return new Carried(out, whereTheArgumentsAre(rows.heldBack(), call, atom, at, terms));
     }
+
+    /** What a call's answer carries whatever its arguments are, and what it carries where its
+     * arguments stand a way the call does not settle. */
+    record Carried(List<NumericConstraint> always, List<ConditionalConstraint> where) {}
 
     /**
      * The rows as what they say about {@code atom}, keeping the relation to the argument each names.
@@ -199,17 +203,72 @@ final class IntrinsicNumericFacts {
                                          LinearForm<FactSubject>> against,
                                  List<NumericConstraint> out) {
         for (ResultBound<DeclaredArgument> bound : rows) {
-            ExactRatio offset =
-                    ExactRatio.of(bound.offset());
-            LinearForm<FactSubject> stands = bound.against() == null
-                    ? LinearForm.constant(offset)
-                    : addTo(against.apply(bound.against()), offset);
-            // A bound whose form no ratio holds is a bound not stated.
-            if (stands != null && LinearForm.atom(atom).minus(stands)
-                    instanceof ExactAnswer.Held<LinearForm<FactSubject>> held) {
-                out.add(new NumericConstraint(held.value(), bound.rel()));
+            NumericConstraint stated = stating(bound, atom, against);
+            if (stated != null) {
+                out.add(stated);
             }
         }
+    }
+
+    /** What {@code bound} says of {@code atom}, or null where its form is one no ratio holds, which
+     * is a bound not stated. */
+    private static NumericConstraint stating(ResultBound<DeclaredArgument> bound, FactSubject atom,
+                                             Function<DeclaredArgument,
+                                                     LinearForm<FactSubject>> against) {
+        ExactRatio offset =
+                ExactRatio.of(bound.offset());
+        LinearForm<FactSubject> stands = bound.against() == null
+                ? LinearForm.constant(offset)
+                : addTo(against.apply(bound.against()), offset);
+        return stands != null && LinearForm.atom(atom).minus(stands)
+                instanceof ExactAnswer.Held<LinearForm<FactSubject>> held
+                ? new NumericConstraint(held.value(), bound.rel()) : null;
+    }
+
+    /**
+     * What the answer of {@code call} carries where the arguments stand a way the call does not
+     * settle: a remainder by a divisor above nought is not negative and is below the divisor.
+     *
+     * <p>The rows the call's arguments do not meet as constants, each with its condition as a
+     * relation of the argument it names. Whether it holds is not the call's to say — a divisor that
+     * is no constant is above nought on the path that guarded it and not on another — so each is
+     * filed beside what it would state ({@link ConditionalConstraint}) and taken in by a reading
+     * that has the condition.
+     */
+    private static List<ConditionalConstraint> whereTheArgumentsAre(
+            List<ResultBound<DeclaredArgument>> heldBack, Core.PreservedCall call, FactSubject atom,
+            Denotations at, Terms terms) {
+        List<ConditionalConstraint> out = new ArrayList<>();
+        for (ResultBound<DeclaredArgument> bound : heldBack) {
+            NumericConstraint premise = premiseOf(bound.provided(), call, at, terms);
+            NumericConstraint stated = stating(bound, atom,
+                    ref -> terms.affineOf(CallArguments.of(ref, call), at));
+            // A condition naming no value was settled by the constants the rows were told apart
+            // with: a row held back for one is a condition that does not hold, and recorded it
+            // would make every call with a written divisor a value computed for nothing.
+            if (premise != null && stated != null && !premise.atoms().isEmpty()) {
+                out.add(new ConditionalConstraint(premise, stated));
+            }
+        }
+        return out;
+    }
+
+    /** The relation of the argument {@code provided} asks about, or null where the argument has no
+     * form to state it of. */
+    private static NumericConstraint premiseOf(ResultBound.Provided<DeclaredArgument> provided,
+                                               Core.PreservedCall call, Denotations at, Terms terms) {
+        return switch (provided) {
+            case ResultBound.Provided.Always<DeclaredArgument> _ -> null;
+            case ResultBound.Provided.ArgumentStands<DeclaredArgument> stands ->
+                    relationOfArgument(stands.argument(), stands.rel(), call, at, terms);
+        };
+    }
+
+    private static NumericConstraint relationOfArgument(DeclaredArgument argument, Rel rel,
+                                                        Core.PreservedCall call, Denotations at,
+                                                        Terms terms) {
+        LinearForm<FactSubject> form = terms.affineOf(CallArguments.of(argument, call), at);
+        return form == null ? null : new NumericConstraint(form, rel);
     }
 
     /**

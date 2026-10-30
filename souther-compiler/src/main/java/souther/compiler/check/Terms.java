@@ -1170,12 +1170,15 @@ final class Terms {
             // said about where its counts run starts every rule about it from a range that admits
             // what the order does not hold.
             atomExtents.putIfAbsent(atom, extentOf(type));
-            recording(atom, e, type, at);
             // What the value carries is filed where the value is named, so that a reader holding the
             // atom and no tree has it. Asked of the operation the value came from, whichever surface
             // it was written on — the same normalisation the recipe is read through.
-            if (asOperator(e) instanceof Core.PreservedCall call) {
-                carrying(atom, IntrinsicNumericFacts.ofCall(call, atom, at, this));
+            IntrinsicNumericFacts.Carried carried =
+                    asOperator(e) instanceof Core.PreservedCall call
+                            ? IntrinsicNumericFacts.ofCall(call, atom, at, this) : null;
+            recording(atom, e, type, at, carried == null ? List.of() : carried.where());
+            if (carried != null) {
+                carrying(atom, carried.always());
             }
         }
         return atom;
@@ -1194,6 +1197,15 @@ final class Terms {
         return atomExtents.get(atom);
     }
 
+    /** A walk or an accumulation is the one recipe its atom has, so a guarantee beside it is a
+     * naming that disagrees with itself. */
+    private static void refusingGuarantees(FactSubject atom,
+                                           List<ConditionalConstraint> guarantees) {
+        if (!guarantees.isEmpty()) {
+            throw new IllegalStateException("atom `" + atom.rendered() + "` is a walk or an"
+                    + " accumulation, which records one recipe, and was also given " + guarantees);
+        }
+    }
 
     /**
      * Records how {@code atom} was computed, where it stands for arithmetic the affine fragment
@@ -1207,8 +1219,15 @@ final class Terms {
      * <p>What is recorded is how the value was computed and not what it lies between. What it lies
      * between depends on what the path assumed, and the path is not something the naming of an
      * expression knows — which is why the walk that reads the operands is not handed one.
+     *
+     * <p>{@code guarantees} are what the operation states of its answer where its arguments stand a
+     * way the call does not settle. They are recorded as a recipe beside whatever else computed the
+     * value: whether the arguments stand so is a question about the values they are, which a recipe
+     * answers with its operands derived first ({@link DerivedNumericFacts}), and not one about the
+     * path. A walk or an accumulation states none.
      */
-    private void recording(FactSubject atom, Core e, Type answered, Denotations at) {
+    private void recording(FactSubject atom, Core e, Type answered, Denotations at,
+                           List<ConditionalConstraint> guarantees) {
         // What was computed first, and the representation only where nothing was. Asked the other
         // way round, a value the table states arithmetic for reached the walk reader because the
         // reading had kept its call standing — so which of the two answered turned on how the tree
@@ -1221,11 +1240,13 @@ final class Terms {
             made = recipeFor(computed.meaning(), computed.at());
         } else if (asOperator(e) instanceof Core.PreservedCall call
                 && Reductions.reducing(call, at) instanceof Reductions.Reducing walk) {
+            refusingGuarantees(atom, guarantees);
             recordingWalk(atom, walk, e, at);
             return;
         } else if (asOperator(e) instanceof Core.PreservedCall accumulation
                 && Accumulations.accumulating(accumulation)
                         instanceof Accumulations.Accumulating accumulating) {
+            refusingGuarantees(atom, guarantees);
             recordingAccumulation(atom, accumulating, e, at);
             return;
         } else {
@@ -1247,6 +1268,10 @@ final class Terms {
             Choice choice = Choice.of(operator);
             made = choice != null ? chosen(choice, at)
                     : operator instanceof Core.PreservedCall call ? definedByCases(call, at) : null;
+        }
+        if (!guarantees.isEmpty()) {
+            Derivation guaranteed = new Derivation.GuaranteedWhere(guarantees);
+            made = made == null ? guaranteed : new Derivation.Each(List.of(made, guaranteed));
         }
         if (made == null) {
             return;

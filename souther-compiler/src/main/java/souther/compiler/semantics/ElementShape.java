@@ -1,5 +1,9 @@
 package souther.compiler.semantics;
 
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Set;
+
 /**
  * What a construction of a container keeps of the elements of the container it was built from.
  *
@@ -23,5 +27,16 @@ package souther.compiler.semantics;
  * has to be spelled as a statement about the elements cannot be made there.
  */
 public enum ElementShape {
-    PERMUTES, SUBSET, MAPS, COLLAPSES
+    PERMUTES, SUBSET, MAPS, COLLAPSES;
+
+    /**
+     * The shapes whose answer holds only elements it was given, so that what is true of every
+     * element of the source is true of every element of the answer.
+     *
+     * <p>The one place this is said. A statement made of every element — an operation's guarantee,
+     * a {@code List.all} a guard wrote — travels through these and no further, and a reader that
+     * spelled the two shapes itself would be a second account of which constructions keep them.
+     */
+    public static final Set<ElementShape> THAT_KEEP_THE_ELEMENTS = Collections.unmodifiableSet(
+            EnumSet.of(PERMUTES, SUBSET));
 }

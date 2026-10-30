@@ -71,7 +71,8 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
                     stopped at no figure                     0
                       the comparison (in the region, above) — the search stopped at how many \
                 values a point is tried with (VALUES_A_POINT_IS_TRIED_WITH, 8), which no option \
-                sets: write a row there, or a rule that leaves no value there
+                sets: a row there, or a rule that leaves no value there, would settle it; \
+                nothing shows one is needed
                 """), human(report));
         assertFalse(human(report).contains("allowing more"), human(report));
     }
