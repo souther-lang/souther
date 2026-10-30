@@ -194,6 +194,9 @@ final class Reasons {
                 case STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR ->
                         "the strings whose case conversion holds a count of code points of a"
                                 + " class by other code points than the class's own";
+                case ROWS_A_RUN_IS_TRIED_FOR ->
+                        "the rows whose run works out a number at the item, other than the few"
+                                + " sizes and values tried";
             });
         }
         return String.join(", ", out);

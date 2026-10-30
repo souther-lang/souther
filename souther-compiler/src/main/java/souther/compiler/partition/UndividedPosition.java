@@ -346,6 +346,16 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         RULE_ABOUT_A_REMAINDER,
         /**
+         * The rule compares a number a call or a walk works out of the values here, which this
+         * compiler does not read back to them, so it divides none of them; its rows are placed by
+         * what their runs worked out.
+         *
+         * <p>Its own word and not {@link #RULE_ABOUT_A_RUN}: that rule was read to the end, and
+         * this one's reading stopped. A reader is told both that nothing says where the values
+         * here have to be and that the border is measured all the same.
+         */
+        RULE_MEASURED_ON_ITS_RUNS,
+        /**
          * The rule holds this position to the values it admits, and places no end on them.
          *
          * <p>A format states which strings stand here, and everything else is refused at

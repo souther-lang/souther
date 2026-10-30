@@ -1726,6 +1726,18 @@ public sealed interface BlockReason {
     record ComparisonOnARemainder() implements ReadToEndWithoutLine {}
 
     /**
+     * The comparison is about a number a call or a walk works out, which this compiler does not
+     * read back to the input, so its line is drawn on how far apart its sides come out on a run
+     * and its rows are placed by what their runs worked out.
+     *
+     * <p>Its own word beside {@link ComparisonOverARun}. That one is a rule read to the end; this
+     * one is a rule whose reading stopped, and what the stop leaves is still said: nothing is
+     * known of where the values here have to be for the comparison to come out either way, so no
+     * class of them is drawn. What is no longer missing is the border, which the runs measure.
+     */
+    record ComparisonMeasuredOnItsRuns() implements ReadToEndWithoutLine {}
+
+    /**
      * The rule holds this position to the values it admits, and places no end on them.
      *
      * <p>What a reader is owed, and it is a fact they act on: the value written here has to be one

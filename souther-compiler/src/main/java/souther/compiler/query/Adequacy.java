@@ -129,7 +129,9 @@ import souther.compiler.partition.RoleAnswer;
 import souther.compiler.partition.LevelRealizer;
 import souther.compiler.partition.MeasuredInput;
 import souther.compiler.partition.ReachingCuts;
+import souther.compiler.partition.PointSearchGoal;
 import souther.compiler.partition.Realization;
+import souther.compiler.partition.Standing;
 import souther.compiler.partition.RowDemand;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ExpansionLineage;
@@ -7189,10 +7191,13 @@ public final class Adequacy {
                             continue;
                         }
                         BorderQuantity quantity = drawn.at(edge.border()).quantity();
-                        if (new LevelRealizer().realize(
-                                quantity.standingAt(owed.criterion()).alongTheWay(able),
-                                able.region(), subject.witnessSearch())
-                                instanceof Realization.Found at) {
+                        // Only where the point says what the input has to be. One a run alone
+                        // works out names no values to bring the outcome out with.
+                        if (quantity.searchGoalAt(owed.criterion())
+                                instanceof PointSearchGoal.ByConstraints(Standing constraint)
+                                && new LevelRealizer().realize(constraint.alongTheWay(able),
+                                        able.region(), subject.witnessSearch())
+                                        instanceof Realization.Found at) {
                             return new HeldOutcome.Bringing.Found(List.of(new HeldOutcome(
                                     List.of(new RowDemand.AtAPoint(at.fixing(),
                                             quantity.asksOfEachTerm(owed.criterion()))),

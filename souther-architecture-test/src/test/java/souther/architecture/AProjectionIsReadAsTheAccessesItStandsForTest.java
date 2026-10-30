@@ -587,6 +587,18 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/ComparisonReadings", "wayTo", "(" + core + core + reads + "L" + c
                 + "partition/ComparisonReadings$Body;)L" + c + "partition/ComparisonReadings$Way;",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
+        // Whether a side works its number out by a call or a walk from a seed: it looks for a
+        // call, which a projection's base is read for as any other subexpression is.
+        row(out, c + "partition/ComparisonReadings", "worksOutByACallOrAWalk", "(" + core
+                + reads + "L" + c + "inputs/InputReading;Ljava/util/Set;)Z", Reading.STRUCTURE,
+                CHOICES_AND_CALLS);
+        row(out, c + "partition/ComparisonReadings", "readsAnAnswer", "(" + core
+                + reads + "L" + c + "inputs/InputReading;Ljava/util/Set;)Z", Reading.STRUCTURE,
+                CHOICES_AND_CALLS);
+        row(out, c + "partition/ComparisonAssessment", "written",
+                "(" + core + ")Ljava/lang/String;", Reading.NAMES,
+                "spells a side of a comparison for a report, a projection as the accesses it"
+                        + " stands for, written from the last of them");
         row(out, c + "partition/ComparisonReadings", "collectWritten", "(" + core + "L" + c
                 + "partition/ComparisonReadings$Body;Ljava/util/Set;)V", Reading.STRUCTURE,
                 "which comparisons of the model are written in a condition, which no name read is");

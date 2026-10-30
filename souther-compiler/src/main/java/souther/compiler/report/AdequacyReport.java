@@ -4082,6 +4082,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RULE_ABOUT_A_REMAINDER ->
                     "it is about what a division leaves of a number made of the values here, so it"
                             + " draws its line on that remainder and divides none of them";
+            case RULE_MEASURED_ON_ITS_RUNS ->
+                    "it compares a number a call or a walk works out of the values here, which"
+                            + " this compiler does not follow back to them, so it divides none of"
+                            + " them and its rows are placed by what their runs worked out";
             // What the rule does to the position, and not what this measure could not hold. An
             // author reading "this compiler does not read it" would go and rewrite a rule that was
             // read from end to end, and one told the position is divided would go looking for the

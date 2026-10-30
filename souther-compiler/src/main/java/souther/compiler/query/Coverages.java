@@ -56,7 +56,9 @@ import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.ThresholdOfADerivedValue;
 import souther.compiler.partition.LevelRealizer;
+import souther.compiler.partition.PointSearchGoal;
 import souther.compiler.partition.Realization;
+import souther.compiler.partition.Standing;
 import souther.compiler.partition.RealizationTarget;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
@@ -2080,9 +2082,26 @@ final class Coverages {
                 // between the point and another value has to say so.
                 //
                 // Nothing is put to the point here, so no value is tried and none is charged for.
-                return new Looked(endedBy(last, realizer.realize(
-                        quantity.standingAt(criterion).alongTheWay(able), region, looking,
-                        tried)), first, Optional.empty());
+                return new Looked(endedBy(last, realized(criterion, able, region, tried)), first,
+                        Optional.empty());
+            }
+
+            /**
+             * Where a row at {@code criterion} along {@code able} would stand, or why none is
+             * offered: solved for where the quantity says what the input has to be, and looked
+             * for by running candidates where only a run works it out ({@link PointSearchGoal}).
+             */
+            private Realization realized(Criterion criterion,
+                                         souther.compiler.partition.Reachability.Reaching able,
+                                         SearchRegion region, ValuesTried tried) {
+                return switch (quantity.searchGoalAt(criterion)) {
+                    case PointSearchGoal.ByConstraints(Standing constraint) -> realizer.realize(
+                            constraint.alongTheWay(able), region, looking, tried);
+                    // A candidate, which the row built at it is run for and read back like any
+                    // other value a point is tried with.
+                    case PointSearchGoal.ByObservation observed ->
+                            realizer.candidateRun(observed, region, tried);
+                };
             }
 
             /**
@@ -2203,8 +2222,7 @@ final class Coverages {
             private Searching searchingWith(Criterion criterion, String label,
                     souther.compiler.partition.Reachability.Reaching able,
                     SearchRegion region, ValuesTried tried) {
-                Realization answered = realizer.realize(
-                        quantity.standingAt(criterion).alongTheWay(able), region, looking, tried);
+                Realization answered = realized(criterion, able, region, tried);
                 return switch (answered) {
                     case Realization.Found found -> {
                         // Asking nothing of what the dependencies answer. A point of a line is a
@@ -2221,8 +2239,7 @@ final class Coverages {
                         java.util.List<souther.compiler.partition.Generator.BoundaryAttempt> made =
                                 probe.attempt(label, found.fixing(),
                                         quantity.asksOfEachTerm(criterion), able,
-                                        souther.compiler.partition.AnswersDemanded.NOTHING);
-                        // Nothing was tried at all, which is the classes not linking. An empty
+                                        souther.compiler.partition.AnswersDemanded.NOTHING);                        // Nothing was tried at all, which is the classes not linking. An empty
                         // answer would say the point was searched and nothing happened. Not a value
                         // this point was tried with either: nothing was built, so there is nothing
                         // to leave out of the next asking and nothing another value would fix.

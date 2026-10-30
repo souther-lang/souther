@@ -419,6 +419,9 @@ public final class PublicationOrders {
                             CompositionRepertoire.ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL,
                             CompositionRepertoire.TREES_WRITTEN_FOR_A_COUNT,
                             CompositionRepertoire.STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
+                            // Last of the ones about which rows: a number only a run works out
+                            // is looked for by running them, with nothing said of where they are.
+                            CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR,
                             CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED,
                             CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE));
 

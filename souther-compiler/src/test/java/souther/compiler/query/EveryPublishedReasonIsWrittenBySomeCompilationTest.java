@@ -428,6 +428,15 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior f : (a: Int, b: Int) -> Answer
                 let f (a, b) = if Int.floorMod(a - b, 7) >= 1 then Yes else No
                 """.formatted(ANSWER)));
+        // A comparison over a streak a fold counts, which no form of the input says: its line is
+        // on how far apart the sides come out on a run, and the list is divided by none of it.
+        out.put(UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS, of("""
+                module m
+                %s
+                behavior f : (xs: List<Int>) -> Answer
+                let f (xs) = if List.fold((n, x) -> if x == 0 then n + 1 else 0, 0, xs) >= 3
+                    then Yes else No
+                """.formatted(ANSWER)));
         // A rule about a value an operation made of a position. Where the value came from is known;
         // what the rule says about the values there is not, because the value is one the body
         // worked out and no form of the input says it.

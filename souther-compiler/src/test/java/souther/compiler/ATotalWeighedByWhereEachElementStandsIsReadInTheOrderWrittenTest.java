@@ -227,7 +227,10 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
                         0
                     }
                     """.formatted(BRANCH, walked));
-            assertTrue(human.contains("not read: comparison"), walked + "\n" + human);
+            // Read as no weighing: the total a call works out places a row by what its run did.
+            assertFalse(human.contains("not read: comparison"), walked + "\n" + human);
+            assertTrue(human.contains("its rows are placed by what their runs worked out"),
+                    walked + "\n" + human);
             assertFalse(human.contains("the position"), walked + "\n" + human);
         }
     }

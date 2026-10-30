@@ -217,7 +217,19 @@ public enum CompositionRepertoire {
      * a count no string comes to: what would reach it is a way of writing strings backwards through
      * the conversion, and raising no figure does.
      */
-    STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR;
+    STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
+
+    /**
+     * The rows whose run works a number out at an item, for a number only a run works out.
+     *
+     * <p>Nothing says where the input's numbers stand for the run to come to a value there, so a
+     * row is looked for by writing candidates and running each. The candidates are rows of a few
+     * sizes and values; a row the item asks for elsewhere — a longer list, a value no candidate
+     * holds — is found by none of them, and that none was found is not that none is there. What
+     * would reach the rest is a way of writing the candidates the run turns on, and raising no
+     * figure does.
+     */
+    ROWS_A_RUN_IS_TRIED_FOR;
 
     /**
      * Whether a row that meets this for one value of a point meets it for every other: the
@@ -237,7 +249,8 @@ public enum CompositionRepertoire {
                  KEYS_OF_ONE_FOLD_ASKED_TOGETHER, ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
                  TOTALS_FROM_A_PUT_WRITTEN_AS_ONE_ELEMENT,
                  MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER, ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL,
-                 TREES_WRITTEN_FOR_A_COUNT, STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR -> false;
+                 TREES_WRITTEN_FOR_A_COUNT, STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
+                 ROWS_A_RUN_IS_TRIED_FOR -> false;
         };
     }
 

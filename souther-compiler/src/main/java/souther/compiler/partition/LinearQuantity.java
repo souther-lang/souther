@@ -40,6 +40,9 @@ public sealed interface LinearQuantity extends BorderQuantity
      */
     List<NumericTerm> terms();
 
+    /** What a search has to solve to put a row at one item. */
+    Standing standingAt(Criterion where);
+
     /**
      * The same quantity, with {@code from} taken at {@code to} instead — or null where it is not
      * this quantity's term, or where the move leaves something a quantity cannot be.

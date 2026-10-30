@@ -206,12 +206,24 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
         }
     }
 
+    /**
+     * Unread on both. Over the input, a fold neither reads is a number a run works out, and its
+     * rows are placed by what their runs worked out; over the response it is what the stand-in
+     * answered, which no run works out of the input, and it stays unread.
+     */
     @Test
     void whatNeitherSideReadsIsUnreadOnBoth() {
         for (String shape : unread()) {
             String input = overTheInput(shape);
-            assertTrue(input.contains("not read: comparison"), "over the input: " + shape + "\n"
-                    + input);
+            if (shape.startsWith("List.fold")) {
+                assertFalse(input.contains("not read: comparison"), "over the input: " + shape
+                        + "\n" + input);
+                assertTrue(input.contains("its rows are placed by what their runs worked out"),
+                        "over the input: " + shape + "\n" + input);
+            } else {
+                assertTrue(input.contains("not read: comparison"), "over the input: " + shape
+                        + "\n" + input);
+            }
             String response = overTheResponse(shape);
             assertTrue(response.contains("not read: comparison"), "over the response: " + shape
                     + "\n" + response);

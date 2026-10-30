@@ -2852,6 +2852,26 @@ public final class LevelRealizer {
     }
 
     /**
+     * The first candidate a row is run for at an item only a run works out, that was not tried
+     * already and the rules were not shown to refuse ({@link RowsARunIsTriedFor}) — or, where none
+     * is left, that the search left the rest of them untried.
+     *
+     * <p>Nothing here is solved for and nothing is run: the candidates are written with no word
+     * from the item, and what a row built at one works out is read where it is run. What is done
+     * here is what is done for every placement, which is why it is done here.
+     */
+    public Realization candidateRun(PointSearchGoal.ByObservation goal, SearchRegion within,
+                                    ValuesTried tried) {
+        for (Map<RealizationTarget, Place> each : RowsARunIsTriedFor.candidates(goal)) {
+            if (found(each, within, tried) instanceof Realization.Found offered) {
+                return offered;
+            }
+        }
+        return Realization.Unknown.searchLeftSomethingUntried(Set.of(),
+                Set.of(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR));
+    }
+
+    /**
      * A placement handed back, or nothing composed where the rules were shown to leave none.
      *
      * <p><b>The one place a placement becomes an answer.</b> What a search may hand back is the same
