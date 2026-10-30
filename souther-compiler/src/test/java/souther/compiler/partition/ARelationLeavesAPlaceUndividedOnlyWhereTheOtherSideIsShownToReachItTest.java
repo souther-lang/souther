@@ -882,10 +882,45 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 left("k: Int, xs: Set<Bool>", "data Unused = Int", "k > Set.size(xs)", "4:19"));
         assertEquals(List.of("k/x <= 0", "k/0 < x < 3", "k/3 <= x"),
                 classesAt("k: Int, xs: Set<Bool>", "data Unused = Int", "k > Set.size(xs)", "k"));
-        // A name the module declares is shown no value, so its containers are shown the empty one
-        // and no more.
-        assertEquals(Map.of("Set.size(xs)", RELATES, "k", NOT_SHOWN),
-                left("k: Int, xs: Set<Unit>", "data Unit", "k > Set.size(xs)", "4:19"));
+        // A name the module declares is as many as its parts: a data with nothing in it is one
+        // value, so a set of it holds none or that one.
+        assertEquals(List.of("k/x <= 0", "k/0 < x < 2", "k/2 <= x"),
+                classesAt("k: Int, xs: Set<Unit>", "data Unit", "k > Set.size(xs)", "k"));
+        // And as many as its rules are read to leave: a rule that is nothing but ends leaves the
+        // whole numbers between them, and any other rule is not read to leave a value, so the
+        // sizes it would put in a set are not shown.
+        assertEquals(List.of("k/x <= 0", "k/0 < x < 4", "k/4 <= x"), classesAt(
+                "k: Int, xs: Set<Digit>", "data Digit = Int invariant value >= 1 && value <= 3",
+                "k > Set.size(xs)", "k"));
+        assertEquals(Map.of("Set.size(xs)", RELATES, "k", NOT_SHOWN), left(
+                "k: Int, xs: Set<Odd>", "data Odd = Int invariant Int.floorMod(value, 2) == 1",
+                "k > Set.size(xs)", "4:19"));
+        // A rule with a hole in it is not read as the numbers between its ends.
+        assertEquals(Map.of("Set.size(xs)", RELATES, "k", NOT_SHOWN), left(
+                "k: Int, xs: Set<Gap>",
+                "data Gap = Int invariant value >= 1 && value <= 3 && value /= 2",
+                "k > Set.size(xs)", "4:19"));
+        // The cases of an enumeration are as many values as it has, and are all it has.
+        assertEquals(List.of("k/x <= 0", "k/0 < x < 4", "k/4 <= x"), classesAt(
+                "k: Int, xs: Set<Side>",
+                "data Left\ndata Right\ndata Middle\ndata Side = Left | Right | Middle",
+                "k > Set.size(xs)", "k"));
+        // Two values shown of a type is not that it has no more: a date is shown two, and a set
+        // of them is not capped at two — no size past two is claimed settled, and none is shown.
+        assertEquals(Map.of("Set.size(xs)", RELATES, "k", NOT_SHOWN), left(
+                "k: Int, xs: Set<Date>", "data Unused = Int", "k > Set.size(xs)", "4:19"));
+        assertEquals(List.of(), classesAt(
+                "k: Int, xs: Set<Date>", "data Unused = Int", "k > Set.size(xs)", "k"));
+        // A rule written over the fields of a record is a rule: the record is shown no value.
+        assertEquals(Map.of("Set.size(xs)", RELATES, "k", NOT_SHOWN), left(
+                "k: Int, xs: Set<Span>",
+                "data Span = { from: Int, to: Int } invariant from <= to",
+                "k > Set.size(xs)", "4:19"));
+        // A type written in terms of itself is shown only the values it can be given without
+        // itself.
+        assertEquals(Map.of("List.length(xs)", RELATES), left(
+                "k: Int, xs: List<Tree>", "data Tree = { kids: List<Tree> }",
+                "k > List.length(xs)", "4:19"));
     }
 
     /**
@@ -900,12 +935,18 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 "match List.get(0, xs) with | Some v -> v == n | None -> false", "4:58"));
         assertEquals(Map.of("n", RELATES), left("n: Int, xs: List<Int>", UNUSED,
                 "match List.get(3, xs) with | Some v -> v == n | None -> false", "4:58"));
-        // A field of the element is read where the element is shown to exist, which a name the
-        // module declares is not.
-        assertEquals(Map.of("n", NOT_SHOWN),
+        // A field of the element is read where the element is shown to exist, as a record of
+        // fields that have a value is.
+        assertEquals(Map.of("n", RELATES),
                 left("n: Int, xs: List<Rec>", "data Rec = { a: Int }",
                         "match List.get(0, xs) with | Some r -> r.a == n | None -> false",
                         "4:60"));
+        // And not where a rule over its fields may leave it none.
+        assertEquals(Map.of("n", NOT_SHOWN),
+                left("n: Int, xs: List<Span>",
+                        "data Span = { from: Int, to: Int } invariant from <= to",
+                        "match List.get(0, xs) with | Some r -> r.from == n | None -> false",
+                        "4:63"));
         assertEquals(Map.of("n", RELATES),
                 left("n: Int, h: Holder", "data Holder = { items: List<Int> }",
                         "match List.get(0, h.items) with | Some v -> v == n | None -> false",
@@ -1010,8 +1051,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     @Test
     void aTotalOverARunIsATermOfTheRelationAsTheCountIs() {
-        assertEquals(Map.of("List.length(ns)", RELATES, "gross", NOT_SHOWN),
+        assertEquals(Map.of("List.length(ns)", RELATES),
                 leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= List.length(ns)", 27));
+        assertEquals(List.of("gross/x <= -1", "gross/-1 < x"), classesAt(
+                "gross: Int, ns: List<Nat>", NAT, "gross >= List.length(ns)", "gross"));
         assertEquals(Map.of("List.sum(ns[*])", RELATES),
                 leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= " + TOTAL, 27));
         assertEquals(List.of("gross/x <= -1", "gross/-1 < x"), classesAt("gross: Int, ns: List<Nat>",
@@ -1953,7 +1996,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void whereAnElementStandsIsReadOnlyAgainstItsOwnListAllOfWhichTheWayLeaves() {
         String inputs = "xs: List<Int>, ys: List<Int>";
         String another = STANDING.formatted("i == List.length(ys) - 1");
-        assertEquals(List.of("List.length(ys)/0 <= x <= 0", "List.length(ys)/0 < x < 2147483648"),
+        assertEquals(List.of("List.length(ys)/0 <= x <= 0", "List.length(ys)/0 < x"),
                 classesAt(inputs, UNUSED, "List<Int>", another, "List.length(ys)"));
         String picked = "if List.all(x -> x > 0, xs) then "
                 + STANDING.formatted("i == List.length(xs) - 1") + " else []";

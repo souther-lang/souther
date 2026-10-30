@@ -18,6 +18,7 @@ import souther.compiler.check.PartId;
 import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.check.PublishedRules;
 import souther.compiler.check.RuleKey;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.Shape;
@@ -4040,7 +4041,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         NumericDomain.Bounds takes = realized(number, source, left,
-                ofIt.isEmpty() ? Way.UNTOUCHED : Way.NARROWED);
+                ofIt.isEmpty() ? Way.UNTOUCHED : Way.NARROWED, read.ruleReading());
         return takesTwoValues(takes) && workedOutBeside(statement.affine(), number, takes, read);
     }
 
@@ -4717,8 +4718,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     .anyMatch(statement -> statement.leavesAlone(each.atOnePosition()))
                     ? declared : region;
             NumericDomain.Bounds realizes = source != null
-                    ? asARelationReadsIt(realized(each.atOnePosition(), source, answering, way),
-                            carriers.get(i))
+                    ? asARelationReadsIt(realized(each.atOnePosition(), source, answering, way,
+                            read.ruleReading()), carriers.get(i))
                     : each.number() instanceof NumericTerm.TakenOver over
                     ? asARelationReadsIt(summedOverOneElement(over, read, region, conditions,
                             heldWhole, carriers.get(i)), carriers.get(i))
@@ -4739,7 +4740,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && each.number() instanceof NumericTerm.ValueOf ? source.takes() : null;
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
                     realizes, takes, each.number() instanceof NumericTerm.ValueOf,
-                    spacingOf(carriers.get(i)), whereItStops(carriers.get(i)), each.number()));
+                    spacingOf(carriers.get(i)),
+                    each.position() != null
+                            ? positionsOrderStops(each.position(), carriers.get(i))
+                            : whereItStops(carriers.get(i)),
+                    each.number() != null ? each.number() : each.position()));
         }
         return terms;
     }
@@ -4774,7 +4779,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Way way = wayOf(element, ofElement.named()
                     ? statingAnythingOfItsParameter(element, conditions, read)
                     : statingAnythingOf(element, conditions));
-            realizes = way == Way.TIES ? null : realized(element, ofElement, region, way);
+            realizes = way == Way.TIES ? null
+                    : realized(element, ofElement, region, way, read.ruleReading());
         }
         return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
                 asARelationReadsIt(holds, carrier), asARelationReadsIt(realizes, carrier), null,
@@ -4810,31 +4816,46 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Way way = wayOf(size, source.named()
                 ? statingAnythingOfItsParameter(size, conditions, read)
                 : statingAnythingOf(size, conditions));
-        NumericDomain.Bounds sizes = way == Way.TIES ? null : realized(size, source, region, way);
+        NumericDomain.Bounds sizes = way == Way.TIES ? null
+                : realized(size, source, region, way, read.ruleReading());
         if (sizes == null) {
             return null;
         }
-        return positionsIn(sizes, size);
+        return positionsIn(sizes, size, true);
     }
 
     /** Where the positions a walk hands its step lie: below how many the region leaves the
-     *  container holding, and open where that is not read. */
+     *  container holding, and open where that is not read. Not ended where the language ends a
+     *  container, which is no distinction a model made ({@link ResultBound.Limit}). */
     private static NumericDomain.Bounds positionsLie(Quantity.PositionInTheWalk position,
                                                      SearchRegion region) {
         NumericDomain.Bounds lie = region.projectionOf(position.howMany())
                 instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds sizes)
-                ? positionsIn(sizes, position.howMany()) : null;
+                ? positionsIn(sizes, position.howMany(), false) : null;
         return lie == null ? NumericDomain.Bounds.OPEN : lie;
+    }
+
+    /**
+     * Where the order the positions are counted on stops: at the last position of the most a
+     * container holds, which the language ends ({@link RepresentationBounds}) and an arithmetic on
+     * a position is held to.
+     */
+    private static NumericDomain.Bounds positionsOrderStops(Quantity.PositionInTheWalk position,
+                                                            Carrier carrier) {
+        NumericDomain.Bounds last = positionsIn(NumericDomain.Bounds.OPEN, position.howMany(), true);
+        NumericDomain.Bounds order = whereItStops(carrier);
+        return order == null || last == null ? last : order.meet(last);
     }
 
     /**
      * The positions a container holding a number of elements in {@code sizes} has, or null where
      * it holds none. {@code size} is the number of them, which the language ends where a container
-     * stops ({@link RepresentationBounds}).
+     * stops ({@link RepresentationBounds}) when {@code ended} says so.
      */
     private static NumericDomain.Bounds positionsIn(NumericDomain.Bounds sizes,
-                                                    NumericTerm.FromOnePosition size) {
-        Endpoint most = sizes.meet(RepresentationBounds.of(size)).max();
+                                                    NumericTerm.FromOnePosition size,
+                                                    boolean ended) {
+        Endpoint most = (ended ? sizes.meet(RepresentationBounds.of(size)) : sizes).max();
         if (most == null) {
             return new NumericDomain.Bounds(Endpoint.inclusive(new Count(BigDecimal.ZERO)), null);
         }
@@ -5460,7 +5481,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // beside.
         NumericDomain.Bounds taken = (start.seeded() && seedTakes == null) || ofEach == null
                 || !untouched || several == null || !several.meet(twoOrMore).holdsAValue() ? null
-                : realized(kept.ofEach(), ofEach, declared, Way.UNTOUCHED);
+                : realized(kept.ofEach(), ofEach, declared, Way.UNTOUCHED, read.ruleReading());
         NumericDomain.Bounds above = taken == null ? null
                 : start.seeded() ? taken.meet(pastOf(seedTakes, greatest)) : taken;
         if (above != null && above.holdsAValue()) {
@@ -5508,7 +5529,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                 ? statingAnythingOfItsParameter(number, conditions, read)
                                 : statingAnythingOf(number, conditions));
                 yield new Start(seed, way == Way.TIES ? null
-                        : realized(number, source, region, way), true);
+                        : realized(number, source, region, way, read.ruleReading()), true);
             }
             case Quantity.KeptSoFar.Seed.OfTheKey _ -> new Start(
                     read.quantities().region().projectionOf(kept.ofEach())
@@ -5653,7 +5674,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                                  operations,
                                                          boolean sizesAreRowsComputed) {
         TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, region,
-                independent) : null;
+                independent, read) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
             return Set.of();
         }
@@ -5676,7 +5697,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         case NumericTerm.ValueOf _ -> on.asARelationReadsIt();
                         case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
                                 .endsAreWhereTheRepresentationStops(taken.operation())
-                                ? realized(taken, source, region, Way.TIES) : null;
+                                ? realized(taken, source, region, Way.TIES, read.ruleReading())
+                                : null;
                         default -> null;
                     };
             if (realizes == null) {
@@ -5723,7 +5745,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             WhatARelationLeavesUndivided.Independence independent,
             WhatARelationLeavesUndivided.Operations operations, boolean sizesAreRowsComputed) {
         TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, along,
-                independent) : null;
+                independent, read) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
             return List.of();
         }
@@ -5736,7 +5758,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return List.of();
             }
             NumericDomain.Bounds realizes = asARelationReadsIt(
-                    realized(value, source, along, Way.UNTOUCHED), on);
+                    realized(value, source, along, Way.UNTOUCHED, read.ruleReading()), on);
             NumericDomain.Bounds holds = asARelationReadsIt(along.projectionOf(value)
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
                     ? within : NumericDomain.Bounds.OPEN, on);
@@ -5795,7 +5817,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private TwoSides twoSidesStandingApart(
             List<Source> sources, List<Carrier> carriers, List<List<OnAWay>> stating,
-            SearchRegion region, WhatARelationLeavesUndivided.Independence independent) {
+            SearchRegion region, WhatARelationLeavesUndivided.Independence independent,
+            InputReading read) {
         if (sides.size() == 2) {
             return carriers.get(0) != null && carriers.get(0).equals(carriers.get(1))
                     ? new TwoSides(0, 1, constant == null ? null
@@ -5816,7 +5839,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     || overlapping(sides.get(second), sides.get(held))) {
                 continue;
             }
-            NumericDomain.Bounds run = realized(value, sources.get(held), region, Way.TIES);
+            NumericDomain.Bounds run = realized(value, sources.get(held), region, Way.TIES,
+                    read.ruleReading());
             ExactRatio at = run == null || !run.holdsAValue() ? null
                     : run.aValueNearestNought(carriers.get(held).spacingBetweenValues());
             ExactRatio weighed = at == null || (carriers.get(held).spacingBetweenValues()
@@ -6185,13 +6209,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param source what the declarations leave the value {@code term} is, or is taken of
      */
     private static NumericDomain.Bounds realized(NumericTerm.FromOnePosition term, Source source,
-                                                 SearchRegion region, Way way) {
+                                                 SearchRegion region, Way way,
+                                                 RuleReadingContext reading) {
         boolean every = source.takes().every();
         return switch (term) {
             case NumericTerm.ValueOf value -> every
                     ? way == Way.UNTOUCHED ? NumericDomain.Bounds.OPEN : region.wholeRunOf(value)
                     : source.onlyItsEnds() ? region.wholeRunOf(value) : null;
-            case NumericTerm.TakenOf taken -> every ? realizedSizes(taken, source, region) : null;
+            case NumericTerm.TakenOf taken ->
+                    every ? realizedSizes(taken, source, region, reading) : null;
             // Every step of the answer's order has a value of the position's order in it, so the
             // steps the value falls in fill the answer's run wherever the value takes every value
             // its type holds.
@@ -6211,13 +6237,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * ({@link EverySizeAContainerHas}).
      */
     private static NumericDomain.Bounds realizedSizes(NumericTerm.TakenOf taken, Source source,
-                                                      SearchRegion region) {
+                                                      SearchRegion region,
+                                                      RuleReadingContext reading) {
         if (DefaultBoundOperationFacts.get()
                 .everyAnswerItCanGiveHasASourceValue(taken.operation())) {
             return region.wholeRunOf(taken);
         }
         Long shown = source.takes() instanceof Takes.Every(var type)
-                ? EverySizeAContainerHas.greatestShown(taken.takenAs(), type) : null;
+                ? EverySizeAContainerHas.greatestShown(taken.takenAs(), type, reading) : null;
         NumericDomain.Bounds run = shown == null ? null : region.wholeRunOf(taken);
         // As many as a container holds is where the language stops, which no run the region
         // answers is cut at, so a count shown that far is the run as it stands.
@@ -6332,7 +6359,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     || wayOf(element, statingAnythingOf(element, conditions)) != Way.UNTOUCHED) {
                 return null;
             }
-            NumericDomain.Bounds here = realized(element, source, region, Way.UNTOUCHED);
+            NumericDomain.Bounds here = realized(element, source, region, Way.UNTOUCHED,
+                    read.ruleReading());
             if (here == null || (each != null && !each.equals(here))) {
                 return null;
             }

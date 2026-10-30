@@ -77,9 +77,6 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
                     "souther.compiler.check.Carrier", Traversal.OPAQUE),
             new Authority("what there is to count about a value",
                     "souther.compiler.check.NumericMeasures", Traversal.OPAQUE),
-            new Authority("whether every size a container of a type could have is the size of"
-                            + " some value of it",
-                    "souther.compiler.check.EverySizeAContainerHas", Traversal.OPAQUE),
             new Authority("what reaches each position of a behavior's inputs, read once",
                     "souther.compiler.inputs.InputDomain", Traversal.OPAQUE),
             new Authority("which number of an input an expression names",

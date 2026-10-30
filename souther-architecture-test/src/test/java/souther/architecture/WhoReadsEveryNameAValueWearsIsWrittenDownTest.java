@@ -100,6 +100,9 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
      * written at each name, or tell what a value is written under: every one of them reads
      * {@code TypeView#wrappers} whole, directly or through what it hands the position to.
      *
+     * <p>How many values a type is shown to have: the rules written at each name it wears decide
+     * whether a value of what is under them is one of the type.
+     *
      * <p>The form a value is written into an issue in: a newtype is reported as what it wraps, and
      * the form names each name the value is opened through on the way there.
      *
@@ -146,6 +149,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(TYPE_VIEW, "of",
                     "(" + TYPE + INNERS + SYMBOLS + KINDS + SUMS + ")L" + TYPE_VIEW + ";",
                     THE_SPINE),
+            row(CHECK + "ValuesShown", "of",
+                    "(" + TYPE + CONTEXT + "Ljava/util/Set;)J", THE_POSITION),
             row(INPUTS + "DeclaredInput", "readingsOf", "(" + TYPE + ")Ljava/util/List;",
                     THE_SPINE),
             row(INPUTS + "InputDomain", "walk",
