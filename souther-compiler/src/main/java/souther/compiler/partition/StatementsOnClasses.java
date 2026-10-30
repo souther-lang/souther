@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.Spelling;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.ModelOccurrence;
@@ -98,9 +99,9 @@ final class StatementsOnClasses {
     private final int axis;
     private final int classes;
     /** Each relation, by its spelling held, with what is known of it on the classes. */
-    private final Map<String, Settled> known = new LinkedHashMap<>();
+    private final Map<Spelling,Settled> known = new LinkedHashMap<>();
     /** The relations a line was drawn for. */
-    private final Set<String> drawn = new LinkedHashSet<>();
+    private final Set<Spelling> drawn = new LinkedHashSet<>();
     /** The comparison whose one line stands for the one relation its applications state. */
     private ModelOccurrence soleLineOf;
 
@@ -115,12 +116,12 @@ final class StatementsOnClasses {
         this.axes = axes;
         this.axis = axis;
         this.classes = axes.get(axis).classes().size();
-        Map<String, Proposition.Compared> relations = new LinkedHashMap<>();
+        Map<Spelling,Proposition.Compared> relations = new LinkedHashMap<>();
         statements.forEach(each -> collect(each, relations));
         // A comparison all of whose applications state one relation draws one line with no part
         // to name it: the line is that relation's. With two relations it names neither.
         boolean theOneLine = states != null && relations.size() == 1;
-        Map<String, Ray> rays = new LinkedHashMap<>();
+        Map<Spelling,Ray> rays = new LinkedHashMap<>();
         relations.forEach((key, leaf) -> {
             Ray ray = rayOf(leaf);
             if (ray != null) {
@@ -139,9 +140,9 @@ final class StatementsOnClasses {
         });
     }
 
-    private static void collect(Proposition stated, Map<String, Proposition.Compared> out) {
+    private static void collect(Proposition stated, Map<Spelling,Proposition.Compared> out) {
         switch (stated) {
-            case Proposition.Compared leaf -> out.putIfAbsent(leaf.heldKey(), leaf);
+            case Proposition.Compared leaf -> out.putIfAbsent(leaf.heldSpelling(), leaf);
             case Proposition.All all -> all.parts().forEach(part -> collect(part, out));
             case Proposition.Any any -> any.parts().forEach(part -> collect(part, out));
             default -> { }
@@ -168,7 +169,7 @@ final class StatementsOnClasses {
     }
 
     /** What the line drawn for the relation {@code key} settles, or null where none was. */
-    private Settled drawnFor(String key, ModelOccurrence sole) {
+    private Settled drawnFor(Spelling key, ModelOccurrence sole) {
         for (Cut cut : axes.get(axis).cuts()) {
             for (LineOrigin origin : cut.origins()) {
                 if (!(origin instanceof LineOrigin.ComparisonOrigin guard)) {
@@ -200,10 +201,10 @@ final class StatementsOnClasses {
     }
 
     /** What the relations that were drawn say of the one that was not, by what implies what. */
-    private Settled impliedFor(Ray ray, Map<String, Ray> rays) {
+    private Settled impliedFor(Ray ray, Map<Spelling,Ray> rays) {
         boolean[] yes = new boolean[classes];
         boolean[] no = new boolean[classes];
-        for (String other : drawn) {
+        for (Spelling other : drawn) {
             Ray there = rays.get(other);
             if (there == null) {
                 continue;
@@ -237,7 +238,7 @@ final class StatementsOnClasses {
     /** What is known of a relation: what was drawn or implied for it, and nothing where neither
      *  was. */
     private Settled ofARelation(Proposition.Compared leaf) {
-        Settled of = known.get(leaf.heldKey());
+        Settled of = known.get(leaf.heldSpelling());
         if (of == null) {
             return new Settled(filled(false), filled(false));
         }

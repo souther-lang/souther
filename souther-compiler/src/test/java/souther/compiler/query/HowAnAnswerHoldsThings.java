@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.collect.InTheOrderGiven;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +55,10 @@ final class HowAnAnswerHoldsThings {
                 () -> java.util.Collections.unmodifiableSortedSet(
                         new java.util.TreeSet<>(Set.of(new String("a")))),
                 () -> Optional.of(new String("a")),
+                () -> InTheOrderGiven.map(Map.of(new String("a"), new String("b"))),
+                () -> InTheOrderGiven.map(Map.of(new String("a"), new String("b"),
+                        new String("c"), new String("d"))),
+                () -> InTheOrderGiven.set(Set.of(new String("a"))),
                 // And the one the language ships that says it keeps none of the contract, so that
                 // a line above going quiet is not the whole of what is asked.
                 () -> {

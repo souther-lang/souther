@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.collect.InTheOrderGiven;
 import souther.compiler.coverage.SeenComparison;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
@@ -585,8 +586,8 @@ public sealed interface BorderQuantity
                 coefs.put(term, form.coefs().get(term));
                 readOn.put(term, on.get(term));
             }
-            form = new LinearForm<>(form.constant(), Collections.unmodifiableMap(coefs));
-            on = Collections.unmodifiableMap(readOn);
+            form = new LinearForm<>(form.constant(), InTheOrderGiven.map(coefs));
+            on = InTheOrderGiven.map(readOn);
             // And each entry's orders are that position's own. The key set agreeing says the map
             // is about the right positions and says nothing about which of them each answer came
             // from: a table with the two ends swapped has exactly the same keys.
@@ -1008,7 +1009,7 @@ public sealed interface BorderQuantity
         @Override
         public String left() {
             String count = CountedElements.spelled(container, counted.differentAt(),
-                    counted.across(), said(meeting));
+                    counted.across(), said(meeting)).toString();
             if (against.coefs().isEmpty()) {
                 return count;
             }
@@ -1041,7 +1042,8 @@ public sealed interface BorderQuantity
                             yield CountedElements.spelled(elements.container().inputPosition(),
                                     AStatementAtARow.differentAt(count),
                                     AStatementAtARow.acrossOf(count),
-                                    said(elements.ofTheElement())) + " " + rel.written() + " "
+                                    said(elements.ofTheElement())).toString() + " "
+                                    + rel.written() + " "
                                     + affine.form().constant().negated().dividedBy(weight)
                                             .map(ExactRatio::spelled).orNull();
                         }
@@ -1055,7 +1057,7 @@ public sealed interface BorderQuantity
                                     + affine.form().constant().negated().dividedBy(weight)
                                             .map(ExactRatio::spelled).orNull();
                         }
-                        yield form == null ? stated.key()
+                        yield form == null ? stated.spelledOut()
                                 : OrderedAffineBoundary.spelled(form.coefs()) + " " + rel.written()
                                         + " " + form.constant().negated().spelled();
                     }
@@ -1081,7 +1083,8 @@ public sealed interface BorderQuantity
                      Proposition.InTheStrings _, Proposition.SameValue _,
                      Proposition.StringInside _, Proposition.LastToHold _,
                      Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
-                     Proposition.OnAnApplication _, Proposition.WhereItAnswers _ -> stated.key();
+                     Proposition.OnAnApplication _, Proposition.WhereItAnswers _ ->
+                        stated.spelledOut();
             };
         }
 

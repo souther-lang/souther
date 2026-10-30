@@ -195,11 +195,21 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            StringBuilder out = new StringBuilder(operation.qualified()).append('(');
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            List<Spelling> pieces = new ArrayList<>(2 * of.size() + 1);
+            pieces.add(Spelling.of(operation.qualified() + "("));
             for (int i = 0; i < of.size(); i++) {
-                out.append(i == 0 ? "" : ", ").append(of.get(i).spelled());
+                if (i > 0) {
+                    pieces.add(Spelling.SEPARATOR);
+                }
+                pieces.add(of.get(i).spelling());
             }
-            return out.append(')').toString();
+            pieces.add(Spelling.of(")"));
+            return Spelling.joined(pieces);
         }
 
         @Override
@@ -265,11 +275,16 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return "a piece " + within + " in" + fromSpelled(from)
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of("a piece " + within + " in" + fromSpelled(from)
                     + (among > 0 ? " among the first " + among : "") + " of "
                     + operation.qualified() + "("
                     + (separator.isPresent() ? "U+" + Integer.toHexString(separator.getAsInt())
-                            + ", " : "") + string.spelled() + ")";
+                            + ", " : ""), string.spelling(), ")");
         }
 
         @Override
@@ -319,8 +334,13 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return "piece " + index + " of " + operation.qualified() + "(U+"
-                    + Integer.toHexString(separator) + ", " + string.spelled() + ")";
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of("piece " + index + " of " + operation.qualified() + "(U+"
+                    + Integer.toHexString(separator) + ", ", string.spelling(), ")");
         }
 
         @Override
@@ -385,11 +405,16 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return "[" + value.spelled() + " is among the pieces" + fromSpelled(from)
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of("[", value.spelling(), " is among the pieces" + fromSpelled(from)
                     + (among > 0 ? " (the first " + among + ")" : "") + " of "
                     + operation.qualified() + "("
                     + (separator.isPresent() ? "U+" + Integer.toHexString(separator.getAsInt())
-                            + ", " : "") + string.spelled() + ")]";
+                            + ", " : ""), string.spelling(), ")]");
         }
 
         @Override
@@ -446,16 +471,26 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                     argument -> Optional.ofNullable(given.at(argument.position())));
         }
 
+        /** The text {@link #spelled} writes, with each term of the dividend held as its own
+         *  spelling ({@link NumericTerm#spelling}). */
+        @Override
+        public Spelling spelling() {
+            List<Object> out = new ArrayList<>();
+            out.add("floorMod(");
+            NumericTerms.entriesInOrder(dividend.coefs()).forEach(each -> {
+                out.add((out.size() == 1 ? "" : " + ") + each.getValue().spelled() + "·");
+                out.add(each.getKey().spelling());
+            });
+            if (dividend.constant().signum() != 0) {
+                out.add(" + " + dividend.constant().spelled());
+            }
+            out.add(", " + divisor + ")");
+            return Spelling.of(out.toArray());
+        }
+
         @Override
         public String spelled() {
-            StringBuilder out = new StringBuilder("floorMod(");
-            NumericTerms.entriesInOrder(dividend.coefs()).forEach(each -> out
-                    .append(out.charAt(out.length() - 1) == '(' ? "" : " + ")
-                    .append(each.getValue().spelled()).append('·').append(each.getKey()));
-            if (dividend.constant().signum() != 0) {
-                out.append(" + ").append(dividend.constant().spelled());
-            }
-            return out.append(", ").append(divisor).append(')').toString();
+            return spelling().toString();
         }
 
         @Override
@@ -1197,9 +1232,14 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return "#different " + container + " [" + ofTheElement + "] where "
-                    + (meeting instanceof Selection.OfEachValue ? "each value " : "")
-                    + "[" + meeting.statement().key() + "]";
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of("#different " + container + " [" + ofTheElement + "] where "
+                    + (meeting instanceof Selection.OfEachValue ? "each value " : "") + "[",
+                    meeting.statement().spelling(), Spelling.CLOSE);
         }
 
         @Override
@@ -1274,7 +1314,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return "#sum " + container + " [" + ofTheElement.spelled() + "]";
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of("#sum " + container + " [", ofTheElement.spelling(), Spelling.CLOSE);
         }
 
         @Override
@@ -1347,11 +1392,21 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            StringBuilder out = new StringBuilder("#[");
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            List<Spelling> pieces = new ArrayList<>(2 * each.size() + 1);
+            pieces.add(Spelling.of("#["));
             for (int i = 0; i < each.size(); i++) {
-                out.append(i == 0 ? "" : ", ").append(each.get(i).key());
+                if (i > 0) {
+                    pieces.add(Spelling.SEPARATOR);
+                }
+                pieces.add(each.get(i).spelling());
             }
-            return out.append("]").toString();
+            pieces.add(Spelling.CLOSE);
+            return Spelling.joined(pieces);
         }
 
         @Override
@@ -1413,7 +1468,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return "#" + container + " [" + ofTheElement.key() + "]";
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of("#" + container + " [", ofTheElement.spelling(), Spelling.CLOSE);
         }
 
         @Override
@@ -1432,6 +1492,19 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * reader happens to meet.
      */
     String spelled();
+
+    /**
+     * {@link #spelled}, held as the pieces it is put together from ({@link Spelling}).
+     *
+     * <p>A count of a statement is spelled with the statement's spelling in it, and a comparison
+     * over the count is told apart and ordered by its own spelling — so a quantity that wrote the
+     * statement out would hold its text again in every comparison it stands in, and again in every
+     * count of a statement such a comparison is part of. A quantity made of statements or of other
+     * quantities holds their spellings themselves; one made of neither is its text.
+     */
+    default Spelling spelling() {
+        return Spelling.of(spelled());
+    }
 
     /**
      * What a walk over the elements of a container hands its step beside the element, where that

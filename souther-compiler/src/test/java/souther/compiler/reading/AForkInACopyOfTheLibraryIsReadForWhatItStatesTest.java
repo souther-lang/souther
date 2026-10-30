@@ -67,7 +67,7 @@ class AForkInACopyOfTheLibraryIsReadForWhatItStatesTest {
         Proposition stated =
                 MeaningsOfABodyReading.ofACopiedCondition(found.fork().cond(), found.at(), read);
         assertTrue(Proposition.stopsIn(stated).isEmpty(), () -> "read to the end: " + stated);
-        assertTrue(stated.key().contains("i.n"), () -> "over the input: " + stated);
+        assertTrue(stated.spelledOut().contains("i.n"), () -> "over the input: " + stated);
     }
 
     /** The one place a copied fork's condition is asked for what it states. */

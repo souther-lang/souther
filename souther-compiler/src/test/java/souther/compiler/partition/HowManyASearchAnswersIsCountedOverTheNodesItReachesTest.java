@@ -159,7 +159,7 @@ class HowManyASearchAnswersIsCountedOverTheNodesItReachesTest {
     /** That {@code stated} counts no run over every node below every tree, or every tag of every
      *  order's items, whatever else it is read as. */
     private static void assertNoRunOverAllOfThem(Proposition stated) {
-        assertTrue(!stated.key().contains("node below") && !stated.key().contains("tags[*])"),
+        assertTrue(!stated.spelledOut().contains("node below") && !stated.spelledOut().contains("tags[*])"),
                 () -> "read as " + stated);
     }
 

@@ -10,6 +10,7 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.Spelling;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -52,7 +53,7 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
         Objects.requireNonNull(perElement, "put to rows as an element is");
         if (PositionsAStatementReads.of(meeting).isEmpty()) {
             throw new IllegalArgumentException("what keeps the elements of " + container
-                    + " reads something no position is: " + meeting.key());
+                    + " reads something no position is: " + meeting.spelling());
         }
     }
 
@@ -86,7 +87,7 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
     private static boolean heldTo(Proposition stated, List<TakenConstraint> out) {
         return switch (stated) {
             case Proposition.All all -> all.parts().stream().allMatch(part -> heldTo(part, out));
-            case Proposition.Compared(Relation.Affine affine, boolean holds, String _) -> {
+            case Proposition.Compared(Relation.Affine affine, boolean holds, Spelling _) -> {
                 LinearForm<NumericTerm> form = WhatTheDeclarationsLeave.ofTheInput(affine.form());
                 Rel rel = holds ? affine.proposition() : affine.proposition().denied();
                 if (form == null) {
@@ -112,7 +113,7 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
                 yield true;
             }
             case Proposition.Compared(Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term),
-                    Place at, Rel rel), boolean holds, String _)
+                    Place at, Rel rel), boolean holds, Spelling _)
                     when term.atOnePosition() != null -> {
                 Rel held = holds ? rel : rel.denied();
                 out.add(TakenConstraint.Ordered.isABound(held)
@@ -160,7 +161,7 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
     private static Optional<CasesAsked> casesAsked(Proposition stated) {
         return switch (stated) {
             case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
-                    boolean holds, String _) when holds -> {
+                    boolean holds, Spelling _) when holds -> {
                 // The position exists only in the cases the way to it narrows to, so each way
                 // is those cases and the case asked beside them.
                 Set<Requirements> ways = new LinkedHashSet<>();
@@ -226,11 +227,17 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
         return List.copyOf(out);
     }
 
-    /** What this selects, spelled for a reader and for a coordinate; no identity. The position is
-     *  spelled with its narrowings, as a report spells a position, and the statement by its own
-     *  key, which is what holds two statements apart. */
+    /** What this selects, spelled for a coordinate: the position with its narrowings, as a report
+     *  spells a position, and the statement by its own spelling, which is what holds two
+     *  statements apart — held as that spelling and not written out. */
+    public Spelling spelling() {
+        return Spelling.of(container.inputPosition().discriminated() + " meeting ",
+                meeting.spelling());
+    }
+
+    /** {@link #spelling} written out, for a reader. */
     public String key() {
-        return container.inputPosition().discriminated() + " meeting " + meeting.key();
+        return spelling().toString();
     }
 
     /** Two of these are one where they keep the elements of the same container by the same

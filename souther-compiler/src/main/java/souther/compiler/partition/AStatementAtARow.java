@@ -17,6 +17,7 @@ import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.Spelling;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -36,6 +37,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -85,12 +87,12 @@ final class AStatementAtARow {
 
     private final Proposition stated;
     private final Map<Relation, OneRelation> relations;
-    private final Map<String, OverTheElements> elements;
+    private final Map<Spelling,OverTheElements> elements;
     /** The positions a part asks of their own value: whether it is true, whether there is one. */
     private final Set<TermPath> positions;
 
     private AStatementAtARow(Proposition stated, Map<Relation, OneRelation> relations,
-                             Map<String, OverTheElements> elements, Set<TermPath> positions) {
+                             Map<Spelling,OverTheElements> elements, Set<TermPath> positions) {
         this.stated = stated;
         // In the order the relations were met, which is the order their containers are found in
         // when a row is walked for them.
@@ -126,15 +128,15 @@ final class AStatementAtARow {
     private static boolean askable(Proposition stated, boolean besideItsRelations) {
         return switch (stated) {
             case Proposition.Always _ -> true;
-            case Proposition.Truth(DecisionSubject.AnInput _, boolean _, String _),
-                 Proposition.Present(DecisionSubject.AnInput _, boolean _, String _) -> true;
+            case Proposition.Truth(DecisionSubject.AnInput _, boolean _, Spelling _),
+                 Proposition.Present(DecisionSubject.AnInput _, boolean _, Spelling _) -> true;
             // A row names the case it wrote at a position, and that answers only cases of a sum:
             // whether an optional holds a value is asked as whether it is present.
             case Proposition.InCases(DecisionSubject.AnInput _, CasesLeft cases, boolean _,
-                                     String _) ->
+                                     Spelling _) ->
                     cases.atoms().stream().allMatch(Refinement.SumCase.class::isInstance);
             case Proposition.SameValue(DecisionSubject.AnInput _, DecisionSubject.AnInput _,
-                                       boolean _, String _) -> true;
+                                       boolean _, Spelling _) -> true;
             case Proposition.LastToHold _ -> true;
             case Proposition.All all ->
                     all.parts().stream().allMatch(each -> askable(each, besideItsRelations));
@@ -316,56 +318,89 @@ final class AStatementAtARow {
      * @param quantities the reading of the input, which says which order each number is on
      */
     static AStatementAtARow of(Proposition stated, String behavior, Quantities quantities) {
+        return readBy(stated, behavior, quantities, new HashMap<>());
+    }
+
+    /**
+     * The same, with each relation looked for in {@code read} first and put there once read.
+     *
+     * <p>For a reader that puts many statements to the same rows. What a relation comes to put to
+     * rows is the relation's and the quantities' of the input, and nothing the statement holding it
+     * brings; so a relation met again in another statement is the one read before, and the
+     * statements share it. Nothing put to a row changes one.
+     *
+     * @param read the relations read so far over {@code quantities}, and over nothing else
+     */
+    static AStatementAtARow readBy(Proposition stated, String behavior, Quantities quantities,
+                                   Map<RelationRead, OneRelation> read) {
         Map<Relation, OneRelation> relations = new LinkedHashMap<>();
-        Map<String, OverTheElements> elements = new LinkedHashMap<>();
+        Map<Spelling,OverTheElements> elements = new LinkedHashMap<>();
         Set<TermPath> positions = new LinkedHashSet<>();
-        gather(stated, behavior, quantities, relations, elements, positions);
+        gather(stated, behavior, quantities, read, relations, elements, positions);
         return new AStatementAtARow(stated, relations, elements, positions);
     }
 
+    /** A relation as it is read to be put to rows: for which behavior's input. */
+    record RelationRead(Relation relation, String behavior) {}
+
+    /** {@code relation} put to rows, the one in {@code read} or read now and put there. */
+    private static OneRelation relationRead(Relation relation, String behavior,
+                                            Quantities quantities,
+                                            Map<RelationRead, OneRelation> read) {
+        RelationRead key = new RelationRead(relation, behavior);
+        OneRelation had = read.get(key);
+        if (had != null) {
+            return had;
+        }
+        OneRelation made = OneRelation.of(relation, behavior, quantities);
+        OneRelation raced = read.putIfAbsent(key, made);
+        return raced == null ? made : raced;
+    }
+
     private static void gather(Proposition stated, String behavior, Quantities quantities,
+                               Map<RelationRead, OneRelation> reading,
                                Map<Relation, OneRelation> into,
-                               Map<String, OverTheElements> elements, Set<TermPath> positions) {
+                               Map<Spelling,OverTheElements> elements, Set<TermPath> positions) {
         switch (stated) {
             case Proposition.Always _, Proposition.LastToHold _ -> { }
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, String _) ->
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, Spelling _) ->
                     positions.add(at);
-            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _, String _) ->
+            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _, Spelling _) ->
                     positions.add(at);
             case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft _,
-                                     boolean _, String _) -> positions.add(at);
+                                     boolean _, Spelling _) -> positions.add(at);
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
                                        DecisionSubject.AnInput(TermPath other), boolean _,
-                                       String _) -> {
+                                       Spelling _) -> {
                 positions.add(one);
                 positions.add(other);
             }
             case Proposition.All all -> all.parts().forEach(part ->
-                    gather(part, behavior, quantities, into, elements, positions));
+                    gather(part, behavior, quantities, reading, into, elements, positions));
             case Proposition.Any any -> any.parts().forEach(part ->
-                    gather(part, behavior, quantities, into, elements, positions));
+                    gather(part, behavior, quantities, reading, into, elements, positions));
             case Proposition.WhereItAnswers where -> {
-                gather(where.answers(), behavior, quantities, into, elements, positions);
-                gather(where.states(), behavior, quantities, into, elements, positions);
+                gather(where.answers(), behavior, quantities, reading, into, elements, positions);
+                gather(where.states(), behavior, quantities, reading, into, elements, positions);
             }
             case Proposition.SoManyHold counted -> counted.statements().forEach(part ->
-                    gather(part, behavior, quantities, into, elements, positions));
-            case Proposition.OfTheWays ways ->
-                    gather(ways.written(), behavior, quantities, into, elements, positions);
+                    gather(part, behavior, quantities, reading, into, elements, positions));
+            case Proposition.OfTheWays ways -> gather(ways.written(), behavior, quantities,
+                    reading, into, elements, positions);
             case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
                     _ -> new OverTheElements(some.container().inputPosition(),
-                            of(some.ofTheElement(), behavior, quantities), Optional.empty(),
-                            Optional.empty()));
+                            readBy(some.ofTheElement(), behavior, quantities, reading),
+                            Optional.empty(), Optional.empty()));
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
                     && countIn(affine) instanceof Quantity count ->
                     elements.computeIfAbsent(keyOf(count), _ -> new OverTheElements(
                             elementsOf(count).container().inputPosition(),
-                            of(meetingOf(count), behavior, quantities), differentAt(count),
-                            acrossOf(count)));
+                            readBy(meetingOf(count), behavior, quantities, reading),
+                            differentAt(count), acrossOf(count)));
             case Proposition.Compared compared when askable(compared) ->
                     into.computeIfAbsent(compared.relation(),
-                            relation -> OneRelation.of(relation, behavior, quantities));
+                            relation -> relationRead(relation, behavior, quantities, reading));
             // Put to no row: answered as not known where it is asked ({@link #notAsked}).
             case Proposition.Compared _, Proposition.Truth _, Proposition.Present _,
                  Proposition.InCases _, Proposition.InTheStrings _, Proposition.SameValue _,
@@ -434,17 +469,17 @@ final class AStatementAtARow {
     }
 
     /** What some element of a container meeting a statement is read as, whichever way it holds. */
-    private static String keyOf(Proposition.Some some) {
-        return some.container() + " [" + some.ofTheElement().key() + "]";
+    private static Spelling keyOf(Proposition.Some some) {
+        return Spelling.of(some.container() + " [", some.ofTheElement().spelling(), "]");
     }
 
     /** What a count of the elements of a container meeting a statement is read as, or of the
      *  different values they hold. */
-    private static String keyOf(Quantity count) {
+    private static Spelling keyOf(Quantity count) {
         Quantity.HowManyMeet elements = elementsOf(count);
-        return differentAt(count).map(at -> "different " + at + " of ").orElse("")
+        return Spelling.of(differentAt(count).map(at -> "different " + at + " of ").orElse("")
                 + acrossOf(count).map(outer -> "across " + outer + " ").orElse("")
-                + elements.container() + " [" + elements.ofTheElement().key() + "]";
+                + elements.container() + " [", elements.ofTheElement().spelling(), "]");
     }
 
     /**
@@ -477,13 +512,13 @@ final class AStatementAtARow {
     static boolean madeOfFormsAndPositions(Proposition stated) {
         return switch (stated) {
             case Proposition.Always _ -> true;
-            case Proposition.Truth(DecisionSubject.AnInput _, boolean _, String _),
-                 Proposition.Present(DecisionSubject.AnInput _, boolean _, String _) -> true;
+            case Proposition.Truth(DecisionSubject.AnInput _, boolean _, Spelling _),
+                 Proposition.Present(DecisionSubject.AnInput _, boolean _, Spelling _) -> true;
             case Proposition.InCases(DecisionSubject.AnInput _, CasesLeft cases, boolean _,
-                                     String _) ->
+                                     Spelling _) ->
                     cases.atoms().stream().allMatch(Refinement.SumCase.class::isInstance);
             case Proposition.SameValue(DecisionSubject.AnInput _, DecisionSubject.AnInput _,
-                                       boolean _, String _) -> true;
+                                       boolean _, Spelling _) -> true;
             case Proposition.All all -> all.parts().stream()
                     .allMatch(AStatementAtARow::madeOfFormsAndPositions);
             case Proposition.Any any -> any.parts().stream()
@@ -491,7 +526,7 @@ final class AStatementAtARow {
             case Proposition.WhereItAnswers where -> madeOfFormsAndPositions(where.answers())
                     && madeOfFormsAndPositions(where.states());
             case Proposition.OfTheWays ways -> madeOfFormsAndPositions(ways.written());
-            case Proposition.Compared(Relation.Affine affine, boolean _, String _) ->
+            case Proposition.Compared(Relation.Affine affine, boolean _, Spelling _) ->
                     countIn(affine) == null && productIn(affine) == null
                             && remainderByAnInputIn(affine) == null
                             && remainderOfADividendIn(affine) == null
@@ -1050,25 +1085,25 @@ final class AStatementAtARow {
     }
 
     private Answer at(Proposition part, BorderQuantity.Observation row,
-                      Map<String, Answer> answered) {
-        Answer known = answered.get(part.key());
+                      Map<Spelling,Answer> answered) {
+        Answer known = answered.get(part.spelling());
         if (known != null) {
             return known;
         }
         Answer answer = atOnce(part, row, answered);
-        answered.put(part.key(), answer);
+        answered.put(part.spelling(), answer);
         return answer;
     }
 
     private Answer atOnce(Proposition part, BorderQuantity.Observation row,
-                          Map<String, Answer> answered) {
+                          Map<Spelling,Answer> answered) {
         return switch (part) {
             case Proposition.Always(boolean holds) -> holds ? Answer.HOLDS : Answer.FAILS;
             // Of the element this row is read with chosen: the last of those holding the value it
             // holds at the position.
             case Proposition.LastToHold(DecisionSubject.AnInput(TermPath container),
                                         DecisionSubject.AnInput(TermPath position), boolean holds,
-                                        String _) -> heldAs(holds, switch (
+                                        Spelling _) -> heldAs(holds, switch (
                     row.lastToHold(container, position)) {
                 case BorderQuantity.Lastness.Last _ -> Said.TRUE;
                 case BorderQuantity.Lastness.NotLast _ -> Said.FALSE;
@@ -1076,17 +1111,17 @@ final class AStatementAtARow {
                         new Said.NotRead(Set.of(why));
             });
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds,
-                                   String _) -> heldAs(holds, ofItsValue(at, row,
+                                   Spelling _) -> heldAs(holds, ofItsValue(at, row,
                     value -> value instanceof ObservedValue.Bool(boolean truth) ? truth : null));
             case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean holds,
-                                     String _) -> heldAs(holds, ofItsValue(at, row,
+                                     Spelling _) -> heldAs(holds, ofItsValue(at, row,
                     value -> !(value instanceof ObservedValue.Absent)));
             case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
-                                     boolean holds, String _) when askable(part) ->
+                                     boolean holds, Spelling _) when askable(part) ->
                     heldAs(holds, amongCases(at, cases, row));
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
                                        DecisionSubject.AnInput(TermPath other), boolean holds,
-                                       String _) -> heldAs(holds, theSame(one, other, row));
+                                       Spelling _) -> heldAs(holds, theSame(one, other, row));
             case Proposition.All all -> joined(all.parts().stream()
                     .map(each -> at(each, row, answered)).toList(), true);
             case Proposition.Any any -> joined(any.parts().stream()
@@ -1192,23 +1227,23 @@ final class AStatementAtARow {
                 yield overElementsOf(elementsOf(count).container().inputPosition(), about, read)
                         && readsOf(meetingOf(count), about, read);
             }
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, String _) -> {
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, Spelling _) -> {
                 read.add(at);
                 yield true;
             }
             case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _,
-                                     String _) -> {
+                                     Spelling _) -> {
                 read.add(at);
                 yield true;
             }
             case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft _,
-                                     boolean _, String _) -> {
+                                     boolean _, Spelling _) -> {
                 read.add(at);
                 yield true;
             }
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
                                        DecisionSubject.AnInput(TermPath other), boolean _,
-                                       String _) -> {
+                                       Spelling _) -> {
                 read.add(one);
                 read.add(other);
                 yield true;
@@ -1241,8 +1276,8 @@ final class AStatementAtARow {
      * What this says of each element of {@code container}, by what it is read as: what some element
      * meets, or what the elements a count counts meet.
      */
-    Map<String, AStatementAtARow> ofEachElementOf(TermPath container) {
-        Map<String, AStatementAtARow> out = new LinkedHashMap<>();
+    Map<Spelling,AStatementAtARow> ofEachElementOf(TermPath container) {
+        Map<Spelling,AStatementAtARow> out = new LinkedHashMap<>();
         elements.forEach((key, over) -> {
             if (over.container().equals(container)) {
                 out.put(key, over.ofTheElement());
@@ -1260,7 +1295,7 @@ final class AStatementAtARow {
      * choice: a part about anything but how many elements meet something is not known, and a part
      * standing in many places is one part.
      */
-    Counting counting(TermPath container, Map<String, Integer> index, int most) {
+    Counting counting(TermPath container, Map<Spelling,Integer> index, int most) {
         Counting.Built built = new Counting.Built(most);
         int root = built.node(stated, this, container, index);
         return built.done(root);
@@ -1393,7 +1428,7 @@ final class AStatementAtARow {
             private final List<Integer> counts = new ArrayList<>();
             private final List<Byte> answer = new ArrayList<>();
             private final List<byte[]> byNumber = new ArrayList<>();
-            private final Map<String, Integer> read = new HashMap<>();
+            private final Map<Spelling,Integer> read = new HashMap<>();
 
             Built(int most) {
                 this.most = most;
@@ -1404,8 +1439,8 @@ final class AStatementAtARow {
             }
 
             int node(Proposition part, AStatementAtARow of, TermPath container,
-                     Map<String, Integer> index) {
-                Integer had = read.get(part.key());
+                     Map<Spelling,Integer> index) {
+                Integer had = read.get(part.spelling());
                 if (had != null) {
                     return had;
                 }
@@ -1445,7 +1480,7 @@ final class AStatementAtARow {
                          Proposition.OnAnApplication _, Proposition.SoManyHold _ ->
                             add(Kind.SETTLED, null, 0, EITHER, null);
                 };
-                read.put(part.key(), out);
+                read.put(part.spelling(), out);
                 return out;
             }
 
@@ -1591,7 +1626,7 @@ final class AStatementAtARow {
      * holding no value a part is about is on neither side of it, so the part and its denial both
      * fail there — read off a failing answer, the denial would hold.
      */
-    private sealed interface Said {
+    sealed interface Said {
 
         /** The part is {@code truth} at the row. */
         record Is(boolean truth) implements Said {}
@@ -1848,7 +1883,7 @@ final class AStatementAtARow {
     }
 
     /** One relation, as the quantity a row is read at and what its numbers have to come to. */
-    private sealed interface OneRelation {
+    sealed interface OneRelation {
 
         /** The numbers of a row the relation is about, whether or not a row can be read at them. */
         List<NumericTerm> terms();
@@ -2176,7 +2211,7 @@ final class AStatementAtARow {
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(stated, relations, elements, positions);
+        return Objects.hash(stated, relations, elements, positions);
     }
 
     /** Every relation over the input's own numbers this reads, for the quantities a reader of it

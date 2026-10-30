@@ -72,7 +72,7 @@ public sealed interface Realization {
                 ordered.addAll(ofOne);
             }
             counts.sort(Comparator.comparing(RealizationTarget::writeRoot,
-                    TermPath.structuralOrder()).thenComparing(RealizationTarget::toString));
+                    TermPath.structuralOrder()).thenComparing(RealizationTarget::spelling));
             ordered.addAll(counts);
             Map<RealizationTarget, Place> inOrder = new LinkedHashMap<>();
             for (RealizationTarget each : ordered) {

@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.meaning.Spelling;
+
 import java.util.Objects;
 
 /**
@@ -17,7 +19,7 @@ import java.util.Objects;
  * @param relation the relation the line came to, as the reading spelled it: one spelling for one
  *                 relation
  */
-public record PlaceOfALine(PartOfAComparison line, String relation) {
+public record PlaceOfALine(PartOfAComparison line, Spelling relation) {
 
     public PlaceOfALine {
         Objects.requireNonNull(line, "a place is of some line");

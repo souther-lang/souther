@@ -378,7 +378,7 @@ public sealed interface Derivation {
         /** What an if states, given what its condition and its two arms state. */
         static Proposition joined(Proposition cond, Proposition yes, Proposition no) {
             // The condition is worked out before either arm, so where it stops the if does.
-            if (yes.key().equals(no.key()) && Proposition.firstStopIn(yes) == null) {
+            if (yes.spelling().equals(no.spelling()) && Proposition.firstStopIn(yes) == null) {
                 return Proposition.afterIt(cond, yes);
             }
             return Proposition.afterIt(cond, Proposition.any(List.of(
@@ -440,7 +440,7 @@ public sealed interface Derivation {
             // stated, whichever arm selects. Not where an arm's statement is about the entry it
             // picked out, which is a different entry under each arm.
             Proposition first = stating.getFirst();
-            if (stating.stream().allMatch(each -> each.key().equals(first.key()))
+            if (stating.stream().allMatch(each -> each.spelling().equals(first.spelling()))
                     && arms.stream().noneMatch(Arm::aboutTheEntry)
                     && Proposition.firstStopIn(first) == null) {
                 return afterWhatIsSelected(selecting, first);
@@ -559,16 +559,16 @@ public sealed interface Derivation {
      */
     private static boolean apart(Proposition one, Proposition other) {
         if (one instanceof Proposition.InCases(
-                DecisionSubject of, CasesLeft cases, boolean holds, String _)) {
+                DecisionSubject of, CasesLeft cases, boolean holds, Spelling _)) {
             return holds && other instanceof Proposition.InCases(
-                    DecisionSubject same, CasesLeft chosen, boolean chosenHolds, String _)
+                    DecisionSubject same, CasesLeft chosen, boolean chosenHolds, Spelling _)
                     && chosenHolds && of.equals(same) && cases.meet(chosen) == null;
         }
         return one instanceof Proposition.Compared(
-                Relation.Affine(LinearForm<Quantity> form, Rel rel), boolean holds, String _)
+                Relation.Affine(LinearForm<Quantity> form, Rel rel), boolean holds, Spelling _)
                 && other instanceof Proposition.Compared(
                         Relation.Affine(LinearForm<Quantity> otherForm, Rel otherRel),
-                        boolean otherHolds, String _)
+                        boolean otherHolds, Spelling _)
                 && apart(form, holds ? rel : rel.denied(), otherForm,
                         otherHolds ? otherRel : otherRel.denied());
     }

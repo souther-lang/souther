@@ -1,5 +1,7 @@
 package souther.compiler.numeric;
 
+import souther.compiler.collect.LatelyAsked;
+
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
@@ -57,13 +59,28 @@ public final class ClosedStates {
      */
     static final ClosedStates IN_ONE_RUN = new ClosedStates(null, null, null, true);
 
-    /** One closure per question, kept for as long as whatever holds this is held. */
+    /**
+     * One closure per question, kept while it is among the {@link #CLOSURES_KEPT} asked last and
+     * for as long as whatever holds this is held.
+     */
     public static ClosedStates kept() {
-        return new ClosedStates(new ConcurrentHashMap<>(), new ConcurrentHashMap<>(),
+        return new ClosedStates(new LatelyAsked<>(CLOSURES_KEPT), new ConcurrentHashMap<>(),
                 new ConcurrentHashMap<>(), false);
     }
 
-    private final Map<ClosureQuestion<?>, ClosedState<?>> answers;
+    /**
+     * How many closures one of these keeps.
+     *
+     * <p>A search asks the closures of the few rules around its step again and again and seldom
+     * goes back to a step it left long before, while a table keeping every closure it was asked
+     * holds the closure of every step for as long as the reading is held. So the ones asked last
+     * are kept: a closure let go and asked again is worked out again, and is the closure it was.
+     * Enough that in the models measured a few closures in a hundred are worked out twice, where a
+     * quarter as many would work out half as many again.
+     */
+    static final int CLOSURES_KEPT = 1024;
+
+    private final LatelyAsked<ClosureQuestion<?>, ClosedState<?>> answers;
 
     /**
      * Where each order puts each set of positions it has been asked about
@@ -98,7 +115,7 @@ public final class ClosedStates {
     /** Whether the rules are closed in one run, which is {@link #IN_ONE_RUN} and nothing else. */
     private final boolean inOneRun;
 
-    private ClosedStates(Map<ClosureQuestion<?>, ClosedState<?>> answers,
+    private ClosedStates(LatelyAsked<ClosureQuestion<?>, ClosedState<?>> answers,
                          Map<CanonicalOrder<?>, Map<Set<?>, Map<?, Integer>>> places,
                          Map<CanonicalOrder<?>, Map<CanonicalForm<?>, List<?>>> walks,
                          boolean inOneRun) {
@@ -249,7 +266,7 @@ public final class ClosedStates {
             this.parts = parts;
             this.questions = questions;
             this.closed = closed;
-            this.partOf = partOf;
+            this.partOf = Map.copyOf(partOf);
             this.state = state;
             this.complete = complete;
         }
@@ -439,17 +456,14 @@ public final class ClosedStates {
         // question over positions of type A is answered by a closure over the same positions.
         asked.incrementAndGet();
         @SuppressWarnings("unchecked")
-        ClosedState<A> had = (ClosedState<A>) answers.get(question);
-        if (had != null) {
-            return had;
-        }
-        // Worked out outside the table: a closure takes long enough that holding the table while
-        // it is worked out would stop every other question waiting on it.
-        ClosedState<A> made = ClosedState.of(question);
+        ClosedState<A> answer = (ClosedState<A>) answers.answer(question, this::workedOutFor);
+        return answer;
+    }
+
+    /** What {@code question} leaves, worked out here and counted as worked out. */
+    private ClosedState<?> workedOutFor(ClosureQuestion<?> question) {
         workedOut.incrementAndGet();
-        @SuppressWarnings("unchecked")
-        ClosedState<A> raced = (ClosedState<A>) answers.putIfAbsent(question, made);
-        return raced == null ? made : raced;
+        return ClosedState.of(question);
     }
 
     /** {@link ClosureQuestion#placesIn}, kept for the order and the positions it was asked of. */

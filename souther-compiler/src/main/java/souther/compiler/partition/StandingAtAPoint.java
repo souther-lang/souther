@@ -574,7 +574,7 @@ public final class StandingAtAPoint {
             MeasuredInput.BorderReading line) {
         return line.border().origin() instanceof LineOrigin.ComparisonOrigin comparison
                 ? comparison.part().map(part -> part.askedOfRows(line.quantity().behavior(),
-                        line.subject().quantities()))
+                        line.subject()))
                 : Optional.empty();
     }
 

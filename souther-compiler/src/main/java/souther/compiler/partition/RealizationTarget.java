@@ -4,6 +4,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Spelling;
 
 import java.util.List;
 import java.util.Optional;
@@ -40,6 +41,12 @@ import java.util.Optional;
  * both are targets; a reader that asks for the number asks it of the first kind only.
  */
 public sealed interface RealizationTarget {
+
+    /** What this is written as, held as the pieces it is put together from: the text
+     *  {@code toString} writes, with a statement held as its own spelling. */
+    default Spelling spelling() {
+        return Spelling.of(toString());
+    }
 
     /**
      * The location whose whole value is rebuilt so that what is asked of it is answered: the
@@ -467,6 +474,11 @@ public sealed interface RealizationTarget {
         }
 
         @Override
+        public Spelling spelling() {
+            return count.spelling();
+        }
+
+        @Override
         public String toString() {
             return count.toString();
         }
@@ -529,8 +541,13 @@ public sealed interface RealizationTarget {
         }
 
         @Override
+        public Spelling spelling() {
+            return Spelling.of(container + " meeting ", stated.spelling());
+        }
+
+        @Override
         public String toString() {
-            return container + " meeting " + stated.key();
+            return spelling().toString();
         }
     }
 }

@@ -11,6 +11,9 @@ rem that compiles here would depend on where it was compiled. The size, and the 
 rem run below, are the root pom's `souther.jvm.stack` and `souther.java.minimum`, filled in when this
 rem script is packaged.
 rem
+rem The object layout is the root pom's `souther.jvm.layout`: a header of eight bytes for every
+rem object, and what a compile holds at its largest is mostly small objects.
+rem
 rem The version of the Java it found is read out of the `release` file of the image that Java belongs
 rem to, rather than by starting it and asking. Asking costs a JVM start on every command run, and
 rem this costs two file reads. A version read as a number below the one the classes in the jar were
@@ -50,7 +53,7 @@ for /f "delims=0123456789" %%x in ("%major%") do goto :run
 if %major% LSS @souther.java.minimum@ goto :oldjava
 
 :run
-"%java%" -Xss@souther.jvm.stack@ -jar "%~dp0lib\souther.jar" %*
+"%java%" -Xss@souther.jvm.stack@ @souther.jvm.layout@ -jar "%~dp0lib\souther.jar" %*
 exit /b %ERRORLEVEL%
 
 rem The image is the directory the `bin` holding that java is in.

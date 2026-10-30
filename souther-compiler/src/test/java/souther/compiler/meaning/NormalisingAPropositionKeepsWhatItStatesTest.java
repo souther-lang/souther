@@ -37,16 +37,16 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
         for (Map<TermPath, Boolean> values : assignments()) {
             for (Proposition one : pool) {
                 assertEquals(!value(one, values), value(one.denied(), values),
-                        () -> "the denial of " + one.key() + " under " + values);
+                        () -> "the denial of " + one.spelledOut() + " under " + values);
                 for (Proposition other : pool) {
                     List<Proposition> parts = List.of(one, other);
                     assertEquals(value(one, values) && value(other, values),
                             value(Proposition.all(parts), values),
-                            () -> "both of " + parts.stream().map(Proposition::key).toList()
+                            () -> "both of " + parts.stream().map(Proposition::spelledOut).toList()
                                     + " under " + values);
                     assertEquals(value(one, values) || value(other, values),
                             value(Proposition.any(parts), values),
-                            () -> "either of " + parts.stream().map(Proposition::key).toList()
+                            () -> "either of " + parts.stream().map(Proposition::spelledOut).toList()
                                     + " under " + values);
                     checked++;
                 }
@@ -106,7 +106,7 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
                         assertEquals(implications.stream().allMatch(each -> value(each, values)),
                                 value(joined, values),
                                 () -> "the conjunction of " + implications.stream()
-                                        .map(Proposition::key).toList() + " under " + values);
+                                        .map(Proposition::spelledOut).toList() + " under " + values);
                         checked++;
                     }
                     // Two arms that are an atom and its denial are the cases of that atom, which
@@ -115,7 +115,7 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
                     if ((condition == partial || condition == onBoth)
                             && overTheThirdAtom(one) && overTheThirdAtom(other)
                             && !one.equals(other.denied())) {
-                        assertFalse(casesOf(joined, condition), joined.key());
+                        assertFalse(casesOf(joined, condition), joined.spelledOut());
                     }
                 }
             }
@@ -129,7 +129,7 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
 
     /** Whether {@code stated} names no atom but the third, or none. */
     private static boolean overTheThirdAtom(Proposition stated) {
-        return !stated.key().contains("a") && !stated.key().contains("b");
+        return !stated.spelledOut().contains("a") && !stated.spelledOut().contains("b");
     }
 
     /** Whether {@code stated} is a disjunction each part of which holds {@code condition} or its
@@ -166,14 +166,14 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
                     .allMatch(values -> value(each.denied(), values) != value(each, values));
             if (Proposition.deniedWhereverItFails(each)) {
                 said++;
-                assertTrue(complement, () -> "the denial of " + each.key() + " is its complement");
+                assertTrue(complement, () -> "the denial of " + each.spelledOut() + " is its complement");
             }
         }
         for (Proposition each : partial) {
-            assertFalse(Proposition.deniedWhereverItFails(each), each.key());
+            assertFalse(Proposition.deniedWhereverItFails(each), each.spelledOut());
             assertFalse(assignments().stream()
                             .allMatch(values -> value(each.denied(), values) != value(each, values)),
-                    () -> "some assignment where " + each.key() + " and its denial are not cases");
+                    () -> "some assignment where " + each.spelledOut() + " and its denial are not cases");
         }
         assertTrue(said > 0, "some statement is said to be denied wherever it fails");
     }
@@ -208,11 +208,11 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
         for (Map<TermPath, Boolean> values : assignments()) {
             assertEquals(parts.stream().allMatch(each -> value(each.denied(), values)),
                     value(stated.denied(), values),
-                    () -> "the denial of " + stated.key() + " under " + values);
+                    () -> "the denial of " + stated.spelledOut() + " under " + values);
         }
         assertEquals(16, parts.stream().mapToLong(each -> waysOf(each.denied()))
                 .reduce(1, (one, other) -> one * other));
-        assertEquals(4, waysOf(stated.denied()), stated.denied().key());
+        assertEquals(4, waysOf(stated.denied()), stated.denied().spelledOut());
     }
 
     /** How many ways a row may take through {@code stated}: one of each disjunction's parts, and
@@ -263,7 +263,7 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
                     Proposition denied = cases.denied();
                     for (Map<TermPath, Boolean> values : assignments()) {
                         assertEquals(!value(cases, values), value(denied, values),
-                                () -> "the denial of " + cases.key() + " under " + values);
+                                () -> "the denial of " + cases.spelledOut() + " under " + values);
                     }
                     if (third == null && casesOfOneCondition(denied)) {
                         kept++;
@@ -312,8 +312,8 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
                     holds));
         }
         for (Proposition each : all) {
-            assertEquals(each.denied().key(), each.deniedKey(), each.key());
-            assertEquals(each.key(), each.denied().deniedKey(), each.key());
+            assertEquals(each.denied().spelling(), each.deniedSpelling(), each.spelledOut());
+            assertEquals(each.spelling(), each.denied().deniedSpelling(), each.spelledOut());
         }
     }
 

@@ -21,6 +21,7 @@ import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.Spelling;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactAnswer;
@@ -464,15 +465,15 @@ final class DemandReading {
     private static final class Projection {
 
         /** What some element meeting each statement already asked, by the statement's key. */
-        final Map<String, List<Read>> met = new HashMap<>();
+        final Map<Spelling,List<Read>> met = new HashMap<>();
         /** The copy each part was read off, by the part's key either way round. */
-        private final Map<String, ModelOccurrences> byPart;
+        private final Map<Spelling,ModelOccurrences> byPart;
         /** What a read of a part read off nothing else was read off: the copy of the code that
          *  states it. */
         private final ModelOccurrences own;
         private final Map<Read, ModelOccurrences> readIn = new IdentityHashMap<>();
 
-        private Projection(Map<String, ModelOccurrences> byPart, ModelOccurrences own) {
+        private Projection(Map<Spelling,ModelOccurrences> byPart, ModelOccurrences own) {
             this.byPart = byPart;
             this.own = own;
         }
@@ -485,20 +486,20 @@ final class DemandReading {
         /** A projection of what {@code pulled} states, each part read off where it was, and what
          *  nothing else was read off read off {@code own}. */
         static Projection over(Pullback.Pulled pulled, ModelOccurrences own) {
-            Map<String, ModelOccurrences.Gathering> found = new LinkedHashMap<>();
+            Map<Spelling,ModelOccurrences.Gathering> found = new LinkedHashMap<>();
             if (pulled != null) {
                 for (Pullback.Leaf leaf : pulled.turnsOn()) {
                     Optional<ModelOccurrence> copy = copyOf(leaf);
                     if (copy.isPresent()) {
-                        for (String key : List.of(leaf.part().key(),
-                                leaf.part().deniedKey())) {
+                        for (Spelling key : List.of(leaf.part().spelling(),
+                                leaf.part().deniedSpelling())) {
                             found.computeIfAbsent(key, _ -> new ModelOccurrences.Gathering())
                                     .add(copy.get());
                         }
                     }
                 }
             }
-            Map<String, ModelOccurrences> byPart = new LinkedHashMap<>();
+            Map<Spelling,ModelOccurrences> byPart = new LinkedHashMap<>();
             found.forEach((key, copies) -> byPart.put(key, copies.gathered()));
             return new Projection(byPart, own);
         }
@@ -554,7 +555,7 @@ final class DemandReading {
                     || from instanceof Proposition.WhereItAnswers) {
                 return reads;
             }
-            Set<String> keys = new HashSet<>();
+            Set<Spelling> keys = new HashSet<>();
             Pullback.Pulled.partsOf(from, keys);
             ModelOccurrences.Gathering copies = new ModelOccurrences.Gathering();
             byPart.forEach((key, those) -> {
@@ -1261,7 +1262,7 @@ final class DemandReading {
      */
     private static List<Read> projected(Proposition stated, InputReading read,
                                         Projection projection) {
-        Map<String, List<Read>> met = projection.met;
+        Map<Spelling,List<Read>> met = projection.met;
         List<Read> made = switch (stated) {
             case Proposition.Always(boolean holds) -> List.of(new Read.Settled(holds));
             // A relation over anything an answer holds, a count of a list it holds among them, is
@@ -1367,10 +1368,10 @@ final class DemandReading {
                     when some.container() instanceof DecisionSubject.AnAnswer ->
                     List.of(anAnswerARowStandsIn(stated));
             case Proposition.Some some -> {
-                List<Read> had = met.get(some.key());
+                List<Read> had = met.get(some.spelling());
                 if (had == null) {
                     had = ofSomeElement(some, read, projection);
-                    met.put(some.key(), had);
+                    met.put(some.spelling(), had);
                 }
                 yield had;
             }

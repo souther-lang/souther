@@ -1,8 +1,7 @@
 package souther.compiler.query;
 
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
+import souther.compiler.collect.InTheOrderGiven;
+
 import java.util.Map;
 import java.util.Set;
 
@@ -19,10 +18,10 @@ final class Ordered {
     private Ordered() {}
 
     static <K, V> Map<K, V> map(Map<K, V> m) {
-        return Collections.unmodifiableMap(new LinkedHashMap<>(m));
+        return InTheOrderGiven.map(m);
     }
 
     static <T> Set<T> set(Set<T> s) {
-        return Collections.unmodifiableSet(new LinkedHashSet<>(s));
+        return InTheOrderGiven.set(s);
     }
 }

@@ -7,7 +7,7 @@
   "runtime": {
     "java": {
       "minimumFeature": ${souther.java.minimum},
-      "requiredJvmArgs": ["-Xss${souther.jvm.stack}"]
+      "requiredJvmArgs": ["-Xss${souther.jvm.stack}", "${souther.jvm.layout}"]
     }
   },
   "contracts": {

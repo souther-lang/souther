@@ -35,7 +35,7 @@ public final class TruthTable {
     }
 
     private static boolean everyAssignmentAnswers(Proposition stated, boolean answer) {
-        Map<String, Integer> parts = new LinkedHashMap<>();
+        Map<Spelling, Integer> parts = new LinkedHashMap<>();
         if (!partsOf(stated, parts) || parts.size() > PARTS_TRIED) {
             return false;
         }
@@ -52,7 +52,7 @@ public final class TruthTable {
      * of it and its denial that spells first — or answers false where a part is one nothing read,
      * which comes out no way this can name.
      */
-    private static boolean partsOf(Proposition stated, Map<String, Integer> into) {
+    private static boolean partsOf(Proposition stated, Map<Spelling, Integer> into) {
         return switch (stated) {
             case Proposition.Always _ -> true;
             case Proposition.Unread _ -> false;
@@ -74,7 +74,7 @@ public final class TruthTable {
         };
     }
 
-    private static boolean valueOf(Proposition stated, Map<String, Integer> parts,
+    private static boolean valueOf(Proposition stated, Map<Spelling, Integer> parts,
                                    long assignment) {
         return switch (stated) {
             case Proposition.Always(boolean holds) -> holds;
@@ -93,9 +93,9 @@ public final class TruthTable {
                  Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
                  Proposition.OnAnApplication _,
                  Proposition.SoManyHold _ -> {
-                String spelled = spelledAs(stated);
+                Spelling spelled = spelledAs(stated);
                 boolean set = (assignment >> parts.get(spelled) & 1L) == 1L;
-                yield spelled.equals(stated.key()) == set;
+                yield spelled.equals(stated.spelling()) == set;
             }
         };
     }
@@ -106,11 +106,11 @@ public final class TruthTable {
      * Proposition#deniedWhereverItFails}), so the two are one part; and its own spelling where not,
      * so it and its denial are two parts, free of each other.
      */
-    private static String spelledAs(Proposition part) {
+    private static Spelling spelledAs(Proposition part) {
         if (!Proposition.deniedWhereverItFails(part)) {
-            return part.key();
+            return part.spelling();
         }
-        String denied = part.denied().key();
-        return part.key().compareTo(denied) <= 0 ? part.key() : denied;
+        Spelling denied = part.denied().spelling();
+        return part.spelling().compareTo(denied) <= 0 ? part.spelling() : denied;
     }
 }

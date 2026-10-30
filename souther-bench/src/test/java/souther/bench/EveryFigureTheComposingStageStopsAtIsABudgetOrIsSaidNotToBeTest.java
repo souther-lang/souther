@@ -181,7 +181,13 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             // not take out leaves them.
             Map.entry("souther.compiler.partition.LengthsPastTheWay.MOST_ROWS",
                     "how many statements are held while the numbers a way ties a length to are"
-                            + " taken out; past it nothing is said of the lengths")));
+                            + " taken out; past it nothing is said of the lengths"),
+
+            // How long a way to a case is kept once worked out. No search stops at it: a way let
+            // go is worked out again, to the way it was.
+            Map.entry("souther.compiler.partition.WaysToACase.CASES_KEPT",
+                    "how many cases' ways are kept for the lines asking them; past it a way is"
+                            + " worked out again, and nothing is left unread")));
 
     /**
      * A number written into a composing class is a budget's, or is one of the above.

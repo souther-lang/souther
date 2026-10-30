@@ -78,17 +78,17 @@ public final class WrittenLines {
 
     private final ExpansionLineage comparison;
     private final Conclusion concluded;
-    private final Map<Derivation, Set<String>> made = new IdentityHashMap<>();
+    private final Map<Derivation, Set<Spelling>> made = new IdentityHashMap<>();
     /** What each step whose relations were gathered concludes. */
     private final Map<Derivation, Proposition> conclusions = new IdentityHashMap<>();
     private final Map<Derivation, Set<Under>> walked = new IdentityHashMap<>();
-    private final Map<String, Map<WrittenLine, Seen>> seen = new LinkedHashMap<>();
+    private final Map<Spelling, Map<WrittenLine, Seen>> seen = new LinkedHashMap<>();
     /** The lines some relation of the comparison's own was made under. */
     private final Set<WrittenLine> drawn = new HashSet<>();
     /** The lines under which the comparison's own reading came out one way whatever the row. */
     private final Set<WrittenLine> settled = new HashSet<>();
     /** Each relation made, held, under its spelling. */
-    private final Map<String, Proposition.Compared> stated = new HashMap<>();
+    private final Map<Spelling, Proposition.Compared> stated = new HashMap<>();
     /** Where a row takes the arms of each line some relation was made under. */
     private final Map<WrittenLine, Proposition> taken = new LinkedHashMap<>();
 
@@ -98,7 +98,7 @@ public final class WrittenLines {
     }
 
     /**
-     * For each relation {@code how} concludes, spelled as {@link Proposition.Compared#heldKey}, the
+     * For each relation {@code how} concludes, spelled as {@link Proposition.Compared#heldSpelling}, the
      * lines of the comparison standing in {@code comparison} it is a place of, and how it stands to
      * each; and where a row takes the arms of each of those lines.
      *
@@ -116,7 +116,7 @@ public final class WrittenLines {
         WrittenLines lines = new WrittenLines(comparison, where);
         lines.walk(how, new Under(WrittenLine.THE_COMPARISON, new Proposition.Always(true), false,
                 false));
-        Map<String, Map<WrittenLine, AuthoredPointMapping>> out = new LinkedHashMap<>();
+        Map<Spelling, Map<WrittenLine, AuthoredPointMapping>> out = new LinkedHashMap<>();
         lines.seen.forEach((relation, under) -> {
             Map<WrittenLine, AuthoredPointMapping> each = new LinkedHashMap<>();
             // What an application states has no claim written for it, and each of its lines
@@ -270,7 +270,7 @@ public final class WrittenLines {
 
     /** Files the relations {@code step} makes, concluded from {@code from}, under {@code under}. */
     private void madeHere(Derivation step, List<Derivation> from, Under under) {
-        Set<String> here = new LinkedHashSet<>(relationsOf(step));
+        Set<Spelling> here = new LinkedHashSet<>(relationsOf(step));
         from.forEach(each -> here.removeAll(relationsOf(each)));
         if (here.isEmpty()) {
             return;
@@ -283,12 +283,12 @@ public final class WrittenLines {
         // they count meeting them is: the reading's relation is its own only where it is what the
         // reading concludes, and not where the statements a count was read as come to one.
         Derivation.AComparisonRead.Facing facing = null;
-        String own = null;
+        Spelling own = null;
         if (step instanceof Derivation.AComparisonRead read && !under.inAnother()
                 && conclusionOf(step) instanceof Proposition.Compared compared
                 && compared.relation().equals(read.relation())) {
             facing = read.facing();
-            own = compared.heldKey();
+            own = compared.heldSpelling();
         }
         if (!under.decidedOutside()) {
             drawn.add(under.line());
@@ -296,7 +296,7 @@ public final class WrittenLines {
         // Reached by more than one way to it, a line's arms are taken where any of them is.
         taken.merge(under.line(), under.taken(), (one, other) -> Proposition.any(List.of(one,
                 other)));
-        for (String each : here) {
+        for (Spelling each : here) {
             boolean itsOwn = each.equals(own);
             Seen how = new Seen(under.decidedOutside() ? null
                     : itsOwn ? facing : Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, itsOwn);
@@ -327,8 +327,8 @@ public final class WrittenLines {
         return one.proven() ? one : other;
     }
 
-    private Set<String> relationsOf(Derivation step) {
-        Set<String> known = made.get(step);
+    private Set<Spelling> relationsOf(Derivation step) {
+        Set<Spelling> known = made.get(step);
         if (known == null) {
             known = new LinkedHashSet<>();
             Proposition out = concluded.of(step);
@@ -345,11 +345,11 @@ public final class WrittenLines {
         return conclusions.get(step);
     }
 
-    private void gather(Proposition stated, Set<String> into) {
+    private void gather(Proposition stated, Set<Spelling> into) {
         switch (stated) {
             case Proposition.Compared compared -> {
-                into.add(compared.heldKey());
-                this.stated.putIfAbsent(compared.heldKey(), compared);
+                into.add(compared.heldSpelling());
+                this.stated.putIfAbsent(compared.heldSpelling(), compared);
             }
             case Proposition.All all -> all.parts().forEach(each -> gather(each, into));
             case Proposition.Any any -> any.parts().forEach(each -> gather(each, into));

@@ -276,7 +276,7 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
                     relation.holds(signOf(form, at)) == held;
             case Proposition.All all -> all.parts().stream().allMatch(part -> holds(part, at));
             case Proposition.Any any -> any.parts().stream().anyMatch(part -> holds(part, at));
-            default -> throw new AssertionError("a statement this test reads: " + stated.key());
+            default -> throw new AssertionError("a statement this test reads: " + stated.spelledOut());
         };
     }
 
@@ -333,7 +333,7 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
 
             assertFalse(stated.isEmpty());
             for (Proposition each : stated) {
-                assertEquals(List.of(), Proposition.stopsIn(each), each::key);
+                assertEquals(List.of(), Proposition.stopsIn(each), each::spelledOut);
             }
         }
     }
@@ -358,7 +358,7 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
                     }
                 }
                 assertFalse(alike.isEmpty(),
-                        () -> "a statement is one of the helper's conditions: " + stated.key());
+                        () -> "a statement is one of the helper's conditions: " + stated.spelledOut());
                 matched.addAll(alike);
             }
             assertEquals(calls, matched.size(), "every condition of the chain is stated");

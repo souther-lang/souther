@@ -339,14 +339,14 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
                 TermPath.of("fs").element().then("currency"));
         Quantity.HowManyDifferentMeet.Selection last =
                 new Quantity.HowManyDifferentMeet.Selection.OfEachValue(
-                        new Proposition.LastToHold(fs, currency, true, "last"));
+                        new Proposition.LastToHold(fs, currency, true));
         Quantity.TheValue value = new Quantity.TheValue.AtAPlace(currency);
         assertThrows(IllegalArgumentException.class,
                 () -> new Quantity.HowManyDifferentMeet(fs, value, last));
         assertNull(Quantity.HowManyDifferentMeet.of(fs, value, last));
         assertNotNull(Quantity.HowManyDifferentMeet.of(fs, value,
                 new Quantity.HowManyDifferentMeet.Selection.OfEachValue(
-                        new Proposition.Present(currency, true, "present"))));
+                        new Proposition.Present(currency, true))));
     }
 
     /**
@@ -361,7 +361,7 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
         DecisionSubject.AnInput ds = new DecisionSubject.AnInput(TermPath.of("ds"));
         DecisionSubject.AnInput currency = new DecisionSubject.AnInput(
                 desk.then("forecasts").element().then("currency"));
-        Proposition present = new Proposition.Present(currency, true, "present");
+        Proposition present = new Proposition.Present(currency, true);
         Quantity.HowManyDifferentMeet.Selection.OfEachValue alone =
                 new Quantity.HowManyDifferentMeet.Selection.OfEachValue(present);
         Quantity.TheValue value = new Quantity.TheValue.AtAPlace(currency);
@@ -370,7 +370,7 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
         Quantity.HowManyDifferentMeet.Selection.OfEachValue withTheDesk =
                 new Quantity.HowManyDifferentMeet.Selection.OfEachValue(new Proposition.All(
                         List.of(present, new Proposition.Present(new DecisionSubject.AnInput(
-                                desk.then("floor")), true, "floor")), "both"));
+                                desk.then("floor")), true))));
         assertNull(Quantity.HowManyDifferentMeet.of(ds, value, withTheDesk));
     }
 

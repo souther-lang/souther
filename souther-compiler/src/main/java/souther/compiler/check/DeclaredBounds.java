@@ -232,7 +232,7 @@ public final class DeclaredBounds {
             return everything;
         }
         NumberAt.OfWhatNumber kind = measure == null
-                ? new NumberAt.OfWhatNumber.OfItsOwnValue()
+                ? NumberAt.OfWhatNumber.OWN_VALUE
                 : new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(measure,
                         TakenArguments.NONE, ValueTransformation.NONE);
         FieldDomains own = FieldDomains.of(outermost, reading);

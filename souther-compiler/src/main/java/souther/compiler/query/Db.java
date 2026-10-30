@@ -430,7 +430,7 @@ public final class Db implements StoreWork {
             // In the order they were read, so a caller walking the graph for reports meets them in
             // the order the work happened. An unordered copy here makes the first error a module
             // reports depend on hash order.
-            read = Collections.unmodifiableSet(frames.pop());
+            read = Ordered.set(frames.pop());
             inProgress.remove(key);
             reachedThroughCycle = throughCycle.remove(key);
         }

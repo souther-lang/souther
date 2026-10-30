@@ -46,8 +46,12 @@ class WhoMayAskBigDecimalWhatItCanRefuseTest {
      * counts the same way and calls {@code toPlainString} only where the count stays under the same
      * limit, and calls {@code toString} instead where it does not — total on every value regardless
      * ({@link BigDecimalCalls#ANSWERS_ON_EVERY_VALUE}), so there is nothing there to explain.
+     * {@code ExactArithmetic.canonical} moves a decimal by its own scale, which leaves a scale of
+     * nought and so none out of range.
      */
     private static final List<String> MAY_BE_REFUSED = List.of(
+            "souther/exact/ExactArithmetic#canonical(Ljava/math/BigDecimal;)Lsouther/exact/ExactParts;"
+                    + " scaleByPowerOfTen(I)Ljava/math/BigDecimal;",
             "souther/exact/ExactDecimals#differenceWhereThereIsRoom(Ljava/math/BigDecimal;"
                     + "Ljava/math/BigDecimal;)Ljava/math/BigDecimal;"
                     + " subtract(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",

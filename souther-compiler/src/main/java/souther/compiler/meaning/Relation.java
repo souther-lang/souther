@@ -5,7 +5,9 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -20,6 +22,17 @@ public sealed interface Relation {
 
     /** The relation this states, which is the canonical one of the pair. */
     Rel proposition();
+
+    /**
+     * This relation's text, held as the pieces it is put together from: the spelling a comparison
+     * over it is told apart and ordered by ({@link Proposition.Compared}). The text is the one the
+     * relation's {@code toString} writes; each quantity of a form is held as its own spelling
+     * ({@link Quantity#spelling}), so a count of a statement in it holds the statement's spelling and
+     * not the statement written out.
+     */
+    default Spelling spelling() {
+        return Spelling.of(toString());
+    }
 
     /**
      * A form of quantities against nought, facing the one way ({@link OneWay}).
@@ -39,6 +52,17 @@ public sealed interface Relation {
                 throw new IllegalArgumentException("a relation is written facing the one way, and "
                         + form + " faces the other");
             }
+        }
+
+        /** The text a record of this writes, with the form written from the quantities' spellings
+         *  ({@link LinearForm#writtenAs}), which are ordered as their texts are. */
+        @Override
+        public Spelling spelling() {
+            List<Object> pieces = new ArrayList<>();
+            pieces.add("Affine[form=");
+            pieces.addAll(form.writtenAs(Quantity::spelling));
+            pieces.add(", proposition=" + proposition + "]");
+            return Spelling.of(pieces.toArray());
         }
     }
 
@@ -81,11 +105,11 @@ public sealed interface Relation {
          * and not from every coefficient's sign, so a form with one of each sign faces one way too.
          */
         public static <A extends Quantity> boolean facesTheOtherWay(LinearForm<A> form) {
-            Map<String, A> spelled = new HashMap<>();
-            String first = null;
+            Map<Spelling, A> spelled = new HashMap<>();
+            Spelling first = null;
             ExactRatio firstCoefficient = null;
             for (Map.Entry<A, ExactRatio> each : form.coefs().entrySet()) {
-                String spelling = each.getKey().spelled();
+                Spelling spelling = each.getKey().spelling();
                 A before = spelled.putIfAbsent(spelling, each.getKey());
                 if (before != null && !before.equals(each.getKey())) {
                     throw new IllegalStateException("two atoms of one form are spelled alike: "

@@ -35,6 +35,7 @@ import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.Spelling;
 import souther.compiler.meaning.WhereARunStops;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhereEachLineDecides;
@@ -750,8 +751,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             PartOfAComparison.of(WrittenLine.THE_COMPARISON);
 
     /** A statement that is one line, as the place of a line it is: the relation, held. */
-    private static String spelled(Proposition stated) {
-        return stated instanceof Proposition.Compared compared ? compared.heldKey() : stated.key();
+    private static Spelling spelled(Proposition stated) {
+        return stated instanceof Proposition.Compared compared ? compared.heldSpelling()
+                : stated.spelling();
     }
 
     /**
@@ -1130,7 +1132,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         List<Read.Several.Part> parts = new ArrayList<>();
         of.forEach((line, mapping) -> parts.add(new Read.Several.Part(
-                new PlaceOfALine(line, compared.heldKey()), authored(drawn, mapping, compared),
+                new PlaceOfALine(line, compared.heldSpelling()),
+                authored(drawn, mapping, compared),
                 WhereEachLineDecides.takenWhere(
                         List.of(DecidingCase.alone(WhereAnApplicationIsMade.nothingAsked())),
                         authors.takenWhere(mapping.line())),
@@ -1158,7 +1161,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             AuthorsLines lines, List<Proposition.Compared> scales, ComparisonClaim written) {
         Map<PartOfAComparison, AuthoredPointMapping> out = new LinkedHashMap<>();
         for (Proposition.Compared relation : scales) {
-            Map<WrittenLine, AuthoredPointMapping> under = lines.of(relation.heldKey());
+            Map<WrittenLine, AuthoredPointMapping> under = lines.of(relation.heldSpelling());
             if (under != null) {
                 under.forEach((line, mapping) ->
                         out.putIfAbsent(PartOfAComparison.of(line), mapping));
@@ -1178,7 +1181,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                      Supplier<Optional<AuthorsLines>> lines) {
         Pullback.Pulled stated = onTheInput.stated();
         Read line = stated.proposition() instanceof Proposition.Compared(
-                Relation.Affine affine, boolean holds, String _)
+                Relation.Affine affine, boolean holds, Spelling _)
                 ? lineOn(behavior, affine, holds, comparison.left(), read, reads) : null;
         List<FilingCoordinate> related = line == null
                 ? relatedToAnotherValue(stated.proposition()) : null;
@@ -1198,7 +1201,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     each -> each;
             case Proposition.Compared(Relation.Ordered(
                     DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel proposition),
-                    boolean holds, String _) when term.atOnePosition() != null ->
+                    boolean holds, Spelling _) when term.atOnePosition() != null ->
                     onAnOrder(behavior, term.atOnePosition(), at,
                             holds ? proposition : proposition.denied(), read.quantities());
             // A number the statement names has no representation, which is a line placed at a
@@ -1343,7 +1346,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * and divides none of them.
      */
     private static List<FilingCoordinate> heldAgainstAnotherValue(Proposition stated) {
-        if (!(stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, String _))
+        if (!(stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, Spelling _))
                 || Proposition.leavesSomethingUnread(stated)) {
             return null;
         }
@@ -1435,7 +1438,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static List<FilingCoordinate> heldOverValuesRelatedToOneAnother(Proposition stated) {
         if (!(stated instanceof Proposition.Compared(Relation.Affine affine, boolean _,
-                                                     String _))) {
+                                                     Spelling _))) {
             return null;
         }
         List<NumericTerm> input = new ArrayList<>();
@@ -1747,7 +1750,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static Read.AgainstAnotherValue against(List<FilingCoordinate> over,
                                                     Proposition stated) {
         List<UndividedByARelation> relations = new ArrayList<>();
-        if (stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, String _)) {
+        if (stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, Spelling _)) {
             relations.add(UndividedByARelation.ofAForm(affine.form(), affine.proposition()));
             for (Quantity each : affine.form().coefs().keySet()) {
                 switch (each) {
@@ -1803,7 +1806,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         sameValuesIn(stated, same);
         if (same.size() == 1 && same.getFirst() instanceof Proposition.SameValue(
                 DecisionSubject.AnInput(TermPath one), DecisionSubject.AnInput(TermPath other),
-                boolean _, String _)) {
+                boolean _, Spelling _)) {
             return UndividedByARelation.ofTwoPositions(one, other);
         }
         List<Proposition.StringInside> inside = new ArrayList<>();
@@ -1894,7 +1897,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return switch (stated) {
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
                                        DecisionSubject.AnInput(TermPath other), boolean _,
-                                       String _) -> {
+                                       Spelling _) -> {
                 for (TermPath each : List.of(one, other)) {
                     if (!out.contains(FilingCoordinate.at(each))) {
                         out.add(FilingCoordinate.at(each));
@@ -1992,7 +1995,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         TheParts.NotDrawn undrawn = null;
         for (WhereEachLineDecides.Decides each : lines) {
             Read line = lineOf(behavior, each.line(), written, read, reads);
-            PlaceOfALine alone = new PlaceOfALine(THE_COMPARISON, each.line().key());
+            PlaceOfALine alone = new PlaceOfALine(THE_COMPARISON, each.line().spelling());
             if (line == null) {
                 // A relation of the input's values to another value is that, beside the lines,
                 // read as one comparison stating it alone is. One over what a dependency answered
@@ -2037,7 +2040,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
             authorsLines(authors.get(), each.scales(), WrittenLines.claimOf(each.line()))
                     .forEach((of, mapping) -> parts.add(
-                    new Read.Several.Part(new PlaceOfALine(of, each.line().key()),
+                    new Read.Several.Part(new PlaceOfALine(of, each.line().spelling()),
                             authored(line, mapping, each.line()),
                             WhereEachLineDecides.takenWhere(each.cases(),
                                     authors.get().takenWhere(mapping.line())),

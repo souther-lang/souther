@@ -11,6 +11,7 @@ import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.meaning.Spelling;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -84,7 +85,16 @@ public sealed interface NumericTerm
      * {@link InputAtom#inOneOrder} refuses them.
      */
     static CanonicalOrder<NumericTerm> inOneOrder() {
-        return Comparator.<NumericTerm, String>comparing(String::valueOf)::compare;
+        return Comparator.comparing(NumericTerm::spelling)::compare;
+    }
+
+    /**
+     * What this is written as, held as the pieces it is put together from: the text
+     * {@code toString} writes, with a statement a term keeps elements by held as the statement's
+     * own spelling ({@link KeptOccurrences#spelling}) and not written out.
+     */
+    default Spelling spelling() {
+        return Spelling.of(toString());
     }
 
     /**
@@ -1188,9 +1198,14 @@ public sealed interface NumericTerm
         }
 
         @Override
+        public Spelling spelling() {
+            return selection == null ? Spelling.of("occurrences(" + run + ")")
+                    : Spelling.of("occurrences(" + run + " kept by ", selection.spelling(), ")");
+        }
+
+        @Override
         public String toString() {
-            return selection == null ? "occurrences(" + run + ")"
-                    : "occurrences(" + run + " kept by " + selection.key() + ")";
+            return spelling().toString();
         }
     }
 
@@ -1558,27 +1573,34 @@ public sealed interface NumericTerm
         }
 
         @Override
-        public String toString() {
+        public Spelling spelling() {
             ElementProjection place = value.asAPlace();
-            String of = (place == null ? "{" + value + " | " + elements + "}"
-                    : place.from(elements).toString())
-                    + (selection == null ? "" : " kept by " + selection.key());
+            String gatheredFrom = place == null ? "{" + value + " | " + elements + "}"
+                    : place.from(elements).toString();
+            Spelling of = selection == null ? Spelling.of(gatheredFrom)
+                    : Spelling.of(gatheredFrom + " kept by ", selection.spelling());
             return switch (gathering) {
-                case Gathering.Total _ -> "total(" + of + " by " + key.spelled() + ")";
+                case Gathering.Total _ -> Spelling.of("total(", of, " by " + key.spelled() + ")");
                 // Handed in the order written, as a run read by where its elements stand is
                 // spelled; the other way round says so.
                 case Gathering.SinceAPut(ElementProjection subject, List<CasesLeft> puts,
                                          RunSource.TraversalOrder order) ->
-                        "total(" + of + " from the last " + String.join(" or ", puts.stream()
-                                .map(cases -> subject.narrowedTo(cases).spelled()).toList())
+                        Spelling.of("total(", of, " from the last " + String.join(" or ", puts
+                                .stream().map(cases -> subject.narrowedTo(cases).spelled())
+                                .toList())
                                 + (order.direction() == TraversalDirection.REVERSE
                                         ? " handed from the far end" : "")
-                                + " by " + key.spelled() + ")";
-                case Gathering.End(Extreme extreme) -> switch (extreme) {
-                    case Extreme.Least _ -> "least";
-                    case Extreme.Greatest _ -> "greatest";
-                } + "(" + of + " by " + key.spelled() + ")";
+                                + " by " + key.spelled() + ")");
+                case Gathering.End(Extreme extreme) -> Spelling.of(switch (extreme) {
+                    case Extreme.Least _ -> "least(";
+                    case Extreme.Greatest _ -> "greatest(";
+                }, of, " by " + key.spelled() + ")");
             };
+        }
+
+        @Override
+        public String toString() {
+            return spelling().toString();
         }
     }
 
@@ -1699,8 +1721,13 @@ public sealed interface NumericTerm
         }
 
         @Override
+        public Spelling spelling() {
+            return Spelling.of(gathered.spelling(), " equal to " + asked);
+        }
+
+        @Override
         public String toString() {
-            return gathered + " equal to " + asked;
+            return spelling().toString();
         }
     }
 
@@ -1948,7 +1975,8 @@ public sealed interface NumericTerm
             if (second != right) {
                 sign = sign.negated();
             }
-            boolean firstFirst = String.valueOf(first).compareTo(String.valueOf(second)) <= 0;
+            boolean firstFirst = Spelling.of(first.writtenAs(NumericTerm::spelling).toArray())
+                    .compareTo(Spelling.of(second.writtenAs(NumericTerm::spelling).toArray())) <= 0;
             return new Signed(firstFirst ? new ProductOf(first, second, null)
                     : new ProductOf(second, first, null), sign);
         }
@@ -2154,24 +2182,35 @@ public sealed interface NumericTerm
         }
 
         @Override
+        public Spelling spelling() {
+            return Spelling.of(written(one), " * ", written(other));
+        }
+
+        @Override
         public String toString() {
-            return written(one) + " * " + written(other);
+            return spelling().toString();
         }
 
         /** A factor as an author writes it: a number alone as it is, a sum of them in brackets. */
-        private static String written(LinearForm<NumericTerm> factor) {
+        private static Spelling written(LinearForm<NumericTerm> factor) {
             if (factor.constant().isZero() && factor.coefs().size() == 1
                     && ExactRatio.ONE.equals(factor.coefs().values().iterator().next())) {
-                return factor.coefs().keySet().iterator().next().toString();
+                return factor.coefs().keySet().iterator().next().spelling();
             }
-            List<String> parts = new ArrayList<>();
+            List<Object> parts = new ArrayList<>();
+            parts.add("(");
             if (!factor.constant().isZero()) {
                 parts.add(factor.constant().toString());
             }
-            factor.coefs().forEach((number, weight) ->
-                    parts.add(ExactRatio.ONE.equals(weight) ? number.toString()
-                            : weight + " * " + number));
-            return "(" + String.join(" + ", parts) + ")";
+            factor.coefs().forEach((number, weight) -> {
+                if (parts.size() > 1) {
+                    parts.add(" + ");
+                }
+                parts.add(ExactRatio.ONE.equals(weight) ? number.spelling()
+                        : Spelling.of(weight + " * ", number.spelling()));
+            });
+            parts.add(")");
+            return Spelling.of(parts.toArray());
         }
     }
 
@@ -2328,21 +2367,21 @@ public sealed interface NumericTerm
      */
     default NumberAt.OfWhatNumber atItsPlace() {
         return switch (this) {
-            case ValueOf _ -> new NumberAt.OfWhatNumber.OfItsOwnValue();
+            case ValueOf _ -> NumberAt.OfWhatNumber.OWN_VALUE;
             case TakenOf taken -> new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(
                     taken.operation(), taken.arguments(), taken.transformation());
             case CodePointClassCount count ->
                     new NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn(count.counted(),
                             count.through());
-            case CodePointValueSum _ -> new NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo();
+            case CodePointValueSum _ -> NumberAt.OfWhatNumber.WHAT_ITS_CODE_POINTS_COME_TO;
             case CodePointAt at -> new NumberAt.OfWhatNumber.OfTheCodePointAt(at.index());
             case WholeUnitsOf units ->
                     new NumberAt.OfWhatNumber.OfTheWholeUnitsOf(units.operation());
-            case Multiplicity _ -> new NumberAt.OfWhatNumber.OfItsMultiplicity();
-            case OccurrencesOfItsValue occurrences ->
-                    new NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer(
-                            occurrences.selection() == null ? null
-                                    : occurrences.selection().key());
+            case Multiplicity _ -> NumberAt.OfWhatNumber.MULTIPLICITY;
+            // Which values are counted, where a statement keeps some of them, is the statement's
+            // and not the place's: it is named by the term itself.
+            case OccurrencesOfItsValue occurrences -> occurrences.selection() == null
+                    ? NumberAt.OfWhatNumber.OCCURRENCES_IN_EVERY_CONTAINER : null;
             // The key by the whole place it stands at: what a rule calls a place is relative to the
             // value it is a position of, and two parameters are both called the value.
             case OccurrencesOfAKey asked ->

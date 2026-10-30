@@ -106,7 +106,7 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
         Proposition.SoManyHold held = assertInstanceOf(Proposition.SoManyHold.class,
                 howMany(each, Rel.EQ, 1));
 
-        assertEquals(each.stream().sorted((a, b) -> a.key().compareTo(b.key())).toList(),
+        assertEquals(each.stream().sorted((a, b) -> a.spelledOut().compareTo(b.spelledOut())).toList(),
                 held.statements());
         assertEquals(List.of(1), held.admitted());
         assertTrue(held.weights().stream().allMatch(weight -> weight == 1), held::toString);

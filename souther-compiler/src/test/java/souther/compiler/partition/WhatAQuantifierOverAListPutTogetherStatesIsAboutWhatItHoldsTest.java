@@ -43,23 +43,23 @@ class WhatAQuantifierOverAListPutTogetherStatesIsAboutWhatItHoldsTest {
 
     @Test
     void aFlatMapStatesWhatTheListWrittenOutStates() {
-        assertEquals(stated(ANY.formatted(BOTH)).key(), stated(ANY.formatted(
-                "List.flatMap(s -> [Placement { who = s, room = 1 }], [Alice, Bob])")).key());
+        assertEquals(stated(ANY.formatted(BOTH)).spelledOut(), stated(ANY.formatted(
+                "List.flatMap(s -> [Placement { who = s, room = 1 }], [Alice, Bob])")).spelledOut());
     }
 
     @Test
     void anyOverAFilterStatesWhatItStatesOfTheElementsKept() {
         String kept = "List.filter(p -> p.room == 1, %s)".formatted(BOTH);
-        assertEquals(stated(ANY.formatted(ALICE)).key(), stated(ANY.formatted(kept)).key());
-        assertNotEquals(stated(ANY.formatted(BOTH)).key(), stated(ANY.formatted(kept)).key(),
+        assertEquals(stated(ANY.formatted(ALICE)).spelledOut(), stated(ANY.formatted(kept)).spelledOut());
+        assertNotEquals(stated(ANY.formatted(BOTH)).spelledOut(), stated(ANY.formatted(kept)).spelledOut(),
                 "the element dropped is one the statement would otherwise be about");
     }
 
     @Test
     void allOverAFilterStatesWhatItStatesOfTheElementsKept() {
         String kept = "List.filter(p -> p.room == 1, %s)".formatted(BOTH);
-        assertEquals(stated(ALL.formatted(ALICE)).key(), stated(ALL.formatted(kept)).key());
-        assertNotEquals(stated(ALL.formatted(BOTH)).key(), stated(ALL.formatted(kept)).key(),
+        assertEquals(stated(ALL.formatted(ALICE)).spelledOut(), stated(ALL.formatted(kept)).spelledOut());
+        assertNotEquals(stated(ALL.formatted(BOTH)).spelledOut(), stated(ALL.formatted(kept)).spelledOut(),
                 "the element dropped is one the statement would otherwise be about");
     }
 

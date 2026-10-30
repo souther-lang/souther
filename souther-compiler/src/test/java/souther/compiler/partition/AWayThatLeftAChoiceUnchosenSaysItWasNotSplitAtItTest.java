@@ -98,7 +98,7 @@ class AWayThatLeftAChoiceUnchosenSaysItWasNotSplitAtItTest {
 
     private static OnTheWay.OneOf oneOf(int occurrence, List<OnTheWay> one,
                                         List<OnTheWay> other) {
-        return new OnTheWay.OneOf(
+        return OnTheWay.OneOf.of(
                 new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, occurrence),
                 WHERE, List.of(one, other), Optional.empty());
     }

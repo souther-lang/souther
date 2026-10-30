@@ -52,7 +52,7 @@ class AChoiceTheNumbersContradictIsNoOpenWayTest {
     }
 
     private static OnTheWay.OneOf oneOf(int occurrence, OnTheWay one, OnTheWay other) {
-        return new OnTheWay.OneOf(
+        return OnTheWay.OneOf.of(
                 new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, occurrence),
                 WHERE, List.of(List.of(one), List.of(other)), Optional.empty());
     }
@@ -127,7 +127,7 @@ class AChoiceTheNumbersContradictIsNoOpenWayTest {
         for (int level = 0; level < levels; level++) {
             alternatives.add(List.of(holds(X, 1, -level, Rel.EQ)));
         }
-        return new OnTheWay.OneOf(
+        return OnTheWay.OneOf.of(
                 new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, occurrence),
                 WHERE, alternatives, Optional.empty());
     }

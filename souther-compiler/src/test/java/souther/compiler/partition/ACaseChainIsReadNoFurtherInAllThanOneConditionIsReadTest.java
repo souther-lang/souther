@@ -134,7 +134,7 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
         Read within = read(WITHIN);
 
         for (Proposition stated : within.stated()) {
-            assertFalse(whysIn(stated).contains(PAST_THE_TOTAL), stated::key);
+            assertFalse(whysIn(stated).contains(PAST_THE_TOTAL), stated::spelledOut);
         }
     }
 

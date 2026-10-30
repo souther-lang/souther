@@ -103,7 +103,7 @@ class HowLongThePathASearchAnswersIsReadTest {
         Proposition dropped = stated(PATH_TO,
                 "List.length(List.drop(1, List.reverse(pathTo(i.t, i.w)))) >= i.k");
         assertFalse(Proposition.leavesSomethingUnread(dropped), () -> "read as " + dropped);
-        assertTrue(dropped.key().contains(LINE.toString()), () -> "read as " + dropped);
+        assertTrue(dropped.spelledOut().contains(LINE.toString()), () -> "read as " + dropped);
     }
 
     /** The search is for a value the rule names, so another field and another input are another
@@ -195,7 +195,7 @@ class HowLongThePathASearchAnswersIsReadTest {
     void oneTreeOfManyIsNoLine() {
         Proposition stated = stated(PATH_TO,
                 "List.all(t -> List.length(pathTo(t, i.w)) >= 2, i.ts)");
-        assertFalse(stated.key().contains("line below"), () -> "read as " + stated);
+        assertFalse(stated.spelledOut().contains("line below"), () -> "read as " + stated);
     }
 
     /** The values of a line are nodes, of which only how many there are is a number. */

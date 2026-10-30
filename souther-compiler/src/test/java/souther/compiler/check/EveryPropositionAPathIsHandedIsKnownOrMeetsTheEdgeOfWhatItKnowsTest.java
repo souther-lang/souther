@@ -166,7 +166,7 @@ class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
         out.put("either", new Proposition.Any(List.of(above, truth)));
         out.put("the cases of the ways of keeping", WaysSamples.over(truth));
         out.put("so many of them holding", new Proposition.SoManyHold(Stream.of(above, truth)
-                .sorted(Comparator.comparing(Proposition::key)).toList(), List.of(1, 1),
+                .sorted(Comparator.comparing(Proposition::spelledOut)).toList(), List.of(1, 1),
                 List.of(1)));
         out.put("some element", new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("xs")),element, true));
         out.put("on some application", new Proposition.OnAnApplication(List.of(above, truth)));

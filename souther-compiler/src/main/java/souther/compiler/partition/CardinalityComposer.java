@@ -14,6 +14,7 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Spelling;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -627,9 +628,9 @@ final class CardinalityComposer {
         // What each statement of the elements together says of one element, once however many of
         // them say it, with no count of it asked: where in what is asked each is.
         List<Together> statements = new ArrayList<>();
-        Map<String, Integer> saidOfAnElement = new LinkedHashMap<>();
+        Map<Spelling, Integer> saidOfAnElement = new LinkedHashMap<>();
         for (AStatementAtARow each : together) {
-            Map<String, Integer> at = new LinkedHashMap<>();
+            Map<Spelling, Integer> at = new LinkedHashMap<>();
             each.ofEachElementOf(container).forEach((key, perElement) -> {
                 Integer index = saidOfAnElement.get(key);
                 if (index == null) {

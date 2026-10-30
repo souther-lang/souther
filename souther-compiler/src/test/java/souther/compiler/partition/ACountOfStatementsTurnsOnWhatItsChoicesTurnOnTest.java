@@ -6,6 +6,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Spelling;
 
 import java.util.Comparator;
 import java.util.HashSet;
@@ -31,19 +32,19 @@ class ACountOfStatementsTurnsOnWhatItsChoicesTurnOnTest {
         List<Proposition> statements = IntStream.range(0, 4)
                 .mapToObj(at -> (Proposition) new Proposition.Truth(
                         new DecisionSubject.AnInput(TermPath.of("t" + at)), true))
-                .sorted(Comparator.comparing(Proposition::key)).toList();
+                .sorted(Comparator.comparing(Proposition::spelledOut)).toList();
         Proposition.SoManyHold counted = new Proposition.SoManyHold(statements,
                 List.of(1, 1, 1, 1), List.of(2));
         Proposition choices = CountsWrittenOut.of(counted)
                 instanceof CountsWrittenOut.Written(Proposition written) ? written : null;
         assertNotNull(choices, "six choices of four statements are written out for a reader");
 
-        Set<String> ofTheCount = new HashSet<>();
+        Set<Spelling> ofTheCount = new HashSet<>();
         Pullback.Pulled.partsOf(counted, ofTheCount);
-        Set<String> ofTheChoices = new HashSet<>();
+        Set<Spelling> ofTheChoices = new HashSet<>();
         Pullback.Pulled.partsOf(choices, ofTheChoices);
 
         assertEquals(ofTheChoices, ofTheCount);
-        assertFalse(ofTheCount.contains(counted.key()), "the count itself is no part of it");
+        assertFalse(ofTheCount.contains(counted.spelling()), "the count itself is no part of it");
     }
 }

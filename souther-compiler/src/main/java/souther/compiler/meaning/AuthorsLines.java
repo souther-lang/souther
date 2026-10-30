@@ -18,12 +18,12 @@ import java.util.Objects;
  * return 12 as well.
  *
  * @param byRelation for each relation the comparison states, spelled as
- *                   {@link Proposition.Compared#heldKey}, the lines it is a place of and how it
+ *                   {@link Proposition.Compared#heldSpelling}, the lines it is a place of and how it
  *                   stands to each
  * @param taken      for each line, where a row takes every arm it is under; a line under no arm
  *                   is taken wherever the comparison is
  */
-public record AuthorsLines(Map<String, Map<WrittenLine, AuthoredPointMapping>> byRelation,
+public record AuthorsLines(Map<Spelling, Map<WrittenLine, AuthoredPointMapping>> byRelation,
                            Map<WrittenLine, Proposition> taken) {
 
     public AuthorsLines {
@@ -34,7 +34,7 @@ public record AuthorsLines(Map<String, Map<WrittenLine, AuthoredPointMapping>> b
 
     /** The lines {@code relation} is a place of and how it stands to each, or null where the
      *  reading saw no step make it. */
-    public Map<WrittenLine, AuthoredPointMapping> of(String relation) {
+    public Map<WrittenLine, AuthoredPointMapping> of(Spelling relation) {
         return byRelation.get(relation);
     }
 

@@ -1,5 +1,7 @@
 package souther.compiler.inputs;
 
+import souther.compiler.meaning.Spelling;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -47,7 +49,7 @@ public final class NumericTerms {
         return walked(new ArrayList<>(form.entrySet()), each -> nameOf(each.getKey()));
     }
 
-    private static <T> List<T> walked(List<T> these, Function<T, String> naming) {
+    private static <T> List<T> walked(List<T> these, Function<T, Spelling> naming) {
         // Each named once. A name is spelled out of the term's whole path, and the sort asks for
         // the names of two terms at every comparison; spelled there, one walk of a form of a few
         // terms spelled each of them several times over.
@@ -70,7 +72,7 @@ public final class NumericTerms {
     }
 
     /** One of the things walked, with the name it is walked under. */
-    private record Named<T>(String name, T value) {}
+    private record Named<T>(Spelling name, T value) {}
 
     /**
      * The name a term is walked under: what it is written as, and then which kind of term it is.
@@ -83,9 +85,12 @@ public final class NumericTerms {
      * place and a number taken of what is at that place can be spelled alike and are two terms.
      * Carried second, it separates those two without moving anything their names already told
      * apart.
+     *
+     * <p>Held as the term's spelling ({@link NumericTerm#spelling}), so a term that keeps elements
+     * by a statement is named without the statement written out.
      */
-    private static String nameOf(NumericTerm term) {
-        return term + " " + switch (term) {
+    private static Spelling nameOf(NumericTerm term) {
+        return Spelling.of(term.spelling(), " " + switch (term) {
             case NumericTerm.ValueOf _ -> "1";
             case NumericTerm.TakenOf _ -> "2";
             case NumericTerm.TakenOver _ -> "3";
@@ -100,6 +105,6 @@ public final class NumericTerms {
             case NumericTerm.CodePointAt _ -> "12";
             case NumericTerm.WholeUnitsOf _ -> "13";
             case NumericTerm.ProductOf _ -> "14";
-        };
+        });
     }
 }

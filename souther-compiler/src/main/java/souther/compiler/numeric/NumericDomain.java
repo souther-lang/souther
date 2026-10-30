@@ -1,13 +1,13 @@
 package souther.compiler.numeric;
 
 import souther.compiler.collect.AppendOnly;
+import souther.compiler.collect.InTheOrderGiven;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -1572,7 +1572,7 @@ public final class NumericDomain<A> {
         Systems {
             groupOf = Map.copyOf(groupOf);
             atomsOf = Map.copyOf(atomsOf);
-            rulesOf = Collections.unmodifiableMap(new LinkedHashMap<>(rulesOf));
+            rulesOf = InTheOrderGiven.map(rulesOf);
             spacedAlike = Set.copyOf(spacedAlike);
         }
     }

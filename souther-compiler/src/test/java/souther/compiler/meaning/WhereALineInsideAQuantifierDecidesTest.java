@@ -55,7 +55,7 @@ class WhereALineInsideAQuantifierDecidesTest {
         assertFalse(cases.isEmpty(), "the line decides somewhere");
         for (Proposition each : cases) {
             assertTrue(unquantified(each).stream().noneMatch(atom -> atom.equals(
-                            compared(N, 0, Rel.GE).key())),
+                            compared(N, 0, Rel.GE).spelledOut())),
                     () -> "the element below nought is the other quantifier's: " + each);
         }
     }
@@ -274,7 +274,7 @@ class WhereALineInsideAQuantifierDecidesTest {
         Proposition stated = Proposition.any(List.of(entry, Proposition.all(List.of(other, d))));
 
         List<Proposition> ofTheLine = casesOf(stated, line);
-        assertTrue(ofTheLine.stream().anyMatch(each -> each.key().contains(d.key())),
+        assertTrue(ofTheLine.stream().anyMatch(each -> each.spelledOut().contains(d.spelledOut())),
                 () -> "the default's line tells the cases apart: " + ofTheLine);
     }
 
@@ -339,7 +339,7 @@ class WhereALineInsideAQuantifierDecidesTest {
         Proposition.Some other = new Proposition.Some(CONTAINER,
                 new Proposition.All(List.of(n, k)), true);
 
-        assertFalse(one.key().equals(other.key()), "spelled apart");
+        assertFalse(one.spelledOut().equals(other.spelledOut()), "spelled apart");
         assertFalse(one.elementAsked().holdsOnlyWhere(other.elementAsked()));
         assertFalse(other.elementAsked().holdsOnlyWhere(one.elementAsked()));
     }
@@ -409,7 +409,7 @@ class WhereALineInsideAQuantifierDecidesTest {
                                                       Proposition.Compared line) {
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
         for (WhereEachLineDecides.Decides each : lines) {
-            if (each.line().key().equals(line.key())) {
+            if (each.line().spelledOut().equals(line.spelledOut())) {
                 return each.cases();
             }
         }
@@ -424,7 +424,7 @@ class WhereALineInsideAQuantifierDecidesTest {
             case Proposition.Any any -> any.parts().forEach(part -> out.addAll(unquantified(part)));
             case Proposition.Some _ -> { }
             default -> out.add(stated instanceof Proposition.Compared compared && !compared.holds()
-                    ? compared.denied().key() : stated.key());
+                    ? compared.denied().spelledOut() : stated.spelledOut());
         }
         return out;
     }

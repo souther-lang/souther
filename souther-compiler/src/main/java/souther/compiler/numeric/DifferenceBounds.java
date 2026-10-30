@@ -1,5 +1,7 @@
 package souther.compiler.numeric;
 
+import souther.compiler.collect.InTheOrderGiven;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -67,10 +69,15 @@ public final class DifferenceBounds<A> {
     private DifferenceBounds(Map<A, Map<A, ExactCut>> related, Map<A, ExactCut> above,
                              Map<A, ExactCut> below, Set<A> positions, boolean holdsNothing,
                              boolean everyHopWasComposed) {
-        this.related = related;
-        this.above = above;
-        this.below = below;
-        this.positions = positions;
+        // Held for as long as the closure is, which is as long as what it answers is asked: kept
+        // as the tables they were built in, each holds a table and an entry per position on top
+        // of what it says.
+        Map<A, Map<A, ExactCut>> rows = new LinkedHashMap<>();
+        related.forEach((from, row) -> rows.put(from, InTheOrderGiven.map(row)));
+        this.related = InTheOrderGiven.map(rows);
+        this.above = InTheOrderGiven.map(above);
+        this.below = InTheOrderGiven.map(below);
+        this.positions = InTheOrderGiven.set(positions);
         this.holdsNothing = holdsNothing;
         this.everyHopWasComposed = everyHopWasComposed;
         List<Apart<A>> apart = new ArrayList<>();

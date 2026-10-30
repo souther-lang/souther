@@ -98,8 +98,7 @@ class AnAcrossCompositionIsOfferedOnlyForWhatDoesNotTurnOnTheListTest {
     @Test
     void aStatementReadingTheDeskHoldingTheForecastIsNotComposedAcrossTheDesks() {
         assertInstanceOf(TermRealizations.Realization.Unexhausted.class,
-                composed(new Proposition.All(List.of(amountAboveNought(), floorAboveNought()),
-                        "both")),
+                composed(new Proposition.All(List.of(amountAboveNought(), floorAboveNought()))),
                 "the forecasts are shared out over desks that hold their own floors");
     }
 
