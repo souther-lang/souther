@@ -115,9 +115,8 @@ sealed interface InputAtom {
             if (this == other) {
                 return true;
             }
-            return this == other
-                    || (other instanceof Named that && hash == that.hash && root.equals(that.root)
-                    && path.equals(that.path) && kind.equals(that.kind));
+            return other instanceof Named that && hash == that.hash && root.equals(that.root)
+                    && path.equals(that.path) && kind.equals(that.kind);
         }
 
         @Override
