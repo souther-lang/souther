@@ -162,6 +162,98 @@ class ARowOfACalleeIsLiftedThroughAFieldAndACaseOfTheCallersInputTest {
             let f (m) = Map.size(Map.filterEntries((k, v) -> inspect(m, k, v), m)) == 0
             """;
 
+    private static final String TWO_SCALES_OF_ONE_AMOUNT = """
+            module repro.lift
+            data S = { amount: Decimal }
+            behavior inspect : (s: S, amount: Decimal) -> Bool
+            let inspect (s, amount) = s.amount == amount
+            example inspect
+                | (S { amount = 1.0m }, 1.00m) -> true
+                | (S { amount = 2.0m }, 3.00m) -> false
+            behavior f : (s: S) -> Bool
+            let f (s) = inspect(s, s.amount)
+            """;
+
+    private static final String ONE_SET_IN_TWO_ORDERS = """
+            module repro.lift
+            data S = { tags: Set<Int> }
+            behavior inspect : (s: S, tags: Set<Int>) -> Bool
+            let inspect (s, tags) = s.tags == tags
+            example inspect
+                | (S { tags = [1, 2] }, [2, 1]) -> true
+                | (S { tags = [7, 8] }, [9]) -> false
+            behavior f : (s: S) -> Bool
+            let f (s) = inspect(s, s.tags)
+            """;
+
+    private static final String ONE_MAP_IN_TWO_ORDERS = """
+            module repro.lift
+            data S = { m: Map<String, Int> }
+            behavior inspect : (s: S, m: Map<String, Int>) -> Bool
+            let inspect (s, m) = s.m == m
+            example inspect
+                | (S { m = [("a", 1), ("b", 2)] }, [("b", 2), ("a", 1)]) -> true
+                | (S { m = [("c", 1)] }, [("d", 1)]) -> false
+            behavior f : (s: S) -> Bool
+            let f (s) = inspect(s, s.m)
+            """;
+
+    @Test
+    void aDecimalIsTheAmountItStandsForWhateverItsScale() {
+        assertEquals(List.of("[S { amount = 1m }]"), seededInputs(TWO_SCALES_OF_ONE_AMOUNT));
+    }
+
+    @Test
+    void aSetIsItsElementsInWhateverOrderTheyWereWritten() {
+        assertEquals(List.of("[S { tags = [1, 2] }]"), seededInputs(ONE_SET_IN_TWO_ORDERS));
+    }
+
+    @Test
+    void aMapIsItsEntriesInWhateverOrderTheyWereWritten() {
+        assertEquals(List.of("[S { m = [(\"a\", 1), (\"b\", 2)] }]"),
+                seededInputs(ONE_MAP_IN_TWO_ORDERS));
+    }
+
+    /**
+     * Four containers, and a call that reads one position under each, and a fifth under the first.
+     * The fifth agrees with the first at the last element only, and the three between are no
+     * constraint on either: read together they are as many choices as the product of the lists,
+     * which is past the figure, and read apart they are as many as the sum.
+     */
+    @Test
+    void positionsThatShareNoContainerAreReadApartAndNotAsTheProductOfTheirChoices() {
+        int elements = 20;
+        StringBuilder ps = new StringBuilder();
+        StringBuilder ones = new StringBuilder();
+        for (int i = 0; i < elements; i++) {
+            String sep = i == 0 ? "" : ", ";
+            ps.append(sep).append("P { a = 1, b = ").append(i == elements - 1 ? 9 : 0).append(" }");
+            ones.append(sep).append("1");
+        }
+        String w = "W { ps = [" + ps + "], qs = [" + ones + "], rs = [" + ones + "], ss = ["
+                + ones + "] }";
+        String model = """
+                module repro.lift
+                data P = { a: Int, b: Int }
+                data W = { ps: List<P>, qs: List<Int>, rs: List<Int>, ss: List<Int> }
+                behavior inspect : (w: W, a: Int, q: Int, r: Int, s: Int, e: Int) -> Bool
+                let inspect (w, a, q, r, s, e) = a == e
+                example inspect
+                    | (%s, 1, 1, 1, 1, 9) -> false
+                behavior f : (w: W) -> Bool
+                let f (w) =
+                    List.fold((x, p) ->
+                        List.fold((y, q) ->
+                            List.fold((z, r) ->
+                                List.fold((v, s) -> inspect(w, p.a, q, r, s, p.b), true, w.ss),
+                                true, w.rs),
+                            true, w.qs),
+                        true, w.ps)
+                """.formatted(w);
+        assertEquals(List.of("[" + w + "]"), seededInputs(model),
+                "the row is a call of the caller's, at the last element of the list");
+    }
+
     @Test
     void twoFieldsOfOneElementAreHandedTheListOnlyWhenOneElementHoldsBoth() {
         assertEquals(List.of("[[P { a = 1, b = 2 }, P { a = 5, b = 6 }]]"),

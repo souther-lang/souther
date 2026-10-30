@@ -11,9 +11,13 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.Comparisons;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.Position;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
+import souther.compiler.observe.ValueTypes;
 import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
@@ -198,6 +202,13 @@ final class CallExampleSeeds {
                 base == null ? List.of() : base.answers(),
                 db.ask(new Names.FakeTables(module)).value());
         BehaviorInputs reading = BehaviorInputs.of(input);
+        ValueTypes types = ValueTypes.over(ExampleExecutions.checkedFieldTypes(db));
+        // Whether two values are the same is the language's to say, and it asks of a value that it
+        // be there in full.
+        BehaviorInputs.SameValue same = (found, expected, type) ->
+                Limits.UNBOUNDED.stoppedBy(found) == null
+                        && Limits.UNBOUNDED.stoppedBy(expected) == null
+                        && Comparisons.same(found, expected, types, Position.at(type));
         Set<List<String>> considered = new HashSet<>();
         Map<WrittenRow, List<Optional<FixtureTemplate>>> written = new HashMap<>();
         int tried = 0;
@@ -221,7 +232,7 @@ final class CallExampleSeeds {
                     return List.copyOf(out.values());
                 }
                 Optional<Map<Integer, FixtureTemplate>> lifted =
-                        lifted(call, inputsWritten, row.inputs(), reading, subject, check);
+                        lifted(call, inputsWritten, row.inputs(), reading, same, subject, check);
                 List<FixtureTemplate> inputs = lifted.isEmpty() ? List.of()
                         : composed(base, lifted.get(), subject);
                 List<String> key = inputs.stream()
@@ -331,8 +342,9 @@ final class CallExampleSeeds {
      */
     private static Optional<Map<Integer, FixtureTemplate>> lifted(
             Call call, List<Optional<FixtureTemplate>> written, List<ObservedValue> given,
-            BehaviorInputs reading, MeasuredInput subject, Generator.CandidateCheck check) {
-        Optional<Set<Integer>> implied = saidByAWiderArgument(call, given, reading, subject);
+            BehaviorInputs reading, BehaviorInputs.SameValue same, MeasuredInput subject,
+            Generator.CandidateCheck check) {
+        Optional<Set<Integer>> implied = saidByAWiderArgument(call, given, reading, same, subject);
         if (implied.isEmpty()) {
             return Optional.empty();
         }
@@ -349,7 +361,9 @@ final class CallExampleSeeds {
             }
             FixtureTemplate held = written.get(i).get();
             if (!at.steps().stream().allMatch(step -> step instanceof TermPath.Step.Element)) {
-                // One position holds one value, as below.
+                // One position holds one value. Two arguments at it that cannot be read as an
+                // input, because it is a field or a case, are served when the row writes them the
+                // same, which is less than when the language calls them the same and never more.
                 FixtureTemplate already = fixed.putIfAbsent(at, held);
                 if (already != null && !already.text().equals(held.text())) {
                     return Optional.empty();
@@ -359,10 +373,9 @@ final class CallExampleSeeds {
             for (int depth = 0; depth < at.steps().size(); depth++) {
                 held = FixtureTemplate.collection(List.of(held));
             }
-            // One position holds one value: two arguments standing at it are served by it when the
-            // row gives them the same, and by no value when it gives them two.
-            FixtureTemplate already = out.putIfAbsent(parameter, held);
-            if (already != null && !already.text().equals(held.text())) {
+            // Two positions of one parameter that neither holds the other are not a call a lift
+            // builds a value for.
+            if (out.putIfAbsent(parameter, held) != null) {
                 return Optional.empty();
             }
         }
@@ -398,25 +411,32 @@ final class CallExampleSeeds {
      * of a list it is, which is what a lift builds around the value.
      */
     private static Optional<Set<Integer>> saidByAWiderArgument(
-            Call call, List<ObservedValue> given, BehaviorInputs reading, MeasuredInput subject) {
+            Call call, List<ObservedValue> given, BehaviorInputs reading,
+            BehaviorInputs.SameValue same, MeasuredInput subject) {
         Set<Integer> out = new HashSet<>();
         for (int wide = 0; wide < call.at().size(); wide++) {
+            if (out.contains(wide)) {
+                continue;
+            }
             TermPath outer = call.at().get(wide).orElseThrow();
-            Map<TermPath, ObservedValue> expected = new LinkedHashMap<>();
+            List<BehaviorInputs.ExpectedAt> expected = new ArrayList<>();
             Set<Integer> narrower = new HashSet<>();
+            boolean strictly = false;
             for (int narrow = 0; narrow < call.at().size(); narrow++) {
                 TermPath inner = call.at().get(narrow).orElseThrow();
                 int shared = outer.steps().size();
-                if (!inner.head().equals(outer.head()) || inner.steps().size() <= shared
-                        || !inner.steps().subList(0, shared).equals(outer.steps())) {
+                boolean inside = inner.head().equals(outer.head())
+                        && inner.steps().size() >= shared
+                        && inner.steps().subList(0, shared).equals(outer.steps());
+                // The same position as a wider argument is that argument's to say once, the first
+                // of them being the one that stays.
+                boolean repeated = inside && inner.steps().size() == shared && narrow > wide;
+                boolean deeper = inside && inner.steps().size() > shared;
+                if (!repeated && !deeper) {
                     continue;
                 }
-                // One position is one value: two arguments at it that the row gives two values
-                // are no call.
-                ObservedValue earlier = expected.putIfAbsent(inner, given.get(narrow));
-                if (earlier != null && !earlier.equals(given.get(narrow))) {
-                    return Optional.empty();
-                }
+                strictly |= deeper;
+                expected.add(new BehaviorInputs.ExpectedAt(inner, given.get(narrow)));
                 narrower.add(narrow);
             }
             if (narrower.isEmpty()) {
@@ -424,12 +444,18 @@ final class CallExampleSeeds {
             }
             ObservedValue root = rootedAt(given.get(wide), outer.steps());
             if (root == null) {
-                return Optional.empty();
+                // Not a position this holds an input for. A wider argument there that holds a
+                // narrower one is no row; one repeated is left to be served by the row writing
+                // it the same.
+                if (strictly) {
+                    return Optional.empty();
+                }
+                continue;
             }
             List<ObservedValue> inputs = new ArrayList<>(Collections.nCopies(
                     subject.parameters().size(), new ObservedValue.Unknown("not read")));
             inputs.set(subject.parameters().indexOf(outer.head()), root);
-            if (!reading.readAtEachPositionAs(inputs, expected)) {
+            if (!reading.readAtEachPositionAs(inputs, expected, same)) {
                 return Optional.empty();
             }
             out.addAll(narrower);
