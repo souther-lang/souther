@@ -253,6 +253,23 @@ class ACodePointHeldAgainstARemainderOfTheOthersIsReadAtItsIndexTest {
     }
 
     /**
+     * A remainder is worked out through the number it divides only where the divisor is a
+     * positive number written down. By a divisor the run takes from its input, or one that is
+     * not positive, working it out may end the run on its own, and what the weighed sum ends is
+     * not every operation the run works out.
+     */
+    @Test
+    void aRemainderByADivisorThatIsNoPositiveConstantIsNotWorkedOutThroughItsDividend() {
+        for (String divisor : List.of("0 - 11", "List.length(body)")) {
+            String model = MODEL.replace("Int.floorMod(weightedSum(body), 11)",
+                    "Int.floorMod(weightedSum(body), " + divisor + ")");
+            assertTrue(!model.equals(MODEL));
+            assertTrue(report(measured(model)).contains("not read:"),
+                    () -> divisor + "\n" + report(measured(model)));
+        }
+    }
+
+    /**
      * A match inside the closure is read at its taken arm only where the lookup it matches on
      * finds an element. A lookup past the end of the one-character text finds none, so neither arm
      * is the taken one, the {@code unreachable} one is not excluded, and what the closure works out

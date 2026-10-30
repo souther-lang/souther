@@ -1391,13 +1391,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     }
                     made.add(new Denotation(closure.body(), handing));
                 }
-                boolean outside = told.applyingToCodePoints;
-                told.applyingToCodePoints = true;
-                try {
-                    return totalOfApplications(call, told.operations.size(), made);
-                } finally {
-                    told.applyingToCodePoints = outside;
-                }
+                return totalOfApplications(call, told.operations.size(), made);
             }
 
             /**
@@ -1729,7 +1723,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             @Override
             public ValueStanding.ReadThrough<InputReads> taken(Core node, InputReads at) {
                 ValueStanding.ReadThrough<InputReads> as = NameAnswers.taken(node, at);
-                return as != null || !told.applyingToCodePoints ? as
+                return as != null || !at.isInsideAnApplicationOverCodePoints() ? as
                         : NameAnswers.armOfAMatchOnAFoundElement(node, at, ruleSource.symbols(),
                                 ruleSource.newtypes());
             }
@@ -1812,9 +1806,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private boolean exact = true;
         /** Whether a product of two non-constant numbers is a stop and not a number of its own. */
         private boolean productsStop;
-        /** Whether the reading is inside the closure applied to a code point of a string, where
-         *  a match on a lookup that finds an element is read at the arm it takes. */
-        private boolean applyingToCodePoints;
         /** The totals of a container whose walk's running totals are the only thing left untold
          *  ({@link UndividedByARelation.Working#partials}). */
         private final List<NumericTerm> partials = new ArrayList<>();
@@ -1832,7 +1823,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         WhatWasTold apart() {
             WhatWasTold apart = new WhatWasTold(elementsRead);
             apart.productsStop = productsStop;
-            apart.applyingToCodePoints = applyingToCodePoints;
             return apart;
         }
 

@@ -82,8 +82,7 @@ let unzip (ps: List<('a, 'b)>): (List<'a>, List<'b>) =
         (acc, p) -> {
             let (xs, ys) = acc
             let (x, y) = p
-            let lefts = xs ++ [x]
-            (lefts, ys ++ [y])
+            (xs ++ [x], ys ++ [y])
         },
         ([], []),
         ps
