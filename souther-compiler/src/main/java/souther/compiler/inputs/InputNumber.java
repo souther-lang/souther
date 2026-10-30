@@ -24,6 +24,7 @@ import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -1075,6 +1076,163 @@ public final class InputNumber {
         added.values().removeIf(ExactRatio::isZero);
         return new SeedAndAdded(seed.form().constant(), new LinearForm<>(ExactRatio.ZERO, added));
     }
+
+    /**
+     * What {@code e} is, where it is a walk from a written number over the entries of one map of
+     * the input whose step adds, to the answer so far, the entry's value times what another map
+     * of the input holds under the entry's key, or nought where it holds none:
+     * {@code acc + quantity * Option.withDefault(0, Map.get(key, prices))}.
+     *
+     * <p>By induction over the walk, which visits every entry once, the answer is the seed and the
+     * total of the products of the values the two maps hold under each key both hold
+     * ({@link RunSource.JoinedOccurrences}): an entry whose key the other map lacks adds nought.
+     * Asked of the step as it is written. A product with the lookup is the one shape taken, the
+     * default is a written nought, and the key looked up is the entry's own.
+     *
+     * @param blockOf the block a closure argument stands for, where the call stands
+     */
+    public static SeedAndAdded ofAWalkJoiningTwoMaps(Core e, InputDomain inputs, InputReads reads,
+                                                     RuleReadingSource source,
+                                                     Function<Core, Core.Block> blockOf) {
+        SeededWalk walk = SeededWalk.of(e, blockOf);
+        if (walk == null || !(Core.withoutStanding(walk.seed()) instanceof Core.Int seed)
+                || walk.step().params().size() != 3) {
+            return null;
+        }
+        Denotation container = reads.standing(walk.container(), source.symbols(), source.newtypes());
+        if (!(container.at().everyElementOf(container.value(), source.newtypes())
+                instanceof PathResolution.At(TermPath walked))
+                || walked.containersHoldingIt().size() != 1) {
+            return null;
+        }
+        BindingId accumulator = walk.accumulator().binding();
+        BindingId value = walk.element().binding();
+        BindingId key = null;
+        for (Core.Binder each : walk.step().params()) {
+            if (each != null && each.binding() != null && !each.binding().equals(accumulator)
+                    && !each.binding().equals(value)) {
+                key = each.binding();
+            }
+        }
+        Map<BindingId, Core> names = new LinkedHashMap<>(reads.heldByTheBody());
+        namedIn(walk.step().body(), names);
+        TermPath alongside = lookedUpBy(walk.step().body(), accumulator, value, key, names, reads,
+                source);
+        if (alongside == null || alongside.containersHoldingIt().size() != 1
+                || !isAMapOfWholeNumbersKeyedAlike(walked, alongside, inputs, source)) {
+            return null;
+        }
+        NumericTerm.TakenOver total = NumericTerm.TakenOver.of(SUM,
+                new RunSource.JoinedOccurrences(walked, alongside), Type.INT, source.inners(),
+                source.symbols());
+        return total == null ? null : new SeedAndAdded(ExactRatio.of(seed.value()),
+                LinearForm.atom(total));
+    }
+
+    /**
+     * The total of the values of the map a join looks into, as a number of its own: what that map
+     * comes to added up, or null where {@code join} is no join of two maps.
+     */
+    public static NumericTerm.TakenOver totalOfTheMapLookedInto(NumericTerm.TakenOver join,
+                                                                RuleReadingSource source) {
+        return join.source() instanceof RunSource.JoinedOccurrences joined
+                ? NumericTerm.TakenOver.of(join.operation(),
+                        new RunSource.ProjectedOccurrences(joined.alongside()), Type.INT,
+                        source.inners(), source.symbols())
+                : null;
+    }
+
+    /** Every name {@code e} binds, with what it is bound to, put in {@code into}. */
+    private static void namedIn(Core e, Map<BindingId, Core> into) {
+        Core here = Core.withoutStanding(e);
+        if (here instanceof Core.LetIn binding && binding.binder() != null
+                && binding.binder().binding() != null) {
+            into.put(binding.binder().binding(), binding.value());
+        }
+        Core.forEachChild(here, child -> namedIn(child, into));
+    }
+
+    /** {@code e} with every name it is given followed to what it was given. */
+    private static Core followed(Core e, Map<BindingId, Core> names) {
+        Core here = Core.withoutStanding(e);
+        for (int guard = 0; guard < 64; guard++) {
+            if (here instanceof Core.Read name && names.get(name.binding()) != null) {
+                here = Core.withoutStanding(names.get(name.binding()));
+            } else if (here instanceof Core.LetIn binding) {
+                here = Core.withoutStanding(binding.body());
+            } else {
+                return here;
+            }
+        }
+        return here;
+    }
+
+    private static boolean isTheName(Core e, BindingId name, Map<BindingId, Core> names) {
+        return name != null && followed(e, names) instanceof Core.Read read
+                && name.equals(read.binding());
+    }
+
+    /**
+     * The values of the map the step looks into, where the step is the answer so far plus the
+     * entry's value times the lookup of the entry's key in it with a written nought where it
+     * holds none — or null where the step is anything else.
+     */
+    private static TermPath lookedUpBy(Core step, BindingId accumulator, BindingId value,
+                                       BindingId key, Map<BindingId, Core> names, InputReads reads,
+                                       RuleReadingSource source) {
+        if (!(followed(step, names) instanceof Core.Binary sum) || sum.op() != BinOp.ADD) {
+            return null;
+        }
+        Core added = isTheName(sum.left(), accumulator, names) ? sum.right()
+                : isTheName(sum.right(), accumulator, names) ? sum.left() : null;
+        if (added == null || !(followed(added, names) instanceof Core.Binary product)
+                || product.op() != BinOp.MUL) {
+            return null;
+        }
+        Core looked = isTheName(product.left(), value, names) ? product.right()
+                : isTheName(product.right(), value, names) ? product.left() : null;
+        if (looked == null || !(followed(looked, names) instanceof Core.Match option)
+                || option.cases().size() != 2) {
+            return null;
+        }
+        Core.Case some = null;
+        Core.Case none = null;
+        for (Core.Case arm : option.cases()) {
+            if (arm.binding() instanceof Core.ArmBinding.Payload) {
+                some = arm;
+            } else {
+                none = arm;
+            }
+        }
+        if (some == null || none == null
+                || !(followed(none.body(), names) instanceof Core.Int zero) || zero.value() != 0
+                || !isTheName(some.body(), some.binding().binder().binding(), names)
+                || !(AnOperationApplied.of(followed(option.scrutinee(), names))
+                        instanceof AnOperationApplied get)
+                || !GET.equals(get.operation()) || get.args().size() != 2
+                || !isTheName(get.args().get(0), key, names)
+                || !(followed(get.args().get(1), names) instanceof Core.Read map)) {
+            return null;
+        }
+        return reads.forkedOn(map, source.newtypes()) instanceof PathResolution.At(TermPath at)
+                ? at.element() : null;
+    }
+
+    /** Whether the maps whose values stand at the two places are maps of whole numbers under
+     *  keys of one type, and two. */
+    private static boolean isAMapOfWholeNumbersKeyedAlike(TermPath walked, TermPath alongside,
+                                                          InputDomain inputs,
+                                                          RuleReadingSource source) {
+        TermPath one = walked.containersHoldingIt().getFirst();
+        TermPath other = alongside.containersHoldingIt().getFirst();
+        return !one.equals(other)
+                && inputs.typeAt(one, source) instanceof Type.MapOf first
+                && inputs.typeAt(other, source) instanceof Type.MapOf second
+                && first.value() == Type.INT && second.value() == Type.INT
+                && first.key().equals(second.key());
+    }
+
+    private static final ValueName.Stdlib.Operation GET = ValueName.Stdlib.operation("Map", "get");
 
     /**
      * How many values {@code run}, one no single container holds, holds — or null where it is

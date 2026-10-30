@@ -217,7 +217,15 @@ public enum CompositionRepertoire {
      * a count no string comes to: what would reach it is a way of writing strings backwards through
      * the conversion, and raising no figure does.
      */
-    STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR;
+    STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
+
+    /**
+     * The maps whose values come to a total, written with the one entry that holds it. A map of
+     * several entries coming to the same total, and a map whose entries are asked to hold
+     * something beside the number, are written by no way here; raising no figure does, and a total
+     * only such a map comes to is not one no map comes to.
+     */
+    MAPS_WRITTEN_WITH_ONE_ENTRY;
 
     /**
      * Whether a row that meets this for one value of a point meets it for every other: the
@@ -237,7 +245,8 @@ public enum CompositionRepertoire {
                  KEYS_OF_ONE_FOLD_ASKED_TOGETHER, ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
                  TOTALS_FROM_A_PUT_WRITTEN_AS_ONE_ELEMENT,
                  MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER, ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL,
-                 TREES_WRITTEN_FOR_A_COUNT, STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR -> false;
+                 TREES_WRITTEN_FOR_A_COUNT, STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
+                 MAPS_WRITTEN_WITH_ONE_ENTRY -> false;
         };
     }
 

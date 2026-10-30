@@ -2242,6 +2242,9 @@ final class TermRealizations {
             case RunSource.ProjectedOccurrences _, RunSource.ComputedOccurrences _ ->
                     throw new IllegalStateException(orders.term() + " is a count of a run one"
                             + " container holds, which is a taking of that container's place");
+            // How many keys two maps share is a number nothing here asks of a row.
+            case RunSource.JoinedOccurrences _ -> new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         };
     }
 

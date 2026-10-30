@@ -7130,6 +7130,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             over.put("handed", wire(run.order().direction()));
                         }
                     }
+                    case RunSource.JoinedOccurrences run -> {
+                        over.put("kind", "joined_occurrences");
+                        over.put("elements", run.elements().discriminated());
+                        over.put("alongside", run.alongside().discriminated());
+                    }
                     case RunSource.ReachableNodes run -> {
                         over.put("kind", "reachable_nodes");
                         over.put("root", run.root().discriminated());

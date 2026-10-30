@@ -148,6 +148,8 @@ public sealed interface LinearQuantity extends BorderQuantity
                             WhatATermRead.over(orders, observation, over.subjectPath());
                     case RunSource.ComputedOccurrences computed ->
                             WhatATermRead.overElements(orders, computed, observation);
+                    case RunSource.JoinedOccurrences joined ->
+                            WhatATermRead.joined(orders, joined, observation);
                 };
             };
             // One entry per term, which the orders say they are of, so two could only meet where a

@@ -283,6 +283,22 @@ public final class TermOrders {
         return TermReading.overElements(this, each);
     }
 
+    /** One entry of a map as a row holds it: the key and the value filed under it. */
+    public record KeyedEntry(ObservedValue key, ObservedValue value) {}
+
+    /**
+     * The products of the values two maps hold under one key, for a term over
+     * {@link RunSource.JoinedOccurrences}: the entries of the map walked and of the map looked
+     * into.
+     */
+    public NumericTerm.Reading readJoined(List<KeyedEntry> first, List<KeyedEntry> second) {
+        if (!(term instanceof NumericTerm.TakenOver over)
+                || !(over.source() instanceof RunSource.JoinedOccurrences)) {
+            throw new IllegalArgumentException(term + " is not the products of two maps' values");
+        }
+        return TermReading.joined(this, first, second);
+    }
+
     /** What the value at {@code field} of an element is decoded on, for a term computed of each
      *  element, or null where nothing orders it. */
     public Carrier fieldCarrier(ElementProjection field) {

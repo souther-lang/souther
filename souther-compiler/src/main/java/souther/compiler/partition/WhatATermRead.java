@@ -365,6 +365,53 @@ sealed interface WhatATermRead {
         return row.keptOf(new ARunOfEachElement(on, computed));
     }
 
+    /**
+     * What {@code on} reads of the products of the entries two maps hold under one key.
+     *
+     * <p>Not yet read: the row stands for no number of this term.
+     */
+    static WhatATermRead joined(TermOrders on, RunSource.JoinedOccurrences joined,
+                                BorderQuantity.Observation row) {
+        return row.keptOf(new AJoinOfTwoMaps(on, joined));
+    }
+
+    /** The entries of the two maps a join is of, each map read whole. */
+    record AJoinOfTwoMaps(TermOrders on, RunSource.JoinedOccurrences joined)
+            implements BorderQuantity.ReadAlike<WhatATermRead> {
+
+        @Override
+        public WhatATermRead readAt(BorderQuantity.Observation reading) {
+            WhatRowsLeft left = new WhatRowsLeft();
+            List<TermOrders.KeyedEntry> first = entries(reading, joined.elements(), left);
+            List<TermOrders.KeyedEntry> second = entries(reading, joined.alongside(), left);
+            if (left.stopped() != null) {
+                return left.stopped();
+            }
+            return first == null || second == null ? new CameToNothing(ReadingGap.COULD_NOT_WALK)
+                    : of(on.readJoined(first, second));
+        }
+
+        /** What the map whose values stand at {@code values} holds, or null where it is not read. */
+        private static List<TermOrders.KeyedEntry> entries(BorderQuantity.Observation reading,
+                                                           TermPath values, WhatRowsLeft left) {
+            TermPath map = values.outermostContainer();
+            if (!(reading.eachElementOf(map)
+                    instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
+                return null;
+            }
+            List<TermOrders.KeyedEntry> out = new ArrayList<>();
+            for (BorderQuantity.Observation entry : reached.value()) {
+                ObservedValue key = left.at(entry, map.key());
+                ObservedValue value = left.at(entry, values);
+                if (key == null || value == null) {
+                    return null;
+                }
+                out.add(new TermOrders.KeyedEntry(key, value));
+            }
+            return out;
+        }
+    }
+
     /** A run computed of each element of a container. */
     record ARunOfEachElement(TermOrders on, RunSource.ComputedOccurrences computed)
             implements BorderQuantity.ReadAlike<WhatATermRead> {

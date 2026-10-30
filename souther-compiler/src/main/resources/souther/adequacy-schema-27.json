@@ -1289,6 +1289,27 @@
                 },
                 {
                   "type": "object",
+                  "description": "The products of the values two maps hold under one key: for each key both maps hold, the value standing at `elements` times the value standing at `alongside`. A key only one of them holds makes no value. No position holds these values.",
+                  "required": [
+                    "kind",
+                    "elements",
+                    "alongside"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "const": "joined_occurrences"
+                    },
+                    "elements": {
+                      "type": "string"
+                    },
+                    "alongside": {
+                      "type": "string"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
                   "description": "Every node of a tree from the node at `root` down, each once: that node and the elements of the fields `through` of every node reached. Where `container` names fields of a node, the values are the elements of the container there in every one of those nodes instead. No position below the root holds these values, since a type that holds itself is not read again below it.",
                   "required": [
                     "kind",
@@ -6798,6 +6819,7 @@
                           "mixes_of_cases_a_total_is_spread_over",
                           "trees_written_for_a_count",
                           "strings_a_case_conversion_is_written_for",
+                          "maps_written_with_one_entry",
                           "elements_with_the_other_fields_held_still"
                         ]
                       }

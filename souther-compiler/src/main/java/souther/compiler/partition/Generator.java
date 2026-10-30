@@ -21,6 +21,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.ElementProjection;
+import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
@@ -7041,6 +7042,32 @@ public final class Generator {
     }
 
     /**
+     * The numbers the row stands at, and beside each product of the values two maps hold under
+     * one key, the total of the map looked into at the number: the product is written as the
+     * map walked holding one entry at one, and the map looked into holding the entry under the
+     * same key at the number. The two are then two numbers of two locations, each written as any
+     * is.
+     *
+     * <p>Standing at the number the product is asked at, so the region is given it and the map
+     * looked into is composed for it ({@code ContainersAddingUp}). Not where a number stands
+     * for it already, which is the row's own and is not written over.
+     */
+    private static Map<RealizationTarget, Place> withTheMapLookedIntoWritten(
+            MeasuredInput subject, Map<RealizationTarget, Place> fixed) {
+        Map<RealizationTarget, Place> out = new LinkedHashMap<>(fixed);
+        for (Map.Entry<RealizationTarget, Place> each : fixed.entrySet()) {
+            if (each.getKey() instanceof RealizationTarget.OverARun run) {
+                NumericTerm.TakenOver beside =
+                        InputNumber.totalOfTheMapLookedInto(run.term(), subject.rules());
+                if (beside != null) {
+                    out.putIfAbsent(RealizationTarget.of(beside), each.getValue());
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
      * The item's positions, and a place inside the region for each position the way to it bounds.
      *
      * <p><b>Chosen and not left to the range.</b> What the conditions above a line leave a position
@@ -7071,12 +7098,14 @@ public final class Generator {
      *                       to, where one stopped them, or null
      * @param leaves         what {@code reaching} leaves each number placed on it
      */
-    private static Standing alsoOnTheWay(MeasuredInput subject, Map<RealizationTarget, Place> fixing,
+    private static Standing alsoOnTheWay(MeasuredInput subject,
+                                         Map<RealizationTarget, Place> fixed,
                                          Map<RealizationTarget, NumbersAskedFor> itemAsks,
                                          CandidateCheck check, Reachability.Reaching reaching,
                                          boolean everyQuantifierCounted,
                                          CompositionBudget alikeStoppedBy,
                                          WhatTheWayLeaves leaves) {
+        Map<RealizationTarget, Place> fixing = withTheMapLookedIntoWritten(subject, fixed);
         Map<RealizationTarget, Place> out = new LinkedHashMap<>(fixing);
         Map<NumericTerm, RealizationTarget> routed = new LinkedHashMap<>();
         Map<RealizationTarget, NumbersAskedFor> counted = new LinkedHashMap<>();
@@ -9005,7 +9034,9 @@ public final class Generator {
         // is another parameter's and is no part of the one candidate; the whole-row reading that
         // follows is what reads it.
         if (target.term() instanceof NumericTerm.OccurrencesOfAKey
-                || target.term() instanceof NumericTerm.GatheredUnderAKey) {
+                || target.term() instanceof NumericTerm.GatheredUnderAKey
+                || (target.term() instanceof NumericTerm.TakenOver over
+                        && over.source() instanceof RunSource.JoinedOccurrences)) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.TurnsOnAnotherParameter());
         }
         // Only this parameter's value is filled in: the walk reads the one the path names, and the

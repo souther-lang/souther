@@ -1095,6 +1095,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         ruleSource, closure -> Core.withoutStanding(closure)
                                 instanceof Core.Block block ? block : null);
                 if (walk == null) {
+                    walk = InputNumber.ofAWalkJoiningTwoMaps(node, inputs, at, ruleSource,
+                            closure -> Core.withoutStanding(closure)
+                                    instanceof Core.Block block ? block : null);
+                }
+                if (walk == null) {
                     return null;
                 }
                 LinearForm<NumericTerm> answer = new LinearForm<>(walk.seed(),
@@ -1125,6 +1130,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * run can stop at.
              */
             private static boolean onlyAddsTheElement(Core node, NumericTerm total) {
+                // The walk joining two maps is read only of the one step, which adds the product
+                // as it is written ({@link InputNumber#ofAWalkJoiningTwoMaps}).
+                if (total instanceof NumericTerm.TakenOver over
+                        && over.source() instanceof RunSource.JoinedOccurrences) {
+                    return true;
+                }
                 SeededWalk walk = SeededWalk.of(node, closure -> Core.withoutStanding(closure)
                         instanceof Core.Block block ? block : null);
                 if (walk == null || !(Core.withoutStanding(walk.seed()) instanceof Core.Int)
@@ -1205,6 +1216,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             /** Whether {@code over} adds up, over the elements of a container, one product of at
              *  least two fields of each at the weight one. */
             private static boolean aProductOfFieldsPerElement(NumericTerm.TakenOver over) {
+                if (over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
+                        && over.source() instanceof RunSource.JoinedOccurrences) {
+                    return true;
+                }
                 if (!(over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)
                         || !(over.source() instanceof RunSource.ComputedOccurrences computed)
                         || !(computed.computation() instanceof ElementValue.Multilinear product)

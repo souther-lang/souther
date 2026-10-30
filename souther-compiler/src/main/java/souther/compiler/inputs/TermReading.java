@@ -1114,6 +1114,47 @@ final class TermReading {
     }
 
     /**
+     * What the products of the values two maps hold under one key add up to, for a term over
+     * {@link RunSource.JoinedOccurrences}: each key both hold makes one product, and a key only
+     * one holds makes none. Nought where they share none, as an empty total is.
+     */
+    static Reading joined(TermOrders on, java.util.List<TermOrders.KeyedEntry> first,
+                          java.util.List<TermOrders.KeyedEntry> second) {
+        Carrier elements = on.answered();
+        if (elements == null) {
+            return new Reading.NotNumber();
+        }
+        List<ExactRatio> terms = new ArrayList<>();
+        for (TermOrders.KeyedEntry one : first) {
+            for (TermOrders.KeyedEntry other : second) {
+                if (!one.key().equals(other.key())) {
+                    continue;
+                }
+                ExactRatio[] pair = new ExactRatio[2];
+                int at = 0;
+                for (ObservedValue each : List.of(one.value(), other.value())) {
+                    Membership.Incomplete unread = Membership.unread(each);
+                    if (unread != null) {
+                        return new Reading.Missing(unread.cause());
+                    }
+                    ObservedValue value = each instanceof ObservedValue.Constructed c
+                            && c.field("value") != null ? c.field("value") : each;
+                    if (!(elements.placeOf(value) instanceof Count count)) {
+                        return new Reading.NotNumber();
+                    }
+                    pair[at++] = count.exactly();
+                }
+                if (!(pair[0].times(pair[1]) instanceof ExactAnswer.Held<ExactRatio>(
+                        ExactRatio product))) {
+                    return new Reading.NotNumber();
+                }
+                terms.add(product);
+            }
+        }
+        return sumOf(terms, elements);
+    }
+
+    /**
      * What an observed container's elements add up to.
      *
      * <p>Every element, on the order the answer is measured on. That order is the elements' own —
@@ -1131,8 +1172,13 @@ final class TermReading {
      * can write outside every class of the number a rule is about.
      */
     private static Reading addedUp(ObservedValue at, TermOrders on) {
-        return at instanceof ObservedValue.Sequence held
-                ? addedUp(held.elements(), on) : new Reading.NotNumber();
+        return switch (at) {
+            case ObservedValue.Sequence held -> addedUp(held.elements(), on);
+            // A map holds its values, one for each key.
+            case ObservedValue.Mapping held -> addedUp(
+                    held.entries().stream().map(ObservedValue.Entry::value).toList(), on);
+            case null, default -> new Reading.NotNumber();
+        };
     }
 
     /**

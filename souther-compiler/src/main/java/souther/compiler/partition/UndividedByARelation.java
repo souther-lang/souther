@@ -6255,21 +6255,30 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static NumericDomain.Bounds summedOverProductsOfOneElement(
             NumericTerm.TakenOver over, InputReading read, SearchRegion region,
             List<OnAWay> conditions, Carrier carrier) {
-        if (!(over.source() instanceof RunSource.ComputedOccurrences computed)
-                || !(computed.computation() instanceof ElementValue.Multilinear product)
-                || !product.form().constant().isZero() || product.form().coefs().size() != 1) {
-            return null;
-        }
-        Map.Entry<ElementValue.Monomial, ExactRatio> only =
-                product.form().coefs().entrySet().iterator().next();
-        List<TermPath> containers = over.subjectPath().containersHoldingIt();
-        if (!ExactRatio.ONE.equals(only.getValue()) || only.getKey().rounding() != null
-                || only.getKey().fields().size() < 2 || containers.size() != 1) {
-            return null;
-        }
         List<NumericTerm.FromOnePosition> factors = new ArrayList<>();
-        for (ElementProjection field : only.getKey().fields()) {
-            factors.add(new NumericTerm.ValueOf(field.from(computed.elements())));
+        List<TermPath> containers = new ArrayList<>();
+        if (over.source() instanceof RunSource.JoinedOccurrences joined) {
+            // The entry of one map and the entry of the other under the key both hold.
+            factors.add(new NumericTerm.ValueOf(joined.elements()));
+            factors.add(new NumericTerm.ValueOf(joined.alongside()));
+            containers.addAll(joined.elements().containersHoldingIt());
+            containers.addAll(joined.alongside().containersHoldingIt());
+        } else {
+            if (!(over.source() instanceof RunSource.ComputedOccurrences computed)
+                    || !(computed.computation() instanceof ElementValue.Multilinear product)
+                    || !product.form().constant().isZero() || product.form().coefs().size() != 1) {
+                return null;
+            }
+            Map.Entry<ElementValue.Monomial, ExactRatio> only =
+                    product.form().coefs().entrySet().iterator().next();
+            containers.addAll(over.subjectPath().containersHoldingIt());
+            if (!ExactRatio.ONE.equals(only.getValue()) || only.getKey().rounding() != null
+                    || only.getKey().fields().size() < 2 || containers.size() != 1) {
+                return null;
+            }
+            for (ElementProjection field : only.getKey().fields()) {
+                factors.add(new NumericTerm.ValueOf(field.from(computed.elements())));
+            }
         }
         for (int i = 0; i < factors.size(); i++) {
             for (int j = i + 1; j < factors.size(); j++) {
@@ -6293,6 +6302,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         NumericDomain.Bounds asked = null;
         for (int at = 0; at < runs.size(); at++) {
+            // The products of two maps' values are written with the entry of the map walked at
+            // one and the number at the entry of the map looked into: no other way is written.
+            if (over.source() instanceof RunSource.JoinedOccurrences && at != 1) {
+                continue;
+            }
             boolean restAtOne = true;
             for (int other = 0; other < runs.size(); other++) {
                 restAtOne &= other == at || runs.get(other).admits(Count.of(1));
@@ -6305,11 +6319,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             asked = runs.get(at);
         }
-        NumericDomain.Bounds held = howManyAreHeld(containers.getFirst(), read, region);
-        if (asked == null || held == null || !held.admits(Count.of(1))) {
-            return null;
+        // Each container may hold the one entry; the total is nought where some container holds
+        // none, which a join of it is empty.
+        boolean noughtIsATotal = false;
+        for (TermPath container : containers) {
+            NumericDomain.Bounds held = howManyAreHeld(container, read, region);
+            if (asked == null || held == null || !held.admits(Count.of(1))) {
+                return null;
+            }
+            noughtIsATotal |= held.admits(Count.ZERO);
         }
-        return held.admits(Count.ZERO) ? withNought(asked, carrier) : asked;
+        return noughtIsATotal ? withNought(asked, carrier) : asked;
     }
 
     /**

@@ -59,6 +59,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     private static final String NOT_SHOWN = "not shown";
 
+    /** A parameter's type as written after its name: a name, or a name with the types it holds,
+     *  which a map holds two of. */
+    private static final String PARAMETER_TYPE = ": [A-Za-z]+(<[A-Za-z, ]+>)?";
+
     private static final String OVER_A_RUN = "over a run";
 
     private static final String NOT_REACHED = "not reached";
@@ -88,7 +92,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 behavior m : (%s) -> %s
                 let m (%s) = %s
                 """.formatted(declarations, inputs, answers,
-                        inputs.replaceAll(": [A-Za-z<>]+", ""), body));
+                        inputs.replaceAll(PARAMETER_TYPE, ""), body));
     }
 
     /**
@@ -657,7 +661,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     private static Map<String, String> pastAWayOffAValue(String inputs, String declarations,
                                                          String kept) {
         String body = "if " + kept + " then false else a.value + b.value >= 30";
-        String head = "let m (" + inputs.replaceAll(": [A-Za-z<>]+", "") + ") = ";
+        String head = "let m (" + inputs.replaceAll(PARAMETER_TYPE, "") + ") = ";
         Map<String, String> out = new LinkedHashMap<>(leftAt(inputs, declarations, body,
                 head.length() + body.indexOf(">= 30") + 1));
         for (String place : List.of("a", "b")) {
@@ -942,7 +946,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 left(list, NAT, added, atThe(">=", NAT, list, added)));
         String map = "limit: Int, ms: Map<String, Int>";
         String entries = "limit >= Map.fold((acc, k, q) -> acc + q, 0, ms)";
-        assertEquals(Map.of(), left(map, NAT, entries, atThe(">=", NAT, map, entries)));
+        assertEquals(Map.of("List.sum(ms)", RELATES, "limit", RELATES),
+                left(map, NAT, entries, atThe(">=", NAT, map, entries)));
         String doubled = "limit >= List.fold((acc, x) -> acc + x * 2, 0, xs)";
         assertEquals(Map.of("List.sum({2·the element itself + 0 | xs[*]})", NOT_SHOWN,
                 "limit", NOT_SHOWN), left(list, NAT, doubled, atThe(">=", NAT, list, doubled)));
@@ -1003,6 +1008,36 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
             Map<String, String> worked =
                     left(inputs, line, body, atThe(">=", line, inputs, body));
             assertTrue(worked.containsValue(NOT_SHOWN), worked.toString());
+        }
+    }
+
+    /**
+     * What two maps hold under one key is multiplied and added up by a walk over one of them: each
+     * entry's value times what the other holds under the entry's key, or nought. The total is
+     * reached with one key in both maps, the entry of the first at one and the entry of the
+     * second at the number. Another step is another number, and a lookup that is not of the
+     * entry's own key in another map of the same keys is no join.
+     */
+    @Test
+    void theProductsOfTwoMapsValuesUnderOneKeyAreReachedAsOneKeyInBothIs() {
+        String inputs = "limit: Int, agreed: Map<String, Int>, prices: Map<String, Int>";
+        String price = "(Map.get(k, prices) |> Option.withDefault(0))";
+        String joined = "limit >= Map.fold((acc, k, q) -> acc + q * " + price + ", 0, agreed)";
+        String swapped = "limit >= Map.fold((acc, k, q) -> acc + " + price + " * q, 0, agreed)";
+        for (String body : List.of(joined, swapped)) {
+            assertEquals(Map.of("List.sum({agreed[*] * prices[*] under one key})", RELATES,
+                    "limit", RELATES), left(inputs, NAT, body, atThe(">=", NAT, inputs, body)));
+        }
+        List<String> otherwise = List.of(
+                "limit >= Map.fold((acc, k, q) -> acc + q * " + price + " + 1, 0, agreed)",
+                "limit >= Map.fold((acc, k, q) -> acc + q * (Map.get(k, prices)"
+                        + " |> Option.withDefault(1)), 0, agreed)",
+                "limit >= Map.fold((acc, k, q) -> acc + q * (Map.get(\"a\", prices)"
+                        + " |> Option.withDefault(0)), 0, agreed)",
+                "limit >= Map.fold((acc, k, q) -> acc + q * (Map.get(k, agreed)"
+                        + " |> Option.withDefault(0)), 0, agreed)");
+        for (String body : otherwise) {
+            assertFalse(linesAbout(measured(inputs, NAT, "Bool", body), "limit").isEmpty(), body);
         }
     }
 
@@ -1507,7 +1542,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *  {@code declarations}. */
     private static String atThe(String operator, String declarations, String inputs,
                                 String body) {
-        String head = "let m (" + inputs.replaceAll(": [A-Za-z<>]+", "") + ") = ";
+        String head = "let m (" + inputs.replaceAll(PARAMETER_TYPE, "") + ") = ";
         return (declarations.lines().count() + 3) + ":" + (head.length() + body.indexOf(operator)
                 + 1);
     }
@@ -2381,7 +2416,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String taking = beside ? inputs + THE_FIVE : inputs;
         String body = "if " + (beside ? FIVE_APART + " && " : "") + guard + " then " + comparison
                 + " else false";
-        int at = ("let m (" + taking.replaceAll(": [A-Za-z<>]+", "") + ") = ").length()
+        int at = ("let m (" + taking.replaceAll(PARAMETER_TYPE, "") + ") = ").length()
                 + body.indexOf(comparison) + comparison.indexOf("==") + 1;
         return left(taking, declarations, body, "4:" + at);
     }
@@ -2462,7 +2497,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String inputs = "x: Int, y: Int, z: Int, w: Bool" + THE_FIVE;
         String body = "if (z >= 1 || w) && " + FIVE_APART + " && (z >= 1 || w) then x == y"
                 + " else false";
-        int from = ("let m (" + inputs.replaceAll(": [A-Za-z<>]+", "") + ") = ").length() + 1;
+        int from = ("let m (" + inputs.replaceAll(PARAMETER_TYPE, "") + ") = ").length() + 1;
         Compilation compilation = measured(inputs, UNUSED, "Bool", body);
         assertEquals(Map.of("x", RELATES, "y", RELATES),
                 leftIn(compilation, "4:" + (from + body.indexOf("=="))));

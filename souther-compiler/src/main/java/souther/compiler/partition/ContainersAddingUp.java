@@ -255,6 +255,71 @@ final class ContainersAddingUp {
         return true;
     }
 
+    /**
+     * A map holding one entry, the value of which is the total: a key the type has, filed under
+     * the number.
+     *
+     * <p>One entry, so its keys are apart and the values come to the value of the one. Written
+     * only where the rules leave a map of one entry ({@code howMany}), the total is a number the
+     * region leaves the values, and the value is a bare whole number the entry holds without a
+     * name round it. A map asked for more than the number, or for several totals at once, is a
+     * population this writes none of.
+     */
+    private static TermRealizations.Realization aMapHoldingTheTotalInOneEntry(
+            Count total, Shape.Mapping map, TypeView view, RealizationTarget.OfANumber target,
+            TermPath occurring, Carrier elements, SearchRegion within, RuleReadingContext reading,
+            HowManyIsAskedFor alsoHolding, List<AlsoAddingUp> alsoAddingUp,
+            DemandsInside inside) {
+        TermRealizations.Realization notWritten = new TermRealizations.Realization.Unexhausted(
+                CompositionShortfall.writing(Set.of(CompositionRepertoire.MAPS_WRITTEN_WITH_ONE_ENTRY)),
+                "a map whose values come to a total is written with one entry");
+        if (!alsoAddingUp.isEmpty() || !inside.among().isEmpty() || map.value() != Type.INT) {
+            return notWritten;
+        }
+        DeclaredBounds.CountRange howMany = howMany(view, target.writeRoot(), within, reading,
+                alsoHolding);
+        if (howMany == null || !(within.projectionOf(new NumericTerm.ValueOf(occurring))
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds runs))) {
+            return none(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
+        }
+        // The products of two maps' values are written as the entry of this one at one and the
+        // entry of the other at the number: the number is the other map's, and this map's
+        // entry is one.
+        Count written = target.term() instanceof NumericTerm.TakenOver over
+                && over.source() instanceof RunSource.JoinedOccurrences ? Count.of(1) : total;
+        if (runs != null && !runs.admits(written)) {
+            return none(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
+        }
+        boolean oneIsAsked = false;
+        // Counts come from the least upward, so the first at one or more says whether one is there.
+        for (int many : countsAdmitted(howMany, alsoHolding)) {
+            if (many >= 1) {
+                oneIsAsked = many == 1;
+                break;
+            }
+        }
+        if (!oneIsAsked) {
+            return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        FixtureTemplate value = FixtureTemplate.on(elements, written,
+                reading.source().symbols().scope()::reach);
+        if (value == null) {
+            return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        Proposals key = Witnesses.distinctValuesOf(map.key(), 1, reading, Set.of());
+        if (key.values().isEmpty()) {
+            return new TermRealizations.Realization.Unexhausted(key.met(), null);
+        }
+        Proposals made = Witnesses.holdingEntries(map,
+                List.of(new Witnesses.Filed(key.values().getFirst(), value)),
+                new DeclaredBounds.CountRange(1, 1), reading);
+        if (made.values().isEmpty()) {
+            return new TermRealizations.Realization.Unexhausted(made.met(), null);
+        }
+        return new TermRealizations.Realization.Built(List.of(WornNames.under(view.wrappers(),
+                made.values().getFirst(), reading.source())), made.met());
+    }
+
     /** A group of totals that this does not compose, said as the compiler's repertoire. */
     private static TermRealizations.Realization severalTotalsNotComposed(String why) {
         return new TermRealizations.Realization.Unexhausted(CompositionShortfall.writing(
@@ -355,6 +420,10 @@ final class ContainersAddingUp {
         // the type again for any of them is another answer to which names it wears.
         TypeView view = TypeView.of(container, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
+        if (view.shape() instanceof Shape.Mapping map) {
+            return aMapHoldingTheTotalInOneEntry(total, map, view, target, occurring, elements,
+                    within, reading, alsoHolding, alsoAddingUp, inside);
+        }
         if (!(view.shape() instanceof Shape.Sequence holding)) {
             // A total is taken of a container, and what is declared at the root is not one. Which is
             // a term nobody should have been able to build; said here rather than by composing a

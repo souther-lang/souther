@@ -2026,7 +2026,8 @@ public sealed interface NumericTerm
                 case RunSource.ProjectedOccurrences _, RunSource.FlattenedOccurrences _ ->
                         new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(over.operation(),
                                 TakenArguments.NONE, ValueTransformation.NONE);
-                case RunSource.ComputedOccurrences _, RunSource.ReachableNodes _ -> null;
+                case RunSource.ComputedOccurrences _, RunSource.ReachableNodes _,
+                     RunSource.JoinedOccurrences _ -> null;
             };
             // What each element contributes is a number made of it, which the place does not say
             // even where it reads one field: the field read as another kind of number is another
