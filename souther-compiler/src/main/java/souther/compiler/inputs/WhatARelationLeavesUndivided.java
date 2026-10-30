@@ -14,6 +14,7 @@ import souther.compiler.numeric.Rel;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -1051,42 +1052,58 @@ public final class WhatARelationLeavesUndivided {
             // program taken to add it, and for none that was read.
             return arithmetic.computesAsTheFormIsAdded(row);
         }
-        return placementsOfTheOthers(terms, at).stream().anyMatch(others ->
-                computedAtBothEnds(arithmetic, terms, at, run, held, others)
-                        || arithmetic.computedAt(() -> valuesByKey(terms,
-                                i -> i == at ? nearest : others.apply(i))));
+        ExactRatio[] nearestNought = othersAt(terms, at, -1);
+        if (computedWithTheOthersAt(arithmetic, terms, at, run, held, nearest, nearestNought)) {
+            return true;
+        }
+        int others = terms.size() - 1;
+        int choices = others <= OTHERS_WHOSE_ENDS_ARE_TRIED_APART ? 1 << others : 2;
+        for (int ends = 0; ends < choices; ends++) {
+            ExactRatio[] placed = othersAt(terms, at, ends);
+            if (!Arrays.equals(placed, nearestNought)
+                    && computedWithTheOthersAt(arithmetic, terms, at, run, held, nearest,
+                            placed)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static <P> boolean computedWithTheOthersAt(RowsComputed arithmetic,
+                                                       List<Term<P>> terms, int at,
+                                                       SettledRun run, WholeRun held,
+                                                       ExactRatio nearest, ExactRatio[] others) {
+        return computedAtBothEnds(arithmetic, terms, at, run, held, i -> others[i])
+                || arithmetic.computedAt(() -> valuesByKey(terms,
+                        i -> i == at ? nearest : others[i]));
     }
 
     /** The most terms beside the one asked whose ends are all tried one by one. */
     private static final int OTHERS_WHOSE_ENDS_ARE_TRIED_APART = 4;
 
     /**
-     * The places the terms but the one at {@code at} may stand at together: each nearest nought,
-     * then each at the least or the greatest value it holds — every choice of the two where there
-     * are few, and all at one end where there are not. A term with no value at an end stands
-     * nearest nought.
+     * The values the terms but the one at {@code at} stand at together, the place of the term
+     * asked left null. Each stands nearest nought where {@code ends} is negative; otherwise at
+     * the least or the greatest value it holds, a bit of {@code ends} for each of the others where
+     * there are few of them, and all at the greatest where {@code ends} is one and there are not.
+     * A term with no value at the end stands nearest nought.
      */
-    private static <P> List<IntFunction<ExactRatio>> placementsOfTheOthers(List<Term<P>> terms,
-                                                                           int at) {
-        List<IntFunction<ExactRatio>> placements = new ArrayList<>();
-        placements.add(i -> heldNearestNought(terms.get(i)));
-        int others = terms.size() - 1;
-        int choices = others <= OTHERS_WHOSE_ENDS_ARE_TRIED_APART ? 1 << others : 2;
-        for (int mask = 0; mask < choices; mask++) {
-            int chosen = mask;
-            int[] position = {0};
-            List<Boolean> greatest = new ArrayList<>();
-            for (int i = 0; i < terms.size(); i++) {
-                greatest.add(i == at ? Boolean.FALSE : others <= OTHERS_WHOSE_ENDS_ARE_TRIED_APART
-                        ? (chosen >> position[0]++ & 1) == 1 : chosen == 1);
+    private static <P> ExactRatio[] othersAt(List<Term<P>> terms, int at, int ends) {
+        boolean apart = terms.size() - 1 <= OTHERS_WHOSE_ENDS_ARE_TRIED_APART;
+        ExactRatio[] placed = new ExactRatio[terms.size()];
+        int other = 0;
+        for (int i = 0; i < terms.size(); i++) {
+            if (i == at) {
+                continue;
             }
-            placements.add(i -> {
-                Term<P> term = terms.get(i);
-                ExactRatio end = term.holds().aValueNearestItsEnd(greatest.get(i), term.spacing());
-                return end == null ? heldNearestNought(term) : end;
-            });
+            Term<P> term = terms.get(i);
+            ExactRatio end = ends < 0 ? null
+                    : term.holds().aValueNearestItsEnd(
+                            apart ? (ends >> other & 1) == 1 : ends == 1, term.spacing());
+            placed[i] = end == null ? heldNearestNought(term) : end;
+            other++;
         }
-        return placements;
+        return placed;
     }
 
     /**
