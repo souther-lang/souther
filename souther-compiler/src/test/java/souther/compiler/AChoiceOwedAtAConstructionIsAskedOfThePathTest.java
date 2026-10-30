@@ -143,7 +143,7 @@ class AChoiceOwedAtAConstructionIsAskedOfThePathTest {
     }
 
     @Test
-    void aHalfThePathCannotReadLeavesTheOtherHalfToBeEstablished() {
+    void aHalfOverAProductNothingBoundsLeavesTheOtherHalfToBeEstablished() {
         String clause = "a * a > 7 || b == 0";
         assertEquals(List.of(), judged(model(clause,
                 "if y == 0 then P { a = x, b = y } else P { a = 0, b = 0 }")));
@@ -222,6 +222,33 @@ class AChoiceOwedAtAConstructionIsAskedOfThePathTest {
                 let f (x, y, z) =
                     %s
                 """.formatted(clause, body);
+    }
+
+    private static String fromABehavior(String clause) {
+        return """
+                module demo
+
+                data P = { a: Int, b: Int }
+                    invariant c = %s
+
+                behavior g : (n: Int) -> Int
+
+                let g (n) = n * n * n
+
+                behavior f : (x: Int, y: Int) -> P
+                    constructs P
+
+                let f (x, y) = P { a = g(x), b = y }
+                """.formatted(clause);
+    }
+
+    /** A value a behavior answered is one the check leaves to the run-time check wherever a clause
+     * reads it, and a clause that is a choice is no different from one that is not. */
+    @Test
+    void aChoiceNamingWhatABehaviorAnsweredIsLeftToTheRunTimeCheckAsAComparisonIs() {
+        assertEquals(List.of(), judged(fromABehavior("a < 3")));
+        assertEquals(List.of(), judged(fromABehavior("a < 3 || b == 0")));
+        assertEquals(List.of(), judged(fromABehavior("b == 0 || a < 3")));
     }
 
     @Test

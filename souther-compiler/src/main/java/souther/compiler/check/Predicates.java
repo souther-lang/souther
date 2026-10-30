@@ -18,9 +18,11 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -787,7 +789,31 @@ final class Predicates {
         // What each handed-over value is, worked out once and where the site stands. Read again
         // further down, a value under a binding would be asked about at names the site never had.
         return obligations(inv, at, handedOver(unnamed, at), true, decidesFalse,
-                Discharge.spending(k), null, k);
+                Discharge.spending(k), null,
+                new Spending(k, handedOver(notWritten(unnamed, at), at)));
+    }
+
+    /**
+     * What a clause owed at a construction is asked against, where it is asked of the path.
+     *
+     * @param known              the path the construction is built on
+     * @param leftToTheRunTime   the values handed over that this check's flagging policy leaves to
+     *                           the run-time check, and not the ones that are written out: a clause
+     *                           naming one of them is not asked of the path, as no clause is
+     */
+    private record Spending(Known known, Set<FactSubject> leftToTheRunTime) {}
+
+    /** The values of {@code values} that are not written out in the model. A written value is
+     * unnamed because there is no guard to add for it, and it folds; any other is unnamed by this
+     * check's flagging policy ({@link Terms#reportableSite}). */
+    private Set<Core> notWritten(Set<Core> values, Denotations at) {
+        Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Core value : values) {
+            if (terms.writtenValue(value, at) == null) {
+                out.add(value);
+            }
+        }
+        return out;
     }
 
     /**
@@ -799,7 +825,7 @@ final class Predicates {
      */
     private Owed obligations(Core rawInv, Denotations at, Set<FactSubject> unnamed,
                              boolean positive, boolean decidesFalse, Discharge discharge,
-                             PerPart per, Known spending) {
+                             PerPart per, Spending spending) {
         return new Owing(this, unnamed, decidesFalse, discharge, spending)
                 .read(rawInv, positive, at, terms::inside,
                         per == null ? null : per::read);
@@ -820,7 +846,7 @@ final class Predicates {
      * where in the clause the reading stands.
      */
     private record Owing(Predicates of, Set<FactSubject> unnamed, boolean decidesFalse,
-                         Discharge discharge, Known spending)
+                         Discharge discharge, Spending spending)
             implements ClauseReading<Owed, Denotations> {
 
         /**
@@ -845,8 +871,15 @@ final class Predicates {
             Owed owed = of.owing(Conditions.asSizeComparison(part.of()), at, unnamed,
                     part.positive(), decidesFalse, discharge);
             return spending != null && part instanceof ClauseExpr.Joined join
-                    ? of.askedOfThePath(owed, join, at, spending) : owed;
+                    && !of.namesAnyOf(spending.leftToTheRunTime(), part, at)
+                    ? of.askedOfThePath(owed, join, at, spending.known()) : owed;
         }
+    }
+
+    /** Whether the clause {@code part} stands for names any of {@code subjects}. */
+    private boolean namesAnyOf(Set<FactSubject> subjects, ClauseExpr.Part part, Denotations at) {
+        return !subjects.isEmpty()
+                && names(Conditions.asSizeComparison(part.of()), chainsOf(subjects), at);
     }
 
     /**
