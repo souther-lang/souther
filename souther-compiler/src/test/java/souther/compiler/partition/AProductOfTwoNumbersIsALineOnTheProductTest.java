@@ -2,18 +2,24 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.report.AdequacyReport;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -334,6 +340,90 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         fold.measure(Adequacy.Asked.fullReport());
         fold.answerEverything();
         assertEquals(List.of(), unreadReasonsOf(measured(fold)));
+    }
+
+    /**
+     * A product is held at a value inside the run only where one over what the factor comes to
+     * there is a decimal. Between two tenths and four tenths the middle is three tenths and
+     * leaves seven tenths, over which a hundredth is no decimal: the number alone would not stand
+     * at every value it is claimed to. Between a quarter and three quarters the middle is a half,
+     * and twice any decimal is one.
+     */
+    @Test
+    void aFactorIsHeldInsideTheRunOnlyWhereOneOverWhatItComesToIsADecimal() {
+        NumericTerm price = new NumericTerm.ValueOf(TermPath.of("price"));
+        NumericTerm rate = new NumericTerm.ValueOf(TermPath.of("rate"));
+        NumericTerm.ProductOf product = NumericTerm.ProductOf.of(LinearForm.atom(price),
+                new LinearForm<>(ExactRatio.ONE, Map.of(rate, ExactRatio.of(-1))));
+        assertEquals(ExactRatio.ZERO, product.atAValue().at());
+
+        NumericTerm.ProductOf aHalf = product.standingWhereTheDeclarationsAdmit(
+                between("0.25", "0.75"));
+        assertEquals(ExactRatio.of(new BigDecimal("0.5")), aHalf.atAValue().at());
+        assertEquals(ExactRatio.of(new BigDecimal("0.5")), aHalf.atAValue().scale());
+
+        assertEquals(product, product.standingWhereTheDeclarationsAdmit(between("0.2", "0.4")));
+    }
+
+    /** The declarations leave {@code rate} the values strictly between {@code low} and
+     *  {@code high}, and every number is counted on decimals. */
+    private static NumericTerm.ProductOf.Declared between(String low, String high) {
+        return new NumericTerm.ProductOf.Declared() {
+            @Override
+            public NumericDomain.Bounds runOf(NumericTerm number) {
+                return number.toString().equals("rate")
+                        ? new NumericDomain.Bounds(
+                                Endpoint.exclusive(Count.of(new BigDecimal(low))),
+                                Endpoint.exclusive(Count.of(new BigDecimal(high))))
+                        : null;
+            }
+
+            @Override
+            public boolean isDense(NumericTerm number) {
+                return true;
+            }
+        };
+    }
+    /**
+     * What is claimed of a construction that stops a run is what a run does: the row that gives
+     * a negative rate is refused when it is applied, and the one that gives a rate of a half is
+     * not.
+     */
+    @Test
+    void theConstructionThatStopsForSomeRateStopsARowThatGivesOne() {
+        String model = """
+                module demo
+
+                data Refund = Decimal
+                    invariant value >= 0.0m
+                data Money = Decimal
+                    invariant value >= 0.0m
+                data Plan = { fee: Refund, within: Bool }
+
+                behavior f : (gross: Money, rate: Decimal, c: Money) -> Plan
+                    constructs Plan, Refund
+                let f (gross, rate, c) = {
+                    let fee = Decimal.multiply(gross.value, rate)
+                    Plan {
+                        fee = Refund(Decimal.min(fee, gross.value)),
+                        within = Decimal.compare(Decimal.subtract(gross.value, fee), c.value) <= 0
+                    }
+                }
+
+                example f
+                    | "a half" : (Money(10.0m), 0.5m, Money(100.0m))
+                        -> Plan { fee = Refund(5.0m), within = true }
+                    | "a negative rate" : (Money(10.0m), -0.5m, Money(100.0m))
+                        -> Plan { fee = Refund(0.0m), within = true }
+                """;
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String human = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts())).toString();
+        assertTrue(human.contains("1 row does not hold"), human);
+        assertTrue(human.contains("a negative rate"), human);
+        assertTrue(!human.contains("a half is") && !human.contains("a half ("), human);
     }
 
     /**

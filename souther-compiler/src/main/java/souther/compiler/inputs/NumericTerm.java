@@ -1865,6 +1865,15 @@ public sealed interface NumericTerm
      *
      * <p>The factors in one order whichever was written first, so {@code r * g} is
      * {@code g * r}.
+     *
+     * <p>Where the number beside the one alone stands to hold the product at a value is part of
+     * the term, and so of its identity. The reading that decides what a run gets past and the
+     * composer that writes the row are far apart, and only this term travels between them: both
+     * must hold the product by the same pair of numbers, or a row would be written that the
+     * reading did not check. The reading chooses it from the declarations alone
+     * ({@link #standingWhereTheDeclarationsAdmit}), so the same product read twice is one term.
+     * A term moved to other places is the product without it: the declarations of those places
+     * are not the ones it was chosen from.
      */
     final class ProductOf implements NumericTerm {
 
@@ -2027,7 +2036,13 @@ public sealed interface NumericTerm
             }
             ExactRatio inside = insideOf(run);
             ProductOf there = inside == null ? null : new ProductOf(one, other, inside);
-            return there == null || there.atAValue() == null ? this : there;
+            AtAValue made = there == null ? null : there.atAValue();
+            // The number alone stands at the value over the scale. Every decimal value is a
+            // value the number alone can stand at only where one over the scale is a decimal
+            // too: seven tenths leaves a hundredth no decimal to stand at.
+            ExactRatio over = made == null ? null
+                    : ExactRatio.ONE.dividedBy(made.scale()).orNull();
+            return over == null || !over.terminates() ? this : there;
         }
 
         /** A value inside {@code run}, written as a decimal, nearest its middle; null where none
