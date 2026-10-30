@@ -14,6 +14,8 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.WhatAConditionRuns;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -443,6 +445,11 @@ final class DecisionNaming implements Naming<DecisionPath> {
                     ModelOccurrence.statedAt(binary.occurrence());
             case Core.PreservedCall applied when applied.occurrence().isWritten() ->
                     ModelOccurrence.statedAt(applied.occurrence());
+            case Core.Call call when Type.BOOL.equals(call.type())
+                    && call.fn() instanceof Core.Reached reached
+                    && reached.denotes() instanceof ValueName.Behavior
+                    && call.occurrence().isWritten() ->
+                    ModelOccurrence.statedAt(call.occurrence());
             default -> Optional.empty();
         };
         if (itself.isPresent()) {

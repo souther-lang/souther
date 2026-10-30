@@ -1949,7 +1949,8 @@ public final class CoverageSites {
                 }
             }
             if (e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
-                    && reached.denotes() instanceof ValueName.Stdlib.Operation
+                    && (reached.denotes() instanceof ValueName.Stdlib.Operation
+                    || reached.denotes() instanceof ValueName.Behavior)
                     && call.occurrence().isWritten()) {
                 applications.add(call.occurrence());
             }

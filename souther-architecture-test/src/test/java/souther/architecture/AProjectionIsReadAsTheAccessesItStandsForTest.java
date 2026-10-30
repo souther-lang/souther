@@ -560,6 +560,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "query/CallExampleSeeds", "collect", "(" + core
                 + "Ljava/util/function/Predicate;Ljava/util/List;)V", Reading.EACH_SUBEXPRESSION,
                 ASKS_EACH);
+        row(out, c + "query/CallExampleSeeds", "collect", "(" + core + reads + "L" + c
+                + "inputs/InputReading;Ljava/util/function/Predicate;Ljava/util/List;)V",
+                Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "inputs/InputUses$Walk", "takenOff", "(" + core + reads + ")V",
                 Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "inputs/InputUses$Walk", "fieldOf", "(" + core + ")" + core,

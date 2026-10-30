@@ -4,6 +4,7 @@ import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.FakeTables;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Sig;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReading;
@@ -78,24 +79,44 @@ final class CallExampleSeeds {
      */
     static List<Call> callsIn(AnalysisBody analysis, InputReading input,
                               Predicate<ValueName.Behavior> worthReading) {
-        List<AnOperationApplied> calls = new ArrayList<>();
-        collect(analysis.core(), worthReading, calls);
-        if (calls.isEmpty()) {
-            return List.of();
-        }
         InputReads reads = InputReads.ofParametersWhereCallsStand(
                 input.domain().parameterReads(), input.declared(),
                 ElementBindings.of(analysis, input.newtypes()), input.domain().dependencies());
+        List<CallRead> calls = new ArrayList<>();
+        collect(analysis.core(), reads, input, worthReading, calls);
         Set<Call> out = new LinkedHashSet<>();
-        for (AnOperationApplied each : calls) {
+        for (CallRead each : calls) {
             List<Optional<TermPath>> at = new ArrayList<>();
-            for (Core argument : each.args()) {
-                at.add(reads.pathOf(argument, input.newtypes()) instanceof PathResolution.At(
+            for (Core argument : each.applied().args()) {
+                at.add(each.reads().pathOf(argument, input.newtypes()) instanceof PathResolution.At(
                         TermPath path) ? Optional.of(path) : Optional.empty());
             }
-            out.add(new Call((ValueName.Behavior) each.operation(), at));
+            out.add(new Call((ValueName.Behavior) each.applied().operation(), at));
         }
         return List.copyOf(out);
+    }
+
+    /** A call of a behavior, with the reading of the names in force where it is made. */
+    private record CallRead(AnOperationApplied applied, InputReads reads) {}
+
+    /**
+     * The calls under {@code e}, each with the reading of the names in force at it: a name an arm
+     * binds over a case, or a {@code let} binds, stands for a position of the input only in the
+     * reading the arm or the {@code let} is entered in.
+     */
+    private static void collect(Core e, InputReads reads, InputReading input,
+                                Predicate<ValueName.Behavior> worthReading, List<CallRead> out) {
+        for (Core each : Core.subexpressionsAt(e)) {
+            if (AnOperationApplied.of(each) instanceof AnOperationApplied applied
+                    && applied.operation() instanceof ValueName.Behavior callee
+                    && worthReading.test(callee)) {
+                out.add(new CallRead(applied, reads));
+            }
+        }
+        ScopeStep.forEachChild(e, (child, step) -> collect(child,
+                input.symbols() == null ? reads
+                        : reads.entering(step, input.symbols(), input.newtypes()),
+                input, worthReading, out));
     }
 
     /**
@@ -175,7 +196,7 @@ final class CallExampleSeeds {
                 List<Optional<FixtureTemplate>> inputsWritten = written.computeIfAbsent(
                         new WrittenRow(call.callee(), at), _ -> writtenInputs(row, callee, subject));
                 Optional<Map<Integer, FixtureTemplate>> lifted =
-                        lifted(call, inputsWritten, subject);
+                        lifted(call, inputsWritten, subject, check);
                 List<FixtureTemplate> inputs = lifted.isEmpty() ? List.of()
                         : composed(base, lifted.get(), subject);
                 List<String> key = inputs.stream()
@@ -278,18 +299,31 @@ final class CallExampleSeeds {
      * element it stands under. Nothing where an argument stands anywhere else, where two
      * arguments stand at one parameter and the row gives them different values, or where an input
      * could not be written.
+     *
+     * <p>An argument that stands at a field of the input, or at a value narrowed by {@code as}, is
+     * a position the row's value is fixed at and not a value the lift builds: the record and the
+     * case around it are what the model builds ({@link Generator#composeWithFixedValues}).
      */
     private static Optional<Map<Integer, FixtureTemplate>> lifted(
-            Call call, List<Optional<FixtureTemplate>> written, MeasuredInput subject) {
+            Call call, List<Optional<FixtureTemplate>> written, MeasuredInput subject,
+            Generator.CandidateCheck check) {
         Map<Integer, FixtureTemplate> out = new LinkedHashMap<>();
+        Map<TermPath, FixtureTemplate> fixed = new LinkedHashMap<>();
         for (int i = 0; i < call.at().size(); i++) {
             TermPath at = call.at().get(i).orElseThrow();
             int parameter = subject.parameters().indexOf(at.head());
-            if (parameter < 0 || written.get(i).isEmpty()
-                    || !at.steps().stream().allMatch(step -> step instanceof TermPath.Step.Element)) {
+            if (parameter < 0 || written.get(i).isEmpty()) {
                 return Optional.empty();
             }
             FixtureTemplate held = written.get(i).get();
+            if (!at.steps().stream().allMatch(step -> step instanceof TermPath.Step.Element)) {
+                // One position holds one value, as below.
+                FixtureTemplate already = fixed.putIfAbsent(at, held);
+                if (already != null && !already.text().equals(held.text())) {
+                    return Optional.empty();
+                }
+                continue;
+            }
             for (int depth = 0; depth < at.steps().size(); depth++) {
                 held = FixtureTemplate.collection(List.of(held));
             }
@@ -297,6 +331,19 @@ final class CallExampleSeeds {
             // row gives them the same, and by no value when it gives them two.
             FixtureTemplate already = out.putIfAbsent(parameter, held);
             if (already != null && !already.text().equals(held.text())) {
+                return Optional.empty();
+            }
+        }
+        if (fixed.isEmpty()) {
+            return Optional.of(out);
+        }
+        Optional<Map<Integer, FixtureTemplate>> built =
+                Generator.composeWithFixedValues(subject, fixed, check);
+        if (built.isEmpty()) {
+            return Optional.empty();
+        }
+        for (Map.Entry<Integer, FixtureTemplate> each : built.get().entrySet()) {
+            if (out.putIfAbsent(each.getKey(), each.getValue()) != null) {
                 return Optional.empty();
             }
         }
