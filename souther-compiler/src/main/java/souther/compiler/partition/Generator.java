@@ -1359,8 +1359,27 @@ public final class Generator {
         private final Map<Replaced, Optional<AnswerObservation>> replaced =
                 new ConcurrentHashMap<>();
 
+        /**
+         * Where the runs kept above went and what they answered, each held once for every run
+         * that came to the same.
+         *
+         * <p>Every row a search runs is kept with what its run came to, for as long as this is the
+         * way rows are run; and the rows of a search go the same ways and answer the same things
+         * far more often than not. Held here and not past this, so what is held goes with the runs
+         * that hold it.
+         */
+        private final Map<Watched, Watched> sawAlike = new ConcurrentHashMap<>();
+        private final Map<AnswerObservation, AnswerObservation> answeredAlike =
+                new ConcurrentHashMap<>();
+
         /** One row as it is written, and what a run of it asks the classes to rewrite. */
         private record Replaced(List<String> written, Rewriting asked) {}
+
+        /** The one held in {@code held} equal to {@code made}, or {@code made}, held from now on. */
+        private static <T> T heldOnce(Map<T, T> held, T made) {
+            T had = held.putIfAbsent(made, made);
+            return had == null ? made : had;
+        }
 
         private RunOnce(Trial trial) {
             this.trial = trial;
@@ -1402,7 +1421,9 @@ public final class Generator {
             if (already != null) {
                 return already;
             }
-            ObservedRun now = trial.run(row);
+            ObservedRun run = trial.run(row);
+            ObservedRun now = new ObservedRun(heldOnce(sawAlike, run.watched()),
+                    heldOnce(answeredAlike, run.answer()));
             ran.put(written, now);
             return now;
         }
@@ -1414,7 +1435,8 @@ public final class Generator {
             if (already != null) {
                 return already;
             }
-            Optional<AnswerObservation> now = trial.runReplacing(row, asked);
+            Optional<AnswerObservation> now = trial.runReplacing(row, asked)
+                    .map(answer -> heldOnce(answeredAlike, answer));
             replaced.put(key, now);
             return now;
         }

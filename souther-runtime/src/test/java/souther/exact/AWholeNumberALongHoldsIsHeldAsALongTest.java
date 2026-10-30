@@ -13,8 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 /**
  * Each whole number of the parts is held as a long where a long holds it and wider where it does not,
  * and which follows from the number alone: parts handed over as {@code BigInteger}s and parts handed
- * over as longs are one representation of one value, so they are equal and hash alike — and hash as
- * they did when both numbers were {@code BigInteger}s, so no map keyed by a value is laid out anew.
+ * over as longs are one representation of one value, so they are equal and hash alike, as a
+ * {@code BigInteger} of each number hashes.
  *
  * <p>Asked at the edges of a long: both signs of the largest magnitude, the least long, and the first
  * numbers past either end.

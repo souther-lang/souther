@@ -149,7 +149,8 @@ public final class MeasuredInput {
      * quantities', and nothing a line brings. No part of what makes two of these one, for the
      * reason {@link #offered} is not.
      */
-    private final AStatementAtARow.RelationsOfAnInput relations;
+    private final Map<AStatementAtARow.RelationRead, AStatementAtARow.OneRelation> relations =
+            new ConcurrentHashMap<>();
 
     /** A position as what it is offered turns on: where the value stops and the runs it is in, how
      *  much it holds, the class it is held to and the values its rules name — and not the rest of
@@ -175,7 +176,6 @@ public final class MeasuredInput {
         this.divided = divided;
         this.reach = reach;
         this.ruleRoots = ruleRoots;
-        this.relations = new AStatementAtARow.RelationsOfAnInput();
     }
 
     /**

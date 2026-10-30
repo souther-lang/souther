@@ -2,14 +2,17 @@ package souther.compiler.collect;
 
 import org.junit.jupiter.api.Test;
 
+import java.lang.ref.WeakReference;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
  * A value made again while an equal one is held is handed out as the one held, a value is never
- * handed out for one it is not equal to — however their hashes fall — and a slot holds the value
- * made last in it.
+ * handed out for one it is not equal to — however their hashes fall — a slot holds the value made
+ * last in it, and holding it keeps nothing alive.
  */
 class AValueMadeAgainIsTheOneHeldTest {
 
@@ -41,6 +44,25 @@ class AValueMadeAgainIsTheOneHeldTest {
         Hashed aAgain = new Hashed("a", 7);
         assertSame(aAgain, held.held(aAgain), "the slot holds what was made last in it");
         assertNotSame(a, aAgain);
+    }
+
+    /**
+     * A value nothing else holds any more is not kept alive by being held here: a table one process
+     * shares across its compiles would otherwise keep whatever such a value refers to.
+     */
+    @Test
+    void aValueNothingElseHoldsIsNotKeptAliveByTheTable() throws InterruptedException {
+        HeldOnce<Hashed> held = new HeldOnce<>(4);
+        WeakReference<Hashed> watched = new WeakReference<>(held.held(new Hashed("gone", 3)));
+
+        for (int asked = 0; asked < 20 && watched.get() != null; asked++) {
+            System.gc();
+            Thread.sleep(10);
+        }
+
+        assertNull(watched.get(), "the table still holds a value nothing else does");
+        Hashed again = new Hashed("gone", 3);
+        assertSame(again, held.held(again), "made again, it is the one held from now on");
     }
 
     @Test

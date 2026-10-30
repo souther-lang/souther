@@ -40,7 +40,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 /**
@@ -319,62 +318,48 @@ final class AStatementAtARow {
      * @param quantities the reading of the input, which says which order each number is on
      */
     static AStatementAtARow of(Proposition stated, String behavior, Quantities quantities) {
-        return readBy(stated, behavior, quantities, new RelationsOfAnInput());
+        return readBy(stated, behavior, quantities, new HashMap<>());
     }
 
     /**
-     * The same, with each relation read by {@code reading}, which may have read it before.
-     *
-     * @param reading what has been read of the relations of this input, over {@code quantities}
-     *                every time
-     */
-    static AStatementAtARow readBy(Proposition stated, String behavior, Quantities quantities,
-                                   RelationsOfAnInput reading) {
-        Map<Relation, OneRelation> relations = new LinkedHashMap<>();
-        Map<Spelling,OverTheElements> elements = new LinkedHashMap<>();
-        Set<TermPath> positions = new LinkedHashSet<>();
-        gather(stated, behavior, quantities, reading, relations, elements, positions);
-        return new AStatementAtARow(stated, relations, elements, positions);
-    }
-
-    /**
-     * The relations put to the rows of one input, each read once ({@link OneRelation#of}).
+     * The same, with each relation looked for in {@code read} first and put there once read.
      *
      * <p>For a reader that puts many statements to the same rows. What a relation comes to put to
      * rows is the relation's and the quantities' of the input, and nothing the statement holding it
      * brings; so a relation met again in another statement is the one read before, and the
-     * statements share it. Nothing put to a row changes one. The quantities are the holder's, which
-     * reads every relation over the same ones.
+     * statements share it. Nothing put to a row changes one.
      *
-     * <p>Equal by what it holds, the relations read so far, as a value carried in what a compile
-     * keeps has to be.
-     *
-     * @param read each relation read so far, by the relation and the behavior it was read for
+     * @param read the relations read so far over {@code quantities}, and over nothing else
      */
-    record RelationsOfAnInput(Map<RelationOf, OneRelation> read) {
+    static AStatementAtARow readBy(Proposition stated, String behavior, Quantities quantities,
+                                   Map<RelationRead, OneRelation> read) {
+        Map<Relation, OneRelation> relations = new LinkedHashMap<>();
+        Map<Spelling,OverTheElements> elements = new LinkedHashMap<>();
+        Set<TermPath> positions = new LinkedHashSet<>();
+        gather(stated, behavior, quantities, read, relations, elements, positions);
+        return new AStatementAtARow(stated, relations, elements, positions);
+    }
 
-        /** A relation as it is read: of which behavior's input. */
-        private record RelationOf(Relation relation, String behavior) {}
+    /** A relation as it is read to be put to rows: for which behavior's input. */
+    record RelationRead(Relation relation, String behavior) {}
 
-        /** Nothing read yet. */
-        RelationsOfAnInput() {
-            this(new ConcurrentHashMap<>());
+    /** {@code relation} put to rows, the one in {@code read} or read now and put there. */
+    private static OneRelation relationRead(Relation relation, String behavior,
+                                            Quantities quantities,
+                                            Map<RelationRead, OneRelation> read) {
+        RelationRead key = new RelationRead(relation, behavior);
+        OneRelation had = read.get(key);
+        if (had != null) {
+            return had;
         }
-
-        private OneRelation of(Relation relation, String behavior, Quantities quantities) {
-            RelationOf key = new RelationOf(relation, behavior);
-            OneRelation had = read.get(key);
-            if (had != null) {
-                return had;
-            }
-            OneRelation made = OneRelation.of(relation, behavior, quantities);
-            OneRelation raced = read.putIfAbsent(key, made);
-            return raced == null ? made : raced;
-        }
+        OneRelation made = OneRelation.of(relation, behavior, quantities);
+        OneRelation raced = read.putIfAbsent(key, made);
+        return raced == null ? made : raced;
     }
 
     private static void gather(Proposition stated, String behavior, Quantities quantities,
-                               RelationsOfAnInput reading, Map<Relation, OneRelation> into,
+                               Map<RelationRead, OneRelation> reading,
+                               Map<Relation, OneRelation> into,
                                Map<Spelling,OverTheElements> elements, Set<TermPath> positions) {
         switch (stated) {
             case Proposition.Always _, Proposition.LastToHold _ -> { }
@@ -415,7 +400,7 @@ final class AStatementAtARow {
                             differentAt(count), acrossOf(count)));
             case Proposition.Compared compared when askable(compared) ->
                     into.computeIfAbsent(compared.relation(),
-                            relation -> reading.of(relation, behavior, quantities));
+                            relation -> relationRead(relation, behavior, quantities, reading));
             // Put to no row: answered as not known where it is asked ({@link #notAsked}).
             case Proposition.Compared _, Proposition.Truth _, Proposition.Present _,
                  Proposition.InCases _, Proposition.InTheStrings _, Proposition.SameValue _,
@@ -1898,7 +1883,7 @@ final class AStatementAtARow {
     }
 
     /** One relation, as the quantity a row is read at and what its numbers have to come to. */
-    private sealed interface OneRelation {
+    sealed interface OneRelation {
 
         /** The numbers of a row the relation is about, whether or not a row can be read at them. */
         List<NumericTerm> terms();

@@ -139,8 +139,8 @@ public final class ExactParts {
                 && Objects.equals(wideDenominator, parts.wideDenominator));
     }
 
-    /** The hash a {@code BigInteger} of each number has, whichever way it is held, so that a value
-     *  hashes as it did when both were {@code BigInteger}s. */
+    /** The hash a {@code BigInteger} of each number has, whichever way it is held: one value hashes
+     *  one way, as a long or wider. */
     @Override
     public int hashCode() {
         int hash = wideNumerator != null ? wideNumerator.hashCode() : hashOf(numerator);

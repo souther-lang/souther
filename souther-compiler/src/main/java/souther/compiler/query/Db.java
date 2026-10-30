@@ -624,7 +624,7 @@ public final class Db implements StoreWork {
             // The frame as it was filled and not a copy of it: nothing adds to a frame once it is
             // off the stack, and a copy would hash every read again for each question handed the
             // work — and walk them in an order of its own rather than the order they were read.
-            read = Ordered.set(frames.pop());
+            read = Collections.unmodifiableSet(frames.pop());
         }
         read.forEach(this::recordRead);
         return new Made<>(made, () -> read.forEach(this::recordRead));

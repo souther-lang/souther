@@ -2,7 +2,6 @@ package souther.compiler.examples;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
-import souther.compiler.collect.HeldOnce;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
@@ -49,20 +48,7 @@ final class ObservedValues {
         return new ObservedValues(symbols, neutral, limits).walk(live, 0);
     }
 
-    /**
-     * What has been observed, each value held once for every observation equal to it.
-     *
-     * <p>A search runs row after row, and what each one answered is kept beside it; the answers of
-     * rows a search composed alike are alike, down to every field of them. Held here bottom up, a
-     * value is made of the parts already held, so an answer equal to one before is that one.
-     */
-    private static final HeldOnce<ObservedValue> OBSERVED = new HeldOnce<>(14);
-
     private ObservedValue walk(Object live, int depth) {
-        return OBSERVED.held(walked(live, depth));
-    }
-
-    private ObservedValue walked(Object live, int depth) {
         // What is walked was built by the evaluation, and is as large as it was built: one node, one
         // counted point, as one time round a loop of the evaluated code is.
         EvaluationContext.tick();

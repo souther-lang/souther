@@ -248,8 +248,7 @@ public sealed interface OnTheWay {
 
         /**
          * The ways made last. Every path through a condition of several ways reads the condition
-         * again, and each held what it read as a tree of its own: the same few conditions were
-         * hundreds of thousands of trees.
+         * again, and what each reads is one of the same few conditions.
          */
         private static final HeldOnce<OneOf> MADE = new HeldOnce<>(14);
 
