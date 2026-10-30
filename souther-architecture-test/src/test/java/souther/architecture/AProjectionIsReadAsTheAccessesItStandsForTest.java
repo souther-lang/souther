@@ -399,6 +399,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/InvariantChecker", "without",
                 "(" + core + "Ljava/util/Set;" + core + ")" + core,
                 Reading.STRUCTURE, REWRITES_THE_BASE);
+        row(out, c + "check/InvariantChecker$Written", "replaced",
+                "(" + core + "Ljava/util/Map;)" + core, Reading.STRUCTURE,
+                "puts a truth value in place of the nodes a clause's parts stand at, which are"
+                        + " statements and no name read off a value: a projection is passed as"
+                        + " any other node");
         row(out, c + "check/Location", "of", "(" + core + "L" + c
                 + "check/DeclarationNewtypes;Ljava/util/function/Function;"
                 + "Ljava/util/function/Function;)L" + c

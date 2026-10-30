@@ -126,7 +126,11 @@ class APairIsChosenOnePositionAtATimeTest {
      *
      * <p>Eight positions of two values each is exactly what the search is allowed to compose. Every
      * one of them is refused, and every one of them was tried — so what the reader is owed is that
-     * nothing here builds, and not that the search gave up one assignment early.
+     * nothing here builds, and not that the search gave up one assignment early. The rule is one
+     * the fold does not work out, so no value of the two numbers it ties together is written down
+     * to complete an assignment with, and one the bounds do not read, so each number is still
+     * offered both of its values; and every product of the values offered leaves a remainder of
+     * nought or one.
      */
     @Test
     void aSearchThatSpentItsLastAssignmentSaysEverythingWasRefused() throws Exception {
@@ -139,7 +143,7 @@ class APairIsChosenOnePositionAtATimeTest {
 
                 data R =
                 FIELDS    }
-                    invariant rule = a1 * a2 >= 5
+                    invariant rule = Int.floorMod(a1 * a2, 7) == 5
 
                 data Ok
 
@@ -153,6 +157,46 @@ class APairIsChosenOnePositionAtATimeTest {
 
         assertTrue(rows.contains("every value tried was refused"),
                 () -> "256 assignments, all composed and all refused:\n" + rows);
+        assertFalse(rows.contains("the search left something untried"),
+                () -> "and none of them was left untried:\n" + rows);
+    }
+
+    /**
+     * And an assignment written a second way is still one assignment under the bound.
+     *
+     * <p>The same eight numbers beside two strings a rule ties together. Each assignment the model
+     * refuses is written again with the two strings as a value of them that holds their rule, and
+     * that is refused as well: the numbers are what nothing builds. Counted as an assignment of its
+     * own, the second writing spent the bound twice as fast, and a search that had tried
+     * everything was said to have left some untried.
+     */
+    @Test
+    void anAssignmentWrittenASecondWayIsStillOneAssignment() throws Exception {
+        StringBuilder fields = new StringBuilder("    { a1: Int\n");
+        for (int i = 2; i <= 8; i++) {
+            fields.append("    , a").append(i).append(": Int\n");
+        }
+        fields.append("    , s: String\n    , t: String\n");
+        String model = """
+                module example.exact
+
+                data R =
+                FIELDS    }
+                    invariant rule = Int.floorMod(a1 * a2, 7) == 5
+                    invariant tied = String.contains(s, t)
+
+                data Ok
+
+                behavior f : (r: R, flag: Bool) -> Ok
+
+                let f (r, flag) = if flag then Ok else Ok
+                """.replace("FIELDS", fields.toString());
+        Path file = Files.createTempDirectory("souther-exact").resolve("model.sou");
+        Files.writeString(file, model);
+        String rows = CliInProcess.printed("examples", "--generate", file.toString());
+
+        assertTrue(rows.contains("every value tried was refused"),
+                () -> "256 assignments, each written twice and refused:\n" + rows);
         assertFalse(rows.contains("the search left something untried"),
                 () -> "and none of them was left untried:\n" + rows);
     }
