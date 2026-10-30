@@ -10,6 +10,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -3529,19 +3530,61 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
             new NumberRegion.Run(null, ExactCut.exclusive(ExactRatio.ONE))));
 
     /**
-     * Two terms read at one place whose numbers have no row shown computed in them are two
-     * findings, each with its own numbers: the numbers of one are not numbers of the other, and a
-     * place told one region would be told that a number of the other term is among them.
+     * Numbers no row is shown computed in are told at a place whether or not it is shown
+     * undivided, and neither is dropped for the other. The reading does not make a place both,
+     * but what is told does not depend on that.
      */
     @Test
-    void theNumbersOfTwoTermsAtOnePlaceAreToldAsTwoRegions() {
+    void aPlaceShownUndividedIsStillToldTheNumbersNoRowIsShownComputedIn() {
         FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
         List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
-                List.of(hours), Set.of(), Map.of(), Set.of(),
-                Map.of(hours, Set.of(FROM_FIVE, BELOW_ONE)));
-        assertEquals(List.of(new BlockReason.RelationRowsNotShownComputed(BELOW_ONE),
+                List.of(hours), Set.of(hours), Map.of(), Set.of(),
+                Map.of(hours, Set.of(FROM_FIVE)));
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues(),
                 new BlockReason.RelationRowsNotShownComputed(FROM_FIVE)),
                 left.stream().map(ComparisonAssessment.LeftAt::why).toList());
+    }
+
+    /**
+     * The numbers of two terms are told at the coordinate of each, as the reading files them
+     * ({@link FilingCoordinate#of}): the numbers of one term are not numbers of the other, and a
+     * place told the other's region would be told numbers it does not hold. Two relations settling
+     * one term give it two regions, told apart.
+     */
+    @Test
+    void theNumbersOfEachTermAreToldAtThatTermsCoordinate() {
+        Compilation compilation = reported(FORECAST);
+        InputReading read = compilation.db().ask(new Adequacy.Inputs("w1")).value().get("m")
+                .reading(RuleReadings.of(compilation, "w1"));
+        NumericTerm.TakenOf deals = lengthOf(TermPath.of("deals"), read);
+        NumericTerm.TakenOf rates = lengthOf(TermPath.of("rates").then("rates"), read);
+
+        Map<FilingCoordinate, Set<NumberRegion>> unshown =
+                ComparisonAssessment.noRowShownComputedAt(List.of(
+                        Map.entry(deals, noRowIn(FROM_FIVE)),
+                        Map.entry(rates, noRowIn(BELOW_ONE)),
+                        Map.entry(deals, noRowIn(BELOW_ONE))));
+
+        assertEquals(Map.of(FilingCoordinate.of(deals), Set.of(FROM_FIVE, BELOW_ONE),
+                FilingCoordinate.of(rates), Set.of(BELOW_ONE)), unshown);
+        List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
+                List.of(FilingCoordinate.of(deals), FilingCoordinate.of(rates)), Set.of(),
+                Map.of(), Set.of(), unshown);
+        assertEquals(List.of(
+                new ComparisonAssessment.LeftAt(FilingCoordinate.of(deals),
+                        new BlockReason.RelationRowsNotShownComputed(BELOW_ONE)),
+                new ComparisonAssessment.LeftAt(FilingCoordinate.of(deals),
+                        new BlockReason.RelationRowsNotShownComputed(FROM_FIVE)),
+                new ComparisonAssessment.LeftAt(FilingCoordinate.of(rates),
+                        new BlockReason.RelationRowsNotShownComputed(BELOW_ONE))), left);
+    }
+
+    /** A term settling a relation in {@code numbers}, in none of which is a row shown computed. */
+    private static WhatARelationLeavesUndivided.Leaves.Settled noRowIn(NumberRegion numbers) {
+        return new WhatARelationLeavesUndivided.Leaves.Settled(List.of(), null, null, false,
+                List.of(), numbers.runs().stream()
+                .map(run -> new WhatARelationLeavesUndivided.SettledRun(run.from(), run.to(), false))
+                .toList());
     }
 
     /**

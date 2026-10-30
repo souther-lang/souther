@@ -218,7 +218,7 @@
     },
     "numberCut": {
       "type": "object",
-      "description": "Where a run of numbers stops, exactly, and whether the number it stops at is in the run. The number is spelled as a decimal where it has a terminating one, and as a fraction otherwise, in a string and never as a JSON number: a bound read into a float is not the bound.",
+      "description": "Where a run of numbers stops, exactly, and whether the number it stops at is in the run. The number is spelled as a decimal where it has a terminating one, and as a fraction otherwise (in factors where either would be too long to write), in a string and never as a JSON number: a bound read into a float is not the bound.",
       "required": [
         "at",
         "inclusive"
@@ -226,8 +226,7 @@
       "additionalProperties": false,
       "properties": {
         "at": {
-          "type": "string",
-          "minLength": 1
+          "type": "string"
         },
         "inclusive": {
           "type": "boolean"
@@ -8127,6 +8126,48 @@
                     "reason"
                   ],
                   "additionalProperties": false,
+                  "allOf": [
+                    {
+                      "description": "Which values are open is said only of a relation shown over some of them.",
+                      "if": {
+                        "properties": {
+                          "reason": {
+                            "const": "relation_shown_over_a_region"
+                          }
+                        },
+                        "required": [
+                          "reason"
+                        ]
+                      },
+                      "else": {
+                        "not": {
+                          "required": [
+                            "leftOpen"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "description": "Which numbers have no row shown computed is said only under the word for values not shown to get to the rule.",
+                      "if": {
+                        "properties": {
+                          "reason": {
+                            "const": "relation_not_shown_reached_at_every_value"
+                          }
+                        },
+                        "required": [
+                          "reason"
+                        ]
+                      },
+                      "else": {
+                        "not": {
+                          "required": [
+                            "numbersNotShownComputed"
+                          ]
+                        }
+                      }
+                    }
+                  ],
                   "properties": {
                     "reason": {
                       "$ref": "#/$defs/ruleStoppedReadingReason"

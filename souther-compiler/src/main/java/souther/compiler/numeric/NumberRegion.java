@@ -89,13 +89,6 @@ public record NumberRegion(List<Run> runs) implements Comparable<NumberRegion> {
         return new NumberRegion(runs);
     }
 
-    /** This region and {@code other} together. */
-    public NumberRegion and(NumberRegion other) {
-        List<Run> both = new ArrayList<>(runs);
-        both.addAll(other.runs);
-        return new NumberRegion(both);
-    }
-
     private static List<Run> normalized(List<Run> runs) {
         List<Run> sorted = new ArrayList<>(runs);
         sorted.sort(Run::byLowerEnd);

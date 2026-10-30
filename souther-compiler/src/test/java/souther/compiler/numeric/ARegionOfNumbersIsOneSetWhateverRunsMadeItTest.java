@@ -71,13 +71,6 @@ class ARegionOfNumbersIsOneSetWhateverRunsMadeItTest {
     }
 
     @Test
-    void twoRegionsPutTogetherAreTheRegionOfTheRunsOfBoth() {
-        assertEquals(NumberRegion.of(List.of(run(in(0), in(9)))),
-                NumberRegion.of(List.of(run(in(0), below(5))))
-                        .and(NumberRegion.of(List.of(run(in(5), in(9))))));
-    }
-
-    @Test
     void theOrderTellsApartExactlyWhatEqualityDoes() {
         List<NumberRegion> every = List.of(
                 NumberRegion.of(List.of(run(null, below(0)))),

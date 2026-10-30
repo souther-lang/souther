@@ -46,7 +46,6 @@ import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import java.util.stream.Stream;
 import java.util.function.UnaryOperator;
 
 /**
@@ -310,8 +309,8 @@ sealed interface ComparisonAssessment {
      *                  comparison is not shown ({@link UndividedByARelation.WhatItLeaves#mayStopBefore})
      * @param noRowShownComputed for those of {@code filedAt} some relation about settles by the
      *                  terms' ends in some numbers where no row is shown computed, those numbers,
-     *                  a region for each term read there: no line is drawn for the place, and it
-     *                  is said so
+     *                  a region for each relation's settling of the term there: no line is drawn
+     *                  for the place, and it is said so
      * @param partnered each string position the relation is shown to part by the strings its
      *                  partner can hold, where the partner is a piece of a string
      */
@@ -1970,6 +1969,10 @@ sealed interface ComparisonAssessment {
      * <p>A place shown undivided that a run may stop on the way to the relation for
      * ({@code mayStopBefore}) says that instead: undivided over every value is a claim that every
      * value gets there, which is what is not shown.
+     *
+     * <p>A place with numbers no row is shown computed in ({@code noRowShownComputed}) is told
+     * each region, after the word above where it is shown undivided and before the words below
+     * where it is not.
      */
     static List<LeftAt> relatingAt(List<FilingCoordinate> places,
                                    Set<FilingCoordinate> undivided,
@@ -1977,19 +1980,27 @@ sealed interface ComparisonAssessment {
                                    Set<FilingCoordinate> mayStopBefore,
                                    Map<FilingCoordinate, Set<NumberRegion>> noRowShownComputed) {
         return places.stream().distinct().flatMap(at -> {
-            if (undivided.contains(at)) {
-                return Stream.of(new LeftAt(at, mayStopBefore.contains(at)
+            List<LeftAt> why = new ArrayList<>();
+            boolean shownUndivided = undivided.contains(at);
+            if (shownUndivided) {
+                why.add(new LeftAt(at, mayStopBefore.contains(at)
                         ? new BlockReason.RelationNotShownReachedAtEveryValue()
                         : new BlockReason.ComparisonRelatingTwoValues()));
+            }
+            // Numbers no row is shown computed in are told whether or not the place is shown
+            // undivided: undivided is what the relation's lines say and these are what was shown
+            // of its numbers, so neither hides the other. Where the reading makes a place
+            // undivided it records no such numbers for it, and this does not depend on that.
+            noRowShownComputed.getOrDefault(at, Set.of()).stream().sorted()
+                    .forEach(numbers -> why.add(new LeftAt(at,
+                            new BlockReason.RelationRowsNotShownComputed(numbers))));
+            if (shownUndivided) {
+                return why.stream();
             }
             // Two reasons a place is shown nothing of are two things to be told, and neither
             // says the other: a figure a search stopped at is one a run allowed more may get
             // past, and numbers in which no row is shown computed are not.
             Set<Figure> figures = stoppedAt.getOrDefault(at, Set.of());
-            List<LeftAt> why = new ArrayList<>();
-            noRowShownComputed.getOrDefault(at, Set.of()).stream().sorted()
-                    .forEach(numbers -> why.add(new LeftAt(at,
-                            new BlockReason.RelationRowsNotShownComputed(numbers))));
             if (!figures.isEmpty() || why.isEmpty()) {
                 why.add(new LeftAt(at, notShownAt(figures)));
             }
@@ -1999,8 +2010,8 @@ sealed interface ComparisonAssessment {
 
     /**
      * The numbers some of whose settling runs have no row shown computed, at the place of the term
-     * they are of: one region for each term read at a place, since the numbers of two terms are
-     * not numbers of one.
+     * they are of: one region for each relation's settling of the term, since two relations about
+     * a term settle different runs of it, and each region is the numbers of one relation's runs.
      */
     static Map<FilingCoordinate, Set<NumberRegion>> noRowShownComputedAt(
             Collection<Map.Entry<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled>> settled) {
