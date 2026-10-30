@@ -1131,26 +1131,36 @@ public final class ExactArithmetic {
      * or {@link #UNDECIDED} where the numbers do not fit them.
      *
      * <p>The order of {@code |n₁|·d₂·2^t₁·5^f₁} against {@code |n₂|·d₁·2^t₂·5^f₂}: dividing both by the
-     * lesser power of each prime leaves only the differences of the exponents, and where those are
-     * small and every product fits a long, that is a few multiplications and nothing made.
+     * lesser power of each prime leaves only the differences of the exponents, and where the side
+     * those raise is held by a long, each side is a product of two longs below two to the sixty-three,
+     * compared as the hundred and twenty-eight bits it is. So every long but the least is taken, and
+     * the numbers that bound an {@code Int} are ordered against ordinary ones without a bracket.
      */
     static int magnitudesInLongs(ExactParts a, ExactParts b) {
-        if (!inLongs(a) || !inLongs(b) || a.denominatorInALong() <= 0 || b.denominatorInALong() <= 0
+        if (!a.inLongs() || !b.inLongs()
+                || a.numeratorInALong() == Long.MIN_VALUE || b.numeratorInALong() == Long.MIN_VALUE
+                || a.denominatorInALong() <= 0 || b.denominatorInALong() <= 0
                 || !near(a.twos()) || !near(b.twos()) || !near(a.fives()) || !near(b.fives())) {
             return UNDECIDED;
         }
         long twosApart = a.twos() - b.twos();
         long fivesApart = a.fives() - b.fives();
-        long mine = raised(Math.abs(a.numeratorInALong()), Math.max(twosApart, 0),
+        long mine = raisedUnlessByNothing(Math.abs(a.numeratorInALong()), Math.max(twosApart, 0),
                 Math.max(fivesApart, 0));
-        long theirs = raised(Math.abs(b.numeratorInALong()), Math.max(-twosApart, 0),
+        long theirs = raisedUnlessByNothing(Math.abs(b.numeratorInALong()), Math.max(-twosApart, 0),
                 Math.max(-fivesApart, 0));
-        if (mine == 0 || theirs == 0
-                || !multipliesInALong(mine, b.denominatorInALong())
-                || !multipliesInALong(theirs, a.denominatorInALong())) {
+        if (mine == 0 || theirs == 0) {
             return UNDECIDED;
         }
-        return Long.compare(mine * b.denominatorInALong(), theirs * a.denominatorInALong());
+        long mineOver = b.denominatorInALong();
+        long theirsOver = a.denominatorInALong();
+        int byHigh = Long.compare(Math.multiplyHigh(mine, mineOver), Math.multiplyHigh(theirs, theirsOver));
+        return byHigh != 0 ? byHigh : Long.compareUnsigned(mine * mineOver, theirs * theirsOver);
+    }
+
+    /** {@code whole} itself where it is raised by no power, and {@link #raised} where it is. */
+    private static long raisedUnlessByNothing(long whole, long twos, long fives) {
+        return twos == 0 && fives == 0 ? whole : raised(whole, twos, fives);
     }
 
     /**

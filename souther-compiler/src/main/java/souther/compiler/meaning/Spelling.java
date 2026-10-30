@@ -115,6 +115,12 @@ public final class Spelling implements Comparable<Spelling> {
         return result;
     }
 
+    /** Whether {@code piece} itself, and not a copy of its text, is one of the pieces this is put
+     *  together from. */
+    boolean holdsAsAPiece(Spelling piece) {
+        return pieces.stream().anyMatch(each -> each == piece);
+    }
+
     /** How many {@code char}s the text is. */
     public long length() {
         return length;
@@ -136,6 +142,21 @@ public final class Spelling implements Comparable<Spelling> {
     public int compareTo(Spelling other) {
         if (this == other) {
             return 0;
+        }
+        if (text != null && other.text != null) {
+            return text.compareTo(other.text);
+        }
+        // Nearly every pair differs within the first piece of text each begins with, which is found
+        // without a reading of either: the piece every first piece down to a text starts.
+        String mineFirst = firstText();
+        String theirsFirst = other.firstText();
+        int common = Math.min(mineFirst.length(), theirsFirst.length());
+        for (int at = 0; at < common; at++) {
+            char a = mineFirst.charAt(at);
+            char b = theirsFirst.charAt(at);
+            if (a != b) {
+                return a - b;
+            }
         }
         Reading mine = new Reading(this);
         Reading theirs = new Reading(other);
@@ -181,6 +202,19 @@ public final class Spelling implements Comparable<Spelling> {
             mine.at += run;
             theirs.at += run;
         }
+    }
+
+    /** The text of the piece the whole text starts with, found down the first piece of each; empty
+     *  where that piece is empty, which then says nothing of what follows it. */
+    private String firstText() {
+        Spelling at = this;
+        while (at.text == null) {
+            if (at.pieces.isEmpty()) {
+                return "";
+            }
+            at = at.pieces.getFirst();
+        }
+        return at.text;
     }
 
     /** What {@link String#compareTo} answers of two texts one of which begins the other: the

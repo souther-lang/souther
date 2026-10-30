@@ -108,22 +108,34 @@ class ASpellingIsItsTextWithoutWritingItOutTest {
         assertEquals("abc".compareTo("abd"), ab.compareTo(a));
     }
 
-    /** Read a piece at a time with a stack of its own: a spelling deeper than a thread's stack is
-     *  compared, measured and written. */
+    /** Read a piece at a time with a stack of its own: a spelling nested deeper than a small
+     *  thread's stack goes is compared, measured and written on that thread. */
     @Test
-    void aSpellingDeeperThanTheStackIsReadWhole() {
+    void aSpellingDeeperThanTheStackIsReadWhole() throws InterruptedException {
+        int depth = 20_000;
         Spelling one = Spelling.of("x");
         Spelling other = Spelling.of("x");
-        StringBuilder text = new StringBuilder("x");
-        for (int i = 0; i < 200_000; i++) {
+        for (int i = 0; i < depth; i++) {
             one = Spelling.of("(", one, ")");
             other = Spelling.of(Spelling.of("("), other, Spelling.of(")"));
-            text.insert(0, '(').append(')');
         }
-        assertEquals(text.length(), one.length());
-        assertEquals(text.toString().hashCode(), one.hashCode());
-        assertEquals(one, other);
-        assertEquals(text.toString(), one.toString());
+        String text = "(".repeat(depth) + "x" + ")".repeat(depth);
+        Spelling deep = one;
+        Spelling alike = other;
+        List<Object> seen = new ArrayList<>();
+        Thread small = new Thread(null, () -> {
+            try {
+                seen.add(deep.length());
+                seen.add(deep.equals(alike));
+                seen.add(deep.toString());
+            } catch (StackOverflowError e) {
+                seen.add(e);
+            }
+        }, "a small stack", 64 * 1024);
+        small.start();
+        small.join();
+        assertEquals(List.of((long) text.length(), true, text), seen);
+        assertEquals(text.hashCode(), deep.hashCode());
     }
 
     /** Turning a statement over and back writes nothing: the spelling of it holding is the one
@@ -137,26 +149,27 @@ class ASpellingIsItsTextWithoutWritingItOutTest {
         assertEquals(denied, held.denied());
     }
 
-    /** Conjunctions and disjunctions nested thousands deep over a part spelled in ten thousand
-     *  characters: written out at each level, that is the part's text tens of millions of times. */
+    /** Conjunctions and disjunctions nested within one another: each level's spelling holds its
+     *  parts' spellings themselves, so the text of a part is held once however many levels it is
+     *  below, and is the text the level spells all the same. */
     @Test
     void aPropositionHoldsItsPartsSpellingsAndNotTheirText() {
-        Proposition deepest = new Proposition.Truth(
-                new DecisionSubject.AnInput(TermPath.of("x".repeat(10_000))), true);
-        Proposition nested = deepest;
-        Proposition again = deepest;
-        long length = deepest.spelling().length();
-        for (int i = 0; i < 4_000; i++) {
+        Proposition nested = new Proposition.Truth(
+                new DecisionSubject.AnInput(TermPath.of("x".repeat(1_000))), true);
+        List<String> copied = new ArrayList<>();
+        for (int i = 0; i < 50; i++) {
             Proposition beside = new Proposition.Truth(
                     new DecisionSubject.AnInput(TermPath.of("p" + i)), true);
-            nested = i % 2 == 0 ? new Proposition.All(List.of(nested, beside))
-                    : new Proposition.Any(List.of(nested, beside));
-            again = i % 2 == 0 ? new Proposition.All(List.of(again, beside))
-                    : new Proposition.Any(List.of(again, beside));
-            length += "all[".length() + ", ".length() + beside.spelling().length() + "]".length();
+            Proposition below = nested;
+            nested = i % 2 == 0 ? new Proposition.All(List.of(below, beside))
+                    : new Proposition.Any(List.of(below, beside));
+            if (!nested.spelling().holdsAsAPiece(below.spelling())
+                    || !nested.spelling().holdsAsAPiece(beside.spelling())) {
+                copied.add("level " + i);
+            }
+            assertEquals((i % 2 == 0 ? "all[" : "any[") + below.spelledOut() + ", "
+                    + beside.spelledOut() + "]", nested.spelledOut());
         }
-        assertEquals(length, nested.spelling().length());
-        assertEquals(nested.spelling(), again.spelling());
-        assertEquals(nested, again);
+        assertEquals(List.of(), copied);
     }
 }
