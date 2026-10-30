@@ -100,9 +100,9 @@ final class TermOrdering {
     }
 
     /**
-     * The orders of a product of two forms, which is counted on the order its factors' numbers
-     * are, or null where they are not all counted on one: a product of a date and a count is the
-     * product of nothing.
+     * The orders of a product of two forms, which is counted on decimals where any of its numbers
+     * is and on whole numbers where all are, and on no order where one is counted on another: a
+     * product of a date and a count is the product of nothing.
      *
      * @param reading the orders of a number either form is of
      */
@@ -112,15 +112,19 @@ final class TermOrdering {
         for (LinearForm<NumericTerm> form : term.factors()) {
             for (NumericTerm number : form.coefs().keySet()) {
                 TermOrders each = reading.of(number);
-                if (each == null || each.answered() == null
-                        || (on != null && !on.equals(each.answered()))) {
-                    return null;
+                if (each == null || !(each.answered() instanceof Carrier.Whole
+                        || each.answered() instanceof Carrier.Dense)) {
+                    return new TermOrders(term, null, null);
                 }
-                on = each.answered();
+                // A whole number beside a decimal is multiplied as decimals are.
+                if (on == null || each.answered() instanceof Carrier.Dense) {
+                    on = each.answered();
+                }
                 factors.add(each);
             }
         }
-        return on == null ? null : new TermOrders(term, on, on, Map.of(), Map.of(), factors);
+        return on == null ? new TermOrders(term, null, null)
+                : new TermOrders(term, on, on, Map.of(), Map.of(), factors);
     }
 
     /**

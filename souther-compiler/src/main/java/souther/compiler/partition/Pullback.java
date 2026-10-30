@@ -1471,7 +1471,7 @@ final class Pullback {
                     if (read != null) {
                         // Each side that is a choice is read arm by arm, with the choice standing
                         // as that arm, so what it works out is this rule's to answer for.
-                        answersForTheChoicesAmong(stated);
+                        answersForTheChoicesAmong(stated, reads);
                     }
                     return read;
                 },
@@ -1566,12 +1566,17 @@ final class Pullback {
         return read;
     }
 
-    private void answersForTheChoicesAmong(StatedComparison stated) {
+    private void answersForTheChoicesAmong(StatedComparison stated, InputReads reads) {
         List<Core> choices = new ArrayList<>();
         for (Core side : List.of(stated.left(), stated.right())) {
             Core value = AffineReading.withoutBindings(side);
             if (Choice.of(value) != null) {
                 choices.add(value);
+            }
+            // A choice a name was given is the side as well: the name stands for it.
+            Denotation chosen = chosenAt(new Denotation(side, reads));
+            if (chosen != null) {
+                choices.add(Core.withoutStanding(chosen.value()));
             }
         }
         trial().answersFor = node -> choices.contains(Core.withoutStanding(node));
@@ -8397,6 +8402,10 @@ final class Pullback {
         InputNumber.SeedAndAdded added = InputNumber.ofAWalkAdding(walk.value(), read.domain(),
                 walk.at(), read.rules(), blocksAt(walk));
         if (added == null) {
+            added = InputNumber.ofAWalkJoiningTwoMaps(walk.value(), read.domain(), walk.at(),
+                    read.rules(), blocksAt(walk));
+        }
+        if (added == null) {
             LinearForm<Quantity> ofAnAnswer =
                     unlessUnread(() -> seedPlusWhatEachElementOfAnAnswerAdds(walk));
             return ofAnAnswer != null ? ofAnAnswer : unlessUnread(() -> foldOfWrittenOut(walk));
@@ -10852,10 +10861,9 @@ final class Pullback {
      * against the level. A square and a product of three are not read here either, and for each of
      * these the stop stands.
      *
-     * <p>And only of two whole numbers, which are the numbers a product of two is worked out of at a
-     * row ({@link OrderedAffineBoundary#productAt}) and a line drawn on: a product of decimals is
-     * answered at a scale the run settles, and its stop stands too. Said here, where the product is
-     * made, so that everything reading one reads a product of two whole numbers.
+     * <p>And only of two whole numbers on the line drawn through the two factors
+     * ({@link OrderedAffineBoundary#productAt}). A product of decimals is answered at a scale the
+     * run settles, so it is read only as one number among the others of the comparison.
      */
     private LinearForm<Quantity> productAt(Core node, InputReads at,
                                            AffineForms.Outcome.StoppedAt<Quantity, InputReads>
@@ -10887,7 +10895,7 @@ final class Pullback {
      * the two are one term.
      */
     private LinearForm<Quantity> productOfTwoForms(Core.Binary written, InputReads at) {
-        if (written.type() != Type.INT) {
+        if (written.type() != Type.INT && written.type() != Type.DECIMAL) {
             return null;
         }
         LinearForm<NumericTerm> left = AffineReading.formOf(written.left(), at, read);

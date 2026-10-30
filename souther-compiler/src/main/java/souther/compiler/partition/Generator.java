@@ -7076,20 +7076,34 @@ public final class Generator {
                     out.put(other, formsOne.get());
                     beside.put(way.carrier(), carrier);
                     beside.put(way.fixed(), other);
+                    // A total of the products of two maps' values that carries the product is
+                    // written with the map looked into as any such total is.
+                    withTheMapLookedInto(carrier, each.getValue(), subject, out, beside);
                 }
                 continue;
             }
-            if (each.getKey() instanceof RealizationTarget.OverARun run) {
-                NumericTerm.TakenOver lookedInto =
-                        InputNumber.totalOfTheMapLookedInto(run.term(), subject.rules());
-                if (lookedInto != null
-                        && out.putIfAbsent(RealizationTarget.of(lookedInto), each.getValue())
-                        == null) {
-                    beside.put(lookedInto, RealizationTarget.of(lookedInto));
-                }
-            }
+            withTheMapLookedInto(each.getKey(), each.getValue(), subject, out, beside);
         }
         return new NumbersWrittenBeside(out, beside);
+    }
+
+    /**
+     * {@code target}, where it is a total of the products of two maps' values standing at
+     * {@code value}, with the total of the map looked into standing there too, written beside it.
+     */
+    private static void withTheMapLookedInto(RealizationTarget target, Place value,
+                                             MeasuredInput subject,
+                                             Map<RealizationTarget, Place> out,
+                                             Map<NumericTerm, RealizationTarget> beside) {
+        if (!(target instanceof RealizationTarget.OverARun run)) {
+            return;
+        }
+        NumericTerm.TakenOver lookedInto =
+                InputNumber.totalOfTheMapLookedInto(run.term(), subject.rules());
+        if (lookedInto != null
+                && out.putIfAbsent(RealizationTarget.of(lookedInto), value) == null) {
+            beside.put(lookedInto, RealizationTarget.of(lookedInto));
+        }
     }
 
     /**

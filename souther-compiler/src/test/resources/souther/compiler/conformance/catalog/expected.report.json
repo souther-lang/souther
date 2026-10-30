@@ -7,8 +7,7 @@
   "keptOpenBy" : [ ],
   "modules" : [ {
     "module" : "conformance.catalog",
-    "status" : "partial",
-    "weakening" : [ "rule_unread" ],
+    "status" : "complete",
     "incompleteness" : [ ],
     "declarations" : [ {
       "owners" : [ {
@@ -1393,8 +1392,7 @@
         "disposition" : "met"
       } ],
       "rowsThatDoNotHold" : [ ],
-      "status" : "partial",
-      "weakening" : [ "rule_unread" ],
+      "status" : "complete",
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -1432,12 +1430,10 @@
       },
       "partition" : {
         "axesMeasure" : {
-          "status" : "partial",
-          "weakening" : [ "rule_unread" ]
+          "status" : "complete"
         },
         "boundariesMeasure" : {
-          "status" : "partial",
-          "weakening" : [ "rule_unread" ]
+          "status" : "complete"
         },
         "axes" : [ {
           "axis" : "discount/item.note",
@@ -1452,45 +1448,6 @@
           "status" : "complete",
           "covered" : [ "None", "Some" ],
           "unclassifiedRows" : 0
-        } ],
-        "unanswered" : [ {
-          "at" : "item.price",
-          "rule" : "comparison@0:68:15",
-          "ruleId" : {
-            "kind" : "comparison",
-            "declaredIn" : "conformance.catalog",
-            "definition" : "discount",
-            "behavior" : "discount",
-            "ordinal" : 3,
-            "lowered" : 0
-          },
-          "question" : "notDetermined",
-          "subject" : {
-            "kind" : "filedAt",
-            "path" : "item.price"
-          },
-          "stopped" : [ {
-            "reason" : "non_affine_product"
-          } ]
-        }, {
-          "at" : "rate",
-          "rule" : "comparison@0:68:15",
-          "ruleId" : {
-            "kind" : "comparison",
-            "declaredIn" : "conformance.catalog",
-            "definition" : "discount",
-            "behavior" : "discount",
-            "ordinal" : 3,
-            "lowered" : 0
-          },
-          "question" : "notDetermined",
-          "subject" : {
-            "kind" : "filedAt",
-            "path" : "rate"
-          },
-          "stopped" : [ {
-            "reason" : "non_affine_product"
-          } ]
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
@@ -1980,8 +1937,310 @@
             "notOwed" : "no_value_can_stand_there",
             "stops" : [ ]
           } ]
+        }, {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "discount",
+              "quantity" : {
+                "shape" : "over_a_form",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "product",
+                    "factors" : [ {
+                      "constant" : "0",
+                      "terms" : [ {
+                        "term" : {
+                          "kind" : "value",
+                          "position" : "item.price"
+                        },
+                        "coefficient" : "1"
+                      } ]
+                    }, {
+                      "constant" : "1",
+                      "terms" : [ {
+                        "term" : {
+                          "kind" : "value",
+                          "position" : "rate"
+                        },
+                        "coefficient" : "-1"
+                      } ]
+                    } ]
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "dense"
+                    },
+                    "answered" : {
+                      "kind" : "dense"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "a_count",
+                "at" : "0.01"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.catalog",
+                  "definition" : "discount",
+                  "behavior" : "discount",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
+            }
+          },
+          "axis" : "discount/item.price * (1 + -1 * rate)",
+          "origin" : "comparison@0:68:15",
+          "kind" : "over_a_form",
+          "value" : "0.01",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "0.01",
+            "knownWritable" : false,
+            "writableBecause" : [ ],
+            "status" : "complete",
+            "hit" : false
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "notOwed" : "the_carrier_names_no_neighbour",
+            "stops" : [ ]
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "0.01 < item.price * (1 + -1 * rate)",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "relation" : "in",
+            "against" : "item.price * (1 + -1 * rate) < 0.01",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          } ]
         } ],
-        "obligations" : [ ],
+        "obligations" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.catalog",
+                  "definition" : "discount",
+                  "behavior" : "discount",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "location" : {
+              "kind" : "at_the_line"
+            }
+          },
+          "point" : "on",
+          "rule" : "comparison@0:68:15",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.catalog",
+            "definition" : "discount",
+            "behavior" : "discount",
+            "ordinal" : 3,
+            "lowered" : 0
+          },
+          "relation" : "=",
+          "knownWritable" : false,
+          "writableBecause" : [ ],
+          "status" : "complete",
+          "hit" : false,
+          "disposition" : "undecided",
+          "undecidedAbout" : [ "whether_a_row_can_be_written" ],
+          "readings" : [ {
+            "behavior" : "discount",
+            "axis" : "discount/item.price * (1 + -1 * rate)",
+            "relation" : "=",
+            "against" : "0.01",
+            "status" : "complete",
+            "hit" : false
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.catalog",
+                  "definition" : "discount",
+                  "behavior" : "discount",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            }
+          },
+          "point" : "in",
+          "rule" : "comparison@0:68:15",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.catalog",
+            "definition" : "discount",
+            "behavior" : "discount",
+            "ordinal" : 3,
+            "lowered" : 0
+          },
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "discount",
+            "axis" : "discount/item.price * (1 + -1 * rate)",
+            "relation" : "in",
+            "against" : "0.01 < item.price * (1 + -1 * rate)",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.catalog",
+                  "definition" : "discount",
+                  "behavior" : "discount",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            }
+          },
+          "point" : "out",
+          "rule" : "comparison@0:68:15",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.catalog",
+            "definition" : "discount",
+            "behavior" : "discount",
+            "ordinal" : 3,
+            "lowered" : 0
+          },
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "discount",
+            "axis" : "discount/item.price * (1 + -1 * rate)",
+            "relation" : "in",
+            "against" : "item.price * (1 + -1 * rate) < 0.01",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        } ],
         "pairs" : {
           "total" : 0,
           "between" : [ ],
@@ -1992,7 +2251,7 @@
         "notDerivable" : [ "item.note@Some" ],
         "notRead" : [ {
           "position" : "item.price",
-          "reason" : "non_affine_product",
+          "reason" : "rule_about_a_run",
           "rule" : "comparison@0:68:15",
           "ruleId" : {
             "kind" : "comparison",
@@ -2004,7 +2263,7 @@
           }
         }, {
           "position" : "rate",
-          "reason" : "non_affine_product",
+          "reason" : "rule_about_a_run",
           "rule" : "comparison@0:68:15",
           "ruleId" : {
             "kind" : "comparison",
@@ -2071,9 +2330,9 @@
           "obligationId" : {
             "behavior" : "discount",
             "conditions" : [ {
-              "kind" : "statement",
-              "condition" : "!Affine[form=LinearForm[constant=-0.01, coefs={conformance.catalog.discount.2=1}], proposition=GE]",
-              "outcome" : "denied"
+              "kind" : "comparison",
+              "condition" : "GE LinearForm[constant=-0.01, coefs={item.price * (1 + -1 * rate)=1}]",
+              "outcome" : "held"
             } ]
           },
           "taken" : true
@@ -2081,9 +2340,9 @@
           "obligationId" : {
             "behavior" : "discount",
             "conditions" : [ {
-              "kind" : "statement",
-              "condition" : "!Affine[form=LinearForm[constant=-0.01, coefs={conformance.catalog.discount.2=1}], proposition=GE]",
-              "outcome" : "held"
+              "kind" : "comparison",
+              "condition" : "GE LinearForm[constant=-0.01, coefs={item.price * (1 + -1 * rate)=1}]",
+              "outcome" : "denied"
             } ]
           },
           "taken" : true
@@ -2133,7 +2392,7 @@
           "ordinal" : 3,
           "lowered" : 0
         },
-        "reason" : "non_affine_product"
+        "reason" : "rule_about_a_run"
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
@@ -2146,31 +2405,7 @@
           "ordinal" : 3,
           "lowered" : 0
         },
-        "reason" : "non_affine_product"
-      }, {
-        "kind" : "rule_unaccounted",
-        "disposition" : "reported",
-        "subject" : "comparison@0:68:15 — what this rule states about item.price",
-        "ruleId" : {
-          "kind" : "comparison",
-          "declaredIn" : "conformance.catalog",
-          "definition" : "discount",
-          "behavior" : "discount",
-          "ordinal" : 3,
-          "lowered" : 0
-        }
-      }, {
-        "kind" : "rule_unaccounted",
-        "disposition" : "reported",
-        "subject" : "comparison@0:68:15 — what this rule states about rate",
-        "ruleId" : {
-          "kind" : "comparison",
-          "declaredIn" : "conformance.catalog",
-          "definition" : "discount",
-          "behavior" : "discount",
-          "ordinal" : 3,
-          "lowered" : 0
-        }
+        "reason" : "rule_about_a_run"
       } ]
     }, {
       "name" : "現価を引く",

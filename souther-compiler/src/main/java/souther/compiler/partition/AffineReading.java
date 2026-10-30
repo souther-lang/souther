@@ -599,7 +599,20 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             @Override
             public void answeredByTheLibrary(Core call, LinearForm<NumericTerm> form,
                                              WhereAnOperatorAnswers where) {
+                if (aDecimalMadeOfWholeNumbers(call)) {
+                    told.readsTheInput(form);
+                }
                 tell(call, form, List.of(form), where);
+            }
+
+            /** Whether {@code call} answers a decimal from whole numbers alone, which holds no
+             *  places beyond the point: {@code Decimal.fromInt(n)} is the number {@code n} is. */
+            private boolean aDecimalMadeOfWholeNumbers(Core call) {
+                Core bare = Core.withoutStanding(call);
+                List<Core> args = bare instanceof Core.PreservedCall kept ? kept.args()
+                        : bare instanceof Core.Call applied ? applied.args() : List.of();
+                return bare.type() == Type.DECIMAL && !args.isEmpty()
+                        && args.stream().allMatch(each -> each.type() == Type.INT);
             }
 
             /**
@@ -962,7 +975,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         }
                     }
                     told.readByATerm(node);
-                    if (isAPlainRead(node)) {
+                    if (isAPlainRead(node) || aDecimalMadeOfWholeNumbers(node)) {
                         told.readsTheInput(numbers);
                     }
                     return numbers;
@@ -1003,7 +1016,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             @Override
             public LinearForm<NumericTerm> productOfTwoForms(Core node, InputReads at) {
                 if (told.productsStop || !(Core.withoutStanding(node) instanceof Core.Binary mul)
-                        || mul.op() != BinOp.MUL || mul.type() != Type.INT) {
+                        || mul.op() != BinOp.MUL
+                        || (mul.type() != Type.INT && mul.type() != Type.DECIMAL)) {
                     return null;
                 }
                 LinearForm<NumericTerm> left = composedBy(mul.left(), at, this);
@@ -1016,6 +1030,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
                 named.add(product.product());
                 LinearForm<NumericTerm> atom = product.asAForm();
+                if (mul.type() == Type.DECIMAL) {
+                    // A decimal product has no region; a row is asked by working it out.
+                    if (!told.addsDecimal(mul, atom, List.of(left, right))) {
+                        told.exact = false;
+                    }
+                    return atom;
+                }
                 // Told whatever the type of the number says of it: the product is the number the
                 // factors come to, which is not held to an Int by being typed as one, and a run
                 // stops where it passes the ends.
@@ -1745,6 +1766,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             inputReads.add(form);
         }
 
+
         UndividedByARelation.Working working() {
             return new UndividedByARelation.Working(operations, exact && partials.isEmpty()
                     ? WhatARelationLeavesUndivided.Told.EVERY
@@ -2231,7 +2253,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             // reader of a line wants the one the answer is measured on. Carried together so neither
             // stands in for the other (#1027).
             souther.compiler.inputs.TermOrders here = quantities.ordersOf(term);
-            if (here.answered() == null || !here.answered().counts()) {
+            if (here == null || here.answered() == null || !here.answered().counts()) {
                 return null;
             }
             on.put(term, here);

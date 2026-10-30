@@ -1116,6 +1116,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Set<NumericTerm> alone = new LinkedHashSet<>();
         for (int i = 0; i < sides.size() && i < terms.size(); i++) {
             NumericTerm total = sides.get(i).number();
+            if (total instanceof NumericTerm.ProductOf product
+                    && product.atAValue() instanceof NumericTerm.ProductOf.AtAValue way) {
+                // The product is held at a value by the total alone standing at it.
+                total = way.carrier();
+            }
             if (total == null || !working.partials().contains(total)
                     || terms.get(i).realizes() == null) {
                 continue;
@@ -6194,12 +6199,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && SUMMED.equals(
                             DefaultBoundOperationFacts.get().accumulation(taken.operation()))) {
                 List<TermPath> entry = read.domain().entryOf(taken.position(), read.rules());
+                StatedOfATotal stated = statedOfTheTotalAlone(taken, conditions);
                 // A map's entry is its element and the key it is filed under, and the total adds
                 // up the elements: the key is written beside it, which the count of one entry
                 // asks of it as well.
-                return entry.isEmpty() || entry.size() > 2 ? null
+                NumericDomain.Bounds alone = entry.isEmpty() || entry.size() > 2 || stated == null
+                        ? null
                         : shownOfAnElementAlone(List.of(new NumericTerm.ValueOf(entry.getFirst())),
-                                taken.position(), read, region, conditions, carrier);
+                                taken.position(), read, region, stated.rest(), carrier);
+                return alone == null ? null : alone.meet(stated.run());
             }
         }
         return null;
@@ -6278,15 +6286,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 || !SUMMED.equals(DefaultBoundOperationFacts.get().accumulation(over.operation()))) {
             return null;
         }
-        if (elements.isEmpty()) {
-            return summedOverProductsOfOneElement(over, read, region, conditions, carrier);
-        }
-        List<TermPath> containers = over.subjectPath().containersHoldingIt();
-        if (containers.size() != 1) {
+        StatedOfATotal stated = statedOfTheTotalAlone(over, conditions);
+        if (stated == null) {
             return null;
         }
-        return shownOfAnElementAlone(elements, containers.getFirst(), read, region, conditions,
-                carrier);
+        NumericDomain.Bounds alone;
+        if (elements.isEmpty()) {
+            alone = summedOverProductsOfOneElement(over, read, region, stated.rest(), carrier);
+        } else {
+            List<TermPath> containers = over.subjectPath().containersHoldingIt();
+            alone = containers.size() != 1 ? null
+                    : shownOfAnElementAlone(elements, containers.getFirst(), read, region,
+                            stated.rest(), carrier);
+        }
+        return alone == null ? null : alone.meet(stated.run());
     }
 
     /**
@@ -6835,6 +6848,71 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             each instanceof TypeSymbol.AtModule member
                             && aValueIsShownToExist(Type.ref(member), read));
             case null, default -> false;
+        };
+    }
+
+    /**
+     * What the way states of a total alone, and the statements of the way beside those.
+     *
+     * @param run  the values the statements about the total alone leave it, open where there are
+     *             none
+     * @param rest the other statements of the way
+     */
+    private record StatedOfATotal(NumericDomain.Bounds run, List<OnAWay> rest) { }
+
+    /**
+     * What {@code conditions} state of the total {@code total} and of nothing else, as the run
+     * they leave it — or null where one of them states more of it than a bound.
+     *
+     * <p>A container of one element totals to that element's number, so a bound stated of the
+     * total is the bound stated of the element: the element is then written anywhere in the run,
+     * and the total takes every value the element does there. A statement relating the total to
+     * another number, or an equality, says more than that and stays a statement the total is tied
+     * by.
+     */
+    private static StatedOfATotal statedOfTheTotalAlone(NumericTerm total,
+                                                        List<OnAWay> conditions) {
+        NumericDomain.Bounds run = NumericDomain.Bounds.OPEN;
+        List<OnAWay> rest = new ArrayList<>();
+        for (OnAWay each : conditions) {
+            TakenConstraint.Affine stated = each.affine();
+            if (stated == null || !stated.form().coefs().containsKey(total)) {
+                rest.add(each);
+                continue;
+            }
+            NumericDomain.Bounds bounds = stated.form().coefs().size() == 1
+                    ? boundsStatedOf(stated) : null;
+            if (bounds == null) {
+                return null;
+            }
+            run = run.meet(bounds);
+        }
+        return new StatedOfATotal(run, rest);
+    }
+
+    /** The values {@code stated}, which is over one number, leaves it — or null where it is an
+     *  equality, a difference, or a bound no number holds. */
+    private static NumericDomain.Bounds boundsStatedOf(TakenConstraint.Affine stated) {
+        ExactRatio weight = stated.form().coefs().values().iterator().next();
+        ExactRatio at = stated.form().constant().negated().dividedBy(weight).orNull();
+        if (at == null || !(Count.written(at)
+                instanceof ExactAnswer.Held<Optional<Count>>(Optional<Count> count))
+                || count.isEmpty()) {
+            return null;
+        }
+        Rel rel = weight.signum() > 0 ? stated.rel() : switch (stated.rel()) {
+            case GE -> Rel.LE;
+            case GT -> Rel.LT;
+            case LE -> Rel.GE;
+            case LT -> Rel.GT;
+            case EQ, NE -> stated.rel();
+        };
+        return switch (rel) {
+            case GE -> new NumericDomain.Bounds(Endpoint.inclusive(count.get()), null);
+            case GT -> new NumericDomain.Bounds(Endpoint.exclusive(count.get()), null);
+            case LE -> new NumericDomain.Bounds(null, Endpoint.inclusive(count.get()));
+            case LT -> new NumericDomain.Bounds(null, Endpoint.exclusive(count.get()));
+            case EQ, NE -> null;
         };
     }
 

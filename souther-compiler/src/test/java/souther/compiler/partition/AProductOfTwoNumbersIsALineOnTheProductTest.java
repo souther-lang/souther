@@ -189,6 +189,133 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         }
     }
 
+    private static final String MONEY_AND_RATE = """
+            data Money = Decimal
+                invariant value >= 0.0m
+
+            data Rate = Decimal
+                invariant value >= 0.0m
+            """;
+
+    /**
+     * The product of two decimals is a number of its own beside the other numbers of a comparison,
+     * as one of whole numbers is: a rule over {@code g * (1 - r)} is read, every position is shown
+     * to reach it, and a row is built at a point of the line by the numbers that make the product.
+     */
+    @Test
+    void aProductOfDecimalsBesideOtherNumbersIsReadAndALineIsReachedByARow() {
+        for (String condition : List.of(
+                "Decimal.compare(Decimal.multiply(g.value, r.value), c.value) <= 0",
+                "Decimal.compare(Decimal.multiply(g.value, r.value), 5.0m) <= 0",
+                "Decimal.compare(Decimal.max(0.0m, Decimal.multiply(g.value, r.value)),"
+                        + " c.value) <= 0",
+                "Decimal.compare(Decimal.subtract(g.value,"
+                        + " Decimal.multiply(g.value, r.value)), c.value) <= 0",
+                "Decimal.compare(Decimal.max(0.0m, Decimal.subtract(g.value,"
+                        + " Decimal.multiply(g.value, r.value))), c.value) <= 0")) {
+            Compilation compilation = compiled(MONEY_AND_RATE, "g: Money, r: Rate, c: Money",
+                    condition);
+            assertEquals(List.of(), unreadReasonsOf(measured(compilation)), condition);
+            List<Row> rows = certifiedRows(linesOf(compilation));
+            assertTrue(!rows.isEmpty(), condition);
+        }
+    }
+
+    /**
+     * A whole number made a decimal is a number a row holds as it is, so a decimal operation over
+     * it is one a row is asked to get past: every position of the rule is shown to reach it.
+     */
+    @Test
+    void aWholeNumberMadeADecimalIsMultipliedAsAnyDecimalIs() {
+        PartitionEvidence measured = measured(compiled(MONEY_AND_RATE, "a: Int, r: Rate, c: Money",
+                "Decimal.compare(Decimal.subtract(Decimal.fromInt(a),"
+                        + " Decimal.multiply(Decimal.fromInt(a), r.value)), c.value) <= 0"));
+        assertEquals(List.of(), unreadReasonsOf(measured));
+    }
+
+    /**
+     * A whole number made a decimal is multiplied as a decimal is, and a total of the products of
+     * two maps' values made one is the number that carries the product: the line is read and
+     * reached by a row whose maps hold the entries the total is made of.
+     */
+    @Test
+    void aTotalMadeADecimalAndMultipliedIsReadAndReached() {
+        for (String net : List.of("Decimal.max(0.0m, Decimal.subtract(gross, fee))",
+                "Decimal.subtract(gross, fee)")) {
+            String model = """
+                    module demo
+
+                    data Ok
+                    data No
+                    data Money = Decimal
+                        invariant value >= 0.0m
+
+                    let lineValue (sku: String, quantity: Int, prices: Map<String, Int>): Int = {
+                        let price = Map.get(sku, prices) |> Option.withDefault(0)
+                        price * quantity
+                    }
+
+                    behavior f : (agreed: Map<String, Int>, prices: Map<String, Int>, c: Money,
+                                  rate: Decimal) -> Ok | No
+                    let f (agreed, prices, c, rate) = {
+                        let gross = Decimal.fromInt(Map.fold((acc, sku, quantity) ->
+                            acc + lineValue(sku, quantity, prices), 0, agreed))
+                        let fee = Decimal.multiply(gross, rate)
+                        let net = %s
+                        guard Decimal.compare(net, c.value) <= 0 else No
+                        Ok
+                    }
+                    """.formatted(net);
+            Compilation compilation = Compilation.ofSource(model, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            assertEquals(List.of(), unreadReasonsOf(measured(compilation)), net);
+            List<BorderAssessment> lines = linesOf(compilation);
+            assertTrue(lines.stream().anyMatch(line -> line.axis().contains("*")),
+                    net + ": " + describe(lines));
+            for (BorderAssessment line : lines) {
+                if (line.axis().contains("*")) {
+                    assertEquals(List.of(), pointsWithNoRow(line), net);
+                }
+            }
+        }
+    }
+
+    /**
+     * What a way states of a total alone is what it states of the one element the total is of:
+     * under {@code 0 <= List.sum(xs)} the total takes every value from nought, as the element
+     * does, so a rule on the total beside another number is shown to reach every value.
+     */
+    @Test
+    void aBoundTheWayStatesOfATotalAloneLeavesTheTotalEveryValueWithinIt() {
+        assertEquals(List.of(), unreadReasonsOf(measured(compiled("", "xs: List<Int>, c: Int",
+                "Int.max(0, List.sum(xs)) <= c"))));
+        Compilation fold = Compilation.ofSource("""
+                module demo
+
+                data Ok
+                data No
+
+                behavior f : (ys: Map<String, Int>, c: Int) -> Ok | No
+                let f (ys, c) = {
+                    guard Int.max(0, Map.fold((acc, key, value) -> acc + value, 0, ys)) <= c else No
+                    Ok
+                }
+                """, "Main");
+        fold.measure(Adequacy.Asked.fullReport());
+        fold.answerEverything();
+        assertEquals(List.of(), unreadReasonsOf(measured(fold)));
+    }
+
+    /** A decimal times itself is no product of two numbers apart, and is named as a product. */
+    @Test
+    void aDecimalTimesItselfIsStillNamedAsAProduct() {
+        PartitionEvidence measured = measured(compiled(MONEY_AND_RATE, "g: Money, c: Money",
+                "Decimal.compare(Decimal.multiply(g.value, g.value), c.value) <= 0"));
+        assertTrue(reasonsOf(measured).contains(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
+                reasonsOf(measured).toString());
+    }
+
     /** A number times itself is no product of two numbers apart, and is named as a product. */
     @Test
     void aNumberTimesItselfBesideOtherNumbersIsStillNamedAsAProduct() {
@@ -360,6 +487,18 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         return rows;
     }
 
+    /** The points of {@code line} a row is owed at and none was built for, by name. */
+    private static List<String> pointsWithNoRow(BorderAssessment line) {
+        List<String> out = new ArrayList<>();
+        line.items().forEach((point, item) -> {
+            if (item instanceof ItemAssessment.Owed owed && owed.searches().each().stream()
+                    .noneMatch(ItemAssessment.Attempt.Certified.class::isInstance)) {
+                out.add(point + " of " + line.axis() + " @ " + line.value());
+            }
+        });
+        return out;
+    }
+
     private static List<BorderAssessment> linesOf(Compilation compilation) {
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "demo");
         assertNotNull(read, "the model under test compiles");
@@ -388,6 +527,16 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         Map<String, List<String>> out = new LinkedHashMap<>();
         evidence.axes().forEach(axis -> out.put(axis.path(), axis.classes()));
         return out;
+    }
+
+    /** The reasons that say a rule was not read: those beside the ones that say it was read and
+     *  divides no position. */
+    private static List<UndividedPosition.Reason> unreadReasonsOf(PartitionEvidence evidence) {
+        return reasonsOf(evidence).stream()
+                .filter(reason -> reason != UndividedPosition.Reason.RULE_RELATING_TWO_VALUES
+                        && reason != UndividedPosition.Reason.RULE_ABOUT_A_RUN
+                        && reason != UndividedPosition.Reason.RULE_NEVER_TURNS_ON_THIS_LINE)
+                .toList();
     }
 
     private static List<UndividedPosition.Reason> reasonsOf(PartitionEvidence evidence) {
