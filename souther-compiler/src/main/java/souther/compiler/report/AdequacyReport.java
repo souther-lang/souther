@@ -10077,8 +10077,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case NOTHING_NAMED -> "stopped at " + figuresSaid(it.figures())
                         + ", which no option sets";
                 case A_ROW_OR_A_RULE_AT_THE_POINT -> "the search stopped at "
-                        + figuresSaid(it.figures()) + ", which no option sets: write a row there,"
-                        + " or a rule that leaves no value there";
+                        + figuresSaid(it.figures()) + ", which no option sets: a row there, or a"
+                        + " rule that leaves no value there, would settle it; nothing shows one"
+                        + " is needed";
                 // The search did not look past the figure, so nothing says there is no row.
                 case A_ROW_THAT_TELLS_THE_REWRITE_APART -> "stopped at "
                         + figuresSaid(it.figures()) + ", which no option sets: a row that tells"
