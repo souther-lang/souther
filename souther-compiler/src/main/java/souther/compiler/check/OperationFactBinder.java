@@ -371,12 +371,19 @@ final class OperationFactBinder {
                                 bound.offset(), bound.rel(), new ResultBound.Provided.Always<>(),
                                 bound.origin()));
             }
+            // A value that is one of the elements of a container.
+            case OperationFact.AnswersAnElementOf of -> {
+                requireAKernel(stdlib, operation, "which element it answers");
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.OPTIONAL,
+                        "an option of an element of a container");
+                DeclaredArgument source = holdToTheDeclaration(declaration, of.source(), null,
+                        TypeRequirement.CONTAINER, "what the value answered is an element of");
+                holdTheAnswerToAnElementOf(declaration, source);
+                yield new BoundOperationFact.AnswersAnElementOf(operation, source);
+            }
             // A value found among the elements of a container, and a truth the closure answers.
             case OperationFact.AnswersAnElementWhereTheClosureHolds found -> {
-                if (stdlib.intrinsicOf(theLibraryOperation(operation.operation())) == null) {
-                    throw new IllegalStateException(operation.operation() + " is written in the"
-                            + " language, and what it finds is its body's to say");
-                }
+                requireAKernel(stdlib, operation, "what it finds");
                 holdTheResultToTheDeclaration(declaration, TypeRequirement.OPTIONAL,
                         "an option of an element a closure holds of");
                 DeclaredArgument source = holdToTheDeclaration(declaration, found.source(),
@@ -417,10 +424,7 @@ final class OperationFactBinder {
             }
             // An option of what the closure answers, made of an option of what it is handed.
             case OperationFact.AnswersTheClosureOnWhatItHolds answers -> {
-                if (stdlib.intrinsicOf(theLibraryOperation(operation.operation())) == null) {
-                    throw new IllegalStateException(operation.operation() + " is written in the"
-                            + " language, and what it answers of an option is its body's to say");
-                }
+                requireAKernel(stdlib, operation, "what it answers of an option");
                 holdTheResultToTheDeclaration(declaration, TypeRequirement.OPTIONAL,
                         "an option of what a closure answers");
                 DeclaredArgument option = holdToTheDeclaration(declaration, answers.option(),
@@ -513,11 +517,8 @@ final class OperationFactBinder {
                                 slots(stdlib, declaration, clause, true)).toList());
             }
             case OperationFact.IsRelated related -> {
-                if (stdlib.intrinsicOf(theLibraryOperation(operation.operation())) == null) {
-                    throw new IllegalStateException(operation.operation() + " is written in the"
-                            + " language, and what it answers is related to other kernels' answers"
-                            + " beside its body: what a body comes to is proved of it");
-                }
+                requireAKernel(stdlib, operation,
+                        "what it answers beside other kernels' answers");
                 yield new BoundOperationFact.IsRelated(operation,
                         slots(stdlib, declaration, related.holds(), false));
             }
@@ -574,11 +575,7 @@ final class OperationFactBinder {
             // What a value is put in answers a container like it, and what is put in is one of what
             // such a container holds.
             case OperationFact.PutsAValueIn puts -> {
-                if (stdlib.intrinsicOf(theLibraryOperation(operation.operation())) == null) {
-                    throw new IllegalStateException(operation.operation() + " is written in the"
-                            + " language, and what it puts in is declared beside its body: what a"
-                            + " body builds is proved of it");
-                }
+                requireAKernel(stdlib, operation, "what it puts in");
                 DeclaredArgument into = holdToTheDeclaration(declaration, puts.into(), null,
                         TypeRequirement.CONTAINER, "what a value is put in");
                 DeclaredArgument value = holdToTheDeclaration(declaration, puts.value(), null,
@@ -1133,15 +1130,35 @@ final class OperationFactBinder {
             throw new IllegalStateException(name + " is said to find an element of argument "
                     + (source.position() + 1) + ", and its signature hands no closure those");
         }
+        holdTheAnswerToAnElementOf(declaration, source);
         Type held = Type.elementOf(source.stands());
         if (!(declaration.params().get(closure.position()) instanceof Type.FnOf fn)
                 || fn.params().size() != 1 || !fn.params().getFirst().equals(held)
-                || !Type.BOOL.equals(fn.result())
-                || !(declaration.result() instanceof Type.OptionOf(Type found))
-                || !found.equals(held)) {
+                || !Type.BOOL.equals(fn.result())) {
+            throw new IllegalStateException(name + " is handed " + Type.show(
+                    declaration.params().get(closure.position())) + " for the elements of "
+                    + Type.show(source.stands()) + ", which is not a closure from the elements to"
+                    + " a truth");
+        }
+    }
+
+    /** That the operation answers an option of what the elements of {@code source} are. */
+    private static void holdTheAnswerToAnElementOf(CompleteSignature declaration,
+                                                   DeclaredArgument source) {
+        String name = ((ValueName.Stdlib) declaration.declaring().operation()).qualified();
+        if (!(declaration.result() instanceof Type.OptionOf(Type found))
+                || !found.equals(Type.elementOf(source.stands()))) {
             throw new IllegalStateException(name + " answers " + Type.show(declaration.result())
-                    + " of " + Type.show(source.stands()) + ", which is not an option of an element"
-                    + " a closure from the elements to a truth holds of");
+                    + " of " + Type.show(source.stands()) + ", which is not an option of one of"
+                    + " its elements");
+        }
+    }
+
+    /** That {@code operation} is a kernel: what a written operation answers is its body's to say. */
+    private static void requireAKernel(Stdlib stdlib, DeclaredOperation operation, String what) {
+        if (stdlib.intrinsicOf(theLibraryOperation(operation.operation())) == null) {
+            throw new IllegalStateException(operation.operation() + " is written in the language,"
+                    + " and " + what + " is its body's to say");
         }
     }
 

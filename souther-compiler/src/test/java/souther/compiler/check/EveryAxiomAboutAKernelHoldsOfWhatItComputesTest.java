@@ -26,9 +26,11 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -231,79 +233,118 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
         }
         WhatTheLibraryComputes.Program program =
                 new WhatTheLibraryComputes.Program("demo", source.toString());
+        // Either side of one another and of nought, at the ends of an Int, and wider than a list
+        // holds, where the call aborts and there is no list for a bound to be tested of.
+        List<Long> ends = List.of(Long.MIN_VALUE, Long.MIN_VALUE + 2, -3L, 0L, 2L, 5L,
+                Long.MAX_VALUE - 2, Long.MAX_VALUE);
         List<String> wrong = new ArrayList<>();
         int answered = 0;
+        int aborted = 0;
         for (Map.Entry<String, Integer> run : runs.entrySet()) {
-            for (long first : List.of(-3L, 0L, 2L, 5L)) {
-                for (long second : List.of(-3L, 0L, 2L, 5L)) {
+            for (long first : ends) {
+                for (long second : ends) {
                     Map<String, Object> input = new HashMap<>();
                     input.put("a0", first);
                     input.put("a1", second);
-                    Object out = program.answer(run.getKey(), "I" + run.getKey(), "N", input);
-                    answered++;
-                    if (!Map.of("n", 1L).equals(out)) {
-                        wrong.add(run.getKey() + " over " + first + ", " + second
-                                + " answered " + out);
+                    try {
+                        Object out = program.answer(run.getKey(), "I" + run.getKey(), "N", input);
+                        answered++;
+                        if (!Map.of("n", 1L).equals(out)) {
+                            wrong.add(run.getKey() + " over " + first + ", " + second
+                                    + " answered " + out);
+                        }
+                    } catch (RuntimeException stopping) {
+                        if (!WhatTheLibraryComputes.stopsOnItsArguments(stopping)) {
+                            throw stopping;
+                        }
+                        aborted++;
                     }
                 }
             }
         }
         assertEquals(List.of(), wrong, source::toString);
         assertTrue(answered > 0, "no kernel is said to bound each element of its answer");
+        assertTrue(aborted > 0, "no span wider than a list holds was asked for");
     }
 
     /**
-     * Every kernel said to find an element a closure holds of answers, where it answers a value, an
-     * element of the container that the closure answers true on.
+     * Every kernel said to answer an element of a container answers, where it answers a value, one
+     * of the elements the container holds — and one the closure answers true on, where it is said
+     * to be found by one. Over arguments either side of nought, so an index and a missing element
+     * are asked as well as a present one.
      */
     @Test
-    void everyKernelFindingAnElementItsClosureHoldsOfAnswersOneOfTheContainer() throws Exception {
+    void everyKernelAnsweringAnElementOfAContainerAnswersOneOfItsElements() throws Exception {
         Stdlib stdlib = DefaultStdlib.get();
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
         StringBuilder source = new StringBuilder("module demo\n\ndata N = { n: Int }\n");
         List<String> runs = new ArrayList<>();
         for (ValueName.Stdlib.Operation operation : stdlib.entries().keySet()) {
-            BoundOperationFacts.Found found = facts.answersAnElementWhereTheClosureHolds(operation);
-            if (found == null) {
+            DeclaredArgument from = facts.answersAnElementOf(operation);
+            if (from == null) {
                 continue;
             }
+            boolean found = facts.answersAnElementWhereTheClosureHolds(operation) != null;
             Stdlib.Signature declaration = stdlib.entry(operation).signature();
             List<Type> params = WhatTheLibraryComputes.instantiated(declaration.params(),
                     declaration);
-            if (params.size() != 2 || !(params.get(found.closure().position())
-                    instanceof Type.FnOf closure) || closure.params().getFirst() != Type.Prim.INT) {
-                throw new IllegalStateException("no signature of " + operation.qualified()
-                        + " is written here");
+            List<String> fields = new ArrayList<>(List.of("xs: List<Int>"));
+            List<String> args = new ArrayList<>();
+            for (int position = 0; position < params.size(); position++) {
+                Type param = params.get(position);
+                if (position == from.position()) {
+                    args.add("i.xs");
+                } else if (param == Type.Prim.INT) {
+                    fields.add("a" + position + ": Int");
+                    args.add("i.a" + position);
+                } else if (param instanceof Type.FnOf closure
+                        && closure.params().equals(List.of(Type.Prim.INT))
+                        && closure.result() == Type.BOOL) {
+                    args.add("v -> v > 2");
+                } else {
+                    throw new IllegalStateException("no argument of type " + Type.show(param)
+                            + " is written here");
+                }
             }
-            List<String> args = new ArrayList<>(List.of("", ""));
-            args.set(found.closure().position(), "v -> v > 2");
-            args.set(found.source().position(), "i.xs");
-            String name = "found" + runs.size();
-            source.append("\ndata I").append(name).append(" = { xs: List<Int> }\n\nbehavior ")
-                    .append(name).append(" : (i: I").append(name)
-                    .append(") -> N constructs N\nlet ").append(name).append(" (i) = N {\n")
-                    .append("    n = match ").append(operation.qualified()).append("(")
-                    .append(String.join(", ", args)).append(") with\n")
-                    .append("        | Some r -> if r > 2 && List.any(x -> x == r, i.xs)")
-                    .append(" then 1 else 0\n        | None -> 1\n}\n");
+            String name = "answered" + runs.size();
+            // Two when a value came out and was one of the elements (and met the closure), one when
+            // none did, and nought where a value came out that is none of them.
+            source.append("\ndata I").append(name).append(" = { ")
+                    .append(String.join(", ", fields)).append(" }\n\nbehavior ").append(name)
+                    .append(" : (i: I").append(name).append(") -> N constructs N\nlet ")
+                    .append(name).append(" (i) = N {\n    n = match ")
+                    .append(operation.qualified()).append("(").append(String.join(", ", args))
+                    .append(") with\n        | Some r -> if List.any(x -> x == r, i.xs)")
+                    .append(found ? " && r > 2" : "").append(" then 2 else 0\n")
+                    .append("        | None -> 1\n}\n");
             runs.add(name);
         }
         WhatTheLibraryComputes.Program program =
                 new WhatTheLibraryComputes.Program("demo", source.toString());
         List<String> wrong = new ArrayList<>();
-        int answered = 0;
+        Set<String> answeredAValue = new HashSet<>();
         for (String name : runs) {
             for (List<Long> elements : List.of(List.<Long>of(), List.of(1L), List.of(3L),
                     List.of(1L, 3L, 5L), List.of(5L, 3L), List.of(0L, -1L, 4L, 4L))) {
-                Object out = program.answer(name, "I" + name, "N", Map.of("xs", elements));
-                answered++;
-                if (!Map.of("n", 1L).equals(out)) {
-                    wrong.add(name + " over " + elements + " answered " + out);
+                for (long index : List.of(-1L, 0L, 1L, 5L)) {
+                    Map<String, Object> input = new HashMap<>();
+                    input.put("xs", elements);
+                    for (int position = 0; position < 4; position++) {
+                        input.put("a" + position, index);
+                    }
+                    Object out = program.answer(name, "I" + name, "N", input);
+                    if (Map.of("n", 2L).equals(out)) {
+                        answeredAValue.add(name);
+                    } else if (!Map.of("n", 1L).equals(out)) {
+                        wrong.add(name + " over " + elements + " at " + index + " answered "
+                                + out);
+                    }
                 }
             }
         }
         assertEquals(List.of(), wrong, source::toString);
-        assertTrue(answered > 0, "no kernel is said to find an element its closure holds of");
+        assertEquals(new HashSet<>(runs), answeredAValue,
+                "a kernel said to answer an element that no run made answer one");
     }
 
     @Test

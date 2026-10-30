@@ -412,6 +412,16 @@ public final class BoundOperationFacts {
     }
 
     /**
+     * The container whose element {@code operation} answers where it answers a value, or null where
+     * it says no such thing ({@link BoundOperationFact.AnswersAnElementOf}).
+     */
+    public DeclaredArgument answersAnElementOf(ValueName operation) {
+        BoundOperationFact.AnswersAnElementOf held =
+                one(BoundOperationFact.AnswersAnElementOf.class, operation);
+        return held == null ? null : held.source();
+    }
+
+    /**
      * The container {@code operation} finds an element of and the closure that element is found
      * by, where what it answers holds, if it holds a value, an element of that container the closure
      * answers true on — or null where it says no such thing

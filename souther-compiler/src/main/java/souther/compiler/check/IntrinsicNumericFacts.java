@@ -243,7 +243,10 @@ final class IntrinsicNumericFacts {
             NumericConstraint premise = premiseOf(bound.provided(), call, at, terms);
             NumericConstraint stated = stating(bound, atom,
                     ref -> terms.affineOf(CallArguments.of(ref, call), at));
-            if (premise != null && stated != null) {
+            // A condition naming no value was settled by the constants the rows were told apart
+            // with: a row held back for one is a condition that does not hold, and recorded it
+            // would make every call with a written divisor a value computed for nothing.
+            if (premise != null && stated != null && !premise.atoms().isEmpty()) {
                 out.add(new ConditionalConstraint(premise, stated));
             }
         }

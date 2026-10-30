@@ -439,6 +439,13 @@ final class DischargeRules {
         return predicate == null || predicate.params().size() != 1 ? null : predicate;
     }
 
+    /** The container whose element {@code call} answers where it answers a value, or null where
+     * the operation does not say which value it answers. */
+    static Core elementAnsweredFrom(Core.PreservedCall call) {
+        DeclaredArgument source = facts().answersAnElementOf(call.operation());
+        return source == null ? null : CallArguments.of(source, call);
+    }
+
     /** Where every element {@code call} answers stands, as the operation keeps them. */
     static List<ResultBound<DeclaredArgument>> boundsOnEachElement(Core.PreservedCall call) {
         return facts().boundsOnEachElementOfTheResult(call.operation());

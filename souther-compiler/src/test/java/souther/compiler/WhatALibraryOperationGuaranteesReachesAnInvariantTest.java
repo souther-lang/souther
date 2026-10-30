@@ -237,6 +237,13 @@ class WhatALibraryOperationGuaranteesReachesAnInvariantTest {
                 "List.map(x -> Idx(x), List.reverse(List.take(3, List.filter(x -> x >= 0, xs))))"));
     }
 
+    /** Every construction that only keeps elements hands on what held of each. */
+    @Test
+    void anElementTheFilterKeptSurvivesSortingAndDropping() {
+        assertEquals(List.of(), overList("List<Idx>", "Idx",
+                "List.map(x -> Idx(x), List.sort(List.drop(1, List.filter(x -> x >= 0, xs))))"));
+    }
+
     @Test
     void theValueFindFoundIsReadThroughTheNameItWasGiven() {
         assertEquals(List.of(), overList("Pos", "Pos", """
@@ -246,6 +253,107 @@ class WhatALibraryOperationGuaranteesReachesAnInvariantTest {
                         | Some k -> Pos(k)
                         | None -> Pos(1)
                 }"""));
+    }
+
+    /** The value found is an element of the container, so what held of every element of it holds
+     * of the value, beside the predicate it was found by. */
+    @Test
+    void theValueFindFoundIsAnElementOfWhatWasFilteredAndSoMeetsItsPredicate() {
+        assertEquals(List.of(), overList("Idx", "Idx", """
+                match List.find(x -> true, List.filter(x -> x >= 0, xs)) with
+                    | Some x -> Idx(x)
+                    | None -> Idx(0)"""));
+    }
+
+    @Test
+    void theValueFindFoundIsAnElementOfARangeAndSoIsBetweenItsEnds() {
+        assertEquals(List.of(), reported("(n: Int) -> Pos", "Pos", """
+                (n) = if n >= 1
+                    then match List.find(k -> k > 3, List.rangeInclusive(1, n)) with
+                        | Some k -> Pos(k)
+                        | None -> Pos(1)
+                    else Pos(1)"""));
+    }
+
+    /** The control: found among elements nothing was known of. */
+    @Test
+    void theValueFindFoundOfAnUnfilteredListMeetsOnlyItsPredicate() {
+        assertEquals(List.of("E2011"), overList("Idx", "Idx", """
+                match List.find(x -> true, xs) with
+                    | Some x -> Idx(x)
+                    | None -> Idx(0)"""));
+    }
+
+    /** The control: a map makes new elements, so nothing held of the ones it was given. */
+    @Test
+    void theValueFindFoundAmongMappedElementsIsNotKnownOfTheOriginals() {
+        assertEquals(List.of("E2011"), overList("Idx", "Idx", """
+                match List.find(x -> true, List.map(y -> y - 1, List.filter(y -> y >= 0, xs))) with
+                    | Some x -> Idx(x)
+                    | None -> Idx(0)"""));
+    }
+
+    /** Every operation that answers one of the elements of a container is read the same way. */
+    @Test
+    void theLargestOfWhatWasFilteredIsOneOfTheElementsKept() {
+        assertEquals(List.of(), overList("Idx", "Idx", """
+                match List.max(List.filter(x -> x >= 0, xs)) with
+                    | Some x -> Idx(x)
+                    | None -> Idx(0)"""));
+    }
+
+    @Test
+    void theSmallestOfWhatWasFilteredIsOneOfTheElementsKept() {
+        assertEquals(List.of(), overList("Idx", "Idx", """
+                match List.min(List.filter(x -> x >= 0, xs)) with
+                    | Some x -> Idx(x)
+                    | None -> Idx(0)"""));
+    }
+
+    @Test
+    void theElementAtAnIndexOfWhatWasFilteredIsOneOfTheElementsKept() {
+        assertEquals(List.of(), overList("Idx", "Idx", """
+                match List.get(0, List.filter(x -> x >= 0, xs)) with
+                    | Some x -> Idx(x)
+                    | None -> Idx(0)"""));
+    }
+
+    @Test
+    void theLargestOfWhatWasFilteredIsReadThroughTheNameItWasGiven() {
+        assertEquals(List.of(), overList("Idx", "Idx", """
+                {
+                    let largest = List.max(List.filter(x -> x >= 0, xs))
+                    match largest with
+                        | Some x -> Idx(x)
+                        | None -> Idx(0)
+                }"""));
+    }
+
+    /** The control: the largest of what nothing was known of. */
+    @Test
+    void theLargestOfAnUnfilteredListIsNotKnownNotNegative() {
+        assertEquals(List.of("E2011"), overList("Idx", "Idx", """
+                match List.max(xs) with
+                    | Some x -> Idx(x)
+                    | None -> Idx(0)"""));
+    }
+
+    /** A closure handed the value of an option is handed an element of the container it was
+     * answered from, as a closure handed an element is. */
+    @Test
+    void aClosureHandedTheLargestOfWhatWasFilteredIsHandedOneOfTheElementsKept() {
+        assertEquals(List.of(), overList("Idx", "Idx", """
+                match Option.map(x -> Idx(x), List.max(List.filter(x -> x >= 0, xs))) with
+                    | Some made -> made
+                    | None -> Idx(0)"""));
+    }
+
+    @Test
+    void aClosureHandedTheLargestOfAnUnfilteredListIsHandedNothingKnown() {
+        assertEquals(List.of("E2011"), overList("Idx", "Idx", """
+                match Option.map(x -> Idx(x), List.max(xs)) with
+                    | Some made -> made
+                    | None -> Idx(0)"""));
     }
 
     /** The control: the predicate the closure answers is the one the value meets and no other. */

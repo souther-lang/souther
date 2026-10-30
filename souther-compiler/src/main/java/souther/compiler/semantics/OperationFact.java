@@ -231,13 +231,28 @@ public sealed interface OperationFact {
     }
 
     /**
+     * What the operation answers holds, where it holds a value, an element of {@code source}:
+     * {@code List.max(xs)} is {@code Some(x)} only for an {@code x} of {@code xs}, so whatever holds
+     * of every element of {@code xs} holds of it.
+     *
+     * <p>About the value the answer holds and not about whether it holds one, which is a law of its
+     * own: that the container holds something says when the answer is {@code Some}, and says nothing
+     * of which element it is {@code Some} of.
+     */
+    record AnswersAnElementOf(ArgumentRef source) implements OperationFact {
+
+        public AnswersAnElementOf {
+            Objects.requireNonNull(source, "an element is one of some container's");
+        }
+    }
+
+    /**
      * What the operation answers holds, where it holds a value, an element of {@code source} that
      * the closure it is handed answers true on: {@code List.find(p, xs)} is {@code Some(x)} only for
      * an {@code x} of {@code xs} with {@code p(x)}.
      *
-     * <p>About the value the answer holds and not about whether it holds one, which is a law of its
-     * own: that some element meets the predicate says when the answer is {@code Some}, and says
-     * nothing of the element it is {@code Some} of.
+     * <p>The stronger of two statements, and the weaker is stated from it and never beside it
+     * ({@link AnswersAnElementOf}): written twice, the two could be changed apart.
      */
     record AnswersAnElementWhereTheClosureHolds(ArgumentRef source) implements OperationFact {
 

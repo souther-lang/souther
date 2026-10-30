@@ -424,6 +424,10 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
                                         ResultBound<DeclaredArgument> bound)
             implements SeveralAboutAnOperation {}
 
+    /** What the operation answers holds, where it holds a value, an element of {@code source}. */
+    record AnswersAnElementOf(DeclaredOperation operation, DeclaredArgument source)
+            implements OneAboutAnOperation {}
+
     /** What the operation answers holds, where it holds a value, an element of {@code source} that
      *  {@code closure} answers true on. */
     record AnswersAnElementWhereTheClosureHolds(DeclaredOperation operation,

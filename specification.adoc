@@ -1756,6 +1756,7 @@ Over the cases that are reached, the clause is established where every one of th
 | `+List.rangeInclusive(from, to)+` | every element is at or above `+from+` and at or below `+to+`
 | `+List.filter(p, xs)+` | every element answered meets `+p+`
 | `+List.find(p, xs)+` | the value found, where there is one, meets `+p+`
+| `+List.find(p, xs)+`, `+List.max(xs)+`, `+List.min(xs)+`, `+List.get(i, xs)+` | the value answered, where there is one, is an element of `+xs+`, so whatever holds of every element of `+xs+` holds of it
 |===
 
 [,souther]
@@ -1770,7 +1771,7 @@ behavior kept : (xs: List<Int>) -> List<Idx>
 let kept (xs) = List.map(x -> Idx(x), List.filter(x -> x >= 0, xs)) // discharged: every element kept is not negative
 ----
 
-What a construction over an answer keeps is what it keeps of the elements: `+List.take+`, `+List.drop+`, `+List.reverse+` and `+List.sort+` hand on what held of the elements they were given, and `+List.map+` does not, since its elements are new ones. The answer may be named first. For `+List.find+` the guarantee is about the value of the `+Some+` arm and nothing is assumed in the `+None+` arm. That some element meets `+p+` is what makes the answer a `+Some+`, and it names no element.
+What a construction over an answer keeps is what it keeps of the elements: `+List.take+`, `+List.drop+`, `+List.reverse+` and `+List.sort+` hand on what held of the elements they were given, and `+List.map+` does not, since its elements are new ones. The answer may be named first. For an operation that answers an element, the guarantee is about the value of the `+Some+` arm and nothing is assumed in the `+None+` arm; it is the same account a closure handed an element is read by, so `+match List.max(List.filter(x -> x >= 0, xs)) with | Some x -> Idx(x)+` is discharged, and so is the closure of `+Option.map+` over that answer. That some element meets `+p+` is what makes `+List.find+` answer a `+Some+`, and it names no element.
 
 An operation not named here guarantees nothing that can be relied on, and a clause over what it answered is left to the run-time check. What is known of the arguments at one call is a different question: it is what the path establishes, and it is read where the clause is.
 

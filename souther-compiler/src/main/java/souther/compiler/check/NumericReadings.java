@@ -173,6 +173,7 @@ final class NumericReadings {
                      BoundOperationFact.EveryElementOfItsAnswerIs _,
                      BoundOperationFact.AnswersTheClosureOnWhatItHolds _,
                      BoundOperationFact.BoundsEachElementOfItsResult _,
+                     BoundOperationFact.AnswersAnElementOf _,
                      BoundOperationFact.AnswersAnElementWhereTheClosureHolds _,
                      BoundOperationFact.KeepsWhetherItHoldsACodePointOf _,
                      BoundOperationFact.KeepsTheKeysOf _,

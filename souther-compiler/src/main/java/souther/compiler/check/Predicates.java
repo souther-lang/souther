@@ -80,10 +80,15 @@ final class Predicates {
             // What an operation guarantees of the elements it answers holds of every element it
             // answers, and of every element of a construction over it that keeps the elements it
             // was given. A construction that makes new ones says nothing of them.
-            if (EnumSet.of(ElementShape.PERMUTES, ElementShape.SUBSET).containsAll(crossed)) {
+            if (ElementShape.THAT_KEEP_THE_ELEMENTS.containsAll(crossed)) {
                 Core.Block kept = DischargeRules.keptWhereItHolds(call, here);
                 if (kept != null && key != null) {
                     found.add(new Quantified(key, Set.copyOf(crossed), kept));
+                }
+                // The value found is one of the elements the closure holds of.
+                Core.Block meeting = DischargeRules.foundWhereItHolds(call, here);
+                if (meeting != null && key != null) {
+                    found.add(new Quantified(key, Set.copyOf(crossed), meeting));
                 }
                 for (ResultBound<DeclaredArgument> row : DischargeRules.boundsOnEachElement(call)) {
                     // Read where the call was written, which is not always where the elements are
@@ -94,6 +99,13 @@ final class Predicates {
                         found.add(new ElementBound(against, row.offset(), row.rel()));
                     }
                 }
+            }
+            // The value an operation answers is one of the elements of the container it answers it
+            // from, so everything known of every element of that container is known of it.
+            Core answeredFrom = DischargeRules.elementAnsweredFrom(call);
+            if (answeredFrom != null) {
+                source = answeredFrom;
+                continue;
             }
             Source built = DischargeRules.builtFrom(call);
             if (built == null) {

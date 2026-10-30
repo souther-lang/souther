@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * What is true of the language's own operations, as somebody wrote it down.
@@ -75,8 +76,8 @@ public final class OperationFacts {
      * beside it would be a kind nothing validates until someone remembers — and the arrangement is
      * meant to make remembering unnecessary.
      */
-    private static final List<Declared> DECLARED =
-            withWhetherAnOptionHoldsAValue(withWhereThePiecesCameFrom(declared()));
+    private static final List<Declared> DECLARED = withWhichElementAnAnswerHolds(
+            withWhetherAnOptionHoldsAValue(withWhereThePiecesCameFrom(declared())));
 
     /**
      * {@code declared}, with where the elements of each list put together of pieces came from
@@ -122,6 +123,22 @@ public final class OperationFacts {
                 out.add(new Declared(each.operation(), law(AnswerAspect.PRESENCE,
                         new LawProposition.Observed<>(new LawSubject.Argument<>(option),
                                 new SideAnswered(AnswerAspect.PRESENCE, true)))));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * {@code declared}, with that the value an operation finds by a closure is an element of what
+     * it finds it among stated from that: the weaker statement of the stronger, as where the pieces
+     * came from is.
+     */
+    private static List<Declared> withWhichElementAnAnswerHolds(List<Declared> declared) {
+        List<Declared> out = new ArrayList<>(declared);
+        for (Declared each : declared) {
+            if (each.fact() instanceof OperationFact.AnswersAnElementWhereTheClosureHolds(
+                    ArgumentRef source)) {
+                out.add(new Declared(each.operation(), new OperationFact.AnswersAnElementOf(source)));
             }
         }
         return List.copyOf(out);
@@ -544,6 +561,11 @@ public final class OperationFacts {
             about("Option", "map", new OperationFact.AnswersTheClosureOnWhatItHolds(CONTAINER)),
             about("List", "max", law(AnswerAspect.PRESENCE, holdsSomething(at(0)))),
             about("List", "min", law(AnswerAspect.PRESENCE, holdsSomething(at(0)))),
+            // And which value they answer, which a law of presence does not say: one of the
+            // elements the list holds.
+            about("List", "max", new OperationFact.AnswersAnElementOf(at(0))),
+            about("List", "min", new OperationFact.AnswersAnElementOf(at(0))),
+            about("List", "get", new OperationFact.AnswersAnElementOf(at(1))),
 
             // Two of them, either or both.
             about("List", "append", lemma(law(AnswerAspect.EMPTINESS,
@@ -939,7 +961,7 @@ public final class OperationFacts {
 
             // Where a predicate reads its container, and which shapes of construction carry its
             // statement there.
-            about("List", "all", reads(CONTAINER, ElementShape.PERMUTES, ElementShape.SUBSET)),
+            about("List", "all", reads(CONTAINER, ElementShape.THAT_KEEP_THE_ELEMENTS)),
             about("List", "allDistinctBy",
                     reads(CONTAINER, ElementShape.PERMUTES, ElementShape.SUBSET)),
             about("List", "any", reads(CONTAINER, ElementShape.PERMUTES)),
@@ -1100,7 +1122,11 @@ public final class OperationFacts {
     }
 
     private static OperationFact reads(ArgumentRef container, ElementShape... through) {
-        return new OperationFact.ReadsItsContainer(container, java.util.Set.of(through));
+        return reads(container, Set.of(through));
+    }
+
+    private static OperationFact reads(ArgumentRef container, Set<ElementShape> through) {
+        return new OperationFact.ReadsItsContainer(container, through);
     }
 
     private static OperationFact takenAs(TakenAs how) {

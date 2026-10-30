@@ -1197,6 +1197,15 @@ final class Terms {
         return atomExtents.get(atom);
     }
 
+    /** A walk or an accumulation is the one recipe its atom has, so a guarantee beside it is a
+     * naming that disagrees with itself. */
+    private static void refusingGuarantees(FactSubject atom,
+                                           List<ConditionalConstraint> guarantees) {
+        if (!guarantees.isEmpty()) {
+            throw new IllegalStateException("atom `" + atom.rendered() + "` is a walk or an"
+                    + " accumulation, which records one recipe, and was also given " + guarantees);
+        }
+    }
 
     /**
      * Records how {@code atom} was computed, where it stands for arithmetic the affine fragment
@@ -1231,11 +1240,13 @@ final class Terms {
             made = recipeFor(computed.meaning(), computed.at());
         } else if (asOperator(e) instanceof Core.PreservedCall call
                 && Reductions.reducing(call, at) instanceof Reductions.Reducing walk) {
+            refusingGuarantees(atom, guarantees);
             recordingWalk(atom, walk, e, at);
             return;
         } else if (asOperator(e) instanceof Core.PreservedCall accumulation
                 && Accumulations.accumulating(accumulation)
                         instanceof Accumulations.Accumulating accumulating) {
+            refusingGuarantees(atom, guarantees);
             recordingAccumulation(atom, accumulating, e, at);
             return;
         } else {
