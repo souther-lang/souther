@@ -33,6 +33,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -665,13 +666,16 @@ class HowLongThePathASearchAnswersIsReadTest {
     }
 
     /** Built in two places, the case holds a different number in each, and that is no number of
-     *  the call. */
+     *  the call: it is not read through the body, and what a run of the call works out places a
+     *  row. */
     @Test
     void aCaseABehaviorBuildsInMoreThanOnePlaceIsNotReadThroughItsBody() {
         String human = humanReportOf(BEHAVIOR_OF_A_LINE.formatted(SEARCH, """
                 if List.length(steps) > 5 then Found { steps = [] } else Found { steps = steps }"""));
         String ofH = human.substring(human.indexOf("  h "));
-        assertTrue(ofH.contains("not read"), human);
+        assertFalse(ofH.contains("read as h/List.length({line"), human);
+        assertTrue(ofH.contains(WhyAPlaceIsUndividedIsSaid.of(
+                UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS)), human);
     }
 
     @Test

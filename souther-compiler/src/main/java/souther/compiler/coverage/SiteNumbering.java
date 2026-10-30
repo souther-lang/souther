@@ -125,7 +125,17 @@ public final class SiteNumbering {
         for (int raw : seen.walksOn()) {
             walksOn.add(walk(raw));
         }
-        return new AlignedObservation(identity, arms, ways, visits, walks, walksOn);
+        Set<SeenComparison> compared = new LinkedHashSet<>();
+        for (RecordedComparison sides : seen.compared()) {
+            compared.add(new SeenComparison(outcome(sides.at()), sides.nth(), sides.left(),
+                    sides.right()));
+        }
+        Set<ConditionOutcomeSite> pastTheKept = new LinkedHashSet<>();
+        for (int raw : seen.pastTheKept()) {
+            pastTheKept.add(outcome(raw));
+        }
+        return new AlignedObservation(identity, arms, ways, visits, walks, walksOn, compared,
+                pastTheKept);
     }
 
     private SiteAddress at(int raw) {

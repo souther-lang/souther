@@ -2,7 +2,9 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.StatedComparison;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.UnreadComparison;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.Arrivals;
@@ -16,6 +18,7 @@ import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.CasesOfALineAsked;
@@ -23,13 +26,18 @@ import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WrittenLine;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumberRegion;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
 import souther.compiler.reach.ComparisonArrival;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -809,6 +817,7 @@ sealed interface ComparisonAssessment {
             SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why =
                     new LinkedHashMap<>();
             boolean allStopped = true;
+            WhereAReadingStopped where = WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT;
             for (Part part : parts) {
                 Unread stopped = notDrawn(part.line());
                 if (stopped == null) {
@@ -819,10 +828,11 @@ sealed interface ComparisonAssessment {
                             ? new Part(part.id(), against.partedBy(List.of()), List.of()) : part);
                 } else {
                     stopped.why().forEach(why::putIfAbsent);
+                    where = where.and(stopped.where());
                     each.add(new Part(part.id(), stopped, List.of()));
                 }
             }
-            return allStopped ? new Unread(why) : new Several(each);
+            return allStopped ? new Unread(why, where) : new Several(each);
         }
 
         /**
@@ -835,7 +845,8 @@ sealed interface ComparisonAssessment {
                 case AtAPosition _, AcrossPositions _, OutsideTheDomain _,
                      NothingArrivesAtItsLine _, TurnsNothing _, NoFeasibleInput _ ->
                         new Unread(atEachOf(cuttingOf(line).over(),
-                                new BlockReason.SeveralLinesInOneRule()));
+                                new BlockReason.SeveralLinesInOneRule()),
+                                WhereAReadingStopped.ELSEWHERE);
                 case AgainstAnotherValue _, AnswerDependent _, OnADependencysAnswer _,
                      StatesNoRelation _, NoInput _, CutsNothing _, AnswersNowhere _,
                      NothingArrivesAtItsRelation _, RelationTurnsNothing _ -> null;
@@ -886,14 +897,17 @@ sealed interface ComparisonAssessment {
      * @param why where the reading was looking and what it left there. The places are diagnostic
      *            positions and never the subject of a question: what such a rule is about is the
      *            part that was not read
+     * @param where where the reading stopped, as the reader that stopped saw it: in what a run
+     *              works out, the comparison is a line on the runs ({@link #onItsRuns})
      */
-    record Unread(SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why)
-            implements ComparisonAssessment {
+    record Unread(SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why,
+                  WhereAReadingStopped where) implements ComparisonAssessment {
 
         public Unread {
             if (why == null || why.isEmpty()) {
                 throw new IllegalArgumentException("a reading that stopped says where and why");
             }
+            Objects.requireNonNull(where, "a reading that stopped stopped somewhere");
             why = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(why));
         }
     }
@@ -975,8 +989,8 @@ sealed interface ComparisonAssessment {
             // over the expression is the only account of what the rule is about, which is what it
             // is for.
             case Cutting.Read.Stopped stopped ->
-                    besideWhereTheValuesCameFrom(stopped.why(), comparison, reads,
-                            read.newtypes());
+                    besideWhereTheValuesCameFrom(stopped.why(), stopped.where(), comparison,
+                            reads, read.newtypes());
         };
     }
 
@@ -1003,14 +1017,16 @@ sealed interface ComparisonAssessment {
             case Cutting.Read.NoOrderToCountOn over -> over.over().isEmpty()
                     ? aboutNoPosition.get()
                     : new Unread(atEachOf(over.over(),
-                            new BlockReason.UnreadComparisonDomain()));
+                            new BlockReason.UnreadComparisonDomain()),
+                            WhereAReadingStopped.ELSEWHERE);
             // And where the quantity was read, counts, and draws a line that falls at a number no
             // exact ratio holds. The same coordinates as the case above and a reason of its own:
             // what stopped it is a constant the rule is written with, and not the order beneath.
             case Cutting.Read.NumberNoRatioHolds over -> over.over().isEmpty()
                     ? aboutNoPosition.get()
                     : new Unread(atEachOf(over.over(),
-                            new BlockReason.LineAtANumberNoRatioHolds()));
+                            new BlockReason.LineAtANumberNoRatioHolds()),
+                            WhereAReadingStopped.ELSEWHERE);
             case Cutting.Read.CutsNothing _, Cutting.Read.AnswersNowhere _,
                  Cutting.Read.Stopped _, Cutting.Read.Several _,
                  Cutting.Read.AgainstAnotherValue _, Cutting.Read.StatesNoRelation _ ->
@@ -1038,7 +1054,7 @@ sealed interface ComparisonAssessment {
                                     ? Optional.empty()
                                     : Optional.of(new DrawnBeside(behavior, at,
                                             part.id().line().line(), claim)), witnesses);
-                    case Cutting.Read.Stopped stopped -> new Unread(stopped.why());
+                    case Cutting.Read.Stopped stopped -> new Unread(stopped.why(), stopped.where());
                     case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
                          Cutting.Read.NumberNoRatioHolds _, Cutting.Read.CutsNothing _,
                          Cutting.Read.AnswersNowhere _, Cutting.Read.Several _,
@@ -1378,8 +1394,8 @@ sealed interface ComparisonAssessment {
         if (!stoppedAt.isEmpty()) {
             out.add(new Several.Part(part.id(), new Unread(atEachOf(cutting.over(),
                     new BlockReason.WhereALineDecidesNotWorkedOut(stoppedAt.stream()
-                            .map(CompositionBudget::figure).toList()))),
-                    List.of()));
+                            .map(CompositionBudget::figure).toList())),
+                    WhereAReadingStopped.ELSEWHERE), List.of()));
         }
         if (out.isEmpty()) {
             out.add(new Several.Part(part.id(), new TurnsNothing(cutting), List.of()));
@@ -1531,7 +1547,8 @@ sealed interface ComparisonAssessment {
         if (!stoppedAt.isEmpty()) {
             out.add(new Several.Part(part.id(), new Unread(atEachOf(against.filedAt(),
                     new BlockReason.WhereALineDecidesNotWorkedOut(stoppedAt.stream()
-                            .map(CompositionBudget::figure).toList()))), List.of()));
+                            .map(CompositionBudget::figure).toList())),
+                    WhereAReadingStopped.ELSEWHERE), List.of()));
         }
         return List.copyOf(out);
     }
@@ -1582,7 +1599,8 @@ sealed interface ComparisonAssessment {
     private static ComparisonAssessment aboutNoPosition(StatedComparison comparison,
                                                         InputReads reads,
                                                         DeclarationNewtypes newtypes) {
-        return besideWhereTheValuesCameFrom(new LinkedHashMap<>(), comparison, reads, newtypes);
+        return besideWhereTheValuesCameFrom(new LinkedHashMap<>(), WhereAReadingStopped.ELSEWHERE,
+                comparison, reads, newtypes);
     }
 
     /**
@@ -1602,11 +1620,112 @@ sealed interface ComparisonAssessment {
      */
     private static ComparisonAssessment besideWhereTheValuesCameFrom(
             SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> filed,
-            StatedComparison comparison, InputReads reads, DeclarationNewtypes newtypes) {
+            WhereAReadingStopped where, StatedComparison comparison, InputReads reads,
+            DeclarationNewtypes newtypes) {
         SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why =
                 new LinkedHashMap<>(filed);
         GuardThresholds.cameFrom(comparison, reads, newtypes, why);
-        return why.isEmpty() ? new NoInput() : new Unread(why);
+        return why.isEmpty() ? new NoInput() : new Unread(why, where);
+    }
+
+    /**
+     * A comparison of two whole numbers in a body that runs, whose reading stopped short of the
+     * input, as a line on how far apart its sides come out on a run
+     * ({@link BorderQuantity#comparedOnARun}) — or {@code stopped} itself where it is no such
+     * comparison.
+     *
+     * <p>The reading stopping says nothing of where the input has to stand for the comparison to
+     * come out either way, and that stays so: the line divides none of the places it is filed at,
+     * which is what a reader is told of them. What it adds is that a row's run works the two sides
+     * out, so where a row stands on the line is read off the run rather than left unread.
+     *
+     * <p>Filed where the reading that stopped was filed, which is where it looked.
+     *
+     * @param which which comparison of the model this is, which is what the line is one of
+     */
+    static ComparisonAssessment onItsRuns(String behavior, StatedComparison comparison,
+                                          ModelOccurrence which, Citation at, Unread stopped,
+                                          InputReading read, CountWitnesses.Lookup witnesses) {
+        if (comparison.reading() instanceof Core.BinaryReading.ExactNumbers
+                || !Type.INT.equals(comparison.left().type())
+                || !Type.INT.equals(comparison.right().type())) {
+            return stopped;
+        }
+        List<FilingCoordinate> filed = List.copyOf(stopped.why().keySet());
+        List<NumericTerm.FromOnePosition> lengths = new ArrayList<>();
+        List<NumericTerm.FromOnePosition> values = new ArrayList<>();
+        for (FilingCoordinate each : filed) {
+            writtenAt(each.path(), read, lengths, values);
+        }
+        BorderQuantity apart = BorderQuantity.comparedOnARun(behavior, which,
+                written(comparison.left()) + " - " + written(comparison.right()), filed,
+                lengths, values);
+        Cutting cutting = new Cutting(apart, new Level.OfTheQuantity(ExactRatio.ZERO),
+                comparison.claim(), NumericDomain.Bounds.OPEN);
+        return onTheQuantity(at, cutting, new Cutting.Read.Cuts(cutting).authored(), read, false,
+                witnesses);
+    }
+
+    /**
+     * The numbers of the row at {@code at} a candidate for a number only a run works out is
+     * written at, added to what is gathered: how many it holds where it is a container, and the
+     * number itself where it is a whole number outside any container. An element's own number is
+     * written the way the row writes what nothing asks of, since one number for every element of
+     * a container is a statement they meet together and not a place.
+     */
+    private static void writtenAt(TermPath at, InputReading read,
+                                  List<NumericTerm.FromOnePosition> lengths,
+                                  List<NumericTerm.FromOnePosition> values) {
+        Type type = read.domain().typeAt(at, read.rules());
+        if (type == null) {
+            return;
+        }
+        if (Type.INT.equals(TypeOps.base(type, read.rules().inners()))) {
+            if (at.insideAContainer()) {
+                return;
+            }
+            NumericTerm.FromOnePosition own = new NumericTerm.ValueOf(at);
+            if (!values.contains(own)) {
+                values.add(own);
+            }
+            return;
+        }
+        ValueName.Stdlib size = NumericMeasures.takenOf(type, read.rules().inners());
+        NumericTerm.TakenOf howMany = size == null ? null : NumericTerm.TakenOf.howManyHeldAt(
+                size, at, type, read.rules().inners(), read.rules().symbols());
+        if (howMany == null) {
+            return;
+        }
+        if (!lengths.contains(howMany) && !at.insideAContainer()) {
+            lengths.add(howMany);
+        }
+    }
+
+    /**
+     * {@code e} the way an author would read it in a report: names, numbers, fields and calls,
+     * and anything else as a part left out.
+     *
+     * <p>A projection is the accesses it stands for, so it is written as the last of them, which
+     * holds the rest as its target.
+     */
+    private static String written(Core e) {
+        return switch (Core.withoutStanding(e)) {
+            case Core.Int number -> Long.toString(number.value());
+            case Core.Read name -> name.name();
+            case Core.FieldAccess field -> written(field.target()) + "." + field.field();
+            case Core.FieldProjection projection -> written(projection.lastAccess());
+            case Core.Call call -> call.fn().rendered() + writtenArguments(call.args());
+            case Core.PreservedCall call ->
+                    call.declared().operation() + writtenArguments(call.args());
+            case Core.Block _ -> "…";
+            default -> "(…)";
+        };
+    }
+
+    private static String writtenArguments(List<Core> args) {
+        List<String> each = new ArrayList<>();
+        args.forEach(arg -> each.add(written(arg)));
+        return "(" + String.join(", ", each) + ")";
     }
 
     /**
@@ -1694,7 +1813,8 @@ sealed interface ComparisonAssessment {
     /** A rule whose line is placed and whose sides were not worked out, said at every place the
      *  quantity is filed at. */
     private static ComparisonAssessment sideNotWorkedOut(Cutting cutting, UnheldNumber why) {
-        return new Unread(atEachOf(cutting.over(), new BlockReason.LineSideNotWorkedOut(why)));
+        return new Unread(atEachOf(cutting.over(), new BlockReason.LineSideNotWorkedOut(why)),
+                WhereAReadingStopped.ELSEWHERE);
     }
 
     /**

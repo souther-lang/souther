@@ -4,8 +4,10 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
+import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 
 import org.junit.jupiter.api.Test;
 
@@ -33,6 +35,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * element alone holds is still reported as unread.
  */
 class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
+
+    /** What the report says of a fold read as no total: its runs place the rows. */
+    private static final String ON_ITS_RUNS =
+            WhyAPlaceIsUndividedIsSaid.of(UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS);
 
     private static String model(String step, String seed, int threshold) {
         return """
@@ -85,8 +91,9 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
         assertTrue(report.contains("List.sum(xs[*].q)"), report);
         assertFalse(report.contains("not read"), report);
 
+        // No addition, so no total: what the run works out is all that places a row.
         String squared = report(model("{ let grown = acc * acc  grown + a.q }", "0", 4));
-        assertTrue(squared.contains("not read"), squared);
+        assertTrue(squared.contains(ON_ITS_RUNS), squared);
         assertFalse(squared.contains("List.sum"), squared);
     }
 
@@ -229,7 +236,7 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
                 "acc * acc + a.q",
                 "acc * (acc - 1) + acc + a.q")) {
             String report = report(model(step, "0", 4));
-            assertTrue(report.contains("not read"), () -> step + ": " + report);
+            assertTrue(report.contains(ON_ITS_RUNS), () -> step + ": " + report);
             assertFalse(report.contains("List.sum"), () -> step + ": " + report);
         }
     }

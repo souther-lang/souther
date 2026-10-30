@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 
 import java.util.List;
 import java.util.Set;
@@ -46,6 +48,10 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
                     + "    invariant pay >= -1000000 && pay <= 1000000");
 
     private static final String SUM = "a.pay + b.pay + c.pay";
+
+    /** What the report says of a walk not unrolled: it is measured on what its runs worked out. */
+    private static final String ON_ITS_RUNS =
+            WhyAPlaceIsUndividedIsSaid.of(UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS);
 
     /**
      * {@code report} without where every run is shown to stop. A sum written out tells each
@@ -224,7 +230,7 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     @Test
     void aWalkFromTheEndIsNotUnrolledInTheOrderTheListIsWritten() {
         String report = measured("List.foldRight((m, acc) -> acc * 2 + m, 0, [a.pay, 1, 2])");
-        assertTrue(report.contains("not read"), report);
+        assertTrue(report.contains(ON_ITS_RUNS), report);
         assertFalse(report.contains("= 74"), "the line of 4 * a.pay + 4: " + report);
         assertTrue(measured("a.pay + 10").contains("read as f/a.pay: = 290"),
                 "the line the walk would draw were it read");
@@ -233,13 +239,13 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     @Test
     void aWalkOverAContainerWithNoOrderIsNotUnrolled() {
         String report = measured("Set.fold((acc, m) -> acc * 2 + m, 0, Set.fromList([a.pay, 1]))");
-        assertTrue(report.contains("not read"), report);
+        assertTrue(report.contains(ON_ITS_RUNS), report);
     }
 
     @Test
     void aWalkWhoseStepIsNotAnAdditionIsNotTheSum() {
         String report = measured("List.fold((acc, m) -> acc * m.pay, 1, [a, b, c])");
-        assertTrue(report.contains("not read"), report);
+        assertTrue(report.contains(ON_ITS_RUNS), report);
         assertNotEquals(measured(SUM), report);
     }
 

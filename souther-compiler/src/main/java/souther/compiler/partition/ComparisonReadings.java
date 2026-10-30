@@ -715,6 +715,29 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     }
 
     /**
+     * {@code assessed}, where the reading of a comparison in this body stopped, as the line a
+     * row's run places it on ({@link ComparisonAssessment#onItsRuns}): a run through a body is what
+     * works its numbers out, and a reading of a body is the one place that is so. Otherwise
+     * {@code assessed} as it is.
+     *
+     * <p>Of a comparison of the model only: one written into a copy the model states nothing
+     * about has no line to be one of.
+     */
+    private static ComparisonAssessment onItsRunsWhereUnread(
+            String behavior, StatedComparison comparison, ConstructOccurrence stands,
+            Citation where, ComparisonAssessment assessed, InputReading read,
+            CountWitnesses.Lookup witnesses) {
+        if (!(assessed instanceof ComparisonAssessment.Unread unread)
+                || unread.where() != WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT) {
+            return assessed;
+        }
+        return ModelOccurrence.statedAt(stands)
+                .map(which -> ComparisonAssessment.onItsRuns(behavior, comparison, which, where,
+                        unread, read, witnesses))
+                .orElse(assessed);
+    }
+
+    /**
      * @param applying the applications of the closures this position stands inside, moved by the
      *                 same steps as {@code reads}
      * @param assumed  what evaluating everything before this position established
@@ -754,13 +777,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     .<BoundaryPolicy.Standing>map(BoundaryPolicy.Standing.Refused::new)
                     .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
                             switch (stated.statement()) {
-                                case Stated.AComparison(var comparison) ->
+                                case Stated.AComparison(var comparison) -> onItsRunsWhereUnread(
+                                        in.behavior(), comparison, stands, where,
                                         ComparisonAssessment.of(in.behavior(), comparison, where,
                                                 in.read(), reads, applying, null,
                                                 in.answering(), false, in.conditions(),
                                                 Optional.of(stands.lineage()
                                                         .expansionProjection()),
-                                                witnesses);
+                                                witnesses), in.read(), witnesses);
                                 case Stated.AnApplication(var _, var answered) ->
                                         ComparisonAssessment.ofAnApplication(in.behavior(),
                                                 answered, where, in.read(), witnesses);

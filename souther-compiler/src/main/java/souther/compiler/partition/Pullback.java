@@ -3019,6 +3019,19 @@ final class Pullback {
      * then the elements answering one, which is what keeps those elements.
      */
     private Sized sizedByTheArmsOfAnElement(Core e, InputReads at) {
+        return byTheArmsOfAnElement(e, at, this::sizeOf);
+    }
+
+    /**
+     * The number {@code e} is, where it is chosen by the arms of a {@code match} or an {@code if}
+     * on the element of a container being added up over and {@code ofAnArm} reads each arm as a
+     * number every element settles alike: that number times whether the arm is taken — or null
+     * where {@code e} is no such choice, or no element is being added up over. What a number is
+     * here is {@code ofAnArm}'s: how many an arm holds ({@link #sizedByTheArmsOfAnElement}), or
+     * what a step adds to what it carried ({@link #countedByTheArmsOfTheStep}).
+     */
+    private Sized byTheArmsOfAnElement(Core e, InputReads at,
+                                       BiFunction<Core, InputReads, Sized> ofAnArm) {
         Core chosen = Core.withoutStanding(e);
         if (quantifying.isEmpty() || !(chosen instanceof Core.Match || chosen instanceof Core.If)) {
             return null;
@@ -3031,7 +3044,7 @@ final class Pullback {
             Choice.Arm arm = choice.arms().get(i);
             InputReads inside = at.choosing(arm.decidedBy(), read.rules().symbols(),
                     read.rules().newtypes());
-            Sized holds = sizeOf(arm.answers(), inside);
+            Sized holds = ofAnArm.apply(arm.answers(), inside);
             if (!(holds instanceof Sized.AsAForm(LinearForm<Quantity> form))) {
                 return holds;
             }
@@ -8450,6 +8463,9 @@ final class Pullback {
      */
     private LinearForm<Quantity> seedPlusWhatEachElementAdds(Core node, InputReads at) {
         Core stands = Core.withoutStanding(node);
+        if (stands instanceof Core.FieldAccess || stands instanceof Core.FieldProjection) {
+            return unlessUnread(() -> aFieldOfAWalk(node, at));
+        }
         if (!(stands instanceof Core.PreservedCall) && !(stands instanceof Core.Read)) {
             return null;
         }
@@ -8463,12 +8479,57 @@ final class Pullback {
         if (added == null) {
             LinearForm<Quantity> ofAnAnswer =
                     unlessUnread(() -> seedPlusWhatEachElementOfAnAnswerAdds(walk));
-            return ofAnAnswer != null ? ofAnAnswer : unlessUnread(() -> foldOfWrittenOut(walk));
+            if (ofAnAnswer != null) {
+                return ofAnAnswer;
+            }
+            LinearForm<Quantity> counted = unlessUnread(() -> countedByTheArmsOfTheStep(walk));
+            return counted != null ? counted : unlessUnread(() -> foldOfWrittenOut(walk));
         }
+        return ofTheInput(added);
+    }
+
+    /** {@code added} as a form of the input's numbers. */
+    private static LinearForm<Quantity> ofTheInput(InputNumber.SeedAndAdded added) {
         Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
         added.added().coefs().forEach((term, by) -> coefs.put(new DecisionAtom.OfTheInput(term),
                 by));
         return new LinearForm<>(added.seed(), coefs);
+    }
+
+    /**
+     * What a field of the record a walk from a seed ends with comes to, where {@code node} takes
+     * that field of such a walk — or of a call of a behavior whose body is one — and the field is a
+     * walk of its own ({@link SeededWalk#ofTheField}): the seed and the total of what its step adds,
+     * or how many elements take each arm of it. Null where it is none of these.
+     *
+     * <p>A field that only adds is the total a fold over that field alone is, so a comparison of
+     * {@code state(xs).score} draws the line {@code List.sum} of the same numbers draws, whatever
+     * the other fields of the record do.
+     */
+    private LinearForm<Quantity> aFieldOfAWalk(Core node, InputReads at) {
+        Core.FieldAccess access = switch (Core.withoutStanding(node)) {
+            case Core.FieldAccess one -> one;
+            case Core.FieldProjection projection -> projection.lastAccess();
+            default -> null;
+        };
+        if (access == null) {
+            return null;
+        }
+        Denotation whole = at.standing(access.target(), read.rules().symbols(),
+                read.rules().newtypes());
+        Inside.ACall called = intoACall(whole);
+        if (called != null) {
+            whole = called.body().at().standing(called.body().value(), read.rules().symbols(),
+                    read.rules().newtypes());
+        }
+        SeededWalk walk = SeededWalk.of(whole.value(), blocksAt(whole));
+        SeededWalk field = walk == null ? null : walk.ofTheField(access.field());
+        if (field == null) {
+            return null;
+        }
+        InputNumber.SeedAndAdded added = InputNumber.ofAWalkAdding(field, read.domain(),
+                whole.at(), read.rules());
+        return added != null ? ofTheInput(added) : countedByTheArmsOfTheStep(field, whole.at());
     }
 
     /**
@@ -9228,6 +9289,77 @@ final class Pullback {
                         ValueName.Stdlib.operation("List", "sum"));
         return added == null ? null
                 : LinearForm.<Quantity>constant(seed).plus(added).orNull();
+    }
+
+    /**
+     * What a walk from a seed over a container of the input ends with, where its step is a
+     * {@code match} or an {@code if} on the element each arm of which adds to what it carried a
+     * number every element settles alike, or keeps it: the seed, and each of those numbers times
+     * how many elements take its arm — or null where it is anything else.
+     *
+     * <p>By induction over the walk, which hands every element to the step once. Each arm is read
+     * once with what it carried standing for any number, and has to come to that number once and a
+     * number beside it; what decides the arm may not read what it carried, so which arm an element
+     * takes is a statement about the element alone. {@code if x == 0 then n + 1 else n} is then
+     * how many elements are nought. An arm that starts over, {@code else 0}, keeps nothing it
+     * carried, and the walk counts nothing.
+     */
+    private LinearForm<Quantity> countedByTheArmsOfTheStep(Denotation call) {
+        SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
+        return walk == null ? null : countedByTheArmsOfTheStep(walk, call.at());
+    }
+
+    /** The same, of {@code walk} as it is handed, read where it stands at {@code at}. */
+    private LinearForm<Quantity> countedByTheArmsOfTheStep(SeededWalk walk, InputReads at) {
+        Core step = Core.withoutStanding(walk.step().body());
+        BindingId accumulator = walk.accumulator().binding();
+        if (decidedByWhatItCarried(step, accumulator)
+                || !(walkedContainer(walk.container(), at)
+                        instanceof DecisionSubject.AnInput held)
+                || !(AffineForms.outcome(walk.seed(), at, quantities())
+                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                                LinearForm<Quantity> seed))) {
+            return null;
+        }
+        Quantity.HowManyCarried soFar = new Quantity.HowManyCarried(ACarriedValue.made());
+        Sized counted = tentatively(soFar, () -> {
+            if (!quantifying.add(held)) {
+                return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
+            }
+            carriedSoFar.put(accumulator, LinearForm.atom(soFar));
+            try {
+                Sized each = byTheArmsOfAnElement(step, at,
+                        (arm, inside) -> addedBesideWhatItCarried(arm, inside, soFar));
+                return each instanceof Sized.AsAForm(LinearForm<Quantity> form)
+                        ? addedUpOver(held, form) : each;
+            } finally {
+                carriedSoFar.remove(accumulator);
+                quantifying.remove(held);
+            }
+        });
+        return counted instanceof Sized.AsAForm(LinearForm<Quantity> over)
+                ? seed.plus(over).orNull() : null;
+    }
+
+    /** Whether what decides which arm of {@code fork} is taken reads {@code carried}, or
+     *  {@code fork} is no {@code match} or {@code if}. */
+    private static boolean decidedByWhatItCarried(Core fork, BindingId carried) {
+        return switch (Core.withoutStanding(fork)) {
+            case Core.If iff -> ComparisonAssessment.readsAnswer(iff.cond(), carried);
+            case Core.Match match -> ComparisonAssessment.readsAnswer(match.scrutinee(), carried);
+            default -> true;
+        };
+    }
+
+    /** What {@code arm} adds to {@code carried}, read as a number of what stands at {@code at}:
+     *  {@code carried} once and a form beside it that does not read it. */
+    private Sized addedBesideWhatItCarried(Core arm, InputReads at,
+                                           Quantity.HowManyCarried carried) {
+        LinearForm<Quantity> added = AffineForms.outcome(arm, at, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)
+                ? addedBesideOnce(form, carried) : null;
+        return added == null ? new Sized.NotSized(new WhyUnread.NotArithmetic())
+                : new Sized.AsAForm(added);
     }
 
     /**

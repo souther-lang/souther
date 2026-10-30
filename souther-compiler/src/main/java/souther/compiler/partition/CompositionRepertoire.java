@@ -238,7 +238,19 @@ public enum CompositionRepertoire {
      * something beside the number, are written by no way here; raising no figure does, and a total
      * only such a map comes to is not one no map comes to.
      */
-    MAPS_WRITTEN_WITH_ONE_ENTRY;
+    MAPS_WRITTEN_WITH_ONE_ENTRY,
+
+    /**
+     * The rows whose run works a number out at an item, for a number only a run works out.
+     *
+     * <p>Nothing says where the input's numbers stand for the run to come to a value there, so a
+     * row is looked for by writing candidates and running each. The candidates are rows of a few
+     * sizes and values; a row the item asks for elsewhere — a longer list, a value no candidate
+     * holds — is found by none of them, and that none was found is not that none is there. What
+     * would reach the rest is a way of writing the candidates the run turns on, and raising no
+     * figure does.
+     */
+    ROWS_A_RUN_IS_TRIED_FOR;
 
     /**
      * Whether a row that meets this for one value of a point meets it for every other: the
@@ -260,7 +272,7 @@ public enum CompositionRepertoire {
                  MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER, ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL,
                  TREES_WRITTEN_FOR_A_COUNT, TREES_WRITTEN_FOR_A_LINE,
                  STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
-                 MAPS_WRITTEN_WITH_ONE_ENTRY -> false;
+                 MAPS_WRITTEN_WITH_ONE_ENTRY, ROWS_A_RUN_IS_TRIED_FOR -> false;
         };
     }
 

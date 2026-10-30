@@ -27,6 +27,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.query.RowObservation;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -1214,8 +1215,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         + " |> Option.withDefault(0)), 0, agreed)",
                 "limit >= Map.fold((acc, k, q) -> acc + q * (Map.get(k, agreed)"
                         + " |> Option.withDefault(0)), 0, agreed)");
+        // No join, so no form: what each run worked out is all that places a row.
         for (String body : otherwise) {
-            assertFalse(linesAbout(measured(inputs, NAT, "Bool", body), "limit").isEmpty(), body);
+            assertFalse(onItsRunsAbout(measured(inputs, NAT, "Bool", body), "limit").isEmpty(),
+                    body);
         }
     }
 
@@ -1236,7 +1239,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 "limit", RELATES), left(inputs, NAT, read, atThe(">=", NAT, inputs, read)));
         String unread = "limit >= Map.fold((acc, k, q) -> {\n    let unused = Int.floorMod(1, d)\n"
                 + "    acc + q * " + looked + "\n}, 0, agreed)";
-        assertFalse(linesAbout(measured(inputs, NAT, "Bool", unread), "limit").isEmpty(), unread);
+        assertFalse(onItsRunsAbout(measured(inputs, NAT, "Bool", unread), "limit").isEmpty(),
+                unread);
         // Not recognised as a join at all, and not merely reported unread for another reason.
         assertTrue(left(inputs, NAT, unread, atThe(">=", NAT, inputs, unread)).keySet().stream()
                 .noneMatch(term -> term.contains("under one key")), unread);
@@ -2938,6 +2942,17 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         List<String> about = linesAbout(measured("x: Int, y: Int", UNUSED, "Bool", within), "y");
         assertFalse(about.isEmpty());
         assertTrue(about.stream().noneMatch(line -> line.contains("stopped at")), about::toString);
+    }
+
+    /** The lines saying a rule at {@code place} is measured on what its runs worked out. */
+    private static List<String> onItsRunsAbout(Compilation compilation, String place) {
+        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(
+                        compilation.texts())).lines().map(String::strip)
+                .filter(line -> line.startsWith("· no line")
+                        && line.contains(WhyAPlaceIsUndividedIsSaid.of(
+                                UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS))
+                        && line.endsWith("about `" + place + "`"))
+                .toList();
     }
 
     /** The lines of a report about {@code place} that say it was not read. */

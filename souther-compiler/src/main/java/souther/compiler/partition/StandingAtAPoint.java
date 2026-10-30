@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.TypeView;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ConditionOutcomeSite;
+import souther.compiler.coverage.SeenComparison;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
@@ -355,7 +356,7 @@ public final class StandingAtAPoint {
             // the readings are tried under each choice of an element of each.
             boolean stands = false;
             Set<ReadingGap> stopped = new LinkedHashSet<>();
-            Readings readings = readings(where, one, quantity, decides);
+            Readings readings = readings(where, one, quantity, decides, watched);
             List<BorderQuantity.Observation> tried = readings.tried();
             for (int which = 0; which < tried.size(); which++) {
                 switch (stoodAt(quantity, criterion, tried.get(which), decides, reached)) {
@@ -528,7 +529,7 @@ public final class StandingAtAPoint {
                     }
                 }
             }
-            Readings readings = readings(where, one, quantity, decides);
+            Readings readings = readings(where, one, quantity, decides, watched);
             for (int which = 0; which < readings.tried().size(); which++) {
                 // Only where the statement turns on the line, and only through an element the run
                 // met the rule on: a reading somewhere it does not says nothing about where this
@@ -667,6 +668,11 @@ public final class StandingAtAPoint {
         /** The walk over the row this is one of. */
         final RowWalk walk() {
             return walk;
+        }
+
+        @Override
+        public final Optional<BorderQuantity.SidesOnARun> comparedOnTheRun() {
+            return walk.comparedOnTheRun();
         }
 
         /**
@@ -1092,14 +1098,48 @@ public final class StandingAtAPoint {
          */
         private final Set<OrderOfAKey> readTheOtherWay;
 
+        /** Where a run through the comparison the line being read was drawn from is recorded,
+         *  none for a line on no comparison a run records. */
+        private final List<ConditionOutcomeSite> recordedAt;
+
+        /** What {@link #comparedOnTheRun} answered, once it was asked; null before. */
+        private Optional<BorderQuantity.SidesOnARun> comparedOnTheRun;
+
         RowWalk(BehaviorInputs where, ObservedInputs observed) {
             this(where, observed, Set.of());
         }
 
         RowWalk(BehaviorInputs where, ObservedInputs observed, Set<OrderOfAKey> readTheOtherWay) {
+            this(where, observed, readTheOtherWay, List.of());
+        }
+
+        RowWalk(BehaviorInputs where, ObservedInputs observed, Set<OrderOfAKey> readTheOtherWay,
+                List<ConditionOutcomeSite> recordedAt) {
             this.where = where;
             this.observed = observed;
             this.readTheOtherWay = Set.copyOf(readTheOtherWay);
+            this.recordedAt = List.copyOf(recordedAt);
+        }
+
+        /**
+         * What the sides of the comparison came to on the row's run, every visit kept at every
+         * place it is recorded — or empty where the row's run was not watched.
+         */
+        Optional<BorderQuantity.SidesOnARun> comparedOnTheRun() {
+            // Every reading of the row asks, and the run is the row's: put together once.
+            if (comparedOnTheRun == null) {
+                if (observed.watched() instanceof Generator.Watched.Ran(AlignedObservation run)) {
+                    List<SeenComparison> out = new ArrayList<>();
+                    recordedAt.forEach(site -> out.addAll(run.comparedAt(site)));
+                    // Every place on its own word: one place visited past the kept leaves the
+                    // comparison's visits short, whatever the others kept between them.
+                    comparedOnTheRun = Optional.of(new BorderQuantity.SidesOnARun(out,
+                            recordedAt.stream().allMatch(run::keptEveryVisit)));
+                } else {
+                    comparedOnTheRun = Optional.empty();
+                }
+            }
+            return comparedOnTheRun;
         }
 
         /** Whether this walk reads {@code order} the other way round. */
@@ -1564,18 +1604,21 @@ public final class StandingAtAPoint {
      */
     static Readings readings(BehaviorInputs where, ObservedInputs observed,
                              BorderQuantity quantity) {
-        return readings(where, observed, quantity, Optional.empty());
+        return readings(where, observed, quantity, Optional.empty(), List.of());
     }
 
     /**
      * The same, with the containers where the line decides is read at chosen in each reading too:
      * a reading is one choice of an element in every container either is read at, so what the line
-     * reads and what is asked beside it are read of the same elements.
+     * reads and what is asked beside it are read of the same elements. {@code recordedAt} is where
+     * a run through the comparison the line was drawn from is recorded, which a number only a run
+     * works out is read at.
      */
     private static Readings readings(BehaviorInputs where, ObservedInputs observed,
                                      BorderQuantity quantity,
-                                     Optional<WhereAPartDecides.AskedOfRows> decides) {
-        RowWalk walk = new RowWalk(where, observed);
+                                     Optional<WhereAPartDecides.AskedOfRows> decides,
+                                     List<ConditionOutcomeSite> recordedAt) {
+        RowWalk walk = new RowWalk(where, observed, Set.of(), recordedAt);
         DiscoveringRow discovering = new DiscoveringRow(walk);
         quantity.lookAt(discovering);
         decides.ifPresent(asked -> asked.lookAt(discovering));

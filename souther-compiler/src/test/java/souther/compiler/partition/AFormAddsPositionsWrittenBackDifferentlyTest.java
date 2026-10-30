@@ -183,7 +183,7 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
     /**
      * And the whole way through: a level of such a form comes back as a row.
      *
-     * <p>Through {@link BorderQuantity#standingAt} and {@link LevelRealizer} rather than asserted of
+     * <p>Through {@link BorderQuantity#searchGoalAt} and {@link LevelRealizer} rather than asserted of
      * the quantity, because what the single order was reaching was the search — which walked every
      * position over the values of whichever order it had been handed. A decimal position walked by
      * whole numbers finds a row at some levels and not at others, and which is which is nothing a
