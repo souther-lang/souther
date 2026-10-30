@@ -12550,9 +12550,20 @@ public final class Generator {
      *
      * <p>Each parameter on its own, as {@link #valueFor} composes one: the check is the model's
      * constructor for that one type.
+     *
+     * <p>A position is fixed once: a position inside another that is fixed is two accounts of one
+     * place, and nothing is composed for it. A caller holding the wider value says what it holds
+     * at the narrower one itself.
      */
     public static Optional<Map<Integer, FixtureTemplate>> composeWithFixedValues(
             MeasuredInput subject, Map<TermPath, FixtureTemplate> fixed, CandidateCheck check) {
+        for (TermPath outer : fixed.keySet()) {
+            for (TermPath inner : fixed.keySet()) {
+                if (!outer.equals(inner) && inner.isAtOrUnder(outer)) {
+                    return Optional.empty();
+                }
+            }
+        }
         Map<Integer, FixtureTemplate> out = new LinkedHashMap<>();
         for (int p = 0; p < subject.parameters().size(); p++) {
             String head = subject.parameters().get(p);

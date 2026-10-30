@@ -453,6 +453,9 @@ final class BodyGen {
                         // Behavior contract and a multi-input base (issue #57), leaving the success
                         // value cast on the stack
                         requiredCall(call);
+                        // The value is written here and not through genExpr, which is where an
+                        // answer is recorded for every other node.
+                        answerProbe(call);
                         standAs(call.type(), li.value().type());
                         storeLet(li, li.value().type());
                     } else {

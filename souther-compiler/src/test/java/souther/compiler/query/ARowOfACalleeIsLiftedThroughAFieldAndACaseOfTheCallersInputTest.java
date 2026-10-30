@@ -71,6 +71,60 @@ class ARowOfACalleeIsLiftedThroughAFieldAndACaseOfTheCallersInputTest {
             let f (s) = isFifty(s.score + 1)
             """ + CALLEES;
 
+    private static final String THE_WHOLE_AND_ITS_FIELD = """
+            module repro.lift
+            data S = { score: Int }
+            behavior inspect : (item: S, score: Int) -> Bool
+            let inspect (item, score) = item.score == score
+            example inspect
+                | (S { score = 50 }, 50) -> true
+                | (S { score = 50 }, 49) -> false
+            behavior f : (s: S) -> Bool
+            let f (s) = inspect(s, s.score)
+            """;
+
+    private static final String THE_FIELD_AND_ITS_WHOLE = """
+            module repro.lift
+            data S = { score: Int }
+            behavior inspect : (score: Int, item: S) -> Bool
+            let inspect (score, item) = item.score == score
+            example inspect
+                | (50, S { score = 50 }) -> true
+                | (49, S { score = 50 }) -> false
+            behavior f : (s: S) -> Bool
+            let f (s) = inspect(s.score, s)
+            """;
+
+    private static final String THE_LIST_AND_THE_FIELD_OF_AN_ELEMENT = """
+            module repro.lift
+            data S = { score: Int }
+            behavior inspect : (items: List<S>, score: Int) -> Bool
+            let inspect (items, score) = List.length(items) == score
+            example inspect
+                | ([S { score = 1 }], 1) -> true
+                | ([S { score = 1 }], 2) -> false
+            behavior f : (ss: List<S>) -> Bool
+            let f (ss) = List.fold((acc, s) -> acc && inspect(ss, s.score), true, ss)
+            """;
+
+    @Test
+    void aListAndTheFieldOfOneOfItsElementsAreTheListWhenSomeElementHoldsTheValue() {
+        assertEquals(List.of("[[S { score = 1 }]]"),
+                seededInputs(THE_LIST_AND_THE_FIELD_OF_AN_ELEMENT),
+                "the row whose value no element holds lifts to nothing");
+    }
+
+    @Test
+    void aWholeInputAndOneOfItsFieldsAreOneRecordWhenTheRowAgreesWithItself() {
+        assertEquals(List.of("[S { score = 50 }]"), seededInputs(THE_WHOLE_AND_ITS_FIELD),
+                "the row whose field is not the whole's field lifts to nothing");
+    }
+
+    @Test
+    void theOrderTheWholeAndItsFieldAreHandedInDecidesNothing() {
+        assertEquals(List.of("[S { score = 50 }]"), seededInputs(THE_FIELD_AND_ITS_WHOLE));
+    }
+
     @Test
     void anArgumentAtAFieldIsHandedTheRecordHoldingTheValue() {
         List<String> rows = seededInputs(A_FIELD);

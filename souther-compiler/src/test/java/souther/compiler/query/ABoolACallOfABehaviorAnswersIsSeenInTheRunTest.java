@@ -113,6 +113,71 @@ class ABoolACallOfABehaviorAnswersIsSeenInTheRunTest {
         assertTrue(report.contains("adequacy: satisfied"), report);
     }
 
+    private static final String IN_A_CLOSURE = """
+            module demo
+            behavior all : (xs: List<Int>) -> Bool
+            let all (xs) = List.fold((acc, x) -> acc && isFifty(x), true, xs)
+            example all
+                | ([50]) -> true
+                | ([51]) -> false
+            """ + IS_FIFTY;
+
+    private static final String A_DEPENDENCY = """
+            module demo
+            behavior ok : (n: Int) -> Bool
+            behavior w : (n: Int) -> Bool
+                depends on ok
+            let w (n, ok) = ok(n)
+            example w
+                | (1) with ok = true -> true
+                | (2) with ok = false -> false
+            """;
+
+    private static final String A_BOUND_DEPENDENCY = """
+            module demo
+            behavior ok : (n: Int) -> Bool
+            behavior w : (n: Int) -> Bool
+                depends on ok
+            let w (n, ok) = {
+                let r = ok(n)
+                r
+            }
+            example w
+                | (1) with ok = true -> true
+                | (2) with ok = false -> false
+            """;
+
+    /**
+     * A call of a behavior stands in the places an operation of the language's does: inside a
+     * closure handed to one, and as a dependency's answer in tail position or bound by a
+     * {@code let}. A helper cannot call a behavior, so no copy of one holds a call twice.
+     */
+    @Test
+    void aDependencyAnsweringATruthIsSeenInTailPosition() {
+        assertMeasuresWithoutError(A_DEPENDENCY);
+    }
+
+    @Test
+    void aDependencyAnsweringATruthIsSeenWhereALetBindsIt() {
+        assertMeasuresWithoutError(A_BOUND_DEPENDENCY);
+    }
+
+    @Test
+    void aCallInAClosureIsMeasured() {
+        assertMeasuresWithoutError(IN_A_CLOSURE);
+    }
+
+    private static void assertMeasuresWithoutError(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
+                .toList(), report);
+    }
+
     @Test
     void aChainOfDelegationsIsMeasuredAtEveryLevel() {
         assertEveryRowIsPlacedAtItsOwnRule(A_CHAIN, "check", 2);

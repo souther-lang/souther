@@ -11,6 +11,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
 import souther.compiler.partition.FixtureTemplate;
@@ -214,7 +215,7 @@ final class CallExampleSeeds {
                     return List.copyOf(out.values());
                 }
                 Optional<Map<Integer, FixtureTemplate>> lifted =
-                        lifted(call, inputsWritten, subject, check);
+                        lifted(call, inputsWritten, row.inputs(), subject, check);
                 List<FixtureTemplate> inputs = lifted.isEmpty() ? List.of()
                         : composed(base, lifted.get(), subject);
                 List<String> key = inputs.stream()
@@ -323,11 +324,18 @@ final class CallExampleSeeds {
      * case around it are what the model builds ({@link Generator#composeWithFixedValues}).
      */
     private static Optional<Map<Integer, FixtureTemplate>> lifted(
-            Call call, List<Optional<FixtureTemplate>> written, MeasuredInput subject,
-            Generator.CandidateCheck check) {
+            Call call, List<Optional<FixtureTemplate>> written, List<ObservedValue> given,
+            MeasuredInput subject, Generator.CandidateCheck check) {
+        Optional<Set<Integer>> implied = saidByAWiderArgument(call, given);
+        if (implied.isEmpty()) {
+            return Optional.empty();
+        }
         Map<Integer, FixtureTemplate> out = new LinkedHashMap<>();
         Map<TermPath, FixtureTemplate> fixed = new LinkedHashMap<>();
         for (int i = 0; i < call.at().size(); i++) {
+            if (implied.get().contains(i)) {
+                continue;
+            }
             TermPath at = call.at().get(i).orElseThrow();
             int parameter = subject.parameters().indexOf(at.head());
             if (parameter < 0 || written.get(i).isEmpty()) {
@@ -366,6 +374,55 @@ final class CallExampleSeeds {
             }
         }
         return Optional.of(out);
+    }
+
+    /**
+     * The arguments another argument already says: one that stands inside the position another
+     * stands at, whose value the row gives is the value the wider one holds there.
+     *
+     * <p>A position is fixed once. Handed the wider and the narrower both, the model has two
+     * accounts of one place; handed the wider alone, the narrower is what the wider holds.
+     * Empty where the row gives a narrower argument a value the wider does not hold there, which
+     * is no call of the caller's, and where the wider's value cannot be read down to it. Reading
+     * through an element is satisfied by some element, since the call is made once for each.
+     */
+    private static Optional<Set<Integer>> saidByAWiderArgument(Call call,
+                                                               List<ObservedValue> given) {
+        Set<Integer> out = new HashSet<>();
+        for (int wide = 0; wide < call.at().size(); wide++) {
+            TermPath outer = call.at().get(wide).orElseThrow();
+            for (int narrow = 0; narrow < call.at().size(); narrow++) {
+                TermPath inner = call.at().get(narrow).orElseThrow();
+                int shared = outer.steps().size();
+                if (!inner.head().equals(outer.head()) || inner.steps().size() <= shared
+                        || !inner.steps().subList(0, shared).equals(outer.steps())) {
+                    continue;
+                }
+                if (!holdsAt(given.get(wide), inner.steps().subList(shared, inner.steps().size()),
+                        given.get(narrow))) {
+                    return Optional.empty();
+                }
+                out.add(narrow);
+            }
+        }
+        return Optional.of(out);
+    }
+
+    /** Whether {@code held}, read down {@code steps}, comes to {@code expected}. */
+    private static boolean holdsAt(ObservedValue held, List<TermPath.Step> steps,
+                                   ObservedValue expected) {
+        if (steps.isEmpty()) {
+            return held.equals(expected);
+        }
+        List<TermPath.Step> rest = steps.subList(1, steps.size());
+        return switch (steps.getFirst()) {
+            case TermPath.Step.Field field -> held instanceof ObservedValue.Constructed built
+                    && built.field(field.name()) != null
+                    && holdsAt(built.field(field.name()), rest, expected);
+            case TermPath.Step.Element _ -> held instanceof ObservedValue.Sequence sequence
+                    && sequence.elements().stream().anyMatch(each -> holdsAt(each, rest, expected));
+            default -> false;
+        };
     }
 
     /** Whether the decoder refuses one of the values a lift puts at a parameter. */
