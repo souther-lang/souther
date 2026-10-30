@@ -867,13 +867,16 @@ public sealed interface Weakening {
      * the body is not known, and not that none does.
      *
      * <p>Named by the rewrite, because each is an obligation of its own and what left one open says
-     * nothing about the next.
+     * nothing about the next. And by the module, because two modules may each declare a behavior of
+     * the one name and each call the one library definition: their rewrites are the same
+     * {@code Replacement} of the same behavior name, and put together would be one fact.
      */
-    record RewriteUndecided(String behavior, Replacement replacement,
+    record RewriteUndecided(String module, String behavior, Replacement replacement,
                             ReplacementEvidence.Undecided.LeftOpen why)
             implements Weakening {
 
         public RewriteUndecided {
+            Objects.requireNonNull(module, "a rewrite is of a body some module declares");
             Objects.requireNonNull(behavior, "a rewrite is of some behavior's body");
             Objects.requireNonNull(replacement, "a rewrite left open is some rewrite");
             Objects.requireNonNull(why, "a rewrite left open was left open for a reason");

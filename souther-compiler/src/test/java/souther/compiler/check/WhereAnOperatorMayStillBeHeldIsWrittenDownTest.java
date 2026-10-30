@@ -332,7 +332,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "what a comparison or an arithmetic does, written into what a reader copied of"
                             + " another module's definition: a copy that computes another way is"
                             + " another copy, and a reader built from the first answers otherwise"),
-            new Held("souther.compiler.report.ArmVocabulary.label",
+            new Held("souther.compiler.coverage.ArmWord.of",
                     "writes the operator into the words a report shows for an arm"),
             new Held("souther.compiler.reading.Meetings.run",
                     "gathers the operands one operator reaches, which is what it is asked about"),

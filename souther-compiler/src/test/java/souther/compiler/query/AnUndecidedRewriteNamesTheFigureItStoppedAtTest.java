@@ -194,6 +194,71 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
                 () -> "the rewrite that loops names the steps it spent: " + its);
     }
 
+    /**
+     * Two folds of one body, each left open at a figure: the page and the document say which
+     * rewrite each is, and the two are two lines.
+     */
+    @Test
+    void twoRewritesOfOneBodyLeftOpenAreTwoLinesEachSayingWhichRewriteItIs() {
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module repro.allopen
+
+                data Rec = { n: Int, xs: List<Int> }
+
+                behavior count : (r: Rec, k: Int) -> Int
+
+                let count (r, k) = List.length(List.filter(x -> x == k, r.xs))
+
+                behavior done : (r: Rec) -> Bool
+
+                let done (r) = List.all(k -> count(r, k) >= 2, List.rangeInclusive(1, r.n))
+
+                example count
+                    | (Rec { n = 1, xs = [1, 1] }, 1) -> 2
+                    | (Rec { n = 1, xs = [] }, 1) -> 0
+                    | (Rec { n = 0, xs = [] }, 0) -> 0
+                    | (Rec { n = 0, xs = [0] }, 0) -> 1
+                    | (Rec { n = 0, xs = [-1] }, 0) -> 0
+                    | (Rec { n = 0, xs = [1] }, 0) -> 0
+                    | (Rec { n = 0, xs = [-2] }, 0) -> 0
+                    | (Rec { n = 0, xs = [2] }, 0) -> 0
+
+                example done
+                    | (Rec { n = 1, xs = [1, 1] }) -> true
+                    | (Rec { n = 1, xs = [] }) -> false
+                    | (Rec { n = 0, xs = [] }) -> true
+                """), ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        AdequacyReport report = AdequacyReport.of(compilation);
+        SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
+
+        List<String> lines = report.human(rendering).lines().map(String::strip).toList();
+
+        List<String> undecided = lines.stream()
+                .filter(line -> line.startsWith("? not decided whether a row would come out"))
+                .toList();
+        assertEquals(2, undecided.size(), () -> "one line per rewrite left open: " + lines);
+        assertTrue(undecided.stream().anyMatch(line -> line.contains("stopped after its first")),
+                () -> "the fold that stopped after one element is named: " + undecided);
+        assertTrue(undecided.stream().anyMatch(line -> line.contains("handed each step the seed")),
+                () -> "the fold handed the seed is named: " + undecided);
+
+        // Only what is said of the rewrite, up to the reason it was left open: the reasons differ
+        // between the two folds, so a line compared whole would be told apart by them even if the
+        // rewrite were not named.
+        List<String> keepingItOpen = lines.stream()
+                .filter(line -> line.startsWith("repro.allopen.done, where the fold"))
+                .map(line -> line.substring(0, line.indexOf(" — stopped at")))
+                .toList();
+        assertEquals(2, keepingItOpen.size(), () -> "one line per rewrite: " + lines);
+        assertTrue(keepingItOpen.stream().anyMatch(line -> line.endsWith("stopped after its first element")),
+                () -> "what keeps the verdict open names the fold that stopped early: "
+                        + keepingItOpen);
+        assertTrue(keepingItOpen.stream().anyMatch(line -> line.endsWith("handed each step the seed in place of what the step before it answered")),
+                () -> "and the fold handed the seed: " + keepingItOpen);
+    }
+
     private static ReplacementEvidence.Undecided.Way wayOf(ReplacementEvidence.Undecided open,
                                                          ReplacementEvidence.Undecided.Why why) {
         return open.why().ways().stream().filter(each -> each.why() == why).findFirst()

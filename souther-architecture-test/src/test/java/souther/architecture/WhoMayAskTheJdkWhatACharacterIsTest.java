@@ -69,13 +69,14 @@ class WhoMayAskTheJdkWhatACharacterIsTest {
      * {@code RetiredDiagnosticCode}, {@code JsonRenderer}, {@code MessageKeys},
      * {@code MessageTemplate}). About how the compiler's own documentation and reports are searched
      * and laid out, which is what a reader is shown and not what a program means: the {@code doc}
-     * package, {@code AdequacyReport}, {@code ArmVocabulary}, {@code WrittenEnsures}. A precondition
+     * package, {@code AdequacyReport}, {@code ArmWord}, {@code WrittenEnsures}. A precondition
      * on a value the compiler or its caller supplied, refusing nothing a source can write:
      * {@code SoutherProcessor}'s option, {@code Messages}' language tag, {@code SourceId},
      * {@code FixtureTemplate}.
      */
     private static final List<String> MAY_ASK = List.of(
             "souther/compiler/apt/SoutherProcessor#process java/lang/String.isBlank",
+            "souther/compiler/coverage/ArmWord#of java/lang/String.toLowerCase",
             "souther/compiler/cst/SyntaxKind#display java/lang/String.toLowerCase",
             "souther/compiler/diag/DiagnosticCode#docAnchor java/lang/String.toLowerCase",
             "souther/compiler/diag/JsonRenderer#render java/lang/String.toLowerCase",
@@ -130,7 +131,6 @@ class WhoMayAskTheJdkWhatACharacterIsTest {
             "souther/compiler/report/AdequacyReport#excluded java/lang/String.stripTrailing",
             "souther/compiler/report/AdequacyReport#human java/lang/String.toLowerCase",
             "souther/compiler/report/AdequacyReport#word java/lang/String.toLowerCase",
-            "souther/compiler/report/ArmVocabulary#label java/lang/String.toLowerCase",
             "souther/compiler/report/WrittenEnsures#indentOf java/lang/Character.isWhitespace",
             "souther/compiler/source/SourceId#<init> java/lang/String.isBlank");
 

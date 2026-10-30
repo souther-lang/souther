@@ -181,7 +181,8 @@ public final class WeakeningSet {
             // figures each reason was met at are what evidenced them.
             case Weakening.RewriteUndecided it ->
                     new StoppedAtALimit(Weakening.RewriteUndecided.class,
-                            List.of(it.behavior(), it.replacement(), it.why().reasons()));
+                            List.of(it.module(), it.behavior(), it.replacement(),
+                                    it.why().reasons()));
             // The rest are their own fact: every value they hold is what a reader is told, and two
             // of them that are equal are one thing that went wrong. A decision's reading among
             // them: one reading is made of a body, and it stops at one figure.
@@ -231,7 +232,7 @@ public final class WeakeningSet {
                             alsoA(Weakening.MeetingsNotWalked.class, also).limits()));
             // One rewrite left open for the same reasons, each met at every figure either met it.
             case Weakening.RewriteUndecided it -> new Weakening.RewriteUndecided(
-                    it.behavior(), it.replacement(),
+                    it.module(), it.behavior(), it.replacement(),
                     it.why().together(alsoA(Weakening.RewriteUndecided.class, also).why()));
             // Equal under the key and holding nothing but the fact, so both are the same value.
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
