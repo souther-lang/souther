@@ -113,6 +113,62 @@ class AChoiceOwedAtAConstructionIsAskedOfThePathTest {
                 """));
     }
 
+    private static final String XY = "x.value * y.value";
+
+    private static final String ZW = "z.value * w.value";
+
+    /** Four values each between nought and ten, so that each product lies between nought and a
+     * hundred and no arithmetic the domain carries says so. */
+    private static String products(String clause, String body) {
+        return """
+                module demo
+
+                data Small = Int
+                    invariant value >= 0 && value <= 10
+
+                data P = { a: Int, b: Int }
+                    invariant c = %s
+
+                behavior f : (x: Small, y: Small, z: Small, w: Small) -> P
+                    constructs P
+
+                let f (x, y, z, w) =
+                    %s
+                """.formatted(clause, body);
+    }
+
+    @Test
+    void aChoiceBothOfWhoseHalvesAProductBoundsOutIsRefused() {
+        String body = "P { a = " + XY + ", b = " + ZW + " }";
+        String said = refusal(products("a < 0 || b < 0", body));
+        assertTrue(said.startsWith("E2010"), said);
+        assertTrue(!said.contains(ON_A_PATH), said);
+        assertTrue(refusal(products("a < 0 || (b < 0 && a > 100)", body)).startsWith("E2010"));
+    }
+
+    @Test
+    void aChoiceOneHalfOfWhichAProductLeavesOpenIsNotRefused() {
+        String body = "P { a = " + XY + ", b = " + ZW + " }";
+        assertEquals(List.of("E2011"), judged(products("a < 50 || b < 0", body)));
+    }
+
+    @Test
+    void aPartOfAGuardThatAProductBoundsOutIsNotAWayTheConstructionIsBuiltUnder() {
+        String live = "if " + XY + " < 5 || " + ZW + " < 0 then P { a = 0 - 1, b = 0 }"
+                + " else P { a = 1, b = 0 }";
+        assertTrue(refusal(products("a >= 0", live)).startsWith("E2010"));
+    }
+
+    @Test
+    void aGuardEveryPartOfWhichAProductBoundsOutLeavesNothingToReport() {
+        String dead = "if " + XY + " < 0 || " + ZW + " < 0 then P { a = 0 - 1, b = 0 }"
+                + " else P { a = 1, b = 0 }";
+        assertEquals(List.of(), judged(products("a >= 0", dead)));
+        String built = "if " + XY + " < 0 || " + ZW + " < 0 then P { a = " + XY + ", b = " + ZW
+                + " } else P { a = 1, b = 0 }";
+        assertEquals(List.of(), judged(products("a >= 0 && b >= 0", built)));
+    }
+
     @Test
     void aDeniedConjunctionIsAChoiceTheGuardEstablishes() {
         String clause = "Bool.not(a >= 3 && b /= 0)";

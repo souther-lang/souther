@@ -27,6 +27,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * How a predicate is read: what a clause owes where a value is built, what a guard settles where one
@@ -952,8 +953,14 @@ final class Predicates {
      * product is a function of what its factors are bounded by in that state, so a bound derived
      * under the path is not one the values alone carry, and the two questions are never answered
      * from one derivation.
+     *
+     * <p>The one place this is decided for a question about the runs that reach a construction:
+     * which parts of a choice a path can enter, which ways of taking a choice apart a construction
+     * is judged under, and whether the choice owed there can fail. A state's own
+     * {@link Known#reachesNothing} knows its conditions and not the recipes of the arithmetic they
+     * are about, so asked alone it calls a part reachable that nothing can enter.
      */
-    private boolean leavesNoRun(Known asked) {
+    boolean leavesNoRun(Known asked) {
         return asked.reachesNothing()
                 || DerivedNumericFacts.refine(asked.numbers(), terms, Set.of()).isBottom();
     }
@@ -1191,16 +1198,31 @@ final class Predicates {
      * numeric domain, a stdlib predicate settles a fact. A condition of neither shape, and an operand
      * outside the affine fragment, leave {@code k} unchanged (sound). */
     Assumed assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
-        return assumeThrough(new Assuming(this).read(rawCond, positive, at, terms::inside), k);
+        return assumeThrough(new Assuming(this, BY_ITS_CONSTRAINTS)
+                .read(rawCond, positive, at, terms::inside), k, BY_ITS_CONSTRAINTS);
     }
 
-    /** The same over a shape the caller already read the clause into. */
+    /**
+     * The same over a shape the caller already read the clause into, for a question about the runs
+     * that reach a construction: whether a state is one nothing stands in is asked of what follows
+     * from it as well ({@link #leavesNoRun}), at every part of every choice looked through.
+     */
     private Assumed assumeShape(ClauseExpr shape, Known k, Denotations at) {
-        return assumeThrough(new Assuming(this).read(shape, at, terms::inside, null), k);
+        Predicate<Known> dead = this::leavesNoRun;
+        return assumeThrough(new Assuming(this, dead).read(shape, at, terms::inside, null), k,
+                dead);
     }
 
-    /** {@code reading} taken in over {@code k}, and the choices the path holds looked through. */
-    private Assumed assumeThrough(Assumption reading, Known k) {
+    /**
+     * Whether a state is one nothing stands in, as far as its conditions alone say. What a guard
+     * is taken in under: a path is looked through at every condition it passes, and what follows
+     * about the arithmetic outside the affine fragment is worked out for a question asked once.
+     */
+    private static final Predicate<Known> BY_ITS_CONSTRAINTS = Known::reachesNothing;
+
+    /** {@code reading} taken in over {@code k}, and the choices the path holds looked through,
+     * a state counting as one nothing stands in where {@code dead} says so. */
+    private Assumed assumeThrough(Assumption reading, Known k, Predicate<Known> dead) {
         Assumed read = reading.from(k);
         Known after = read.known();
         // A path that holds no choice, or one the looking was given up along, has nothing more to
@@ -1209,13 +1231,13 @@ final class Predicates {
                 || (k.holdsAChoice() && k.wayIn() == null)) {
             return read;
         }
-        Known past = wayPast(reading, k, after);
+        Known past = wayPast(reading, k, after, dead);
         if (past != null) {
             return new Assumed(after.throughWay(past, after.triesLeft()), read.taken(),
                     read.shapeRead(), read.notTaken());
         }
         int[] tries = {after.triesLeft()};
-        return switch (aWayThrough(after, after.heldAsOneOfTheirParts(), 0, tries)) {
+        return switch (aWayThrough(after, after.heldAsOneOfTheirParts(), 0, tries, dead)) {
             case WayFound(Known way) -> new Assumed(after.throughWay(way, tries[0]), read.taken(),
                     read.shapeRead(), read.notTaken());
             // Read to the end: what the conditions come to is that nothing gets past them.
@@ -1235,12 +1257,12 @@ final class Predicates {
      * of the one way known to get through, it is one: the condition read once more, over that way.
      * Where {@code k} held no choice the way is {@code after} itself, and nothing is read again.
      */
-    private Known wayPast(Assumption cond, Known k, Known after) {
+    private Known wayPast(Assumption cond, Known k, Known after, Predicate<Known> dead) {
         if (!k.holdsAChoice()) {
-            return aPartOfEachSince(after, 0);
+            return aPartOfEachSince(after, 0, dead);
         }
         Known before = k.wayIn();
-        return aPartOfEachSince(cond.from(before).known(), before.heldCount());
+        return aPartOfEachSince(cond.from(before).known(), before.heldCount(), dead);
     }
 
     /**
@@ -1253,16 +1275,16 @@ final class Predicates {
      * against. So the conditions are taken until none is left that was not, and not over the ones
      * there were when this began.
      */
-    private Known aPartOfEachSince(Known way, int taken) {
+    private Known aPartOfEachSince(Known way, int taken, Predicate<Known> dead) {
         Known out = way;
         int done = taken;
-        while (!out.reachesNothing() && out.heldCount() > done) {
+        while (!dead.test(out) && out.heldCount() > done) {
             int upTo = out.heldCount();
             for (Known.OneOf condition : out.heldSince(done)) {
                 Known through = null;
                 for (ClauseExpr part : partsOf(condition)) {
-                    Known taking = takingPart(condition, part, out).known();
-                    if (!taking.reachesNothing()) {
+                    Known taking = takingPart(condition, part, out, dead).known();
+                    if (!dead.test(taking)) {
                         through = taking;
                         break;
                     }
@@ -1274,7 +1296,7 @@ final class Predicates {
             }
             done = upTo;
         }
-        return out.reachesNothing() ? null : out;
+        return dead.test(out) ? null : out;
     }
 
     /** What looking for a way through the conditions a state holds came to. */
@@ -1298,7 +1320,8 @@ final class Predicates {
      * path has left across every look along it ({@link Known.Choices}); where it runs out the look
      * stops, and says it stopped rather than that it found nothing.
      */
-    private Through aWayThrough(Known k, List<Known.OneOf> pending, int next, int[] tries) {
+    private Through aWayThrough(Known k, List<Known.OneOf> pending, int next, int[] tries,
+                                Predicate<Known> dead) {
         if (next == pending.size()) {
             return new WayFound(k);
         }
@@ -1309,8 +1332,8 @@ final class Predicates {
                 return new PastTheBound();
             }
             tries[0]--;
-            Known taking = takingPart(condition, part, k).known();
-            if (!taking.reachesNothing()) {
+            Known taking = takingPart(condition, part, k, dead).known();
+            if (!dead.test(taking)) {
                 entered.add(taking);
             }
         }
@@ -1322,11 +1345,11 @@ final class Predicates {
             List<Known.OneOf> inside = way.heldSince(k.heldCount());
             Through further;
             if (inside.isEmpty()) {
-                further = aWayThrough(way, pending, next + 1, tries);
+                further = aWayThrough(way, pending, next + 1, tries, dead);
             } else {
                 List<Known.OneOf> rest = new ArrayList<>(pending.subList(next + 1, pending.size()));
                 rest.addAll(inside);
-                further = aWayThrough(way, rest, 0, tries);
+                further = aWayThrough(way, rest, 0, tries, dead);
             }
             if (further instanceof WayFound) {
                 return further;
@@ -1385,7 +1408,7 @@ final class Predicates {
      */
     List<Known> eachWayOf(Known.OneOf condition, Known k) {
         List<Known> ways = new ArrayList<>();
-        for (Assumed way : takingEachPartOf(condition, k)) {
+        for (Assumed way : takingEachPartOf(condition, k, this::leavesNoRun)) {
             ways.add(way.known());
         }
         return ways;
@@ -1393,10 +1416,10 @@ final class Predicates {
 
     /** What taking each part of {@code condition} in alone over {@code k} came to, the state and
      *  what the reading made of the part ({@link #eachWayOf}). */
-    private List<Assumed> takingEachPartOf(Known.OneOf condition, Known k) {
+    private List<Assumed> takingEachPartOf(Known.OneOf condition, Known k, Predicate<Known> dead) {
         List<Assumed> ways = new ArrayList<>();
         for (ClauseExpr part : partsOf(condition)) {
-            ways.add(takingPart(condition, part, k));
+            ways.add(takingPart(condition, part, k, dead));
         }
         return ways;
     }
@@ -1414,12 +1437,14 @@ final class Predicates {
 
     /** What taking {@code part} of {@code condition} in alone over {@code k} came to, speaking of
      *  what {@code k} speaks of ({@link #eachWayOf}). */
-    private Assumed takingPart(Known.OneOf condition, ClauseExpr part, Known k) {
+    private Assumed takingPart(Known.OneOf condition, ClauseExpr part, Known k,
+                               Predicate<Known> dead) {
         long[] counting = COUNTING_PARTS_READ;
         if (counting != null) {
             counting[0]++;
         }
-        Assumed taken = new Assuming(this).read(part, condition.at(), terms::inside, null).from(k);
+        Assumed taken = new Assuming(this, dead).read(part, condition.at(), terms::inside, null)
+                .from(k);
         return new Assumed(taken.known().speakingAs(k), taken.taken(), taken.shapeRead(),
                 taken.notTaken());
     }
@@ -1443,10 +1468,10 @@ final class Predicates {
      * condition no case satisfies is; one left is that part's reading, which took the part in; both
      * left is the whole's, which took neither.
      */
-    private Assumed takingOneOf(Known.OneOf condition, Assumed whole) {
+    private Assumed takingOneOf(Known.OneOf condition, Assumed whole, Predicate<Known> dead) {
         List<Assumed> left = new ArrayList<>();
-        for (Assumed way : takingEachPartOf(condition, whole.known())) {
-            if (!way.known().reachesNothing()) {
+        for (Assumed way : takingEachPartOf(condition, whole.known(), dead)) {
+            if (!dead.test(way.known())) {
                 left.add(way);
             }
         }
@@ -1483,7 +1508,8 @@ final class Predicates {
      * naming it made nothing known, while the same rule written out made the comparison known, and
      * the one reader with no tree-rebuilding above it named a dead branch on one spelling only.
      */
-    private record Assuming(Predicates of) implements ClauseReading<Assumption, Denotations> {
+    private record Assuming(Predicates of, Predicate<Known> dead)
+            implements ClauseReading<Assumption, Denotations> {
 
         /**
          * A conjunction is taken in a half at a time, and a choice whole.
@@ -1503,7 +1529,7 @@ final class Predicates {
 
         @Override
         public Assumption whole(ClauseExpr.Part part, Denotations at) {
-            return known -> of.taking(part, known, at);
+            return known -> of.taking(part, known, at, dead);
         }
 
         /**
@@ -1530,7 +1556,7 @@ final class Predicates {
      * is settled where the clause is read, so a guard states each of them rather than choosing
      * here.
      */
-    private Assumed taking(ClauseExpr.Part part, Known k, Denotations at) {
+    private Assumed taking(ClauseExpr.Part part, Known k, Denotations at, Predicate<Known> dead) {
         boolean positive = part.positive();
         Core cond = Conditions.asSizeComparison(part.of());
         // A connective taken whole states no comparison — that is what taking it whole means — so
@@ -1539,7 +1565,7 @@ final class Predicates {
         if (part instanceof ClauseExpr.Joined join) {
             Assumed whole = taking(cond, join.writtenHalves(), k, at, positive);
             return join.how() != ConditionJoin.EITHER || whole.known().reachesNothing() ? whole
-                    : takingOneOf(new Known.OneOf(join, at), whole);
+                    : takingOneOf(new Known.OneOf(join, at), whole, dead);
         }
         List<ComparisonReadings.Reading> readings =
                 Conditions.comparisonsStatedBy(terms, cond, at).holdingWhere(positive);

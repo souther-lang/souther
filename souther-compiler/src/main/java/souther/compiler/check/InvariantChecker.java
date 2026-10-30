@@ -5112,7 +5112,7 @@ public final class InvariantChecker {
                 continue;
             }
             List<Known> entered = predicates.eachWayOf(condition, k).stream()
-                    .filter(way -> !way.reachesNothing())
+                    .filter(way -> !predicates.leavesNoRun(way))
                     .toList();
             if (entered.isEmpty()) {
                 return null;
