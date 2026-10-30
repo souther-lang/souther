@@ -191,6 +191,9 @@ final class Reasons {
                                 + " besides the one solved for";
                 case TREES_WRITTEN_FOR_A_COUNT ->
                         "the trees that hold a count of nodes deeper than one node below the root";
+                case TREES_WRITTEN_FOR_A_LINE ->
+                        "the trees whose search finds a line to the node holding the value it is"
+                                + " for";
                 case STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR ->
                         "the strings whose case conversion holds a count of code points of a"
                                 + " class by other code points than the class's own";

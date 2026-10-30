@@ -301,6 +301,13 @@ public sealed interface RealizationTarget {
             return term.source().subjectPath().outermostContainer();
         }
 
+        /** The value a search is for, which is another parameter's and is fixed with the rest of
+         *  the row before the tree is written holding it. */
+        @Override
+        public TermPath keyAskedFor() {
+            return term.source() instanceof RunSource.SearchedLine line ? line.key() : null;
+        }
+
         @Override
         public String toString() {
             return term.toString();

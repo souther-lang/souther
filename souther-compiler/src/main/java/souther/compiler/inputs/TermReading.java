@@ -541,6 +541,12 @@ final class TermReading {
                 return new Reading.Missing(unread.cause());
             }
         }
+        if (term.source() instanceof RunSource.SearchedLine line) {
+            // How many nodes the line holds is the one number of it, and any other account of a
+            // line is no number of the row.
+            return term.takenAs() instanceof TakenAs.HowManyItHolds
+                    ? lineFound(values, line) : new Reading.NotNumber();
+        }
         if (term.source() instanceof RunSource.ReachableNodes nodes) {
             List<ObservedValue> held = new ArrayList<>();
             Reading stopped = heldBelow(values, nodes, held);
@@ -557,6 +563,64 @@ final class TermReading {
                     TakenAs.TheTruncatingQuotient _, TakenAs.TheFloorRemainder _ ->
                     new Reading.NotNumber();
         };
+    }
+
+    /**
+     * How many nodes the line holds that a search finds, {@code values} being the tree it goes down
+     * and the value it is for, in that order.
+     *
+     * <p>The nodes are visited as the search visits them: a node before the nodes below it, and
+     * the elements of the field it goes down in the order the row writes them. The line is the
+     * first node holding the value and every node above it, so its length is that node's depth
+     * and one more, and none where no node holds the value.
+     */
+    private static Reading lineFound(List<ObservedValue> values, RunSource.SearchedLine line) {
+        ObservedValue sought = values.get(1);
+        Deque<ObservedValue> visited = new ArrayDeque<>();
+        Deque<Integer> depths = new ArrayDeque<>();
+        visited.push(values.getFirst());
+        depths.push(1);
+        while (!visited.isEmpty()) {
+            ObservedValue node = visited.pop();
+            int depth = depths.pop();
+            Membership.Incomplete unread = Membership.unread(node);
+            if (unread != null) {
+                return new Reading.Missing(unread.cause());
+            }
+            ObservedValue held = valueAt(node, line.matchAt());
+            if (held == null) {
+                return new Reading.NotNumber();
+            }
+            Membership.Incomplete unreadValue = Membership.unread(held);
+            if (unreadValue != null) {
+                return new Reading.Missing(unreadValue.cause());
+            }
+            if (held.equals(sought)) {
+                return new Reading.Number(Count.of(depth));
+            }
+            List<ObservedValue> below = elementsAt(node, List.of(line.through()));
+            if (below == null) {
+                return new Reading.NotNumber();
+            }
+            // Pushed last-first, so that the first element is the next one visited.
+            for (int at = below.size() - 1; at >= 0; at--) {
+                visited.push(below.get(at));
+                depths.push(depth + 1);
+            }
+        }
+        return new Reading.Number(Count.of(0));
+    }
+
+    /** The value at {@code fields} of {@code value}, or null where it holds none there. */
+    private static ObservedValue valueAt(ObservedValue value, List<String> fields) {
+        ObservedValue at = value;
+        for (String field : fields) {
+            if (!(at instanceof ObservedValue.Constructed record) || record.field(field) == null) {
+                return null;
+            }
+            at = record.field(field);
+        }
+        return at;
     }
 
     /**

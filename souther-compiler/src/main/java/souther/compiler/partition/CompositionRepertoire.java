@@ -207,6 +207,19 @@ public enum CompositionRepertoire {
     TREES_WRITTEN_FOR_A_COUNT,
 
     /**
+     * The trees written for how long the line is that a search down them finds: from the root to
+     * the first node, in the order the search goes down, that holds the value it is for.
+     *
+     * <p>Written as a chain: each node the only element below the one above it, the last holding
+     * the value the search is for at one field and the nodes above it holding another value there,
+     * as many nodes as the line asked for. A line past those is not written — a value held at a
+     * field of a field of the node, nodes below a node that are not a list, a value searched for
+     * that stands at no one value — and none of it is a line no tree makes: what would reach it
+     * is a way of writing the nodes, and raising no figure does.
+     */
+    TREES_WRITTEN_FOR_A_LINE,
+
+    /**
      * The strings written for how many code points of a class what a case conversion makes of them
      * holds.
      *
@@ -245,7 +258,8 @@ public enum CompositionRepertoire {
                  KEYS_OF_ONE_FOLD_ASKED_TOGETHER, ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
                  TOTALS_FROM_A_PUT_WRITTEN_AS_ONE_ELEMENT,
                  MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER, ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL,
-                 TREES_WRITTEN_FOR_A_COUNT, STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
+                 TREES_WRITTEN_FOR_A_COUNT, TREES_WRITTEN_FOR_A_LINE,
+                 STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
                  MAPS_WRITTEN_WITH_ONE_ENTRY -> false;
         };
     }

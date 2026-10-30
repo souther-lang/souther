@@ -128,6 +128,9 @@ final class RunReach {
             // A product of two entries is a product of the runs two places hold, and the run of
             // a product is not read off the runs of its factors here.
             case RunSource.JoinedOccurrences _ -> null;
+            // The nodes of a line stand at no path either, and what is taken over them is how
+            // many there are.
+            case RunSource.SearchedLine _ -> null;
         };
         NumberSpace answeredOn = spaceOf(orders.answered());
         NumberSpace observedOn = spaceOf(orders.observed());
