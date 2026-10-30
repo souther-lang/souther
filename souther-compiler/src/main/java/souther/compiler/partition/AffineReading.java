@@ -33,6 +33,7 @@ import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TotalsOfOneRun;
 import souther.compiler.inputs.WrittenOutElements;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -55,6 +56,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -399,14 +401,60 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      */
     private interface Arithmetic extends AffineForms.Reading<NumericTerm, InputReads> {
 
-        /** What a walk from a seed over a list written out at the call comes to, step by step;
-         *  null where it is no such walk or a part does not compose. */
-        LinearForm<NumericTerm> walkOfWhatIsWrittenOut(Core node, InputReads at);
+        /** What a walk from a seed over a list written out at the call comes to, step by step. */
+        Attempt walkOfWhatIsWrittenOut(Core node, InputReads at);
 
         /** What a total over what an operation makes of a list written out at it comes to,
-         *  application by application; null where it is no such total or a part does not
-         *  compose. */
-        LinearForm<NumericTerm> totalOfWhatIsMadeOfAListWrittenOut(Core node, InputReads at);
+         *  application by application. */
+        Attempt totalOfWhatIsMadeOfAListWrittenOut(Core node, InputReads at);
+    }
+
+    /**
+     * What reading a call by one of the rules that unroll it came to.
+     *
+     * <p>The rules differ in whether they were about the call at all. One that was not says so and
+     * the call is read some other way; one that was, and could not be carried through, says what
+     * kept it, so the call is reported for that when no other rule reads it.
+     */
+    private sealed interface Attempt {
+
+        /** The call is this form. */
+        record Form(LinearForm<NumericTerm> form) implements Attempt {
+
+            public Form {
+                Objects.requireNonNull(form, "an attempt that came to a form has one");
+            }
+        }
+
+        /** The rule is not about the call, or a part of it composes no form that says why. */
+        record NotApplicable() implements Attempt {}
+
+        /** The rule is about the call and this reading declined its work at a figure. */
+        record Declined(WhyUnread why) implements Attempt {
+
+            public Declined {
+                Objects.requireNonNull(why, "an attempt declined declined for a reason");
+            }
+        }
+
+        /** The rule is about the call and a part of what it reads stopped. */
+        record PartStopped(AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> inside)
+                implements Attempt {
+
+            public PartStopped {
+                Objects.requireNonNull(inside, "an attempt whose part stopped stopped somewhere");
+            }
+        }
+
+        /** What {@code outcome}, the reading of a part, came to as the attempt it is part of. */
+        static Attempt ofAPart(AffineForms.Outcome<NumericTerm, InputReads> outcome) {
+            return switch (outcome) {
+                case AffineForms.Outcome.Composed<NumericTerm, InputReads>(var form) ->
+                        new Form(form);
+                case AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped ->
+                        new PartStopped(stopped);
+            };
+        }
     }
 
     /**
@@ -580,9 +628,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (name != null && told.readByATerm(name)) {
                     return;
                 }
-                if (tried(apart -> AffineForms.outcome(binding.value(), at, apart)
-                        instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads>(
-                                LinearForm<NumericTerm> value) ? value : null) != null) {
+                if (tried(apart -> Attempt.ofAPart(AffineForms.outcome(binding.value(), at, apart)))
+                        instanceof Attempt.Form) {
                     return;
                 }
                 if (reached.endsNoRun(new Denotation(binding.value(), at))) {
@@ -643,7 +690,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              */
             @Override
             public void counted(Core call, List<Core> elements, InputReads at) {
-                if (told.readsElementByElement(elements.size())) {
+                if (told.declinedAtCounting(elements.size()).isEmpty()) {
                     builtFrom(elements, at);
                 } else {
                     told.exact = false;
@@ -868,26 +915,47 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             @Override
             public LinearForm<NumericTerm> leafOf(Core node, InputReads at) {
+                return leaf(node, at, null) instanceof AffineForms.Leaf.Form<NumericTerm,
+                        InputReads>(var form) ? form : null;
+            }
+
+            /**
+             * {@code node} as a form of the input's numbers, or the stop it came to where the
+             * rules that unroll a call were about it and none carried through.
+             *
+             * <p>Of those rules the first that was about the call and kept the reading from it at a
+             * figure of this compiler's work is the reason: a call declined at a figure, or one
+             * whose part was. A part that stopped for any other reason is not reported here; the
+             * call is read some other way, or stops as it does for a call with no rule.
+             */
+            @Override
+            public AffineForms.Leaf<NumericTerm, InputReads> leaf(
+                    Core node, InputReads at,
+                    AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> inside) {
                 if (Core.withoutStanding(node) instanceof Core.Read name
                         && carried.get(name.binding()) instanceof LinearForm<NumericTerm> so) {
-                    return so;
+                    return new AffineForms.Leaf.Form<>(so);
                 }
+                AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> keptAtAFigure = null;
                 // Each reading below is of a call the library's operations keep, and asked of
                 // nothing else, since what it puts back where it reads nothing is copied first.
                 if (Core.withoutStanding(node) instanceof Core.PreservedCall) {
-                    LinearForm<NumericTerm> walked =
-                            tried(apart -> apart.walkOfWhatIsWrittenOut(node, at));
-                    if (walked != null) {
-                        return walked;
+                    Attempt walked = tried(apart -> apart.walkOfWhatIsWrittenOut(node, at));
+                    if (walked instanceof Attempt.Form(var form)) {
+                        return new AffineForms.Leaf.Form<>(form);
                     }
                     LinearForm<NumericTerm> added = walkAddingOverAContainer(node, at);
                     if (added != null) {
-                        return added;
+                        return new AffineForms.Leaf.Form<>(added);
                     }
-                    LinearForm<NumericTerm> applied =
+                    Attempt applied =
                             tried(apart -> apart.totalOfWhatIsMadeOfAListWrittenOut(node, at));
-                    if (applied != null) {
-                        return applied;
+                    if (applied instanceof Attempt.Form(var form)) {
+                        return new AffineForms.Leaf.Form<>(form);
+                    }
+                    keptAtAFigure = stopAtAFigure(node, at, walked);
+                    if (keptAtAFigure == null) {
+                        keptAtAFigure = stopAtAFigure(node, at, applied);
                     }
                 }
                 LinearForm<NumericTerm> numbers =
@@ -906,10 +974,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     if (isAPlainRead(node)) {
                         told.readsTheInput(numbers);
                     }
-                    return numbers;
+                    return new AffineForms.Leaf.Form<>(numbers);
                 }
                 if (stoppedAt == null) {
-                    return null;
+                    return keptAtAFigure == null ? new AffineForms.Leaf.None<>()
+                            : new AffineForms.Leaf.Stopped<>(keptAtAFigure);
                 }
                 // Each expression nothing here reads is held aside as an atom of its own, and what
                 // working it out may stop a run at is told by nothing here. Where it may stop one
@@ -930,7 +999,25 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         aside.rangeIs(rangeOfTheArms(node, at));
                     }
                 }
-                return LinearForm.atom(aside.atom);
+                return new AffineForms.Leaf.Form<>(LinearForm.atom(aside.atom));
+            }
+
+            /**
+             * The stop at {@code node} that {@code attempt} comes to, where it kept the reading
+             * from the call at a figure of this compiler's work — the call's own, or a part's —
+             * and null where it did not.
+             */
+            private static AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopAtAFigure(
+                    Core node, InputReads at, Attempt attempt) {
+                return switch (attempt) {
+                    case Attempt.Declined(var why) -> new AffineForms.Outcome.StoppedAt<>(node, at,
+                            new AffineForms.Halt.DeclinedAtAFigure<>(why));
+                    case Attempt.PartStopped(var inside)
+                            when inside.why().declinedFigure().isPresent() ->
+                            new AffineForms.Outcome.StoppedAt<>(node, at,
+                                    new AffineForms.Halt.AnArgumentStopped<>(inside));
+                    case Attempt.PartStopped _, Attempt.NotApplicable _, Attempt.Form _ -> null;
+                };
             }
 
             /**
@@ -939,21 +1026,21 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * Kept only where it came to a form: then what it named, met and told is this
              * reading's, its operations after the ones told here. Where it came to none, the
              * expression is read some other way or the comparison stops at it, and nothing the
-             * attempt did is left here, whatever it would have changed.
+             * attempt did is left here, whatever it would have changed. What it came to instead
+             * is handed back with it.
              */
-            private LinearForm<NumericTerm> tried(
-                    Function<Arithmetic, LinearForm<NumericTerm>> unrolling) {
+            private Attempt tried(Function<Arithmetic, Attempt> unrolling) {
                 Set<NumericTerm> namedApart = new LinkedHashSet<>();
                 ElementsMet metApart = met.copied();
                 WhatWasTold toldApart = told.apart();
-                LinearForm<NumericTerm> form = unrolling.apply(
+                Attempt attempt = unrolling.apply(
                         reading(ofTheInput, namedApart, metApart, toldApart));
-                if (form != null) {
+                if (attempt instanceof Attempt.Form) {
                     named.addAll(namedApart);
                     met.takes(metApart);
                     told.absorb(toldApart);
                 }
-                return form;
+                return attempt;
             }
 
             /**
@@ -977,25 +1064,28 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * in the list's order, with what it carried standing for the answer so far. Each
              * application's operations are told as they are met, so a row is asked to get past
              * every step and not only the total the steps come to, which is all a sum holds to
-             * its type. Null where it is no such walk, or a part does not compose.
+             * its type. Not applicable where it is no such walk; declined where the list is past a
+             * figure of this compiler's work; and the stop of the part where one does not compose.
              *
              * <p>Only a step written at the call over a list written there: what a step reached
              * by a name works out is in no tree read here.
              */
             @Override
-            public LinearForm<NumericTerm> walkOfWhatIsWrittenOut(Core node, InputReads at) {
+            public Attempt walkOfWhatIsWrittenOut(Core node, InputReads at) {
                 SeededWalk walk = SeededWalk.of(node, closure ->
                         Core.withoutStanding(closure) instanceof Core.Block block ? block : null);
                 if (walk == null || !walk.inTheContainersOrder()
-                        || !(Core.withoutStanding(walk.container()) instanceof Core.ListLit list)
-                        || !told.readsElementByElement(list.elements().size())) {
-                    return null;
+                        || !(Core.withoutStanding(walk.container()) instanceof Core.ListLit list)) {
+                    return new Attempt.NotApplicable();
+                }
+                Optional<WhyUnread> declined = told.declinedAtCounting(list.elements().size());
+                if (declined.isPresent()) {
+                    return new Attempt.Declined(declined.get());
                 }
                 builtFrom(list.elements(), at);
-                if (!(AffineForms.outcome(walk.seed(), at, this)
-                        instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads>(
-                                LinearForm<NumericTerm> seed))) {
-                    return null;
+                Attempt seeded = Attempt.ofAPart(AffineForms.outcome(walk.seed(), at, this));
+                if (!(seeded instanceof Attempt.Form(LinearForm<NumericTerm> seed))) {
+                    return seeded;
                 }
                 // What the walk does itself, apart from the step it applies.
                 if (!WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(node).endsNone()) {
@@ -1008,14 +1098,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         InputReads handing = at.handingTheElement(walk.step(), walk.container(),
                                 new Denotation(element, at), ruleSource.newtypes());
                         if (handing == null) {
-                            return null;
+                            return new Attempt.NotApplicable();
                         }
                         carried.put(accumulator, so);
                         told.after(accumulator);
-                        if (!(AffineForms.outcome(walk.step().body(), handing, this)
-                                instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads>(
-                                        LinearForm<NumericTerm> next))) {
-                            return null;
+                        Attempt stepped = Attempt.ofAPart(
+                                AffineForms.outcome(walk.step().body(), handing, this));
+                        if (!(stepped instanceof Attempt.Form(LinearForm<NumericTerm> next))) {
+                            return stepped;
                         }
                         so = next;
                     }
@@ -1023,7 +1113,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     carried.remove(accumulator);
                     told.carriedAfter.remove(accumulator);
                 }
-                return so;
+                return new Attempt.Form(so);
             }
 
             /**
@@ -1031,15 +1121,16 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * to, read the way a run works it out: the list's elements, then the closures written
              * at the operation once per element, each application's operations told, and last
              * the total, which is all the sum holds to its type
-             * ({@link GetsPast.WhereTheTotalFits}). Null where it is no such total, the operation
-             * does more than apply its closures, or an element it makes does not compose.
+             * ({@link GetsPast.WhereTheTotalFits}). Not applicable where it is no such total or the
+             * operation does more than apply its closures; declined where the list is past a
+             * figure of this compiler's work; and the stop of the element where one it makes does
+             * not compose.
              *
              * <p>Only an operation that makes every element of the list it is handed, each once:
              * one that keeps some of them answers on rows the reading would have to decide.
              */
             @Override
-            public LinearForm<NumericTerm> totalOfWhatIsMadeOfAListWrittenOut(Core node,
-                                                                               InputReads at) {
+            public Attempt totalOfWhatIsMadeOfAListWrittenOut(Core node, InputReads at) {
                 if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)
                         || !(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
                                 instanceof GetsPast.WhereTheTotalFits(int operand))
@@ -1048,7 +1139,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                 instanceof Core.PreservedCall making)
                         || !WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(making)
                                 .endsNone()) {
-                    return null;
+                    return new Attempt.NotApplicable();
                 }
                 Core.ListLit list = null;
                 for (Core argument : making.args()) {
@@ -1056,7 +1147,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     if (bare instanceof Core.ListLit written && list == null) {
                         list = written;
                     } else if (!(bare instanceof Core.Block)) {
-                        return null;
+                        return new Attempt.NotApplicable();
                     }
                 }
                 if (list == null
@@ -1064,27 +1155,31 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         ruleSource.symbols(), ruleSource.newtypes())
                         instanceof WrittenOutElements.Walked.Each each)
                         || each.asWritten().size() != list.elements().size()
-                        || each.asWritten().stream().anyMatch(one -> !one.keptWhere().isEmpty())
-                        || !told.readsElementByElement(list.elements().size())) {
-                    return null;
+                        || each.asWritten().stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
+                    return new Attempt.NotApplicable();
+                }
+                Optional<WhyUnread> declined = told.declinedAtCounting(list.elements().size());
+                if (declined.isPresent()) {
+                    return new Attempt.Declined(declined.get());
                 }
                 int from = told.operations.size();
                 builtFrom(list.elements(), at);
                 LinearForm<NumericTerm> total = LinearForm.constant(ExactRatio.ZERO);
                 for (ReadMeaning.Occurrence occurrence : each.asWritten()) {
-                    if (!(AffineForms.outcome(occurrence.value().value(), occurrence.value().at(),
-                            this) instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads>(
-                                    LinearForm<NumericTerm> made))
-                            || !(total.plus(made)
-                                    instanceof ExactAnswer.Held<LinearForm<NumericTerm>>(
-                                            LinearForm<NumericTerm> sum))) {
-                        return null;
+                    Attempt made = Attempt.ofAPart(AffineForms.outcome(
+                            occurrence.value().value(), occurrence.value().at(), this));
+                    if (!(made instanceof Attempt.Form(LinearForm<NumericTerm> one))) {
+                        return made;
+                    }
+                    if (!(total.plus(one) instanceof ExactAnswer.Held<LinearForm<NumericTerm>>(
+                            LinearForm<NumericTerm> sum))) {
+                        return new Attempt.NotApplicable();
                     }
                     total = sum;
                 }
                 tellAnIntTotal(call, total,
                         IntStream.range(from, told.operations.size()).boxed().toList());
-                return total;
+                return new Attempt.Form(total);
             }
 
             /**
@@ -1294,21 +1389,26 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
 
         /**
-         * Whether a list of {@code elements} is read element by element, which is counted if so:
-         * each element is a reading of the condition, no more of them in one list than
-         * {@link CompositionBudget#READINGS_OF_ONE_CONDITION} allows, nor in all, along every walk
-         * and total read so and inside one another, than
+         * The figure a list of {@code elements} is past, or none where it is read element by
+         * element, which is counted then: each element is a reading of the condition, no more of
+         * them in one list than {@link CompositionBudget#READINGS_OF_ONE_CONDITION} allows, nor in
+         * all, along every walk and total read so and inside one another, than
          * {@link CompositionBudget#TOTAL_READINGS_OF_ONE_CONDITION} does. Past either the list is
          * not read so, and what is worked out over it is not told.
+         *
+         * <p>The check and the reason for passing it are made here and nowhere else, so a reader
+         * of the answer has the figure with the refusal.
          */
-        boolean readsElementByElement(int elements) {
-            if (elements > CompositionBudget.READINGS_OF_ONE_CONDITION.maximum()
-                    || elementsRead[0] + elements
+        Optional<WhyUnread> declinedAtCounting(int elements) {
+            if (elements > CompositionBudget.READINGS_OF_ONE_CONDITION.maximum()) {
+                return Optional.of(WhyUnread.PAST_THE_READINGS);
+            }
+            if (elementsRead[0] + elements
                     > CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum()) {
-                return false;
+                return Optional.of(WhyUnread.PAST_THE_TOTAL_READINGS);
             }
             elementsRead[0] += elements;
-            return true;
+            return Optional.empty();
         }
 
         /** That {@code node} was read as numbers of the input, with what each name under it was
