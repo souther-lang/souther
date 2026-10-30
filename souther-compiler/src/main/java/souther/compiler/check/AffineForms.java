@@ -7,6 +7,7 @@ import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.core.IntNegation;
 import souther.compiler.core.Kernel;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -97,6 +98,15 @@ public final class AffineForms {
          */
         default LinearForm<A> leafOf(Core e, E at, Outcome.StoppedAt<A, E> inside) {
             return leafOf(e, at);
+        }
+
+        /**
+         * The figure of this compiler's work the reading of {@code e} was declined at, where
+         * {@link #leafOf} came to nothing for that reason and not for want of a rule: the call has
+         * one, and the work of reading it was more than the figure allows.
+         */
+        default Optional<WhyUnread> declinedAt(Core e, E at) {
+            return Optional.empty();
         }
 
         @Override
@@ -409,6 +419,11 @@ public final class AffineForms {
         }
 
         @Override
+        public Optional<WhyUnread> declinedAt(Core e, E at) {
+            return of.declinedAt(e, at);
+        }
+
+        @Override
         public E inside(Core.LetIn li, E at) {
             return of.inside(li, at);
         }
@@ -630,8 +645,36 @@ public final class AffineForms {
                     ? Optional.of(operation) : Optional.empty();
         }
 
+        /**
+         * The figure of this compiler's work this stop comes to, through however many calls the
+         * library states the form of it was reached under — or empty where it is another stop.
+         */
+        default Optional<WhyUnread> declinedFigure() {
+            Halt<A, E> at = this;
+            while (at instanceof AnArgumentStopped<A, E>(var argument)) {
+                at = argument.why();
+            }
+            return at instanceof DeclinedAtAFigure<A, E>(var why) ? Optional.of(why)
+                    : Optional.empty();
+        }
+
         /** No rule here for the expression, and the caller named it nothing. */
         record NoRule<A, E>() implements Halt<A, E> {}
+
+        /**
+         * A rule here for the expression, which the reading declined to apply for the work it
+         * comes to: the figure it stopped at is {@code why}'s.
+         */
+        record DeclinedAtAFigure<A, E>(WhyUnread why) implements Halt<A, E> {
+
+            public DeclinedAtAFigure {
+                Objects.requireNonNull(why, "a reading declined at a figure declined at one");
+                if (why.figure().isEmpty()) {
+                    throw new IllegalArgumentException(
+                            why + " is not a figure of this compiler's work");
+                }
+            }
+        }
 
         /**
          * A product of two values neither of which is a constant, or a quotient by one that is
@@ -755,6 +798,10 @@ public final class AffineForms {
                     && inside.why().nonAffineOperation().isPresent()) {
                 return new Outcome.StoppedAt<>(e, at, new Halt.AnArgumentStopped<>(inside));
             }
+        }
+        Optional<WhyUnread> declined = reading.declinedAt(e, at);
+        if (declined.isPresent()) {
+            return new Outcome.StoppedAt<>(e, at, new Halt.DeclinedAtAFigure<>(declined.get()));
         }
         return new Outcome.StoppedAt<>(e, at, new Halt.NoRule<>());
     }
@@ -944,6 +991,11 @@ public final class AffineForms {
         @Override
         public LinearForm<A> leafOf(Core e, E at, Outcome.StoppedAt<A, E> inside) {
             return of.leafOf(e, at, inside);
+        }
+
+        @Override
+        public Optional<WhyUnread> declinedAt(Core e, E at) {
+            return of.declinedAt(e, at);
         }
 
         @Override

@@ -743,11 +743,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // element is a reading the split would make, one list and all of them together;
             // past either it reads none of it, and the comparison stops there.
             Map.entry("souther.compiler.partition.AffineReading$WhatWasTold"
-                            + "#readsElementByElement(I)Z",
+                            + "#readsElementByElement(Lsouther/compiler/core/Core;I)Z",
                     "past either figure the arithmetic stops at the walk or the total, and what"
                             + " the comparison's rows get past is not told: no row is shown"
-                            + " computed. Which figure it was is not said, and the rule that reads"
-                            + " the comparison says why on its own account"),
+                            + " computed. The figure it was is kept with the call, and the stop"
+                            + " names it"),
             Map.entry("souther.compiler.partition.Pullback#<init>("
                             + "Lsouther/compiler/inputs/InputReading;Ljava/util/Optional;)V",
                     "how many readings one reading of a condition makes in all, which every split"

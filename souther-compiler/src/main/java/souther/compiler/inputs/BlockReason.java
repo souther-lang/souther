@@ -13,6 +13,7 @@ import souther.compiler.values.TextExtents;
 import net.unit8.notation199x.pattern.Meter;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -1586,6 +1587,11 @@ public sealed interface BlockReason {
             /** The reason that stopped at a figure this word says, or null where it says none. */
             public WhyUnread says() {
                 return says;
+            }
+
+            /** The word that says {@code why}, or none where no word does. */
+            public static Optional<Why> saying(WhyUnread why) {
+                return Arrays.stream(values()).filter(each -> why.equals(each.says)).findFirst();
             }
 
             /** The figure the part was declined at, or none. */

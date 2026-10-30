@@ -682,6 +682,16 @@ public final class GuardThresholds {
                 at -> met.containsKey(at) && orderable(met.get(at), read.rules().declarations());
         java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out =
                 new java.util.LinkedHashMap<>();
+        // A figure of this compiler's work is the same reason at every place the rule is filed at.
+        Optional<BlockReason.WhatItStatesIsNoLine.Why> figure =
+                stopped.failure().why().declinedFigure()
+                        .flatMap(BlockReason.WhatItStatesIsNoLine.Why::saying);
+        if (figure.isPresent()) {
+            for (FilingCoordinate at : filedAt(comparison, read, reads, answering)) {
+                out.putIfAbsent(at, new BlockReason.WhatItStatesIsNoLine(figure.get()));
+            }
+            return out;
+        }
         for (FilingCoordinate at : filedAt(comparison, read, reads, answering)) {
             out.putIfAbsent(at,
                     UnreadComparison.whereItStopped(ruleAt(at, left, right), notRead, ordered));

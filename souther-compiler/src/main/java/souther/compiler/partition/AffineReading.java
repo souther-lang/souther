@@ -33,6 +33,7 @@ import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TotalsOfOneRun;
 import souther.compiler.inputs.WrittenOutElements;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -55,6 +56,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -643,7 +645,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              */
             @Override
             public void counted(Core call, List<Core> elements, InputReads at) {
-                if (told.readsElementByElement(elements.size())) {
+                if (told.readsElementByElement(call, elements.size())) {
                     builtFrom(elements, at);
                 } else {
                     told.exact = false;
@@ -933,6 +935,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 return LinearForm.atom(aside.atom);
             }
 
+            @Override
+            public Optional<WhyUnread> declinedAt(Core node, InputReads at) {
+                return told.declinedAt(node);
+            }
+
             /**
              * What {@code unrolling} comes to, read by another reading of the input that starts
              * from what this one has met and collects what it names and tells apart from it.
@@ -988,7 +995,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         Core.withoutStanding(closure) instanceof Core.Block block ? block : null);
                 if (walk == null || !walk.inTheContainersOrder()
                         || !(Core.withoutStanding(walk.container()) instanceof Core.ListLit list)
-                        || !told.readsElementByElement(list.elements().size())) {
+                        || !told.readsElementByElement(node, list.elements().size())) {
                     return null;
                 }
                 builtFrom(list.elements(), at);
@@ -1065,7 +1072,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         instanceof WrittenOutElements.Walked.Each each)
                         || each.asWritten().size() != list.elements().size()
                         || each.asWritten().stream().anyMatch(one -> !one.keptWhere().isEmpty())
-                        || !told.readsElementByElement(list.elements().size())) {
+                        || !told.readsElementByElement(node, list.elements().size())) {
                     return null;
                 }
                 int from = told.operations.size();
@@ -1277,38 +1284,54 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** How many elements the reading of the comparison has read a closure applied to one by
          *  one, shared with every reading tried apart from it ({@link #apart}). */
         private final int[] elementsRead;
+        /** The figure each call whose list was not read element by element was declined at,
+         *  shared with every reading tried apart from this one ({@link #apart}) since the call
+         *  is asked about where the attempts were made from. */
+        private final Map<Core, WhyUnread> declined;
         private boolean exact = true;
 
         WhatWasTold() {
-            this(new int[1]);
+            this(new int[1], new IdentityHashMap<>());
         }
 
-        private WhatWasTold(int[] elementsRead) {
+        private WhatWasTold(int[] elementsRead, Map<Core, WhyUnread> declined) {
             this.elementsRead = elementsRead;
+            this.declined = declined;
         }
 
         /** Nothing told yet, for a part of the comparison read apart: what it reads element by
          *  element is counted with what this reading has. */
         WhatWasTold apart() {
-            return new WhatWasTold(elementsRead);
+            return new WhatWasTold(elementsRead, declined);
         }
 
         /**
-         * Whether a list of {@code elements} is read element by element, which is counted if so:
-         * each element is a reading of the condition, no more of them in one list than
-         * {@link CompositionBudget#READINGS_OF_ONE_CONDITION} allows, nor in all, along every walk
-         * and total read so and inside one another, than
+         * Whether the list {@code node} reads, of {@code elements}, is read element by element,
+         * which is counted if so: each element is a reading of the condition, no more of them in
+         * one list than {@link CompositionBudget#READINGS_OF_ONE_CONDITION} allows, nor in all,
+         * along every walk and total read so and inside one another, than
          * {@link CompositionBudget#TOTAL_READINGS_OF_ONE_CONDITION} does. Past either the list is
-         * not read so, and what is worked out over it is not told.
+         * not read so, what is worked out over it is not told, and {@link #declinedAt} says which
+         * figure {@code node} was declined at.
          */
-        boolean readsElementByElement(int elements) {
-            if (elements > CompositionBudget.READINGS_OF_ONE_CONDITION.maximum()
-                    || elementsRead[0] + elements
+        boolean readsElementByElement(Core node, int elements) {
+            if (elements > CompositionBudget.READINGS_OF_ONE_CONDITION.maximum()) {
+                declined.put(node, WhyUnread.PAST_THE_READINGS);
+                return false;
+            }
+            if (elementsRead[0] + elements
                     > CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum()) {
+                declined.put(node, WhyUnread.PAST_THE_TOTAL_READINGS);
                 return false;
             }
             elementsRead[0] += elements;
             return true;
+        }
+
+        /** The figure {@code node}'s list was declined at by {@link #readsElementByElement}, or
+         *  none where it was not declined. */
+        Optional<WhyUnread> declinedAt(Core node) {
+            return Optional.ofNullable(declined.get(node));
         }
 
         /** That {@code node} was read as numbers of the input, with what each name under it was
