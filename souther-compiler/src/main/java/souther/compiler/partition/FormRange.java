@@ -58,6 +58,53 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
         return new FormRange(low, high);
     }
 
+    /**
+     * The range of {@code form} held to what the declarations say of it as a whole, or null where
+     * some place has no end to give ({@link #of}).
+     *
+     * <p>Asked of the declarations, which relate the places a form is over: the ends of the places
+     * added one by one say less than the declarations say of their sum, and a bound written in a
+     * clause of a record is seen only there.
+     */
+    static FormRange held(LinearForm<NumericTerm> form, InputReading read,
+                          Map<NumericTerm, FormRange> standIns) {
+        FormRange ends = of(form, read, standIns);
+        return ends == null ? null : ends.within(form, read, standIns);
+    }
+
+    /**
+     * Whether every number {@code form} comes to lies from {@code leastAllowed} to
+     * {@code greatestAllowed}: by the ends of its places where those show it, and by what the
+     * declarations say of the form as a whole where they do not. The declarations are asked only
+     * then, since asking them is the dearer question.
+     */
+    static boolean liesWithin(LinearForm<NumericTerm> form, InputReading read,
+                              Map<NumericTerm, FormRange> standIns, BigInteger leastAllowed,
+                              BigInteger greatestAllowed) {
+        FormRange ends = of(form, read, standIns);
+        return ends != null && (ends.liesWithin(leastAllowed, greatestAllowed)
+                || ends.within(form, read, standIns).liesWithin(leastAllowed, greatestAllowed));
+    }
+
+    /**
+     * This, held to what the rules say of the form as a whole, where every atom of it is a place of
+     * the input.
+     */
+    private FormRange within(LinearForm<NumericTerm> form, InputReading read,
+                             Map<NumericTerm, FormRange> standIns) {
+        if (form.coefs().isEmpty()
+                || form.coefs().keySet().stream().anyMatch(standIns::containsKey)) {
+            return this;
+        }
+        NumericDomain.Bounds runs = read.quantities().runsBetween(form);
+        if (runs == null) {
+            return this;
+        }
+        ExactRatio from = tighter(least, runs.min(), true);
+        ExactRatio to = tighter(greatest, runs.max(), false);
+        return new FormRange(from, to);
+    }
+
     /** The ends of the place {@code term} stands at, or null where it has none at either end. */
     static FormRange endsOf(NumericTerm term, InputReading read) {
         TermOrders orders = read.quantities().ordersOf(term);

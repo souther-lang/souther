@@ -10,6 +10,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -146,12 +147,23 @@ public final class WhatARunMayEndFor {
      * closure written at it is asked apart from the closure, whose body is under it.
      */
     public static boolean endsNoneBeneath(Core e) {
+        return endsNoneBeneathApart(e, Set.of());
+    }
+
+    /**
+     * The same, apart from the expressions in {@code apart}, which are asked of someone else:
+     * the elements of a list a reading takes one by one.
+     */
+    public static boolean endsNoneBeneathApart(Core e, Set<Core> apart) {
         Core here = Core.withoutStanding(e);
+        if (apart.contains(here)) {
+            return true;
+        }
         if (!itselfApartFromTheClosuresWrittenAtIt(here).endsNone()) {
             return false;
         }
         boolean[] under = {true};
-        Core.forEachChild(here, child -> under[0] &= endsNoneBeneath(child));
+        Core.forEachChild(here, child -> under[0] &= endsNoneBeneathApart(child, apart));
         return under[0];
     }
 
