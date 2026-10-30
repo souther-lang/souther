@@ -1889,6 +1889,22 @@ public final class InputReads {
     }
 
     /**
+     * The closures that made what {@code option} holds, in the order a run applies them, each as
+     * its answer: its body, read where its parameter stands for what it was handed. Empty where
+     * the value was made by none. A closure is applied only where the option holds a value.
+     */
+    public List<Denotation> closuresMakingWhatItHolds(Core option, Symbols symbols,
+                                                      DeclarationNewtypes newtypes) {
+        List<Denotation> applied = new ArrayList<>();
+        WhatItHolds held = whatItHolds(option, symbols, newtypes);
+        while (held instanceof WhatItHolds.MadeByAClosure(Denotation answered, var handed)) {
+            applied.addFirst(answered);
+            held = handed;
+        }
+        return applied;
+    }
+
+    /**
      * How {@link WhatAnOptionHolds} reads an option here: names followed by this reading, a
      * closure's parameter standing for what it is handed ({@link #holding}), and what only an input
      * has answered here — the entry a lookup in the input's map picks, and what stands at a position

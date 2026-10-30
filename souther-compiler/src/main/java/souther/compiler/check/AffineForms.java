@@ -6,6 +6,7 @@ import souther.compiler.abort.GetsPast;
 import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.core.IntNegation;
+import souther.compiler.core.Kernel;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -237,6 +238,17 @@ public final class AffineForms {
         }
 
         /**
+         * That the walk read {@code call}, the length of a list written out, as the number of its
+         * elements, which the list's shape says whatever the elements are. The call works out
+         * nothing of its own, but the list is built before it is counted, so the {@code elements}
+         * are worked out and a reader that asks where each operation is worked out is told what
+         * building them does.
+         */
+        default void counted(Core call, List<Core> elements, E at) {
+            unobserved(call);
+        }
+
+        /**
          * Whether making {@code construct} ends no run: no clause is checked when it is made. A
          * reader that does not know says it may.
          */
@@ -464,6 +476,11 @@ public final class AffineForms {
         @Override
         public void totalled(Core call, LinearForm<A> total, List<Core> elements) {
             of.totalled(call, total, elements);
+        }
+
+        @Override
+        public void counted(Core call, List<Core> elements, E at) {
+            of.counted(call, elements, at);
         }
 
         @Override
@@ -1103,6 +1120,16 @@ public final class AffineForms {
                 ? list : null;
     }
 
+    /** The list {@code call} counts, where it is {@code List.length} of a list written out; null
+     *  otherwise. */
+    private static Core.ListLit listCountedWrittenOut(Core.PreservedCall call, Symbols symbols) {
+        return call.args().size() == 1
+                && call.operation() instanceof ValueName.Stdlib.Operation operation
+                && symbols.kernelOf(operation) == Kernel.LIST_LENGTH
+                && Core.withoutStanding(call.args().get(0)) instanceof Core.ListLit list
+                ? list : null;
+    }
+
     /**
      * {@code call}, which adds up the numbers of {@code list}, read as the sum of the forms of its
      * elements and told as the one operation it is ({@link Reading#totalled}); null where an
@@ -1170,6 +1197,11 @@ public final class AffineForms {
             Core.ListLit list = listAddedUpWrittenOut(call);
             if (list != null) {
                 return totalOfWhatIsWrittenOut(call, list, at, reading, following, stopped);
+            }
+            Core.ListLit counted = listCountedWrittenOut(call, reading.symbols());
+            if (counted != null) {
+                reading.counted(call, counted.elements(), at);
+                return LinearForm.constant(ExactRatio.of(counted.elements().size()));
             }
         }
         return switch (e) {
