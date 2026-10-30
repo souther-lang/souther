@@ -1247,6 +1247,7 @@ final class Pullback {
             return;
         }
         InputReads.Applications.Made around = operated.application;
+        int from = operated.told.size();
         try {
             for (InputReads.Applications.Made one : each) {
                 operated.application = one;
@@ -1255,7 +1256,7 @@ final class Pullback {
         } finally {
             operated.application = around;
         }
-        operated.toldOnEach(each);
+        operated.toldOnEach(each, from);
     }
 
     /**
@@ -6572,23 +6573,29 @@ final class Pullback {
         }
 
         /**
-         * That {@code each}, the applications of one closure, were read: a node of its body told
-         * of on every one of them is told of on the application around them, or wherever a run
-         * works it out where there is none.
+         * That {@code each}, the applications of one closure, were read, telling what is in
+         * {@link #told} from {@code from} on: a node of its body told of on every one of them is
+         * told of on the application around them, or wherever a run works it out where there is
+         * none.
+         *
+         * <p>Only the nodes told of while they were read are asked. Every node told of on one of
+         * them was told there first on that application, and so is among those.
          */
-        void toldOnEach(List<InputReads.Applications.Made> each) {
+        void toldOnEach(List<InputReads.Applications.Made> each, int from) {
             Set<InputReads.Applications.Made> all = Collections.newSetFromMap(
                     new IdentityHashMap<>());
             all.addAll(each);
-            toldOn.forEach((node, on) -> {
-                if (on.containsAll(all)) {
+            Set<Core> asked = Collections.newSetFromMap(new IdentityHashMap<>());
+            for (Operated one : told.subList(from, told.size())) {
+                Set<InputReads.Applications.Made> on = toldOn.get(one.operation());
+                if (asked.add(one.operation()) && on != null && on.containsAll(all)) {
                     if (application == null) {
-                        nodes.add(node);
+                        nodes.add(one.operation());
                     } else {
                         on.add(application);
                     }
                 }
-            });
+            }
         }
 
         /** What the next operator not said of may stop a run on is one group of places: it ties
