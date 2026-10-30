@@ -3,6 +3,9 @@ package souther.compiler.report;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.observe.RowRef;
 import souther.compiler.query.ReplacementAsWritten;
+import souther.compiler.query.ReplacementEvidence;
+
+import java.util.Optional;
 
 /**
  * What the reports written in one language call a rewrite of a body.
@@ -37,6 +40,21 @@ public final class RewriteVocabulary {
      */
     public static String outOfSight(ReplacementAsWritten.OfAWalk rewrite, String module) {
         return "in `" + rewrite.writtenBy().saidIn(module) + "` this build holds no source of";
+    }
+
+    /**
+     * What tells a rewrite from one whose words read the same, as the end of a phrase about it;
+     * nothing where its words already differ.
+     *
+     * <p>The numbers the document writes as {@code construct} and {@code lowered}, and no place: a
+     * definition this build holds no source of has no line to give, and one made up would send a
+     * reader to code that is not there. They tell the lines apart and are not where to look.
+     */
+    public static String apart(Optional<ReplacementEvidence.ToldApartBy> by) {
+        return by.map(it -> " (construct " + it.construct()
+                + (it.lowered() == 0 ? "" : ", lowered " + it.lowered())
+                + it.arms().map(arms -> ", arm " + arms.part() + " as " + arms.with())
+                        .orElse("") + ")").orElse("");
     }
 
     /** What {@code rewrite} has the fold do, as the end of a sentence about the fold. */

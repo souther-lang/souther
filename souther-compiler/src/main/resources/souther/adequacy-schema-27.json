@@ -9284,6 +9284,28 @@
               "description": "The position, as `axes` names it."
             }
           }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "module",
+            "replacementId"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "replacement"
+            },
+            "module": {
+              "type": "string",
+              "description": "The module that declares the behavior the rewrite is of, which is not the `module` inside `replacementId`: that one names the module that wrote the construct being rewritten, a library's where the behavior calls one. `replacementId` tells rewrites apart within a module's behaviors, and two modules may declare a behavior of one name."
+            },
+            "replacementId": {
+              "$ref": "#/$defs/replacementObligationId",
+              "description": "Which rewrite of the body, written as the `obligationId` of its entry under `replacement.obligations` of that module's behavior. Two rewrites of one behavior are two subjects."
+            }
+          }
         }
       ]
     }

@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.coverage.ArmWord;
+import souther.compiler.coverage.WalkRewrite;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.observe.RowRef;
@@ -10,6 +12,10 @@ import souther.compiler.observe.RowIdentity;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -97,6 +103,106 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
             rewrites = List.copyOf(rewrites);
         }
 
+        /**
+         * What to say beside the words for {@code one}, where another rewrite of this body reads
+         * the same without it; nothing where its words already differ.
+         *
+         * <p>What and not how: the numbers that tell the rewrites apart, and no words for them.
+         * A page, a warning in either language and a generated row each say them in their own,
+         * so what the measure decides stays the same whichever of them is written.
+         *
+         * <p>The numbers the document writes as {@code construct} and {@code lowered}, and no
+         * place: a definition this build holds no source of has no line to give, and one made up
+         * would send a reader to code that is not there. They tell the lines apart and are not
+         * where to look.
+         *
+         * <p>Asked of the body's every rewrite whatever the rows came to about each, so that a
+         * rewrite is said the same way on every surface that says it, a page and a warning and a
+         * generated row alike: a surface that asked only of the rewrites it happens to print
+         * would say one rewrite with its construct here and without it there.
+         *
+         * <p>Two rewrites read alike when everything the words are made of is the same: the
+         * definition that wrote the construct, what each arm means as the source wrote it (or how
+         * the fold is run) and, where this build holds the source and the words point at the
+         * construct, which construct that is. Asked of those and not of the numbers the arms are
+         * counted by, which two arms the words cannot part also differ in. A construct lowered
+         * into several forks shares the place the words point at, so the number to say is the
+         * fork's own; where the words only name the definition it is the construct's. A body
+         * answering one value is told from another by the value and is never alike.
+         */
+        public Optional<ToldApartBy> toldApartBy(Replacement one) {
+            Rewrite asked = rewrites.stream().filter(each -> each.replacement().equals(one))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "not a rewrite of this body: " + one));
+            Object reading = readingOf(asked);
+            if (reading == null) {
+                return Optional.empty();
+            }
+            List<Rewrite> alike = rewrites.stream()
+                    .filter(each -> reading.equals(readingOf(each))).toList();
+            if (alike.size() <= 1) {
+                return Optional.empty();
+            }
+            SourceConstructOrigin of = constructOf(one);
+            // Two arms of one construct the words cannot part, which the construct cannot either:
+            // the arms are then told apart by the numbers they are counted by, the last thing that
+            // does. Nothing is left to read alike, so no line is printed twice.
+            boolean sameConstruct = alike.stream()
+                    .filter(each -> constructOf(each.replacement()).equals(of)).count() > 1;
+            Optional<ToldApartBy.Arms> arms = sameConstruct && one instanceof Replacement.OfAnArm arm
+                    ? Optional.of(new ToldApartBy.Arms(arm.part(), arm.with())) : Optional.empty();
+            return Optional.of(new ToldApartBy(of.ordinal(), of.lowered(), arms));
+        }
+
+        /**
+         * What the words for a rewrite are made of, and so what two rewrites alike share.
+         *
+         * <p>An arm as a reader is shown it: the word for it ({@link ArmWord}), and not the
+         * construct and the outcome it is made from. An {@code if} and a {@code guard} that
+         * attempt a construction call their ways through it alike, and two types of two modules
+         * named alike are one word; asked of anything finer, those would be taken for different
+         * and said twice.
+         */
+        private static Object readingOf(Rewrite one) {
+            return switch (one.written()) {
+                case ReplacementAsWritten.OfAnArm it -> {
+                    SourceConstruct kind = it.replacement().fork().kind();
+                    yield new AnArmRead(it.writtenBy(), ArmWord.of(kind, it.arm()),
+                            ArmWord.of(kind, it.sibling()),
+                            pointedAt(one.reportAt(), it.replacement().fork()));
+                }
+                case ReplacementAsWritten.OfAWalk it -> new AWalkRead(it.writtenBy(),
+                        it.replacement().how(),
+                        pointedAt(one.reportAt(), it.replacement().walk()));
+                case ReplacementAsWritten.ByOneAnswer _ -> null;
+            };
+        }
+
+        /** The construct the words point at, or nothing where they name only the definition. */
+        private static Place pointedAt(ReplacementReportAnchor reportAt,
+                                       SourceConstructOrigin construct) {
+            return reportAt instanceof ReplacementReportAnchor.AtTheBehavior
+                    ? null : new Place(construct.owner(), construct.ordinal());
+        }
+
+        private static SourceConstructOrigin constructOf(Replacement one) {
+            return switch (one) {
+                case Replacement.OfAnArm it -> it.fork();
+                case Replacement.OfAWalk it -> it.walk();
+                case Replacement.ByOneAnswer _ -> throw new IllegalArgumentException(
+                        "a body answering one value is of no construct: " + one);
+            };
+        }
+
+        /** Where in a source a construct is, which a construct lowered into several forks shares. */
+        private record Place(WrittenOwner owner, int ordinal) {}
+
+        private record AnArmRead(ValueName.Helper writtenBy, String arm, String sibling,
+                                 Place pointedAt) {}
+
+        private record AWalkRead(ValueName.Helper writtenBy, WalkRewrite how, Place pointedAt) {}
+
         /** The rewrites some row tells from the body. */
         public long noticed() {
             return rewrites.stream().filter(each -> each.outcome() instanceof Noticed).count();
@@ -111,6 +217,21 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
         public long undecided() {
             return rewrites.stream().filter(each -> each.outcome() instanceof Undecided).count();
         }
+    }
+
+    /**
+     * What tells a rewrite from others whose words read the same: the construct it is of, which
+     * of the forks the construct was lowered into where it was, and, where even the construct says
+     * the same of both, the arms it is counted by.
+     */
+    public record ToldApartBy(int construct, int lowered, Optional<Arms> arms) {
+
+        public ToldApartBy {
+            Objects.requireNonNull(arms, "the arms are given or are not");
+        }
+
+        /** Arm {@code part} answering as arm {@code with} does, as the construct counts them. */
+        public record Arms(int part, int with) {}
     }
 
     /** One rewrite, where a report about it is shown, and what the rows came to about it. */
@@ -391,13 +512,14 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
      * not read, and where some rewrite was left open: neither leaves a gap, and both leave the
      * verdict waiting on something.
      */
-    public static ReplacementEvidence measured(String behavior, List<Rewrite> rewrites,
-                                               WeakeningSet rowsBehind) {
+    public static ReplacementEvidence measured(String module, String behavior,
+                                               List<Rewrite> rewrites, WeakeningSet rowsBehind) {
         Summary summary = new Summary(rewrites);
         List<Weakening> open = new ArrayList<>(rowsBehind.causes());
         for (Rewrite each : rewrites) {
             if (each.outcome() instanceof Undecided(Undecided.LeftOpen why)) {
-                open.add(new Weakening.RewriteUndecided(behavior, each.replacement(), why));
+                open.add(new Weakening.RewriteUndecided(module, behavior, each.replacement(),
+                        why));
             }
         }
         WeakeningSet by = WeakeningSet.ofAll(open);
