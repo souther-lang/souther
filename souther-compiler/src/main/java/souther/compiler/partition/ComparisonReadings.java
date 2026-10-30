@@ -725,7 +725,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      */
     private static ComparisonAssessment onItsRunsWhereUnread(
             String behavior, StatedComparison comparison, ConstructOccurrence stands,
-            Citation where, ComparisonAssessment assessed, InputReading read, InputReads reads,
+            Citation where, ComparisonAssessment assessed, InputReading read,
             CountWitnesses.Lookup witnesses) {
         if (!(assessed instanceof ComparisonAssessment.Unread unread)
                 || unread.where() != WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT) {
@@ -784,7 +784,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                                 in.answering(), false, in.conditions(),
                                                 Optional.of(stands.lineage()
                                                         .expansionProjection()),
-                                                witnesses), in.read(), reads, witnesses);
+                                                witnesses), in.read(), witnesses);
                                 case Stated.AnApplication(var _, var answered) ->
                                         ComparisonAssessment.ofAnApplication(in.behavior(),
                                                 answered, where, in.read(), witnesses);
