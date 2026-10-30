@@ -46,15 +46,14 @@ class ACountMovingADateRelatesOnlyWhereARowShownToBeTakenCompletesTest {
                 Granularity.DISCRETE, INTS, place);
     }
 
-    private static Leaves daysOf(NumericDomain.Bounds birthdayRealizes,
-                                 BiPredicate<String, String> overlap) {
+    private static Leaves daysOf(NumericDomain.Bounds birthdayRealizes) {
         Term<String> birthday = term("birthday", run(LEAST, GREATEST), birthdayRealizes);
         Term<String> days = term("days", run(-730_484_999_633L, 730_484_999_633L),
                 run(-730_484_999_633L, 730_484_999_633L));
         IntSum moved = new IntSum(Map.of("birthday", ExactRatio.ONE, "days", ExactRatio.ONE),
                 ExactRatio.ZERO, BigInteger.valueOf(LEAST), BigInteger.valueOf(GREATEST));
         return WhatARelationLeavesUndivided.leavesOf(List.of(birthday, days), 1,
-                ExactRatio.of(-YEAR_2027), Rel.GE, overlap, (one, other) -> true,
+                ExactRatio.of(-YEAR_2027), Rel.GE, String::equals, (one, other) -> true,
                 Granularity.DISCRETE, BigInteger.valueOf(Long.MAX_VALUE), List.of(),
                 Operations.read(List.of(moved), true));
     }
@@ -66,8 +65,7 @@ class ACountMovingADateRelatesOnlyWhereARowShownToBeTakenCompletesTest {
      */
     @Test
     void aCountThatSomeDateTheTermTakesCompletesIsRelated() {
-        Leaves.Settled settled =
-                (Leaves.Settled) daysOf(run(LEAST, GREATEST), String::equals);
+        Leaves.Settled settled = (Leaves.Settled) daysOf(run(LEAST, GREATEST));
 
         assertEquals(2, settled.runs().size(), settled.toString());
         assertFalse(settled.runs().getFirst().holds(), settled.toString());
