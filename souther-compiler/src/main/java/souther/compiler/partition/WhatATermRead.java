@@ -397,8 +397,41 @@ sealed interface WhatATermRead {
                 case RunSource.ComputedOccurrences computed ->
                         overElements(orders, computed, observation);
                 case RunSource.JoinedOccurrences joined -> joined(orders, joined, observation);
+                case RunSource.SearchedLine line -> searchedLine(orders, line, observation);
             };
             case NumericTerm.ProductOf _ -> productOf(orders, observation);
+        };
+    }
+
+    /**
+     * What {@code on} reads of the line a search finds in the tree the row wrote at the root of
+     * {@code line}, for the value the row wrote at its key.
+     *
+     * <p>Both are read whole, because which node the search stops at is the first one holding the
+     * value in the order it goes down, and that is not a number of either alone. A row that wrote
+     * nothing at one of them has no line.
+     */
+    static WhatATermRead searchedLine(TermOrders on, RunSource.SearchedLine line,
+                                      BorderQuantity.Observation row) {
+        return switch (row.at(line.root())) {
+            case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
+                    new CameToNothing(ReadingGap.COULD_NOT_WALK);
+            case WalkResult.Reached(ObservationAtPoint tree) -> switch (tree) {
+                case ObservationAtPoint.Value(ObservedValue searched) -> switch (
+                        row.at(line.key())) {
+                    case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
+                            new CameToNothing(ReadingGap.COULD_NOT_WALK);
+                    case WalkResult.Reached(ObservationAtPoint key) -> switch (key) {
+                        case ObservationAtPoint.Value(ObservedValue sought) ->
+                                of(on.readOver(List.of(searched, sought)));
+                        case ObservationAtPoint.WroteNothing _,
+                             ObservationAtPoint.BelongsToAnotherReading _ ->
+                                new NothingWrittenThere();
+                    };
+                };
+                case ObservationAtPoint.WroteNothing _,
+                     ObservationAtPoint.BelongsToAnotherReading _ -> new NothingWrittenThere();
+            };
         };
     }
 

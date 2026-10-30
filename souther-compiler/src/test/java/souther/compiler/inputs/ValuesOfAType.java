@@ -55,7 +55,10 @@ import java.util.function.Function;
  * a null where a component is never absent — asked one record the same question the better part of
  * a million times. What that leaves out is held against every combination, nightly
  * ({@link #everyCombination}, {@code TheNearestValuesOfATypeAreTheValuesEveryCombinationMakesTest}),
- * so a record that comes to take a value only far from the first ones is named there.
+ * so a record that comes to take a value only far from the first ones is named there. Every
+ * combination puts a value beside the nearest values' partner wherever those find one, and counts
+ * through the rest only where they find none; a search that takes more constructions than its
+ * budget is an error, since it has not found that no combination takes the value.
  *
  * <p>Null is offered for every component that is not a primitive, and the constructor says whether
  * it is a value. An absence a record means — the owner of a construct no source wrote — is one an
@@ -102,13 +105,25 @@ final class ValuesOfAType {
      *  not only the nearest ones. */
     private final boolean everyCombination;
 
+    /** How many constructions one search over every combination may make before it is an error. */
+    private final int budget;
+
+    /**
+     * What one search over every combination of a record's others may construct: about twice the
+     * most the types asked here take, which is a null of {@code RuleReasons.Said} refused at every
+     * combination. A record that grows past it is an error that names the record, and not a run
+     * that does not finish.
+     */
+    private static final int CONSTRUCTIONS_A_SEARCH_MAY_MAKE = 50_000;
+
     /** Values made with each value of a component beside the nearest values of the others. */
     ValuesOfAType() {
-        this(false);
+        this(false, CONSTRUCTIONS_A_SEARCH_MAY_MAKE);
     }
 
-    private ValuesOfAType(boolean everyCombination) {
+    private ValuesOfAType(boolean everyCombination, int budget) {
         this.everyCombination = everyCombination;
+        this.budget = budget;
     }
 
     /**
@@ -117,7 +132,13 @@ final class ValuesOfAType {
      * against.
      */
     static ValuesOfAType everyCombination() {
-        return new ValuesOfAType(true);
+        return everyCombination(CONSTRUCTIONS_A_SEARCH_MAY_MAKE);
+    }
+
+    /** As {@link #everyCombination()}, with each search over the others allowed {@code budget}
+     *  constructions. */
+    static ValuesOfAType everyCombination(int budget) {
+        return new ValuesOfAType(true, budget);
     }
 
     /**
@@ -125,9 +146,10 @@ final class ValuesOfAType {
      * {@code nearest} made none with, named by the record and the component — empty where the
      * nearest values leave out nothing every combination takes.
      *
-     * <p>By the values of each component and not by the values made: the two put a value beside
-     * different values of the others, and what the nearest ones are held to is that each value is
-     * in some value made, not that it is beside the same ones.
+     * <p>By the values of each component and not by the values made: where the nearest values leave
+     * a value out, every combination puts it beside others the nearest values do not reach, and
+     * what the nearest ones are held to is that each value is in some value made, not that it is
+     * beside the same ones.
      *
      * <p>Every record made, a generic one among them: what is a record is the type's question and
      * not how it was asked for, and a record over type arguments is made as that type, with the
@@ -271,7 +293,7 @@ final class ValuesOfAType {
         Set<Object> out = new LinkedHashSet<>();
         for (int i = 0; i < components.length; i++) {
             for (Object value : offered.get(i)) {
-                (everyCombination ? anyMadeWith(canonical, offered, i, value)
+                (everyCombination ? anyMadeWith(canonical, offered, i, value, budget)
                         : nearestMadeWith(canonical, offered, i, value)).ifPresent(out::add);
             }
         }
@@ -283,7 +305,7 @@ final class ValuesOfAType {
                 continue;
             }
             for (Object value : offered.get(i)) {
-                anyMadeWith(canonical, offered, i, value).ifPresent(out::add);
+                countedThrough(canonical, offered, i, value, budget).ifPresent(out::add);
             }
             if (!variedAlone(List.copyOf(out), components, i)) {
                 throw new AssertionError("no two values of " + record.getName() + " differ in "
@@ -362,14 +384,40 @@ final class ValuesOfAType {
     }
 
     /**
-     * {@code value} at component {@code at}, beside the first values of the others the constructor
-     * accepts among every combination of them, counted through as an odometer does — or nothing
-     * where it accepts none.
+     * {@code value} at component {@code at}, beside the others the constructor accepts: the ones
+     * {@link #nearestMadeWith} finds where it finds any, so that the two ways of asking put a value
+     * beside the same partner wherever the nearer way answers, and otherwise the first of every
+     * combination of them, counted through as an odometer does — or nothing where it accepts none.
+     *
+     * <p>Where a component is varied alone in no two of the nearest values, the other combinations
+     * are what is wanted and not the nearest again, so that asking is {@link #countedThrough}.
      */
     private static Optional<Object> anyMadeWith(Constructor<?> canonical,
-                                                List<List<Object>> offered, int at, Object value) {
+                                                List<List<Object>> offered, int at, Object value,
+                                                int budget) {
+        Optional<Object> nearest = nearestMadeWith(canonical, offered, at, value);
+        return nearest.isPresent() ? nearest : countedThrough(canonical, offered, at, value, budget);
+    }
+
+    /**
+     * {@code value} at component {@code at}, beside the first of every combination of the others the
+     * constructor accepts — or nothing where it accepts none.
+     *
+     * <p>Nothing says every combination was asked and none accepts. Where more than {@code budget}
+     * constructions were refused first, the search is not finished and the answer is not known, so
+     * it is an error and not an absence.
+     */
+    private static Optional<Object> countedThrough(Constructor<?> canonical,
+                                                   List<List<Object>> offered, int at,
+                                                   Object value, int budget) {
+        int asked = 0;
         int[] index = new int[offered.size()];
         while (true) {
+            if (++asked > budget) {
+                throw new AssertionError("asking " + canonical.getDeclaringClass().getName()
+                        + " for " + value + " at component " + at + " was not finished after "
+                        + budget + " constructions, so whether any combination takes it is not known");
+            }
             Object[] arguments = new Object[offered.size()];
             for (int i = 0; i < arguments.length; i++) {
                 arguments[i] = i == at ? value : offered.get(i).get(index[i]);

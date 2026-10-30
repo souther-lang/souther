@@ -1442,18 +1442,59 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * <p>One type for every such thing, so a reader that carries one carries all of them, and one
      * that asks which it is answers each.
      */
-    public sealed interface HandedToTheStep extends ReadAlongAContainer
+    public sealed interface HandedToTheStep extends ReadOffABinding
             permits KeptSoFar, PositionInTheWalk {}
+
+    /**
+     * What a binding's value is read off a container's elements as: what a walk hands its step, or
+     * the element an index written down picks.
+     */
+    public sealed interface ReadOffABinding extends ReadAlongAContainer
+            permits HandedToTheStep, PickedAtAnIndex {}
 
     /**
      * A number read off a container's elements one by one and at no one position of the input,
      * where what it is says where it lies beside how many the container holds: what a walk hands
-     * its step, or how many of the elements meet a statement.
+     * its step, the element an index picks, or how many of the elements meet a statement.
      *
      * <p>One type for every such thing, for the reason {@link HandedToTheStep} is one: a reader of
      * a relation carrying one carries all of them.
      */
-    public sealed interface ReadAlongAContainer permits HandedToTheStep, HowManyMeet {}
+    public sealed interface ReadAlongAContainer permits ReadOffABinding, HowManyMeet {}
+
+    /**
+     * The element at {@code index} of {@code container}, which a name an arm opening a lookup at
+     * that index binds.
+     *
+     * <p>The element and not the elements. Where the elements of the container stand is one place
+     * ({@link TermPath.Step.Element}) and a row puts a value at all of them or at some, so a number
+     * read at that place says nothing of which element a comparison is about: the index is what
+     * does, and it is held here beside the place whose declarations and rules the element is read
+     * under, which is a different thing and is not to be taken for it. A reader that wants the
+     * values the element may take asks the place; one that wants a value at the element asks for a
+     * container of more than {@code index} elements.
+     *
+     * @param container the list the lookup is made in, which no other container holds
+     * @param index     the index written down
+     * @param element   where the elements of the container stand, or a field under them where the
+     *                  name is read through one: the place the element's declarations are read at
+     * @param howMany   how many the container holds
+     */
+    record PickedAtAnIndex(TermPath container, long index, TermPath element,
+                           NumericTerm.FromOnePosition howMany) implements ReadOffABinding {
+
+        public PickedAtAnIndex {
+            Objects.requireNonNull(container, "an element of some container");
+            Objects.requireNonNull(element, "and the place the elements stand at");
+            if (index < 0 || container.insideAContainer()
+                    || !element.isAtOrUnder(container.element())
+                    || !PositionInTheWalk.counts(howMany, container)) {
+                throw new IllegalArgumentException("an element is picked at an index of a"
+                        + " container that no other holds, and read where its elements stand: "
+                        + container + "[" + index + "] at " + element);
+            }
+        }
+    }
 
     /**
      * Where the element a walk over every element of {@code container} hands its step stands in
@@ -1617,7 +1658,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * @param handed  what a walk hands its step, where the value is that
      */
     record OfABinding(BindingId binding, List<TermPath.Step> steps, Type type,
-                      Optional<WhyUnread> madeOf, Optional<HandedToTheStep> handed)
+                      Optional<WhyUnread> madeOf, Optional<ReadOffABinding> handed)
             implements Quantity {
 
         public OfABinding {
@@ -1625,7 +1666,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 throw new IllegalArgumentException("a bound number is some binding's, of some type");
             }
             steps = List.copyOf(steps);
-            if (handed.isPresent() && (madeOf.isPresent() || !steps.isEmpty())) {
+            if (handed.isPresent() && (madeOf.isPresent()
+                    || (!steps.isEmpty() && !(handed.get() instanceof PickedAtAnIndex)))) {
                 throw new IllegalArgumentException("what a walk hands its step is the value itself,"
                         + " and nothing of it was read to stop: " + binding);
             }

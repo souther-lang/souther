@@ -39,7 +39,8 @@ public sealed interface RunSource {
     default boolean isInOneContainer() {
         return switch (this) {
             case ProjectedOccurrences _, ComputedOccurrences _ -> true;
-            case FlattenedOccurrences _, ReachableNodes _, JoinedOccurrences _ -> false;
+            case FlattenedOccurrences _, ReachableNodes _, JoinedOccurrences _,
+                 SearchedLine _ -> false;
         };
     }
 
@@ -72,7 +73,23 @@ public sealed interface RunSource {
                 yield namesOneRun(at) && beside != null && namesOneRun(beside)
                         && !at.equals(beside) ? new JoinedOccurrences(at, beside) : null;
             }
+            // The tree and the value it is searched for are two inputs, and the line is the same
+            // one only where each is still one place.
+            case SearchedLine line -> overTheLineDown(at, line.through(), line.matchAt(),
+                    moved.put(line.key()));
         };
+    }
+
+    /**
+     * The line of nodes from the node at {@code root} down to the first one a search finds, or
+     * null where no one tree stands at {@code root} or the value searched for is not one place
+     * ({@link SearchedLine}).
+     */
+    static RunSource overTheLineDown(TermPath root, String through, List<String> matchAt,
+                                     TermPath key) {
+        return root != null && key != null && oneTreeStandsAt(root) && !key.insideAContainer()
+                && !root.isAtOrUnder(key) && !key.isAtOrUnder(root)
+                ? new SearchedLine(root, through, matchAt, key) : null;
     }
 
     /**
@@ -346,6 +363,67 @@ public sealed interface RunSource {
         public String toString() {
             return "{" + (container.isEmpty() ? "node" : String.join(".", container) + "[*]")
                     + " below " + root + " through " + through + "}";
+        }
+    }
+
+    /**
+     * The nodes on the line from the node at {@code root} down to the first node a search finds,
+     * the search going to the elements of the field {@code through} of each node in turn, first
+     * element to last and each element's nodes before the next element's, and stopping at the
+     * first node whose value at {@code matchAt} is the value standing at {@code key}: that node
+     * and each node above it down from the root, or none where no node of the tree has that
+     * value. The order is part of which node is first, so what reads the search, what reads a row
+     * and what writes one all take it ({@code TermReading#lineFound}); a search that takes the
+     * elements in another order is not this run.
+     *
+     * <p>Not {@link ReachableNodes}. That is every node of the tree and a search finds one of them,
+     * so a tree of a given height holds lines of every length up to it and the search answers one
+     * of those — the first node in the order it goes down, which is the root where the root has
+     * the value whatever is below it. What is claimed is how many nodes that line holds, from none
+     * (nothing matched) to the depth of the first match plus one, and nothing about which tree
+     * makes which: a tree's height is no length this holds, and a tree the declarations leave no
+     * way to write a matching node in has no line of that length.
+     *
+     * <p>Two inputs, as {@link JoinedOccurrences} is: the tree is read from {@code root} and the
+     * value it is searched for from {@code key}, a place holding one value apart from the tree.
+     *
+     * @param root    where the node the search starts from stands
+     * @param through the field of a node whose elements are the nodes below it
+     * @param matchAt the fields from a node to the value that is compared with the one at
+     *                {@code key}
+     * @param key     where the value searched for stands
+     */
+    record SearchedLine(TermPath root, String through, List<String> matchAt, TermPath key)
+            implements RunSource {
+
+        public SearchedLine {
+            Objects.requireNonNull(root, "a tree is searched from some node");
+            Objects.requireNonNull(through, "a search goes below a node through something");
+            matchAt = List.copyOf(matchAt);
+            Objects.requireNonNull(key, "a search is for some value");
+            if (matchAt.isEmpty()) {
+                throw new IllegalArgumentException("a node holds the value searched for at one of"
+                        + " its fields");
+            }
+            if (!oneTreeStandsAt(root)) {
+                throw new IllegalArgumentException("`" + root + "` stands inside a container, and"
+                        + " which of its trees a search went down is not said by it");
+            }
+            if (key.insideAContainer() || root.isAtOrUnder(key) || key.isAtOrUnder(root)) {
+                throw new IllegalArgumentException("the value searched for stands at `" + key
+                        + "`, which is not one place apart from the tree at `" + root + "`");
+            }
+        }
+
+        @Override
+        public TermPath subjectPath() {
+            return root;
+        }
+
+        @Override
+        public String toString() {
+            return "{line below " + root + " through " + through + " to the node whose "
+                    + String.join(".", matchAt) + " is " + key + "}";
         }
     }
 

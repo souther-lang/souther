@@ -9098,7 +9098,8 @@ public final class Generator {
                 || target.term() instanceof NumericTerm.GatheredUnderAKey
                 || target.term() instanceof NumericTerm.ProductOf
                 || (target.term() instanceof NumericTerm.TakenOver over
-                        && over.source() instanceof RunSource.JoinedOccurrences)) {
+                        && (over.source() instanceof RunSource.JoinedOccurrences
+                                || over.source() instanceof RunSource.SearchedLine))) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.TurnsOnAnotherParameter());
         }
         // Only this parameter's value is filled in: the walk reads the one the path names, and the
