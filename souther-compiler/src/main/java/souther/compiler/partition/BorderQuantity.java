@@ -54,7 +54,7 @@ import java.util.stream.Collectors;
  *
  * <p><b>Everything a border's readers ask is asked here, and which of these it is is asked
  * nowhere.</b> How the quantity's own values are ordered ({@link #levels}), whether a row stands at
- * one item ({@link #standsAt}), what a search has to solve to put a row there ({@link #standingAt}),
+ * one item ({@link #standsAt}), what a search for a row there is asked to find ({@link #searchGoalAt}),
  * and how a report names it ({@link #left} and {@link #writtenAt}). A reader outside this file that
  * asked which of the variants it was holding would be asking the same question the old two shapes of
  * line asked, under a new name — and that question is what made a second shape cost a copy of the

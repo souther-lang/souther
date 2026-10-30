@@ -1094,6 +1094,9 @@ public final class StandingAtAPoint {
          *  none for a line on no comparison a run records. */
         private final List<ConditionOutcomeSite> recordedAt;
 
+        /** What {@link #comparedOnTheRun} answered, once it was asked; null before. */
+        private Optional<List<SeenComparison>> comparedOnTheRun;
+
         RowWalk(BehaviorInputs where, ObservedInputs observed) {
             this(where, observed, Set.of());
         }
@@ -1115,12 +1118,17 @@ public final class StandingAtAPoint {
          * place it is recorded — or empty where the row's run was not watched.
          */
         Optional<List<SeenComparison>> comparedOnTheRun() {
-            if (!(observed.watched() instanceof Generator.Watched.Ran(AlignedObservation run))) {
-                return Optional.empty();
+            // Every reading of the row asks, and the run is the row's: put together once.
+            if (comparedOnTheRun == null) {
+                if (observed.watched() instanceof Generator.Watched.Ran(AlignedObservation run)) {
+                    List<SeenComparison> out = new ArrayList<>();
+                    recordedAt.forEach(site -> out.addAll(run.comparedAt(site)));
+                    comparedOnTheRun = Optional.of(List.copyOf(out));
+                } else {
+                    comparedOnTheRun = Optional.empty();
+                }
             }
-            List<SeenComparison> out = new ArrayList<>();
-            recordedAt.forEach(site -> out.addAll(run.comparedAt(site)));
-            return Optional.of(out);
+            return comparedOnTheRun;
         }
 
         /** Whether this walk reads {@code order} the other way round. */

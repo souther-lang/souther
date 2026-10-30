@@ -1,7 +1,10 @@
 package souther.compiler.coverage;
 
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -47,6 +50,10 @@ public final class AlignedObservation {
 
     private final Set<SeenComparison> compared;
 
+    /** The same, by the place each was recorded at and in the order of the visits: asked of every
+     *  reading of a row at every point, so put in order once. */
+    private final Map<ConditionOutcomeSite, List<SeenComparison>> comparedBySite;
+
     AlignedObservation(NumberingIdentity numbering, Set<ArmProbe> arms,
                        Set<SeenConditionOutcome> outcomes, Set<SeenVisit> visits) {
         this(numbering, arms, outcomes, visits, Set.of(), Set.of());
@@ -74,6 +81,12 @@ public final class AlignedObservation {
         this.walksOn = Set.copyOf(walksOn);
         this.compared = Set.copyOf(compared);
         this.compared.forEach(each -> requireOurs(each.at().numbering(), each));
+        Map<ConditionOutcomeSite, List<SeenComparison>> bySite = new HashMap<>();
+        this.compared.stream().sorted(Comparator.comparingInt(SeenComparison::nth))
+                .forEach(each -> bySite.computeIfAbsent(each.at(), _ -> new ArrayList<>())
+                        .add(each));
+        bySite.replaceAll((_, ofOne) -> List.copyOf(ofOne));
+        this.comparedBySite = Map.copyOf(bySite);
         this.arms.forEach(each -> requireOurs(each.numbering(), each));
         this.outcomes.forEach(each -> requireOurs(each.at().numbering(), each));
         this.visits.forEach(each -> requireOurs(each.at().numbering(), each));
@@ -154,8 +167,7 @@ public final class AlignedObservation {
      */
     public List<SeenComparison> comparedAt(ConditionOutcomeSite at) {
         requireOurs(at.numbering(), at);
-        return compared.stream().filter(each -> each.at().equals(at))
-                .sorted(Comparator.comparingInt(SeenComparison::nth)).toList();
+        return comparedBySite.getOrDefault(at, List.of());
     }
 
     /** Whether the run reached {@code at} at all, whichever way the condition there came out. */

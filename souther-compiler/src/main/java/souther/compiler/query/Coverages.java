@@ -1766,7 +1766,7 @@ final class Coverages {
      *
      * <p>The one reading. Whether a row sits at an item is the quantity's answer ({@link
      * BorderQuantity#standsAt}), where a row would have to stand is the quantity's too
-     * ({@link BorderQuantity#standingAt}) and finding one there is the realizer's — so nothing here
+     * ({@link BorderQuantity#searchGoalAt}) and finding one there is the realizer's — so nothing here
      * asks which kind of line this is. Two readings written apart is what left a criterion about one
      * place reaching the reader of a pair as an {@code IllegalStateException}.
      */
