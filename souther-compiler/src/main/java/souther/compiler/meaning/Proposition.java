@@ -278,7 +278,7 @@ public sealed interface Proposition {
                 throw new IllegalArgumentException("counts held against nought are whether some"
                         + " element meets what is counted, and are written as that: " + relation);
             }
-            spelling = Spelling.denying(holds, Spelling.of(String.valueOf(relation)));
+            spelling = Spelling.denying(holds, relation.spelling());
         }
 
         /** The spelling of the relation held, whichever way round this is: one for one relation. */

@@ -5,8 +5,11 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * A comparison as the relation it states over the quantities a condition is about, in the one
@@ -20,6 +23,17 @@ public sealed interface Relation {
 
     /** The relation this states, which is the canonical one of the pair. */
     Rel proposition();
+
+    /**
+     * This relation's text, held as the pieces it is put together from: the spelling a comparison
+     * over it is told apart and ordered by ({@link Proposition.Compared}). The text is
+     * {@link #toString}'s; each quantity of a form is held as its own spelling
+     * ({@link Quantity#spelling}), so a count of a statement in it holds the statement's spelling and
+     * not the statement written out.
+     */
+    default Spelling spelling() {
+        return Spelling.of(toString());
+    }
 
     /**
      * A form of quantities against nought, facing the one way ({@link OneWay}).
@@ -39,6 +53,29 @@ public sealed interface Relation {
                 throw new IllegalArgumentException("a relation is written facing the one way, and "
                         + form + " faces the other");
             }
+        }
+
+        /** The text a record of this writes, with the form's text as {@link LinearForm#toString}
+         *  writes it: the constant, then each quantity and its coefficient in the order of the
+         *  quantities' spellings, one entry for each spelling. */
+        @Override
+        public Spelling spelling() {
+            Map<Spelling, ExactRatio> named = new TreeMap<>();
+            form.coefs().forEach((atom, coef) -> named.put(atom.spelling(), coef));
+            List<Spelling> pieces = new ArrayList<>(3 * named.size() + 2);
+            pieces.add(Spelling.of("Affine[form=LinearForm[constant=" + form.constant().spelled()
+                    + ", coefs={"));
+            boolean first = true;
+            for (Map.Entry<Spelling, ExactRatio> each : named.entrySet()) {
+                if (!first) {
+                    pieces.add(Spelling.SEPARATOR);
+                }
+                pieces.add(each.getKey());
+                pieces.add(Spelling.of("=" + each.getValue().spelled()));
+                first = false;
+            }
+            pieces.add(Spelling.of("}], proposition=" + proposition + "]"));
+            return Spelling.joined(pieces);
         }
     }
 
@@ -81,11 +118,11 @@ public sealed interface Relation {
          * and not from every coefficient's sign, so a form with one of each sign faces one way too.
          */
         public static <A extends Quantity> boolean facesTheOtherWay(LinearForm<A> form) {
-            Map<String, A> spelled = new HashMap<>();
-            String first = null;
+            Map<Spelling, A> spelled = new HashMap<>();
+            Spelling first = null;
             ExactRatio firstCoefficient = null;
             for (Map.Entry<A, ExactRatio> each : form.coefs().entrySet()) {
-                String spelling = each.getKey().spelled();
+                Spelling spelling = each.getKey().spelling();
                 A before = spelled.putIfAbsent(spelling, each.getKey());
                 if (before != null && !before.equals(each.getKey())) {
                     throw new IllegalStateException("two atoms of one form are spelled alike: "
