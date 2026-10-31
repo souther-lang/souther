@@ -20,11 +20,11 @@ class ChoicesThatPartitionOneValueAreCountedByTheWaysThatHoldTogetherTest {
 
     @Test
     void aLookupAfterAnIfLookingTheSameValueUpIsReadAsItIsWithNothingBeforeIt() {
-        String model = LookupsOfOneValue.model(LookupsOfOneValue.TESTED_AGAIN, 6);
+        String model = LookupsOfOneValue.model(LookupsOfOneValue.TESTED_AGAIN, 3);
 
         assertEquals(List.of(), LookupsOfOneValue.unread(model));
         assertEquals(LookupsOfOneValue.aboutTheLookup(
-                        LookupsOfOneValue.model(LookupsOfOneValue.NOT_TESTED, 6)),
+                        LookupsOfOneValue.model(LookupsOfOneValue.NOT_TESTED, 3)),
                 LookupsOfOneValue.aboutTheLookup(model));
     }
 }
