@@ -2100,6 +2100,19 @@ public final class InputReads {
     }
 
     /**
+     * This reading inside {@code arm}, an arm opening an option, with the name it binds standing
+     * for {@code value}: a reading on which the option holds that one of the values it may hold,
+     * where which one it holds is said apart from this reading. As it is under the arm where the
+     * arm binds no name.
+     */
+    public InputReads holdingOneItMayHold(Core.Case arm, Denotation value,
+                                          DeclarationNewtypes newtypes) {
+        return arm.binder() == null || arm.binder().binding() == null
+                || !(arm.binding() instanceof Core.ArmBinding.Payload) ? this
+                : standingFor(arm.binder().binding(), value, newtypes);
+    }
+
+    /**
      * This reading, with {@code name} standing for {@code value}: at its position where it stands
      * at one, and otherwise for the value read where it was.
      *

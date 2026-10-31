@@ -71,14 +71,14 @@ class AnArithmeticStopIsReportedAtTheCallItStoppedAtTest {
             let first (d: Date, xs: List<Date>): Date =
                 Option.withDefault(d, List.find(x -> x == d, xs))
 
-            let weekOf (s: Date, d: Date): Int =
-                Int.floorMod(Date.daysBetween(s, first(d, [ d ])), 7)
+            let weekOf (s: Date, d: Date, xs: List<Date>): Int =
+                Int.floorMod(Date.daysBetween(s, first(d, xs)), 7)
 
-            let fiveDaysOf (s: Date, d: Date): Int =
-                Int.floorMod(Date.daysBetween(s, first(d, [ d ])), 5)
+            let fiveDaysOf (s: Date, d: Date, xs: List<Date>): Int =
+                Int.floorMod(Date.daysBetween(s, first(d, xs)), 5)
 
-            behavior f : (s: Date, a: Date, b: Date) -> Bool
-            let f (s, a, b) = List.any(v -> v >= 1, [ weekOf(s, a), fiveDaysOf(s, b) ])
+            behavior f : (s: Date, a: Date, b: Date, xs: List<Date>) -> Bool
+            let f (s, a, b, xs) = List.any(v -> v >= 1, [ weekOf(s, a, xs), fiveDaysOf(s, b, xs) ])
             """;
 
     /** The same stop in a rule written on a type, in one part and in two. */
@@ -306,16 +306,18 @@ class AnArithmeticStopIsReportedAtTheCallItStoppedAtTest {
 
     /**
      * Two remainders over two positions, put together as the applications of one closure: each
-     * position is sent to the remainder it went through, and the one both went through to both.
+     * position is sent to the remainder it went through, and the ones both went through to both.
+     * What each is of is found among a list of the input, which no reading writes out.
      */
     @Test
     void eachPlaceIsSentToTheRemainderItWentThroughAndToNoOther() {
         String week = placeOf(TWO_REMAINDERS,
-                "Int.floorMod(Date.daysBetween(s, first(d, [ d ])), 7)");
+                "Int.floorMod(Date.daysBetween(s, first(d, xs)), 7)");
         String five = placeOf(TWO_REMAINDERS,
-                "Int.floorMod(Date.daysBetween(s, first(d, [ d ])), 5)");
+                "Int.floorMod(Date.daysBetween(s, first(d, xs)), 5)");
 
-        assertEquals(Map.of("s", Set.of(week, five), "a", Set.of(week), "b", Set.of(five)),
+        assertEquals(Map.of("s", Set.of(week, five), "a", Set.of(week), "b", Set.of(five),
+                        "xs", Set.of(week, five), "xs[*]", Set.of(week, five)),
                 sentTo(pairs, "f"));
     }
 

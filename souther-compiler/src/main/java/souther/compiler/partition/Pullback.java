@@ -2173,11 +2173,69 @@ final class Pullback {
             Core.Case arm = match.cases().get(i);
             InputReads inside = reads.choosing(Choice.Decides.ofCase(match, arm),
                     read.rules().symbols(), read.rules().newtypes());
+            Derivation found = onTheElementFound(match, arm, reads, inside, states);
             arms.add(new Derivation.MatchArms.Arm(selections.get(i),
-                    states.apply(arm.body(), inside),
+                    found != null ? found : states.apply(arm.body(), inside),
                     ofAnEntry && arm.binding() instanceof Core.ArmBinding.Payload));
         }
         return new Derivation.MatchArms(arms);
+    }
+
+    /**
+     * What {@code arm} states where it opens what an operation found among the elements of a
+     * container written out — the element its closure holds of, applied to each in turn from the
+     * first until one holds — read on each element as the arm taken where that is the one found:
+     * where the closure holds of it and of none before it. Null where {@code arm} binds no such
+     * value, or reading it on each element is past what one condition is read in.
+     *
+     * <p>The value found is the first the closure holds of. The law says it is an element the
+     * closure holds of ({@link BoundOperationFacts#answersAnElementWhereTheClosureHolds}), and
+     * the operation applies the closure no further than the first that holds
+     * ({@link HowAClosureIsApplied#UNTIL_ONE_HOLDS}): of any element after it, nothing was asked.
+     */
+    private Derivation onTheElementFound(Core.Match match, Core.Case arm, InputReads reads,
+                                         InputReads inside,
+                                         BiFunction<Core, InputReads, Derivation> states) {
+        if (!(arm.binding() instanceof Core.ArmBinding.Payload) || arm.binder() == null
+                || !Boolean.TRUE.equals(LawAtACall.presentWhereTaken(arm))) {
+            return null;
+        }
+        Denotation looked = reads.standing(match.scrutinee(), read.rules().symbols(),
+                read.rules().newtypes());
+        if (!(AnOperationApplied.of(Core.withoutStanding(looked.value()))
+                instanceof AnOperationApplied applied)) {
+            return null;
+        }
+        BoundOperationFacts.Found found = DefaultBoundOperationFacts.get()
+                .answersAnElementWhereTheClosureHolds(applied.operation());
+        int at = found == null ? -1 : CallArguments.positionOf(found.closure(),
+                applied.operation());
+        if (at < 0 || at >= applied.args().size()) {
+            return null;
+        }
+        Denotation closure = looked.at().denotes(applied.args().get(at), read.rules().symbols(),
+                read.rules().newtypes());
+        if (closure == null || !(Core.withoutStanding(closure.value()) instanceof Core.Block block)
+                || block.params().size() != 1 || block.params().getFirst() == null
+                || block.params().getFirst().binding() == null
+                || !(applicationsOf(block, closure.at(), read)
+                        instanceof InputReads.Applications.Each(var each, var how))
+                || how != HowAClosureIsApplied.UNTIL_ONE_HOLDS || each.isEmpty()
+                || each.stream().anyMatch(made -> !made.keptWhere().isEmpty())
+                || splitInto(inside, each.size(), looked) != null) {
+            return null;
+        }
+        Core.Binder parameter = block.params().getFirst();
+        Core.Read handed = new Core.Read(parameter.name(), parameter.binding(),
+                block.paramTypes().getFirst(), block.pos());
+        List<Derivation.MatchArms.Arm> onEach = new ArrayList<>();
+        for (InputReads.Applications.Made made : each) {
+            onEach.add(new Derivation.MatchArms.Arm(
+                    observe(block.body(), AnswerAspect.TRUTH, made.reads()),
+                    states.apply(arm.body(), inside.holdingOneItMayHold(arm,
+                            new Denotation(handed, made.reads()), read.rules().newtypes()))));
+        }
+        return new Derivation.MatchArms(onEach);
     }
 
     /**
