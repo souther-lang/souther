@@ -1,21 +1,20 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
+import souther.compiler.check.ValuePlaces;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.observe.CanonicalSetOrder;
 import souther.compiler.observe.ElementsTaken;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.UnorderedOrder;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -362,42 +361,37 @@ final class ObservedFixtures {
             }
         }
         if (sequence.kind() == Shape.Sequence.Kind.SET) {
-            written = inSetOrder(elements, written, sequence.element(), reading.source());
+            written = inUnorderedOrder(elements, written, sequence.element(), reading.source());
         }
         return new Writing.Written<>(FixtureTemplate.collection(written));
     }
 
     /**
-     * The elements of a set in the order {@link CanonicalSetOrder} writes them: by value where the
-     * element type is a number or a name over one, and by text otherwise.
+     * {@code written}, the parts of a collection that states no order, in the order
+     * {@link UnorderedOrder} writes them: by the place of {@code observed}, the value each was
+     * written from, at a position of {@code type}, and by text where that position places nothing.
      *
-     * <p>The place is taken off the observed value, with the names the position wears off it by the
-     * walk {@link #of} takes them off by, so a number is never read back out of its text.
+     * <p>The place is asked of {@link ValuePlaces}, of the observed value and never of its text. A
+     * collection of fewer than two parts has no order to settle, and does not ask what the type is.
      */
-    private static List<FixtureTemplate> inSetOrder(List<ObservedValue> observed,
-                                                    List<FixtureTemplate> written, Type element,
-                                                    RuleReadingSource source) {
+    private static List<FixtureTemplate> inUnorderedOrder(List<ObservedValue> observed,
+                                                          List<FixtureTemplate> written,
+                                                          Type type, RuleReadingSource source) {
         if (written.size() < 2) {
             return written;
         }
-        Carrier carrier = Carrier.ofValue(element, source.declarations());
-        boolean counted = carrier instanceof Carrier.Whole || carrier instanceof Carrier.Dense;
-        List<TypeSymbol> worn = TypeView.of(element, source.inners(), source.symbols(),
-                source.kinds(), source.sums()).wrappers();
+        ValuePlaces places = ValuePlaces.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
         List<Integer> positions = new ArrayList<>();
         for (int at = 0; at < written.size(); at++) {
             positions.add(at);
         }
-        return CanonicalSetOrder.of(positions, at -> {
-            if (!counted) {
-                return null;
-            }
-            ObservedValue inside = ObservedValue.wearing(worn, observed.get(at));
-            return inside == null ? null : carrier.placeOf(inside);
-        }, at -> written.get(at).text()).stream().map(written::get).toList();
+        return UnorderedOrder.of(positions, at -> places.of(observed.get(at)),
+                at -> written.get(at).text()).stream().map(written::get).toList();
     }
 
-    /** A map as its entries, in the order of their text. */
+    /** A map as its entries, in the order of its keys' values where they are numbers, and of their
+     *  text otherwise. */
     private static Writing<FixtureTemplate> mapping(List<ObservedValue.Entry> entries,
                                                     Shape.Mapping mapping,
                                                     RuleReadingContext reading) {
@@ -413,8 +407,9 @@ final class ObservedFixtures {
             }
             written.add(FixtureTemplate.entry(k, v));
         }
-        written.sort(Comparator.comparing(FixtureTemplate::text));
-        return new Writing.Written<>(FixtureTemplate.collection(written));
+        List<ObservedValue> keys = entries.stream().map(ObservedValue.Entry::key).toList();
+        return new Writing.Written<>(FixtureTemplate.collection(
+                inUnorderedOrder(keys, written, mapping.key(), reading.source())));
     }
 
     private static <T> Writing<T> unread(ObservedValue value) {

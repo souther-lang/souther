@@ -149,6 +149,9 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(TYPE_VIEW, "of",
                     "(" + TYPE + INNERS + SYMBOLS + KINDS + SUMS + ")L" + TYPE_VIEW + ";",
                     THE_SPINE),
+            row(CHECK + "ValuePlaces", "of",
+                    "(" + TYPE + INNERS + SYMBOLS + KINDS + SUMS + ")L" + CHECK + "ValuePlaces;",
+                    THE_POSITION),
             row(CHECK + "ValueUniverse", "howManyDiffer", "(" + TYPE + CONTEXT + ")J",
                     THE_POSITION),
             row(INPUTS + "DeclaredInput", "readingsOf", "(" + TYPE + ")Ljava/util/List;",
@@ -235,9 +238,6 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "NestedContainersAddingUp", "typeAlong",
                     "(" + TYPE + "L" + INPUTS + "TermPath;L" + INPUTS + "TermPath;" + CONTEXT
                             + ")" + TYPE,
-                    THE_POSITION),
-            row(PARTITION + "ObservedFixtures", "inSetOrder",
-                    "(Ljava/util/List;Ljava/util/List;" + TYPE + SOURCE + ")Ljava/util/List;",
                     THE_POSITION),
             row(PARTITION + "ObservedFixtures", "of",
                     "(Lsouther/compiler/observe/ObservedValue;" + TYPE + CONTEXT + ")L" + PARTITION

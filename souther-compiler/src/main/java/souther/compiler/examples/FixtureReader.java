@@ -1845,11 +1845,11 @@ public final class FixtureReader {
                 Position.at(position));
     }
 
-    /** What a row stated, as it stated it: the value it wrote, the case it named, or the mark that
-     *  says its answer is owed. */
-    String shown(Expectation stated) {
+    /** What a row stated at a position that answers {@code position}, as it stated it: the value it
+     *  wrote, the case it named, or the mark that says its answer is owed. */
+    String shown(Expectation stated, Type position) {
         return switch (stated) {
-            case Expectation.TheValue(Asserted value) -> shown(value);
+            case Expectation.TheValue(Asserted value) -> shown(value, position);
             case Expectation.TheCase(TypeSymbol name) -> name.name();
             // As the row writes it. A reader shown a phrase about the row instead would be shown
             // this compiler's words where the row's own characters are what they are looking for.
@@ -1863,8 +1863,8 @@ public final class FixtureReader {
     }
 
     /** A value in the notation a fixture is written in — what a row wrote, or what came out. */
-    String shown(Asserted a) {
-        return new ValueRendering(neutral).show(a);
+    String shown(Asserted a, Type position) {
+        return new ValueRendering(neutral).show(a, position);
     }
 
     String shown(ObservedValue v, Type position) {

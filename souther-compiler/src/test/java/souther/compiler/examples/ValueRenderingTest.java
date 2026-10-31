@@ -6,6 +6,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.check.CheckedDeclarations;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
+import souther.compiler.observe.Asserted;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
@@ -55,6 +56,36 @@ class ValueRenderingTest {
         ObservedValue.Sequence built = new ObservedValue.Sequence(List.of(n(10), n(-3), n(2)));
         assertEquals("Set.fromList([ -3, 2, 10 ])", rendering().show(built, Type.set(Type.INT)));
         assertEquals("[ 10, -3, 2 ]", rendering().show(built, Type.list(Type.INT)));
+    }
+
+    @Test
+    void aMapOfNumberKeysIsWrittenInTheOrderOfItsKeysOnBothSides() {
+        Type position = Type.map(Type.INT, Type.STRING);
+        ObservedValue.Mapping answered = new ObservedValue.Mapping(List.of(
+                new ObservedValue.Entry(n(10), new ObservedValue.Text("j")),
+                new ObservedValue.Entry(n(2), new ObservedValue.Text("b"))));
+        Asserted.Entries stated = new Asserted.Entries(true, List.of(
+                new Asserted.Entry(new Asserted.Value(n(10)),
+                        new Asserted.Value(new ObservedValue.Text("j"))),
+                new Asserted.Entry(new Asserted.Value(n(2)),
+                        new Asserted.Value(new ObservedValue.Text("b")))));
+
+        assertEquals("[ (2, \"b\"), (10, \"j\") ]", rendering().show(answered, position));
+        assertEquals("Map.fromList([ (2, \"b\"), (10, \"j\") ])",
+                rendering().show(stated, position));
+        // Said at no position, the row states nothing of its type and its text orders it.
+        assertEquals("Map.fromList([ (10, \"j\"), (2, \"b\") ])", rendering().show(stated));
+    }
+
+    @Test
+    void aStatedSetIsWrittenInTheOrderOfItsValuesAtAPositionThatPlacesThem() {
+        Asserted.Elements stated = new Asserted.Elements(Asserted.Container.SET, List.of(
+                new Asserted.Value(n(10)), new Asserted.Value(n(-3)), new Asserted.Value(n(2))));
+
+        assertEquals("Set.fromList([ -3, 2, 10 ])", rendering().show(stated, Type.set(Type.INT)));
+        assertEquals("Set.fromList([ -3, 10, 2 ])", rendering().show(stated));
+        assertEquals("Set.fromList([ -3, 10, 2 ])",
+                rendering().show(stated, Type.set(Type.STRING)));
     }
 
     @Test
