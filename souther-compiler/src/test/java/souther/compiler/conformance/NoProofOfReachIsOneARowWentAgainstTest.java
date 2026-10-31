@@ -6,6 +6,7 @@ import souther.compiler.check.PathReachability;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
+import souther.test.Nightly;
 import souther.test.ReadsTheRepositorysModels;
 
 import java.util.ArrayList;
@@ -34,8 +35,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>What it does not establish is the other half. A place no row went to is not shown unreachable
  * by that, and nothing here asks whether a proof that held over these rows holds over every input.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
+@Nightly
 @ReadsTheRepositorysModels
 class NoProofOfReachIsOneARowWentAgainstTest {
 
