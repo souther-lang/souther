@@ -1,14 +1,11 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.MeasureReason;
-import souther.compiler.observe.RowRef;
 import souther.compiler.types.TypeSymbol;
 
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * What a behavior's {@code example} rows establish about the cases one of its inputs can be.
@@ -99,18 +96,26 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
     }
 
     /**
-     * A row whose case at this position could not be read.
+     * A row whose case at this position could not be read, and how far the row got.
      *
-     * @param rowRef   which row, so that a reader can be sent to it
-     * @param mayReach how far its case would have got, had it been read. Decided as it is for a row
-     *                 that was read, by how far the row got — except that a row that did not finish
-     *                 has no such answer, and may have got to any of them
+     * @param how     why the case was not read
+     * @param reached how far the row got, which is how far its case would have got had it been
+     *                read
      */
-    public record Unread(RowRef rowRef, Reached mayReach) {
+    public record Unread(UnreadCase how, Reached reached) {
 
         public Unread {
-            Objects.requireNonNull(rowRef, "a row nobody can name cannot be sent to");
-            Objects.requireNonNull(mayReach, "a row got somewhere, if only nowhere");
+            Objects.requireNonNull(how, "a case not read was not read for a reason");
+            Objects.requireNonNull(reached, "a row got somewhere, if only nowhere");
+        }
+
+        /**
+         * How far its case may have got. A row that did not finish got as far as it got for a
+         * reason that is not the model's, so nothing says which sets its case stops short of: it
+         * may have got to any of them.
+         */
+        public Reached mayReach() {
+            return how instanceof UnreadCase.Stopped ? Reached.VERIFIED : reached;
         }
     }
 
@@ -185,13 +190,13 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
         List<Reached> lacking = cases.unread().isEmpty() ? List.of() : Reached.SETS.stream()
                 .filter(set -> !missing(declared, excluded, cases.of(set)).isEmpty())
                 .toList();
-        Set<RowRef> deciding = cases.unread().stream()
+        List<UnreadCase> deciding = cases.unread().stream()
                 .filter(each -> lacking.stream().anyMatch(each.mayReach()::isIn))
-                .map(Unread::rowRef)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+                .map(Unread::how)
+                .toList();
         WeakeningSet by = deciding.isEmpty() ? observed
-                : observed.union(WeakeningSet.of(
-                        new Weakening.InputCasesUnreadable(behavior, at, deciding)));
+                : observed.union(UnreadCase.weakeningOf(deciding,
+                        rows -> new Weakening.InputCasesUnreadable(behavior, at, rows)));
         return new InputCaseEvidence(at, declared, excluded, by.isEmpty()
                 ? new Measurement.Complete<>(cases) : new Measurement.Partial<>(cases, by));
     }

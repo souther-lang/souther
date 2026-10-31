@@ -10583,7 +10583,7 @@ public final class Adequacy {
         Set<TypeSymbol> specified = new LinkedHashSet<>();
         Set<TypeSymbol> observed = new LinkedHashSet<>();
         Set<TypeSymbol> verified = new LinkedHashSet<>();
-        List<RowRef> unreadableOut = new ArrayList<>();
+        List<UnreadCase> unreadableOut = new ArrayList<>();
         int answered = 0;
 
         List<Type> ins = sig.inputTypes();
@@ -10619,16 +10619,20 @@ public final class Adequacy {
                     : SignatureEvidence.notAsked(out, none, layout);
         }
 
-        // The rows the reading went without, as the reason written where each stopped names them.
-        Set<RowRef> wentWithout = new HashSet<>();
+        // What stopped each row the reading went without, as it was written where the row stopped.
+        // A case not read of such a row is not read because of that, and says so by carrying it.
+        Map<RowRef, List<Incompleteness.Met>> stoppedBy = new HashMap<>();
         for (Incompleteness.Met gap : seen.gaps()) {
             if (gap.fact().target() instanceof Target.OfRow(RowRef stopped)) {
-                wentWithout.add(stopped);
+                stoppedBy.computeIfAbsent(stopped, _ -> new ArrayList<>()).add(gap);
             }
         }
         for (RowOutcome row : rows) {
             boolean held = row.disposition() == Disposition.HELD;
             RowRef rowRef = RowRef.of(row);
+            UnreadCase unreadHere = stoppedBy.containsKey(rowRef)
+                    ? new UnreadCase.Stopped(rowRef, stoppedBy.get(rowRef))
+                    : new UnreadCase.NoCaseRead(rowRef);
             switch (row.expectedCase()) {
                 // Only a case of the output. A row naming a type the output does not have expects
                 // none of its cases. A case of it nothing reachable produces is kept: the row does
@@ -10643,7 +10647,7 @@ public final class Adequacy {
                 // An expectation neither the text nor its value says a case of.
                 case RowOutcome.ExpectedCase.Unread _ -> {
                     if (!declaredOut.isEmpty()) {
-                        unreadableOut.add(rowRef);
+                        unreadableOut.add(unreadHere);
                     }
                 }
             }
@@ -10664,18 +10668,13 @@ public final class Adequacy {
                     : row.stage().reached(Stage.FIXTURES_VALIDATED)
                             ? InputCaseEvidence.Reached.SPECIFIED
                             : InputCaseEvidence.Reached.NOWHERE;
-            // A row the reading went without got as far as it got for a reason that is not the
-            // model's, so nothing says which sets its case stops short of. Asked of the reason
-            // written where it stopped, which names the row.
-            InputCaseEvidence.Reached unreadReached = wentWithout.contains(rowRef)
-                    ? InputCaseEvidence.Reached.VERIFIED : reached;
             for (int i = 0; i < ins.size(); i++) {
                 if (declaredIn.get(i).isEmpty()) {
                     continue;   // not a sum: nothing to cover at this position
                 }
                 TypeSymbol written = i < row.inputCases().size() ? row.inputCases().get(i) : null;
                 if (written == null) {
-                    unreadableIn.get(i).add(new InputCaseEvidence.Unread(rowRef, unreadReached));
+                    unreadableIn.get(i).add(new InputCaseEvidence.Unread(unreadHere, reached));
                     continue;
                 }
                 if (reached.isIn(InputCaseEvidence.Reached.SPECIFIED)) {
@@ -10694,7 +10693,7 @@ public final class Adequacy {
         // may hold the row that covers a case, so a count over what remains is a count over some of
         // them — and that is these measures' own business, not something the signature above them
         // holds on their behalf. A row that was seen and did not finish is not here: it arrives
-        // through the case it could not be classified into, which is what the counts already say.
+        // through the case it could not be read, carrying what stopped it.
         Set<Weakening> unseen = new LinkedHashSet<>();
         for (Incompleteness.Met gap : seen.gaps()) {
             if (gap.fact().code().leftNoRowRead()) {

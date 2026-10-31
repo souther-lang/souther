@@ -2,12 +2,16 @@ package souther.compiler.report;
 
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.RowRef;
+import souther.compiler.observe.RunSensitivity;
+import souther.compiler.observe.Target;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.OutputCaseEvidence;
+import souther.compiler.query.UnreadCase;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.WeakeningSet;
 import souther.compiler.source.SourceId;
@@ -20,6 +24,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,6 +46,11 @@ class ARowWhoseCaseIsNotReadLeavesUndecidedOnlyACaseNoRowIsCountedAtTest {
      *  whichever rows beside it a case puts in: what is asked here is the case measure, and a
      *  point no row is at would refuse the verdict over something else. */
     private static String model(String rows) {
+        return model("", rows);
+    }
+
+    /** The same, with more declarations beside the helper. */
+    private static String model(String declarations, String rows) {
         return """
                 module m
 
@@ -58,6 +68,7 @@ class ARowWhoseCaseIsNotReadLeavesUndecidedOnlyACaseNoRowIsCountedAtTest {
 
                 let hit (n: Int): Shot = Hit(n)
 
+                """ + declarations + """
                 example record
                 """ + rows;
     }
@@ -128,11 +139,11 @@ class ARowWhoseCaseIsNotReadLeavesUndecidedOnlyACaseNoRowIsCountedAtTest {
         SourceRendering rendering = SourceRendering.namedByIdentity(SourceLayouts.NONE);
         String human = report.human(rendering);
         assertTrue(human.contains("in #2 specified 1/2"), human);
-        assertTrue(human.contains("input #2 of record — the rows "
+        assertTrue(human.contains("input #2 of record — rows with a case this cannot read: "
                         + rows.getFirst().shown(rendering.names().nameOf(rows.getFirst().source()))
                         + ", "
                         + rows.getLast().shown(rendering.names().nameOf(rows.getLast().source()))
-                        + " name no case"),
+                        + ";"),
                 human);
     }
 
@@ -221,9 +232,25 @@ class ARowWhoseCaseIsNotReadLeavesUndecidedOnlyACaseNoRowIsCountedAtTest {
     }
 
     /**
+     * What stopped the row, as it is written where the row stopped: the one fact a measure short
+     * of that row goes without, whichever measure it is.
+     */
+    private static Weakening.ObservationIncomplete stopOf(Measurement.Partial<?> partial,
+                                                          RowRef row) {
+        List<Weakening.ObservationIncomplete> stops = partial.weakening().causes().stream()
+                .filter(Weakening.ObservationIncomplete.class::isInstance)
+                .map(Weakening.ObservationIncomplete.class::cast)
+                .filter(each -> each.met().fact().target().equals(new Target.OfRow(row)))
+                .toList();
+        assertEquals(1, stops.size(), () -> "the row's stop, once: " + partial.weakening());
+        return stops.getFirst();
+    }
+
+    /**
      * A row that did not finish while its input was being built joined none of the sets, and not
-     * because of anything the model says: had it finished it may have been the row at {@code Hit}.
-     * So it holds {@code Hit} undecided as a row that finished and was not read does.
+     * because of anything its text says: had it finished it may have been the row at
+     * {@code Hit}. So it holds {@code Hit} undecided — by what stopped it, which a run that allows
+     * more may get past, and not as a row whose text names no case, which no run reads.
      */
     @Test
     void aRowThatDidNotFinishBuildingItsInputMayBeTheRowAtAnyCase() {
@@ -234,17 +261,65 @@ class ARowWhoseCaseIsNotReadLeavesUndecidedOnlyACaseNoRowIsCountedAtTest {
 
                 """;
         AdequacyReport report = WrittenWitness.refusedOnly(List.of("E1910"),
-                model("    | \"spins\" : (0, spun(1)) -> 0\n" + A_MISS)
-                        .replace("example record", spinning + "example record"));
+                model(spinning, "    | \"spins\" : (0, spun(1)) -> 0\n" + A_MISS));
         InputCaseEvidence shot = theShot(report);
 
         assertEquals(1, shot.unspecified().size(),
                 () -> "Hit and nothing else is without a row: " + shot.unspecified());
         Measurement.Partial<?> partial = assertInstanceOf(Measurement.Partial.class, shot.cases(),
                 () -> "a row that may be at Hit did not finish: " + shot.cases());
-        assertEquals(List.of(new Weakening.InputCasesUnreadable("record", 1,
-                        Set.of(theRow(report, "spins")))),
-                List.copyOf(partial.weakening().causes()));
+        Weakening.ObservationIncomplete stop = stopOf(partial, theRow(report, "spins"));
+        assertEquals(RunSensitivity.MAY_CHANGE, stop.runSensitivity());
+        assertFalse(stop.figures().isEmpty(), "the figure a run would have to be allowed past");
+        assertTrue(partial.weakening().causes().stream()
+                        .noneMatch(Weakening.InputCasesUnreadable.class::isInstance),
+                "the text of the row is not what is unread");
+    }
+
+    /**
+     * The stop is one entry among what keeps the verdict open however many measures are short of the
+     * row, and a reader of it is sent to what stopped the row and not to the text of its case.
+     */
+    @Test
+    void aStoppedRowIsOneEntryAndSendsAReaderToWhatStoppedIt() {
+        AdequacyReport report = WrittenWitness.refusedOnly(List.of("E1910"),
+                outputModel(SPINS + DROPPED));
+        RowRef spins = theRow(report, "spins");
+
+        List<AdequacyUncertainty> aboutTheRow = report.whatKeepsTheVerdictOpen().stream()
+                .filter(each -> each.subject().equals(new Subject.OfARow(spins)))
+                .toList();
+        assertEquals(1, aboutTheRow.size(), () -> report.whatKeepsTheVerdictOpen().toString());
+        assertInstanceOf(ReaderDisposition.StoppedAtAFigure.class,
+                ReaderDisposition.of(aboutTheRow.getFirst()));
+        assertTrue(report.whatKeepsTheVerdictOpen().stream().noneMatch(each ->
+                        ReaderDisposition.of(each) instanceof ReaderDisposition.WriteTheCaseOutIn),
+                "no case is to be written out in a row that stopped");
+    }
+
+    /**
+     * Rows of both reasons at once: the stop is the stop and the text is the text, each its own
+     * fact, and two measures met by one stop are one stop.
+     */
+    @Test
+    void rowsOfBothReasonsAreTwoKindsOfFact() {
+        AdequacyReport report = WrittenWitness.refusedOnly(List.of("E1910"),
+                outputModel(SPINS + DROPPED));
+        RowRef spins = theRow(report, "spins");
+        RowRef dropped = theRow(report, "dropped");
+        Incompleteness.Met stop = report.modules().getFirst().behaviors().getFirst().reading()
+                .gaps().stream()
+                .filter(each -> each.fact().target().equals(new Target.OfRow(spins)))
+                .findFirst().orElseThrow();
+
+        WeakeningSet by = UnreadCase.weakeningOf(
+                List.of(new UnreadCase.NoCaseRead(dropped),
+                        new UnreadCase.Stopped(spins, List.of(stop))),
+                rows -> new Weakening.OutputCasesUnreadable("sort", rows));
+
+        assertEquals(2, by.causes().size());
+        assertEquals(by, by.union(WeakeningSet.of(new Weakening.ObservationIncomplete(stop))),
+                "the same stop met by another measure is the same fact");
     }
 
     /**
@@ -333,8 +408,11 @@ class ARowWhoseCaseIsNotReadLeavesUndecidedOnlyACaseNoRowIsCountedAtTest {
                 outputModel(SPINS + DROPPED));
         Measurement.Partial<?> partial = assertInstanceOf(Measurement.Partial.class,
                 theOutcome(left).cases());
-        assertEquals(List.of(new Weakening.OutputCasesUnreadable("sort",
-                        Set.of(theRow(left, "spins")))),
-                List.copyOf(partial.weakening().causes()));
+        Weakening.ObservationIncomplete stop = stopOf(partial, theRow(left, "spins"));
+        assertEquals(RunSensitivity.MAY_CHANGE, stop.runSensitivity(),
+                "it is the row's step limit that stopped it, and a run allowed more is past it");
+        assertTrue(partial.weakening().causes().stream()
+                        .noneMatch(Weakening.OutputCasesUnreadable.class::isInstance),
+                "the text of the row is not what is unread");
     }
 }

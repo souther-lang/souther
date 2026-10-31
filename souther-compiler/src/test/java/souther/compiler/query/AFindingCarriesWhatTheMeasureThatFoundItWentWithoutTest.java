@@ -146,8 +146,8 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
         InputCaseEvidence unreadable = InputCaseEvidence.of("sort", 0, Set.of(small, large),
                 Set.of(), new InputCaseEvidence.Cases(Set.of(small), Set.of(small), Set.of(small),
                         List.of(new InputCaseEvidence.Unread(
-                                new RowRef("sort", new SourceId("m.sou"),
-                                        new RowIdentity.Unnamed(2)),
+                                new UnreadCase.NoCaseRead(new RowRef("sort",
+                                        new SourceId("m.sou"), new RowIdentity.Unnamed(2))),
                                 InputCaseEvidence.Reached.VERIFIED))),
                 true, WeakeningSet.none());
         InputCaseEvidence read = InputCaseEvidence.of("sort", 1, Set.of(small, large), Set.of(),

@@ -22,7 +22,6 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -290,74 +289,7 @@ public final class StandingAtAPoint {
      */
     public static AtALine putToRows(MeasuredInput.BorderReading line,
                                     List<ConditionOutcomeSite> watched) {
-        return new AtALine(line, watched, whereItDecides(line), metOn(line), Optional.empty(),
-                new ReadingsOfTheRows(false));
-    }
-
-    /**
-     * The same, keeping the readings of each row it is put to for every point that row is tried
-     * against after the first ({@link ReadingsOfTheRows}).
-     *
-     * <p>For a caller that asks one set of rows about every point of a line and is done with the
-     * line after: what is kept lives as long as the line put to rows does. A caller putting the
-     * rows a search offers to a line it holds on to, one row after another, would keep every one
-     * of them, and is handed {@link #putToRows}.
-     */
-    public static AtALine putToTheSameRowsAtEveryPoint(MeasuredInput.BorderReading line,
-                                                       List<ConditionOutcomeSite> watched) {
-        return new AtALine(line, watched, whereItDecides(line), metOn(line), Optional.empty(),
-                new ReadingsOfTheRows(true));
-    }
-
-    /**
-     * The readings of each row a line has been put to, made once however many points the row is
-     * tried against.
-     *
-     * <p>Which readings a row has turns on the row, the line, where the line decides and what is
-     * read beside it ({@link #readings}), and on nothing a point says, so they are the same
-     * readings at every point of the line. Making them is the dear part: the walk that finds a
-     * row's containers reads every statement beside the line to find them. What the readings learn
-     * of the row as they are tried is kept in them, and a point after the first is asked of what
-     * the first one read.
-     *
-     * <p>Held by the line put to rows and every line made from it for a class, which are asked
-     * within one assessment of one border; nothing here is shared beyond it, which is what lets the
-     * walks it holds keep what they read without a lock. A row is known by the value handed in, so
-     * two equal rows each make their own readings, which are the same readings.
-     *
-     * <p>Kept only where the caller said it asks the same rows again ({@link
-     * #putToTheSameRowsAtEveryPoint}); otherwise each asking makes its own.
-     */
-    private static final class ReadingsOfTheRows {
-
-        private final boolean keeps;
-        private final Map<ObservedInputs, List<Made>> made = new IdentityHashMap<>();
-
-        ReadingsOfTheRows(boolean keeps) {
-            this.keeps = keeps;
-        }
-
-        private record Made(Optional<WhereAPartDecides.AskedOfRows> decides,
-                            List<WhereAPartDecides.AskedOfRows> elsewhere, Readings readings) {}
-
-        /** {@link #readings} of {@code one}, made the first time it is asked under these. */
-        Readings of(BehaviorInputs where, ObservedInputs one, BorderQuantity quantity,
-                    Optional<WhereAPartDecides.AskedOfRows> decides,
-                    List<WhereAPartDecides.AskedOfRows> elsewhere,
-                    List<ConditionOutcomeSite> recordedAt) {
-            if (!keeps) {
-                return readings(where, one, quantity, decides, elsewhere, recordedAt);
-            }
-            List<Made> had = made.computeIfAbsent(one, _ -> new ArrayList<>(2));
-            for (Made each : had) {
-                if (each.decides().equals(decides) && each.elsewhere().equals(elsewhere)) {
-                    return each.readings();
-                }
-            }
-            Readings readings = readings(where, one, quantity, decides, elsewhere, recordedAt);
-            had.add(new Made(decides, elsewhere, readings));
-            return readings;
-        }
+        return new AtALine(line, watched, whereItDecides(line), metOn(line), Optional.empty());
     }
 
     /** One line put to rows ({@link #putToRows}). */
@@ -373,18 +305,15 @@ public final class StandingAtAPoint {
         /** For a point of a class the line cuts: what a row has to be for it. Empty for a point
          *  against the line. */
         private final Optional<AsAClass> asAClass;
-        /** The readings of each row it has been put to, shared with every line made from it. */
-        private final ReadingsOfTheRows rowsRead;
 
         private AtALine(MeasuredInput.BorderReading line, List<ConditionOutcomeSite> watched,
                         Optional<WhereAPartDecides.AskedOfRows> decides, MetOnARow reached,
-                        Optional<AsAClass> asAClass, ReadingsOfTheRows rowsRead) {
+                        Optional<AsAClass> asAClass) {
             this.line = line;
             this.watched = List.copyOf(watched);
             this.decides = decides;
             this.reached = reached;
             this.asAClass = asAClass;
-            this.rowsRead = rowsRead;
         }
 
         /**
@@ -406,19 +335,19 @@ public final class StandingAtAPoint {
         public AtALine forAClass(boolean holds, OtherReadings otherReadings) {
             return watched.isEmpty() ? this
                     : new AtALine(line, watched, Optional.empty(), reached,
-                            Optional.of(new AsAClass(holds, otherReadings)), rowsRead);
+                            Optional.of(new AsAClass(holds, otherReadings)));
         }
 
         /** {@link StandingAtAPoint#met}, of this line. */
         public Met met(List<ObservedInputs> observed, Criterion criterion) {
             return StandingAtAPoint.met(line, decides, reached, observed, criterion,
-                    new Arrival(watched, asAClass), rowsRead);
+                    new Arrival(watched, asAClass));
         }
 
         /** {@link StandingAtAPoint#valuesOf}, of this line. */
         public RowsRead valuesOf(List<ObservedInputs> observed) {
             return StandingAtAPoint.valuesOf(line, decides, reached, observed,
-                    new Arrival(watched, asAClass), Optional.empty(), rowsRead);
+                    new Arrival(watched, asAClass), Optional.empty());
         }
 
         /**
@@ -433,7 +362,7 @@ public final class StandingAtAPoint {
          */
         public RowsRead valuesAt(List<ObservedInputs> observed, Criterion criterion) {
             return StandingAtAPoint.valuesOf(line, decides, reached, observed,
-                    new Arrival(watched, asAClass), Optional.of(criterion), rowsRead);
+                    new Arrival(watched, asAClass), Optional.of(criterion));
         }
     }
 
@@ -567,7 +496,7 @@ public final class StandingAtAPoint {
     private static Met met(MeasuredInput.BorderReading line,
                            Optional<WhereAPartDecides.AskedOfRows> decides, MetOnARow reached,
                            List<ObservedInputs> observed, Criterion criterion,
-                           Arrival arrival, ReadingsOfTheRows rowsRead) {
+                           Arrival arrival) {
         List<ConditionOutcomeSite> watched = arrival.watched();
         BorderQuantity quantity = line.quantity();
         BehaviorInputs where = line.subject().inputs();
@@ -584,7 +513,7 @@ public final class StandingAtAPoint {
             boolean stands = false;
             Set<ReadingGap> stopped = new LinkedHashSet<>();
             Readings readings =
-                    rowsRead.of(where, one, quantity, decides, arrival.elsewhere(), watched);
+                    readings(where, one, quantity, decides, arrival.elsewhere(), watched);
             List<BorderQuantity.Observation> tried = readings.tried();
             for (int which = 0; which < tried.size(); which++) {
                 switch (stoodAt(quantity, criterion, tried.get(which), decides, reached,
@@ -755,8 +684,7 @@ public final class StandingAtAPoint {
     private static RowsRead valuesOf(MeasuredInput.BorderReading line,
                                      Optional<WhereAPartDecides.AskedOfRows> decides,
                                      MetOnARow reached, List<ObservedInputs> observed,
-                                     Arrival arrival, Optional<Criterion> at,
-                                     ReadingsOfTheRows rowsRead) {
+                                     Arrival arrival, Optional<Criterion> at) {
         List<ConditionOutcomeSite> watched = arrival.watched();
         // A row's numbers are read position by position, and only a form has positions to read
         // them at. A line on any other quantity is not one another line is written beside, and
@@ -793,7 +721,7 @@ public final class StandingAtAPoint {
                 }
             }
             Readings readings =
-                    rowsRead.of(where, one, quantity, decides, arrival.elsewhere(), watched);
+                    readings(where, one, quantity, decides, arrival.elsewhere(), watched);
             for (int which = 0; which < readings.tried().size(); which++) {
                 // Only where the statement turns on the line, and only through an element the run
                 // met the rule on: a reading somewhere it does not says nothing about where this

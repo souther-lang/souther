@@ -155,10 +155,15 @@ public sealed interface Weakening {
     }
 
     /**
-     * Rows that state an expectation whose case could not be read
-     * ({@link RowOutcome.ExpectedCase.Unread}) while a case of the output is expected by no row, so
-     * that case is undecided rather than missing. A row whose answer is owed is not one of them: it
+     * Rows that state an expectation whose case was not read ({@link
+     * RowOutcome.ExpectedCase.Unread}) while a case of the output is expected by no row, so that
+     * case is undecided rather than missing. A row whose answer is owed is not one of them: it
      * expects nothing, and no case waits on it.
+     *
+     * <p>Rows whose text names no case, and only those ({@link UnreadCase.NoCaseRead}). A row that
+     * stopped before its expectation was read is stopped by something a wider run may get past, and
+     * says what: it arrives as that reason, which is how it is met everywhere else, and is not
+     * restated here as a fact about the text.
      *
      * <p>Where every case is expected by some row there is nothing for these rows to decide, and
      * this is not met.
@@ -177,9 +182,7 @@ public sealed interface Weakening {
             }
         }
 
-        /** Whether a row's text names a case is the same however much a run allows. A row a
-         *  figure stopped before its expectation was read is stopped in the reading of the rows
-         *  as well, and that gap carries the figure. */
+        /** Whether a row's text names a case is the same however much a run allows. */
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
@@ -187,8 +190,9 @@ public sealed interface Weakening {
     }
 
     /**
-     * The same at one of a behavior's inputs, counted from zero: rows whose input case could not be
-     * read, where a set they would be in lacks a case a row can be written at.
+     * The same at one of a behavior's inputs, counted from zero: rows whose input case was not
+     * read ({@link UnreadCase.NoCaseRead}), where a set they would be in lacks a case a row can be
+     * written at. A row that stopped arrives as what stopped it.
      *
      * @param unread which rows, those whose case could change one of those sets, as a set in the
      *               order they were read. A row whose sets are already full is not among them:

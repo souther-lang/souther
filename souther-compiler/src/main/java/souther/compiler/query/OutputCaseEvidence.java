@@ -1,10 +1,8 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.MeasureReason;
-import souther.compiler.observe.RowRef;
 import souther.compiler.types.TypeSymbol;
 
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -40,13 +38,12 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Measure<Cases> cases)
      * honest account of a model that has been described and not yet written.
      *
      * @param unread       rows that state an expectation whose case could not be read, in the order
-     *                     they were read; a row whose answer is owed expects nothing and is not
-     *                     here. While one of them is here a case no row expects is undecided
-     *                     rather than missing, because that row may expect it — and the measurement
-     *                     around it says so rather than leaving a reader to compare a count with
-     *                     zero. Only
-     *                     {@link #specified} waits on them: what was observed and verified is read
-     *                     off the answer, not off what the row wrote
+     *                     they were read, each with why; a row whose answer is owed expects nothing
+     *                     and is not here. While one of them is here a case no row expects is
+     *                     undecided rather than missing, because that row may expect it — and the
+     *                     measurement around it says so rather than leaving a reader to compare a
+     *                     count with zero. Only {@link #specified} waits on them: what was observed
+     *                     and verified is read off the answer, not off what the row wrote
      * @param answeredRows rows the behavior answered for. Not the size of {@link #observed}: an
      *                     answer of a type no declaration names is an answer this cannot place, so a
      *                     run that got one has an empty {@code observed} and a count above zero.
@@ -54,7 +51,7 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Measure<Cases> cases)
      *                     not be named is this, and neither of the case sets says it.
      */
     public record Cases(Set<TypeSymbol> specified, Set<TypeSymbol> observed,
-                        Set<TypeSymbol> verified, List<RowRef> unread, int answeredRows) {
+                        Set<TypeSymbol> verified, List<UnreadCase> unread, int answeredRows) {
 
         public Cases {
             specified = Evidence.ordered(specified);
@@ -149,9 +146,8 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Measure<Cases> cases)
         // the count is exact without them — the same question the inputs ask.
         WeakeningSet by = cases.unread().isEmpty()
                 || Evidence.missingFrom(declared, cases.specified()).isEmpty() ? observed
-                : observed.union(WeakeningSet.of(
-                        new Weakening.OutputCasesUnreadable(behavior,
-                                new LinkedHashSet<>(cases.unread()))));
+                : observed.union(UnreadCase.weakeningOf(cases.unread(),
+                        rows -> new Weakening.OutputCasesUnreadable(behavior, rows)));
         return new OutputCaseEvidence(declared, by.isEmpty()
                 ? new Measurement.Complete<>(cases) : new Measurement.Partial<>(cases, by));
     }

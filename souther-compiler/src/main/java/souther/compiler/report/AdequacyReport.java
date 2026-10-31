@@ -10294,16 +10294,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static String next(ReaderDisposition disposition, SourceRendering rendering) {
         return switch (disposition) {
             // Each row as a line of this report names one, so two rows never read as one.
-            case ReaderDisposition.WriteTheCaseOutIn it -> {
-                boolean one = it.unread().size() == 1;
-                yield (one ? "the row " : "the rows ")
-                        + it.unread().stream()
-                                .map(row -> row.shown(rendering.names().nameOf(row.source())))
-                                .collect(Collectors.joining(", "))
-                        + (one ? " names" : " name") + " no case this can read, and a case no"
-                        + " row is counted at may be " + (one ? "its" : "theirs")
-                        + "; write the case out in " + (one ? "it" : "them");
-            }
+            case ReaderDisposition.WriteTheCaseOutIn it ->
+                    "rows with a case this cannot read: "
+                            + it.unread().stream()
+                                    .map(row -> row.shown(rendering.names().nameOf(row.source())))
+                                    .collect(Collectors.joining(", "))
+                            + "; a case no row is counted at may be theirs — write each case out"
+                            + " in its row";
             // The figures named here, as what stopped carried them, and nothing a run is given sets
             // them.
             case ReaderDisposition.StoppedAtAFigure it -> switch (it.settledBy()) {

@@ -422,7 +422,17 @@ final class Coverages {
          * it holds, which is what an axis from another measurement gets a wrong answer out of.
          */
         record AxisReading(Axis axis, int at, Map<String, RowWitnesses> covered, int couldNotSay,
-                           List<Incompleteness> stopped) {}
+                           List<Incompleteness> stopped) {
+
+            /**
+             * Whether a class of this measure has no row in it, which is what a row that could not
+             * be placed here may be the one in. With a row in every class there is nothing for it
+             * to decide: the classes are counted exactly without it.
+             */
+            boolean aClassHasNoRow() {
+                return axis.classes().stream().anyMatch(each -> !covered.containsKey(each.id()));
+            }
+        }
 
         /** Where one row was placed at each measure, in the order the measures are walked, and what
          *  the row is as a witness of the classes it was placed in. Null at a measure the row is not
@@ -502,13 +512,16 @@ final class Coverages {
         }
 
         /**
-         * Whether every row said where it was at {@code read}.
+         * What the measure went without: the rows never seen, and the rows that could not be
+         * placed at the measures {@code undecided}.
          *
-         * <p>Only then does a class or a combination nothing sits in mean nothing reaches it. One
-         * row that could not be placed at one of the positions leaves every class of that position,
-         * and every combination it takes part in, undecided rather than untried.
+         * <p>A row that could not be placed leaves undecided a class or a combination nothing sits
+         * in, which would otherwise mean nothing reaches it. So it counts at the measures where
+         * such a class or combination is left, and at no other: handed a measure with a row in
+         * every class, it would hold open a count that is exact without it. Which measures those
+         * are is the caller's, who holds what each one counts.
          */
-        WeakeningSet weakening(List<AxisReading> read) {
+        WeakeningSet weakening(List<AxisReading> undecided) {
             Set<Weakening> out = new LinkedHashSet<>();
             for (Incompleteness.Met gap : unseen) {
                 out.add(new Weakening.ObservationIncomplete(gap));
@@ -516,7 +529,7 @@ final class Coverages {
             // Every reading's, whatever else met the same thing. What makes two of these one fact
             // and what happens to the places they were met at is the account's, asked once there
             // rather than settled again by whichever reading this walk reached first.
-            for (AxisReading each : read) {
+            for (AxisReading each : undecided) {
                 each.stopped().forEach(gap -> out.add(Weakening.ObservationIncomplete.of(gap)));
             }
             return WeakeningSet.ofAll(out);
@@ -688,7 +701,20 @@ final class Coverages {
         reached.forEach((between, cells) -> found.put(between, RowWitnesses.Gathering.done(cells)));
         PartitionEvidence.PairSpace.CoveredBetween made =
                 new PartitionEvidence.PairSpace.CoveredBetween(found);
-        WeakeningSet by = readings.weakening(read);
+        // The positions a combination is left at that no row reached: a row that could not be placed
+        // at one of those may be the one in it. A position whose every combination has a row is
+        // counted exactly without it.
+        Set<Integer> leftAt = new LinkedHashSet<>();
+        for (OwedBetween each : owed) {
+            Map<PartitionEvidence.PairSpace.Cell, RowWitnesses.Gathering> reachedHere =
+                    reached.get(each.between());
+            if (each.cells().stream().anyMatch(cell -> !reachedHere.containsKey(cell))) {
+                leftAt.add(each.one());
+                leftAt.add(each.other());
+            }
+        }
+        WeakeningSet by = readings.weakening(
+                leftAt.stream().sorted().map(read::get).toList());
         return new PartitionEvidence.PairSpace(space, by.isEmpty()
                 ? new Measurement.Complete<>(made) : new Measurement.Partial<>(made, by));
     }
@@ -876,7 +902,8 @@ final class Coverages {
         PartitionEvidence.AxisCoverage.Reached reached =
                 new PartitionEvidence.AxisCoverage.Reached(reading.covered(),
                         reading.couldNotSay());
-        WeakeningSet by = readings.weakening(List.of(reading));
+        WeakeningSet by = readings.weakening(
+                reading.aClassHasNoRow() ? List.of(reading) : List.of());
         return new PartitionEvidence.AxisCoverage(axis.id(), axis.term().toString(),
                 classes, axis.divides(), toldApart, use, read, by.isEmpty()
                         ? new Measurement.Complete<>(reached)
@@ -1925,10 +1952,8 @@ final class Coverages {
                 line.border().origin().recordedAt();
         Predicate<Map<NumericTerm, Place>> refusedByTheDeclarations =
                 new DeclarationsRefuse(way, declarations);
-        // Put to rows once for every point and row asked of it, and each row read once for every
-        // point: what is asked here is the recorded rows, at each point of this one line.
-        StandingAtAPoint.AtALine toRows =
-                StandingAtAPoint.putToTheSameRowsAtEveryPoint(line, site);
+        // Put to rows once for every point and row asked of it.
+        StandingAtAPoint.AtALine toRows = StandingAtAPoint.putToRows(line, site);
         return new OneShapeOfBorder() {
 
             @Override
