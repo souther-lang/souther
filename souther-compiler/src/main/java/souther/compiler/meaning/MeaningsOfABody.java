@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiConsumer;
 
 /**
  * What each condition of one body states, filed under the construct of the model it is asked at.
@@ -147,48 +148,91 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
          */
         public Proposition whereARunStops() {
             List<Proposition> stops = new ArrayList<>();
-            whereARunStopsIn(how, List.of(), stops);
+            downTheArms(how, List.of(), (step, down) -> {
+                if (step instanceof Derivation.TheRunStopsHere) {
+                    stops.add(Proposition.all(down));
+                }
+            });
             return stops.isEmpty() ? null : Proposition.any(stops);
         }
 
-        private static void whereARunStopsIn(Derivation step, List<Proposition> down,
-                                             List<Proposition> stops) {
+        /**
+         * Each relation a comparison was read as in what this states, with where it is read: the
+         * conditions of the {@code if}s and the arms it is down, as {@link #whereARunStops} has
+         * them, all holding. A relation read on no arm is read wherever the statement is. The
+         * same relation read on two arms is said once for each.
+         *
+         * <p>What working the relation's comparison out does is worked out where it is read, and
+         * nowhere else: a sum on one arm is no sum of a run that takes the other.
+         */
+        public List<ReadOnAnArm> relationsDownTheArms() {
+            return relationsDownTheArmsOf(how);
+        }
+
+        /** The same, of {@code how}, a derivation a site's may be made of. */
+        public static List<ReadOnAnArm> relationsDownTheArmsOf(Derivation how) {
+            List<ReadOnAnArm> out = new ArrayList<>();
+            downTheArms(how, List.of(), (step, down) -> {
+                if (step instanceof Derivation.AComparisonRead read) {
+                    out.add(new ReadOnAnArm(read.relation(), Proposition.all(down)));
+                }
+            });
+            return List.copyOf(out);
+        }
+
+        /**
+         * A relation a comparison was read as, and where it is read.
+         *
+         * @param relation the relation
+         * @param reached  where the arms it is down are taken
+         */
+        public record ReadOnAnArm(Relation relation, Proposition reached) {
+
+            public ReadOnAnArm {
+                Objects.requireNonNull(relation, "a relation read");
+                Objects.requireNonNull(reached, "is read somewhere, if only nowhere");
+            }
+        }
+
+        /** Every step of {@code step}, each handed to {@code at} with the conditions of the arms it
+         *  is down. */
+        private static void downTheArms(Derivation step, List<Proposition> down,
+                                        BiConsumer<Derivation, List<Proposition>> at) {
+            at.accept(step, down);
             if (step instanceof Derivation.TheRunStopsHere) {
-                stops.add(Proposition.all(down));
                 return;
             }
             if (step instanceof Derivation.IfThenElse(Derivation condition, Derivation then,
                                                       Derivation otherwise)) {
                 Proposition decides = condition.concludes(Optional.empty());
-                whereARunStopsIn(condition, down, stops);
-                whereARunStopsIn(then, with(down, decides), stops);
-                whereARunStopsIn(otherwise, with(down, decides.denied()), stops);
+                downTheArms(condition, down, at);
+                downTheArms(then, with(down, decides), at);
+                downTheArms(otherwise, with(down, decides.denied()), at);
                 return;
             }
             // An arm is down where it selects the value and, for arms taken in order, no arm
             // before it does; what selects is worked out before any arm.
             switch (step) {
-                case Derivation.MatchArms(var arms) -> whereARunStopsInArms(arms, true, down, stops);
+                case Derivation.MatchArms(var arms) -> downTheArms(arms, true, down, at);
                 case Derivation.AnOperationsCases(var _, var cases) ->
-                        whereARunStopsInArms(cases, true, down, stops);
+                        downTheArms(cases, true, down, at);
                 case Derivation.ASizeInCases(var _, var cases) ->
-                        whereARunStopsInArms(cases, true, down, stops);
-                case Derivation.OneOfItsArms(var arms) ->
-                        whereARunStopsInArms(arms, false, down, stops);
+                        downTheArms(cases, true, down, at);
+                case Derivation.OneOfItsArms(var arms) -> downTheArms(arms, false, down, at);
                 default -> WrittenLines.premisesOf(step)
-                        .forEach(each -> whereARunStopsIn(each, down, stops));
+                        .forEach(each -> downTheArms(each, down, at));
             }
         }
 
-        private static void whereARunStopsInArms(List<Derivation.MatchArms.Arm> arms,
-                                                 boolean inOrder, List<Proposition> down,
-                                                 List<Proposition> stops) {
+        private static void downTheArms(List<Derivation.MatchArms.Arm> arms, boolean inOrder,
+                                        List<Proposition> down,
+                                        BiConsumer<Derivation, List<Proposition>> at) {
             List<Proposition> before = new ArrayList<>();
             for (Derivation.MatchArms.Arm arm : arms) {
                 Proposition selects = arm.selects().concludes(Optional.empty());
-                whereARunStopsIn(arm.selects(), down, stops);
+                downTheArms(arm.selects(), down, at);
                 Proposition reached = inOrder ? Derivation.taken(before, selects) : selects;
-                whereARunStopsIn(arm.states(), with(down, reached), stops);
+                downTheArms(arm.states(), with(down, reached), at);
                 before.add(selects);
             }
         }

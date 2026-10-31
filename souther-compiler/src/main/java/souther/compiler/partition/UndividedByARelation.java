@@ -1739,6 +1739,32 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
+     * Whether a run on a row {@code regions} leave may stop in an operation {@code working}
+     * tells: one over a bound value no value of it is shown to keep within its type, or one over
+     * the input's numbers past one of its ends on some such row. What a run works out before it
+     * is not asked, since a run stopping there stops all the same; nor whether every operation is
+     * told, since one told is one a run works out. False where the regions leave no row.
+     */
+    static boolean aRunMayStopIn(Working working, InputReading read, List<SearchRegion> regions) {
+        if (regions.isEmpty()) {
+            return false;
+        }
+        if (working.aRunMayStopOverABoundValue()) {
+            return true;
+        }
+        for (IntOperation it : working.operations()) {
+            LinearForm<NumericTerm> form = it.overTheInput();
+            if (form != null && (rowsWhere(List.of(new Bounded(form,
+                            it.greatest().add(BigInteger.ONE), null)), read, regions) != null
+                    || rowsWhere(List.of(new Bounded(form, null,
+                            it.least().subtract(BigInteger.ONE))), read, regions) != null)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Whether a run getting to this relation may stop in an operation the reading told over a
      * bound value ({@link Working#aRunMayStopOverABoundValue}).
      */

@@ -265,6 +265,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   for where a run stops in it ({@link StopEvidence}); nothing where it is
      *                   read on each application, or not read. Independent of the lines it draws
      *                   and of what a row of them gets past
+     * @param onTheArms  what a run taking each arm of a choice the comparison is read through
+     *                   works out there, with where the arm is taken, where it is read once;
+     *                   none otherwise. Independent of the lines it draws
      * @param metOn   which elements of the input a run makes the comparison on, where it stands
      *                   inside closures an operation stopping at an answer applies to them
      * @param runsAs     the construct as the tree that runs holds it, which is {@code occurrence}
@@ -293,7 +296,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    List<OnTheWay> assumed, BoundaryPolicy.Standing standing,
                    Optional<Condition> statedAsACondition, Optional<Proposition> stopsWhere,
                    Optional<List<Cutting.OnAnApplication>> worksOutOnEach,
-                   Optional<StopEvidence> stopsIn,
+                   Optional<StopEvidence> stopsIn, List<StopEvidence.OnAnArm> onTheArms,
                    ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context,
                    SaidOnTheWay saidOnTheWay, CountWitnesses.Lookup witnesses,
                    DemandReading.Answered getsPast) {
@@ -301,7 +304,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         Reading {
             if (occurrence == null || statement == null || at == null
                     || statedAsACondition == null || stopsWhere == null || worksOutOnEach == null
-                    || stopsIn == null || metOn == null || runsAs == null || context == null
+                    || stopsIn == null || onTheArms == null || metOn == null || runsAs == null || context == null
                     || saidOnTheWay == null || witnesses == null || getsPast == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
@@ -819,10 +822,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     ? Optional.of(in.conditions().comparison(comparison, reads, in.read()).stops()
                             .get())
                     : Optional.empty();
+            // And what a run taking each arm of a choice it is read through works out there.
+            List<StopEvidence.OnAnArm> onTheArms = stopsIn.isPresent()
+                    && stated.statement() instanceof Stated.AComparison(var comparison)
+                    ? in.conditions().comparison(comparison, reads, in.read()).onTheArms().get()
+                    : List.of();
             out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing,
                     statedAsACondition(e, standing, stopsWhere, worksOutOnEach, reads, in,
                             numbering), stopsWhere,
-                    worksOutOnEach, stopsIn, applying.elementsMetOn(), stated.written(), in.context(),
+                    worksOutOnEach, stopsIn, onTheArms, applying.elementsMetOn(), stated.written(), in.context(),
                     numbering.saidOnTheWay(List.of(assumed)), witnesses,
                     standing instanceof BoundaryPolicy.Standing.Admitted
                             && stated.statement() instanceof Stated.AComparison

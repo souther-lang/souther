@@ -46,6 +46,8 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
             data Small = Int
                 invariant value <= 1000
 
+            data Kind = A | B
+
             data Yes = { n: Int }
             data No = { n: Int }
 
@@ -197,6 +199,13 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     void anOperationOfOneArmStopsNoRunThatTakesAnotherArm() {
         assertEquals(List.of(),
                 everyRunStops("Int", "x", "", "(if y > 0 then x + 1 else x) == z"));
+        assertEquals(1, mayStop("Int", "x", "", "(if y > 0 then x + 1 else x) == z").size());
+        assertEquals(List.of(), mayStop("Int", "x", "guard y <= 0 else No { n = 0 }",
+                "(if y > 0 then x + 1 else x) == z"));
+        String byCases = "(match x with | A -> y + 1 | B -> y) == z";
+        assertEquals(List.of(), everyRunStops("Kind", "x", "", byCases));
+        assertEquals(1, mayStop("Kind", "x", "", byCases).size());
+        assertEquals(List.of(), mayStop("Kind", "x", "guard x == B else No { n = 0 }", byCases));
         assertTrue(everyRunStops("Int", "x", "",
                         "(if y > 0 then x + 1 else x) + (z + 1) == 0").stream()
                 .noneMatch(stop -> stop.startsWith("x + 1 ")),
@@ -336,8 +345,13 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
      *  under it stops no row of every run. */
     @Test
     void theSumARemainderOnOneArmIsOfStopsNoRunThatTakesTheOther() {
-        assertEquals(List.of(), everyRunStops("Int", "x", "",
-                "(if y > 0 then Int.floorMod(x + z, 7) else 1) >= 1"));
+        for (String dividend : List.of("x + z", "x + 1")) {
+            String comparison = "(if y > 0 then Int.floorMod(" + dividend + ", 7) else 1) >= 1";
+            assertEquals(List.of(), everyRunStops("Int", "x", "", comparison), dividend);
+            assertEquals(1, mayStop("Int", "x", "", comparison).size(), dividend);
+            assertEquals(List.of(), mayStop("Int", "x", "guard y <= 0 else No { n = 0 }",
+                    comparison), dividend);
+        }
     }
 
     /** Numbers the ways keep well short of the ends never take the sum past its type, and

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.meaning.Proposition;
 
 import java.util.List;
 import java.util.Objects;
@@ -32,6 +33,22 @@ record StopEvidence(UndividedByARelation.Working operations) {
         Objects.requireNonNull(operations, "what a run works out, or that it is not known");
     }
 
+    /**
+     * What a run taking an arm of a choice works out there, and where the arm is taken: a run
+     * that takes another works none of it out, so none of it is said of every run getting to the
+     * comparison.
+     *
+     * @param reached where the arm is taken
+     * @param stops   what a run taking it works out there
+     */
+    record OnAnArm(Proposition reached, StopEvidence stops) {
+
+        OnAnArm {
+            Objects.requireNonNull(reached, "an arm is taken somewhere, if only nowhere");
+            Objects.requireNonNull(stops, "and a run taking it works something out");
+        }
+    }
+
     /** What a reading that leaves nothing to a witness says a run works out: what a row of its
      *  lines gets past. */
     static StopEvidence ofWhatIsToldOf(UndividedByARelation.Working working) {
@@ -52,6 +69,15 @@ record StopEvidence(UndividedByARelation.Working operations) {
      */
     boolean aRunMayStopOverABoundValue() {
         return operations.aRunMayStopOverABoundValue();
+    }
+
+    /**
+     * Whether a run on a row {@code regions} leave may stop in what it works out here
+     * ({@link UndividedByARelation#aRunMayStopIn}): said where no region of the rows it stops on
+     * can be, as on an arm whose condition is no bound of what it works out.
+     */
+    boolean aRunMayStopIn(InputReading read, List<SearchRegion> regions) {
+        return UndividedByARelation.aRunMayStopIn(operations, read, regions);
     }
 
     /**

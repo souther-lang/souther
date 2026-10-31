@@ -333,7 +333,9 @@ public final class GuardThresholds {
                                                     .map(StopEvidence::aRunMayStopOverABoundValue)
                                                     .orElseGet(() -> arrived.relationsRead()
                                                             .stream().anyMatch(UndividedByARelation
-                                                                    ::aRunMayStopOverABoundValue))));
+                                                                    ::aRunMayStopOverABoundValue)))
+                                    || aRunTakingAnArmMayStop(each, read, arrivals, wayToACase,
+                                            aCase));
                             // And the values at which every run getting to it stops in what it
                             // works out, asked of the way before a row is narrowed to getting
                             // past that: a row that got past holds none of them.
@@ -1086,6 +1088,30 @@ public final class GuardThresholds {
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * Whether a run taking an arm of a choice {@code each} is read through may stop in what it
+     * works out there ({@link StopEvidence.OnAnArm}): asked over the rows the way to the arm
+     * leaves, the arm's condition put on it, of an arm some row is shown to arrive at. An arm no
+     * row takes works nothing out, and an arm whose condition cannot be put on the way is asked
+     * nothing, since what the rows of the whole way would say is said of runs that do not take it.
+     */
+    private static boolean aRunTakingAnArmMayStop(
+            ComparisonReadings.Reading each, InputReading read, List<ComparisonArrival> arrivals,
+            WaysToACase wayToACase, Function<Proposition, ReachingCuts.Stating> aCase) {
+        if (each.statedAsACondition().isEmpty()) {
+            return false;
+        }
+        for (StopEvidence.OnAnArm arm : each.onTheArms()) {
+            if (ComparisonAssessment.someRowArrives(wayToACase.apply(arm.reached()), arrivals)
+                    && arm.stops().aRunMayStopIn(read, regionsOf(Reachability.of(
+                            new WayToTheBorder(each.wayToACase(aCase.apply(arm.reached()))),
+                            read.quantities().region())))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The region {@code way} leaves, or none where nothing reaches along it. */
