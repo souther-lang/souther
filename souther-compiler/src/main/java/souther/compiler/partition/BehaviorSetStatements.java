@@ -860,8 +860,7 @@ public final class BehaviorSetStatements {
             return null;
         }
         BlockReason.WhatItStatesIsNoLine said = Cutting.whatStopsSay(stops);
-        return said == null || said.why() == BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ
-                ? null : said;
+        return said != null && Cutting.saysMoreThanAPartNotRead(said) ? said : null;
     }
 
     /** Whether {@code part} names a position of the input, however the reading gets there. */

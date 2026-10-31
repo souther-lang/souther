@@ -50,6 +50,33 @@ class EveryFieldOfAPullbackSaysWhatAReadingKeptToBeTakenAgainDoesWithItTest {
         }
     }
 
+    private static Set<String> fieldsWith(ReadingRole role) {
+        Set<String> out = new TreeSet<>();
+        ReadingRoles.OF_A_PULLBACK.forEach((field, has) -> {
+            if (has == role) {
+                out.add(field);
+            }
+        });
+        return out;
+    }
+
+    /**
+     * The state is taken from the table for the roles it compares or guards; the parts met, the
+     * elements asked of, the readings left, the counts and the readings kept are each wired to
+     * their field by name where a reading is kept and taken. A field that takes one of those roles
+     * is not wired, and this is what says so.
+     */
+    @Test
+    void theRolesThatAreWiredByNameAreHeldByTheFieldsThatAreWired() {
+        assertEquals(Set.of("met"), fieldsWith(ReadingRole.LEDGER));
+        assertEquals(Set.of("elementsMet"), fieldsWith(ReadingRole.FOOTPRINT));
+        assertEquals(Set.of("readingsLeft"), fieldsWith(ReadingRole.BUDGET));
+        assertEquals(Set.of("keptReadings", "aggregatesKept", "aggregatesAsked"),
+                fieldsWith(ReadingRole.COUNTER));
+        assertEquals(Set.of("sharedSums", "sharedApplications", "sharedConditions"),
+                fieldsWith(ReadingRole.MEMO));
+    }
+
     @Test
     void everyRoleIsGivenToSomeField() {
         Set<ReadingRole> given = EnumSet.noneOf(ReadingRole.class);

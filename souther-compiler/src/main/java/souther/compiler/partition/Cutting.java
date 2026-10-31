@@ -1319,8 +1319,17 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 new LinkedHashMap<>();
         GuardThresholds.cameFrom(comparison, reads, read.newtypes(), out);
         out.replaceAll((at, was) -> was instanceof BlockReason.RuleAboutADerivedValue
-                && why.why() != BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ ? why : was);
+                && saysMoreThanAPartNotRead(why) ? why : was);
         return new Read.Stopped(out, WhereAReadingStopped.ELSEWHERE);
+    }
+
+    /**
+     * Whether {@code why} says more of a statement than that a part of it was not read, which is
+     * what a place says of a value that came from nowhere it can name. Said once, for the
+     * comparison that gave up and for the fork over a part of it.
+     */
+    static boolean saysMoreThanAPartNotRead(BlockReason.WhatItStatesIsNoLine why) {
+        return why.why() != BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ;
     }
 
     /**
