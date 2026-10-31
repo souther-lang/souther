@@ -81,6 +81,21 @@ public final class LevelRealizer {
     }
 
     /**
+     * Whether the region leaves the item no value at all, which {@link #realize} answers
+     * {@link Realization.Impossible} for before it looks for one.
+     *
+     * <p>Asked on its own by a reader that needs the fact and no row: a class a line cuts lies
+     * wholly outside the case the line is read in when the region of that case leaves it nothing.
+     */
+    public boolean leavesNoValue(PointSearchGoal goal, SearchRegion within) {
+        if (within.emptiness().isPresent()) {
+            return true;
+        }
+        return goal instanceof PointSearchGoal.ByConstraints(Standing constraint)
+                && StandingImpossibility.provesImpossible(within, constraint);
+    }
+
+    /**
      * The same, leaving out the places this point was already composed at.
      *
      * <p>Asked again because the row a place was built into did not stand at the point, which is
