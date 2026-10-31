@@ -159,6 +159,61 @@ class WhatStatementsOfOneFormDecideTest {
                 "2x + y <= 50 ends before 51");
     }
 
+    /**
+     * What the range in whole steps rests on, walked: a statement of the form that is met holds at
+     * both values of every pair of rows next to each other in one term that the relation tells
+     * apart. Every relation, weights of one to three, and every interval of the form around the
+     * line.
+     */
+    @Test
+    void aStatementMetInWholeStepsHoldsAtBothValuesOfEveryPairTheRelationTellsApart() {
+        int met = 0;
+        for (Rel asked : List.of(Rel.LT, Rel.LE, Rel.GT, Rel.GE)) {
+            for (int weightX = 1; weightX <= 3; weightX++) {
+                for (int weightY = 1; weightY <= 3; weightY++) {
+                    for (int constant = -3; constant <= 3; constant++) {
+                        TakenConstraint.Affine question = over(weightX, weightY, constant, asked);
+                        for (Rel rule : List.of(Rel.LT, Rel.LE, Rel.GT, Rel.GE)) {
+                            for (int at = -12; at <= 12; at++) {
+                                TakenConstraint.Affine statement =
+                                        over(weightX, weightY, at, rule);
+                                if (!leavesRoomInWholeSteps(question, statement)) {
+                                    continue;
+                                }
+                                met++;
+                                assertHoldsAtEveryPairTold(weightX, weightY, constant, asked,
+                                        at, rule);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(met > 0, "nothing was met, so nothing was walked");
+    }
+
+    /** {@code weightX * x + weightY * y + constant} against nought is {@code asked}, and the same
+     *  form with {@code at} is {@code rule}. */
+    private static void assertHoldsAtEveryPairTold(int weightX, int weightY, int constant,
+                                                   Rel asked, int at, Rel rule) {
+        for (int x = -10; x <= 10; x++) {
+            for (int y = -10; y <= 10; y++) {
+                int here = weightX * x + weightY * y;
+                for (int[] step : new int[][] {{1, 0}, {0, 1}}) {
+                    int there = here + weightX * step[0] + weightY * step[1];
+                    if (asked.holds(Integer.signum(here + constant))
+                            == asked.holds(Integer.signum(there + constant))) {
+                        continue;
+                    }
+                    String where = asked + " " + constant + " is told apart at (" + x + ", " + y
+                            + ") and one step on, but " + rule + " " + at;
+                    assertTrue(rule.holds(Integer.signum(here + at)), where + " fails here");
+                    assertTrue(rule.holds(Integer.signum(there + at)), where + " fails there");
+                }
+            }
+        }
+    }
+
     @Test
     void aWeightThatIsNoWholeNumberKeepsTheRangeAWholeWeightEitherSide() {
         TakenConstraint.Affine halves = new TakenConstraint.Affine(new LinearForm<>(

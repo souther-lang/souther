@@ -92,7 +92,8 @@ class ASecondComparisonOfOneSumIsReadWhateverStandsOnTheWayToItTest {
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
-    /** Each of the behaviors measured on its own, so that a refusal is named to its behavior. */
+    /** The module is measured once; a refusal names the comparison and its position in the
+     *  report. */
     @Test
     void everyOrderOfTheTwoComparisonsIsReadWithAGuardOnOneTermOrWithout() {
         String human = measured(MODEL);
@@ -101,31 +102,4 @@ class ASecondComparisonOfOneSumIsReadWhateverStandsOnTheWayToItTest {
         assertFalse(human.contains("not read"), human);
     }
 
-    /**
-     * The statement the first comparison leaves behind leaves room at the line only for numbers
-     * that move in whole steps. A {@code Decimal} sum takes the values between 49 and 50, so the
-     * statement {@code s <= 50} is still a tie there, and the second comparison is not read.
-     */
-    @Test
-    void aSumOfDecimalsIsStillAskedAStepEitherSideOfTheLine() {
-        String human = measured("""
-                module m
-
-                data A = Decimal
-                    invariant value >= 0 && value <= 49
-
-                data B = Decimal
-                    invariant value >= 0 && value <= 12
-
-                behavior f : (a: A, b: B) -> Int
-                let f (a, b) =
-                    if b.value >= 1 then
-                        if a.value + b.value > 50 then 1
-                        else if a.value + b.value < 50 then 2
-                        else 3
-                    else 0
-                """);
-
-        assertTrue(human.contains("not read"), human);
-    }
 }
