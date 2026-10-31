@@ -92,17 +92,17 @@ public record SaidOnTheWay(Map<OnTheWay, ModelOccurrences> entries,
      * what the second was read off is kept beside the first by value, which is all that is left.
      */
     public SaidOnTheWay retold(List<OnTheWay> onto, List<OnTheWay> from, SaidOnTheWay other) {
-        Map<OnTheWay, ModelOccurrences> told = new LinkedHashMap<>(entries);
+        Filing told = new Filing();
+        told.all(this);
         if (!retoldInto(onto, from, other, told)) {
             return and(other);
         }
         SaidOnTheWay demands = new SaidOnTheWay(Map.of(), other.stated, other.unstated);
-        return new SaidOnTheWay(told, stated, unstated).and(demands);
+        return new SaidOnTheWay(told.said().entries, stated, unstated).and(demands);
     }
 
     private static boolean retoldInto(List<OnTheWay> onto, List<OnTheWay> from,
-                                      SaidOnTheWay other,
-                                      Map<OnTheWay, ModelOccurrences> into) {
+                                      SaidOnTheWay other, Filing into) {
         if (onto.size() != from.size()) {
             return false;
         }
@@ -112,7 +112,7 @@ public record SaidOnTheWay(Map<OnTheWay, ModelOccurrences> entries,
             if (mine.getClass() != theirs.getClass()) {
                 return false;
             }
-            filedAlone(mine, other.entries.getOrDefault(theirs, ModelOccurrences.NONE), into);
+            into.alone(mine, other.entries.getOrDefault(theirs, ModelOccurrences.NONE));
             if (mine instanceof OnTheWay.OneOf one && theirs instanceof OnTheWay.OneOf two) {
                 if (one.alternatives().size() != two.alternatives().size()) {
                     return false;
@@ -167,30 +167,52 @@ public record SaidOnTheWay(Map<OnTheWay, ModelOccurrences> entries,
         return new SaidOnTheWay(gathered(entries), gathered(stated), gathered(unstated));
     }
 
-    /** What {@code entries} were put on a way by: {@code by}, for each of them and every entry
-     *  inside an alternative of one. */
-    static void filed(List<OnTheWay> entries, ModelOccurrences by,
-                      Map<OnTheWay, ModelOccurrences> into) {
-        for (OnTheWay each : entries) {
-            filedAlone(each, by, into);
-            if (each instanceof OnTheWay.OneOf several) {
-                several.alternatives().forEach(one -> filed(one, by, into));
-            }
-            if (each instanceof OnTheWay.Counted counted) {
-                counted.statements().forEach(one -> {
-                    filed(one.holding(), by, into);
-                    filed(one.failing(), by, into);
-                });
+    /**
+     * What put the entries of a way on it, told as the way is made, and put together once it is.
+     *
+     * <p>Gathered, for the reason {@link #allOf} gathers: one entry is put on a way by many
+     * copies — a truth every alternative of a long disjunction asks is one entry, made once for
+     * each — and putting each copy together with all those before it files them all again, so
+     * that an entry made by many copies costs as many times all of them.
+     */
+    static final class Filing {
+
+        private final Map<OnTheWay, ModelOccurrences.Gathering> entries = new LinkedHashMap<>();
+
+        /** What {@code entry} itself was put on the way by, leaving what its alternatives were
+         *  put there by to whoever made them. */
+        void alone(OnTheWay entry, ModelOccurrences by) {
+            if (!by.isEmpty()) {
+                entries.computeIfAbsent(entry, _ -> new ModelOccurrences.Gathering()).add(by);
             }
         }
-    }
 
-    /** What {@code entry} itself was put on a way by, leaving what its alternatives were put
-     *  there by to whoever made them. */
-    static void filedAlone(OnTheWay entry, ModelOccurrences by,
-                           Map<OnTheWay, ModelOccurrences> into) {
-        if (!by.isEmpty()) {
-            into.merge(entry, by, ModelOccurrences::and);
+        /** {@code by}, for each of {@code these} and every entry inside an alternative of
+         *  one. */
+        void each(List<OnTheWay> these, ModelOccurrences by) {
+            for (OnTheWay each : these) {
+                alone(each, by);
+                if (each instanceof OnTheWay.OneOf several) {
+                    several.alternatives().forEach(one -> each(one, by));
+                }
+                if (each instanceof OnTheWay.Counted counted) {
+                    counted.statements().forEach(one -> {
+                        each(one.holding(), by);
+                        each(one.failing(), by);
+                    });
+                }
+            }
+        }
+
+        /** What {@code said} told of each entry, in its order, every entry it names kept. */
+        void all(SaidOnTheWay said) {
+            said.entries.forEach((entry, by) -> entries
+                    .computeIfAbsent(entry, _ -> new ModelOccurrences.Gathering()).add(by));
+        }
+
+        /** What put each entry on the way, the entries in the order they were first told of. */
+        SaidOnTheWay said() {
+            return new SaidOnTheWay(gathered(entries), Map.of(), Map.of());
         }
     }
 
