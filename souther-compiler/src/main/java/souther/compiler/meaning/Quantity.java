@@ -1518,11 +1518,43 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             permits KeptSoFar, PositionInTheWalk {}
 
     /**
-     * What a binding's value is read off a container's elements as: what a walk hands its step, or
-     * the element an index written down picks.
+     * What a binding's value is read off a container's elements as: what a walk hands its step, the
+     * element an index written down picks, or the element of a list of every whole number between
+     * two.
      */
     public sealed interface ReadOffABinding extends ReadAlongAContainer
-            permits HandedToTheStep, PickedAtAnIndex {}
+            permits HandedToTheStep, PickedAtAnIndex, AWholeNumberInTurn {}
+
+    /**
+     * The element a walk hands its step over a list an operation made of every whole number from
+     * {@code from} up to {@code to}, each once ({@code OperationFact.HoldsEachWholeNumberInTurn}).
+     *
+     * <p>The element and not where it stands. At position {@code i} the element is
+     * {@code from + i}, for {@code i} from nought to {@code to - from}, so the element takes every
+     * whole number from {@code from} to {@code to}, each once, and none where {@code to} is below
+     * {@code from}. Where it stands is {@link PositionInTheWalk}'s, and the two are one number only
+     * where {@code from} is nought.
+     *
+     * <p>No container of the input holds these elements. A row puts no list anywhere for them: it
+     * puts the numbers {@code from} and {@code to} are made of, and the list follows. So the places
+     * a relation on the element reads are those of the two ends, and a reader asking how many the
+     * list holds asks the two ends.
+     *
+     * <p>That a run gets to the element is not said here. The list is made only where the run gets
+     * past making it, and a walk that stops on an answer hands its step the elements before that
+     * answer and no other; both are what the reading of the walk says.
+     *
+     * @param from the number the list starts at, as a form of the input's numbers
+     * @param to   the number it ends at, likewise
+     */
+    record AWholeNumberInTurn(LinearForm<NumericTerm> from, LinearForm<NumericTerm> to)
+            implements ReadOffABinding {
+
+        public AWholeNumberInTurn {
+            Objects.requireNonNull(from, "the numbers start somewhere");
+            Objects.requireNonNull(to, "and end somewhere");
+        }
+    }
 
     /**
      * A number read off a container's elements one by one and at no one position of the input,

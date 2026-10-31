@@ -258,7 +258,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   stops in
      * @param stopsWhere the rows on which a run stops in the comparison, as the conditions of the
      *                   statement; nothing where no run does. Independent of the lines it draws
-     * @param metOn     which elements of the input a run makes the comparison on, where it stands
+     * @param worksOutOnEach what the comparison works out on each application of the closure it
+     *                   stands in, and where each is made ({@link Cutting#whatEachApplicationWorksOut});
+     *                   nothing where it is read once. Independent of the lines it draws
+     * @param metOn    which elements of the input a run makes the comparison on, where it stands
      *                   inside closures an operation stopping at an answer applies to them
      * @param runsAs     the construct as the tree that runs holds it, which is {@code occurrence}
      *                   wherever the body read is the one that runs. A helper's body read at a call
@@ -285,13 +288,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    InputReads reads,
                    List<OnTheWay> assumed, BoundaryPolicy.Standing standing,
                    Optional<Condition> statedAsACondition, Optional<Proposition> stopsWhere,
+                   Optional<List<Cutting.OnAnApplication>> worksOutOnEach,
                    ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context,
                    SaidOnTheWay saidOnTheWay, CountWitnesses.Lookup witnesses,
                    DemandReading.Answered getsPast) {
 
         Reading {
             if (occurrence == null || statement == null || at == null
-                    || statedAsACondition == null || stopsWhere == null
+                    || statedAsACondition == null || stopsWhere == null || worksOutOnEach == null
                     || metOn == null || runsAs == null || context == null
                     || saidOnTheWay == null || witnesses == null || getsPast == null) {
                 throw new IllegalArgumentException(
@@ -796,9 +800,17 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     ? Optional.ofNullable(Cutting.whereTheRunStops(comparison, in.read(), reads,
                             applying, in.conditions()))
                     : Optional.empty();
+            // And what each application of the closure it stands in works out, likewise.
+            Optional<List<Cutting.OnAnApplication>> worksOutOnEach =
+                    standing instanceof BoundaryPolicy.Standing.Admitted
+                    && stated.statement() instanceof Stated.AComparison(var comparison)
+                    ? Cutting.whatEachApplicationWorksOut(comparison, in.read(), applying,
+                            in.conditions())
+                    : Optional.empty();
             out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing,
-                    statedAsACondition(e, standing, stopsWhere, reads, in, numbering), stopsWhere,
-                    applying.elementsMetOn(), stated.written(), in.context(),
+                    statedAsACondition(e, standing, stopsWhere, worksOutOnEach, reads, in,
+                            numbering), stopsWhere,
+                    worksOutOnEach, applying.elementsMetOn(), stated.written(), in.context(),
                     numbering.saidOnTheWay(List.of(assumed)), witnesses,
                     standing instanceof BoundaryPolicy.Standing.Admitted
                             && stated.statement() instanceof Stated.AComparison
@@ -1294,17 +1306,22 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     }
 
     /**
-     * The comparison {@code e} as a condition, where its statement is several lines or a run
-     * stops in it: what where each line decides, or where the run stops, is put on the way at —
-     * nothing where it is one line that no run stops in, or draws none.
+     * The comparison {@code e} as a condition, where its statement is several lines, a run stops
+     * in it, or it stands in a closure some application of which is made on some rows and not
+     * others: what where each line decides, where the run stops, or where the application is
+     * made, is put on the way at — nothing where it is one line that no run stops in, or draws
+     * none.
      */
-    private static Optional<Condition> statedAsACondition(Core e, BoundaryPolicy.Standing standing,
-                                                          Optional<Proposition> stopsWhere,
-                                                          InputReads reads, Body in,
-                                                          ConditionNumbering numbering) {
+    private static Optional<Condition> statedAsACondition(
+            Core e, BoundaryPolicy.Standing standing, Optional<Proposition> stopsWhere,
+            Optional<List<Cutting.OnAnApplication>> worksOutOnEach, InputReads reads, Body in,
+            ConditionNumbering numbering) {
         return standing instanceof BoundaryPolicy.Standing.Admitted admitted
                 && (admitted.read() instanceof ComparisonAssessment.Several
-                        || stopsWhere.isPresent())
+                        || stopsWhere.isPresent()
+                        || worksOutOnEach.orElse(List.of()).stream().anyMatch(one ->
+                                !(one.reached() instanceof Proposition.Always(boolean holds)
+                                        && holds)))
                 ? Optional.of(Condition.of(e, reads, in.symbols(), in.newtypes(), numbering))
                 : Optional.empty();
     }

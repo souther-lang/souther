@@ -124,13 +124,17 @@ sealed interface ComparisonAssessment {
      * @param value    the value of the position the classes meet at, or null where the position
      *                 holds none there
      * @param authored how the line stands to the line of its author's it is a place of
+     * @param working  what the comparison that drew the line works out, which says where every
+     *                 run getting to it stops: the comparison's and not the line's
      */
     record AtAPosition(Cutting cutting, NumericTerm.FromOnePosition position, Place value,
-                       Places places, AuthoredPointMapping authored)
+                       Places places, AuthoredPointMapping authored,
+                       UndividedByARelation.Working working)
             implements ComparisonAssessment {
 
         public AtAPosition {
-            if (cutting == null || position == null || places == null || authored == null) {
+            if (cutting == null || position == null || places == null || authored == null
+                    || working == null) {
                 throw new IllegalArgumentException("a line on a position names the position");
             }
         }
@@ -1723,7 +1727,7 @@ sealed interface ComparisonAssessment {
      * <p>A projection is the accesses it stands for, so it is written as the last of them, which
      * holds the rest as its target.
      */
-    private static String written(Core e) {
+    static String written(Core e) {
         return switch (Core.withoutStanding(e)) {
             case Core.Int number -> Long.toString(number.value());
             case Core.Read name -> name.name();
@@ -1815,7 +1819,8 @@ sealed interface ComparisonAssessment {
             case ExactAnswer.Unheld<Optional<Place>> unheld ->
                     sideNotWorkedOut(cutting, unheld.why());
             case ExactAnswer.Held<Optional<Place>> held ->
-                    new AtAPosition(cutting, divided, held.value().orElse(null), kind, authored);
+                    new AtAPosition(cutting, divided, held.value().orElse(null), kind, authored,
+                            working);
         };
     }
 
@@ -1910,14 +1915,16 @@ sealed interface ComparisonAssessment {
     default List<UndividedByARelation> relationsRead() {
         return switch (this) {
             case AcrossPositions across -> List.of(across.relation());
+            // A line on one position is the relation its cut states, worked out as the
+            // comparison that drew it is.
+            case AtAPosition at -> List.of(relationOf(at.cutting()).workingOut(at.working()));
             case AgainstAnotherValue against -> against.relations();
             case Several several -> several.parts().stream()
                     .flatMap(part -> part.line().relationsRead().stream())
                     .distinct()
                     .toList();
-            // A line on one position is read off its cut, and what the cut works out is not told
-            // of here; the rest are no relation of the input's numbers.
-            case AtAPosition _, AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _,
+            // The rest are no relation of the input's numbers.
+            case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _,
                  NoInput _, CutsNothing _, AnswersNowhere _, OutsideTheDomain _,
                  NothingArrivesAtItsLine _, TurnsNothing _, NothingArrivesAtItsRelation _,
                  RelationTurnsNothing _, NoFeasibleInput _, Unread _ -> List.of();

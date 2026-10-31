@@ -584,6 +584,47 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * What a comparison inside a closure works out on one application of it, and where the
+     * application is made.
+     *
+     * @param reached where the application is made: a run that does not make it works none of
+     *                this out
+     * @param working what the comparison works out on it
+     */
+    record OnAnApplication(Proposition reached, UndividedByARelation.Working working) {
+
+        OnAnApplication {
+            Objects.requireNonNull(reached, "an application is made somewhere");
+            Objects.requireNonNull(working, "and works something out");
+        }
+    }
+
+    /**
+     * What the comparison works out on each application a closure is made on, where it stands in
+     * one, as {@link #whereTheRunStops} reads where a run stops: independent of the lines it draws.
+     * A line that decides on no row an application is made on is no line, and what the
+     * application works out is still worked out there. Empty where the comparison stands in no
+     * closure, or the applications are not said, and is read once.
+     */
+    static Optional<List<OnAnApplication>> whatEachApplicationWorksOut(
+            StatedComparison comparison, InputReading read, ClosureApplications applying,
+            WhatConditionsState conditions) {
+        if (!(applying instanceof ClosureApplications.Each(var made))) {
+            return applying instanceof ClosureApplications.None ? Optional.of(List.of())
+                    : Optional.empty();
+        }
+        List<OnAnApplication> out = new ArrayList<>();
+        for (ClosureApplications.Application one : made) {
+            if (one.reached() instanceof Proposition.Always(boolean holds) && !holds) {
+                continue;
+            }
+            out.add(new OnAnApplication(one.reached(),
+                    workingOf(conditions.comparison(comparison, one.reads(), read))));
+        }
+        return Optional.of(out);
+    }
+
+    /**
      * One line an application of a closure draws: which of the author's lines it is a place of,
      * and what reading it came to there.
      *
@@ -1202,7 +1243,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     new Read.AnswersNowhere(settledAt(stated, comparison, read, reads, answering));
             case Proposition.Compared _ when line != null -> line;
             case Proposition.Compared _ when related != null ->
-                    against(related, stated.proposition());
+                    against(related, stated.proposition(), workingOf(onTheInput));
             case Proposition.Some some
                     when valuesItRelates(some) instanceof List<FilingCoordinate> values ->
                     against(values, some);
@@ -1759,9 +1800,21 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static Read.AgainstAnotherValue against(List<FilingCoordinate> over,
                                                     Proposition stated) {
+        return against(over, stated, UndividedByARelation.Working.NOTHING);
+    }
+
+    /**
+     * The same, of a comparison that {@code stated} is read off and that works out
+     * {@code working}: the form is the comparison's own, so its rows get past what the comparison
+     * works out, and the relations read off the counts in it are not and are told nothing.
+     */
+    private static Read.AgainstAnotherValue against(List<FilingCoordinate> over,
+                                                    Proposition stated,
+                                                    UndividedByARelation.Working working) {
         List<UndividedByARelation> relations = new ArrayList<>();
         if (stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, Spelling _)) {
-            relations.add(UndividedByARelation.ofAForm(affine.form(), affine.proposition()));
+            relations.add(UndividedByARelation.ofAForm(affine.form(), affine.proposition())
+                    .workingOut(working));
             for (Quantity each : affine.form().coefs().keySet()) {
                 switch (each) {
                     case Quantity.HowManyMeet count -> relations.add(oneValue(count.ofTheElement()));

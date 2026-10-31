@@ -958,8 +958,7 @@ public final class PathReachability {
                 WhyNone why = WhyNone.BY_THE_WAY;
                 if (inside.reachesNothing()) {
                     Proof none = Proof.itsClosureIsAppliedToNothing(
-                            applied.orElseThrow().containers().stream()
-                                    .map(TermPath::toString).toList(), here.decided());
+                            applied.orElseThrow().containers(), here.decided());
                     appliedToNothing(block.body(), none);
                     why = new WhyNone.Because(none);
                 }

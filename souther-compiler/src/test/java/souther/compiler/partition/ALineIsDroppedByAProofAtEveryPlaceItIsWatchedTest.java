@@ -116,7 +116,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         return new ComparisonAssessment.AtAPosition(cutting, n, null,
                 ComparisonAssessment.Places.AT_NO_VALUE, new AuthoredPointMapping.Proven(
                         WrittenLine.THE_COMPARISON, cutting.claim(),
-                        Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true));
+                        Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true),
+                UndividedByARelation.Working.NOTHING);
     }
 
     /** Nothing on the way, over what the declarations leave. */

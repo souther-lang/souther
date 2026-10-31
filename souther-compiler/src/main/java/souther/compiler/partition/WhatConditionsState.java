@@ -68,6 +68,7 @@ final class WhatConditionsState {
     private final Map<AComparison, Pullback.OnTheInput> comparisons = new HashMap<>();
     private final Map<ANode, Pullback.Pulled> truths = new HashMap<>();
     private final Map<ANode, Pullback.Pulled> presences = new HashMap<>();
+    private final Map<ANode, Pullback.Pulled> holdings = new HashMap<>();
     private final Map<ANode, List<Pullback.Pulled>> arms = new HashMap<>();
     private final Map<ANode, Optional<DividedInput>> dividedInputs = new HashMap<>();
     private final Map<ANode, Pullback.OperatorsAnswer> operatorsAnswer = new HashMap<>();
@@ -177,6 +178,14 @@ final class WhatConditionsState {
         heldTo(read);
         return kept(presences, new ANode(optional, reads),
                 () -> Pullback.ofAPresence(optional, reads, read, Optional.empty()));
+    }
+
+    /** What {@code container} holding something states with its names as {@code reads} has them,
+     *  under {@code read}. */
+    Pullback.Pulled holdingSomething(Core container, InputReads reads, InputReading read) {
+        heldTo(read);
+        return kept(holdings, new ANode(container, reads),
+                () -> Pullback.ofHoldingSomething(container, reads, read, Optional.empty()));
     }
 
     /** What a run entering arm {@code part} of {@code fork} states with its names as {@code reads}

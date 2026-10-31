@@ -234,6 +234,11 @@ public final class OperationFacts {
             // `rangeInclusive` holds none below its first argument or above its second.
             about("List", "rangeInclusive", eachElementBounded(Rel.GE, at(0))),
             about("List", "rangeInclusive", eachElementBounded(Rel.LE, at(1))),
+            // And which numbers those are, in which order: every one between the two, each once,
+            // from the first up. The bounds above and the size below say less than this and are
+            // still declared, for the readers that read them.
+            about("List", "rangeInclusive",
+                    new OperationFact.HoldsEachWholeNumberInTurn(at(0), at(1))),
             about("Int", "abs", bounded(Rel.GE, 0)),
             about("Decimal", "abs", bounded(Rel.GE, 0)),
             about("Int", "floorMod", bounded(Rel.GE, 0, aboveZero(at(1)))),

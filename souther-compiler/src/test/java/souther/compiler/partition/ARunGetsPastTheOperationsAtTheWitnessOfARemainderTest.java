@@ -31,7 +31,7 @@ class ARunGetsPastTheOperationsAtTheWitnessOfARemainderTest {
 
     private static UndividedByARelation.IntOperation over(
             LinearForm<NumericTerm> form) {
-        return new UndividedByARelation.IntOperation(form, LEAST, GREATEST, List.of());
+        return UndividedByARelation.IntOperation.overTheInput(form, LEAST, GREATEST, List.of());
     }
 
     private static LinearForm<NumericTerm> weighing(NumericTerm number, long weight,
@@ -73,9 +73,8 @@ class ARunGetsPastTheOperationsAtTheWitnessOfARemainderTest {
     @Test
     void anOperationThatComesToTheSameNumberWhateverIsReadStopsTheRunOrNone() {
         UndividedByARelation.IntOperation within = over(LinearForm.constant(ExactRatio.of(5)));
-        UndividedByARelation.IntOperation past = new UndividedByARelation.IntOperation(
-                LinearForm.constant(ExactRatio.of(BigInteger.ONE.shiftLeft(70))), LEAST, GREATEST,
-                List.of());
+        UndividedByARelation.IntOperation past = over(
+                LinearForm.constant(ExactRatio.of(BigInteger.ONE.shiftLeft(70))));
         assertTrue(getsPast(within, over(weighing(X, 3, 5))));
         assertFalse(getsPast(true, past, over(weighing(X, 3, 5))));
     }

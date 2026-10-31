@@ -125,10 +125,11 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
         assertTrue(bothOnOnePath, "both are said of one path: " + report);
     }
 
+    /** None of the pieces taken, the closure is applied to none, and the comparison in it is one
+     *  no run makes: it relates nothing and leaves nothing unread. */
     @Test
     void noPieceTakenIsNoRelation() {
-        assertEquals(List.of("· not read: comparison@3:36 — written in a form this compiler does not"
-                + " read, about `d`"), said("""
+        assertEquals(List.of(), said("""
                 module w1
                 behavior m : (email: String, d: String) -> Bool
                 let m (email, d) = List.any(p -> p == d, List.take(0, String.split("@", email)))

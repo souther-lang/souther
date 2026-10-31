@@ -231,6 +231,25 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers every whole number from {@code from} up to {@code to}, each once and in
+     * that order, and nothing where {@code to} is below {@code from}: {@code List.rangeInclusive(3,
+     * k)} holds {@code 3}, then {@code 4}, and so on to {@code k}.
+     *
+     * <p>So the element at position {@code i} is {@code from + i}, for every {@code i} from nought
+     * to {@code to - from}. Which value a walk over the answer hands its step is read off that, and
+     * not off where the element stands: the two are one number only where {@code from} is nought.
+     * That a run makes the list at all is the operation's to say where it stops, and nothing here
+     * says it.
+     */
+    record HoldsEachWholeNumberInTurn(ArgumentRef from, ArgumentRef to) implements OperationFact {
+
+        public HoldsEachWholeNumberInTurn {
+            Objects.requireNonNull(from, "the numbers start somewhere");
+            Objects.requireNonNull(to, "and end somewhere");
+        }
+    }
+
+    /**
      * What the operation answers holds, where it holds a value, an element of {@code source}:
      * {@code List.max(xs)} is {@code Some(x)} only for an {@code x} of {@code xs}, so whatever holds
      * of every element of {@code xs} holds of it.

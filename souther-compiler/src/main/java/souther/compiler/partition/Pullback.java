@@ -647,6 +647,13 @@ final class Pullback {
         return reading.pulled(reading.observe(optional, AnswerAspect.PRESENCE, reads));
     }
 
+    /** What {@code container} holding something states. */
+    static Pulled ofHoldingSomething(Core container, InputReads reads, InputReading read,
+                                     Optional<ModelOccurrence> where) {
+        Pullback reading = new Pullback(read, where);
+        return reading.pulled(reading.observe(container, AnswerAspect.EMPTINESS, reads));
+    }
+
     /**
      * What a comparison the source wrote states, read as any truth is: a size held where it parts
      * nought from every size above it is whether the container holds anything.
@@ -724,7 +731,7 @@ final class Pullback {
         Pulled stated = reading.pulled(reading.underTheEntriesLookedUp(chosen, comparison, reads));
         Trial theRule = reading.triedAndConcluded.get(chosen);
         return new OnTheInput(stated, arithmetic,
-                new Once<>(() -> workingOf(theRule, arithmetic)),
+                new Once<>(() -> reading.workingOf(theRule, arithmetic)),
                 theRule == null ? _ -> null : theRule::workingOf, reading.readOff);
     }
 
@@ -1778,9 +1785,10 @@ final class Pullback {
     /**
      * What the rows of a comparison read by a candidate work out: what the candidate says, and
      * otherwise what the arithmetic over the input made of the comparison, with the expressions
-     * the candidate answers for held to it.
+     * the candidate answers for held to it, and an expression held aside that this reads as the
+     * value of a name taken for that value.
      */
-    private static UndividedByARelation.Working workingOf(
+    private UndividedByARelation.Working workingOf(
             Trial theRule, Supplier<AffineReading.OfAComparison> arithmetic) {
         if (theRule != null && theRule.working != null) {
             return theRule.working;
@@ -1792,7 +1800,24 @@ final class Pullback {
         Predicate<Core> readAgain = theRule.answersFor;
         return stopped.apart(new AffineReading.WhatTheAnalysisAnswersFor(
                 readAgain == null ? _ -> false : readAgain,
-                held -> theRule.readByTheFormOf.get(Core.withoutStanding(held))));
+                held -> theRule.readByTheFormOf.get(Core.withoutStanding(held)),
+                this::boundValueOf));
+    }
+
+    /**
+     * The value of a name {@code held}, read in {@code at}, is read as by what this reads a
+     * comparison's numbers as: the one bound value it comes to, weighed by one, where it comes
+     * to that; null otherwise.
+     */
+    private Quantity.OfABinding boundValueOf(Core held, InputReads at) {
+        return AffineForms.outcome(held, at, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                        LinearForm<Quantity> form)
+                && form.constant().isZero() && form.coefs().size() == 1
+                && form.coefs().entrySet().iterator().next() instanceof Map.Entry<Quantity,
+                        ExactRatio> only
+                && only.getValue().equals(ExactRatio.ONE)
+                && only.getKey() instanceof Quantity.OfABinding bound ? bound : null;
     }
 
     /**
@@ -3002,6 +3027,43 @@ final class Pullback {
                 ? handedToTheStep(name, at).map(each -> (Quantity.ReadOffABinding) each)
                 : Optional.empty();
         return handed.isPresent() ? handed : pickedAtAnIndex(name, steps, at);
+    }
+
+    /**
+     * The element {@code name} is, where one operation hands it to its step from a list an
+     * operation made of every whole number between two whose ends are forms of the input's numbers
+     * — or empty where it is not.
+     *
+     * <p>Which list is the library's to say ({@link BoundOperationFacts#holdsEachWholeNumberInTurn}),
+     * and the ends are the arguments it names, read where the call stands. Whether a run gets to
+     * the element is the walk's to say, and nothing here asks it.
+     */
+    private Optional<Quantity.ReadOffABinding> wholeNumberInTurn(Core.Read name, InputReads at) {
+        ClosureUses uses = at.usesOfTheClosureTaking(name.binding());
+        if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1) {
+            return Optional.empty();
+        }
+        ClosureUses.Application applied = uses.applications().getFirst();
+        if (!applied.held().contains(name.binding())) {
+            return Optional.empty();
+        }
+        Denotation container = at.standing(applied.container(), read.rules().symbols(),
+                read.rules().newtypes());
+        if (!(Core.withoutStanding(container.value()) instanceof Core.PreservedCall call)
+                || !(call.declared().operation() instanceof ValueName.Stdlib operation)) {
+            return Optional.empty();
+        }
+        BoundOperationFacts.Between between =
+                DefaultBoundOperationFacts.get().holdsEachWholeNumberInTurn(operation);
+        if (between == null) {
+            return Optional.empty();
+        }
+        LinearForm<NumericTerm> from = AffineReading.formOf(
+                call.args().get(between.from().position()), container.at(), read);
+        LinearForm<NumericTerm> to = AffineReading.formOf(
+                call.args().get(between.to().position()), container.at(), read);
+        return from == null || to == null ? Optional.empty()
+                : Optional.of(new Quantity.AWholeNumberInTurn(from, to));
     }
 
     /**
@@ -9182,6 +9244,14 @@ final class Pullback {
                     }
                 }
                 return switch (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
+                    // An element no position holds and no reading writes out may still be one of
+                    // every whole number between two, which says where it lies and which values
+                    // it takes.
+                    case ReadMeaning.Element _ when steps.isEmpty() -> wholeNumberInTurn(name, at)
+                            .map(number -> LinearForm.<Quantity>atom(new Quantity.OfABinding(
+                                    name.binding(), steps, node.type(), Optional.empty(),
+                                    Optional.of(number))))
+                            .orElse(null);
                     case ReadMeaning.Element _, ReadMeaning.OneOf _, ReadMeaning.NoneHeld _,
                          ReadMeaning.MoreThanAreWrittenOut _, ReadMeaning.Position _ -> null;
                     // A name given a choice between values holds whichever arm was taken, which

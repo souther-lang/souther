@@ -424,6 +424,12 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
                                         ResultBound<DeclaredArgument> bound)
             implements SeveralAboutAnOperation {}
 
+    /** The operation answers every whole number from {@code from} up to {@code to}, each once and
+     *  in that order, and nothing where {@code to} is below {@code from}. */
+    record HoldsEachWholeNumberInTurn(DeclaredOperation operation, DeclaredArgument from,
+                                      DeclaredArgument to)
+            implements OneAboutAnOperation {}
+
     /** What the operation answers holds, where it holds a value, an element of {@code source}. */
     record AnswersAnElementOf(DeclaredOperation operation, DeclaredArgument source)
             implements OneAboutAnOperation {}

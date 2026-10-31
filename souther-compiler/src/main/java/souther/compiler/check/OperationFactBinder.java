@@ -372,6 +372,18 @@ final class OperationFactBinder {
                                 bound.offset(), bound.rel(), new ResultBound.Provided.Always<>(),
                                 bound.origin()));
             }
+            // Every whole number between two, each once and in order: both ends are whole numbers
+            // and so is every element, or the element at a position is no end moved by it.
+            case OperationFact.HoldsEachWholeNumberInTurn each -> {
+                requireAKernel(stdlib, operation, "which numbers it answers");
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.LIST_OF_INTS,
+                        "a list of every whole number between two");
+                DeclaredArgument from = holdAWholeNumber(declaration, each.from(),
+                        "the number the list starts at");
+                DeclaredArgument to = holdAWholeNumber(declaration, each.to(),
+                        "the number the list ends at");
+                yield new BoundOperationFact.HoldsEachWholeNumberInTurn(operation, from, to);
+            }
             // A value that is one of the elements of a container.
             case OperationFact.AnswersAnElementOf of -> {
                 requireAKernel(stdlib, operation, "which element it answers");
@@ -629,6 +641,19 @@ final class OperationFactBinder {
                     new BoundOperationFact.IsDefinedByCases(operation,
                             holdCase(declaration, defined.one()));
         };
+    }
+
+    /** {@code at} held to the declaration as an argument that is a whole number. */
+    private static DeclaredArgument holdAWholeNumber(CompleteSignature declaration, ArgumentRef at,
+                                                     String role) {
+        DeclaredArgument held = holdToTheDeclaration(declaration, at, null, TypeRequirement.EXACT,
+                role);
+        if (held.stands() != Type.Prim.INT) {
+            throw new IllegalStateException("argument " + (held.position() + 1) + " of "
+                    + declaration.declaring().operation() + " is " + Type.show(held.stands())
+                    + ", not a whole number; it is named as " + role);
+        }
+        return held;
     }
 
     /**
