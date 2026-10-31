@@ -208,12 +208,29 @@ public final class AffineReduction {
         return new Settled<>(reading, sidedOf);
     }
 
-    /** {@code holes} grouped by the sum they are on, in the order the first of each was said. */
+    /**
+     * {@code holes} grouped by the sum they are on, in the order the first of each was said.
+     *
+     * <p>{@code f /= v} and {@code -f /= -v} are one rule ({@link AffineConstraint.Disequality}), so
+     * they are on one sum and in one group, each written the way the first of the group was. The
+     * hole kept is equal to the one said, so what is found for it is found for that one.
+     */
     private static <A> Collection<List<AffineConstraint.Disequality<A>>> onOneSumEach(
             List<AffineConstraint.Disequality<A>> holes) {
         Map<CanonicalForm<A>, List<AffineConstraint.Disequality<A>>> grouped = new LinkedHashMap<>();
         for (AffineConstraint.Disequality<A> hole : holes) {
-            grouped.computeIfAbsent(hole.form(), _ -> new ArrayList<>()).add(hole);
+            List<AffineConstraint.Disequality<A>> there = grouped.get(hole.form());
+            AffineConstraint.Disequality<A> written = hole;
+            if (there == null) {
+                there = grouped.get(hole.form().negated());
+                written = new AffineConstraint.Disequality<>(hole.form().negated(), hole.at().negated());
+            }
+            if (there == null) {
+                there = new ArrayList<>();
+                grouped.put(hole.form(), there);
+                written = hole;
+            }
+            there.add(written);
         }
         return grouped.values();
     }

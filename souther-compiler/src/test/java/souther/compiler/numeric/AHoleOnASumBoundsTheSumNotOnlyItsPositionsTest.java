@@ -153,6 +153,49 @@ class AHoleOnASumBoundsTheSumNotOnlyItsPositionsTest {
         assertFalse(d.entails(sumMinus(49 - holes), Rel.LE), "a + b = " + (50 - holes) + " is admitted");
     }
 
+    private static LinearForm<String> positionMinus(long n) {
+        return SmallForm.small(atom(A)).minus(num(n)).form();
+    }
+
+    /** The run on one position: the ends are what a position is asked of, and the run still ends. */
+    @Test
+    void aRunOfHolesOnOnePositionIsNotLimitedByTheRounds() {
+        NumericDomain<String> d = assumed(start(), positionMinus(50), Rel.LE, Granularity.DISCRETE);
+        int last = 50 - ClosedState.ROUNDS * 2;
+        for (int at = 50; at > last; at--) {
+            d = assumed(d, positionMinus(at), Rel.NE, Granularity.DISCRETE);
+        }
+
+        assertTrue(d.entails(positionMinus(last), Rel.LE));
+        assertFalse(d.entails(positionMinus(last - 1), Rel.LE), "a = " + last + " is admitted");
+    }
+
+    /**
+     * {@code a /= 49} and {@code -a /= -49} are one rule, and a run of them is one run however each
+     * is spelled. Spelled alternately on a position and on a sum.
+     */
+    @Test
+    void aRunOfHolesSpelledBothWaysRoundIsOneRun() {
+        int last = 50 - ClosedState.ROUNDS * 2;
+        NumericDomain<String> onAPosition = assumed(start(), positionMinus(50), Rel.LE,
+                Granularity.DISCRETE);
+        NumericDomain<String> onASum = assumed(start(), sumMinus(50), Rel.LE, Granularity.DISCRETE);
+        for (int at = 50; at > last; at--) {
+            boolean turned = at % 2 == 1;
+            onAPosition = assumed(onAPosition, turned
+                    ? SmallForm.small(atom(A).negate()).plus(num(at)).form() : positionMinus(at),
+                    Rel.NE, Granularity.DISCRETE);
+            onASum = assumed(onASum, turned
+                    ? SmallForm.small(atom(A).negate()).minus(atom(B)).plus(num(at)).form()
+                    : sumMinus(at), Rel.NE, Granularity.DISCRETE);
+        }
+
+        assertTrue(onAPosition.entails(positionMinus(last), Rel.LE));
+        assertFalse(onAPosition.entails(positionMinus(last - 1), Rel.LE));
+        assertTrue(onASum.entails(sumMinus(last), Rel.LE));
+        assertFalse(onASum.entails(sumMinus(last - 1), Rel.LE));
+    }
+
     /**
      * Holes on two differences, each beside a bound, give the same chain as the two strict
      * comparisons written in their place.
