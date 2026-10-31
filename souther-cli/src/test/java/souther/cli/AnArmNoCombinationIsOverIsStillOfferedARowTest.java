@@ -112,7 +112,7 @@ class AnArmNoCombinationIsOverIsStillOfferedARowTest {
         assertEquals(0, run.code(), run.out() + run.err());
         assertTrue(run.out().contains("no row goes through `case Off`"), run.out());
         assertTrue(run.out().contains("// fills case Off")
-                        && run.out().contains("// fills flags[*]=Off")
+                        && run.out().contains("// fills Off at flags[*]")
                         && run.out().contains("| ([Off])"),
                 "a row whose run goes through the arm is offered: " + run.out());
         assertFalse(run.out().contains("nothing offers a row for `case Off`"),

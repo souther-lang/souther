@@ -1836,12 +1836,12 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "straws/0 <= x < 17", "straws/17 <= x <= 20" ],
+          "classes" : [ "straws: 0 <= x < 17", "straws: 17 <= x <= 20" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
-          "covered" : [ "straws/0 <= x < 17", "straws/17 <= x <= 20" ],
+          "covered" : [ "straws: 0 <= x < 17", "straws: 17 <= x <= 20" ],
           "unclassifiedRows" : 0
         }, {
           "axis" : "packBox/bars",
@@ -1849,12 +1849,12 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "bars/0 <= x < 9", "bars/9 <= x <= 20" ],
+          "classes" : [ "bars: 0 <= x < 9", "bars: 9 <= x <= 20" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
-          "covered" : [ "bars/0 <= x < 9", "bars/9 <= x <= 20" ],
+          "covered" : [ "bars: 0 <= x < 9", "bars: 9 <= x <= 20" ],
           "unclassifiedRows" : 0
         } ],
         "claimsOffAxis" : [ ],
@@ -3012,10 +3012,10 @@
           "behavior" : "packBox",
           "classes" : [ {
             "axis" : "packBox/bars",
-            "class" : "bars/9 <= x <= 20"
+            "class" : "bars: 9 <= x <= 20"
           }, {
             "axis" : "packBox/straws",
-            "class" : "straws/17 <= x <= 20"
+            "class" : "straws: 17 <= x <= 20"
           } ]
         },
         "code" : "E1937"
@@ -3196,12 +3196,12 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "from/0 <= x < 16", "from/16 <= x <= 24" ],
+          "classes" : [ "from: 0 <= x < 16", "from: 16 <= x <= 24" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
-          "covered" : [ "from/0 <= x < 16", "from/16 <= x <= 24" ],
+          "covered" : [ "from: 0 <= x < 16", "from: 16 <= x <= 24" ],
           "unclassifiedRows" : 0
         }, {
           "axis" : "bookSlot/until",
@@ -3209,12 +3209,12 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "until/0 <= x <= 8", "until/8 < x <= 24" ],
+          "classes" : [ "until: 0 <= x <= 8", "until: 8 < x <= 24" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
-          "covered" : [ "until/0 <= x <= 8", "until/8 < x <= 24" ],
+          "covered" : [ "until: 0 <= x <= 8", "until: 8 < x <= 24" ],
           "unclassifiedRows" : 0
         } ],
         "claimsOffAxis" : [ ],

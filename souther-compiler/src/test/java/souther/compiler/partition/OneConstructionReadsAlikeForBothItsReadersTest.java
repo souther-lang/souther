@@ -77,8 +77,8 @@ class OneConstructionReadsAlikeForBothItsReadersTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
-        assertEquals(Map.of("throughARecord", "n/x < 100, n/100 <= x",
-                        "throughANewtype", "n/x < 100, n/100 <= x"),
+        assertEquals(Map.of("throughARecord", "n: x < 100, n: 100 <= x",
+                        "throughANewtype", "n: x < 100, n: 100 <= x"),
                 AdequacyReport.of(compilation).modules().get(0).behaviors().stream()
                         .collect(Collectors.toMap(AdequacyReport.BehaviorReport::name,
                                 behavior -> behavior.partition().axes().stream()

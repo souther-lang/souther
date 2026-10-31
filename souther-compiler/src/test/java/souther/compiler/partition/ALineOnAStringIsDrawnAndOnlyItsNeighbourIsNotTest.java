@@ -51,7 +51,7 @@ class ALineOnAStringIsDrawnAndOnlyItsNeighbourIsNotTest {
     /** The line, and the classes either side of it, named by the strings the model wrote. */
     @Test
     void theClassesAreTheTwoSidesOfTheLine() {
-        assertEquals(List.of("m/x < 2026-08", "m/2026-08 <= x"), classes());
+        assertEquals(List.of("m: x < 2026-08", "m: 2026-08 <= x"), classes());
     }
 
     /** A row at the line, which is the literal the body already holds. */

@@ -29,13 +29,13 @@ class AnOperationAnsweringArithmeticByCasesIsReadOnEachCaseTest {
         read.put("the call as a side", reading("Int", "n: Int", "Int.abs(n) > 5"));
         read.put("the call inside a sum", reading("Int", "n: Int", "Int.abs(n) + 1 > 6"));
 
-        String lines = "[n/x < -5, n/-5 <= x <= 5, n/5 < x] unread []";
+        String lines = "[n: x < -5, n: -5 <= x <= 5, n: 5 < x] unread []";
         assertEquals(Map.of("the call as a side", lines, "the call inside a sum", lines), read);
     }
 
     @Test
     void theDecimalOneIsReadTheSameWay() {
-        assertEquals("[d/x < -5, d/-5 <= x <= 5, d/5 < x] unread []",
+        assertEquals("[d: x < -5, d: -5 <= x <= 5, d: 5 < x] unread []",
                 reading("Decimal", "d: Decimal", "Decimal.abs(d) > 5.0m"));
     }
 

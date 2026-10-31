@@ -135,14 +135,14 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
             String report = AdequacyReport.of(compilation)
                     .human(SourceRendering.namedByIdentity(compilation.texts()));
 
-            assertFalse(report.contains("String.length(s)/" + past + " <= x"), report);
+            assertFalse(report.contains("String.length(s): " + past + " <= x"), report);
         }
         Compilation within = Compilation.ofSource(source.formatted("7"), "Main");
         within.measure(Adequacy.Asked.fullReport());
         within.answerEverything();
         assertTrue(AdequacyReport.of(within)
                 .human(SourceRendering.namedByIdentity(within.texts()))
-                .contains("String.length(s)/7 <= x"), "the control: a class a string reaches");
+                .contains("String.length(s): 7 <= x"), "the control: a class a string reaches");
     }
 
     /** The arm a guard past the longest string opens is reached by no String, so it and the outcome

@@ -89,7 +89,7 @@ class AClosuresParameterIsThePositionItWasHandedTest {
         String bare = only(measured().get("classify")).classes().toString();
         String inside = only(measured().get("select")).classes().toString();
 
-        assertEquals(bare.replace("age/", "×/"), inside.replace("people[*].age/", "×/"),
+        assertEquals(bare.replace("age: ", "×: "), inside.replace("people[*].age: ", "×: "),
                 () -> "the same rule divides the same values: " + bare + " and " + inside);
     }
 

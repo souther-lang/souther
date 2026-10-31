@@ -193,7 +193,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String amount = "data Amount = Int invariant value >= 0";
         assertEquals(Map.of("a", RELATES),
                 left("a: Amount, n: Int", amount, "n == a.value", "4:18"));
-        assertEquals(List.of("n/x <= -1", "n/-1 < x"),
+        assertEquals(List.of("n: x <= -1", "n: -1 < x"),
                 classesAt("a: Amount, n: Int", amount, "n == a.value", "n"));
     }
 
@@ -210,7 +210,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 left("g: Yen, d: Yen", yen, "g.value >= d.value", "4:24"));
         assertEquals(Map.of("g", RELATES),
                 left("g: Yen, d: Yen", yen, "d.value <= g.value", "4:24"));
-        assertEquals(List.of("d/0 <= x <= 0", "d/0 < x"),
+        assertEquals(List.of("d: 0 <= x <= 0", "d: 0 < x"),
                 classesAt("g: Yen, d: Yen", yen, "g.value >= d.value", "d"));
     }
 
@@ -676,8 +676,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 head.length() + body.indexOf(">= 30") + 1));
         for (String place : List.of("a", "b")) {
             List<String> classes = classesAt(inputs, declarations, body, place);
-            if (classes.size() == 2 && classes.get(0).equals(place + "/0 <= x < 30")
-                    && classes.get(1).startsWith(place + "/30 <= x")) {
+            if (classes.size() == 2 && classes.get(0).equals(place + ": 0 <= x < 30")
+                    && classes.get(1).startsWith(place + ": 30 <= x")) {
                 out.putIfAbsent(place, "divided at 30");
             }
         }
@@ -742,7 +742,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String inputs = "p: Yen, a: Yen, b: Yen";
         String kept = "p.value + a.value + 9223372036854775797 - 9223372036854775797 == 0";
         assertEquals(Map.of("a", RELATES), pastAWayOffAValue(inputs, yen, kept));
-        assertEquals(List.of("b/0 <= x <= 19", "b/19 < x < 30", "b/30 <= x <= 1000000"),
+        assertEquals(List.of("b: 0 <= x <= 19", "b: 19 < x < 30", "b: 30 <= x <= 1000000"),
                 classesAt(inputs, yen, "if " + kept + " then false else a.value + b.value >= 30",
                         "b"));
     }
@@ -818,9 +818,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void anAmountHeldBetweenTwoEndsIsDividedAtTheEndNothingReachesPast() {
         String yen = "data Yen = Int invariant value >= 0 && value <= 10";
         assertEquals(Map.of(), left("g: Yen, d: Yen", yen, "g.value >= d.value", "4:24"));
-        assertEquals(List.of("g/0 <= x < 10", "g/10 <= x <= 10"),
+        assertEquals(List.of("g: 0 <= x < 10", "g: 10 <= x <= 10"),
                 classesAt("g: Yen, d: Yen", yen, "g.value >= d.value", "g"));
-        assertEquals(List.of("d/0 <= x <= 0", "d/0 < x <= 10"),
+        assertEquals(List.of("d: 0 <= x <= 0", "d: 0 < x <= 10"),
                 classesAt("g: Yen, d: Yen", yen, "g.value >= d.value", "d"));
     }
 
@@ -863,7 +863,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aLengthReachesEveryNumberAtOrAboveNoughtAndNothingBelow() {
         assertEquals(Map.of("String.length(s)", RELATES),
                 left("n: Int, s: String", "data Unused = Int", "n == String.length(s)", "4:18"));
-        assertEquals(List.of("n/x <= -1", "n/-1 < x"), classesAt("n: Int, s: String",
+        assertEquals(List.of("n: x <= -1", "n: -1 < x"), classesAt("n: Int, s: String",
                 "data Unused = Int", "n == String.length(s)", "n"));
         assertEquals(Map.of("n", RELATES, "String.length(s)", RELATES),
                 left("n: N, s: String", "data N = Int invariant value >= 0",
@@ -888,11 +888,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         // with are the ones it has and the number is parted where they stop.
         assertEquals(Map.of("Set.size(xs)", RELATES),
                 left("k: Int, xs: Set<Bool>", "data Unused = Int", "k > Set.size(xs)", "4:19"));
-        assertEquals(List.of("k/x <= 0", "k/0 < x < 3", "k/3 <= x"),
+        assertEquals(List.of("k: x <= 0", "k: 0 < x < 3", "k: 3 <= x"),
                 classesAt("k: Int, xs: Set<Bool>", "data Unused = Int", "k > Set.size(xs)", "k"));
         // A name the module declares is as many as its parts: a data with nothing in it is one
         // value, so a set of it holds none or that one.
-        assertEquals(List.of("k/x <= 0", "k/0 < x < 2", "k/2 <= x"),
+        assertEquals(List.of("k: x <= 0", "k: 0 < x < 2", "k: 2 <= x"),
                 classesAt("k: Int, xs: Set<Unit>", "data Unit", "k > Set.size(xs)", "k"));
         // A name with a rule is shown the one value the rule leaves it, and a set of it is shown
         // no more than that: how many differ is asked only of a type nothing is written on and of
@@ -906,7 +906,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 "data Gap = Int invariant value >= 1 && value <= 3 && value /= 2",
                 "k > Set.size(xs)", "4:19"));
         // The cases of an enumeration are as many values as it has, and are all it has.
-        assertEquals(List.of("k/x <= 0", "k/0 < x < 4", "k/4 <= x"), classesAt(
+        assertEquals(List.of("k: x <= 0", "k: 0 < x < 4", "k: 4 <= x"), classesAt(
                 "k: Int, xs: Set<Side>",
                 "data Left\ndata Right\ndata Middle\ndata Side = Left | Right | Middle",
                 "k > Set.size(xs)", "k"));
@@ -1059,11 +1059,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aTotalOverARunIsATermOfTheRelationAsTheCountIs() {
         assertEquals(Map.of("List.length(ns)", RELATES),
                 leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= List.length(ns)", 27));
-        assertEquals(List.of("gross/x <= -1", "gross/-1 < x"), classesAt(
+        assertEquals(List.of("gross: x <= -1", "gross: -1 < x"), classesAt(
                 "gross: Int, ns: List<Nat>", NAT, "gross >= List.length(ns)", "gross"));
         assertEquals(Map.of("List.sum(ns[*])", RELATES),
                 leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= " + TOTAL, 27));
-        assertEquals(List.of("gross/x <= -1", "gross/-1 < x"), classesAt("gross: Int, ns: List<Nat>",
+        assertEquals(List.of("gross: x <= -1", "gross: -1 < x"), classesAt("gross: Int, ns: List<Nat>",
                 NAT, "gross >= " + TOTAL, "gross"));
         assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", RELATES,
                         "gross", NOT_SHOWN),
@@ -1303,7 +1303,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         for (String model : List.of(FORECAST, weighed)) {
             Compilation named = reported(model);
             assertEquals(Map.of(), leftIn(named, whereWritten(model, "== List")), model);
-            assertEquals(List.of("List.length(deals)/0 <= x <= 0", "List.length(deals)/0 < x"),
+            assertEquals(List.of("List.length(deals): 0 <= x <= 0", "List.length(deals): 0 < x"),
                     named.db().ask(new Adequacy.Coverage("w1")).value().get("m").axes().stream()
                             .filter(axis -> axis.path().equals("List.length(deals)"))
                             .flatMap(axis -> axis.classes().stream()).toList(), model);
@@ -1511,7 +1511,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         for (String model : List.of(countedAfterALet("x.value > 2"), countedInline("x.value > 2"))) {
             Compilation compilation = reported(model);
             assertEquals(List.of(), compilation.errors(), model);
-            assertEquals(List.of("List.length(xs)/0 <= x <= 0", "List.length(xs)/0 < x"),
+            assertEquals(List.of("List.length(xs): 0 <= x <= 0", "List.length(xs): 0 < x"),
                     compilation.db().ask(new Adequacy.Coverage("w1")).value().get("m").axes()
                             .stream().filter(axis -> axis.path().equals("List.length(xs)"))
                             .flatMap(axis -> axis.classes().stream()).toList(), model);
@@ -1711,7 +1711,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     @Test
     void aTotalTakesWhatOneElementTakesAndNoughtWhereTheListMayBeEmpty() {
         String positive = "data Pos = Int invariant value >= 1\n";
-        assertEquals(List.of("gross/x <= -1", "gross/-1 < x"), classesAt(
+        assertEquals(List.of("gross: x <= -1", "gross: -1 < x"), classesAt(
                 "gross: Int, ns: List<Pos>", positive, "gross >= " + TOTAL, "gross"));
         assertEquals(NOT_SHOWN, leftAt("gross: Int, ns: Ps",
                 positive + "data Ps = List<Pos> invariant List.length(value) >= 1",
@@ -1819,7 +1819,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     @Test
     void howOftenAValueOccursTakesEveryCountItsListMayHoldElementsTo() {
-        assertEquals(List.of("atLeast/x <= 1", "atLeast/1 < x"),
+        assertEquals(List.of("atLeast: x <= 1", "atLeast: 1 < x"),
                 classesAt("issues: List<Issue>, atLeast: Int", LABELLED, BUSY, "atLeast"));
         assertEquals(List.of(), classesAt("board: Board, atLeast: Int", LABELLED + """
 
@@ -1937,11 +1937,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String inputs = "xs: List<Int>";
         for (String test : List.of("i == List.length(xs) - 1", "i + 1 >= List.length(xs)",
                 "i == List.length(xs) - 2")) {
-            assertEquals(List.of("List.length(xs)/0 <= x <= 1", "List.length(xs)/1 < x"),
+            assertEquals(List.of("List.length(xs): 0 <= x <= 1", "List.length(xs): 1 < x"),
                     classesAt(inputs, UNUSED, "List<Int>", STANDING.formatted(test),
                             "List.length(xs)"), test);
         }
-        assertEquals(List.of("List.length(xs)/0 <= x <= 2", "List.length(xs)/2 < x"),
+        assertEquals(List.of("List.length(xs): 0 <= x <= 2", "List.length(xs): 2 < x"),
                 classesAt(inputs, UNUSED, "List<Int>",
                         STANDING.formatted("List.length(xs) - i <= 2"), "List.length(xs)"));
         String body = STANDING.formatted("i == List.length(xs) - 1");
@@ -1962,7 +1962,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String inputs = "xs: List<Int>";
         String body = STANDING.formatted(
                 "i + 3074457345618258602 * List.length(xs) - 9223372036854775806 <= 0");
-        assertEquals(List.of("List.length(xs)/0 <= x <= 2", "List.length(xs)/2 < x"),
+        assertEquals(List.of("List.length(xs): 0 <= x <= 2", "List.length(xs): 2 < x"),
                 classesAt(inputs, UNUSED, "List<Int>", body, "List.length(xs)"));
     }
 
@@ -1978,8 +1978,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aLineTheModelDrawsWhereFewPositionsComputeIsDrawn() {
         String inputs = "xs: List<Int>";
         String body = STANDING.formatted("i - List.length(xs) + 2147483646 <= 0");
-        assertEquals(List.of("List.length(xs)/0 <= x <= 2147483645",
-                        "List.length(xs)/2147483645 < x"),
+        assertEquals(List.of("List.length(xs): 0 <= x <= 2147483645",
+                        "List.length(xs): 2147483645 < x"),
                 classesAt(inputs, UNUSED, "List<Int>", body, "List.length(xs)"));
     }
 
@@ -2146,7 +2146,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String inputs = "xs: List<Int>";
         String inALet = "List.mapIndexed((i, x) -> { let last = List.length(xs) - 1\n"
                 + "    if i == last then 1 else 0 }, xs)";
-        assertEquals(List.of("List.length(xs)/0 <= x <= 1", "List.length(xs)/1 < x"),
+        assertEquals(List.of("List.length(xs): 0 <= x <= 1", "List.length(xs): 1 < x"),
                 classesAt(inputs, UNUSED, "List<Int>", inALet, "List.length(xs)"));
     }
 
@@ -2162,7 +2162,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void whereAnElementStandsIsReadOnlyAgainstItsOwnListAllOfWhichTheWayLeaves() {
         String inputs = "xs: List<Int>, ys: List<Int>";
         String another = STANDING.formatted("i == List.length(ys) - 1");
-        assertEquals(List.of("List.length(ys)/0 <= x <= 0", "List.length(ys)/0 < x"),
+        assertEquals(List.of("List.length(ys): 0 <= x <= 0", "List.length(ys): 0 < x"),
                 classesAt(inputs, UNUSED, "List<Int>", another, "List.length(ys)"));
         String picked = "if List.all(x -> x > 0, xs) then "
                 + STANDING.formatted("i == List.length(xs) - 1") + " else []";
@@ -2196,7 +2196,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     @Test
     void anArmADependencysAnswerEntersLeavesTheParametersItNamesNothingOfAsTheyWere() {
         String onADay = RATED.formatted("on");
-        assertEquals(List.of("List.length(xs)/0 <= x <= 1", "List.length(xs)/1 < x"),
+        assertEquals(List.of("List.length(xs): 0 <= x <= 1", "List.length(xs): 1 < x"),
                 classesIn(onADay, "List.length(xs)"));
         assertEquals(Map.of(), leftIn(onADay, whereWritten(onADay, "== List")));
         String onTheLength = RATED.formatted("List.length(xs)");
@@ -2257,7 +2257,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void anHourReachesTheHoursOfADay() {
         assertEquals(Map.of("Time.hour(t)", RELATES),
                 left("n: Int, t: Time", "data Unused = Int", "n == Time.hour(t)", "4:18"));
-        assertEquals(List.of("n/x <= -1", "n/-1 < x < 24", "n/24 <= x"),
+        assertEquals(List.of("n: x <= -1", "n: -1 < x < 24", "n: 24 <= x"),
                 classesAt("n: Int, t: Time", "data Unused = Int", "n == Time.hour(t)", "n"));
         assertEquals(Map.of("h", RELATES, "Time.hour(t)", RELATES),
                 left("h: H, t: Time", "data H = Int invariant value >= 0 && value <= 23",
@@ -2271,14 +2271,14 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aYearReachesTheYearsADateCanBeWrittenInAndNoGapARuleLeaves() {
         assertEquals(Map.of("Date.year(d)", RELATES),
                 left("y: Int, d: Date", "data Unused = Int", "y == Date.year(d)", "4:18"));
-        assertEquals(List.of("y/x <= -1000000000", "y/-1000000000 < x < 1000000000",
-                "y/1000000000 <= x"), classesAt("y: Int, d: Date", "data Unused = Int",
+        assertEquals(List.of("y: x <= -1000000000", "y: -1000000000 < x < 1000000000",
+                "y: 1000000000 <= x"), classesAt("y: Int, d: Date", "data Unused = Int",
                 "y == Date.year(d)", "y"));
         String heldYear = "data Y = Int invariant value >= 1 && value <= 9999";
         assertEquals(Map.of("y", RELATES),
                 left("y: Y, d: Date", heldYear, "y.value == Date.year(d)", "4:24"));
-        assertEquals(List.of("Date.year(d)/-999999999 <= x <= 0", "Date.year(d)/0 < x < 10000",
-                        "Date.year(d)/10000 <= x <= 999999999"),
+        assertEquals(List.of("Date.year(d): -999999999 <= x <= 0", "Date.year(d): 0 < x < 10000",
+                        "Date.year(d): 10000 <= x <= 999999999"),
                 classesAt("y: Y, d: Date", heldYear, "y.value == Date.year(d)", "Date.year(d)"));
         assertEquals(Map.of("Date.year(d)", RELATES, "y", NOT_SHOWN),
                 left("y: Int, d: D", "data D = Date invariant value == Date(\"2020-01-01\")"
@@ -2503,7 +2503,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("a", RELATES),
                 left("a: Int, b: Int", "data Unused = Int", "if a > 0 then a < b else false",
                         "4:32"));
-        assertEquals(List.of("b/x <= 1", "b/1 < x"), classesAt("a: Int, b: Int",
+        assertEquals(List.of("b: x <= 1", "b: 1 < x"), classesAt("a: Int, b: Int",
                 "data Unused = Int", "if a > 0 then a < b else false", "b"));
     }
 
@@ -2517,14 +2517,14 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String declarations = "data Y = Int invariant value >= -10 && value <= -5";
         String fromFour = "if h >= 4 && h <= 11 then 2 * h + y.value < 0 else false";
         assertEquals(Map.of(), left("h: Int, y: Y", declarations, fromFour, "4:58"));
-        assertEquals(List.of("h/x < 4", "h/4 <= x < 5", "h/5 <= x <= 11", "h/11 < x"),
+        assertEquals(List.of("h: x < 4", "h: 4 <= x < 5", "h: 5 <= x <= 11", "h: 11 < x"),
                 classesAt("h: Int, y: Y", declarations, fromFour, "h"));
-        assertEquals(List.of("y/-10 <= x < -8", "y/-8 <= x <= -5"),
+        assertEquals(List.of("y: -10 <= x < -8", "y: -8 <= x <= -5"),
                 classesAt("h: Int, y: Y", declarations, fromFour, "y"));
         String fromNought = "if h >= 0 && h <= 20 then 2 * h + y.value < 0 else false";
         assertEquals(Map.of("y", RELATES), left("h: Int, y: Y", declarations, fromNought, "4:58"));
-        assertEquals(List.of("h/x < 0", "h/0 <= x <= 2", "h/2 < x < 5", "h/5 <= x <= 20",
-                "h/20 < x"), classesAt("h: Int, y: Y", declarations, fromNought, "h"));
+        assertEquals(List.of("h: x < 0", "h: 0 <= x <= 2", "h: 2 < x < 5", "h: 5 <= x <= 20",
+                "h: 20 < x"), classesAt("h: Int, y: Y", declarations, fromNought, "h"));
     }
 
     /**
@@ -2537,15 +2537,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aMonthIsDividedAtTheEndOfTheNumbersAGuardHoldsTheOtherSideTo() {
         String months = "if k >= 1 && k <= 12 then Date.month(d) >= k else false";
         assertEquals(Map.of(), left("d: Date, k: Int", "data Unused = Int", months, "4:56"));
-        assertEquals(List.of("Date.month(d)/1 <= x < 12", "Date.month(d)/12 <= x <= 12"),
+        assertEquals(List.of("Date.month(d): 1 <= x < 12", "Date.month(d): 12 <= x <= 12"),
                 classesAt("d: Date, k: Int", "data Unused = Int", months, "Date.month(d)"));
-        assertEquals(List.of("k/x < 1", "k/1 <= x <= 1", "k/1 < x <= 12", "k/12 < x"),
+        assertEquals(List.of("k: x < 1", "k: 1 <= x <= 1", "k: 1 < x <= 12", "k: 12 < x"),
                 classesAt("d: Date, k: Int", "data Unused = Int", months, "k"));
         String wider = "if k >= 0 && k <= 13 then Date.month(d) >= k else false";
         assertEquals(Map.of("Date.month(d)", RELATES),
                 left("d: Date, k: Int", "data Unused = Int", wider, "4:56"));
-        assertEquals(List.of("k/x < 0", "k/0 <= x <= 1", "k/1 < x < 13", "k/13 <= x <= 13",
-                "k/13 < x"), classesAt("d: Date, k: Int", "data Unused = Int", wider, "k"));
+        assertEquals(List.of("k: x < 0", "k: 0 <= x <= 1", "k: 1 < x < 13", "k: 13 <= x <= 13",
+                "k: 13 < x"), classesAt("d: Date, k: Int", "data Unused = Int", wider, "k"));
     }
 
     /**
@@ -2560,9 +2560,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String body = "if p.value == g.value then false else p.value < g.value";
         assertEquals(Map.of(), left("p: Amount, g: Amount", amount, body, "4:62"),
                 "neither is left unshown: each is parted at the value that settles it");
-        assertEquals(List.of("p/0 <= x <= 0", "p/0 < x"),
+        assertEquals(List.of("p: 0 <= x <= 0", "p: 0 < x"),
                 classesAt("p: Amount, g: Amount", amount, body, "p"));
-        assertEquals(List.of("g/0 <= x <= 0", "g/0 < x"),
+        assertEquals(List.of("g: 0 <= x <= 0", "g: 0 < x"),
                 classesAt("p: Amount, g: Amount", amount, body, "g"));
     }
 
@@ -3032,7 +3032,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String body = "if b >= 0 && a >= b then a < c else false";
         assertEquals(Map.of("a", RELATES),
                 left("a: Int, b: Int, c: Int", "data Unused = Int", body, "4:46"));
-        assertEquals(List.of("c/x <= 0", "c/0 < x"),
+        assertEquals(List.of("c: x <= 0", "c: 0 < x"),
                 classesAt("a: Int, b: Int, c: Int", "data Unused = Int", body, "c"));
     }
 
@@ -3158,7 +3158,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String rules = QUOTE + "issuedOn >= 0 && expiresOn >= issuedOn";
         assertEquals(Map.of("q.expiresOn", RELATES),
                 leftAt("q: Quote, today: Int", rules, "today <= q.expiresOn", 26));
-        assertEquals(List.of("today/x <= 0", "today/0 < x"),
+        assertEquals(List.of("today: x <= 0", "today: 0 < x"),
                 classesAt("q: Quote, today: Int", rules, "today <= q.expiresOn", "today"));
     }
 
@@ -3420,12 +3420,12 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 "h.value * 4.0m >= s.value * 3.0m")) {
             assertEquals(Map.of(),
                     left(inputs, HOURS, body, atThe(">=", HOURS, inputs, body)), body);
-            assertEquals(List.of("s/0 <= x <= 0", "s/0 < x <= 168"),
+            assertEquals(List.of("s: 0 <= x <= 0", "s: 0 < x <= 168"),
                     classesAt(inputs, HOURS, body, "s"), body);
         }
-        assertEquals(List.of("h/0 <= x < 42", "h/42 <= x <= 168"),
+        assertEquals(List.of("h: 0 <= x < 42", "h: 42 <= x <= 168"),
                 classesAt(inputs, HOURS, "h.value * 4.0m >= s.value", "h"));
-        assertEquals(List.of("h/0 <= x < 126", "h/126 <= x <= 168"),
+        assertEquals(List.of("h: 0 <= x < 126", "h: 126 <= x <= 168"),
                 classesAt(inputs, HOURS, "h.value * 4.0m >= s.value * 3.0m", "h"));
     }
 
@@ -3443,8 +3443,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String body = "r.value * 2 >= i.value";
         assertEquals(Map.of("r", RELATES),
                 left("r: Yen, i: Yen", yen, body, atThe(">=", yen, "r: Yen, i: Yen", body)));
-        assertEquals(List.of("i/0 <= x <= 0", "i/0 < x < 9223372036854775807",
-                        "i/9223372036854775807 <= x"),
+        assertEquals(List.of("i: 0 <= x <= 0", "i: 0 < x < 9223372036854775807",
+                        "i: 9223372036854775807 <= x"),
                 classesAt("r: Yen, i: Yen", yen, body, "i"));
         String gap = yen + "\ndata Gap = Int invariant value <= 10 || value >= 20";
         assertEquals(NOT_SHOWN, left("r: Yen, i: Gap", gap, body,
@@ -3468,7 +3468,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String body = "if w.value > t.value then false else t.value > w.value";
         assertEquals(Map.of("w", RELATES),
                 left(inputs, yen, body, atThe("> w.value", yen, inputs, body)));
-        assertEquals(List.of("t/0 <= x <= 0", "t/0 < x"), classesAt(inputs, yen, body, "t"));
+        assertEquals(List.of("t: 0 <= x <= 0", "t: 0 < x"), classesAt(inputs, yen, body, "t"));
         String twice = "if w.value > 2 * t.value then false else t.value > w.value";
         assertEquals(Map.of("t", NOT_SHOWN, "w", NOT_SHOWN),
                 left(inputs, yen, twice, atThe("> w.value", yen, inputs, twice)));
@@ -3476,7 +3476,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String kept = "if w.value < t.value then false else w.value > t.value";
         assertEquals(Map.of(), left("t: Yen, w: Small", small, kept,
                 atThe("> t.value", small, "t: Yen, w: Small", kept)));
-        assertEquals(List.of("t/0 <= x <= 0", "t/0 < x < 10", "t/10 <= x < 11", "t/11 <= x"),
+        assertEquals(List.of("t: 0 <= x <= 0", "t: 0 < x < 10", "t: 10 <= x < 11", "t: 11 <= x"),
                 classesAt("t: Yen, w: Small", small, kept, "t"));
     }
 
@@ -3539,7 +3539,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         // the sum written over Int shows them.
         assertEquals(Map.of("a", RELATES, "b", RELATES),
                 leftIn(named, whereWritten(named, ">= c")));
-        assertEquals(List.of("c/0 <= x <= 0", "c/0 < x"), classesIn(named, "c"));
+        assertEquals(List.of("c: 0 <= x <= 0", "c: 0 < x"), classesIn(named, "c"));
         assertEquals(Set.of(), notReadIn(named, whereWritten(named, ">= c")));
 
         String writtenOut = named.replace("let g = a + b\n    guard g >= c",
@@ -3597,7 +3597,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 "guard (a + b).value >= d.value else Exceeds")) {
             String source = CONSTRUCTED_ABOVE.formatted("", "Yen", body);
             assertEquals(related, leftIn(source, whereWritten(source, ">= d.value")), body);
-            assertEquals(List.of("d/0 <= x <= 0", "d/0 < x"), classesIn(source, "d"), body);
+            assertEquals(List.of("d: 0 <= x <= 0", "d: 0 < x"), classesIn(source, "d"), body);
         }
     }
 
@@ -3839,12 +3839,12 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String inputs = "a: Unit, s: Unit";
         String over = "a.value * 3.0m >= s.value";
         assertEquals(Map.of(), left(inputs, UNIT, over, atThe(">=", UNIT, inputs, over)));
-        assertEquals(List.of("a/0 <= x and 3 * x <= 1", "a/1 < 3 * x and x <= 1"),
+        assertEquals(List.of("a: 0 <= x and 3 * x <= 1", "a: 1 < 3 * x and x <= 1"),
                 classesAt(inputs, UNIT, over, "a"));
         String under = "a.value >= s.value * 3.0m";
         assertEquals(Map.of("a", RELATES),
                 left(inputs, UNIT, under, atThe(">=", UNIT, inputs, under)));
-        assertEquals(List.of("s/0 <= x <= 0", "s/0 < x and 3 * x <= 1", "s/1 < 3 * x and x <= 1"),
+        assertEquals(List.of("s: 0 <= x <= 0", "s: 0 < x and 3 * x <= 1", "s: 1 < 3 * x and x <= 1"),
                 classesAt(inputs, UNIT, under, "s"));
     }
 
@@ -3862,7 +3862,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 "(h.value * 4.0m) * 1.0m >= s.value", "h.value * 4.0m + 0.0m >= s.value")) {
             assertEquals(Map.of(), left(inputs, HOURS, known, atThe(">=", HOURS, inputs, known)),
                     known);
-            assertEquals(List.of("h/0 <= x < 42", "h/42 <= x <= 168"),
+            assertEquals(List.of("h: 0 <= x < 42", "h: 42 <= x <= 168"),
                     classesAt(inputs, HOURS, known, "h"), known);
         }
         String unknown = "h.value * Decimal.round(1, HALF_UP, 4.00m) >= s.value";
@@ -3980,7 +3980,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         // The sum reads only the amount put beside the one asked of, so rows past five are
         // computed whichever amount they stand at, and the row built at the end the run has shows
         // both sides of the boundary at five.
-        assertEquals(List.of("a/0 <= x < 5", "a/5 <= x"),
+        assertEquals(List.of("a: 0 <= x < 5", "a: 5 <= x"),
                 classesAt("a: Amount, s: Amount", amount, body, "a"));
     }
 

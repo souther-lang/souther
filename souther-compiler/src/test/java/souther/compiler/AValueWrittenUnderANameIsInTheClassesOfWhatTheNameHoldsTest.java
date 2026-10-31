@@ -104,7 +104,7 @@ class AValueWrittenUnderANameIsInTheClassesOfWhatTheNameHoldsTest {
         PartitionEvidence.AxisCoverage.Reached reached = at.reached().made().orElseThrow();
         assertEquals(0, reached.unclassifiedRows(),
                 "a row whose value the classes were drawn over was read for it");
-        assertTrue(reached.covered().contains("t/String.startsWith(\"w-\", x)"),
+        assertTrue(reached.covered().contains("t: String.startsWith(\"w-\", x)"),
                 () -> "the class the row's string is in, among " + at.classes()
                         + ", reached " + reached.covered());
     }
@@ -113,8 +113,8 @@ class AValueWrittenUnderANameIsInTheClassesOfWhatTheNameHoldsTest {
     @Test
     void theClassesAreTheSidesTheBodyDrew() {
         assertEquals(
-                java.util.List.of("t/String.startsWith(\"w-\", x)",
-                        "t/not String.startsWith(\"w-\", x)"),
+                java.util.List.of("t: String.startsWith(\"w-\", x)",
+                        "t: not String.startsWith(\"w-\", x)"),
                 axis(UNDER_A_NAME, "t").classes());
     }
 
@@ -136,11 +136,11 @@ class AValueWrittenUnderANameIsInTheClassesOfWhatTheNameHoldsTest {
         PartitionEvidence.AxisCoverage at = axis(IN_A_RECORD, "t.value");
 
         assertEquals(
-                java.util.List.of("t.value/String.startsWith(\"w-\", x)",
-                        "t.value/not String.startsWith(\"w-\", x)"),
+                java.util.List.of("t.value: String.startsWith(\"w-\", x)",
+                        "t.value: not String.startsWith(\"w-\", x)"),
                 at.classes());
         assertTrue(at.reached().made().orElseThrow().covered()
-                        .contains("t.value/String.startsWith(\"w-\", x)"),
+                        .contains("t.value: String.startsWith(\"w-\", x)"),
                 "the row is placed at the field the classes are of");
     }
 }

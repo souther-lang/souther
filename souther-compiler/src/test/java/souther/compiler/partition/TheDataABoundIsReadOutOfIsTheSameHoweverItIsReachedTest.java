@@ -377,7 +377,7 @@ class TheDataABoundIsReadOutOfIsTheSameHoweverItIsReachedTest {
         // The region the wrong bound opens is a gap no row of the first limit closes, and the
         // point at it is answered at one reading of the line and not at the one where the second
         // limit is chosen.
-        assertTrue(report.contains("! no row is in `a.v/1000 <= x` at a.v"), report);
+        assertTrue(report.contains("! no row is in `a.v: 1000 <= x` at a.v"), report);
         assertTrue(report.contains("is answered, and not at every reading of the line"), report);
     }
 

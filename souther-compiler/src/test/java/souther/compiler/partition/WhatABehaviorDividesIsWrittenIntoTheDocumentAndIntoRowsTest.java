@@ -64,8 +64,8 @@ class WhatABehaviorDividesIsWrittenIntoTheDocumentAndIntoRowsTest {
         List<String> classes = new ArrayList<>();
         axes.forEach(axis -> axis.get("classes").forEach(each -> classes.add(each.asString())));
         assertEquals(List.of(
-                        "code/String.startsWith(\"JP\", x)",
-                        "code/not String.startsWith(\"JP\", x)"),
+                        "code: String.startsWith(\"JP\", x)",
+                        "code: not String.startsWith(\"JP\", x)"),
                 classes,
                 "a person is told which strings this behavior tells apart");
     }

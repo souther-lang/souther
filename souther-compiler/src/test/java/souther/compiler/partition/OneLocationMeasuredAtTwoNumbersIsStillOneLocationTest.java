@@ -139,8 +139,10 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
     void twoClassesOfOneLocationAreAnsweredByOneValueStandingInBoth() {
         FillResult filled = filled(TWO_NUMBERS);
 
-        assertEquals(List.of("slot.at=0 <= x < 9", "slot.at=9 <= x <= 23",
-                        "slot.at=0 <= x < 30", "slot.at=30 <= x <= 59"),
+        assertEquals(List.of("Time.hour(slot.at): 0 <= x < 9 at Time.hour(slot.at)",
+                        "Time.hour(slot.at): 9 <= x <= 23 at Time.hour(slot.at)",
+                        "Time.minute(slot.at): 0 <= x < 30 at Time.minute(slot.at)",
+                        "Time.minute(slot.at): 30 <= x <= 59 at Time.minute(slot.at)"),
                 filled.rows().stream().flatMap(row -> row.purposes().stream())
                         .flatMap(purpose -> purpose.labels().stream()).toList(),
                 "every class of both numbers is answered by a row");

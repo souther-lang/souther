@@ -80,7 +80,7 @@ class CompileAdequacyShapesTest {
         List<BorderAssessment> lines = lines(compilation, "classify");
 
         assertEquals(1, evidence.axes().size());
-        assertEquals(List.of("rate/x < 0.5", "rate/0.5 <= x"), evidence.axes().get(0).classes());
+        assertEquals(List.of("rate: x < 0.5", "rate: 0.5 <= x"), evidence.axes().get(0).classes());
         assertEquals(List.of("0.5"),
                 lines.stream().map(BorderAssessment::value).toList());
         // A `Decimal` names no value one step over, so the border owes its own point and says why
@@ -252,7 +252,7 @@ class CompileAdequacyShapesTest {
                 .map(BorderAssessment::value).filter(v -> v.equals("0")).toList();
         assertEquals(2, at.size(), "one line, and two rules that drew it there");
         assertFalse(evidence.axes().isEmpty());
-        assertEquals(List.of("rate/0 <= x <= 0", "rate/0 < x"), evidence.axes().get(0).classes(),
+        assertEquals(List.of("rate: 0 <= x <= 0", "rate: 0 < x"), evidence.axes().get(0).classes(),
                 "two ranges over one line — not three, with two of them holding zero");
     }
 }

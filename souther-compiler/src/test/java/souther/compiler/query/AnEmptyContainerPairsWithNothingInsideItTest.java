@@ -92,7 +92,7 @@ class AnEmptyContainerPairsWithNothingInsideItTest {
                 String named = length.classes().get(count).id() + " with "
                         + quantity.classes().get(held).id();
                 boolean empty = length.classes().get(count).id()
-                        .equals("List.length(c.items)/0 <= x <= 0");
+                        .equals("List.length(c.items): 0 <= x <= 0");
                 assertEquals(!empty, countFirst.canHoldTogether(0, count, 1, held), named);
                 assertEquals(!empty, countSecond.canHoldTogether(0, held, 1, count), named);
                 assertEquals(!empty, countSecond.canHoldTogether(1, count, 0, held), named);

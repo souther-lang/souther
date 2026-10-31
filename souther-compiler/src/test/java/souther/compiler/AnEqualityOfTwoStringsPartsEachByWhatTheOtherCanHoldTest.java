@@ -260,8 +260,8 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                 THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK);
 
         Map<String, List<String>> parted = Map.of("book[*].domain@Some", List.of(
-                "book[*].domain@Some/x can be piece 1 of email",
-                "book[*].domain@Some/x is never piece 1 of email"));
+                "book[*].domain@Some: x can be piece 1 of email",
+                "book[*].domain@Some: x is never piece 1 of email"));
         assertEquals(parted,
                 classesAtOf("book[*].domain@Some", ANY_EMAIL, domains,
                         THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
@@ -295,7 +295,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
         assertEquals(List.of(new BlockReason.RelationShownOverARegion(true, null, List.of())),
                 leftOpenAt(evidence, "book[*].domain@Some"));
         assertEquals(Map.of("book[*].domain@Some",
-                        List.of("book[*].domain@Some/x is never piece 300000000 of email")),
+                        List.of("book[*].domain@Some: x is never piece 300000000 of email")),
                 classesAtOf("book[*].domain@Some", "[a-z@]+", "[a-z0-9]+(\\\\.[a-z0-9]+)*",
                         lets));
     }
@@ -351,8 +351,8 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
     }
 
     private static final Map<String, List<String>> THE_EMAILS_WHOSE_SECOND_PIECE_CAN_BE_A_DOMAIN =
-            Map.of("email", List.of("email/x can be book[*].domain@Some",
-                    "email/x is never book[*].domain@Some"));
+            Map.of("email", List.of("email: x can be book[*].domain@Some",
+                    "email: x is never book[*].domain@Some"));
 
     /**
      * The piece a lookup at an index written down picks of the pieces of a string is one value,
@@ -384,8 +384,8 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
     @Test
     void theDomainsThatAreTheSecondPieceOfSomeEmailAreAClassOfTheOtherSide() {
         assertEquals(Map.of("book[*].domain@Some", List.of(
-                        "book[*].domain@Some/x can be piece 1 of email",
-                        "book[*].domain@Some/x is never piece 1 of email")),
+                        "book[*].domain@Some: x can be piece 1 of email",
+                        "book[*].domain@Some: x is never piece 1 of email")),
                 classesAtOf("book[*].domain@Some", "[a-z]+@(a|b)\\\\.example",
                         "[a-z0-9]{1,63}(\\\\.[a-z0-9]{1,63}){1,3}",
                         THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
@@ -405,7 +405,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                 THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK);
 
         assertEquals(Map.of("book[*].domain@Some",
-                        List.of("book[*].domain@Some/x can be piece 1 of email")),
+                        List.of("book[*].domain@Some: x can be piece 1 of email")),
                 classesAtOf("book[*].domain@Some", emails, "[^@\\\\s]+",
                         THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
         assertEquals(List.of(new BlockReason.RelationShownOverARegion(true,
@@ -428,7 +428,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
     @Test
     void aPieceOnlyOfAStringNotHeldAsWrittenIsLeftOpen() {
         assertEquals(Map.of("book[*].domain@Some",
-                        List.of("book[*].domain@Some/x is never piece 1 of email")),
+                        List.of("book[*].domain@Some: x is never piece 1 of email")),
                 classesAtOf("book[*].domain@Some", "a@a|e\\\\u0301@b", "b|c",
                         THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
         assertEquals(List.of(new BlockReason.RelationShownOverARegion(true, null, List.of())),
@@ -451,8 +451,8 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
     @Test
     void aDomainWithNoBoundOnItsLengthIsPartedByTheShortDomainsTheEmailsHold() {
         assertEquals(Map.of("book[*].domain@Some", List.of(
-                        "book[*].domain@Some/x can be piece 1 of email",
-                        "book[*].domain@Some/x is never piece 1 of email")),
+                        "book[*].domain@Some: x can be piece 1 of email",
+                        "book[*].domain@Some: x is never piece 1 of email")),
                 classesAtOf("book[*].domain@Some", "[a-z]+@(a|b)\\\\.example",
                         "[a-z0-9]+(\\\\.[a-z0-9]+)+", THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
         assertEquals(List.of(), leftOpenAt(evidenceOf("[a-z]+@(a|b)\\\\.example",
@@ -513,7 +513,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
     /** A guard on a number beside the two says nothing of their strings. */
     @Test
     void aGuardOnAnotherPositionLeavesTheStringsPartedAsTheyWere() {
-        assertEquals(Map.of("b", List.of("b/x can be a", "b/x is never a")),
+        assertEquals(Map.of("b", List.of("b: x can be a", "b: x is never a")),
                 classesOfTheStringsBehind("guard n >= 1 else false"));
     }
 
@@ -524,29 +524,29 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
      */
     @Test
     void aGuardOnTheLengthOfTheStringItselfLeavesTheEqualityPartedByTheLengthsItReaches() {
-        assertEquals(Map.of("a", List.of("a/x can be b", "a/x is never b"),
-                        "b", List.of("b/x can be a", "b/x is never a")),
+        assertEquals(Map.of("a", List.of("a: x can be b", "a: x is never b"),
+                        "b", List.of("b: x can be a", "b: x is never a")),
                 classesOfTheStringsBehind("guard String.length(b.value) >= 2 else false"));
     }
 
     /** The strings of {@code b} that {@code a} cannot hold are a class of {@code b}'s own. */
     @Test
     void theStringsThePartnerCannotHoldAreAClassOfTheOther() {
-        assertEquals(Map.of("b", List.of("b/x can be a", "b/x is never a")),
+        assertEquals(Map.of("b", List.of("b: x can be a", "b: x is never a")),
                 classesOf(LETTERS, LETTERS_AND_DIGITS, "a.value == b.value"));
     }
 
     /** It is the wider side that is parted: the narrower one's strings are all the other's. */
     @Test
     void itIsTheWiderSideThatIsParted() {
-        assertEquals(Map.of("a", List.of("a/x can be b", "a/x is never b")),
+        assertEquals(Map.of("a", List.of("a: x can be b", "a: x is never b")),
                 classesOf(LETTERS_AND_DIGITS, LETTERS, "a.value == b.value"));
     }
 
     @Test
     void twoLanguagesThatOverlapPartEachOther() {
-        assertEquals(Map.of("a", List.of("a/x can be b", "a/x is never b"),
-                        "b", List.of("b/x can be a", "b/x is never a")),
+        assertEquals(Map.of("a", List.of("a: x can be b", "a: x is never b"),
+                        "b", List.of("b: x can be a", "b: x is never a")),
                 classesOf("[a-c]+", "[b-d]+", "a.value == b.value"));
     }
 

@@ -126,7 +126,7 @@ class ABodyThatBindsItsInputBeforeComparingItComparesItsInputTest {
     void theFieldSpellingDividesThePositionTheBodyCompares() {
         PartitionEvidence read = measured().get("throughTheField");
 
-        assertEquals(List.of("temp: [temp/x < 240, temp/240 <= x < 260, temp/260 <= x]"),
+        assertEquals(List.of("temp: [temp: x < 240, temp: 240 <= x < 260, temp: 260 <= x]"),
                 classesOf(read));
         assertEquals(List.of("temp = 239 ON", "temp = 240 OFF",
                         "temp = 259 ON", "temp = 260 OFF"),

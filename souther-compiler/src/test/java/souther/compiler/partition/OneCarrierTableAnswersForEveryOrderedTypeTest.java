@@ -465,26 +465,27 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         assertFalse(moment.contains("2026-08-01T00:00:01 < x < 2026-08-01T00:00:02"),
                 "nothing lies strictly between two adjacent moments, so the two rules part them"
                         + " in one place and there is no class between: " + moment);
-        assertTrue(classesOffered(moment).contains("x=x <= 2026-08-01T00:00:01"), moment);
-        assertTrue(classesOffered(moment).contains("x=2026-08-01T00:00:01 < x"),
+        assertTrue(classesOffered(moment).contains("x: x <= 2026-08-01T00:00:01 at x"), moment);
+        assertTrue(classesOffered(moment).contains("x: 2026-08-01T00:00:01 < x at x"),
                 "and the position has the two classes either side of that one line: " + moment);
     }
 
     /**
-     * The classes a block offers a row for, as a row's name or over it. A class is said as the
-     * position and its label joined by {@code =}, which no rule, combination or point is.
+     * The classes a block offers a row for, as a row's name or over it. A class is said as its id
+     * and the position it is at joined by {@code at}, which no rule, combination or point ends
+     * with.
      */
     private static List<String> classesOffered(String block) {
         List<String> out = new ArrayList<>();
         for (RowsOfABlock.Row row : RowsOfABlock.of(block)) {
             row.name().ifPresent(out::add);
-            row.fills().stream().filter(said -> A_CLASS.matcher(said).lookingAt())
+            row.fills().stream().filter(said -> A_CLASS.matcher(said).matches())
                     .forEach(out::add);
         }
         return out;
     }
 
-    private static final Pattern A_CLASS = Pattern.compile("[^\\s=]+=");
+    private static final Pattern A_CLASS = Pattern.compile(".+ at \\S+");
 
     /** The row offered for {@code label}, as it is written. */
     private static String rowFor(String block, String label) {
@@ -516,12 +517,12 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
 
         String dense = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.matrix", "singledDense", SourceRendering.namedByIdentity(compilation.texts())).text();
-        assertTrue(rowFor(dense, "x=/= 0, 1").contains("(TwoDecimals(0.5m)"),
+        assertTrue(rowFor(dense, "x: /= 0, 1 at x").contains("(TwoDecimals(0.5m)"),
                 "a decimal lies between the two singled out: " + dense);
 
         String moment = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.matrix", "singledMoment", SourceRendering.namedByIdentity(compilation.texts())).text();
-        assertFalse(moment.contains("=/= 2026-08-01T00:00:00, 2026-08-01T00:00:01"),
+        assertFalse(moment.contains(": /= 2026-08-01T00:00:00, 2026-08-01T00:00:01"),
                 "the position holds nothing but the two singled out, so nothing is left to be"
                         + " a class: " + moment);
     }

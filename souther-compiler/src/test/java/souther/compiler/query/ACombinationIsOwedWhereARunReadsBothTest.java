@@ -84,7 +84,7 @@ class ACombinationIsOwedWhereARunReadsBothTest {
 
         assertInstanceOf(CombinationCriterion.PairFallback.class, charge.criterion(),
                 "the decisions meet nowhere, so the combinations of the positions are the measure");
-        assertEquals(Set.of("Metered × usage/0 <= x <= 100", "Metered × usage/100 < x"),
+        assertEquals(Set.of("Metered × usage: 0 <= x <= 100", "Metered × usage: 100 < x"),
                 charge.owed(), "only Metered asks the usage, so only Metered is paired with it");
         assertEquals(List.of(), charge.left(), "the Metered rows reach both");
         assertEquals(List.of(), charge.pairGaps(), "and a strict build has nothing to refuse");
@@ -121,7 +121,7 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                     | (Metered, Usage(101)) -> Fee(0)
                 """, "charge");
 
-        assertEquals(Set.of("Flat × usage/0 <= x <= 100", "Metered × usage/0 <= x <= 100"),
+        assertEquals(Set.of("Flat × usage: 0 <= x <= 100", "Metered × usage: 0 <= x <= 100"),
                 handed.owed(), "the plan is read where its answer is used, under the usage's line");
     }
 
@@ -143,7 +143,7 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                     | (In { a = 0, b = 0 }) -> Out(0)
                 """, "both");
 
-        assertEquals(Set.of("i.a/5 < x × i.b/x <= 10", "i.a/5 < x × i.b/10 < x"), both.owed(),
+        assertEquals(Set.of("i.a: 5 < x × i.b: x <= 10", "i.a: 5 < x × i.b: 10 < x"), both.owed(),
                 "a run whose left came out false never asks the right anything");
     }
 
@@ -179,8 +179,8 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                 """, "both");
 
         assertEquals(Set.of(
-                        "o.left@Small.amount/0 <= x <= 5 × o.right@Small.amount/0 <= x <= 5",
-                        "o.left@Small.amount/0 <= x <= 5 × o.right@Small.amount/5 < x <= 10"),
+                        "o.left@Small.amount: 0 <= x <= 5 × o.right@Small.amount: 0 <= x <= 5",
+                        "o.left@Small.amount: 0 <= x <= 5 × o.right@Small.amount: 5 < x <= 10"),
                 sums.owed(), "the right is asked only under a left at or below the line");
     }
 
@@ -216,8 +216,8 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                     | (Flat, Usage(60)) -> Fee(1000)
                 """, "charge");
 
-        assertEquals(Set.of("Flat × usage/0 <= x <= 100", "Flat × usage/100 < x",
-                        "Metered × usage/0 <= x <= 100", "Metered × usage/100 < x"),
+        assertEquals(Set.of("Flat × usage: 0 <= x <= 100", "Flat × usage: 100 < x",
+                        "Metered × usage: 0 <= x <= 100", "Metered × usage: 100 < x"),
                 attempted.owed(), "what the reading could not say is no proof of reading apart");
     }
 
@@ -259,8 +259,8 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                     | (Flat, Usage(0)) -> Fee(1000)
                 """, "charge");
 
-        assertEquals(Set.of("Flat × usage/0 <= x <= 100", "Flat × usage/100 < x",
-                        "Metered × usage/0 <= x <= 100", "Metered × usage/100 < x"),
+        assertEquals(Set.of("Flat × usage: 0 <= x <= 100", "Flat × usage: 100 < x",
+                        "Metered × usage: 0 <= x <= 100", "Metered × usage: 100 < x"),
                 tier.owed(), "which position the tier is decided on was not read");
     }
 
@@ -295,8 +295,8 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                     | (In { plan = Flat, a = 2, b = 2, c = 2, d = 2, e = 2, usage = 0 }) -> Fee(1000)
                 """, "charge");
 
-        assertEquals(Set.of("Flat × i.usage/x <= 100", "Flat × i.usage/100 < x",
-                        "Metered × i.usage/x <= 100", "Metered × i.usage/100 < x"),
+        assertEquals(Set.of("Flat × i.usage: x <= 100", "Flat × i.usage: 100 < x",
+                        "Metered × i.usage: x <= 100", "Metered × i.usage: 100 < x"),
                 many.owedBetween("i.plan", "i.usage"),
                 "which ways the answer was settled by was not read, so nothing is read apart");
     }
@@ -337,11 +337,11 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                     | (In { plan = Flat, a = 2, b = 2, c = 2, usage = 0 }) -> Fee(1000)
                 """, "charge");
 
-        assertEquals(Set.of("Flat × i.usage/x <= 100", "Flat × i.usage/= 500",
-                        "Flat × i.usage/1000 < x",
-                        "Metered × i.usage/x <= 100", "Metered × i.usage/= 500",
-                        "Metered × i.usage/100 < x <= 1000 and x /= 500",
-                        "Metered × i.usage/1000 < x"),
+        assertEquals(Set.of("Flat × i.usage: x <= 100", "Flat × i.usage: = 500",
+                        "Flat × i.usage: 1000 < x",
+                        "Metered × i.usage: x <= 100", "Metered × i.usage: = 500",
+                        "Metered × i.usage: 100 < x <= 1000 and x /= 500",
+                        "Metered × i.usage: 1000 < x"),
                 fork.owedBetween("i.plan", "i.usage"),
                 "the ways into the first arm were read without the plan above them, and the"
                         + " other arm with it");
@@ -376,10 +376,10 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                 """, "few");
 
         assertEquals(Set.of(
-                        "List.length(c.items)/0 <= x <= 1 × c.items[*].quantity/x < 1",
-                        "List.length(c.items)/0 <= x <= 1 × c.items[*].quantity/1 <= x",
-                        "List.length(c.items)/1 < x × c.items[*].quantity/x < 1",
-                        "List.length(c.items)/1 < x × c.items[*].quantity/1 <= x"),
+                        "List.length(c.items): 0 <= x <= 1 × c.items[*].quantity: x < 1",
+                        "List.length(c.items): 0 <= x <= 1 × c.items[*].quantity: 1 <= x",
+                        "List.length(c.items): 1 < x × c.items[*].quantity: x < 1",
+                        "List.length(c.items): 1 < x × c.items[*].quantity: 1 <= x"),
                 few.owed(), "a list longer than one is sent away before the predicate on any run"
                         + " the ways show, and the predicate is read on none of them");
     }
@@ -478,7 +478,7 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                     | (Flat, Usage(0)) -> Fee(300)
                 """, "charge");
 
-        assertEquals(Set.of("Flat × usage/0 <= x <= 100", "Flat × usage/100 < x"),
+        assertEquals(Set.of("Flat × usage: 0 <= x <= 100", "Flat × usage: 100 < x"),
                 helper.owed(), "only Flat hands the usage to the helpers");
     }
 
@@ -543,10 +543,10 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                 """, "both");
 
         assertEquals(Set.of(
-                        "o.kind@Small.amount/0 <= x <= 5 × o.n/x <= 50",
-                        "o.kind@Small.amount/0 <= x <= 5 × o.n/50 < x",
-                        "o.kind@Small.amount/5 < x <= 10 × o.n/x <= 50",
-                        "o.kind@Small.amount/5 < x <= 10 × o.n/50 < x"),
+                        "o.kind@Small.amount: 0 <= x <= 5 × o.n: x <= 50",
+                        "o.kind@Small.amount: 0 <= x <= 5 × o.n: 50 < x",
+                        "o.kind@Small.amount: 5 < x <= 10 × o.n: x <= 50",
+                        "o.kind@Small.amount: 5 < x <= 10 × o.n: 50 < x"),
                 cases.owedBetween("o.kind@Small.amount", "o.n"),
                 "a decision past the construction may read either, whichever side of the line");
     }
@@ -1253,12 +1253,12 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                     | (In { a = 2, b = 2, c = 2, usage = 0 }, [Call { dest = Premium }]) -> Fee(1000)
                 """, "total");
 
-        assertEquals(Set.of("i.usage/x <= 100 × Normal", "i.usage/= 500 × Normal",
-                        "i.usage/100 < x <= 1000 and x /= 500 × Normal",
-                        "i.usage/1000 < x × Normal",
-                        "i.usage/x <= 100 × Premium", "i.usage/= 500 × Premium",
-                        "i.usage/100 < x <= 1000 and x /= 500 × Premium",
-                        "i.usage/1000 < x × Premium"),
+        assertEquals(Set.of("i.usage: x <= 100 × Normal", "i.usage: = 500 × Normal",
+                        "i.usage: 100 < x <= 1000 and x /= 500 × Normal",
+                        "i.usage: 1000 < x × Normal",
+                        "i.usage: x <= 100 × Premium", "i.usage: = 500 × Premium",
+                        "i.usage: 100 < x <= 1000 and x /= 500 × Premium",
+                        "i.usage: 1000 < x × Premium"),
                 fork.owedBetween("i.usage", "calls[*].dest"),
                 "the ways into the usage's arm were read without the destination above them");
         // And by the usage's rules, which no decision on a way read whole reads: the ways to them

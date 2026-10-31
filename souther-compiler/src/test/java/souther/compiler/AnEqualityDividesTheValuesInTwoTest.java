@@ -219,7 +219,32 @@ class AnEqualityDividesTheValuesInTwoTest {
         assertTrue(block.contains("example pick"), block);
     }
 
+    /**
+     * The class of the value singled out is told apart from the class of every other value by what
+     * follows the colon, and the report and the row generated for it call it the same thing.
+     *
+     * <p>{@code /=} is the not-equal operator, so a name that ran the separator into it read as the
+     * opposite of the class it named.
+     */
+    @Test
+    void theClassOfTheValueIsNamedTheSameInTheReportAndInTheRowGenerated() {
+        String model = writtenAs("==") + "    | \"other\" : (5) -> Again\n";
+
+        String human = reportOf(model);
+        String block = generatedFor(model, "example.equal");
+
+        assertTrue(human.contains("no row is in `retries: = 3` at retries"), human);
+        assertTrue(block.contains("// fills retries: = 3 at retries"), block);
+        assertFalse(human.contains("retries/="), human);
+        assertFalse(block.contains("retries/="), block);
+        assertFalse(human.contains("retries=/="), human);
+    }
+
     private static String generatedFor(String source) {
+        return generatedFor(source, "example.ratio");
+    }
+
+    private static String generatedFor(String source, String module) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -227,7 +252,7 @@ class AnEqualityDividesTheValuesInTwoTest {
         assertNotNull(all, "the model under test compiles");
         return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         souther.compiler.query.OfferingRequest.overTheModule(
-                                "example.ratio")),
+                                module)),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
     }
 

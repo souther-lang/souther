@@ -69,13 +69,13 @@ class ARowsElementsNeedNotFallTogetherTest {
                 elementAxis("[ Person { age = 20 } ]", "1");
 
         assertEquals("people[*].age", axis.path());
-        assertEquals(List.of("people[*].age/x < 18", "people[*].age/18 <= x"), axis.classes());
+        assertEquals(List.of("people[*].age: x < 18", "people[*].age: 18 <= x"), axis.classes());
     }
 
     /** One element, one class. */
     @Test
     void aListOfOneCoversTheClassItsElementIsIn() {
-        assertEquals(Set.of("people[*].age/18 <= x"),
+        assertEquals(Set.of("people[*].age: 18 <= x"),
                 WhatTheRowsReached.at(elementAxis("[ Person { age = 20 } ]", "1")).covered());
     }
 
@@ -90,7 +90,7 @@ class ARowsElementsNeedNotFallTogetherTest {
         PartitionEvidence.AxisCoverage axis =
                 elementAxis("[ Person { age = 20 }, Person { age = 10 } ]", "1");
 
-        assertEquals(Set.of("people[*].age/18 <= x", "people[*].age/x < 18"),
+        assertEquals(Set.of("people[*].age: 18 <= x", "people[*].age: x < 18"),
                 WhatTheRowsReached.at(axis).covered());
         assertEquals(0, WhatTheRowsReached.at(axis).unclassifiedRows(),
                 "and the row said where it was, at every element it wrote");

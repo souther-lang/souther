@@ -196,7 +196,7 @@ class AnOperationOnTheWayTyingAStringsLengthToANumberPartsTheStringsAtTheLengths
         PartitionEvidence control = evidenceOf(measured(
                 NUMBER.formatted(NOTHING_HELD, "n.value > 0")));
 
-        assertEquals(List.of("b/x can be a", "b/x is never a"),
+        assertEquals(List.of("b: x can be a", "b: x is never a"),
                 classesOf(tied, "b").get("b"));
         assertEquals(classesOf(control, "a", "b"), classesOf(tied, "a", "b"));
         assertEquals(List.of(), stringsNotShownToReachEveryValue(tied));
@@ -216,8 +216,8 @@ class AnOperationOnTheWayTyingAStringsLengthToANumberPartsTheStringsAtTheLengths
 
         assertEquals(List.of(), stringsNotShownToReachEveryValue(evidence));
         assertEquals(List.of("b"), shownOverARegion(evidence));
-        assertEquals(List.of("a/x can be b", "a/x is never b"), classesOf(evidence, "a").get("a"));
-        assertEquals(List.of("b/x can be a", "b/x is never a"), classesOf(evidence, "b").get("b"));
+        assertEquals(List.of("a: x can be b", "a: x is never b"), classesOf(evidence, "a").get("a"));
+        assertEquals(List.of("b: x can be a", "b: x is never a"), classesOf(evidence, "b").get("b"));
         assertTrue(Pattern.compile("\"longerThan\"\\s*:\\s*2\\b").matcher(json(compilation)).find(),
                 json(compilation));
     }
@@ -345,7 +345,7 @@ class AnOperationOnTheWayTyingAStringsLengthToANumberPartsTheStringsAtTheLengths
         three.axes().forEach(axis -> sayings.addAll(axis.classes()));
         assertTrue(sayings.stream().noneMatch(saying ->
                 saying.contains(" can be ") || saying.contains(" is never ")), sayings.toString());
-        assertEquals(List.of("a/x can be b", "a/x is never b"),
+        assertEquals(List.of("a: x can be b", "a: x is never b"),
                 classesOf(orTwo, "a").get("a"));
         assertEquals(List.of(), stringsNotShownToReachEveryValue(orTwo));
     }

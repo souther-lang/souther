@@ -176,7 +176,7 @@ class WhatWasTriedIsNotEverythingWhereARuleComposedNothingTest {
         // number, and naming the rule and going quiet about the figure hides that the search
         // stopped. The line for `t.flag` is the one whose search met both.
         String both = block.lines()
-                .filter(each -> each.contains("no row for `t.flag=Yes`"))
+                .filter(each -> each.contains("no row for `Yes at t.flag`"))
                 .findFirst().orElseThrow(() -> new AssertionError(block));
 
         assertTrue(both.contains("nothing here could build a representative for it"),

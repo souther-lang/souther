@@ -62,11 +62,11 @@ class AClassOffersAValueTheDeclarationsAdmitTest {
     void theClassAwayFromASingledStringIsOfferedARowThatBuilds() {
         String rows = rowsFor(AT_LEAST_ONE);
 
-        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(row -> row.isFor("voucher=/= spring")),
+        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(row -> row.isFor("voucher: /= spring at voucher")),
                 () -> "the class away from the singled value is offered a row:\n" + rows);
         // The note is what a class offered a value the declarations refuse comes to: the row is
         // composed, the construction fails, and a reader is told the combination was not reached.
-        assertFalse(rows.contains("no row for `voucher=/= spring`"), () -> rows);
+        assertFalse(rows.contains("no row for `voucher: /= spring at voucher`"), () -> rows);
         assertFalse(rows.contains("Voucher(\"\")"),
                 () -> "nothing of no length is a voucher:\n" + rows);
     }

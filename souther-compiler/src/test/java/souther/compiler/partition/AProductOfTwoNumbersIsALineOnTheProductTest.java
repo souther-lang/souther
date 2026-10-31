@@ -51,8 +51,8 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         Compilation compilation = compiled("", PRICE_AND_QUANTITY, "price * quantity >= 1000");
         assertEquals(List.of("1000"), bordersOf(linesOf(compilation)));
         Map<String, List<String>> classes = classesOf(measured(compilation));
-        assertEquals(List.of("price/= 0", "price//= 0"), classes.get("price"), classes.toString());
-        assertEquals(List.of("quantity/= 0", "quantity//= 0"), classes.get("quantity"),
+        assertEquals(List.of("price: = 0", "price: /= 0"), classes.get("price"), classes.toString());
+        assertEquals(List.of("quantity: = 0", "quantity: /= 0"), classes.get("quantity"),
                 classes.toString());
     }
 
@@ -144,9 +144,9 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 """;
         Map<String, List<String>> classes = classesOf(measured(compiled(prelude,
                 "price: Price, quantity: Quantity", "price.value * quantity.value >= 1000")));
-        assertEquals(List.of("price/1 <= x < 1000", "price/1000 <= x <= 100000"),
+        assertEquals(List.of("price: 1 <= x < 1000", "price: 1000 <= x <= 100000"),
                 classes.get("price"), classes.toString());
-        assertEquals(List.of("quantity/1 <= x < 1000", "quantity/1000 <= x <= 100000"),
+        assertEquals(List.of("quantity: 1 <= x < 1000", "quantity: 1000 <= x <= 100000"),
                 classes.get("quantity"), classes.toString());
     }
 
@@ -891,7 +891,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         Compilation guard = compiled(plain, "p: Policy", "p.rate * p.cap >= 10");
         assertEquals(List.of("10"), bordersOf(linesOf(guard)));
         Map<String, List<String>> guarded = classesOf(measured(guard));
-        assertEquals(List.of("p.rate/= 0", "p.rate//= 0"), guarded.get("p.rate"),
+        assertEquals(List.of("p.rate: = 0", "p.rate: /= 0"), guarded.get("p.rate"),
                 guarded.toString());
     }
 

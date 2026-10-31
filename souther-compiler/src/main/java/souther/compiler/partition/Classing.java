@@ -700,7 +700,7 @@ final class Classing {
         // Which does tie the identity to the wording: a class renamed is a class nothing was
         // recorded at. That is the arrangement every other class in this measure is already under,
         // and one kind of class keeping its own would be a document that reads two ways.
-        String id = term + "/" + label;
+        String id = PartitionClass.idOf(term, label);
         Recognition is = new Recognition.OfASet(cell.values());
         // Over the whole of the order and away from nothing: what the cell holds is already what
         // the rules leave, met together where the cells were refined. An allowance of this class's

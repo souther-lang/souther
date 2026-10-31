@@ -83,7 +83,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
     void theReasonsAHelperBuiltAreReadAsWhatTheyWereKeptFor() {
         Compilation compilation = compiled(THE_REASONS_A_HELPER_BUILT);
         assertEquals(List.of(), measured(compilation).notRead(), "every rule is read");
-        assertEquals(List.of("[t.cost/x < 100, t.cost/100 <= x]", "[true, false]"),
+        assertEquals(List.of("[t.cost: x < 100, t.cost: 100 <= x]", "[true, false]"),
                 measured(compilation).axes().stream()
                         .map(axis -> String.valueOf(axis.classes())).toList());
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
@@ -342,7 +342,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
                 let pick (xs) =
                     if Set.size(Set.filter(x -> x > 0, Set.fromList(xs))) >= 2 then 1 else 0
                 """));
-        assertEquals(List.of("[xs[*]/x <= 0, xs[*]/0 < x]"), classesOf(counted),
+        assertEquals(List.of("[xs[*]: x <= 0, xs[*]: 0 < x]"), classesOf(counted),
                 "the closure's own line on each element, and none on how many meet it");
         assertTrue(notRead(counted).contains("xs RULE_ABOUT_A_DERIVED_VALUE"),
                 "how many different values meet it is not how many elements do");
@@ -403,7 +403,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
                 "List.take(n, List.filter(x -> x > 0, xs))")));
         assertEquals(List.of(), notRead(taken),
                 "taking none of what was kept is empty whatever was kept, and nothing else is");
-        assertEquals(List.of("[xs[*]/x <= 0, xs[*]/0 < x]", "[n/x < 1, n/1 <= x]"),
+        assertEquals(List.of("[xs[*]: x <= 0, xs[*]: 0 < x]", "[n: x < 1, n: 1 <= x]"),
                 classesOf(taken), "a line on n, beside the closure's on each element");
         String text = """
                 behavior pick : (s: String) -> Int
@@ -429,7 +429,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
             assertEquals(List.of(),
                     counted.notRead().stream().map(each -> each.at() + " " + each.reason())
                             .toList(), count);
-            assertEquals(List.of("[t.cost/x < 100, t.cost/100 <= x]", "[true, false]"),
+            assertEquals(List.of("[t.cost: x < 100, t.cost: 100 <= x]", "[true, false]"),
                     classesOf(counted), count);
         }
     }
