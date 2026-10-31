@@ -2048,6 +2048,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // region it answers holds the line taken out, which no run is, and beside another
         // statement there is no region of the rest to ask instead.
         TakenConstraint.Affine asStated = remainder == null ? askedAsAStatement() : null;
+        boolean inWholeSteps = carriers.stream()
+                .allMatch(each -> granularityOf(each) == Granularity.DISCRETE);
         boolean offItsLine = asStated != null && !written.isEmpty()
                 && written.stream().allMatch(each -> keepsOffTheLineOf(each, asStated));
         List<OnAWay> unfree = offItsLine ? List.of()
@@ -2077,7 +2079,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // are neither of them one, and a value is settled only over every value the others may
         // hold, which a tie among them cannot widen.
         List<TakenConstraint.Affine> met = offItsLine ? List.of()
-                : metByARowAtTheLine(unfree, past.narrowing());
+                : metByARowAtTheLine(unfree, past.narrowing(), inWholeSteps);
         WayRead beside = met.isEmpty() ? entire : wayRead(
                 unfree.stream().filter(each -> each.affine() == null
                         || !met.contains(each.affine())).toList(),
@@ -2092,7 +2094,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : null;
         // The rules of the declarations a row at this line needs nothing of leave the numbers they
         // relate as the way's own statements do: each is read over the run the region answers.
-        Roomy room = offItsLine ? Roomy.NONE : rulesLeavingRoomAroundTheLine(read);
+        Roomy room = offItsLine ? Roomy.NONE
+                : rulesLeavingRoomAroundTheLine(read, inWholeSteps);
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
                 termsAlong(read, withoutWhatARowAtTheLineNeeds(sources, room, read), carriers,
                         beside.along().withoutTheRelationOf(room.parts()),
@@ -4361,7 +4364,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * away no row there that the others could have supplied, and makes none the others could not.
      */
     private List<TakenConstraint.Affine> metByARowAtTheLine(List<OnAWay> conditions,
-                                                            List<TakenConstraint> narrowing) {
+                                                            List<TakenConstraint> narrowing,
+                                                            boolean inWholeSteps) {
         TakenConstraint.Affine asked = askedAsAStatement();
         if (asked == null) {
             return List.of();
@@ -4377,7 +4381,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 stated.add(affine);
             }
         }
-        return WhatStatementsOfOneFormDecide.leavingRoomAroundTheLine(stated, asked);
+        return WhatStatementsOfOneFormDecide.leavingRoomAroundTheLine(stated, asked,
+                inWholeSteps);
     }
 
     /**
@@ -4407,7 +4412,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * rule is applied at the one place of its parameter. A rule that fails one stays in the
      * reading and ties as it did.
      */
-    private Roomy rulesLeavingRoomAroundTheLine(InputReading read) {
+    private Roomy rulesLeavingRoomAroundTheLine(InputReading read, boolean inWholeSteps) {
         TakenConstraint.Affine asked = askedAsAStatement();
         if (asked == null) {
             return Roomy.NONE;
@@ -4420,7 +4425,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 for (Object node : reachedByTheDeclarations(place.path(), read).nodes().ties()) {
                     if (node instanceof TiedOnTheWay.Rule rule && rule.clause() >= 0
                             && !nodes.contains(rule)) {
-                        ClauseMeaning.Stated stated = leavingRoomAroundTheLine(rule, asked, read);
+                        ClauseMeaning.Stated stated = leavingRoomAroundTheLine(rule, asked, read,
+                                inWholeSteps);
                         if (stated != null) {
                             nodes.add(rule);
                             refs.computeIfAbsent(rule.at().head(), _ -> new LinkedHashSet<>())
@@ -4465,7 +4471,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *  null otherwise. */
     private static ClauseMeaning.Stated leavingRoomAroundTheLine(TiedOnTheWay.Rule rule,
                                                                  TakenConstraint.Affine asked,
-                                                                 InputReading read) {
+                                                                 InputReading read,
+                                                                 boolean inWholeSteps) {
         if (!(rule.worn() instanceof TypeSymbol.AtModule name)) {
             return null;
         }
@@ -4496,8 +4503,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             statements.add(new TakenConstraint.Affine(
                     new LinearForm<>(each.form().constant(), coefs), each.rel()));
         }
-        return WhatStatementsOfOneFormDecide.leavingRoomAroundTheLine(statements, asked).size()
-                == statements.size() ? stated : null;
+        return WhatStatementsOfOneFormDecide.leavingRoomAroundTheLine(statements, asked,
+                inWholeSteps).size() == statements.size() ? stated : null;
     }
 
     /** The relation as a statement is held, the sides weighed and added to the constant and held

@@ -97,10 +97,20 @@ final class WhatStatementsOfOneFormDecide {
      * way, as it is without the statements. A reading that moves two terms together moves the
      * form by more than the greatest weight, and the interval need not reach as far as that.
      *
+     * <p>Where every number of the form moves in whole steps and the form's weights and line are
+     * whole, the form takes whole values only, and a step of one term carries it from one side of
+     * the line to the other only between two values next to each other across it. {@code f < 50}
+     * flips between 49 and 50 and no row has to be at 51, so a statement that stops holding at
+     * 51 ({@code f <= 50}) still leaves such a row. The range is then the one the relation's
+     * flip needs: the greatest weight below the line to one short of it above, for a relation
+     * that holds below the line ({@code <}, {@code >=}), and the mirror for the others.
+     *
      * @param asked the relation asked as a statement
+     * @param inWholeSteps whether every number of the form moves in whole steps
      */
     static List<TakenConstraint.Affine> leavingRoomAroundTheLine(
-            List<TakenConstraint.Affine> stated, TakenConstraint.Affine asked) {
+            List<TakenConstraint.Affine> stated, TakenConstraint.Affine asked,
+            boolean inWholeSteps) {
         ExactRatio reach = asked.form().coefs().values().stream().map(ExactRatio::abs)
                 .max(ExactRatio::compareTo).orElse(null);
         if (reach == null) {
@@ -125,6 +135,17 @@ final class WhatStatementsOfOneFormDecide {
         ExactRatio above = line.plus(reach).orNull();
         if (bounds.isEmpty() || below == null || above == null) {
             return List.of();
+        }
+        if (inWholeSteps && line.isWhole() && asked.form().coefs().values().stream()
+                .allMatch(ExactRatio::isWhole)) {
+            switch (asked.rel()) {
+                case LT, GE -> above = above.minus(ExactRatio.ONE).orNull();
+                case LE, GT -> below = below.plus(ExactRatio.ONE).orNull();
+                case EQ, NE -> { }
+            }
+            if (below == null || above == null) {
+                return List.of();
+            }
         }
         for (Bound each : bounds) {
             if (!Boolean.TRUE.equals(each.holdsAt(below))
