@@ -126,23 +126,26 @@ public final class ExactArithmetic {
      * The one canonical form of the value a written decimal is: its unscaled value times two and five
      * to the negated scale, so the scale moves into the exponents and nothing is built.
      *
-     * <p>A decimal of eighteen digits or fewer holds its unscaled value as a long, and is read as one
-     * rather than through {@link BigDecimal#unscaledValue}, which makes a {@code BigInteger} of it every
-     * time it is asked.
+     * <p>A decimal whose unscaled value a long holds is read as one rather than through
+     * {@link BigDecimal#unscaledValue}, which makes a {@code BigInteger} of it every time it is asked.
+     * Whether a long holds it is asked by comparing with the least and the greatest long at a scale of
+     * nought, which reads the sizes of the two and counts no digits: a digit count of a large value is
+     * work that grows faster than the value does.
      */
     public static ExactParts canonical(BigDecimal written) {
         long exponent = -(long) written.scale();
-        if (written.precision() <= MOST_DIGITS_A_LONG_HOLDS) {
-            // Moved by its own scale, which leaves a scale of nought, so nothing is refused; and a
-            // whole number of that many digits is the long it narrows to.
-            long unscaled = written.scaleByPowerOfTen(written.scale()).longValue();
-            return canonical(new ExactParts(unscaled, 1, exponent, exponent));
+        // Moved by its own scale, which leaves a scale of nought, so nothing is refused and the
+        // unscaled value is the whole number this is.
+        BigDecimal unscaled = written.scaleByPowerOfTen(written.scale());
+        if (unscaled.compareTo(LEAST_LONG) >= 0 && unscaled.compareTo(GREATEST_LONG) <= 0) {
+            return canonical(new ExactParts(unscaled.longValue(), 1, exponent, exponent));
         }
         return canonical(written.unscaledValue(), BigInteger.ONE, exponent, exponent);
     }
 
-    /** The most decimal digits every one of which a long holds whatever they are. */
-    private static final int MOST_DIGITS_A_LONG_HOLDS = 18;
+    private static final BigDecimal LEAST_LONG = BigDecimal.valueOf(Long.MIN_VALUE);
+
+    private static final BigDecimal GREATEST_LONG = BigDecimal.valueOf(Long.MAX_VALUE);
 
     /**
      * The one canonical form of the value {@code parts} are, which is {@code parts} itself where they
