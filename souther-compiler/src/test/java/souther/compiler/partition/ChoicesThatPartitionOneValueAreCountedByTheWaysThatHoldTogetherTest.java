@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * A lookup of the average in a table, after an {@code if} whose condition looks the same average
@@ -20,11 +21,12 @@ class ChoicesThatPartitionOneValueAreCountedByTheWaysThatHoldTogetherTest {
 
     @Test
     void aLookupAfterAnIfLookingTheSameValueUpIsReadAsItIsWithNothingBeforeIt() {
-        String model = LookupsOfOneValue.model(LookupsOfOneValue.TESTED_AGAIN, 3);
+        String model = LookupsOfOneValue.model(LookupsOfOneValue.Body.TESTED_AGAIN, 3);
+        List<String> withNothingBefore = LookupsOfOneValue.bordersOfTheLookup(
+                LookupsOfOneValue.model(LookupsOfOneValue.Body.NOT_TESTED, 3));
 
         assertEquals(List.of(), LookupsOfOneValue.unread(model));
-        assertEquals(LookupsOfOneValue.aboutTheLookup(
-                        LookupsOfOneValue.model(LookupsOfOneValue.NOT_TESTED, 3)),
-                LookupsOfOneValue.aboutTheLookup(model));
+        assertFalse(withNothingBefore.isEmpty(), "the lookup has borders to compare");
+        assertEquals(withNothingBefore, LookupsOfOneValue.bordersOfTheLookup(model));
     }
 }

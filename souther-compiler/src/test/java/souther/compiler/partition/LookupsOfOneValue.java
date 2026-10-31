@@ -6,6 +6,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -56,37 +58,56 @@ final class LookupsOfOneValue {
             }
             """;
 
-    /** The grade the average comes to tested before it is looked up again. */
-    static final String TESTED_AGAIN = """
-            let computed = gradeRowFor(average).grade
-                if NotRequired { reasons = blockers(current, w, computed) } as unchanged
-                then unchanged
-                else Decision { grade = gradeRowFor(average).grade }""";
+    /**
+     * What the behavior does with the average, and what it builds besides a decision, a row and
+     * an amount.
+     */
+    enum Body {
 
-    /** The lookup with nothing before it. */
-    static final String NOT_TESTED = """
-            Decision { grade = gradeRowFor(average).grade }""";
+        /** The grade the average comes to tested before it is looked up again. */
+        TESTED_AGAIN("""
+                let computed = gradeRowFor(average).grade
+                    if NotRequired { reasons = blockers(current, w, computed) } as unchanged
+                    then unchanged
+                    else Decision { grade = gradeRowFor(average).grade }""", ", NotRequired"),
+
+        /** The lookup with nothing before it. */
+        NOT_TESTED("""
+                Decision { grade = gradeRowFor(average).grade }""", "");
+
+        private final String text;
+        private final String alsoConstructs;
+
+        Body(String text, String alsoConstructs) {
+            this.text = text;
+            this.alsoConstructs = alsoConstructs;
+        }
+    }
+
+    private static final Pattern A_POINT_OF_THE_LOOKUP =
+            Pattern.compile("read as f/.*: = (\\S+) in gradeRowFor");
 
     private LookupsOfOneValue() {}
 
     /** The model with {@code body} after the average, over a table of {@code rows} grades a
      *  thousand apart. */
-    static String model(String body, int rows) {
+    static String model(Body body, int rows) {
         String table = IntStream.range(0, rows)
                 .mapToObj(each -> "    Row { grade = %d, lowerBound = Yen(%d) }"
                         .formatted(each + 1, each * 1000))
                 .collect(Collectors.joining(",\n"));
-        return SOURCE.formatted(table, body.contains("NotRequired") ? ", NotRequired" : "", body);
+        return SOURCE.formatted(table, body.alsoConstructs, body.text);
     }
 
-    /** What the report of {@code source} says about the comparisons of the table's lookup, with
-     *  where in the source each stands left out: a line said of both lookups of the model that
-     *  tests the grade is the line said of the one. */
-    static List<String> aboutTheLookup(String source) {
-        return report(source).stream().filter(line -> line.contains("gradeRowFor"))
-                .map(line -> line.replaceAll("@\\d+:\\d+", "")
-                        .replace("gradeRowFor, gradeRowFor", "gradeRowFor"))
-                .sorted().toList();
+    /** The values of the average the lookup's borders are at, as the report of {@code source}
+     *  says them. */
+    static List<String> bordersOfTheLookup(String source) {
+        return report(source).stream()
+                .map(A_POINT_OF_THE_LOOKUP::matcher)
+                .filter(Matcher::find)
+                .map(found -> found.group(1))
+                .sorted()
+                .toList();
     }
 
     /** The report of {@code source}, line by line. */

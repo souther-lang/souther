@@ -22,6 +22,6 @@ class ChoicesThatPartitionOneValueAreCountedByTheWaysThatHoldTogetherForALongTab
     @Test
     void aLookupAfterAnIfLookingTheSameValueUpInALongTableIsRead() {
         assertEquals(List.of(), LookupsOfOneValue.unread(
-                LookupsOfOneValue.model(LookupsOfOneValue.TESTED_AGAIN, 50)));
+                LookupsOfOneValue.model(LookupsOfOneValue.Body.TESTED_AGAIN, 50)));
     }
 }
