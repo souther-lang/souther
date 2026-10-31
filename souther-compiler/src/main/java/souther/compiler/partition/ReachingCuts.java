@@ -337,6 +337,24 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
     }
 
     /**
+     * How a row for a class that the line {@code origin} cuts came to be looked for where it is:
+     * the walk to the comparison, without the case of where the line decides it.
+     *
+     * <p>A region to look in that contains the one {@link #wayTo} gives. The case is where the
+     * line turns the statement, and the classes it cuts run over the whole of the quantity: a
+     * value in a class outside the case reaches the comparison and answers it. Whether a row there
+     * is a row of the class is the run's to say, by the answer the comparison came out with.
+     */
+    public WayToTheBorder wayToTheComparison(LineOrigin origin) {
+        if (!(origin instanceof LineOrigin.ComparisonOrigin comparison)) {
+            return WayToTheBorder.UNTOUCHED;
+        }
+        List<OnTheWay> found =
+                byLine.get(new ALine(comparison.read().states(), Optional.empty()));
+        return new WayToTheBorder(found == null ? List.of() : found);
+    }
+
+    /**
      * Whether no row is on the ways to the lines {@code one} and {@code other} at once: what the two
      * ways ask of a row, taken together, asks one position to be two things.
      *

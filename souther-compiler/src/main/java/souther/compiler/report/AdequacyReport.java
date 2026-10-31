@@ -5252,6 +5252,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> "a part of the way about a"
                                 + " container holding more than is written out";
                         case NO_VALUE_OF_THE_ROW -> "something the row does not write";
+                        case APPLICATIONS_NOT_TOLD_APART -> "which application of the comparison"
+                                + " belongs to that element, which the record of the run does not"
+                                + " tell apart";
                     };
             // The values were there, so nothing is said about the row: what stopped is the number
             // they come to, and whether a host with more room would hold it is said with it.

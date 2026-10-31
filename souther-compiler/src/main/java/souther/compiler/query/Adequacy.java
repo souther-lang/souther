@@ -4809,17 +4809,20 @@ public final class Adequacy {
             List<Coverages.ReadingOfALine> out = new ArrayList<>();
             // The rows read once for every line, and not once per line.
             Coverages.RowsPutToTheLines put = Coverages.RowsPutToTheLines.of(observed, numbering);
+            // Once for the behavior: the readings of one comparison are sought among every line,
+            // whichever axis or the lines between positions a measure is over.
+            List<Border> everyLine = Coverages.everyLineOf(partitioning);
             for (Axis axis : partitioning.axes()) {
                 // A reading that ran, so its answer is one of the two a reading comes to. The third
                 // state belongs to the lines between two positions, where the question is not put at
                 // all, and is spelled there rather than here — a boolean lifted at the boundary it
                 // is answered at cannot arrive somewhere as the wrong one of the three.
-                out.addAll(Coverages.assess(partitioning.along(axis), subject, observed,
+                out.addAll(Coverages.assess(partitioning.along(axis), everyLine, subject, observed,
                         line -> ItemAssessment.WritabilityProjection.ofReading(
                                 partitioning.edgeIsKnownWritable(axis.term(), line)), put,
                         partitioning.reaching()));
             }
-            out.addAll(Coverages.assessBetween(subject, observed, put,
+            out.addAll(Coverages.assessBetween(everyLine, subject, observed, put,
                     partitioning.reaching()));
             return Coverages.besideEachLine(out, partitioning.replaced());
         }
