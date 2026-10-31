@@ -285,10 +285,12 @@ public final class MeasuredInput {
 
     /**
      * {@code stated}, ready to be asked of the rows of this input ({@link AStatementAtARow#of}),
-     * with each of its relations read once for this input however many statements hold it.
+     * with each of its relations read once for this input however many statements hold it — and,
+     * where it is over the element of a list of every whole number between two, asked whether it
+     * holds at some element the row's list holds ({@link AStatementAtARow#atSomeElement}).
      */
     AStatementAtARow putToRows(Proposition stated, String behavior) {
-        return AStatementAtARow.readBy(stated, behavior, quantities, relations);
+        return AStatementAtARow.atSomeElement(stated, behavior, quantities, relations);
     }
 
     /**

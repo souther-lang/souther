@@ -260,15 +260,77 @@ class ARemainderOverAnElementOfAListOfWholeNumbersIsReadAsARemainderTest {
         }
     }
 
+    /**
+     * The same search passing over the numbers a set holds: whether a number is in the set turns
+     * on the element itself and does not come round, so it is asked of a row at an element the row
+     * holds, and not at the one the remainders come round to. Each row read back is one whose run,
+     * on some element its list holds and with the set it holds, works out the remainder the line
+     * is on.
+     */
+    @Test
+    void aSearchPassingOverTheNumbersOfASetIsAskedAtTheElementItself() {
+        Compilation compilation = compiled("a: Int, hs: Set<Int>, days: Int", "List<Int>",
+                "List.rangeInclusive(0, days) |> List.filter(n -> Int.floorMod("
+                        + "List.rangeInclusive(0, 3) |> List.map(j -> a + n + j)"
+                        + " |> List.find(d -> Int.floorMod(d, 7) >= 5"
+                        + " && Bool.not(Set.contains(d, hs)))"
+                        + " |> Option.withDefault(a + n), 7) == 6)");
+        // What the set's numbers are related to is the element itself, which values of the set
+        // settle that is not worked out, and it is said so; nothing else is left unread.
+        report(compilation).lines().filter(line -> line.contains("· not read:")).forEach(line ->
+                assertTrue(line.contains("relates the value here to another value"),
+                        () -> line + "\n" + report(compilation)));
+        List<BorderAssessment> owed = measured(compilation).stream()
+                .filter(line -> shiftOf(line.left()) != null).toList();
+        assertFalse(owed.isEmpty(), () -> report(compilation));
+        List<ObservedInputs> rows = new ArrayList<>();
+        for (BorderAssessment line : owed) {
+            int shift = shiftOf(line.left());
+            line.items().forEach((point, item) -> certified(item).forEach(row -> {
+                rows.add(row);
+                long a = number(row, 0);
+                Set<Long> hs = numbersIn(row, 1);
+                long days = number(row, 2);
+                boolean worked = false;
+                for (int element = 0; element <= Math.min(days, 48); element++) {
+                    worked |= theSearchWorksOut(a, hs, element).contains(shift);
+                }
+                assertTrue(worked, () -> line.left() + " " + point + " is worked out on an"
+                        + " element the list holds: " + row);
+            }));
+        }
+        assertFalse(rows.isEmpty(), "some line has its rows");
+    }
+
+    /** The whole numbers the set at {@code parameter} holds in {@code row}. */
+    private static Set<Long> numbersIn(ObservedInputs row, int parameter) {
+        if (!(row.inputs().get(parameter) instanceof ObservedValue.Sequence(var elements))) {
+            throw new AssertionError("a set: " + row);
+        }
+        Set<Long> out = new TreeSet<>();
+        elements.forEach(each -> {
+            if (!(each instanceof ObservedValue.Integer(long value))) {
+                throw new AssertionError("a whole number: " + row);
+            }
+            out.add(value);
+        });
+        return out;
+    }
+
     /** The remainders of seven whose shift from {@code a} the search on {@code element} works out
      *  on a run from {@code a}: each candidate up to the first leaving five or more, and the one
      *  compared at the end. */
     private static Set<Integer> theSearchWorksOut(long a, int element) {
+        return theSearchWorksOut(a, Set.of(), element);
+    }
+
+    /** The same, passing over the numbers in {@code hs}. */
+    private static Set<Integer> theSearchWorksOut(long a, Set<Long> hs, int element) {
         Set<Integer> out = new TreeSet<>();
         long landed = a + element;
         for (int j = 0; j <= 3; j++) {
             out.add(Math.floorMod(element + j, 7));
-            if (Math.floorMod(a + element + j, 7) >= 5) {
+            if (Math.floorMod(a + element + j, 7) >= 5 && !hs.contains(a + element + j)) {
                 landed = a + element + j;
                 break;
             }

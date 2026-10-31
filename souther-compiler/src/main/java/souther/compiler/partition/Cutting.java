@@ -555,7 +555,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return drawn;
         }
         boolean asked = several.parts().stream().allMatch(part -> part.cases().stream()
-                .allMatch(one -> AStatementAtARow.askable(one.condition())));
+                .allMatch(one -> AStatementAtARow.askableAtSomeElement(one.condition())));
         boolean drawsALine = several.parts().stream()
                 .anyMatch(part -> part.line() instanceof Read.Cuts);
         PlacesStopped unread = PlacesStopped.NOWHERE;
@@ -1473,7 +1473,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     /**
      * The lines what the comparison states on {@code one} element draws, each deciding where it
-     * does on that element — or null where some relation of it is no line drawn. One relation is
+     * does on that element — or null where some relation of it is neither a line drawn nor a
+     * relation to another value, as one keeping the element is. One relation is
      * the line it draws, deciding wherever the element is; several are the lines each draws where
      * the statement turns on it ({@link #asLines}).
      */
@@ -1495,7 +1496,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return asLines(behavior, comparison, one.stated(), onTheInput.arithmetic(),
                 onTheInput.working(), onTheInput.workingOfRelation(), read, reads, answering,
                 Optional.empty()) instanceof Read.Several several
-                && several.parts().stream().allMatch(part -> Read.Several.Part.isALine(part.line()))
+                && several.parts().stream().allMatch(part -> Read.Several.Part.isALine(part.line())
+                        || part.line() instanceof Read.AgainstAnotherValue)
                 ? several.parts() : null;
     }
 
@@ -2328,8 +2330,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 } else if (undrawn == null) {
                     // Where it decides is carried only if a row can be asked to be there.
                     parts.add(new Read.Several.Part(alone, against(against, each.line()),
-                            each.cases().stream().allMatch(
-                                    one -> AStatementAtARow.askable(one.condition()))
+                            each.cases().stream().allMatch(one ->
+                                    AStatementAtARow.askableAtSomeElement(one.condition()))
                                     ? each.cases() : List.of()));
                 }
                 continue;
@@ -2344,12 +2346,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // be held to where it decides, so it is said not to be drawn, at its own places.
             List<DecidingCase> cases = each.cases();
             if (line instanceof Read.Cuts cuts && !cases.stream()
-                    .allMatch(one -> AStatementAtARow.askable(one.condition()))) {
+                    .allMatch(one -> AStatementAtARow.askableAtSomeElement(one.condition()))) {
                 // Beside what was not read, a line is drawn where it decides whatever that comes
                 // to, and is none where it decides only on it: the part that stopped is said for
                 // the comparison, and says it for this line too.
                 if (!besideWhatStopped || !cases.stream().allMatch(one ->
-                        AStatementAtARow.askable(one.condition())
+                        AStatementAtARow.askableAtSomeElement(one.condition())
                                 || AStatementAtARow.turnsOnWhatWasNotRead(one.condition()))) {
                     parts.add(new Read.Several.Part(alone, new Read.Stopped(ComparisonAssessment
                             .atEachOf(cuts.cutting().over(),
@@ -2358,7 +2360,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     continue;
                 }
                 cases = cases.stream()
-                        .filter(one -> AStatementAtARow.askable(one.condition())).toList();
+                        .filter(one -> AStatementAtARow.askableAtSomeElement(one.condition()))
+                        .toList();
                 if (cases.isEmpty()) {
                     continue;
                 }
