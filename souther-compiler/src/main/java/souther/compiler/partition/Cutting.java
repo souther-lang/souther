@@ -548,12 +548,30 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 conditions, writtenIn);
         // Where an application is made, and where a line decides on it, is part of what the line
         // is; said in anything but what a row's own numbers answer, a row could not be asked
-        // whether it is somewhere the line decides, and none of the lines is drawn.
-        return drawn instanceof Read.Several several && several.parts().stream()
-                .anyMatch(part -> !part.cases().stream()
-                        .allMatch(one -> AStatementAtARow.askable(one.condition())))
-                ? severalNotDrawn(comparison, read, reads, answering)
-                : drawn;
+        // whether it is somewhere the line decides, and none of the lines is drawn. Where some
+        // part of what an application states was not read, that part is what stopped the
+        // comparison, and it is said for what stopped it.
+        if (!(drawn instanceof Read.Several several)) {
+            return drawn;
+        }
+        boolean asked = several.parts().stream().allMatch(part -> part.cases().stream()
+                .allMatch(one -> AStatementAtARow.askable(one.condition())));
+        boolean drawsALine = several.parts().stream()
+                .anyMatch(part -> part.line() instanceof Read.Cuts);
+        PlacesStopped unread = PlacesStopped.NOWHERE;
+        WhereAReadingStopped where = WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT;
+        for (Read.Several.Part part : several.parts()) {
+            if (part.line() instanceof Read.Stopped stopped && stopped.places().reasons().values()
+                    .stream().anyMatch(reason ->
+                            !(reason instanceof BlockReason.SeveralLinesInOneRule))) {
+                unread = unread.and(stopped.places());
+                where = where.and(stopped.where());
+            }
+        }
+        if (!unread.isEmpty() && (!asked || !drawsALine)) {
+            return new Read.Stopped(unread, where);
+        }
+        return asked ? drawn : severalNotDrawn(comparison, read, reads, answering);
     }
 
     /**
@@ -668,8 +686,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                           List<ClosureApplications.Application> each,
                                           Arrivals answering, WhatConditionsState conditions,
                                           Optional<ExpansionLineage> writtenIn) {
+        // What stopped, in the order the applications are made: a whole application's reading, or
+        // a part of one read beside the lines it drew. Said only where some application stopped
+        // whole, and then with every stop before and after it.
         PlacesStopped stopped = PlacesStopped.NOWHERE;
         WhereAReadingStopped stoppedWhere = WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT;
+        boolean stoppedWhole = false;
         List<FilingCoordinate> settled = new ArrayList<>();
         List<FilingCoordinate> answeringNowhere = new ArrayList<>();
         List<FilingCoordinate> against = new ArrayList<>();
@@ -689,6 +711,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 case Read.Stopped alone -> {
                     stopped = stopped.and(alone.places());
                     stoppedWhere = stoppedWhere.and(alone.where());
+                    stoppedWhole = true;
                 }
                 case Read.StatesNoRelation _ -> {
                     if (statingNoRelation == null) {
@@ -721,12 +744,19 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     relatedOnlySomewhere |= !(one.reached() instanceof Proposition.Always(
                             boolean holds) && holds);
                 }
-                case Read.Several several -> several.parts().forEach(part -> {
-                    ALineRead key = new ALineRead(part.id(), part.line());
-                    lines.computeIfAbsent(key, _ -> new ArrayList<>())
-                            .add(new WhereAnApplicationIsMade.OnOne(part.cases(), one.reached()));
-                    workings.computeIfAbsent(key, _ -> new ArrayList<>()).add(part.working());
-                });
+                case Read.Several several -> {
+                    for (Read.Several.Part part : several.parts()) {
+                        if (part.line() instanceof Read.Stopped beside) {
+                            stopped = stopped.and(beside.places());
+                            stoppedWhere = stoppedWhere.and(beside.where());
+                        }
+                        ALineRead key = new ALineRead(part.id(), part.line());
+                        lines.computeIfAbsent(key, _ -> new ArrayList<>()).add(
+                                new WhereAnApplicationIsMade.OnOne(part.cases(), one.reached()));
+                        workings.computeIfAbsent(key, _ -> new ArrayList<>())
+                                .add(part.working());
+                    }
+                }
                 case Read line -> {
                     ALineRead key = new ALineRead(new PlaceOfALine(
                             line instanceof Read.Cuts cuts
@@ -740,7 +770,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 }
             }
         }
-        if (!stopped.isEmpty()) {
+        if (stoppedWhole) {
             return new Read.Stopped(stopped, stoppedWhere);
         }
         // Every application's statement is a line or none of them is drawn, and one that relates
