@@ -680,7 +680,7 @@ class HowLongThePathASearchAnswersIsReadTest {
 
     @Test
     void theApprovalChainOfARoleIsReadAsTheLengthOfTheLineToTheSubmitter() {
-        Compilation compilation = Compilation.ofSource("""
+        String model = """
                 module demo
 
                 data UserId = String
@@ -755,7 +755,8 @@ class HowLongThePathASearchAnswersIsReadTest {
                         -> SubmitterNotInHierarchy { submitter = UserId("u-ghost") }
                     | "ceo" : (acmeOrg, UserId("u-ceo"), SalesManager)
                         -> NoAuthorityAbove { submitter = UserId("u-ceo"), needed = 1, available = 0 }
-                """, "Main");
+                """;
+        Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
@@ -781,6 +782,45 @@ class HowLongThePathASearchAnswersIsReadTest {
                         row.split("reports = \\[RoleNode", -1).length >= 5
                                 && row.endsWith("Cfo")),
                 () -> "offered " + offered);
+        // Written back as examples the rows are run by the language, and what they reach is read.
+        StringBuilder written = new StringBuilder();
+        int named = 0;
+        for (List<String> inputs : Adequacy.offeredFor(compilation.db(),
+                        OfferingRequest.overTheModule("demo"))
+                .rowsByBehavior().getOrDefault("approvalChainFor", List.of()).stream()
+                .map(row -> row.inputs().stream().map(FixtureTemplate::text).toList())
+                .toList()) {
+            int nodes = inputs.getFirst().split("reports = \\[RoleNode", -1).length;
+            String role = inputs.get(2);
+            int needed = switch (role) {
+                case "SalesManager" -> 1;
+                case "RegionalVp" -> 2;
+                default -> 3;
+            };
+            int above = nodes - 1;
+            String answer = above >= needed
+                    ? "ApprovalChain { role = " + role + ", approvers = ["
+                            + "UserId(\"x\"), ".repeat(needed - 1) + "UserId(\"x\") ] }"
+                    : "NoAuthorityAbove { submitter = " + inputs.get(1) + ", needed = " + needed
+                            + ", available = " + above + " }";
+            written.append("                | \"offered ").append(named++).append("\" : (")
+                    .append(String.join(", ", inputs)).append(") -> ").append(answer)
+                    .append('\n');
+        }
+        Compilation after = measuredModel(model + written);
+        assertEquals(List.of(), after.errors().stream()
+                .map(each -> each.diagnostic().code()).toList());
+        String measured = humanOf(after);
+        String afterChain = measured.substring(measured.indexOf("  approvalChainFor "));
+        // Every point of every border is met by a row the language ran, but the one at a line of
+        // no node, which the guard of chainTo keeps out of this branch: it is said not to be
+        // shown, and is not said to be unreachable.
+        assertTrue(afterChain.contains("borders 3   obligations 7/8"), measured);
+        assertTrue(afterChain.contains("nothing could show a row can be written at the OUT point"),
+                measured);
+        assertFalse(afterChain.contains("no row can stand at the OUT point"), measured);
+        assertTrue(afterChain.contains("branch      7/7"), measured);
+        assertTrue(afterChain.contains("decision    rules 7   taken 7"), measured);
     }
 
     // The proposition and its helpers.
