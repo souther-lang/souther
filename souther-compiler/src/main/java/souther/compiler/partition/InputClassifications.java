@@ -69,12 +69,25 @@ public final class InputClassifications {
      */
     public static List<Classification> placedAt(List<ObservedValue> inputs,
                                                 MeasuredInput.MeasuredAxes axes) {
+        return placedAt(inputs, axes, null);
+    }
+
+    /**
+     * The same, for the inputs a row built before it stopped.
+     *
+     * <p>A position the row never reached is not a value that could not be read: it is unknown
+     * for the reason the row stopped, and {@code unreached} is that reason. Null where the inputs
+     * are a whole tuple, and a position that cannot be walked is then the value's own fault.
+     */
+    public static List<Classification> placedAt(List<ObservedValue> inputs,
+                                                MeasuredInput.MeasuredAxes axes,
+                                                Incompleteness unreached) {
         BehaviorInputs where = axes.subject().inputs();
         // One row walked to every position, through the same few types each time.
         Map<Type, TypeView> views = new HashMap<>();
         List<Classification> out = new ArrayList<>(axes.size());
         for (Axis axis : axes.axes()) {
-            out.add(axis.derivable() ? classify(inputs, where, axis, views) : null);
+            out.add(axis.derivable() ? classify(inputs, where, axis, views, unreached) : null);
         }
         return java.util.Collections.unmodifiableList(out);
     }
@@ -92,14 +105,16 @@ public final class InputClassifications {
      * had to guess.
      */
     private static Classification classify(List<ObservedValue> inputs, BehaviorInputs where,
-                                           Axis axis, Map<Type, TypeView> views) {
+                                           Axis axis, Map<Type, TypeView> views,
+                                           Incompleteness unreached) {
         // Over the arms, so a walk that comes to answer a third way is one this is taught about
         // rather than one folded into the word for a walk that could not be made.
         return switch (where.occurrencesAt(inputs, axis.path(), views)) {
             case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
-                    Classification.unreadable(
-                            Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE),
-                            axis.id().behavior(), axis.id().term());
+                    unreached != null ? new Classification.Unclassified(unreached)
+                            : Classification.unreadable(
+                                    Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE),
+                                    axis.id().behavior(), axis.id().term());
             case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) ->
                     among(axis, values);
         };
