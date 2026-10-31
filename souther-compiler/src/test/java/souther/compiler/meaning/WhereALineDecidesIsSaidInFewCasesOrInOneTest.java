@@ -54,6 +54,41 @@ class WhereALineDecidesIsSaidInFewCasesOrInOneTest {
                 "the statement held against itself across the line, which is one of two things");
     }
 
+    /** Cases of a line read elsewhere are said by the same figure: the most are one by one. */
+    @Test
+    void casesReadElsewhereAreSaidOneByOneUpToTheMost() {
+        List<DecidingCase> cases = DecidingCase.saidInAsFewAsMay(
+                alone(evenWays(6).subList(0, WhereEachLineDecides.MOST_CASES)));
+        assertEquals(WhereEachLineDecides.MOST_CASES, cases.size(), () -> "each by itself: " + cases);
+        assertTrue(cases.stream().allMatch(DecidingCase::saidAlone), () -> "alone: " + cases);
+    }
+
+    /** And one more than that are one case, standing for each of them and for no other. */
+    @Test
+    void oneMoreThanThatReadElsewhereIsOneCaseForAllOfThem() {
+        List<Proposition> ways = evenWays(6).subList(0, WhereEachLineDecides.MOST_CASES + 1);
+        List<DecidingCase> cases = DecidingCase.saidInAsFewAsMay(alone(ways));
+        assertEquals(1, cases.size(), () -> "one case: " + cases);
+        assertEquals(Set.copyOf(ways),
+                Set.copyOf(DecidingCases.eachOf(cases.getFirst().standsFor())),
+                () -> "standing for each of the ways: " + cases);
+    }
+
+    private static List<DecidingCase> alone(List<Proposition> ways) {
+        return ways.stream().map(DecidingCase::alone).toList();
+    }
+
+    /** One more than the most said one by one is already said as one, standing for every one. */
+    @Test
+    void oneCaseMoreThanThatIsSaidAsOneForAllOfThem() {
+        List<Proposition> ways = evenWays(6).subList(0, WhereEachLineDecides.MOST_CASES + 1);
+        List<DecidingCase> cases = casesOf(ways);
+        assertEquals(1, cases.size(), () -> "one case: " + cases);
+        assertEquals(Set.copyOf(ways),
+                Set.copyOf(DecidingCases.eachOf(cases.getFirst().standsFor())),
+                () -> "standing for each of the ways: " + cases);
+    }
+
     /**
      * The one case stands for the thirty-two it was said for, each the six parts held or failing,
      * and for no other: what the cases are does not depend on how many of them are said.
@@ -69,8 +104,13 @@ class WhereALineDecidesIsSaidInFewCasesOrInOneTest {
 
     /** Where {@link #LINE} decides, held together with an even number of {@code parts} truths. */
     private static List<DecidingCase> casesOf(int parts) {
+        return casesOf(evenWays(parts));
+    }
+
+    /** Where {@link #LINE} decides, held together with one of {@code ways}. */
+    private static List<DecidingCase> casesOf(List<Proposition> ways) {
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(
-                Proposition.all(List.of(LINE, Proposition.any(evenWays(parts)))));
+                Proposition.all(List.of(LINE, Proposition.any(ways))));
         assertEquals(1, lines.size(), () -> "one relation is a line: " + lines);
         return lines.getFirst().cases();
     }
