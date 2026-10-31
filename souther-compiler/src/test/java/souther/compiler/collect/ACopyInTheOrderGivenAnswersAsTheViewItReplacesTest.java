@@ -72,6 +72,32 @@ class ACopyInTheOrderGivenAnswersAsTheViewItReplacesTest {
         }
     }
 
+    /** The keys of a map listed answer as the view's keys listed do, null key and all, whether
+     *  the map is a copy made here or any other: in its order, and every change refused. */
+    @Test
+    void theKeysOfAMapAreListedAsTheViewsAre() {
+        for (int size : SIZES) {
+            List<Object> expected =
+                    new ArrayList<>(Collections.unmodifiableMap(given(size)).keySet());
+            for (Map<Object, Object> map : List.of(given(size),
+                    InTheOrderGiven.map(given(size)))) {
+                List<Object> keys = InTheOrderGiven.keys(map);
+                String which = "the keys of " + size + " in a " + map.getClass().getSimpleName();
+                assertEquals(expected, keys, which);
+                assertEquals(keys, expected, which);
+                assertEquals(expected.hashCode(), keys.hashCode(), which);
+                assertEquals(expected.size(), keys.size(), which);
+                for (int at = 0; at < size; at++) {
+                    assertEquals(expected.get(at), keys.get(at), which);
+                }
+                assertEquals(expected.contains(null), keys.contains(null), which);
+                assertThrows(IndexOutOfBoundsException.class, () -> keys.get(size), which);
+                assertThrows(UnsupportedOperationException.class, () -> keys.add("k"), which);
+                assertThrows(UnsupportedOperationException.class, keys::clear, which);
+            }
+        }
+    }
+
     @Test
     void aMapIsNotEqualToOneMissingANullValuedKey() {
         Map<Object, Object> nulls = new LinkedHashMap<>();

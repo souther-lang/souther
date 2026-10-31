@@ -46,6 +46,14 @@ public record WrittenLine(List<Arm> arms) {
         }
     }
 
+    /**
+     * The choice this line is what one arm of answers — or null where it is the comparison
+     * itself, a line under arms of more than one choice, or how an arm is selected.
+     */
+    public WrittenChoice choiceAnArmOfWhichItAnswers() {
+        return arms.size() != 1 || arms.getFirst().selects() ? null : arms.getFirst().at();
+    }
+
     /** This line, one arm further in. */
     WrittenLine then(Arm next) {
         List<Arm> more = new ArrayList<>(arms);

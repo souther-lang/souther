@@ -24,6 +24,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiPredicate;
 import java.util.function.IntFunction;
+import java.util.function.Predicate;
 
 /**
  * Which of the places a relation is written over it is shown to leave undivided.
@@ -603,24 +604,9 @@ public final class WhatARelationLeavesUndivided {
      * taken to be one, which keeps a line the runs would otherwise lose.
      */
     private static boolean gapBetween(ExactCut to, ExactCut from, boolean whole) {
-        if (whole) {
-            ExactRatio next = to.at().plus(ExactRatio.ONE).orNull();
-            return next == null || from.at().compareTo(next) > 0;
-        }
-        int order = from.at().compareTo(to.at());
-        if (order < 0) {
-            return false;
-        }
-        if (order == 0) {
-            return !to.inclusive() && !from.inclusive()
-                    && Lattice.holds(Granularity.DENSE, to.at());
-        }
-        Lattice.Point after = Lattice.least(Granularity.DENSE,
-                new ExactCut(to.at(), !to.inclusive()));
-        Lattice.Point before = Lattice.greatest(Granularity.DENSE,
-                new ExactCut(from.at(), !from.inclusive()));
-        Integer placed = Lattice.compare(after, before);
-        return placed == null || placed <= 0;
+        return Lattice.occupancy(whole ? Granularity.DISCRETE : Granularity.DENSE,
+                new ExactCut(to.at(), !to.inclusive()), new ExactCut(from.at(), !from.inclusive()))
+                != Lattice.Occupancy.EMPTY;
     }
 
     /**
@@ -749,6 +735,203 @@ public final class WhatARelationLeavesUndivided {
         }
         return leavesOf(terms, at, constant, Asking.offItsLine(relation), overlap, independent,
                 granularity, greatest, supports, operations);
+    }
+
+    /**
+     * How {@code terms} held against {@code constant} as {@code relation} come out at the values
+     * of the term at {@code at}, each way on its own ({@link EachWayItComesOut}) — or null where
+     * neither is worked out.
+     *
+     * <p>Every value the term may hold is said, each way, in one of three words, and what says
+     * each is a different proof. A way is never reached at a value where every value the others
+     * may hold puts the relation the other way there: a claim about every row, made over where
+     * the terms may lie ({@link Term#holds}). A way is reached at a value only where a row is
+     * shown with the term there coming out so: the term is shown to take the value
+     * ({@link Term#realizes}), and either the relation is settled that way there, so that any row
+     * with the term at it comes out so, or some other term, apart from the rest and tied to none
+     * of them, is shown to take beside it a value that comes out so
+     * ({@link #reachedOneWayBySome}). What neither proof shows stays not shown. That the relation
+     * settles a run, or leaves it undivided ({@link #leavesOf}), says how a row there would come
+     * out and not that there is one, so it is not asked here.
+     *
+     * <p>Worked out only for a dense term, of a relation of order whose rows nothing can stop;
+     * any other is null.
+     */
+    public static <P> EachWayItComesOut eachWayItComesOut(List<Term<P>> terms, int at,
+                                                          ExactRatio constant, Rel relation,
+                                                          BiPredicate<P, P> overlap,
+                                                          Independence independent,
+                                                          Granularity granularity,
+                                                          BigInteger greatest,
+                                                          Operations operations) {
+        if (granularity != Granularity.DENSE || constant == null || relation == Rel.EQ
+                || relation == Rel.NE
+                || !RowsComputed.upTo(greatest).withOperations(operations).nothingStopsARow()) {
+            return null;
+        }
+        Term<P> it = terms.get(at);
+        Span held = Span.ofTheValues(it.holds());
+        Interval rest = restOf(terms, at, constant);
+        if (held == null || rest == null) {
+            return null;
+        }
+        // The values the term is shown to take, where a row stands with it there; none where
+        // nothing is shown, or the ends are no numbers.
+        Span taken = it.realizes() == null ? null : Span.ofTheValues(it.realizes());
+        DenseSettling settling = settlingOfADenseTerm(held, it.weight(), rest,
+                Asking.of(relation));
+        if (settling == null) {
+            return null;
+        }
+        List<EachWayItComesOut.Stretch> out = new ArrayList<>();
+        for (SettledRun each : settling.runs()) {
+            boolean holds = each.holds();
+            if (!shownOver(new Span(each.from(), each.to()), taken, out, _ -> holds,
+                    _ -> !holds, holds, !holds)) {
+                return null;
+            }
+        }
+        for (Span each : settling.between()) {
+            if (!shownOver(each, taken, out,
+                    values -> reachedOneWayBySome(terms, at, values, constant, relation, true,
+                            overlap, independent),
+                    values -> reachedOneWayBySome(terms, at, values, constant, relation, false,
+                            overlap, independent),
+                    false, false)) {
+                return null;
+            }
+        }
+        return new EachWayItComesOut(Granularity.DENSE, out);
+    }
+
+    /**
+     * {@code run} said into {@code out}: at the values of it the term is shown to take
+     * ({@code taken}), a way reached where {@code holding} or {@code failing} shows a row of it
+     * over them; at the rest, where no row is shown, reached nowhere. A way {@code holdsNever} or
+     * {@code failsNever} says no row comes out is never reached at any of them. False where
+     * whether a part of {@code run} holds a value is not worked out.
+     *
+     * @param taken the values the term is shown to take, or null where none is shown
+     */
+    private static boolean shownOver(Span run, Span taken, List<EachWayItComesOut.Stretch> out,
+                                     Predicate<Interval> holding, Predicate<Interval> failing,
+                                     boolean failsNever, boolean holdsNever) {
+        List<Span> unshown = taken == null ? List.of(run) : run.without(taken);
+        if (unshown == null) {
+            return false;
+        }
+        for (Span each : unshown) {
+            out.add(new EachWayItComesOut.Stretch(each.lower(), each.upper(),
+                    holdsNever ? EachWayItComesOut.Shown.NEVER : EachWayItComesOut.Shown.NOT_SHOWN,
+                    failsNever ? EachWayItComesOut.Shown.NEVER
+                            : EachWayItComesOut.Shown.NOT_SHOWN));
+        }
+        if (taken == null) {
+            return true;
+        }
+        Span shown = run.meet(taken);
+        switch (shown.occupancy()) {
+            case UNKNOWN -> {
+                return false;
+            }
+            case EMPTY -> {
+                return true;
+            }
+            case HOLDS -> { }
+        }
+        Interval values = new Interval(shown.lower(), shown.upper());
+        out.add(new EachWayItComesOut.Stretch(shown.lower(), shown.upper(),
+                holdsNever ? EachWayItComesOut.Shown.NEVER : reachedIf(holding.test(values)),
+                failsNever ? EachWayItComesOut.Shown.NEVER : reachedIf(failing.test(values))));
+        return true;
+    }
+
+    private static EachWayItComesOut.Shown reachedIf(boolean shown) {
+        return shown ? EachWayItComesOut.Shown.REACHED : EachWayItComesOut.Shown.NOT_SHOWN;
+    }
+
+    /**
+     * Whether some term apart from the one at {@code at}, and tied to it by nothing, takes beside
+     * each value of {@code within} a value at which the relation comes out the way
+     * {@code holding} names: holding, or failing. One side of what {@link #reachedBySome} asks of
+     * a term reaching it, which is both. Asked where nothing stops a row, so every value a term
+     * is shown to take stands in one.
+     */
+    private static <P> boolean reachedOneWayBySome(List<Term<P>> terms, int at, Interval within,
+                                                   ExactRatio constant, Rel relation,
+                                                   boolean holding, BiPredicate<P, P> overlap,
+                                                   Independence independent) {
+        boolean[] free = freeOf(terms, at, overlap, independent);
+        for (int other = 0; other < terms.size(); other++) {
+            if (free[other] && reachesOneWay(terms, other, at, within, constant, relation,
+                    holding)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether the term at {@code by} takes, beside each value of {@code within} the term at
+     * {@code of} may stand at, a value at which the relation comes out the way {@code holding}
+     * names. That way is one side of where the term has to stand at the relation's line: strictly
+     * past it on the side an order leaves its line out of, and at it or past it on the other.
+     */
+    private static <P> boolean reachesOneWay(List<Term<P>> terms, int by, int of,
+                                             Interval within, ExactRatio constant, Rel relation,
+                                             boolean holding) {
+        Run needed = neededWithinItsOrder(terms, by, of, within, constant);
+        return needed != null && reachedOnOneSide(terms, by, needed, relation, holding,
+                new Spacings(terms.get(by).spacing(), neededSpacing(terms, by, constant)));
+    }
+
+    /**
+     * Where the term at {@code by} has to stand for the relation to hold at its line, for each
+     * value of {@code within} the term at {@code of} may stand at ({@link #needed}) — or null
+     * where the term is shown to take nothing, that is no run this can write, or a value of it is
+     * past where the term's order stops and is no witness ({@link Run#passes}).
+     */
+    private static <P> Run neededWithinItsOrder(List<Term<P>> terms, int by, int of,
+                                                Interval within, ExactRatio constant) {
+        Term<P> reaching = terms.get(by);
+        if (reaching.realizes() == null) {
+            return null;
+        }
+        Run needed = needed(terms, by, of, within, constant);
+        // A value past where the reaching term's order stops is no witness, however its run is
+        // read (asARelationReadsIt): an end of the type moved by a constant or a weight, a value
+        // weighed past it, an end of the other's order the reaching term's runs out before. Only
+        // a term standing at the other's value passes over an end, where its order runs on as
+        // far as the other's: there a value with no partner is beside the end of both.
+        if (needed == null || (needed.passes(reaching.runsTo(), reaching.spacing())
+                && !(standsAtTheOthersValue(terms, constant)
+                        && runsOnAsFar(reaching, terms.get(of))))) {
+            return null;
+        }
+        return needed;
+    }
+
+    /**
+     * Whether the term at {@code by} takes, beside each value of {@code needed}, a value at which
+     * the relation, an order, comes out the way {@code holding} names: strictly past it on the
+     * side the order leaves its line out of, and at it or past it on the other. Which side that
+     * is follows from the relation and the sign of the term's weight ({@link #strictlyBelow}); a
+     * strict side running without end needs every other term to be the value at its place.
+     */
+    private static <P> boolean reachedOnOneSide(List<Term<P>> terms, int by, Run needed,
+                                                Rel relation, boolean holding,
+                                                Spacings spacings) {
+        Term<P> reaching = terms.get(by);
+        // The side the order leaves its line out of holds a strict order, and comes out holding
+        // where the order is strict itself.
+        boolean strictlyBelow = strictlyBelow(relation, reaching.weight());
+        boolean strictly = holding == (relation == Rel.LT || relation == Rel.GT);
+        boolean below = strictly == strictlyBelow;
+        if (strictly && (below ? needed.runsDown() : needed.runsUp())
+                && !othersAreTheirPlaces(terms, by)) {
+            return false;
+        }
+        return needed.beside(reaching.realizes(), below, strictly, spacings);
     }
 
     /**
@@ -1979,6 +2162,69 @@ public final class WhatARelationLeavesUndivided {
     }
 
     /**
+     * The runs of a dense term's values that settle a relation whatever the rest come to, each
+     * with the way it settles it, and the runs of the values it holds between them.
+     *
+     * @param runs    the runs, of what the term holds, in the order they were found
+     * @param between what the term holds that no run settles
+     */
+    private record DenseSettling(List<SettledRun> runs, List<Span> between) {}
+
+    /**
+     * The values of {@code held}, a dense term's, that settle the relation the term weighed
+     * {@code weight} stands in beside {@code rest}, what the others come to wherever they lie,
+     * asked as {@code asking} says — or null where whether a run holds a value is not worked out,
+     * or a value is settled both ways where that is one no row reaches ({@link Asking#apart}).
+     */
+    private static DenseSettling settlingOfADenseTerm(Span held, ExactRatio weight,
+                                                      Interval rest, Asking asking) {
+        List<SettledRun> runs = new ArrayList<>();
+        List<Span> settledTrue = new ArrayList<>();
+        List<Span> between = List.of(held);
+        for (boolean holds : List.of(true, false)) {
+            Rel asked = holds ? asking.holding() : asking.failing();
+            for (OnTheDifference statement : settledBy(weight, rest, asked)) {
+                Span settling = Span.where(statement);
+                if (settling == null) {
+                    continue;
+                }
+                Lattice.Occupancy settles = settling.occupancy();
+                if (settles == Lattice.Occupancy.UNKNOWN) {
+                    return null;
+                }
+                if (settles == Lattice.Occupancy.EMPTY) {
+                    continue;
+                }
+                List<Span> left = new ArrayList<>();
+                for (Span each : between) {
+                    List<Span> remains = each.without(settling);
+                    if (remains == null) {
+                        return null;
+                    }
+                    left.addAll(remains);
+                }
+                between = left;
+                Span here = settling.meet(held);
+                Lattice.Occupancy within = here.occupancy();
+                if (within == Lattice.Occupancy.UNKNOWN) {
+                    return null;
+                }
+                if (within == Lattice.Occupancy.HOLDS) {
+                    if (asking.apart() && !holds && settledTrue.stream().anyMatch(one ->
+                            one.meet(here).occupancy() != Lattice.Occupancy.EMPTY)) {
+                        return null;
+                    }
+                    if (holds) {
+                        settledTrue.add(here);
+                    }
+                    runs.add(new SettledRun(here.lower(), here.upper(), holds));
+                }
+            }
+        }
+        return new DenseSettling(runs, between);
+    }
+
+    /**
      * What a relation leaves the values of a dense term, which the runs that settle it, open or
      * closed, and the values left between them are asked of.
      *
@@ -2003,52 +2249,12 @@ public final class WhatARelationLeavesUndivided {
         if (held == null || rest == null) {
             return null;
         }
-        List<SettledRun> runs = new ArrayList<>();
-        List<Span> settledTrue = new ArrayList<>();
-        List<Span> between = List.of(held);
-        for (boolean holds : List.of(true, false)) {
-            Rel asked = holds ? asking.holding() : asking.failing();
-            for (OnTheDifference statement : settledBy(it.weight(), rest, asked)) {
-                Span settling = Span.where(statement);
-                if (settling == null) {
-                    continue;
-                }
-                Span.Occupancy settles = settling.occupancy();
-                if (settles == Span.Occupancy.UNKNOWN) {
-                    return null;
-                }
-                if (settles == Span.Occupancy.EMPTY) {
-                    continue;
-                }
-                List<Span> left = new ArrayList<>();
-                for (Span each : between) {
-                    List<Span> remains = each.without(settling);
-                    if (remains == null) {
-                        return null;
-                    }
-                    left.addAll(remains);
-                }
-                between = left;
-                Span here = settling.meet(held);
-                Span.Occupancy within = here.occupancy();
-                if (within == Span.Occupancy.UNKNOWN) {
-                    return null;
-                }
-                if (within == Span.Occupancy.HOLDS) {
-                    if (asking.apart() && !holds && settledTrue.stream().anyMatch(one ->
-                            one.meet(here).occupancy() != Span.Occupancy.EMPTY)) {
-                        return null;
-                    }
-                    if (holds) {
-                        settledTrue.add(here);
-                    }
-                    runs.add(new SettledRun(here.lower(), here.upper(), holds));
-                }
-            }
-        }
-        if (runs.isEmpty()) {
+        DenseSettling settling = settlingOfADenseTerm(held, it.weight(), rest, asking);
+        if (settling == null || settling.runs().isEmpty()) {
             return null;
         }
+        List<SettledRun> runs = new ArrayList<>(settling.runs());
+        List<Span> between = settling.between();
         List<SettledRun> noRowShownComputed = new ArrayList<>();
         if (arithmetic.mayStopARow()) {
             runs.removeIf(run -> {
@@ -3824,38 +4030,24 @@ public final class WhatARelationLeavesUndivided {
         if (exactly && itsValue && sameValues(terms, by, of)) {
             return aWitnessComputes(terms, by, of, within, constant, relation, beside, arithmetic);
         }
-        if (reaching.realizes() == null) {
-            return false;
-        }
         if (exactly && !(reaching.weight().abs().equals(ExactRatio.ONE) && constant != null
                 && constant.isWhole()
                 && terms.stream().allMatch(each -> each.weight().isWhole()))) {
             return false;
         }
-        Run needed = needed(terms, by, of, within, constant);
+        Run needed = neededWithinItsOrder(terms, by, of, within, constant);
         if (needed == null) {
             return false;
         }
         Spacings spacings = new Spacings(reaching.spacing(), neededSpacing(terms, by, constant));
-        // A value past where the reaching term's order stops is no witness, however its run is
-        // read (asARelationReadsIt): an end of the type moved by a constant or a weight, a value
-        // weighed past it, an end of the other's order the reaching term's runs out before. Only
-        // a term standing at the other's value passes over an end, where its order runs on as
-        // far as the other's: there a value with no partner is beside the end of both.
-        if (needed.passes(reaching.runsTo(), reaching.spacing())
-                && !(itsValue && runsOnAsFar(reaching, terms.get(of)))) {
-            return false;
-        }
         if (exactly) {
             return needed.within(reaching.realizes(), spacings)
                     && aWitnessComputes(terms, by, of, within, constant, relation, beside, arithmetic);
         }
-        boolean strictlyBelow = strictlyBelow(relation, reaching.weight());
-        if ((strictlyBelow ? needed.runsDown() : needed.runsUp())
-                && !othersAreTheirPlaces(terms, by)) {
-            return false;
-        }
-        return needed.around(reaching.realizes(), strictlyBelow, spacings)
+        // An order is left either way where the term reaches each side of its line: the one it
+        // holds on and the one it fails on.
+        return reachedOnOneSide(terms, by, needed, relation, true, spacings)
+                && reachedOnOneSide(terms, by, needed, relation, false, spacings)
                 && aWitnessComputes(terms, by, of, within, constant, relation, beside, arithmetic);
     }
 
@@ -4406,9 +4598,33 @@ public final class WhatARelationLeavesUndivided {
          */
         default boolean around(NumericDomain.Bounds realized, boolean strictlyBelow,
                                Spacings spacings) {
-            return reaches(realized,
-                    strictlyBelow ? Reach.STRICTLY_BEYOND : Reach.AT_OR_BEYOND,
-                    strictlyBelow ? Reach.AT_OR_BEYOND : Reach.STRICTLY_BEYOND, spacings);
+            return beside(realized, true, strictlyBelow, spacings)
+                    && beside(realized, false, !strictlyBelow, spacings);
+        }
+
+        /**
+         * One side of {@link #around}: whether {@code realized} holds beside each value of this
+         * run a value below it, where {@code below}, or above it — strictly past it where
+         * {@code strictly}, and at it or past it otherwise.
+         */
+        default boolean beside(NumericDomain.Bounds realized, boolean below, boolean strictly,
+                               Spacings spacings) {
+            Reach reach = strictly ? Reach.STRICTLY_BEYOND : Reach.AT_OR_BEYOND;
+            Endpoint end = below ? realized.min() : realized.max();
+            if (end == null) {
+                return true;
+            }
+            if (below ? runsDown() : runsUp()) {
+                return false;
+            }
+            if (spacings.areKnown() && onTheGrid(realized.min()) && onTheGrid(realized.max())) {
+                ExactCut asked = below ? lowerCut() : upperCut();
+                return asked != null && (below
+                        ? reachesFrom(reach, asked, cutOf(end), spacings)
+                        : reachesTo(reach, asked, cutOf(end), spacings));
+            }
+            return below ? lowFrom(end, reach, spacings.reaching())
+                    : highTo(end, reach, spacings.reaching());
         }
 
         /** What a value of the run asks of the values a term takes on the side of an end. */
@@ -4918,34 +5134,12 @@ public final class WhatARelationLeavesUndivided {
                     ExactCut.tighterUpper(upper, other.upper));
         }
 
-        /** Whether a decimal lies in a run: it does, it does not, or that is not worked out. */
-        enum Occupancy { HOLDS, EMPTY, UNKNOWN }
-
         /**
-         * Whether a decimal lies in this run: the least one in it is not past the greatest. Both
-         * are points of the grid even where an end is no decimal, and where the ends are too close
-         * for the places they are moved from to say which is first, it is not worked out, which
-         * nothing reads as either answer.
+         * Whether a decimal lies in this run ({@link Lattice#occupancy}). Both ends are points of
+         * the grid even where an end is no decimal.
          */
-        Occupancy occupancy() {
-            if (lower == null || upper == null) {
-                return Occupancy.HOLDS;
-            }
-            int order = lower.at().compareTo(upper.at());
-            if (order > 0) {
-                return Occupancy.EMPTY;
-            }
-            if (order == 0) {
-                return lower.inclusive() && upper.inclusive()
-                        && Lattice.holds(Granularity.DENSE, lower.at())
-                        ? Occupancy.HOLDS : Occupancy.EMPTY;
-            }
-            Integer placed = Lattice.compare(Lattice.least(Granularity.DENSE, lower),
-                    Lattice.greatest(Granularity.DENSE, upper));
-            if (placed == null) {
-                return Occupancy.UNKNOWN;
-            }
-            return placed > 0 ? Occupancy.EMPTY : Occupancy.HOLDS;
+        Lattice.Occupancy occupancy() {
+            return Lattice.occupancy(Granularity.DENSE, lower, upper);
         }
 
         /**
