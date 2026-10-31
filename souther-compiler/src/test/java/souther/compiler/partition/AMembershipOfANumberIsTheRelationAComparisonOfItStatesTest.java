@@ -51,7 +51,10 @@ class AMembershipOfANumberIsTheRelationAComparisonOfItStatesTest {
                     | Net15 -> Date.addDays(15, d)
                     | Net30 -> Date.addDays(30, d)
             behavior f : (cal: Cal, hs: List<Date>, d: Date, t: Terms) -> Yes | No
-            let f (cal, hs, d, t) = if %s then Yes { n = 1 } else No { n = 0 }
+            let f (cal, hs, d, t) = {
+                %s
+                if %s then Yes { n = 1 } else No { n = 0 }
+            }
             """;
 
     private static final String FINDS = """
@@ -85,6 +88,15 @@ class AMembershipOfANumberIsTheRelationAComparisonOfItStatesTest {
             LocalDate d = date(row.get(2));
             return dates(row.get(1)).contains(d.plusDays(1));
         });
+    }
+
+    /** The day behind a name is the day written out: the same line, and rows at it hold the day. */
+    @Test
+    void theDayBehindANameIsTheDayWrittenOut() {
+        String named = holds("let e = Date.addDays(1, d)", "List.contains(e, hs)");
+        assertEquals(linesOf(holds("List.contains(Date.addDays(1, d), hs)")), linesOf(named));
+        everyRowAt(named, (line, row) ->
+                dates(row.get(1)).contains(date(row.get(2)).plusDays(1)));
     }
 
     /** A value chosen by cases is held on each of them, as a comparison of it is read. */
@@ -217,7 +229,11 @@ class AMembershipOfANumberIsTheRelationAComparisonOfItStatesTest {
     }
 
     private static String holds(String held) {
-        return HOLDS.formatted(CALENDAR.formatted(""), held);
+        return holds("", held);
+    }
+
+    private static String holds(String before, String held) {
+        return HOLDS.formatted(CALENDAR.formatted(""), before, held);
     }
 
     /** And given back when the class is done with them: a fork keeps its JVM. */

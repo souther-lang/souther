@@ -1759,8 +1759,8 @@ public final class WhereEachLineDecides {
      * {@code stated} with {@code value} one of {@code atoms} — every part asking which case it is
      * come out the way that answers — or none of the cases asked where {@code atoms} is empty.
      */
-    private static Proposition assuming(Proposition stated, DecisionSubject value,
-                                        List<Refinement> atoms) {
+    static Proposition assuming(Proposition stated, DecisionSubject value,
+                                List<Refinement> atoms) {
         return switch (stated) {
             case Proposition.All all -> Proposition.all(all.parts().stream()
                     .map(each -> assuming(each, value, atoms)).toList());

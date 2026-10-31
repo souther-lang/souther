@@ -114,7 +114,7 @@ final class AStatementAtARow {
      * it says nothing about.
      */
     static boolean askable(Proposition stated) {
-        return askable(stated, false);
+        return askable(stated, false, false);
     }
 
     /**
@@ -122,11 +122,30 @@ final class AStatementAtARow {
      * one at a time — for a line, or for what else each relates.
      */
     static boolean askableBesideItsRelations(Proposition stated) {
-        return askable(stated, true);
+        return askable(stated, true, false);
     }
 
-    private static boolean askable(Proposition stated, boolean besideItsRelations) {
+    /**
+     * The same of every part of {@code stated} that is neither a relation nor a part nothing read:
+     * for the lines of a statement read beside what it left unread, each of which is still asked
+     * where it decides ({@link #askable}), so that one deciding on what was not read is no line.
+     */
+    static boolean askableBesideItsRelationsAndItsStops(Proposition stated) {
+        return askable(stated, true, true);
+    }
+
+    /**
+     * Whether what keeps a row from being asked {@code stated} is its parts nothing read and
+     * nothing else: with those taken as asked, every part of it is.
+     */
+    static boolean turnsOnWhatWasNotRead(Proposition stated) {
+        return !askable(stated, false, false) && askable(stated, false, true);
+    }
+
+    private static boolean askable(Proposition stated, boolean besideItsRelations,
+                                   boolean besideItsStops) {
         return switch (stated) {
+            case Proposition.Unread _ when besideItsStops -> true;
             case Proposition.Always _ -> true;
             case Proposition.Truth(DecisionSubject.AnInput _, boolean _, Spelling _),
                  Proposition.Present(DecisionSubject.AnInput _, boolean _, Spelling _) -> true;
@@ -138,16 +157,19 @@ final class AStatementAtARow {
             case Proposition.SameValue(DecisionSubject.AnInput _, DecisionSubject.AnInput _,
                                        boolean _, Spelling _) -> true;
             case Proposition.LastToHold _ -> true;
-            case Proposition.All all ->
-                    all.parts().stream().allMatch(each -> askable(each, besideItsRelations));
-            case Proposition.Any any ->
-                    any.parts().stream().allMatch(each -> askable(each, besideItsRelations));
-            case Proposition.WhereItAnswers where -> askable(where.answers(), besideItsRelations)
-                    && askable(where.states(), besideItsRelations);
+            case Proposition.All all -> all.parts().stream()
+                    .allMatch(each -> askable(each, besideItsRelations, besideItsStops));
+            case Proposition.Any any -> any.parts().stream()
+                    .allMatch(each -> askable(each, besideItsRelations, besideItsStops));
+            case Proposition.WhereItAnswers where ->
+                    askable(where.answers(), besideItsRelations, besideItsStops)
+                            && askable(where.states(), besideItsRelations, besideItsStops);
             case Proposition.SoManyHold counted -> counted.statements().stream()
-                    .allMatch(each -> askable(each, besideItsRelations));
-            case Proposition.OfTheWays ways -> askable(ways.written(), besideItsRelations);
-            case Proposition.Some some -> askable(some.ofTheElement(), besideItsRelations);
+                    .allMatch(each -> askable(each, besideItsRelations, besideItsStops));
+            case Proposition.OfTheWays ways ->
+                    askable(ways.written(), besideItsRelations, besideItsStops);
+            case Proposition.Some some ->
+                    askable(some.ofTheElement(), besideItsRelations, besideItsStops);
             case Proposition.Compared compared -> besideItsRelations
                     || switch (compared.relation()) {
                 case Relation.Affine affine ->
