@@ -435,7 +435,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * it is judged by the same walk, as the one way it is.
      */
     OneOfEach.Walked<OnTheWay, Reachability> along() {
-        return WaysWalked.along(onTheWay, this::walkedAlong);
+        return OneReading.walked(onTheWay, this::walkedAlong);
     }
 
     /** {@link #along}, walked. */

@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
- * A reading of a body narrows a region by a run's answers once ({@link RegionsGotPast}): asked of
+ * A reading of a body narrows a region by a run's answers once ({@link OneReading}): asked of
  * the same region and the same answers again, it hands back what it worked out, and asked of
  * others, however alike, it works them out.
  */
@@ -95,10 +95,10 @@ class ARegionIsNarrowedOnceInAReadingByTheSameAnswersTest {
         SearchRegion region = new Untouched();
         DemandReading.Answered answered = answered();
         Counted narrowing = new Counted(region);
-        RegionsGotPast.over(() -> {
+        OneReading.over(() -> {
             Reachability.Reaching.NarrowedPast first =
-                    RegionsGotPast.of(region, answered, narrowing);
-            assertSame(first, RegionsGotPast.of(region, answered, narrowing));
+                    OneReading.narrowedPast(region, answered, narrowing);
+            assertSame(first, OneReading.narrowedPast(region, answered, narrowing));
             return null;
         });
         assertEquals(1, narrowing.times);
@@ -111,9 +111,9 @@ class ARegionIsNarrowedOnceInAReadingByTheSameAnswersTest {
         DemandReading.Answered other = answered();
         assertEquals(one, other, "alike");
         Counted narrowing = new Counted(region);
-        RegionsGotPast.over(() -> {
-            RegionsGotPast.of(region, one, narrowing);
-            RegionsGotPast.of(region, other, narrowing);
+        OneReading.over(() -> {
+            OneReading.narrowedPast(region, one, narrowing);
+            OneReading.narrowedPast(region, other, narrowing);
             return null;
         });
         assertEquals(2, narrowing.times);
@@ -125,9 +125,9 @@ class ARegionIsNarrowedOnceInAReadingByTheSameAnswersTest {
         SearchRegion one = new Untouched();
         SearchRegion other = new Untouched();
         Counted narrowing = new Counted(one);
-        RegionsGotPast.over(() -> {
-            RegionsGotPast.of(one, answered, narrowing);
-            RegionsGotPast.of(other, answered, narrowing);
+        OneReading.over(() -> {
+            OneReading.narrowedPast(one, answered, narrowing);
+            OneReading.narrowedPast(other, answered, narrowing);
             return null;
         });
         assertEquals(2, narrowing.times);
@@ -138,8 +138,8 @@ class ARegionIsNarrowedOnceInAReadingByTheSameAnswersTest {
         SearchRegion region = new Untouched();
         DemandReading.Answered answered = answered();
         Counted narrowing = new Counted(region);
-        assertNotSame(RegionsGotPast.of(region, answered, narrowing),
-                RegionsGotPast.of(region, answered, narrowing));
+        assertNotSame(OneReading.narrowedPast(region, answered, narrowing),
+                OneReading.narrowedPast(region, answered, narrowing));
         assertEquals(2, narrowing.times);
     }
 }

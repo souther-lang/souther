@@ -421,7 +421,7 @@ public sealed interface Reachability {
             }
             List<DemandReading.Tie> ties = new ArrayList<>(tied);
             ties.addAll(answered.tied());
-            NarrowedPast past = RegionsGotPast.of(region, answered,
+            NarrowedPast past = OneReading.narrowedPast(region, answered,
                     () -> narrowedPast(region, answered));
             List<TakenConstraint> narrowing = past.narrowing();
             SearchRegion narrowed = past.narrowed();

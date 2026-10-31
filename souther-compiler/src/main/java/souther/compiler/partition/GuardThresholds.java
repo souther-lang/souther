@@ -220,8 +220,8 @@ public final class GuardThresholds {
         // reads them again for each region and relation it asks about: a way walked once is the
         // same walk for all of them. And the ways of each case are taken past what the run got
         // past working out, a region many of them share narrowed by the same answers each time.
-        return WaysWalked.over(() -> RegionsGotPast.over(() -> guardsOf(behavior, states,
-                emitted, plan, read, elements, arrives, reaches, witnesses)));
+        return OneReading.over(() -> guardsOf(behavior, states, emitted, plan, read, elements,
+                arrives, reaches, witnesses));
     }
 
     private static Guards guardsOf(String behavior, AnalysisBody states, Core emitted,
