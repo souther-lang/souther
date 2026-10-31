@@ -8,6 +8,7 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputQuestion;
+import souther.compiler.inputs.RuleSite;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.WhatAQuestionStandsOn;
 import souther.compiler.observe.Figure;
@@ -455,6 +456,12 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             /** Which rule, which is what tells this finding from the one beside it. */
             public RuleRef rule() {
                 return finding.rule();
+            }
+
+            /** Where inside the rule a reader goes about it: the expression the reading stopped
+             *  at, or the rule itself. */
+            public RuleSite sentTo() {
+                return finding.sentTo();
             }
 
             /** And how a reader finds that rule, which is not what tells it from another. */

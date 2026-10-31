@@ -57,8 +57,11 @@ class AnInvariantStatedAsTheSignOfAnOrderIsReadAsTheOrderTest {
                 """.formatted(fields, rule, use), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        // Without the places a report sends a reader to. The two spellings write one call at two
+        // columns, and what is compared is what each says of the rule.
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .human(SourceRendering.namedByIdentity(compilation.texts()))
+                .replaceAll(", at \\d+:\\d+", "");
     }
 
     /**

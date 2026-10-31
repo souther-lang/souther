@@ -285,13 +285,7 @@ public final class EnsuresThresholds {
         // reading finished. Nothing works out what such a clause raises about an input — what it
         // states is a relation the behavior is held to — so where the reading stopped there is
         // nothing that was determined.
-        left.forEach(each -> {
-            if (each.why() instanceof BlockReason.RuleReadingStopped stopped) {
-                withoutALine.unclassified(cited, ModelOccurrences.NONE, each.at(), stopped);
-            } else {
-                withoutALine.add(cited, each.at(), each.why());
-            }
-        });
+        left.forEach(each -> each.filedIn(cited, ModelOccurrences.NONE, withoutALine));
     }
 
 
