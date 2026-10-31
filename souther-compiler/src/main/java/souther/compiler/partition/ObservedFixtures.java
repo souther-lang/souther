@@ -377,6 +377,9 @@ final class ObservedFixtures {
     private static List<FixtureTemplate> inSetOrder(List<ObservedValue> observed,
                                                     List<FixtureTemplate> written, Type element,
                                                     RuleReadingSource source) {
+        if (written.size() < 2) {
+            return written;
+        }
         Carrier carrier = Carrier.ofValue(element, source.declarations());
         boolean counted = carrier instanceof Carrier.Whole || carrier instanceof Carrier.Dense;
         List<TypeSymbol> worn = TypeView.of(element, source.inners(), source.symbols(),

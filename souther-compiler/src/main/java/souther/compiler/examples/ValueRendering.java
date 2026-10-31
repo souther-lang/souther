@@ -205,7 +205,7 @@ final class ValueRendering {
      * where the element is a number or a name over one, by text otherwise.
      */
     private List<String> inSetOrder(List<ObservedValue> elements, Type element) {
-        Function<ObservedValue, Place> placing = placing(element);
+        Function<ObservedValue, Place> placing = elements.size() < 2 ? value -> null : placing(element);
         List<Map.Entry<ObservedValue, String>> written = new ArrayList<>(elements.size());
         for (ObservedValue each : elements) {
             written.add(Map.entry(each, canonical(each, element)));
