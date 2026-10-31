@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.DecimalOperation.Formed;
+import souther.compiler.inputs.DecimalOperation.Total;
 import souther.compiler.inputs.DecimalOperation.Worked;
 import souther.compiler.inputs.DecimalOperation.Written;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.Leaves;
@@ -47,7 +48,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <li>an operation reading the term asked of and nothing else has room at a number or has none,
  * whichever other term is put where;
  * <li>an operation reading it with another term has room by what the other is put at, which is no
- * fact about the number, and nothing is claimed;
+ * fact about the number, and nothing is claimed, unless every place of the input it is worked out
+ * of is weighed by whole numbers and the scales it is worked out at are kept to what room is shown
+ * for: it then has room at every pair of numbers a row is built at;
  * <li>an operation reading the term put beside it is worked out over numbers chosen at no more than
  * the places a row is built at, and has room for all of them or not.
  * </ul>
@@ -436,11 +439,63 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
         assertNull(leftOfAmounts(0, A));
     }
 
+    /** Each operand is built at no more places than a row is built at, so the sum has room
+     *  whatever the two are put at. */
     @Test
-    void anOperationReadingBothTermsLeavesNothingClaimed() {
+    void anOperationReadingBothTermsWeighedByWholeNumbersIsClaimedOver() {
         DecimalOperation together = sum(H, S);
+        assertInstanceOf(Leaves.Settled.class, left(0, together));
+        assertInstanceOf(Leaves.Settled.class, left(1, together));
+    }
+
+    /** A term weighed by a third is a decimal at some numbers and none at others, and which
+     *  depends on the other term put beside it. */
+    @Test
+    void anOperationReadingBothTermsWeighedByAFractionLeavesNothingClaimed() {
+        Formed aThirdOfH = new Formed(
+                Map.of("h", ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(3))), ExactRatio.ZERO);
+        DecimalOperation together = sum(aThirdOfH, S);
         assertNull(left(0, together));
         assertNull(left(1, together));
+        assertFalse(DecimalOperation.allowAClaimOver(List.of(together), "h", "s"));
+    }
+
+    /** Having room at every number is a fact of the scales the operands are written at, and a
+     *  total is written at the places of the number it is the sum of a list of. */
+    @Test
+    void aTotalIsWrittenAtTheFewestPlacesItsNumberTakesAndSoHasRoomWhateverItIsAddedTo() {
+        Total total = new Total("t");
+        DecimalOperation together = new DecimalOperation(BinOp.SUB, List.of(H, total), List.of());
+        assertTrue(DecimalOperation.allowAClaimOver(List.of(together), "h", "t"));
+        assertTrue(DecimalOperation.allowAClaimOver(List.of(together), "t", "h"));
+        assertEquals(Set.of("h", "t"), DecimalOperation.readsOf(List.of(together)).getFirst());
+    }
+
+    /** The sum of the list of one number written at the places the number takes, nought as the
+     *  sum of none: the number at another scale is no total of these rows. */
+    @Test
+    void aTotalIsWorkedOutOnTheListOfOneNumberAndNoOtherScaleOfIt() {
+        DecimalOperation minusTheTotal = new DecimalOperation(BinOp.SUB,
+                List.of(new Written(new BigDecimal("1.5")), new Total("t")), List.of());
+        assertTrue(DecimalOperation.allCompleteAt(List.of(minusTheTotal),
+                Map.of("t", ExactRatio.ZERO)));
+        assertTrue(DecimalOperation.allCompleteAt(List.of(minusTheTotal),
+                Map.of("t", ExactRatio.of(new BigDecimal("0.25")))));
+        // A factor at the floor of the range has room for a total of scale nought and none for one
+        // at a place: a total is worked out at the scale of its number, so the same number at
+        // another scale is a different row.
+        DecimalOperation againstTheFloor = new DecimalOperation(BinOp.MUL,
+                List.of(new Written(AT_THE_FLOOR), new Total("t")), List.of());
+        assertTrue(DecimalOperation.allCompleteAt(List.of(againstTheFloor),
+                Map.of("t", ExactRatio.of(4))));
+        assertFalse(DecimalOperation.allCompleteAt(List.of(againstTheFloor),
+                Map.of("t", ExactRatio.of(new BigDecimal("4.5")))));
+        assertFalse(DecimalOperation.allowAClaimOver(List.of(againstTheFloor), "h", "t"));
+        // A total of a number that needs more places than a row is built at is no row.
+        assertFalse(DecimalOperation.allCompleteAt(List.of(minusTheTotal), Map.of("t",
+                ExactRatio.of(new BigDecimal(BigInteger.ONE,
+                        DecimalOperation.PLACES_A_ROW_IS_BUILT_AT + 1)))));
+        assertFalse(DecimalOperation.allCompleteAt(List.of(minusTheTotal), Map.of()));
     }
 
     @Test
@@ -451,10 +506,14 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
 
     @Test
     void anOperationWorkedOutOfBothIsReadAsBothThoughNoOperandNamesThem() {
-        List<DecimalOperation> operations = List.of(product(H, new Written(BigDecimal.ONE)),
+        List<DecimalOperation> operations = List.of(product(H, new Written(AT_THE_FLOOR)),
                 sum(new Worked(0), S));
         assertFalse(DecimalOperation.allowAClaimOver(operations, "h", "s"));
         assertFalse(DecimalOperation.allowAClaimOver(operations, "s", "h"));
+        List<DecimalOperation> atFewPlaces = List.of(product(H, new Written(BigDecimal.ONE)),
+                sum(new Worked(0), S));
+        assertTrue(DecimalOperation.allowAClaimOver(atFewPlaces, "h", "s"));
+        assertTrue(DecimalOperation.allowAClaimOver(atFewPlaces, "s", "h"));
     }
 
     @Test

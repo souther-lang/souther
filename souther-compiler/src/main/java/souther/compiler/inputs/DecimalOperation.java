@@ -29,9 +29,10 @@ import java.util.TreeSet;
  *
  * <p>An operand is a decimal as the program wrote it ({@link Written}), the result of an operation
  * worked out before ({@link Worked}), or a place of the input ({@link Formed}), which a row is
- * built with at the fewest digits its number can be written with. Those are the operands whose
- * scale is known, and the scale is what the room is for: an operand of any other kind is not
- * told, and the operation with it.
+ * built with at the fewest digits its number can be written with, or a total of a list of
+ * decimals ({@link Total}), which is the sum of the list of that one number. Those are the
+ * operands whose scale is known, and the scale is what the room is for: an operand of any other
+ * kind is not told, and the operation with it.
  *
  * @param op       the operator: add, subtract or multiply
  * @param operands the two operands, in the order written
@@ -87,6 +88,7 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
             for (Operand operand : each.operands) {
                 switch (operand) {
                     case Formed formed -> here.addAll(formed.coefs().keySet());
+                    case Total total -> here.add(total.term());
                     case Worked worked -> {
                         if (worked.operation() < reads.size()) {
                             here.addAll(reads.get(worked.operation()));
@@ -117,7 +119,13 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * whichever other term is put where; where it has none there is no row at the number, and
      * where it has, the term put as the partner finds the operation as it was found.
      * <li>An operation reading both, or {@code asked} with another term, has room at a number or
-     * not by what the other is put at, which is no fact about the number: nothing is claimed.
+     * not by what the other is put at, which is no fact about the number: nothing is claimed,
+     * unless the room does not turn on the numbers at all. That is so where every place of the
+     * input it is worked out of is weighed by whole numbers, so that each operand is written at no
+     * more places than a row is built at ({@link #PLACES_A_ROW_IS_BUILT_AT}), and the scales of
+     * its operands and of its answer are kept to what is shown room for. Then it has room at
+     * every pair of numbers a row is built at, and the number a row lacks is a number it is not
+     * built at.
      * <li>An operation reading {@code partner} and nothing of {@code asked} is worked out over the
      * number the partner is put at, which is chosen at no more than {@link #PLACES_A_ROW_IS_BUILT_AT}
      * places whichever number of the run it is chosen for, and has room for every such number when
@@ -135,6 +143,72 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
     public static boolean allowAClaimOver(List<DecimalOperation> all, Object asked,
                                           Object partner) {
         List<Set<Object>> reads = readsOf(all);
+        boolean[] bounded = boundedScales(all);
+        if (bounded == null) {
+            return false;
+        }
+        for (int i = 0; i < all.size(); i++) {
+            boolean readsAsked = reads.get(i).contains(asked);
+            if (readsAsked && reads.get(i).size() > 1
+                    && !(bounded[i] && all.get(i).hasRoomWhateverTheOtherTermsAre())) {
+                return false;
+            }
+            if (!readsAsked && reads.get(i).contains(partner) && !bounded[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether every operation of {@code all} that reads {@code asked} reads another term with it
+     * and has the room it has whatever numbers they are put at
+     * ({@link #hasRoomWhateverTheOtherTermsAre}, and its scales kept to what room is shown for). A
+     * run with no end on a side is asked at the edge of what is built for such operations: the
+     * room is the same there as at any number.
+     */
+    static boolean everyOperationReadingItHasRoomAtEveryNumber(List<DecimalOperation> all,
+                                                               Object asked) {
+        List<Set<Object>> reads = readsOf(all);
+        boolean[] bounded = boundedScales(all);
+        if (bounded == null) {
+            return false;
+        }
+        for (int i = 0; i < all.size(); i++) {
+            if (reads.get(i).contains(asked) && (reads.get(i).size() < 2 || !bounded[i]
+                    || !all.get(i).hasRoomWhateverTheOtherTermsAre())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether every operation of {@code all} has the room it has whatever numbers its operands
+     * come to ({@link #hasRoomWhateverTheOtherTermsAre}, and its scales kept to what room is shown
+     * for). The sizes of the addends of a form then say nothing of whether a row completes them:
+     * a row that is built completes every one of them.
+     */
+    static boolean everyOperationHasRoomAtEveryNumber(List<DecimalOperation> all) {
+        boolean[] bounded = boundedScales(all);
+        if (bounded == null) {
+            return false;
+        }
+        for (int i = 0; i < all.size(); i++) {
+            if (!bounded[i] || !all.get(i).hasRoomWhateverTheOtherTermsAre()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * For each of {@code all}, whether its operands and its answer are written at no more places
+     * than room is shown for ({@link #SCALE_THE_ROOM_IS_SHOWN_FOR}). Null where an operation is
+     * worked out of one told after it.
+     */
+    private static boolean[] boundedScales(List<DecimalOperation> all) {
+        boolean[] bounded = new boolean[all.size()];
         long[] scaleOf = new long[all.size()];
         for (int i = 0; i < all.size(); i++) {
             DecimalOperation each = all.get(i);
@@ -142,23 +216,36 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
             for (int o = 0; o < 2; o++) {
                 switch (each.operands.get(o)) {
                     case Written written -> over[o] = Math.abs((long) written.value().scale());
-                    case Formed _ -> over[o] = PLACES_A_ROW_IS_BUILT_AT;
+                    case Formed _, Total _ -> over[o] = PLACES_A_ROW_IS_BUILT_AT;
                     case Worked worked -> {
                         if (worked.operation() >= i) {
-                            return false;
+                            return null;
                         }
                         over[o] = scaleOf[worked.operation()];
                     }
                 }
             }
             scaleOf[i] = each.op == BinOp.MUL ? over[0] + over[1] : Math.max(over[0], over[1]);
-            boolean readsAsked = reads.get(i).contains(asked);
-            if (readsAsked && reads.get(i).size() > 1) {
-                return false;
-            }
-            if (!readsAsked && reads.get(i).contains(partner)
-                    && (over[0] > SCALE_THE_ROOM_IS_SHOWN_FOR || over[1] > SCALE_THE_ROOM_IS_SHOWN_FOR
-                    || scaleOf[i] > SCALE_THE_ROOM_IS_SHOWN_FOR)) {
+            bounded[i] = over[0] <= SCALE_THE_ROOM_IS_SHOWN_FOR
+                    && over[1] <= SCALE_THE_ROOM_IS_SHOWN_FOR
+                    && scaleOf[i] <= SCALE_THE_ROOM_IS_SHOWN_FOR;
+        }
+        return bounded;
+    }
+
+    /**
+     * Whether the room this has is the same at every number of a term it reads, whatever the
+     * other terms it reads are put at. A place of the input is built with at most
+     * {@link #PLACES_A_ROW_IS_BUILT_AT} places, and so is a sum or difference of such places
+     * weighed by whole numbers, so the scale of every such operand is bounded without the
+     * numbers. A place weighed by a fraction is none that every number has a decimal for: whether
+     * a row has one turns on the other terms.
+     */
+    private boolean hasRoomWhateverTheOtherTermsAre() {
+        for (Operand operand : operands) {
+            if (operand instanceof Formed formed
+                    && !(formed.constant().isWhole()
+                    && formed.coefs().values().stream().allMatch(ExactRatio::isWhole))) {
                 return false;
             }
         }
@@ -209,16 +296,48 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
                 }
                 sum = value.times(each.getValue()).flatMap(sum::plus).orNull();
             }
-            if (sum == null) {
-                return Optional.empty();
-            }
-            return switch (sum.writtenDecimal()) {
-                case ExactAnswer.Held<Optional<BigDecimal>> written -> written.value()
-                        .filter(number -> Math.abs((long) number.scale())
-                                <= PLACES_A_ROW_IS_BUILT_AT);
-                case ExactAnswer.Unheld<Optional<BigDecimal>> _ -> Optional.empty();
-            };
+            return builtAt(sum);
         }
+    }
+
+    /**
+     * The total of a list of decimals, the term called {@code term}, as the list of that one
+     * number sums to: the number written at the fewest places, and at no fewer than none, which
+     * is the scale {@code List.sum} leaves ({@code max(0, scales of the elements)}). A total of
+     * nought is the sum of the empty list, at scale nought.
+     *
+     * <p>This is the sum of a list a row can hold, and not of every list that sums to the number:
+     * the same number is the sum of lists whose elements are written at any scale, and the room
+     * an operation has for it is not a fact about the number. So what is shown of an operation
+     * with a total is shown of the rows built with it so, as it is for a place of the input.
+     *
+     * @param term the key of the total, as {@link Formed} keys its places
+     */
+    public record Total(Object term) implements Operand {
+        public Total {
+            Objects.requireNonNull(term, "the total of a list of decimals");
+        }
+
+        /** The decimal the list of the number sums to at {@code values}; empty where the total
+         *  has no value there or the number is written at more places than a row is built at. */
+        Optional<BigDecimal> at(Map<Object, ExactRatio> values) {
+            ExactRatio value = values.get(term);
+            return value == null ? Optional.empty()
+                    : builtAt(value).map(number -> number.scale() < 0 ? number.setScale(0) : number);
+        }
+    }
+
+    /** The number {@code sum} is, written at the fewest places; empty where it is no decimal
+     *  or is written at more places than a row is built at ({@link #PLACES_A_ROW_IS_BUILT_AT}). */
+    private static Optional<BigDecimal> builtAt(ExactRatio sum) {
+        if (sum == null) {
+            return Optional.empty();
+        }
+        return switch (sum.writtenDecimal()) {
+            case ExactAnswer.Held<Optional<BigDecimal>> written -> written.value()
+                    .filter(number -> Math.abs((long) number.scale()) <= PLACES_A_ROW_IS_BUILT_AT);
+            case ExactAnswer.Unheld<Optional<BigDecimal>> _ -> Optional.empty();
+        };
     }
 
     /**
@@ -250,6 +369,7 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
                 case Worked worked -> worked.operation() < results.length
                         ? results[worked.operation()] : null;
                 case Formed formed -> formed.at(values).orElse(null);
+                case Total total -> total.at(values).orElse(null);
             };
             if (taken[i] == null) {
                 return null;

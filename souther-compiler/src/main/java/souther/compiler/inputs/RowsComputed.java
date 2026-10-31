@@ -90,6 +90,16 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
         return greatest == null && !mayStopARow();
     }
 
+    /**
+     * Whether the only operations that can stop a row are of decimals and each has room at every
+     * number a row is built at ({@link DecimalOperation#everyOperationHasRoomAtEveryNumber}). A
+     * number a row is not built at is none of the rows, so no row that is built is stopped.
+     */
+    boolean stopsNoRowThatIsBuilt() {
+        return tellsEveryOperation() && operations.sums().isEmpty() && worksOutDecimals()
+                && DecimalOperation.everyOperationHasRoomAtEveryNumber(operations.decimals());
+    }
+
     /** Whether the rows of the relation work out an operation of decimals. */
     boolean worksOutDecimals() {
         return !operations.decimals().isEmpty();
@@ -124,8 +134,8 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
     boolean aRunWithNoEndIsAskedAtTheEdgeOfWhatIsBuilt(Object asked) {
         return greatest == null && tellsEveryOperation() && operations.sums().isEmpty()
                 && worksOutDecimals()
-                && DecimalOperation.readsOf(operations.decimals()).stream()
-                        .noneMatch(reads -> reads.contains(asked));
+                && DecimalOperation.everyOperationReadingItHasRoomAtEveryNumber(
+                        operations.decimals(), asked);
     }
 
     /**

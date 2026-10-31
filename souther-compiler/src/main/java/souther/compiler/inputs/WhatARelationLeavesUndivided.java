@@ -2162,7 +2162,8 @@ public final class WhatARelationLeavesUndivided {
                 return true;
             }
         }
-        return (!arithmetic.mayStopARow() && reachedWithoutEnd(terms, relation, free))
+        return ((!arithmetic.mayStopARow() || arithmetic.stopsNoRowThatIsBuilt())
+                && reachedWithoutEnd(terms, relation, free))
                 || (within == null
                         && reachedByTheOthersAddedUp(terms, at, constant, relation, free,
                                 arithmetic))
