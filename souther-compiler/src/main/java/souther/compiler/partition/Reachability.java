@@ -421,23 +421,10 @@ public sealed interface Reachability {
             }
             List<DemandReading.Tie> ties = new ArrayList<>(tied);
             ties.addAll(answered.tied());
-            // Only what narrows: a bound the region already holds is nothing a reader of this
-            // way is to be told of.
-            List<TakenConstraint> narrowing = new ArrayList<>();
-            SearchRegion narrowed = region;
-            for (TakenConstraint each : answered.narrowing()) {
-                SearchRegion next = each.narrowing(narrowed);
-                // One number that no run of moves is one the region already holds. Several say
-                // how they go together, which no run of one of them shows: a sum held below a
-                // greatest value leaves each its values and the pair fewer. Unless every row of
-                // the region meets it, which leaves them as they are.
-                boolean keeps = each.terms().size() > 1
-                        ? !heldAtEveryRow(each, region, narrowed) : movesAny(each, narrowed, next);
-                if (keeps) {
-                    narrowing.add(each);
-                    narrowed = next;
-                }
-            }
+            NarrowedPast past = OneReading.narrowedPast(region, answered,
+                    () -> narrowedPast(region, answered));
+            List<TakenConstraint> narrowing = past.narrowing();
+            SearchRegion narrowed = past.narrowed();
             Optional<List<TakenConstraint>> by = narrowedBy.map(was -> {
                 List<TakenConstraint> both = new ArrayList<>(was);
                 both.addAll(narrowing);
@@ -460,15 +447,60 @@ public sealed interface Reachability {
             owedNow.addAll(answered.owed());
             List<DemandReading.PriorApplications> beforeNow = new ArrayList<>(before);
             beforeNow.addAll(answered.before());
-            // A region nothing moved is the one the way already had, which is asked nothing again.
-            if (!narrowing.isEmpty() && narrowed.emptiness().isPresent()) {
+            if (past.leavesNone()) {
                 return new Reaching(region, requirements, truths, boundedOnTheWay, split,
                         declined, narrowedBy, gotPast, ties, unsaidNow, owedNow, beforeNow);
             }
-            List<TakenConstraint> past = new ArrayList<>(gotPast);
-            past.addAll(narrowing);
+            List<TakenConstraint> gotPastNow = new ArrayList<>(gotPast);
+            gotPastNow.addAll(narrowing);
             return new Reaching(narrowed, requirements, truths, boundedOnTheWay, split, declined,
-                    by, past, ties, unsaidNow, owedNow, beforeNow);
+                    by, gotPastNow, ties, unsaidNow, owedNow, beforeNow);
+        }
+
+        /**
+         * What {@code answered} narrows {@code region} by, the region it leaves, and whether that
+         * leaves no input.
+         *
+         * <p>Of the region and what was got past alone, and nothing else a way holds: the ways a
+         * way is split into share their region with it wherever what they ask that it does not is
+         * nothing a region says, so one region is narrowed by one run's answers for many ways.
+         */
+        static NarrowedPast narrowedPast(SearchRegion region, DemandReading.Answered answered) {
+            // Only what narrows: a bound the region already holds is nothing a reader of this
+            // way is to be told of.
+            List<TakenConstraint> narrowing = new ArrayList<>();
+            SearchRegion narrowed = region;
+            for (TakenConstraint each : answered.narrowing()) {
+                SearchRegion next = each.narrowing(narrowed);
+                // One number that no run of moves is one the region already holds. Several say
+                // how they go together, which no run of one of them shows: a sum held below a
+                // greatest value leaves each its values and the pair fewer. Unless every row of
+                // the region meets it, which leaves them as they are.
+                boolean keeps = each.terms().size() > 1
+                        ? !heldAtEveryRow(each, region, narrowed) : movesAny(each, narrowed, next);
+                if (keeps) {
+                    narrowing.add(each);
+                    narrowed = next;
+                }
+            }
+            // A region nothing moved is the one the way already had, which is asked nothing again.
+            return new NarrowedPast(narrowing,
+                    narrowed, !narrowing.isEmpty() && narrowed.emptiness().isPresent());
+        }
+
+        /**
+         * What a run's answers narrow a region by ({@link #narrowedPast}).
+         *
+         * @param narrowing  the constraints that moved the region, in the order taken in
+         * @param narrowed   the region they leave
+         * @param leavesNone whether that is no input, which a way keeps its region for
+         */
+        record NarrowedPast(List<TakenConstraint> narrowing, SearchRegion narrowed,
+                            boolean leavesNone) {
+
+            NarrowedPast {
+                narrowing = List.copyOf(narrowing);
+            }
         }
 
         /**

@@ -448,12 +448,12 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         // disjunction of things is put at the whole node, since neither operand is what could not
         // be carried.
         List<OnTheWay> entries = new ArrayList<>();
-        Map<OnTheWay, ModelOccurrences> by = new LinkedHashMap<>();
+        SaidOnTheWay.Filing by = new SaidOnTheWay.Filing();
         for (DemandReading.Stated each : DemandReading.stated(node, read, holding, conditions)) {
             entries.add(onTheWay(each.where().occurrence(), each.where().anchor(), each.read(),
                     read, each.readOff(), by, Optional.empty()));
         }
-        return new Stating(entries, new SaidOnTheWay(by, Map.of(), Map.of()));
+        return new Stating(entries, by.said());
     }
 
     /**
@@ -480,9 +480,9 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         /** {@code entries}, every one of them and of their alternatives read off
          *  {@code readIn}. */
         static Stating of(List<OnTheWay> entries, ModelOccurrences readIn) {
-            Map<OnTheWay, ModelOccurrences> by = new LinkedHashMap<>();
-            SaidOnTheWay.filed(entries, readIn, by);
-            return new Stating(entries, new SaidOnTheWay(by, Map.of(), Map.of()));
+            SaidOnTheWay.Filing by = new SaidOnTheWay.Filing();
+            by.each(entries, readIn);
+            return new Stating(entries, by.said());
         }
     }
 
@@ -766,11 +766,11 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         DemandReading.Projected made =
                 DemandReading.projectedOff(arm, arm.proposition(), read, fork);
         List<OnTheWay> entries = new ArrayList<>();
-        Map<OnTheWay, ModelOccurrences> by = new LinkedHashMap<>();
+        SaidOnTheWay.Filing by = new SaidOnTheWay.Filing();
         for (DemandReading.Read each : made.reads()) {
             entries.add(onTheWay(met, at, each, read, made.readOff(), by, entered));
         }
-        return new Stating(entries, new SaidOnTheWay(by, Map.of(), Map.of()));
+        return new Stating(entries, by.said());
     }
 
     /** The copy of the model's code {@code fork} stands in, or none where the model states
@@ -796,13 +796,13 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         // Read off the parts of the comparison's own statement: where a line decides is a fact of
         // the comparison, over the values it reads.
         List<OnTheWay> entries = new ArrayList<>();
-        Map<OnTheWay, ModelOccurrences> by = new LinkedHashMap<>();
+        SaidOnTheWay.Filing by = new SaidOnTheWay.Filing();
         for (DemandReading.Stated each
                 : DemandReading.askedAt(at, decides, read, WhatConditionsState.of(read))) {
             entries.add(onTheWay(at.occurrence(), at.anchor(), each.read(), read, each.readOff(),
                     by, Optional.empty()));
         }
-        return new Stating(entries, new SaidOnTheWay(by, Map.of(), Map.of()));
+        return new Stating(entries, by.said());
     }
 
     /**
@@ -815,7 +815,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
     private static OnTheWay onTheWay(ConditionOccurrence condition, ConditionReportAnchor at,
                                      DemandReading.Read read, InputReading input,
                                      DemandReading.ReadOff readOff,
-                                     Map<OnTheWay, ModelOccurrences> by,
+                                     SaidOnTheWay.Filing by,
                                      Optional<EnteredArm> entered) {
         OnTheWay made = switch (read) {
             case DemandReading.Read.Demands(var demand) -> new OnTheWay.TakenIn(at, demand);
@@ -839,7 +839,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             case DemandReading.Read.Unread(var whys, var besideAnAnswer) ->
                     new OnTheWay.Declined(condition, at, whys, entered, besideAnAnswer);
         };
-        SaidOnTheWay.filedAlone(made, readOff.of(read), by);
+        by.alone(made, readOff.of(read));
         return made;
     }
 

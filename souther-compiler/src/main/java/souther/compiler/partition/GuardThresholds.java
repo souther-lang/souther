@@ -216,6 +216,21 @@ public final class GuardThresholds {
         // modules' together — and a reading of another plan answers that nothing is known about
         // every comparison here, which restricts nothing and is what an unread body looks like.
         arrives.requireNumbering(plan.identity());
+        // Every comparison of the body reads its ways over the conditions the body states, and
+        // reads them again for each region and relation it asks about: a way walked once is the
+        // same walk for all of them. And the ways of each case are taken past what the run got
+        // past working out, a region many of them share narrowed by the same answers each time.
+        return OneReading.over(() -> guardsOf(behavior, states, emitted, plan, read, elements,
+                arrives, reaches, witnesses));
+    }
+
+    private static Guards guardsOf(String behavior, AnalysisBody states, Core emitted,
+                                   CoverageSites.Plan plan,
+                                   InputReading read,
+                                   ElementBindings elements,
+                                   PathReachability.Arrivals arrives,
+                                   RuleReachNumbering reaches,
+                                   CountWitnesses.AtComparisons witnesses) {
         InputDomain inputs = read.domain();
         List<LineEvidence> found = new ArrayList<>();
         RulesWithNoLine.Gathered withoutALine = new RulesWithNoLine.Gathered();
@@ -293,9 +308,10 @@ public final class GuardThresholds {
                             // statement of several is asked again with where it decides taken in.
                             List<ComparisonArrival> arrivals = at.observations().stream()
                                     .map(one -> one.arrival()).toList();
-                            WaysToACase wayToACase = new WaysToACase(decides ->
-                                    Reachability.gettingPast(Reachability.of(new WayToTheBorder(
-                                            each.wayToACase(aCase.apply(decides))),
+                            WaysToACase wayToACase = new WaysToACase(each.assumed(),
+                                    decides -> aCase.apply(decides).entries(), put ->
+                                    Reachability.gettingPast(Reachability.of(
+                                            new WayToTheBorder(each.wayToACase(put)),
                                             read.quantities().region()), each.getsPast()));
                             Reachability toIt = Reachability.gettingPast(Reachability.of(
                                     new WayToTheBorder(each.assumed()),

@@ -414,6 +414,48 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         return ASKED_OF_A_ROW.positions(entry);
     }
 
+    /**
+     * The positions what {@code entry} asks of a row turns on ({@link #positionsOf}), inside every
+     * alternative it leaves a row and every statement it counts as well.
+     */
+    static Set<TermPath> positionsInside(OnTheWay entry) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        everyOneInside(entry).forEach(one -> out.addAll(positionsOf(one)));
+        return out;
+    }
+
+    /**
+     * Whether {@code entry} is shown to ask nothing of the value at {@code at}: what it asks of a
+     * row, inside it as well, turns on no position at {@code at}, under it or around it
+     * ({@link #positionsInside}). Not shown where a condition inside it is one this reading has no
+     * words for, which may ask anything.
+     */
+    static boolean asksNothingOf(TermPath at, OnTheWay entry) {
+        List<OnTheWay> inside = everyOneInside(entry);
+        return inside.stream().noneMatch(OnTheWay.Declined.class::isInstance)
+                && inside.stream().flatMap(one -> positionsOf(one).stream())
+                        .noneMatch(one -> one.isAtOrUnder(at) || at.isAtOrUnder(one));
+    }
+
+    /** {@code entry}, and every condition inside the alternatives it leaves a row and the
+     *  statements it counts, however deep. */
+    private static List<OnTheWay> everyOneInside(OnTheWay entry) {
+        List<OnTheWay> out = new ArrayList<>();
+        gatherInside(entry, out);
+        return out;
+    }
+
+    private static void gatherInside(OnTheWay entry, List<OnTheWay> into) {
+        into.add(entry);
+        if (entry.ofSeveralWays()) {
+            entry.alternatives().forEach(alternative ->
+                    alternative.forEach(one -> gatherInside(one, into)));
+        }
+        if (entry instanceof OnTheWay.Counted counted) {
+            counted.parts().forEach(one -> gatherInside(one, into));
+        }
+    }
+
     /** The conditions on this way a row is past one of several ways of
      *  ({@link OnTheWay#alternatives}), in the order the walk met them. */
     public List<OnTheWay> severalWays() {
@@ -435,6 +477,11 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * it is judged by the same walk, as the one way it is.
      */
     OneOfEach.Walked<OnTheWay, Reachability> along() {
+        return OneReading.walked(onTheWay, this::walkedAlong);
+    }
+
+    /** {@link #along}, walked. */
+    private OneOfEach.Walked<OnTheWay, Reachability> walkedAlong() {
         // A way with no count on it is walked as it always was, with the walk's own figures.
         if (stated().stream().noneMatch(OnTheWay.Counted.class::isInstance)) {
             return walked(onTheWay, ASKED_OF_A_ROW);

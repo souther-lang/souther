@@ -251,18 +251,18 @@ final class ConditionNumbering {
      * and two equal entries on these ways made by two copies are told both.
      */
     SaidOnTheWay saidOnTheWay(List<List<OnTheWay>> ways) {
-        Map<OnTheWay, ModelOccurrences> entries = new LinkedHashMap<>();
+        SaidOnTheWay.Filing entries = new SaidOnTheWay.Filing();
         for (List<OnTheWay> way : ways) {
             told(way, entries);
         }
-        return new SaidOnTheWay(entries, Map.of(), Map.of());
+        return entries.said();
     }
 
-    private void told(List<OnTheWay> way, Map<OnTheWay, ModelOccurrences> into) {
+    private void told(List<OnTheWay> way, SaidOnTheWay.Filing into) {
         for (OnTheWay each : way) {
             ModelOccurrences made = madeBy.get(each);
             if (made != null) {
-                SaidOnTheWay.filedAlone(each, made, into);
+                into.alone(each, made);
             }
             if (each instanceof OnTheWay.OneOf several) {
                 several.alternatives().forEach(one -> told(one, into));

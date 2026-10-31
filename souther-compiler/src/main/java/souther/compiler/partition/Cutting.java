@@ -2682,7 +2682,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * leaves the quantity is the same whatever arrives.
      */
     UnaryOperator<Border.Values> keptTo(Proposition where, InputReading read) {
-        LevelRegion onIt = leftBy(where, read);
+        return keptTo(leftBy(where, read));
+    }
+
+    /**
+     * {@link #keptTo} of a case that leaves this line's quantity {@code onIt} ({@link #leftBy}):
+     * two cases leaving it the same keep a region's values to the same.
+     */
+    UnaryOperator<Border.Values> keptTo(LevelRegion onIt) {
         return onIt == null ? UnaryOperator.identity()
                 : values -> values == null ? null : keptTo(values, onIt);
     }
@@ -2732,7 +2739,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * leaves it the values on the side it holds on; anything else in the case leaves it whatever it
      * had.
      */
-    private LevelRegion leftBy(Proposition where, InputReading read) {
+    LevelRegion leftBy(Proposition where, InputReading read) {
         if (of instanceof LinearQuantity) {
             return null;
         }

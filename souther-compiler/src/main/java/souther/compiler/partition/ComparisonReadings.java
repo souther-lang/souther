@@ -316,8 +316,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
          * {@code put}, what the case puts on the way ({@link #aCasePutOnTheWay}).
          */
         List<OnTheWay> wayToACase(ReachingCuts.Stating put) {
+            return wayToACase(put.entries());
+        }
+
+        /** The way, and then {@code put}, entries some case puts on the way. */
+        List<OnTheWay> wayToACase(List<OnTheWay> put) {
             List<OnTheWay> out = new ArrayList<>(assumed);
-            out.addAll(put.entries());
+            out.addAll(put);
             return List.copyOf(out);
         }
 

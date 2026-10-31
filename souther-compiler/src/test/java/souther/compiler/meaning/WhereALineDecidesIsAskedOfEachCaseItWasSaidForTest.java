@@ -202,7 +202,6 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
                 new DecidingCase.Cases.EachOf(List.of(one(yes[2]), one(yes[2].denied()))),
                 one(yes[2]));
 
-        Set<Proposition> every = new LinkedHashSet<>();
         Set<Proposition> expected = new LinkedHashSet<>();
         for (int mask = 0; mask < 8; mask++) {
             List<Proposition> chosen = new ArrayList<>();
@@ -211,11 +210,12 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
                 chosen.add((mask >> at & 1) == 0 ? yes[at] : yes[at].denied());
             }
             Proposition all = Proposition.all(chosen);
-            every.add(all);
             if (consistent(all)) {
                 expected.add(all);
             }
         }
+        Set<Proposition> every = new LinkedHashSet<>(expected);
+        every.add(new Proposition.Always(false));
         DecidingCase.Cases together = new DecidingCase.Cases.Together(written);
 
         Asking asking = new Asking(WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest::consistent);
@@ -229,10 +229,42 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
 
         CasesOfALineAsked.Atoms<Proposition> atoms =
                 CasesOfALineAsked.atomsOf(new DecidingCase(SAID, together), condition -> condition);
+        assertEquals(8, atoms.each().size(),
+                "asked of every case, none given up, whichever order they are chosen in");
         assertEquals(every, atoms.each().stream().map(CasesOfALineAsked.Atom::condition)
                 .collect(Collectors.toSet()),
-                "asked of every case, none given up, whichever order they are chosen in");
+                "each as what its choices leave of it: one whose choices deny each other holds"
+                        + " nowhere");
         assertEquals(Set.of(), atoms.notWorkedOut());
+    }
+
+    /**
+     * A case is asked as what its choices leave of it: a condition every case holds is asked of
+     * each case with what the case chose put in it. {@code a} and {@code b} coming out alike,
+     * held by every way of choosing each of them: once {@code a} is chosen it is {@code b}, once
+     * {@code b} is chosen too it is nothing more, and with {@code b} failing it is nowhere. Asked
+     * as it was written, it would be beside every case in full, which is as long as the statement
+     * it came from.
+     */
+    @Test
+    void aCaseIsAskedAsWhatItsChoicesLeaveOfIt() {
+        Proposition alike = Proposition.any(List.of(both(A, B),
+                both(A.denied(), B.denied())));
+        DecidingCase.Cases cases = new DecidingCase.Cases.Together(List.of(one(alike),
+                new DecidingCase.Cases.EachOf(List.of(one(A), one(A.denied()))),
+                new DecidingCase.Cases.EachOf(List.of(one(B), one(B.denied())))));
+        Asking asking = new Asking(WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest::consistent);
+
+        CasesOfALineAsked.Found found = asking.of(cases);
+
+        Proposition nowhere = new Proposition.Always(false);
+        Proposition neither = both(A.denied(), B.denied());
+        assertEquals(List.of(cases.holdingInSome(TAKEN_APART).orElseThrow(), alike,
+                        both(A, B), both(A, B), nowhere, neither, nowhere, neither),
+                asking.asked(), "the condition every case holds, and then each case as its"
+                        + " choices leave it");
+        assertEquals(List.of(DecidingCase.alone(both(A, B)), DecidingCase.alone(neither)),
+                found.decidesIn(), "the two cases it holds in, each as what it chose");
     }
 
     /**
