@@ -285,7 +285,8 @@ class AHoleOnASumBoundsTheSumNotOnlyItsPositionsTest {
     @Test
     void whatAStateWithHolesHandsBackHoldsAtEveryPointTheRulesAdmit() {
         List<AffineConstraint<String>> rules = holesOnSumsAndDifferences();
-        ClosedState<String> closed = ClosedState.of(rules, WHOLE, CanonicalOrder.asTheyAreSpelled());
+        ClosedState<String> closed = ClosedState.of(rules,
+                AHoleOnASumBoundsTheSumNotOnlyItsPositionsTest::whole, CanonicalOrder.asTheyAreSpelled());
         assertFalse(closed.holdsNothing());
 
         int admitted = 0;
@@ -330,12 +331,14 @@ class AHoleOnASumBoundsTheSumNotOnlyItsPositionsTest {
     void holesCarriedFromEarlierRoundsAreTheHolesSettledFromNothing() {
         List<AffineConstraint<String>> rules = holesOnSumsAndDifferences();
         CanonicalOrder<String> order = CanonicalOrder.asTheyAreSpelled();
-        ClosedState<String> closed = ClosedState.of(rules, WHOLE, order);
+        ClosedState<String> closed = ClosedState.of(rules,
+                AHoleOnASumBoundsTheSumNotOnlyItsPositionsTest::whole, order);
         assertEquals(ClosedState.Status.STABLE, closed.status());
 
         FormReach<String> fromNothing = FormReach.over(rules, closed.box(), closed.differences(), order);
         AffineReduction.Reduction.Tightened<String> found = (AffineReduction.Reduction.Tightened<String>)
-                AffineReduction.over(fromNothing, WHOLE, order);
+                AffineReduction.over(fromNothing,
+                        AHoleOnASumBoundsTheSumNotOnlyItsPositionsTest::whole, order);
 
         assertEquals(found.sided(), closed.sided());
     }
@@ -359,7 +362,10 @@ class AHoleOnASumBoundsTheSumNotOnlyItsPositionsTest {
                 onASum.projectionCertification());
     }
 
-    private static final Function<String, Granularity> WHOLE = _ -> Granularity.DISCRETE;
+    /** Every position takes whole numbers. */
+    private static Granularity whole(String ignored) {
+        return Granularity.DISCRETE;
+    }
 
     private static final Map<String, ExactRatio> AB = Map.of(A, ExactRatio.ONE, B, ExactRatio.of(-1));
     private static final Map<String, ExactRatio> BC = Map.of(B, ExactRatio.ONE, "c", ExactRatio.of(-1));
