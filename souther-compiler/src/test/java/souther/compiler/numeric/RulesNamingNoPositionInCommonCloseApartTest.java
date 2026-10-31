@@ -360,17 +360,19 @@ class RulesNamingNoPositionInCommonCloseApartTest {
      *                    position's bounds as the differences have them
      * @param relations   the relations the differences hold, as a set: the order they are listed in
      *                    is the order the rules arrived in, which parting may change
+     * @param sided       the half-spaces the holes came to, as a set for the same reason
      */
     record Outcome(boolean holdsNothing, Box<String> box, ClosedState.Status status,
                            boolean everyBoundWasComposed, boolean differencesHoldNothing,
                            Map<String, ExactCut> differences,
-                           Set<DifferenceBounds.Apart<String>> relations) {}
+                           Set<DifferenceBounds.Apart<String>> relations,
+                           Set<AffineConstraint.HalfSpace<String>> sided) {}
 
     static Outcome outcome(ClosedState<String> closed) {
         DifferenceBounds<String> differences = closed.differences();
         if (closed.holdsNothing()) {
             return new Outcome(true, null, closed.status(), closed.everyBoundWasComposed(),
-                    differences.holdsNothing(), null, null);
+                    differences.holdsNothing(), null, null, null);
         }
         Map<String, ExactCut> apart = new LinkedHashMap<>();
         List<String> everywhere = new ArrayList<>(ONE_HALF);
@@ -385,7 +387,8 @@ class RulesNamingNoPositionInCommonCloseApartTest {
             }
         }
         return new Outcome(false, closed.box(), closed.status(), closed.everyBoundWasComposed(),
-                false, apart, new LinkedHashSet<>(differences.relations()));
+                false, apart, new LinkedHashSet<>(differences.relations()),
+                new LinkedHashSet<>(closed.sided()));
     }
 
     /** Which of the cases the theorem is about the halves reached, so that a list reaching none of

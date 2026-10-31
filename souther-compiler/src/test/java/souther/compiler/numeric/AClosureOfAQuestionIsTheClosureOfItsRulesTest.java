@@ -65,7 +65,7 @@ class AClosureOfAQuestionIsTheClosureOfItsRulesTest {
 
     /** What one road came to, as a value two roads can be compared by. */
     private record Outcome(boolean refused, boolean holdsNothing, Object box,
-                           boolean everyBoundWasComposed) {}
+                           boolean everyBoundWasComposed, Object sided) {}
 
     private interface Closing {
         ClosedState<String> close();
@@ -76,10 +76,11 @@ class AClosureOfAQuestionIsTheClosureOfItsRulesTest {
         try {
             closed = closing.close();
         } catch (IllegalStateException refusal) {
-            return new Outcome(true, false, refusal.getMessage(), false);
+            return new Outcome(true, false, refusal.getMessage(), false, null);
         }
         return new Outcome(false, closed.holdsNothing(),
-                closed.holdsNothing() ? null : closed.box(), closed.everyBoundWasComposed());
+                closed.holdsNothing() ? null : closed.box(), closed.everyBoundWasComposed(),
+                closed.sided());
     }
 
     private static List<AffineConstraint<String>> someRules(Random dice,
