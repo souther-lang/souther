@@ -10628,16 +10628,24 @@ public final class Adequacy {
         }
         for (RowOutcome row : rows) {
             boolean held = row.disposition() == Disposition.HELD;
-            if (row.expectedArm() != null) {
+            RowRef rowRef = RowRef.of(row);
+            switch (row.expectedCase()) {
                 // Only a case of the output. A row naming a type the output does not have expects
                 // none of its cases. A case of it nothing reachable produces is kept: the row does
                 // expect it, and what the count is out of is the evidence's to apply.
-                if (outputCases.contains(row.expectedArm())) {
-                    specified.add(row.expectedArm());
+                case RowOutcome.ExpectedCase.Names(TypeSymbol arm) -> {
+                    if (outputCases.contains(arm)) {
+                        specified.add(arm);
+                    }
                 }
-            } else if (!declaredOut.isEmpty()) {
-                // an expectation neither the text nor its value says a case of
-                unreadableOut.add(RowRef.of(row));
+                // Its answer is owed: it expects nothing, so no case waits on it.
+                case RowOutcome.ExpectedCase.NoneAsserted _ -> { }
+                // An expectation neither the text nor its value says a case of.
+                case RowOutcome.ExpectedCase.Unread _ -> {
+                    if (!declaredOut.isEmpty()) {
+                        unreadableOut.add(rowRef);
+                    }
+                }
             }
             if (row.answered()) {
                 answered++;
@@ -10659,7 +10667,6 @@ public final class Adequacy {
             // A row the reading went without got as far as it got for a reason that is not the
             // model's, so nothing says which sets its case stops short of. Asked of the reason
             // written where it stopped, which names the row.
-            RowRef rowRef = RowRef.of(row);
             InputCaseEvidence.Reached unreadReached = wentWithout.contains(rowRef)
                     ? InputCaseEvidence.Reached.VERIFIED : reached;
             for (int i = 0; i < ins.size(); i++) {

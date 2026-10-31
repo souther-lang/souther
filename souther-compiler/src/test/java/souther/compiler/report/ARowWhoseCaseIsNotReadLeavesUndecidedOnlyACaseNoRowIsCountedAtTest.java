@@ -9,10 +9,15 @@ import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.OutputCaseEvidence;
 import souther.compiler.query.Weakening;
+import souther.compiler.query.WeakeningSet;
+import souther.compiler.source.SourceId;
+import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -107,7 +112,7 @@ class ARowWhoseCaseIsNotReadLeavesUndecidedOnlyACaseNoRowIsCountedAtTest {
         List<RowRef> rows = List.of(aHit(report), theRow(report, "a hit of three"));
 
         Measurement.Partial<?> partial = assertInstanceOf(Measurement.Partial.class, shot.cases());
-        assertEquals(List.of(new Weakening.InputCasesUnreadable("record", 1, rows)),
+        assertEquals(List.of(new Weakening.InputCasesUnreadable("record", 1, Set.copyOf(rows))),
                 List.copyOf(partial.weakening().causes()));
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
                 () -> "a case the helper's row may cover is refused over: "
@@ -118,7 +123,7 @@ class ARowWhoseCaseIsNotReadLeavesUndecidedOnlyACaseNoRowIsCountedAtTest {
                         && it.cause() instanceof Weakening.InputCasesUnreadable)
                 .findFirst().orElseThrow();
         assertEquals(new ReaderDisposition.WriteTheCaseOutIn(
-                new Subject.AtAnInput("record", 1), rows), ReaderDisposition.of(open));
+                new Subject.AtAnInput("record", 1), Set.copyOf(rows)), ReaderDisposition.of(open));
 
         SourceRendering rendering = SourceRendering.namedByIdentity(SourceLayouts.NONE);
         String human = report.human(rendering);
@@ -149,8 +154,70 @@ class ARowWhoseCaseIsNotReadLeavesUndecidedOnlyACaseNoRowIsCountedAtTest {
                 () -> "and one is not verified by a row that was read: " + shot.seen());
         Measurement.Partial<?> partial = assertInstanceOf(Measurement.Partial.class, shot.cases());
         assertEquals(List.of(new Weakening.InputCasesUnreadable("record", 1,
-                        List.of(aHit(report)))),
+                        Set.of(aHit(report)))),
                 List.copyOf(partial.weakening().causes()));
+    }
+
+    /**
+     * The same, with the helper's row not holding either. It was applied and did not hold, so its
+     * case is in the specified and executed sets and not in the verified one: reading it would add
+     * nothing to the sets that lack a case, and the measure is exact without it.
+     */
+    @Test
+    void anUnreadRowThatDidNotHoldLeavesNoVerifiedCaseUndecided() {
+        AdequacyReport report = WrittenWitness.refusedOnly(List.of("E1905", "E1905"), model(
+                "    | \"a hit\" : (0, hit(0)) -> 1\n"
+                        + "    | \"a hit of three\" : (0, Hit(3)) -> 4\n" + A_MISS));
+        InputCaseEvidence shot = theShot(report);
+
+        assertEquals(1, shot.seen().unclassifiedRows(), "the helper's row is not read");
+        assertEquals(shot.coverable(), List.copyOf(shot.seen().executed()),
+                "every case was applied");
+        assertTrue(!shot.seen().verified().containsAll(shot.coverable()),
+                () -> "and one is verified by no row: " + shot.seen());
+        assertInstanceOf(Measurement.Complete.class, shot.cases(),
+                () -> "a row that did not hold verifies nothing, and it says " + shot.cases());
+    }
+
+    /**
+     * A case the position's rules refuse is no case a row is owed at, so a set lacking only that
+     * one lacks nothing a helper's row could be at.
+     */
+    @Test
+    void aCaseTheRulesRefuseIsNotOneAnUnreadRowMayCover() {
+        AdequacyReport report = WrittenWitness.reportOf("""
+                module m
+
+                data On
+                data Off
+                data Pending
+                data Flag = On | Off | Pending
+                data Active = Flag invariant value /= Off
+                data Answer = Int
+
+                behavior pick : (f: Active) -> Answer
+                    constructs Answer
+
+                let pick (f) = match f.value with
+                    | On      -> Answer(1)
+                    | Pending -> Answer(0)
+                    | Off     -> unreachable "an Active is never Off"
+
+                let pending (n: Int): Active = if n > 0 then Active(Pending) else Active(On)
+
+                example pick
+                    | "on" : (Active(On)) -> Answer(1)
+                    | "pending" : (Active(Pending)) -> Answer(0)
+                    | "pending by a helper" : (pending(1)) -> Answer(0)
+                """);
+        InputCaseEvidence f = report.modules().getFirst().behaviors().getFirst().signature()
+                .inputs().made().orElseThrow().getFirst();
+
+        assertEquals(1, f.excluded().size(), "Off is refused by the rules");
+        assertEquals(1, f.seen().unclassifiedRows(), "the helper's row is not read");
+        assertEquals(List.of(), f.unspecified(), "every case a row can be at has one");
+        assertInstanceOf(Measurement.Complete.class, f.cases(),
+                () -> "only the refused case is without a row, and it says " + f.cases());
     }
 
     /**
@@ -176,13 +243,36 @@ class ARowWhoseCaseIsNotReadLeavesUndecidedOnlyACaseNoRowIsCountedAtTest {
         Measurement.Partial<?> partial = assertInstanceOf(Measurement.Partial.class, shot.cases(),
                 () -> "a row that may be at Hit did not finish: " + shot.cases());
         assertEquals(List.of(new Weakening.InputCasesUnreadable("record", 1,
-                        List.of(theRow(report, "spins")))),
+                        Set.of(theRow(report, "spins")))),
                 List.copyOf(partial.weakening().causes()));
     }
 
-    /** The output side asks the same: an expectation that names no case decides nothing where every
-     *  case is expected by a row that does. A row whose answer is owed names none, which a
-     *  helper's answer does through its value. */
+    /**
+     * Which rows a fact names is the fact, and not the order they came in: the same rows gathered
+     * the other way round are the same thing a measure went without, and a set of those holds it
+     * once.
+     */
+    @Test
+    void theSameRowsInAnotherOrderAreTheSameFact() {
+        RowRef one = new RowRef("record", new SourceId("m.sou"), new RowIdentity.Unnamed(1));
+        RowRef two = new RowRef("record", new SourceId("m.sou"), new RowIdentity.Unnamed(2));
+        Weakening forwards = new Weakening.InputCasesUnreadable("record", 1,
+                new LinkedHashSet<>(List.of(one, two)));
+        Weakening backwards = new Weakening.InputCasesUnreadable("record", 1,
+                new LinkedHashSet<>(List.of(two, one)));
+
+        assertEquals(forwards, backwards);
+        assertEquals(1, WeakeningSet.of(forwards).union(WeakeningSet.of(backwards)).causes()
+                .size());
+        assertEquals(new Weakening.OutputCasesUnreadable("record",
+                        new LinkedHashSet<>(List.of(one, two))),
+                new Weakening.OutputCasesUnreadable("record",
+                        new LinkedHashSet<>(List.of(two, one))));
+    }
+
+    /** The output side asks the same of the case a row expects. A helper's answer there is read
+     *  through its value, so what leaves it unread is a row that stopped before its expectation
+     *  was built. */
     private static String outputModel(String rows) {
         return """
                 module m
@@ -195,34 +285,56 @@ class ARowWhoseCaseIsNotReadLeavesUndecidedOnlyACaseNoRowIsCountedAtTest {
 
                 let sort (n) = if n >= 0 then Kept(n) else Dropped
 
+                partial let spin (n: Int) : Int = if n < 0 then 0 else spin(n + 1)
+
                 example sort
                 """ + rows;
     }
+
+    private static final String DROPPED = "    | \"dropped\" : (-1) -> Dropped\n";
+
+    /** Its input never finishes, so its expectation is never read. */
+    private static final String SPINS = "    | \"spins\" : (spin(1)) -> Kept(0)\n";
 
     private static OutputCaseEvidence theOutcome(AdequacyReport report) {
         return report.modules().getFirst().behaviors().getFirst().signature().output();
     }
 
+    /**
+     * A row whose answer is owed expects nothing (example-answer-owed). It is no row that may
+     * expect {@code Kept}, so a measure beside it is exact, and {@code Kept} is missing rather
+     * than undecided.
+     */
     @Test
-    void anOutputCaseEveryRowLeavesToTheUnreadRowIsUndecidedAndOtherwiseItIsNot() {
-        String owed = "    | \"owed\" : (3) -> <?>\n";
-        String dropped = "    | \"dropped\" : (-1) -> Dropped\n";
+    void aRowWhoseAnswerIsOwedLeavesNoOutputCaseUndecided() {
+        AdequacyReport report = WrittenWitness.reportOf(outputModel(
+                "    | \"owed\" : (3) -> <?>\n" + DROPPED));
+        OutputCaseEvidence outcome = theOutcome(report);
 
-        AdequacyReport named = WrittenWitness.reportOf(outputModel(owed
-                + "    | \"kept\" : (0) -> Kept(0)\n" + dropped));
+        assertEquals(0, outcome.seen().unclassifiedRows(), "the owed row expects no case");
+        assertInstanceOf(Measurement.Complete.class, outcome.cases(),
+                () -> "nothing here may expect Kept, and it says " + outcome.cases());
+        assertEquals(List.of("Kept"), outcome.unspecified().stream().map(TypeSymbol::name)
+                .toList());
+    }
+
+    /** A row that states an expectation nothing read may be the one at {@code Kept}, until a row
+     *  that is read expects it. */
+    @Test
+    void anOutputCaseLeftToARowWhoseExpectationWasNotReadIsUndecidedAndOtherwiseItIsNot() {
+        AdequacyReport named = WrittenWitness.refusedOnly(List.of("E1910"),
+                outputModel(SPINS + "    | \"kept\" : (0) -> Kept(0)\n" + DROPPED));
         assertEquals(1, theOutcome(named).seen().unclassifiedRows(),
-                "the owed row names no case");
+                "the row that spins was not read");
         assertInstanceOf(Measurement.Complete.class, theOutcome(named).cases(),
                 () -> "every case is expected by a row, and it says " + theOutcome(named).cases());
 
-        AdequacyReport left = WrittenWitness.reportOf(outputModel(owed + dropped));
+        AdequacyReport left = WrittenWitness.refusedOnly(List.of("E1910"),
+                outputModel(SPINS + DROPPED));
         Measurement.Partial<?> partial = assertInstanceOf(Measurement.Partial.class,
                 theOutcome(left).cases());
-        RowRef row = left.modules().getFirst().behaviors().getFirst().reading().rowsSeen()
-                .stream().map(RowRef::of)
-                .filter(each -> each.identity().equals(new RowIdentity.Named("owed")))
-                .findFirst().orElseThrow();
-        assertEquals(List.of(new Weakening.OutputCasesUnreadable("sort", List.of(row))),
+        assertEquals(List.of(new Weakening.OutputCasesUnreadable("sort",
+                        Set.of(theRow(left, "spins")))),
                 List.copyOf(partial.weakening().causes()));
     }
 }

@@ -1925,8 +1925,10 @@ final class Coverages {
                 line.border().origin().recordedAt();
         Predicate<Map<NumericTerm, Place>> refusedByTheDeclarations =
                 new DeclarationsRefuse(way, declarations);
-        // Put to rows once for every point and row asked of it.
-        StandingAtAPoint.AtALine toRows = StandingAtAPoint.putToRows(line, site);
+        // Put to rows once for every point and row asked of it, and each row read once for every
+        // point: what is asked here is the recorded rows, at each point of this one line.
+        StandingAtAPoint.AtALine toRows =
+                StandingAtAPoint.putToTheSameRowsAtEveryPoint(line, site);
         return new OneShapeOfBorder() {
 
             @Override

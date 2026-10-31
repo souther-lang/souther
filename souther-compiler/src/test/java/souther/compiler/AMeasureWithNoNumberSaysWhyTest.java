@@ -26,6 +26,7 @@ import souther.compiler.report.AdequacyReport;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -757,7 +758,7 @@ class AMeasureWithNoNumberSaysWhyTest {
                 new souther.compiler.types.SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
                         souther.compiler.types.SourceConstruct.IF));
         Weakening c = new Weakening.OutputCasesUnreadable("take",
-                List.of(new RowRef("take", new SourceId("m.sou"), new RowIdentity.Unnamed(1))));
+                Set.of(new RowRef("take", new SourceId("m.sou"), new RowIdentity.Unnamed(1))));
 
         assertEquals(WeakeningSet.of(a), WeakeningSet.of(a).union(WeakeningSet.none()));
         assertEquals(WeakeningSet.of(a), WeakeningSet.none().union(WeakeningSet.of(a)));

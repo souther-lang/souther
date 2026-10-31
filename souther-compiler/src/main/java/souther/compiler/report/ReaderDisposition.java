@@ -10,7 +10,10 @@ import souther.compiler.query.Weakening;
 import souther.compiler.publish.WeakeningVocabulary;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Where one thing this report says leaves the person reading it.
@@ -111,16 +114,16 @@ public sealed interface ReaderDisposition {
      * The rows whose case could not be read, which is what to write differently.
      *
      * <p>An operation and not a judgement: a row naming its case where it writes the value is read,
-     * and the case it covers is then counted. A row writing a helper's answer at an input, or
-     * owing its answer, is no worse a row for that; it is that nothing here can say which case it
-     * is, while a case is left that only it may cover.
+     * and the case it covers is then counted. A row writing a helper's answer at an input is no
+     * worse a row for that; it is that nothing here can say which case it is, while a case is
+     * left that only it may cover.
      *
      * @param unread which rows, never empty, in the order they were read
      */
-    record WriteTheCaseOutIn(Subject subject, List<RowRef> unread) implements ReaderDisposition {
+    record WriteTheCaseOutIn(Subject subject, Set<RowRef> unread) implements ReaderDisposition {
 
         public WriteTheCaseOutIn {
-            unread = List.copyOf(unread);
+            unread = Collections.unmodifiableSet(new LinkedHashSet<>(unread));
             if (unread.isEmpty()) {
                 throw new IllegalArgumentException("a row is what a reader is sent to, so there is"
                         + " one to name");

@@ -4,9 +4,11 @@ import souther.compiler.observe.MeasureReason;
 import souther.compiler.observe.RowRef;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * What a behavior's {@code example} rows establish about the cases one of its inputs can be.
@@ -179,11 +181,14 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
         // a case no row is counted at (example-adequacy), so a row whose sets already hold every
         // case a row can be written at decides nothing by being read, and the count is exact
         // without it.
-        List<RowRef> deciding = cases.unread().stream()
-                .filter(each -> Reached.SETS.stream().anyMatch(set -> each.mayReach().isIn(set)
-                        && !missing(declared, excluded, cases.of(set)).isEmpty()))
-                .map(Unread::rowRef)
+        // Which sets lack a case is the same question for every row, so it is asked once.
+        List<Reached> lacking = cases.unread().isEmpty() ? List.of() : Reached.SETS.stream()
+                .filter(set -> !missing(declared, excluded, cases.of(set)).isEmpty())
                 .toList();
+        Set<RowRef> deciding = cases.unread().stream()
+                .filter(each -> lacking.stream().anyMatch(each.mayReach()::isIn))
+                .map(Unread::rowRef)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
         WeakeningSet by = deciding.isEmpty() ? observed
                 : observed.union(WeakeningSet.of(
                         new Weakening.InputCasesUnreadable(behavior, at, deciding)));
