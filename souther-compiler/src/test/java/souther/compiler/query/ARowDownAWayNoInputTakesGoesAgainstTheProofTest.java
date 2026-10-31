@@ -196,7 +196,7 @@ class ARowDownAWayNoInputTakesGoesAgainstTheProofTest {
 
         /** What the rows took, where the one row is {@code run}. */
         Measure<DecisionEvidence.RowsPlaced> placing(ObservedInputs run) {
-            return DecisionEvidence.of("f", placement,
+            return DecisionEvidence.of("f", placement, read.rules(),
                     List.of(new WitnessedRow(run, RowWitnesses.ANOTHER_ROW)), WeakeningSet.none(),
                     CasesTheRowsTook.none());
         }

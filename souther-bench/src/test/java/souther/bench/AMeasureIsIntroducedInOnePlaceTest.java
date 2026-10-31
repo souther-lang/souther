@@ -149,7 +149,7 @@ class AMeasureIsIntroducedInOnePlaceTest {
             // behavior no row names is neither: a reading over no rows was made and found no rule
             // taken, which is what an author writing the first row of it is told.
             Map.entry("souther.compiler.query.Adequacy$Decides#whatTheRowsTook(Ljava/lang/String;Lsouther/compiler/partition/DecisionReading;Lsouther/compiler/partition/RunPlacement;Lsouther/compiler/query/Adequacy$RowReading;Ljava/util/Optional;Lsouther/compiler/partition/CasesTheRowsTook;)Lsouther/compiler/query/Measure;", 4),
-            Map.entry("souther.compiler.query.DecisionEvidence#of(Ljava/lang/String;Lsouther/compiler/partition/RunPlacement;Ljava/util/List;Lsouther/compiler/query/WeakeningSet;Lsouther/compiler/partition/CasesTheRowsTook;)Lsouther/compiler/query/Measure;", 3),
+            Map.entry("souther.compiler.query.DecisionEvidence#of(Ljava/lang/String;Lsouther/compiler/partition/RunPlacement;Ljava/util/List;Ljava/util/List;Lsouther/compiler/query/WeakeningSet;Lsouther/compiler/partition/CasesTheRowsTook;)Lsouther/compiler/query/Measure;", 3),
             // Which combinations of a body's decisions the rows made, the same two places and for
             // the same reason: the gates say why no run could be read at all, and the fold over
             // the runs says how far reading them got.

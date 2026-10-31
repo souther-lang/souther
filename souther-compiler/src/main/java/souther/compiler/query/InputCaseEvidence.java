@@ -57,9 +57,10 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
             unread = List.copyOf(unread);
         }
 
-        /** How many rows' case at this position could not be read. */
+        /** How many rows' case at this position could not be read: rows, and not the reasons,
+         *  of which one row may have two. */
         public int unclassifiedRows() {
-            return unread.size();
+            return (int) unread.stream().map(each -> each.how().rowRef()).distinct().count();
         }
 
         /** The cases of one of the three sets. {@link Reached#NOWHERE} is none of them. */
@@ -80,7 +81,7 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
      * gets to them in order — what held was applied, and what was applied was built.
      */
     public enum Reached {
-        /** Its input was not built, so its case is in none of them. */
+        /** Its values were never handed over, so its case is in none of them. */
         NOWHERE,
         SPECIFIED,
         EXECUTED,

@@ -39,11 +39,12 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Measure<Cases> cases)
      *
      * @param unread       rows that state an expectation whose case could not be read, in the order
      *                     they were read, each with why; a row whose answer is owed expects nothing
-     *                     and is not here. While one of them is here a case no row expects is
-     *                     undecided rather than missing, because that row may expect it — and the
-     *                     measurement around it says so rather than leaving a reader to compare a
-     *                     count with zero. Only {@link #specified} waits on them: what was observed
-     *                     and verified is read off the answer, not off what the row wrote
+     *                     and is not here. While one that may be the row that expects a case is
+     *                     here (not one {@link UnreadCase.Refused}) a case no row expects is
+     *                     undecided rather than missing, and the measurement around it says so
+     *                     rather than leaving a reader to compare a count with zero. Only
+     *                     {@link #specified} waits on them: what was observed and verified is read
+     *                     off the answer, not off what the row wrote
      * @param answeredRows rows the behavior answered for. Not the size of {@link #observed}: an
      *                     answer of a type no declaration names is an answer this cannot place, so a
      *                     run that got one has an empty {@code observed} and a count above zero.
@@ -60,9 +61,9 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Measure<Cases> cases)
             unread = List.copyOf(unread);
         }
 
-        /** How many rows' expected case could not be read. */
+        /** How many rows' expected case could not be read: rows, and not the reasons. */
         public int unclassifiedRows() {
-            return unread.size();
+            return (int) unread.stream().map(UnreadCase::rowRef).distinct().count();
         }
     }
 

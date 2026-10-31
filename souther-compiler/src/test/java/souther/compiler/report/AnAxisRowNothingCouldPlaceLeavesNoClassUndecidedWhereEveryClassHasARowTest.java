@@ -7,6 +7,8 @@ import souther.compiler.query.Weakening;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -161,5 +163,86 @@ class AnAxisRowNothingCouldPlaceLeavesNoClassUndecidedWhereEveryClassHasARowTest
                         each instanceof Weakening.ObservationIncomplete it
                                 && it.met().fact().code() == Incompleteness.Code.VALUE_TRUNCATED),
                 () -> partial.weakening().causes().toString());
+    }
+
+    /**
+     * Two flags as two inputs, so a row can be placed at one and not at the other. The last row
+     * stops while its second input is being built: the first is {@code Yes} and the second is not
+     * known.
+     */
+    private static String twoInputs(String rows) {
+        return """
+                module example.pairs
+
+                data Yes
+                data No
+                data Flag = Yes | No
+                data Ok = { n: Int }
+
+                behavior take : (a: Flag, b: Flag) -> Ok
+                    constructs Ok
+
+                let take (a, b) =
+                    match a with
+                        | Yes -> match b with | Yes -> Ok { n = 0 } | No -> Ok { n = 1 }
+                        | No -> match b with | Yes -> Ok { n = 2 } | No -> Ok { n = 3 }
+
+                partial let spin (n: Int) : Int = if n < 0 then 0 else spin(n + 1)
+
+                partial let spunFlag (n: Int): Flag = if spin(n) >= 0 then Yes else No
+
+                example take
+                    | (Yes, Yes) -> Ok { n = 0 }
+                    | (Yes, No) -> Ok { n = 1 }
+                    | (No, Yes) -> Ok { n = 2 }
+                """ + rows;
+    }
+
+    private static PartitionEvidence.PairSpace pairsOf(AdequacyReport report) {
+        return report.modules().getFirst().behaviors().getFirst().partition().pairs();
+    }
+
+    /**
+     * {@code (No, No)} is the one combination no row is in. The row that stopped is {@code Yes}
+     * at the first input, so it is not the row in it, whatever its second input would have been.
+     */
+    @Test
+    void aRowPlacedAtOnePositionOutsideTheCombinationLeftIsNotTheRowInIt() {
+        AdequacyReport report = WrittenWitness.refusedOnly(List.of("E1910"),
+                twoInputs("    | (Yes, spunFlag(1)) -> Ok { n = 0 }\n"));
+
+        assertInstanceOf(Measurement.Complete.class, pairsOf(report).counted(),
+                () -> "no row that may be in (No, No) stopped: " + pairsOf(report).counted());
+    }
+
+    /** The same row, but {@code No} at the first input: it may be the one in {@code (No, No)}. */
+    @Test
+    void aRowPlacedAtOnePositionInsideTheCombinationLeftMayBeTheRowInIt() {
+        AdequacyReport report = WrittenWitness.refusedOnly(List.of("E1910"),
+                twoInputs("    | (No, spunFlag(1)) -> Ok { n = 0 }\n"));
+
+        assertInstanceOf(Measurement.Partial.class, pairsOf(report).counted(),
+                () -> "the row may be in (No, No): " + pairsOf(report).counted());
+    }
+
+    /** A row placed at neither position may be in any combination left. */
+    @Test
+    void aRowPlacedAtNeitherPositionMayBeInAnyCombinationLeft() {
+        AdequacyReport report = WrittenWitness.refusedOnly(List.of("E1910"),
+                twoInputs("    | (spunFlag(1), Yes) -> Ok { n = 0 }\n"));
+
+        assertInstanceOf(Measurement.Partial.class, pairsOf(report).counted(),
+                () -> "the row may be in (No, No): " + pairsOf(report).counted());
+    }
+
+    /** With every combination reached, a stopped row beside them decides nothing. */
+    @Test
+    void everyCombinationReachedLeavesTheStoppedRowNothingToDecide() {
+        AdequacyReport report = WrittenWitness.refusedOnly(List.of("E1910"),
+                twoInputs("    | (No, No) -> Ok { n = 3 }\n"
+                        + "    | (No, spunFlag(1)) -> Ok { n = 0 }\n"));
+
+        assertInstanceOf(Measurement.Complete.class, pairsOf(report).counted(),
+                () -> "nothing is left for the row to be in: " + pairsOf(report).counted());
     }
 }

@@ -1883,7 +1883,7 @@ public final class Adequacy {
             for (RowOutcome row : rows) {
                 watched.add(WitnessedRow.of(row, numbering));
             }
-            return DecisionEvidence.of(rules.behavior(), against, watched,
+            return DecisionEvidence.of(rules.behavior(), against, rules.rules(), watched,
                     observed.measured().weakening(), cases);
         }
     }
@@ -10630,9 +10630,6 @@ public final class Adequacy {
         for (RowOutcome row : rows) {
             boolean held = row.disposition() == Disposition.HELD;
             RowRef rowRef = RowRef.of(row);
-            UnreadCase unreadHere = stoppedBy.containsKey(rowRef)
-                    ? new UnreadCase.Stopped(rowRef, stoppedBy.get(rowRef))
-                    : new UnreadCase.NoCaseRead(rowRef);
             switch (row.expectedCase()) {
                 // Only a case of the output. A row naming a type the output does not have expects
                 // none of its cases. A case of it nothing reachable produces is kept: the row does
@@ -10647,7 +10644,7 @@ public final class Adequacy {
                 // An expectation neither the text nor its value says a case of.
                 case RowOutcome.ExpectedCase.Unread _ -> {
                     if (!declaredOut.isEmpty()) {
-                        unreadableOut.add(unreadHere);
+                        unreadableOut.addAll(whyNotRead(row, rowRef, stoppedBy.get(rowRef), false));
                     }
                 }
             }
@@ -10674,7 +10671,9 @@ public final class Adequacy {
                 }
                 TypeSymbol written = i < row.inputCases().size() ? row.inputCases().get(i) : null;
                 if (written == null) {
-                    unreadableIn.get(i).add(new InputCaseEvidence.Unread(unreadHere, reached));
+                    for (UnreadCase why : whyNotRead(row, rowRef, stoppedBy.get(rowRef), true)) {
+                        unreadableIn.get(i).add(new InputCaseEvidence.Unread(why, reached));
+                    }
                     continue;
                 }
                 if (reached.isIn(InputCaseEvidence.Reached.SPECIFIED)) {
@@ -10730,6 +10729,34 @@ public final class Adequacy {
     }
 
     private Adequacy() {}
+
+    /**
+     * Why a case of this row was not read, from how far the row got and what is on record about it
+     * ({@link UnreadCase} has the table).
+     *
+     * <p>Total over what a row can be. A row that never had its values handed over was stopped, with
+     * the stop written where it stopped, or refused; one whose values were handed over wrote a case
+     * nothing here reads. A row both of those can be at once — its text names no case and a stop
+     * came after — is both, where the stop can still change which sets the case is in.
+     *
+     * @param stops             what stopped the row, null where nothing did
+     * @param runDecidesMore    whether the sets the case would be in are settled by how the run went
+     *                          after the fixtures, as an input's are (applied, held). The
+     *                          expectation of the output is settled by the fixtures alone, so a
+     *                          stop after them changes nothing about it
+     */
+    private static List<UnreadCase> whyNotRead(RowOutcome row, RowRef ref,
+                                               List<Incompleteness.Met> stops,
+                                               boolean runDecidesMore) {
+        boolean stopped = stops != null;
+        if (!row.stage().reached(Stage.FIXTURES_VALIDATED)) {
+            return List.of(stopped ? new UnreadCase.Stopped(ref, stops)
+                    : new UnreadCase.Refused(ref));
+        }
+        return stopped && runDecidesMore
+                ? List.of(new UnreadCase.NoCaseRead(ref), new UnreadCase.Stopped(ref, stops))
+                : List.of(new UnreadCase.NoCaseRead(ref));
+    }
 
     /**
      * Whether the row is waiting for its answer, so that what it went through is not evidence that
