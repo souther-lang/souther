@@ -541,7 +541,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         };
         if (each == null) {
             return readOnce(behavior, comparison, read, reads, answering,
-                    conditions.comparison(comparison, reads, read), writtenIn);
+                    conditions.comparison(comparison, reads, read), false, writtenIn);
         }
         Read drawn = onEachApplication(behavior, comparison, read, reads, each, answering,
                 conditions, writtenIn);
@@ -680,7 +680,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
             Pullback.OnTheInput onTheInput = conditions.comparison(comparison, one.reads(), read);
             switch (readOnce(behavior, comparison, read, one.reads(), answering, onTheInput,
-                    writtenIn)) {
+                    one.metOn().levels().isEmpty(), writtenIn)) {
                 case Read.Stopped alone -> {
                     stopped = stopped.and(alone.places());
                     stoppedWhere = stoppedWhere.and(alone.where());
@@ -1157,16 +1157,19 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * states {@code p <= g} alone, and that is where both of the author's lines landed.
      *
      * @param onTheInput what the comparison states there, put on the input
+     * @param onEveryElement whether a run that gets to the closure the comparison stands in makes
+     *                       it on every element the closure is handed: no operation around it
+     *                       stops at an answer
      */
     private static Read readOnce(String behavior, StatedComparison comparison,
                                  InputReading read, InputReads reads, Arrivals answering,
-                                 Pullback.OnTheInput onTheInput,
+                                 Pullback.OnTheInput onTheInput, boolean onEveryElement,
                                  Optional<ExpansionLineage> writtenIn) {
         Pullback.TheBound bound = Pullback.boundOf(comparison, read, reads,
                 writtenIn.orElse(null) instanceof ExpansionLineage.Expansion);
         return heldIn(writtenAgainst(
                 readOnceAsDrawn(behavior, comparison, read, reads, answering, onTheInput,
-                        writtenIn),
+                        onEveryElement, writtenIn),
                 bound.written()), bound.heldIn());
     }
 
@@ -1207,14 +1210,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     private static Read readOnceAsDrawn(String behavior, StatedComparison comparison,
                                         InputReading read, InputReads reads, Arrivals answering,
-                                        Pullback.OnTheInput onTheInput,
+                                        Pullback.OnTheInput onTheInput, boolean onEveryElement,
                                         Optional<ExpansionLineage> writtenIn) {
         Pullback.Pulled stated = onTheInput.stated();
         Supplier<Optional<AuthorsLines>> lines =
                 new Pullback.Once<>(() -> writtenIn.map(at -> WrittenLines.of(
                         stated.meaning().how(), at, Optional.empty(),
                         Optional.of(comparison.claim()))));
-        Read drawn = readAsAWhole(behavior, comparison, read, reads, answering, onTheInput, lines);
+        Read drawn = readAsAWhole(behavior, comparison, read, reads, answering, onTheInput,
+                onEveryElement, lines);
         if (writtenIn.isEmpty() || !(stated.proposition() instanceof Proposition.Compared compared)
                 || !(drawn instanceof Read.Cuts || drawn instanceof Read.NoOrderToCountOn
                         || drawn instanceof Read.NumberNoRatioHolds)) {
@@ -1276,13 +1280,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     /** What {@code comparison} states read once, in {@code reads}, as the reading drew it. */
     private static Read readAsAWhole(String behavior, StatedComparison comparison,
                                      InputReading read, InputReads reads, Arrivals answering,
-                                     Pullback.OnTheInput onTheInput,
+                                     Pullback.OnTheInput onTheInput, boolean onEveryElement,
                                      Supplier<Optional<AuthorsLines>> lines) {
         Pullback.Pulled stated = onTheInput.stated();
         // A remainder of a form over a value read off a binding is no number a row's numbers put
-        // anywhere: no line on it, no relation of it to another value, and the arithmetic that
-        // stopped at the division says where and why, as it did before the division was read.
+        // anywhere: no line on it and no relation of it to another value. Over the element of a
+        // list of every whole number between two, the comparison is read on the elements the
+        // list starts with; otherwise the arithmetic that stopped at the division says where and
+        // why, as it did before the division was read.
         if (statesARemainderNoRowPuts(stated.proposition())) {
+            Read atTheFirst = onEveryElement ? atTheWholeNumbersItStartsWith(behavior, comparison,
+                    read, reads, answering, onTheInput) : null;
+            if (atTheFirst != null) {
+                return atTheFirst;
+            }
             return onTheInput.arithmetic().get()
                     instanceof AffineReading.OfAComparison.Stopped stopped
                     ? GuardThresholds.whatEachPlaceIsLeftWith(comparison, stopped, read, reads,
@@ -1359,6 +1370,174 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return true;
         }
         return stated.partsHeld().stream().anyMatch(Cutting::statesARemainderNoRowPuts);
+    }
+
+    /**
+     * What a comparison of remainders over the element of a list of every whole number between two
+     * states, read on the elements the list starts with: a line for each of as many of them as the
+     * divisors come round in, each deciding where the list holds that element — or null where the
+     * statement is no such comparison, or one of those lines is not drawn.
+     *
+     * <p>Those elements are every element there is to read. The element is the list's start and a
+     * whole number past it, weighed in each dividend by a whole number, so what each remainder
+     * leaves comes round every divisor of elements: an element as many past the start as the
+     * divisors come round in, or more, leaves what one of the first ones leaves, and the
+     * comparison on it is the comparison on that one, in a list holding that one too. On each of
+     * them every dividend is a form of the input's numbers alone, and the line is the one a
+     * remainder of those draws ({@link #onARemainder}). No line is drawn for the element itself on
+     * the input's numbers: which remainder a row's numbers leave turns on which element, and comes
+     * round, so no one place on those numbers parts the rows.
+     *
+     * <p>Only where every value read off a binding in the comparison is that element, and inside
+     * the remainders, where it comes round. And only where the run makes the comparison on every
+     * element the list holds ({@code onEveryElement}): an operation stopping at an answer makes it
+     * on an element only where none before it stopped, and a row whose list holds the element is
+     * then no row the comparison was made on there. Past
+     * {@link CompositionBudget#READINGS_OF_ONE_CONDITION} elements the comparison is read on none
+     * of them, and says so. What working the dividend out does to a run is what the comparison
+     * worked out on the element, and every line keeps it.
+     */
+    private static Read atTheWholeNumbersItStartsWith(String behavior, StatedComparison comparison,
+                                                      InputReading read, InputReads reads,
+                                                      Arrivals answering,
+                                                      Pullback.OnTheInput onTheInput) {
+        Proposition stated = onTheInput.stated().proposition();
+        if (!(stated instanceof Proposition.Compared(Relation.Affine affine, boolean holds,
+                Spelling _))) {
+            return null;
+        }
+        Quantity.OfABinding element = null;
+        BigInteger roundIn = BigInteger.ONE;
+        for (Quantity each : affine.form().coefs().keySet()) {
+            if (each instanceof Quantity.OfABinding) {
+                return null;
+            }
+            if (!(each instanceof Quantity.RemainderOfADividend remainder)
+                    || remainder.overTheInput() != null) {
+                continue;
+            }
+            for (Map.Entry<Quantity, ExactRatio> atom : remainder.dividend().coefs().entrySet()) {
+                if (atom.getKey() instanceof DecisionAtom.OfTheInput) {
+                    continue;
+                }
+                if (!(atom.getKey() instanceof Quantity.OfABinding bound)
+                        || !(bound.handed().orElse(null) instanceof Quantity.AWholeNumberInTurn)
+                        || (element != null && !element.equals(bound))
+                        || !atom.getValue().isWhole()) {
+                    return null;
+                }
+                element = bound;
+            }
+            roundIn = roundIn.multiply(remainder.divisor())
+                    .divide(roundIn.gcd(remainder.divisor()));
+        }
+        if (element == null
+                || !(element.handed().orElseThrow() instanceof Quantity.AWholeNumberInTurn number)) {
+            return null;
+        }
+        if (roundIn.compareTo(BigInteger.valueOf(
+                CompositionBudget.READINGS_OF_ONE_CONDITION.maximum())) > 0) {
+            return noLine(comparison, stated, List.of(WhyUnread.PAST_THE_READINGS), Set.of(),
+                    onTheInput.arithmetic(), read, reads, answering);
+        }
+        LinearForm<Quantity> from = ofTheInputsNumbers(number.from());
+        LinearForm<Quantity> past = number.to().minus(number.from()).orNull()
+                instanceof LinearForm<NumericTerm> gap ? ofTheInputsNumbers(gap) : null;
+        if (past == null) {
+            return null;
+        }
+        List<Read.Several.Part> parts = new ArrayList<>();
+        for (int at = 0; at < roundIn.intValueExact(); at++) {
+            ExactRatio step = ExactRatio.of(at);
+            Proposition holding = heldAtOrPast(past, step);
+            if (holding instanceof Proposition.Always(boolean some) && !some) {
+                break;
+            }
+            LinearForm<Quantity> there = from.plus(LinearForm.constant(step)).orNull();
+            LinearForm<Quantity> on = there == null ? null : withTheElementAt(affine.form(),
+                    element, there);
+            if (on == null) {
+                return null;
+            }
+            if (on.coefs().isEmpty()) {
+                continue;
+            }
+            Relation.OneWay<Quantity> one = Relation.OneWay.of(on, affine.proposition());
+            Relation.Affine relation = new Relation.Affine(one.form(), one.proposition());
+            boolean holdsThere = holds == one.holds();
+            Read line = lineOn(behavior, relation, holdsThere, comparison.left(), read, reads);
+            if (line == null || !Read.Several.Part.isALine(line)) {
+                return null;
+            }
+            parts.add(new Read.Several.Part(new PlaceOfALine(THE_COMPARISON,
+                    spelled(new Proposition.Compared(relation, holdsThere))), line,
+                    List.of(DecidingCase.alone(holding)), workingOf(onTheInput)));
+        }
+        return parts.isEmpty() ? null : new Read.Several(parts);
+    }
+
+    /** {@code form}, a form of the input's numbers, as a form of quantities. */
+    private static LinearForm<Quantity> ofTheInputsNumbers(LinearForm<NumericTerm> form) {
+        Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+        form.coefs().forEach((term, by) -> coefs.put(new DecisionAtom.OfTheInput(term), by));
+        return new LinearForm<>(form.constant(), coefs);
+    }
+
+    /** That {@code past}, how far a list's end is past its start, is at least {@code step}: that
+     *  the list holds the element {@code step} past its start. */
+    private static Proposition heldAtOrPast(LinearForm<Quantity> past, ExactRatio step) {
+        LinearForm<Quantity> left = past.minus(LinearForm.constant(step)).orNull();
+        if (left == null) {
+            return new Proposition.Always(false);
+        }
+        if (left.coefs().isEmpty()) {
+            return new Proposition.Always(left.constant().signum() >= 0);
+        }
+        Relation.OneWay<Quantity> one = Relation.OneWay.of(left, Rel.GE);
+        return new Proposition.Compared(new Relation.Affine(one.form(), one.proposition()),
+                one.holds());
+    }
+
+    /**
+     * {@code form} with {@code element} at {@code there} in every remainder it is weighed in — or
+     * null where the exact arithmetic cannot hold that. A remainder left with no number of the
+     * input in it is the number it leaves.
+     */
+    private static LinearForm<Quantity> withTheElementAt(LinearForm<Quantity> form,
+                                                         Quantity.OfABinding element,
+                                                         LinearForm<Quantity> there) {
+        List<LinearForm<Quantity>> parts = new ArrayList<>();
+        parts.add(LinearForm.constant(form.constant()));
+        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+            if (!(each.getKey() instanceof Quantity.RemainderOfADividend remainder)
+                    || remainder.overTheInput() != null) {
+                parts.add(LinearForm.weighing(each.getKey(), each.getValue()));
+                continue;
+            }
+            LinearForm<Quantity> dividend = remainder.dividend().over(atom ->
+                    atom.equals(element) ? there : LinearForm.atom(atom));
+            if (dividend == null || !dividend.constant().isWhole()
+                    || !(dividend.constant().floor() instanceof ExactAnswer.Held<BigInteger>(
+                            BigInteger whole))) {
+                return null;
+            }
+            // Moved by a whole turn, a dividend is the dividend it was, as the remainder of a form
+            // of the input's numbers is read ({@link Pullback}).
+            ExactRatio moved = ExactRatio.of(whole.mod(remainder.divisor()));
+            if (!dividend.coefs().isEmpty()) {
+                parts.add(LinearForm.weighing(new Quantity.RemainderOfADividend(
+                        remainder.operation(), new LinearForm<>(moved, dividend.coefs()),
+                        remainder.divisor()), each.getValue()));
+                continue;
+            }
+            LinearForm<Quantity> left = LinearForm.<Quantity>constant(moved)
+                    .times(each.getValue()).orNull();
+            if (left == null) {
+                return null;
+            }
+            parts.add(left);
+        }
+        return LinearForm.sum(parts).orNull();
     }
 
     /**
