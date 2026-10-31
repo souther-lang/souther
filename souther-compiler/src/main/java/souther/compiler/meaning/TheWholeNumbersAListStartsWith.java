@@ -13,22 +13,20 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * What a comparison of remainders over the element of a list of every whole number between two
- * states on the elements the list starts with, as many of them as the divisors come round in.
+ * states on the elements the list starts with, as many of them as the statement comes round in.
  *
- * <p>Those elements are every element there is to read. The element is the list's start and a
- * whole number past it, weighed in each dividend by a whole number, so what each remainder leaves
- * comes round every divisor of elements: an element as many past the start as the divisors come
- * round in, or more, leaves what one of the first ones leaves, and the comparison on it is the
- * comparison on that one, in a list holding that one too. On each of them every dividend is a
- * form of the input's numbers alone, moved by whole turns of its divisor as the remainder of such
- * a form is.
+ * <p>Those elements are every element there is to read. Where the statement comes round
+ * ({@link TheElementComesRound}), an element as many past the start as it comes round in, or
+ * more, makes it come out as on one of the first ones, in a list holding that one too. On each of
+ * them every dividend is a form of the input's numbers alone, moved by whole turns of its divisor
+ * as the remainder of such a form is, and the relations are held together as the statement holds
+ * them.
  *
- * <p>Only where every value read off a binding in the comparison is that element, and inside the
- * remainders, where it comes round. That a run makes the comparison on each element the list
- * holds is not said here.
+ * <p>That a run makes the comparison on each element the list holds is not said here.
  */
 public final class TheWholeNumbersAListStartsWith {
 
@@ -61,10 +59,11 @@ public final class TheWholeNumbersAListStartsWith {
     /**
      * The comparison on one element.
      *
-     * @param stated  what it states there, a relation of the input's numbers alone
+     * @param stated  what it states there, relations of the input's numbers alone, held together
+     *                as they are in the comparison
      * @param holding where the list holds that element: its last end at or past it
      */
-    public record OnOne(Proposition.Compared stated, Proposition holding) {
+    public record OnOne(Proposition stated, Proposition holding) {
 
         public OnOne {
             Objects.requireNonNull(stated, "the comparison states something on the element");
@@ -74,40 +73,13 @@ public final class TheWholeNumbersAListStartsWith {
 
     /** What {@code stated} comes to on the elements the list its element is of starts with. */
     public static Read of(Proposition stated) {
-        if (!(stated instanceof Proposition.Compared(Relation.Affine affine, boolean holds,
-                Spelling _))) {
+        Optional<TheElementComesRound> round = TheElementComesRound.in(stated);
+        if (round.isEmpty()) {
             return new Read.NotOfThatKind();
         }
-        Quantity.OfABinding element = null;
-        BigInteger roundIn = BigInteger.ONE;
-        for (Quantity each : affine.form().coefs().keySet()) {
-            if (each instanceof Quantity.OfABinding) {
-                return new Read.NotOfThatKind();
-            }
-            if (!(each instanceof Quantity.RemainderOfADividend remainder)
-                    || remainder.overTheInput() != null) {
-                continue;
-            }
-            for (Map.Entry<Quantity, ExactRatio> atom : remainder.dividend().coefs().entrySet()) {
-                if (atom.getKey() instanceof DecisionAtom.OfTheInput) {
-                    continue;
-                }
-                if (!(atom.getKey() instanceof Quantity.OfABinding bound)
-                        || !(bound.handed().orElse(null) instanceof Quantity.AWholeNumberInTurn)
-                        || (element != null && !element.equals(bound))
-                        || !atom.getValue().isWhole()) {
-                    return new Read.NotOfThatKind();
-                }
-                element = bound;
-            }
-            roundIn = roundIn.multiply(remainder.divisor())
-                    .divide(roundIn.gcd(remainder.divisor()));
-        }
-        if (element == null
-                || !(element.handed().orElseThrow() instanceof Quantity.AWholeNumberInTurn number)) {
-            return new Read.NotOfThatKind();
-        }
-        if (roundIn.compareTo(BigInteger.valueOf(
+        Quantity.OfABinding element = round.get().element();
+        Quantity.AWholeNumberInTurn number = round.get().number();
+        if (round.get().every().compareTo(BigInteger.valueOf(
                 CompositionBudget.READINGS_OF_ONE_CONDITION.maximum())) > 0) {
             return new Read.PastTheReadings();
         }
@@ -118,27 +90,72 @@ public final class TheWholeNumbersAListStartsWith {
             return new Read.NotOfThatKind();
         }
         List<OnOne> out = new ArrayList<>();
-        for (int at = 0; at < roundIn.intValueExact(); at++) {
+        for (int at = 0; at < round.get().every().intValueExact(); at++) {
             ExactRatio step = ExactRatio.of(at);
             Proposition holding = heldAtOrPast(past, step);
             if (holding instanceof Proposition.Always(boolean some) && !some) {
                 break;
             }
             LinearForm<Quantity> there = from.plus(LinearForm.constant(step)).orNull();
-            LinearForm<Quantity> on = there == null ? null
-                    : withTheElementAt(affine.form(), element, there);
+            Proposition on = there == null ? null : onTheElementAt(stated, element, there);
             if (on == null) {
                 return new Read.NotOfThatKind();
             }
-            if (on.coefs().isEmpty()) {
+            if (on instanceof Proposition.Always) {
                 continue;
             }
-            Relation.OneWay<Quantity> one = Relation.OneWay.of(on, affine.proposition());
-            out.add(new OnOne(new Proposition.Compared(
-                    new Relation.Affine(one.form(), one.proposition()), holds == one.holds()),
-                    holding));
+            out.add(new OnOne(on, holding));
         }
         return new Read.OnEach(out);
+    }
+
+    /**
+     * {@code stated} with {@code element} at {@code there}: each relation in it with the element
+     * there in every remainder it weighs ({@link #withTheElementAt}), and a relation left with no
+     * number of the input in it what it comes to — or null where the exact arithmetic cannot hold
+     * one of them.
+     */
+    private static Proposition onTheElementAt(Proposition stated, Quantity.OfABinding element,
+                                              LinearForm<Quantity> there) {
+        return switch (stated) {
+            case Proposition.All(var parts, var _) -> {
+                List<Proposition> each = onTheElementAt(parts, element, there);
+                yield each == null ? null : Proposition.all(each);
+            }
+            case Proposition.Any(var parts, var _) -> {
+                List<Proposition> each = onTheElementAt(parts, element, there);
+                yield each == null ? null : Proposition.any(each);
+            }
+            case Proposition.Compared(Relation.Affine affine, boolean holds, var _) -> {
+                LinearForm<Quantity> on = withTheElementAt(affine.form(), element, there);
+                if (on == null) {
+                    yield null;
+                }
+                if (on.coefs().isEmpty()) {
+                    yield new Proposition.Always(
+                            holds == affine.proposition().holds(on.constant().signum()));
+                }
+                Relation.OneWay<Quantity> one = Relation.OneWay.of(on, affine.proposition());
+                yield new Proposition.Compared(new Relation.Affine(one.form(), one.proposition()),
+                        holds == one.holds());
+            }
+            default -> stated;
+        };
+    }
+
+    /** Each of {@code parts} with {@code element} at {@code there}, or null where one cannot be. */
+    private static List<Proposition> onTheElementAt(List<Proposition> parts,
+                                                    Quantity.OfABinding element,
+                                                    LinearForm<Quantity> there) {
+        List<Proposition> out = new ArrayList<>();
+        for (Proposition part : parts) {
+            Proposition on = onTheElementAt(part, element, there);
+            if (on == null) {
+                return null;
+            }
+            out.add(on);
+        }
+        return out;
     }
 
     /** {@code form}, a form of the input's numbers, as a form of quantities. */

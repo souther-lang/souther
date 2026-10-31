@@ -1416,13 +1416,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     /**
      * What a comparison of remainders over the element of a list of every whole number between two
      * states, read on the elements the list starts with ({@link TheWholeNumbersAListStartsWith}):
-     * a line for each, deciding where the list holds that element — or null where the statement
-     * is no such comparison, or one of those lines is not drawn.
+     * the lines it draws on each, each deciding where the statement turns on it there and the list
+     * holds that element — or null where the statement is no such comparison, or one of those
+     * lines is not drawn.
      *
-     * <p>On each element every dividend is a form of the input's numbers alone, and the line is
-     * the one a remainder of those draws ({@link #onARemainder}). No line is drawn for the element
-     * itself on the input's numbers: which remainder a row's numbers leave turns on which element,
-     * and comes round, so no one place on those numbers parts the rows.
+     * <p>On each element every dividend is a form of the input's numbers alone, and a line is the
+     * one a remainder of those draws ({@link #onARemainder}); relations held together there are
+     * read as any statement of several is ({@link #asLines}). A line drawn on several elements is
+     * one line, deciding where it does on any of them. No line is drawn for the element itself on
+     * the input's numbers: which remainder a row's numbers leave turns on which element, and comes
+     * round, so no one place on those numbers parts the rows.
      *
      * <p>Only where the run makes the comparison on every element the list holds
      * ({@code onEveryElement}): an operation stopping at an answer makes it on an element only
@@ -1442,21 +1445,58 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     noLine(comparison, stated, List.of(WhyUnread.PAST_THE_READINGS), Set.of(),
                             onTheInput.arithmetic(), read, reads, answering);
             case TheWholeNumbersAListStartsWith.Read.OnEach(var each) -> {
-                List<Read.Several.Part> parts = new ArrayList<>();
+                Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> lines =
+                        new LinkedHashMap<>();
+                Map<ALineRead, List<UndividedByARelation.Working>> workings = new HashMap<>();
                 for (TheWholeNumbersAListStartsWith.OnOne one : each) {
-                    Read line = one.stated().relation() instanceof Relation.Affine relation
-                            ? lineOn(behavior, relation, one.stated().holds(), comparison.left(),
-                                    read, reads) : null;
-                    if (line == null || !Read.Several.Part.isALine(line)) {
+                    List<Read.Several.Part> drawn = onTheElement(behavior, comparison, one,
+                            read, reads, answering, onTheInput);
+                    if (drawn == null) {
                         yield null;
                     }
-                    parts.add(new Read.Several.Part(new PlaceOfALine(THE_COMPARISON,
-                            spelled(one.stated())), line,
-                            List.of(DecidingCase.alone(one.holding())), workingOf(onTheInput)));
+                    for (Read.Several.Part part : drawn) {
+                        ALineRead key = new ALineRead(part.id(), part.line());
+                        lines.computeIfAbsent(key, _ -> new ArrayList<>()).add(
+                                new WhereAnApplicationIsMade.OnOne(part.cases(), one.holding()));
+                        workings.computeIfAbsent(key, _ -> new ArrayList<>())
+                                .add(part.working());
+                    }
                 }
+                List<Read.Several.Part> parts = new ArrayList<>();
+                lines.forEach((line, readings) -> parts.add(new Read.Several.Part(line.id(),
+                        line.read(), WhereAnApplicationIsMade.decidesOn(readings),
+                        UndividedByARelation.Working.together(workings.get(line)))));
                 yield parts.isEmpty() ? null : new Read.Several(parts);
             }
         };
+    }
+
+    /**
+     * The lines what the comparison states on {@code one} element draws, each deciding where it
+     * does on that element — or null where some relation of it is no line drawn. One relation is
+     * the line it draws, deciding wherever the element is; several are the lines each draws where
+     * the statement turns on it ({@link #asLines}).
+     */
+    private static List<Read.Several.Part> onTheElement(String behavior,
+                                                        StatedComparison comparison,
+                                                        TheWholeNumbersAListStartsWith.OnOne one,
+                                                        InputReading read, InputReads reads,
+                                                        Arrivals answering,
+                                                        Pullback.OnTheInput onTheInput) {
+        if (one.stated() instanceof Proposition.Compared(Relation.Affine relation, boolean holds,
+                Spelling _)) {
+            Read line = lineOn(behavior, relation, holds, comparison.left(), read, reads);
+            return line == null || !Read.Several.Part.isALine(line) ? null
+                    : List.of(new Read.Several.Part(new PlaceOfALine(THE_COMPARISON,
+                            spelled(one.stated())), line,
+                            List.of(DecidingCase.alone(WhereAnApplicationIsMade.nothingAsked())),
+                            workingOf(onTheInput)));
+        }
+        return asLines(behavior, comparison, one.stated(), onTheInput.arithmetic(),
+                onTheInput.working(), onTheInput.workingOfRelation(), read, reads, answering,
+                Optional.empty()) instanceof Read.Several several
+                && several.parts().stream().allMatch(part -> Read.Several.Part.isALine(part.line()))
+                ? several.parts() : null;
     }
 
     /**

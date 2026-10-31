@@ -47,7 +47,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The element is no number a row holds, so no line is drawn on that remainder. The comparison
  * is read on the elements the list starts with instead, as many as the divisor comes round in:
  * on each, the remainder is one of the input's numbers alone, and its line decides where the list
- * holds that element. Every other element leaves what one of those leaves. A run working the sum
+ * holds that element. Every other element leaves what one of those leaves. Relations held together
+ * are read the same way, on as many elements as all their divisors come round in, and only where
+ * the element is weighed inside remainders alone. A run working the sum
  * out is read as it was, so a sum past its type is not taken away by reading the division as a
  * remainder.
  *
@@ -168,7 +170,186 @@ class ARemainderOverAnElementOfAListOfWholeNumbersIsReadAsARemainderTest {
                 () -> report(compilation));
     }
 
+    /**
+     * A comparison holding several relations together over the element is read on as many
+     * elements as all their divisors come round in, and each line decides where the statement
+     * turns on it on one of those: a line on what {@code a} leaves of six where {@code b} is
+     * above nought, and one on what it leaves of four where it is not. The lines are those every
+     * element puts, worked out here over elements well past where they come round, and every row
+     * read back is on the side of {@code b} the line decides on, with the list holding an element
+     * that leaves {@code a} what the line is on.
+     */
+    @Test
+    void relationsHeldTogetherAreReadOnTheElementsAllTheirDivisorsComeRoundIn() {
+        Compilation compilation = compiled("a: Int, b: Int, days: Int", "List<Int>",
+                "List.rangeInclusive(0, days) |> List.filter(n -> " + GATED + ")");
+        Set<String> expected = new TreeSet<>();
+        for (int element = 0; element < 48; element++) {
+            expected.add(remainderOf("a", element, 6) + " = 5");
+            expected.add(remainderOf("a", element, 4) + " = 3");
+        }
+        assertEquals(expected, gatedLinesOn(compilation));
+        assertFalse(report(compilation).contains("· not read:"), () -> report(compilation));
+        measured(compilation).stream().filter(line -> gatedShiftOf(line.left()) != null)
+                .forEach(ARemainderOverAnElementOfAListOfWholeNumbersIsReadAsARemainderTest
+                        ::assertGatedRowsDecideOnAnElementTheListHolds);
+    }
+
+    /** The same relations with the element weighed outside a remainder as well do not come round,
+     *  and are read on no element: no line, and the rule is said not read. */
+    @Test
+    void relationsWeighingTheElementOutsideARemainderAreReadOnNoElement() {
+        Compilation compilation = compiled("a: Int, b: Int, days: Int", "List<Int>",
+                "List.rangeInclusive(0, days) |> List.filter(n -> (if b > 0 && n > 3 then"
+                        + " Int.floorMod(a + n, 6) else Int.floorMod(a + n, 4) + 2) >= 5)");
+        assertEquals(Set.of(), gatedLinesOn(compilation));
+        assertTrue(report(compilation).contains("· not read: comparison@"),
+                () -> report(compilation));
+    }
+
+    /** A row whose sum over some element passes the type stops there, and none is shown to stand
+     *  at a line of relations held together either. */
+    @Test
+    void noRowWhoseSumPassesItsTypeIsShownAtALineOfRelationsHeldTogether() {
+        Compilation compilation = compiled("a: Int, b: Int, days: Int", "List<Int>",
+                "if a >= 9223372036854775805 then List.rangeInclusive(0, days) |> List.filter(n -> "
+                        + GATED + ") else []");
+        List<ObservedInputs> rows = new ArrayList<>();
+        measured(compilation).stream().filter(line -> gatedShiftOf(line.left()) != null)
+                .forEach(line -> line.items().values().forEach(item -> rows.addAll(
+                        certified(item))));
+        assertFalse(rows.isEmpty(), "some line has its rows");
+        BigInteger most = BigInteger.valueOf(Long.MAX_VALUE);
+        for (ObservedInputs row : rows) {
+            assertTrue(BigInteger.valueOf(number(row, 0)).add(BigInteger.valueOf(number(row, 2)))
+                    .compareTo(most) <= 0, row::toString);
+        }
+    }
+
+    /**
+     * The first of four numbers from {@code a} and the element that leaves at least five of seven,
+     * compared on each element: the search stops at the first, so on each element a line on what
+     * a later one leaves decides only where every one before it left less. Each row read back is
+     * one whose run, on some element the list holds, works out the remainder the line is on.
+     */
+    @Test
+    void theFirstMatchOfASearchOnEachElementIsKept() {
+        Compilation compilation = compiled("a: Int, days: Int", "List<Int>",
+                "List.rangeInclusive(0, days) |> List.filter(n -> Int.floorMod("
+                        + "List.rangeInclusive(0, 3) |> List.map(j -> a + n + j)"
+                        + " |> List.find(d -> Int.floorMod(d, 7) >= 5)"
+                        + " |> Option.withDefault(a + n), 7) == 6)");
+        Set<String> lines = linesOn(compilation);
+        assertFalse(lines.isEmpty(), () -> report(compilation));
+        assertFalse(report(compilation).contains("· not read:"), () -> report(compilation));
+        List<BorderAssessment> owed = measured(compilation).stream()
+                .filter(line -> shiftOf(line.left()) != null).toList();
+        assertFalse(owed.isEmpty(), () -> report(compilation));
+        for (BorderAssessment line : owed) {
+            int shift = shiftOf(line.left());
+            line.items().forEach((point, item) -> certified(item).forEach(row -> {
+                long a = number(row, 0);
+                long days = number(row, 1);
+                boolean worked = false;
+                for (int element = 0; element <= Math.min(days, 6); element++) {
+                    worked |= theSearchWorksOut(a, element).contains(shift);
+                }
+                assertTrue(worked, () -> line.left() + " " + point + " is worked out on an"
+                        + " element the list holds: " + row);
+            }));
+        }
+    }
+
+    /** The remainders of seven whose shift from {@code a} the search on {@code element} works out
+     *  on a run from {@code a}: each candidate up to the first leaving five or more, and the one
+     *  compared at the end. */
+    private static Set<Integer> theSearchWorksOut(long a, int element) {
+        Set<Integer> out = new TreeSet<>();
+        long landed = a + element;
+        for (int j = 0; j <= 3; j++) {
+            out.add(Math.floorMod(element + j, 7));
+            if (Math.floorMod(a + element + j, 7) >= 5) {
+                landed = a + element + j;
+                break;
+            }
+        }
+        out.add(Math.floorMod(landed - a, 7));
+        return out;
+    }
+
     private static final String AT_NOUGHT = "List.filter(n -> Int.floorMod(a + n, 7) == 0)";
+
+    /** A remainder of six compared where {@code b} is above nought, and one of four where not. */
+    private static final String GATED =
+            "(if b > 0 then Int.floorMod(a + n, 6) else Int.floorMod(a + n, 4) + 2) >= 5";
+
+    private static final Pattern GATED_REMAINDER =
+            Pattern.compile("Int\\.floorMod\\(a(?: \\+ (\\d+))?, ([46])\\)");
+
+    /** How {@code a} or {@code b} is written moved by the element {@code element}, by whole
+     *  turns of {@code divisor}. */
+    private static String remainderOf(String input, int element, int divisor) {
+        int moved = Math.floorMod(element, divisor);
+        return moved == 0 ? "Int.floorMod(" + input + ", " + divisor + ")"
+                : "Int.floorMod(" + input + " + " + moved + ", " + divisor + ")";
+    }
+
+    /** What the input in {@code left} is moved by, or null where it is none of the two
+     *  remainders. */
+    private static Integer gatedShiftOf(String left) {
+        Matcher matcher = GATED_REMAINDER.matcher(left);
+        return !matcher.matches() ? null
+                : matcher.group(1) == null ? 0 : Integer.parseInt(matcher.group(1));
+    }
+
+    /** The lines of {@code m} on a remainder of {@code a} by six or by four. */
+    private static Set<String> gatedLinesOn(Compilation compilation) {
+        Set<String> out = new TreeSet<>();
+        List<BorderAssessment> lines = Adequacy.readingsOf(compilation.db(), "w1").get("m");
+        if (lines != null) {
+            lines.stream().filter(line -> gatedShiftOf(line.left()) != null)
+                    .forEach(line -> out.add(line.left() + " = " + line.value()));
+        }
+        return out;
+    }
+
+    /**
+     * Every row read back at every item owed of {@code line} stands where the item is, on the side
+     * of {@code b} the statement turns on the line, and holds an element the list holds that
+     * leaves {@code a} the remainder the line is on.
+     */
+    private static void assertGatedRowsDecideOnAnElementTheListHolds(BorderAssessment line) {
+        Matcher matcher = GATED_REMAINDER.matcher(line.left());
+        assertTrue(matcher.matches(), line::left);
+        int shift = matcher.group(1) == null ? 0 : Integer.parseInt(matcher.group(1));
+        int divisor = Integer.parseInt(matcher.group(2));
+        long level = Long.parseLong(line.value());
+        line.items().forEach((point, item) -> {
+            if (!(item instanceof ItemAssessment.Owed)) {
+                return;
+            }
+            List<ObservedInputs> rows = certified(item);
+            assertFalse(rows.isEmpty(), () -> line.left() + " " + point + " has a row: " + item);
+            for (ObservedInputs row : rows) {
+                long a = number(row, 0);
+                long b = number(row, 1);
+                long days = number(row, 2);
+                long left = Math.floorMod(a + shift, divisor);
+                boolean there = switch (point) {
+                    case DomainPoint.AtTheLine _ -> left == level;
+                    case DomainPoint.BesideTheLine(Towards side) ->
+                            left == (side == Towards.ABOVE ? level + 1 : level - 1);
+                    case DomainPoint.InTheRegion(Towards side) ->
+                            side == Towards.ABOVE ? left > level : left < level;
+                };
+                assertTrue(there, () -> line.left() + " " + point + ": " + row);
+                assertEquals(divisor == 6, b > 0, () -> line.left() + " " + point
+                        + " is on the side of b it decides on: " + row);
+                assertTrue(days >= shift, () -> line.left() + " " + point
+                        + " holds an element that leaves a what the line is on: " + row);
+            }
+        });
+    }
 
     private static final Pattern REMAINDER =
             Pattern.compile("Int\\.floorMod\\(a(?: \\+ (\\d+))?, 7\\)");
