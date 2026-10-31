@@ -9,6 +9,7 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.CanonicalForm;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -220,29 +221,27 @@ final class AWayReadForARelation {
      * of every value the declarations leave, so that it comes to nothing for the relation where
      * what it asks apart is met, as a choice some alternative of which asks nothing of it does.
      *
-     * <p>Shown where each alternative asks bounds on one form and nothing else, and the runs they
-     * leave it together hold every value the declarations leave the form
-     * ({@link RunsOfOneForm}): a lookup of a value in a table, whose rows' lines between them
-     * leave the value nowhere out.
+     * <p>Shown where the alternatives between them are read as bounds on one form, and the runs
+     * they leave it hold every value the declarations leave the form ({@link FormsLeft#onOneForm}):
+     * a lookup of a value in a table, whose rows' lines between them leave the value nowhere out.
      */
     private boolean leavesEveryValueDeclared(ChoiceRead choice) {
-        RunsOfOneForm runs = new RunsOfOneForm();
-        OrderedRuns left = OrderedRuns.nothing();
+        FormsRead forms = new FormsRead();
+        FormsLeft left = null;
         for (List<OnTheWay> alternative : choice.bearing()) {
-            OrderedRuns one = runs.leftBy(alternative);
-            if (one == null) {
-                return false;
-            }
-            left = left.join(one);
+            FormsLeft one = forms.of(alternative);
+            left = left == null ? one : left.join(one);
         }
-        if (!(runs.form().map(whole.from().declarations()::projectionOf)
-                .orElse(null) instanceof NumericDomain.FormProjection.Within(
-                        NumericDomain.Bounds declared))) {
+        if (left == null || left.everyValue()) {
+            return left != null;
+        }
+        Optional<OnOneForm> bounded = left.onOneForm();
+        if (bounded.isEmpty()) {
             return false;
         }
-        OrderedRuns everyValue =
-                OrderedRuns.of(new OrderedInterval(declared.min(), declared.max()));
-        return everyValue.meet(left).sameValuesAs(everyValue);
+        OrderedRuns everyValue = forms.declared(bounded.get().form(), whole.from().declarations());
+        return everyValue != null
+                && everyValue.meet(bounded.get().runs()).sameValuesAs(everyValue);
     }
 
     /**
@@ -413,7 +412,8 @@ final class AWayReadForARelation {
          */
         boolean met(List<OnTheWay> stated) {
             List<OnTheWay> bearingTaken = bearingOf(stated);
-            List<TakenTogether> ways = heldTogether(bearingTaken);
+            FormsRead forms = new FormsRead();
+            List<TakenTogether> ways = heldTogether(bearingTaken, forms);
             if (ways == null) {
                 return false;
             }
@@ -430,9 +430,8 @@ final class AWayReadForARelation {
                 }
                 (aValueMeets(apart) ? met : notMet).add(chosen);
             }
-            RunsOfOneForm runs = new RunsOfOneForm();
             for (Set<OnTheWay> chosen : notMet) {
-                if (insideWhatIsMet(chosen, met, runs)) {
+                if (insideWhatIsMet(chosen, met, forms)) {
                     continue;
                 }
                 List<OnTheWay> bearingAlong = new ArrayList<>(bearingTaken);
@@ -450,31 +449,36 @@ final class AWayReadForARelation {
          * states of it, leaves is one some way of {@code met} leaves, each what such a way asks.
          * What the way states is asked of all of them alike, so it is left out.
          *
-         * <p>Shown where {@code chosen} asks all one of them asks and more. Or where each of what
-         * {@code chosen} asks is a bound on one form, the alternatives of a choice in it too: the
-         * runs of the form it leaves are then inside those the ways of {@code met} asking only
-         * bounds on that form leave together ({@link RunsOfOneForm}). That is how choices that
-         * part one number by the same lines are read, where what each alternative asks apart was
-         * asked of every line at once ({@link ChoiceRead#toMeet}) and so is met by no value beside
-         * another.
+         * <p>Shown where {@code chosen} asks all one of them asks and more. Or where all of what
+         * {@code chosen} asks is read as bounds on one form, the alternatives of a choice in it
+         * too: the runs of the form it leaves are then inside those left together by the ways of
+         * {@code met} that are read so as well ({@link FormsLeft#onOneForm}). That is how choices
+         * that part one number by the same lines are read, where what each alternative asks apart
+         * was asked of every line at once ({@link ChoiceRead#toMeet}) and so is met by no value
+         * beside another.
          */
         private static boolean insideWhatIsMet(Set<OnTheWay> chosen, List<Set<OnTheWay>> met,
-                                               RunsOfOneForm runs) {
+                                               FormsRead forms) {
             if (met.stream().anyMatch(chosen::containsAll)) {
                 return true;
             }
-            OrderedRuns left = runs.leftBy(chosen);
-            if (left == null) {
+            Optional<OnOneForm> asked = forms.of(chosen).onOneForm();
+            if (asked.isEmpty()) {
                 return false;
             }
+            OnOneForm left = asked.get();
             OrderedRuns leftByMet = OrderedRuns.nothing();
             for (Set<OnTheWay> each : met) {
-                OrderedRuns one = runs.leftBy(each);
-                if (one != null) {
-                    leftByMet = leftByMet.join(one);
+                FormsLeft one = forms.of(each);
+                if (one.everyValue()) {
+                    return true;
+                }
+                Optional<OnOneForm> same = one.onOneForm();
+                if (same.isPresent() && same.get().form().equals(left.form())) {
+                    leftByMet = leftByMet.join(same.get().runs());
                 }
             }
-            return left.meet(leftByMet).sameValuesAs(left);
+            return left.runs().meet(leftByMet).sameValuesAs(left.runs());
         }
 
         /**
@@ -482,41 +486,37 @@ final class AWayReadForARelation {
          * order the choices came and their alternatives in each — or null where they are more
          * than a way is looked along with, which is then a figure this was stopped at.
          *
-         * <p>A way whose numbers bearing on the relation nothing the declarations leave meets,
-         * beside what the way states of the relation, is one no row takes, which is the second
-         * half of what {@link #met} accepts, and a way narrower than it is one no row takes
-         * either. So such a way is met and not counted, nor is any way it is part of. Choices
-         * that each part one number by the same lines — two lookups of one value in one table —
-         * hold together only where they agree on the part, and are counted as that many ways and
-         * not as the product of their sizes. Choices of numbers apart from one another hold
+         * <p>A way no value of whose forms lies in the runs what it asks bearing on the relation
+         * leaves them, beside what the way states of the relation, is one no row takes, which is
+         * the second half of what {@link #met} accepts, and a way narrower than it is one no row
+         * takes either. So such a way is met and not counted, nor is any way it is part of.
+         * Choices that each part one number by the same lines — two lookups of one value in one
+         * table — hold together only where they agree on the part, and are counted as that many
+         * ways and not as the product of their sizes, whether the lines are written in an
+         * alternative or in a choice nested in it. Choices of numbers apart from one another hold
          * together in every way, and are counted as the product.
          *
-         * <p>Only what is stated of the numbers outside a choice nested in an alternative is
-         * asked, which leaves more than the alternative and so shows no more ways closed than
-         * are. And the ways counted are those of the choices taken so far, each time one more is
-         * taken, so a way is never counted past the figure only to be closed by the choices
-         * after it.
+         * <p>What is read of a way is what it leaves at most ({@link FormsLeft}), so it shows no
+         * more ways closed than are. And the ways counted are those of the choices taken so far,
+         * each time one more is taken, so a way is never counted past the figure only to be closed
+         * by the choices after it.
          */
-        private List<TakenTogether> heldTogether(List<OnTheWay> bearingTaken) {
-            SearchRegion declared = whole.from().declarations();
-            List<TakenConstraint> stated = numbersIn(bearingTaken);
-            List<TakenTogether> ways = List.of(new TakenTogether(List.of(), stated,
-                    TakenConstraint.narrowedBy(stated, declared)));
+        private List<TakenTogether> heldTogether(List<OnTheWay> bearingTaken, FormsRead forms) {
+            List<TakenTogether> ways = List.of(new TakenTogether(List.of(),
+                    forms.of(bearingTaken)));
             for (ChoiceRead choice : inOrder) {
                 List<TakenTogether> wider = new ArrayList<>();
                 for (TakenTogether way : ways) {
                     for (int alternative = 0; alternative < choice.bearing().size();
                          alternative++) {
-                        List<TakenConstraint> asked = numbersIn(choice.bearing().get(alternative));
-                        List<TakenConstraint> numbers = new ArrayList<>(way.numbers());
-                        numbers.addAll(asked);
-                        SearchRegion region = TakenConstraint.narrowedBy(asked, way.region());
-                        if (!asked.isEmpty() && TakenConstraint.nothingIsLeftFor(numbers, region)) {
+                        FormsLeft left = way.left().meet(
+                                forms.of(choice.bearing().get(alternative)));
+                        if (left.holdsNothing()) {
                             continue;
                         }
                         List<Integer> taken = new ArrayList<>(way.alternatives());
                         taken.add(alternative);
-                        wider.add(new TakenTogether(taken, numbers, region));
+                        wider.add(new TakenTogether(taken, left));
                         if (wider.size() > CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum()) {
                             stoppedAt.add(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
                             return null;
@@ -530,133 +530,195 @@ final class AWayReadForARelation {
     }
 
     /**
-     * One way of taking an alternative of each of some choices together, and what the numbers
-     * bearing on the relation are asked along it.
+     * One way of taking an alternative of each of some choices together, and what it leaves the
+     * forms bearing on the relation.
      *
      * @param alternatives the alternative taken of each choice, in their order
-     * @param numbers      what is stated of the numbers along it
-     * @param region       what the declarations leave with {@code numbers} taken in
+     * @param left         what the way leaves the forms, at most
      */
-    private record TakenTogether(List<Integer> alternatives, List<TakenConstraint> numbers,
-                                 SearchRegion region) {}
+    private record TakenTogether(List<Integer> alternatives, FormsLeft left) {}
 
     /**
-     * The runs of one form that what ways ask of the relation leave it, where all they ask is a
-     * bound on that form.
+     * The runs each form of the input's numbers lies in along a way, as far as conditions bounding
+     * it say: every row taking the way has each form in its runs, whatever else it asks.
      *
-     * <p>Every value of the input a way asks this of is one whose form lies in the runs it leaves,
-     * and every value whose form lies there is one it asks: what it asks of the input is what it
-     * asks of the form and nothing else. So one way's runs inside another's is its values inside
-     * the other's, whatever else is asked of the input beside them all alike. Which form is the
-     * first one met, as it was written there, and the runs are of it. A bound on it is read
-     * however it is written: {@code 2 * x <= 10}, {@code x <= 5} and {@code -x >= -5} are one
-     * bound, which is what their {@link CanonicalForm} says; a bound on any other form is not read.
+     * <p>A form is one number of a row only where every position it weighs is one value of the
+     * row, outside every container, and those are the conditions read: one asking of an element
+     * may ask of another element than the next, which no bound on one number says. That is the
+     * rule a walk of the way takes conditions into its region by ({@link WayToTheBorder}), and
+     * what it leaves out is left out here. A bound is on its form however it is scaled:
+     * {@code 2 * x <= 10} and {@code x <= 5} are one ({@link CanonicalForm}). Turned round,
+     * {@code -x >= -5} is a bound on the form turned round, which the form's lowest terms keep
+     * apart; read as a form of its own, it is met with no bound on {@code x}, which leaves a way
+     * more values and closes none that is open.
      *
-     * <p>Over every value of the form between its places and not only those a count steps through,
-     * so runs a counted order leaves no value between are still two, and one way is shown inside
-     * others only where it is over the values between as well.
+     * <p>Over every value of a form between its places and not only those a count steps through,
+     * so runs a counted order leaves no value between are still two.
+     *
+     * @param runs  for each form some condition bounds, the runs it leaves it; a form not here is
+     *              left every value
+     * @param exact whether every row with each form in its runs takes the way, which is so where
+     *              every condition was read as bounds, and the alternatives of a choice too
      */
-    private static final class RunsOfOneForm {
+    private record FormsLeft(Map<CanonicalForm<NumericTerm>, OrderedRuns> runs, boolean exact) {
 
-        /** The form the runs are of, as the first bound read wrote it with its constant left
-         *  out. */
-        private LinearForm<NumericTerm> form;
+        /** What nothing asks: every value of every form, and every row. */
+        static final FormsLeft EVERY_VALUE = new FormsLeft(Map.of(), true);
 
-        /** That form in lowest terms, and what it is that times. */
-        private CanonicalForm<NumericTerm> lowest;
-        private ExactRatio scaled;
+        /** What a condition read as no bound asks: every value at most, and less than every row. */
+        static final FormsLeft NOT_READ = new FormsLeft(Map.of(), false);
 
-        /** What each condition leaves the form, read once; empty where it is not a bound on it. */
-        private final Map<OnTheWay, Optional<OrderedRuns>> read = new HashMap<>();
-
-        /** The form the runs are of; empty where no bound was read. */
-        Optional<LinearForm<NumericTerm>> form() {
-            return Optional.ofNullable(form);
+        FormsLeft {
+            runs = Map.copyOf(runs);
         }
 
-        /** The runs {@code conditions} together leave the form, or null where one of them is not
-         *  a bound on it. */
-        OrderedRuns leftBy(Collection<OnTheWay> conditions) {
-            OrderedRuns out = OrderedRuns.of(OrderedInterval.OPEN);
+        /** What a row taking both ways leaves the forms. */
+        FormsLeft meet(FormsLeft other) {
+            Map<CanonicalForm<NumericTerm>, OrderedRuns> both = new HashMap<>(runs);
+            other.runs.forEach((form, there) -> both.merge(form, there, OrderedRuns::meet));
+            return new FormsLeft(both, exact && other.exact);
+        }
+
+        /**
+         * What a row taking one way or the other leaves the forms: the runs of each form both
+         * bound, joined. Exact where both are and they bound the one form, or one leaves every
+         * value; otherwise the rows are not those of runs of each form apart.
+         */
+        FormsLeft join(FormsLeft other) {
+            if (everyValue() || other.everyValue()) {
+                return EVERY_VALUE;
+            }
+            Map<CanonicalForm<NumericTerm>, OrderedRuns> either = new HashMap<>();
+            runs.forEach((form, here) -> {
+                OrderedRuns there = other.runs.get(form);
+                if (there != null) {
+                    either.put(form, here.join(there));
+                }
+            });
+            return new FormsLeft(either, exact && other.exact && runs.size() == 1
+                    && runs.keySet().equals(other.runs.keySet()));
+        }
+
+        /** Whether no row takes the way: some form is left no value. */
+        boolean holdsNothing() {
+            return runs.values().stream().anyMatch(OrderedRuns::holdsNothing);
+        }
+
+        /** Whether every row takes the way. */
+        boolean everyValue() {
+            return exact && runs.isEmpty();
+        }
+
+        /** The one form the way bounds and the runs it leaves it, where the rows taking the way
+         *  are exactly those with the form in the runs. */
+        Optional<OnOneForm> onOneForm() {
+            if (!exact || runs.size() != 1) {
+                return Optional.empty();
+            }
+            Map.Entry<CanonicalForm<NumericTerm>, OrderedRuns> only =
+                    runs.entrySet().iterator().next();
+            return Optional.of(new OnOneForm(only.getKey(), only.getValue()));
+        }
+    }
+
+    /** A form, and the runs a way leaves it. */
+    private record OnOneForm(CanonicalForm<NumericTerm> form, OrderedRuns runs) {}
+
+    /** What conditions leave the forms they bound ({@link FormsLeft}), each condition read once. */
+    private static final class FormsRead {
+
+        private final Map<OnTheWay, FormsLeft> read = new HashMap<>();
+
+        /** Each form read, as the first bound on it wrote it with its constant left out, and what
+         *  that writing is the form times. */
+        private final Map<CanonicalForm<NumericTerm>, Written> written = new HashMap<>();
+
+        private record Written(LinearForm<NumericTerm> form, ExactRatio by) {}
+
+        /**
+         * The run of {@code form} the declarations leave every value of it in — or null where
+         * that is not shown, or {@code form} was not read here. Asked of the form as a bound on
+         * it wrote it, and brought back to the form by what that writing is the form times.
+         */
+        OrderedRuns declared(CanonicalForm<NumericTerm> form, SearchRegion declarations) {
+            Written as = written.get(form);
+            if (as == null || !(declarations.projectionOf(as.form())
+                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds))) {
+                return null;
+            }
+            Endpoint low = bounds.min() == null ? null : divided(bounds.min(), as.by());
+            Endpoint high = bounds.max() == null ? null : divided(bounds.max(), as.by());
+            if ((bounds.min() != null && low == null) || (bounds.max() != null && high == null)) {
+                return null;
+            }
+            return OrderedRuns.of(new OrderedInterval(low, high));
+        }
+
+        /** {@code end} divided by {@code by}, which is positive — or null where that is no
+         *  count. */
+        private static Endpoint divided(Endpoint end, ExactRatio by) {
+            if (!(end.at() instanceof Count count)
+                    || !(count.exactly().dividedBy(by)
+                            instanceof ExactAnswer.Held<ExactRatio>(ExactRatio at))
+                    || !(Count.written(at)
+                            instanceof ExactAnswer.Held<Optional<Count>>(Optional<Count> place))
+                    || place.isEmpty()) {
+                return null;
+            }
+            return new Endpoint(place.get(), end.inclusive());
+        }
+
+        /** What {@code conditions} together leave the forms. */
+        FormsLeft of(Collection<OnTheWay> conditions) {
+            FormsLeft out = FormsLeft.EVERY_VALUE;
             for (OnTheWay each : conditions) {
-                Optional<OrderedRuns> one = read.get(each);
+                FormsLeft one = read.get(each);
                 if (one == null) {
-                    one = Optional.ofNullable(leftBy(each));
+                    one = leftBy(each);
                     read.put(each, one);
                 }
-                if (one.isEmpty()) {
-                    return null;
-                }
-                out = out.meet(one.get());
+                out = out.meet(one);
             }
             return out;
         }
 
-        private OrderedRuns leftBy(OnTheWay condition) {
+        private FormsLeft leftBy(OnTheWay condition) {
             return switch (condition) {
                 case OnTheWay.TakenIn(var _, RowDemand.Relational(
-                        TakenConstraint.Affine(LinearForm<NumericTerm> written, Rel rel))) ->
-                        leftBy(written, rel);
+                        TakenConstraint.Affine(LinearForm<NumericTerm> written, Rel rel)))
+                        when WayToTheBorder.ofOnePosition(condition) -> leftBy(written, rel);
                 case OnTheWay.OneOf several -> {
-                    OrderedRuns out = OrderedRuns.nothing();
+                    FormsLeft out = null;
                     for (List<OnTheWay> alternative : several.alternatives()) {
-                        OrderedRuns one = leftBy(alternative);
-                        if (one == null) {
-                            yield null;
-                        }
-                        out = out.join(one);
+                        FormsLeft one = of(alternative);
+                        out = out == null ? one : out.join(one);
                     }
                     yield out;
                 }
                 case OnTheWay.TakenIn _, OnTheWay.Narrowed _, OnTheWay.Settled _,
-                     OnTheWay.Counted _, OnTheWay.Declined _ -> null;
+                     OnTheWay.Counted _, OnTheWay.Declined _ -> FormsLeft.NOT_READ;
             };
         }
 
-        /** What {@code written rel 0} leaves the form, or null where it is no bound on it or its
-         *  threshold is no place of the form's order. */
-        private OrderedRuns leftBy(LinearForm<NumericTerm> written, Rel rel) {
-            if (!(CanonicalForm.of(written.coefs()) instanceof CanonicalForm.Scaled<NumericTerm>(
+        /** What {@code bound rel 0} leaves its form, in lowest terms; not read where its threshold
+         *  is no place of the form's order. */
+        private FormsLeft leftBy(LinearForm<NumericTerm> bound, Rel rel) {
+            if (!(CanonicalForm.of(bound.coefs()) instanceof CanonicalForm.Scaled<NumericTerm>(
                     CanonicalForm<NumericTerm> on, ExactRatio by))) {
-                return null;
+                return FormsLeft.NOT_READ;
             }
-            if (form == null) {
-                form = new LinearForm<>(ExactRatio.ZERO, written.coefs());
-                lowest = on;
-                scaled = by;
+            // by * on + constant rel 0 is on rel -constant / by.
+            if (!(bound.constant().negated().dividedBy(by)
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio threshold))
+                    || !(Count.written(threshold)
+                            instanceof ExactAnswer.Held<Optional<Count>>(Optional<Count> place))
+                    || place.isEmpty()) {
+                return FormsLeft.NOT_READ;
             }
-            boolean turned;
-            if (on.equals(lowest)) {
-                turned = false;
-            } else if (on.isNegationOf(lowest)) {
-                turned = true;
-            } else {
-                return null;
-            }
-            // by * on + constant rel 0 is on rel -constant / by, and the form is scaled times
-            // the lowest terms, which on is or is turned round from.
-            if (!(written.constant().negated().dividedBy(by).flatMap(threshold ->
-                    (turned ? threshold.negated() : threshold).times(scaled))
-                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio at))) {
-                return null;
-            }
-            if (!(Count.written(at) instanceof ExactAnswer.Held<Optional<Count>>(
-                    Optional<Count> place)) || place.isEmpty()) {
-                return null;
-            }
-            return OrderedRuns.leftBy(turned ? rel.turned() : rel, place.get());
+            written.putIfAbsent(on, new Written(
+                    new LinearForm<>(ExactRatio.ZERO, bound.coefs()), by));
+            return new FormsLeft(Map.of(on, OrderedRuns.leftBy(rel, place.get())), true);
         }
-    }
-
-    /** What {@code onTheWay} states of the numbers outside the choices in it. */
-    private static List<TakenConstraint> numbersIn(List<OnTheWay> onTheWay) {
-        List<TakenConstraint> out = new ArrayList<>();
-        for (OnTheWay each : onTheWay) {
-            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.Relational(var constraint))) {
-                out.add(constraint);
-            }
-        }
-        return out;
     }
 
     /**

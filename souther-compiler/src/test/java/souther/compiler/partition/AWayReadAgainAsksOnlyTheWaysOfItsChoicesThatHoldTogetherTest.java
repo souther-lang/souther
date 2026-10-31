@@ -11,6 +11,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static souther.compiler.partition.WaysReadAgain.anElement;
 import static souther.compiler.partition.WaysReadAgain.oneOf;
 import static souther.compiler.partition.WaysReadAgain.truth;
 import static souther.compiler.partition.WaysReadAgain.x;
@@ -40,18 +41,47 @@ class AWayReadAgainAsksOnlyTheWaysOfItsChoicesThatHoldTogetherTest {
     private static OnTheWay parting(int at, Bound number) {
         List<List<OnTheWay>> runs = new ArrayList<>();
         for (int run = 0; run <= LINES; run++) {
-            List<OnTheWay> asked = new ArrayList<>();
-            if (run > 0) {
-                asked.add(number.of(1, Rel.GE, run * 10L));
-            }
-            if (run < LINES) {
-                asked.add(number.of(1, Rel.LT, (run + 1) * 10L));
-            }
-            asked.add(truth("c" + run, true));
-            asked.add(truth("c" + (run + 1), false));
+            List<OnTheWay> asked = new ArrayList<>(theRun(run, number));
+            asked.addAll(askedApart(run));
             runs.add(asked);
         }
         return oneOf(at, runs);
+    }
+
+    /**
+     * The same choice with each run's lines written only inside a choice of its own halves, as a
+     * lookup in a table writes them: the run is one half or the other.
+     */
+    private static OnTheWay partingInside(int at, Bound number) {
+        List<List<OnTheWay>> runs = new ArrayList<>();
+        for (int run = 0; run <= LINES; run++) {
+            List<OnTheWay> below = new ArrayList<>(theRun(run, number));
+            below.add(number.of(1, Rel.LT, run * 10L + 5));
+            List<OnTheWay> above = new ArrayList<>(theRun(run, number));
+            above.add(number.of(1, Rel.GE, run * 10L + 5));
+            List<OnTheWay> asked = new ArrayList<>();
+            asked.add(oneOf(at * 100 + run, List.of(below, above)));
+            asked.addAll(askedApart(run));
+            runs.add(asked);
+        }
+        return oneOf(at, runs);
+    }
+
+    /** The lines either side of the run numbered {@code run}. */
+    private static List<OnTheWay> theRun(int run, Bound number) {
+        List<OnTheWay> lines = new ArrayList<>();
+        if (run > 0) {
+            lines.add(number.of(1, Rel.GE, run * 10L));
+        }
+        if (run < LINES) {
+            lines.add(number.of(1, Rel.LT, (run + 1) * 10L));
+        }
+        return lines;
+    }
+
+    /** What the run numbered {@code run} asks apart. */
+    private static List<OnTheWay> askedApart(int run) {
+        return List.of(truth("c" + run, true), truth("c" + (run + 1), false));
     }
 
     /**
@@ -62,6 +92,18 @@ class AWayReadAgainAsksOnlyTheWaysOfItsChoicesThatHoldTogetherTest {
     void choicesPartingOneNumberByTheSameLinesAreAskedAlongTheRunsTheyAgreeOn() {
         AWayReadForARelation.ReadAgain again = WaysReadAgain.readAgain(
                 List.of(parting(1, WaysReadAgain::x), parting(2, WaysReadAgain::x)));
+
+        assertFalse(again.stoppedAt().contains(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG),
+                () -> "the ways were not more than a way is looked along with: "
+                        + again.stoppedAt());
+        assertTrue(again.as().isPresent(), "and the way is read as less for the relation");
+    }
+
+    /** The same where the lines are written only inside a choice in each alternative. */
+    @Test
+    void choicesPartingOneNumberInsideTheirAlternativesAreAskedAlongTheRunsTheyAgreeOn() {
+        AWayReadForARelation.ReadAgain again = WaysReadAgain.readAgain(List.of(
+                partingInside(1, WaysReadAgain::x), partingInside(2, WaysReadAgain::x)));
 
         assertFalse(again.stoppedAt().contains(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG),
                 () -> "the ways were not more than a way is looked along with: "
@@ -94,6 +136,25 @@ class AWayReadAgainAsksOnlyTheWaysOfItsChoicesThatHoldTogetherTest {
                         List.of(x(1, Rel.GE, 10), truth("t", false)))),
                 oneOf(2, List.of(List.of(x(1, Rel.LE, 3), truth("t", false)),
                         List.of(x(1, Rel.GE, 7), truth("t", true))))));
+
+        assertTrue(again.as().isEmpty(), () -> "nothing is read as less: " + again.as());
+    }
+
+    /**
+     * Under {@code (e < 0 && t || e >= 0 && s)} and {@code (e < -1 && s || e >= 1 && !t)}, where
+     * {@code e} is an element of a list, a row may take the first of one and the second of the
+     * other with one element below nought and another at one or above, as the walk of that way
+     * says: the way asks {@code t} both ways, no way met asks less of the relation, and so
+     * neither is read as less. Read as bounds on one value, the way would be closed and not
+     * asked.
+     */
+    @Test
+    void boundsOnAnElementAreNotReadAsBoundsOnOneValue() {
+        AWayReadForARelation.ReadAgain again = WaysReadAgain.readAgain(List.of(
+                oneOf(1, List.of(List.of(anElement(1, Rel.LT, 0), truth("t", true)),
+                        List.of(anElement(1, Rel.GE, 0), truth("s", true)))),
+                oneOf(2, List.of(List.of(anElement(1, Rel.LT, -1), truth("s", true)),
+                        List.of(anElement(1, Rel.GE, 1), truth("t", false))))));
 
         assertTrue(again.as().isEmpty(), () -> "nothing is read as less: " + again.as());
     }

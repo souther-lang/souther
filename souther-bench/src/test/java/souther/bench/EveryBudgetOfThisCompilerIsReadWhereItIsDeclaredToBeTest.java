@@ -263,7 +263,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // the way was read again as, and where the relation is then shown nothing of the way
             // it says it stopped at them.
             Map.entry("souther.compiler.partition.AWayReadForARelation$Part#heldTogether("
-                            + "Ljava/util/List;)Ljava/util/List;",
+                            + "Ljava/util/List;"
+                            + "Lsouther/compiler/partition/AWayReadForARelation$FormsRead;)"
+                            + "Ljava/util/List;",
                     "keeps a choice as it stands past the ways looked along that may hold"
                             + " together, and hands the figure to what the relation says it"
                             + " stopped at"),

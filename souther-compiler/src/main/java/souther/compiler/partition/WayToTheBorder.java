@@ -195,7 +195,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
 
     /** Whether every position {@code entry} asks about is one value of a run's own, outside every
      *  container. */
-    private static boolean ofOnePosition(OnTheWay entry) {
+    static boolean ofOnePosition(OnTheWay entry) {
         return ASKED_OF_A_ROW.positions(entry).stream().noneMatch(TermPath::insideAContainer);
     }
 

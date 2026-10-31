@@ -32,6 +32,10 @@ final class WaysReadAgain {
     static final TermPath X = TermPath.of("x");
     static final TermPath Y = TermPath.of("y");
 
+    /** An element of the list {@code xs}, which two conditions on a way may each ask of a
+     *  different element. */
+    static final TermPath AN_ELEMENT = TermPath.of("xs").element();
+
     /** How many {@code Bool}s the met choices ask of, each asked by several. */
     private static final int TRUTHS = 16;
 
@@ -69,7 +73,7 @@ final class WaysReadAgain {
                         way.stream().filter(OnTheWay::splitsTheWay).toList(),
                         CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG, List.of(),
                         new Reachability.ReadFrom(new WayToTheBorder(way), REGION)),
-                Set.of(X, Y), NOTHING_DECLARED);
+                Set.of(X, Y, AN_ELEMENT), NOTHING_DECLARED);
     }
 
     /** {@code count} choices of two truths each, every truth asked to hold, numbered from
@@ -120,6 +124,11 @@ final class WaysReadAgain {
         return number(Y, weight, rel, threshold);
     }
 
+    /** {@code weight * xs[*] rel threshold}, asked of an element the relation reads. */
+    static OnTheWay anElement(long weight, Rel rel, long threshold) {
+        return number(AN_ELEMENT, weight, rel, threshold);
+    }
+
     private static OnTheWay number(TermPath at, long weight, Rel rel, long threshold) {
         return new OnTheWay.TakenIn(anchor(0), new RowDemand.Relational(new TakenConstraint.Affine(
                 new LinearForm<>(ExactRatio.of(-threshold),
@@ -148,8 +157,8 @@ final class WaysReadAgain {
         Compilation compilation = Compilation.ofSource("""
                 module m
                 data Yes
-                behavior f : (x: Int, y: Int) -> Yes
-                let f (x, y) = Yes
+                behavior f : (x: Int, y: Int, xs: List<Int>) -> Yes
+                let f (x, y, xs) = Yes
                 """, "Main");
         return compilation.db().ask(new Adequacy.Inputs("m")).value().get("f")
                 .reading(RuleReadings.of(compilation, "m")).quantities().region();
