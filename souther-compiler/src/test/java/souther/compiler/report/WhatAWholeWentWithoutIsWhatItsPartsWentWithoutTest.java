@@ -228,7 +228,10 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
             data Amount = Int
                 invariant value >= 0
 
-            data Draft = { n: Amount }
+            data Item = { a: String, b: String, c: String }
+            data Group = { items: List<Item> }
+
+            data Draft = { groups: List<Group>, n: Amount }
             data Ok = { n: Int }
 
             behavior seen : (d: Draft) -> Ok
@@ -239,11 +242,17 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
                 constructs Ok
             let unread (d) = Ok { n = d.n.value }
 
+            let someItems (n: Int): List<Item> =
+                List.map({ (i) -> Item { a = "x", b = "x", c = "x" } }, List.rangeInclusive(1, n))
+
+            let someGroups (n: Int): List<Group> =
+                List.map({ (i) -> Group { items = someItems(64) } }, List.rangeInclusive(1, n))
+
             example seen
-                | "inside the run" : (Draft { n = Amount(5) }) -> Ok { n = 5 }
+                | "inside the run" : (Draft { groups = someGroups(1), n = Amount(5) }) -> Ok { n = 5 }
 
             example unread
-                | "never read" : (Draft { n = Amount(7) }) -> Ok { n = 7 }
+                | "never read" : (Draft { groups = someGroups(64), n = Amount(0) }) -> Ok { n = 0 }
             """;
 
     /**
@@ -262,8 +271,6 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
     @Test
     void aModuleHoldsWhatOnlyItsDeclarationsWentWithout() {
         Compilation compilation = Compilation.ofSource(ONE_ROW_UNREAD, "Main");
-        compilation.withJvmExampleDeadlines(souther.compiler.DoesNotComeBack.overrunningOn(
-                souther.compiler.DoesNotComeBack.everythingAboutRowsOf("unread")));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         AdequacyReport.ModuleReport module =
@@ -280,6 +287,10 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
         assertFalse(onlyTheDeclarations.isEmpty(),
                 () -> "nothing here is the declaration account's alone, so this holds the module to"
                         + " nothing: " + module.declarationsWeakenedBy().causes());
+        assertTrue(onlyTheDeclarations.stream()
+                        .anyMatch(Weakening.BorderValueUnreadable.class::isInstance),
+                () -> "the row finished and handed its values over, and one of them was cut short:"
+                        + " " + onlyTheDeclarations);
         assertTrue(module.weakenedBy().causes().containsAll(onlyTheDeclarations),
                 () -> "a module that did not hear what only its declaration account went without: "
                         + module.weakenedBy().causes());

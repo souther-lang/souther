@@ -36,6 +36,8 @@ import souther.compiler.observe.Classification;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RowOutcome;
+import souther.compiler.observe.RowRef;
+import souther.compiler.observe.Target;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.MeasuredInput;
@@ -1582,14 +1584,20 @@ final class Coverages {
      * @param others     the values of every other row, which is {@code all}'s where there are none
      */
     record RowsPutToTheLines(List<ObservedInputs> all, List<WitnessedRow> notHolding,
-                             List<ObservedInputs> others) {
+                             List<ObservedInputs> others, Set<RowRef> stoppedBeforeTheirValues) {
 
+        /**
+         * The rows that handed their values over, and the ones that stopped before doing so. A row
+         * that stopped is not a row at any point: it may be at any of them, which is said by the
+         * stop and not by a value it did not hand over. A row refused before its values is
+         * neither, since it is evidence of nothing.
+         */
         static RowsPutToTheLines of(Adequacy.RowReading observed,
                                     Optional<SiteNumbering> numbering) {
             List<ObservedInputs> all = new ArrayList<>();
             List<WitnessedRow> notHolding = new ArrayList<>();
             List<ObservedInputs> others = new ArrayList<>();
-            for (RowOutcome row : observed.rowsSeen()) {
+            for (RowOutcome row : observed.rowsWithValues()) {
                 WitnessedRow read = WitnessedRow.of(row, numbering);
                 all.add(read.observed());
                 if (read.by().anotherRow()) {
@@ -1599,7 +1607,8 @@ final class Coverages {
                 }
             }
             return new RowsPutToTheLines(List.copyOf(all), List.copyOf(notHolding),
-                    notHolding.isEmpty() ? List.copyOf(all) : List.copyOf(others));
+                    notHolding.isEmpty() ? List.copyOf(all) : List.copyOf(others),
+                    observed.rowsStoppedBeforeTheirValues());
         }
     }
 
@@ -1932,15 +1941,17 @@ final class Coverages {
             RowsPutToTheLines put, boolean guard, Border border, Adequacy.RowReading observed) {
         if (put.notHolding().isEmpty()) {
             return verdictOf(shape.met(answeredAs, criterion, put.all()),
-                    () -> RowWitnesses.ANOTHER_ROW, guard, border, observed);
+                    () -> RowWitnesses.ANOTHER_ROW, guard, border, observed,
+                    put.stoppedBeforeTheirValues());
         }
         StandingAtAPoint.Met byOthers = shape.met(answeredAs, criterion, put.others());
         if (byOthers instanceof StandingAtAPoint.Met.Reached) {
-            return verdictOf(byOthers, () -> RowWitnesses.ANOTHER_ROW, guard, border, observed);
+            return verdictOf(byOthers, () -> RowWitnesses.ANOTHER_ROW, guard, border, observed,
+                    put.stoppedBeforeTheirValues());
         }
         return verdictOf(shape.met(answeredAs, criterion, put.all()),
                 () -> onlyRowsThatDoNotHoldAt(shape, answeredAs, criterion, put.notHolding()),
-                guard, border, observed);
+                guard, border, observed, put.stoppedBeforeTheirValues());
     }
 
     /** Which of {@code notHolding} stand at a point every row was found to meet and no other row
@@ -2997,7 +3008,7 @@ final class Coverages {
      */
     private static Measurement<ItemAssessment.Coverage> verdictOf(
             StandingAtAPoint.Met met, Supplier<RowWitnesses> whoStandsThere, boolean guard,
-            Border border, Adequacy.RowReading observed) {
+            Border border, Adequacy.RowReading observed, Set<RowRef> stoppedBeforeTheirValues) {
         if (met instanceof StandingAtAPoint.Met.Reached) {
             // Found is found: a row settles this whatever else went unread, so nothing weakens it.
             return new Measurement.Complete<>(new ItemAssessment.Coverage.Hit(whoStandsThere.get()));
@@ -3029,8 +3040,13 @@ final class Coverages {
             // Read off the reasons rather than off the dispositions beside them. What a row that
             // stopped costs a measure is said once, where the row stopped (`ExampleVerifier`), and
             // a second reading here was a second statement of it that could differ (issue #996).
+            //
+            // A row that stopped before handing its values over bears on every line: its values
+            // are unknown, so the point it would have stood at is too.
             if (gap.fact().code().leftNoRowRead()
-                    || (guard && gap.fact().scope() == Incompleteness.Scope.ROW)) {
+                    || (guard && gap.fact().scope() == Incompleteness.Scope.ROW)
+                    || (gap.fact().target() instanceof Target.OfRow(RowRef row)
+                            && stoppedBeforeTheirValues.contains(row))) {
                 by.add(new Weakening.ObservationIncomplete(gap));
             }
         }

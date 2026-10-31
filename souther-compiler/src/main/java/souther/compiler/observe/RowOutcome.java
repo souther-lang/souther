@@ -230,6 +230,16 @@ public record RowOutcome(SourcePos at,
         }
     }
 
+    /**
+     * Whether the row got as far as handing its values over, which is what makes {@link #inputs}
+     * the row's inputs. A row that did not has what was built before it stopped or was refused,
+     * and that is not a tuple of the behavior's parameters: a position past its end is not a value
+     * that could not be read.
+     */
+    public boolean valuesHandedOver() {
+        return stage.reached(Stage.FIXTURES_VALIDATED);
+    }
+
     /** Whether the behavior answered for this row — it was applied and a value came back, which is
      * what {@link Stage#ANSWERED} is reached by. Where a row states what it expects the answer is
      * then compared, and where it is owed the row ends here; both saw the answer. Whether that

@@ -5546,6 +5546,35 @@ public final class Adequacy {
             return measured.made().map(Observed::rows).orElseGet(List::of);
         }
 
+        /**
+         * The rows that handed their values over, which are the only ones whose inputs are a tuple
+         * of the behavior's parameters. A row measured by its values is taken from here, so that
+         * what a row got through before it stopped is not read as what it wrote.
+         */
+        public List<RowOutcome> rowsWithValues() {
+            return rowsSeen().stream().filter(RowOutcome::valuesHandedOver).toList();
+        }
+
+        /**
+         * The rows that stopped before they handed their values over, which are the rows with no
+         * values and a reason on record. A row without values and without a reason was refused:
+         * it is evidence of nothing and leaves nothing undecided.
+         */
+        public Set<RowRef> rowsStoppedBeforeTheirValues() {
+            Set<RowRef> stopped = new HashSet<>();
+            for (Incompleteness.Met gap : gaps()) {
+                if (gap.fact().target() instanceof Target.OfRow(RowRef ref)) {
+                    stopped.add(ref);
+                }
+            }
+            for (RowOutcome row : rowsSeen()) {
+                if (row.valuesHandedOver()) {
+                    stopped.remove(RowRef.of(row));
+                }
+            }
+            return Set.copyOf(stopped);
+        }
+
         /** What this reading went without, as the reasons themselves, each once and with everywhere
          *  it was met. One projection, shared with the document that prints them
          *  ({@link WeakeningSet#observationCauses}). */
@@ -7238,7 +7267,15 @@ public final class Adequacy {
                         List.of(new souther.compiler.partition.GenerationReason.RowsNotRead(
                                 spec.name(), observed.gaps())));
             }
-            List<RowOutcome> rows = observed.rowsSeen();
+            // A row refused before its values were handed over is evidence of nothing and leaves
+            // nothing undecided, so the generator does not see it. One that stopped is seen with
+            // no values placed: what it covers is unknown, and that is what a row placed nowhere
+            // says.
+            Set<RowRef> stoppedBefore = observed.rowsStoppedBeforeTheirValues();
+            List<RowOutcome> rows = observed.rowsSeen().stream()
+                    .filter(row -> row.valuesHandedOver()
+                            || stoppedBefore.contains(RowRef.of(row)))
+                    .toList();
             // The measurement's own axes, so that a row is placed by the walk it was measured at.
             souther.compiler.partition.MeasuredInput.MeasuredAxes axes = asked.subject().axes();
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
@@ -7249,8 +7286,8 @@ public final class Adequacy {
             // body's combinations the row was seen filling.
             List<Generator.ObservedRow> existing = rows.stream()
                     .map(row -> {
-                        Map<AxisId, Classification> placed =
-                                InputClassifications.of(row.inputs(), axes);
+                        Map<AxisId, Classification> placed = InputClassifications.of(
+                                row.valuesHandedOver() ? row.inputs() : List.of(), axes);
                         return new Generator.ObservedRow(
                                 Lookup.built(put -> placed.forEach(put::put)),
                                 // What the row's run recorded, which is the row's own answer. A
