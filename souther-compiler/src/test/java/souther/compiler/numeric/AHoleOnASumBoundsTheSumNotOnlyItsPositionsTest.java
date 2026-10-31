@@ -245,6 +245,7 @@ class AHoleOnASumBoundsTheSumNotOnlyItsPositionsTest {
         ClosedState<String> closed = ClosedState.of(rules, WHOLE, CanonicalOrder.asTheyAreSpelled());
         assertFalse(closed.holdsNothing());
 
+        int admitted = 0;
         for (long a = -12; a <= 16; a++) {
             for (long b = -12; b <= 16; b++) {
                 for (long c = -2; c <= 7; c++) {
@@ -252,6 +253,7 @@ class AHoleOnASumBoundsTheSumNotOnlyItsPositionsTest {
                     if (!admits(rules, at)) {
                         continue;
                     }
+                    admitted++;
                     for (String each : List.of(A, B, "c")) {
                         ExactCut low = closed.box().leastOf(each);
                         ExactCut high = closed.box().mostOf(each);
@@ -271,6 +273,7 @@ class AHoleOnASumBoundsTheSumNotOnlyItsPositionsTest {
                 }
             }
         }
+        assertTrue(admitted > 0, "no point in the sweep satisfies the rules, so it checked nothing");
         assertTrue(closed.sided().contains(half(AC, 4)),
                 "the run of holes took the sum from 10 down to 4: " + closed.sided());
     }
