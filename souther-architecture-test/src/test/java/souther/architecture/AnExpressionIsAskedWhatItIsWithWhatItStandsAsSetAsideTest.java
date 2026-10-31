@@ -495,6 +495,10 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "check/Clauses$ReadsOfAClause", "walk", "(" + core + ")V", 2,
                 "a read and a count taken of a container, each asked of a node: a Widen is neither,"
                         + " and the walk goes on into it and meets the one under it");
+        row(out, c + "check/RecordRules", "readFrom",
+                "(" + core + "Ljava/util/Map;Ljava/util/Set;)V", 1,
+                "a read, asked of each node Core.forEachDistinctNode hands over: a Widen is not one,"
+                        + " and the walk hands over what it holds as well");
         row(out, c + "check/RecursionOverAList", "callsOf", "(" + core + "L" + c
                         + "types/ValueName$Helper;Ljava/util/List;)V", 1, GOES_ON_INTO_IT);
         row(out, c + "inputs/InputUses$Walk", "fieldOf", "(" + core + ")" + core, 1,
