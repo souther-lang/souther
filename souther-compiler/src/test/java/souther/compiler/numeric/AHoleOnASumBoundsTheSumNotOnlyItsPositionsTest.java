@@ -2,6 +2,7 @@ package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +10,7 @@ import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -97,6 +99,22 @@ class AHoleOnASumBoundsTheSumNotOnlyItsPositionsTest {
 
         assertTrue(d.entails(sumMinus(50), Rel.LT));
         assertFalse(d.entails(sumMinus(49), Rel.LE), "a + b = 49.5 is admitted");
+    }
+
+    /**
+     * A hole whose sum can still fall on either side stays open beside one that has a side, and a
+     * bound derived for the sum does not make it sided: 45 satisfies every rule here.
+     */
+    @Test
+    void aHoleWithNoSideStaysOpenBesideOneThatHasOne() {
+        NumericDomain<String> d = assumed(assumed(assumed(start(),
+                sumMinus(50), Rel.LE, Granularity.DISCRETE),
+                sumMinus(50), Rel.NE, Granularity.DISCRETE),
+                sumMinus(40), Rel.NE, Granularity.DISCRETE);
+
+        assertTrue(d.entails(sumMinus(49), Rel.LE));
+        assertFalse(d.entails(sumMinus(44), Rel.LE), "a + b = 45 is admitted");
+        assertFalse(d.entails(sumMinus(40), Rel.GE), "a + b = 39 is admitted");
     }
 
     @Test
@@ -223,18 +241,8 @@ class AHoleOnASumBoundsTheSumNotOnlyItsPositionsTest {
      */
     @Test
     void whatAStateWithHolesHandsBackHoldsAtEveryPointTheRulesAdmit() {
-        Map<String, ExactRatio> ab = Map.of(A, ExactRatio.ONE, B, ExactRatio.of(-1));
-        Map<String, ExactRatio> bc = Map.of(B, ExactRatio.ONE, "c", ExactRatio.of(-1));
-        Map<String, ExactRatio> ac = Map.of(A, ExactRatio.ONE, "c", ExactRatio.ONE);
-        List<AffineConstraint<String>> rules = new java.util.ArrayList<>(List.of(
-                half(ab, 3), hole(ab, 3), half(bc, 3), hole(bc, 3),
-                half(Map.of("c", ExactRatio.ONE), 5), half(Map.of("c", ExactRatio.of(-1)), 0),
-                half(ac, 10)));
-        for (long at = 10; at >= 5; at--) {
-            rules.add(hole(ac, at));
-        }
-        Function<String, Granularity> whole = _ -> Granularity.DISCRETE;
-        ClosedState<String> closed = ClosedState.of(rules, whole, CanonicalOrder.asTheyAreSpelled());
+        List<AffineConstraint<String>> rules = holesOnSumsAndDifferences();
+        ClosedState<String> closed = ClosedState.of(rules, WHOLE, CanonicalOrder.asTheyAreSpelled());
         assertFalse(closed.holdsNothing());
 
         for (long a = -12; a <= 16; a++) {
@@ -263,9 +271,65 @@ class AHoleOnASumBoundsTheSumNotOnlyItsPositionsTest {
                 }
             }
         }
-        // And it is not vacuous: the run of holes has taken the sum below what the bound alone
-        // leaves, and the differences are tighter than the holes' own bounds.
-        assertFalse(closed.sided().isEmpty());
+        assertTrue(closed.sided().contains(half(AC, 4)),
+                "the run of holes took the sum from 10 down to 4: " + closed.sided());
+    }
+
+    /**
+     * What a state carries from one round to the next is what settling from nothing comes to. The
+     * holes an earlier round sided are not asked again, and that is only a saving where the answer
+     * is the one asking would give.
+     */
+    @Test
+    void holesCarriedFromEarlierRoundsAreTheHolesSettledFromNothing() {
+        List<AffineConstraint<String>> rules = holesOnSumsAndDifferences();
+        CanonicalOrder<String> order = CanonicalOrder.asTheyAreSpelled();
+        ClosedState<String> closed = ClosedState.of(rules, WHOLE, order);
+        assertEquals(ClosedState.Status.STABLE, closed.status());
+
+        FormReach<String> fromNothing = FormReach.over(rules, closed.box(), closed.differences(), order);
+        AffineReduction.Reduction.Tightened<String> found = (AffineReduction.Reduction.Tightened<String>)
+                AffineReduction.over(fromNothing, WHOLE, order);
+
+        assertEquals(found.sided(), closed.sided());
+    }
+
+    /**
+     * A hole the closed differences state is something the certificate may rest on, and one they do
+     * not state is not. The differences hold the half-space a hole on a difference came to, and hold
+     * nothing about a sum.
+     */
+    @Test
+    void aHoleIsCertifiedWhereTheClosedDifferencesStateItAndNotOnASum() {
+        Map<String, NumberSpace> whole = spaced(Granularity.DISCRETE);
+        NumericDomain<String> onADifference = start().assume(differenceMinus(3), Rel.LE, whole)
+                .assume(differenceMinus(3), Rel.NE, whole);
+        NumericDomain<String> onASum = start().assume(sumMinus(3), Rel.LE, whole)
+                .assume(sumMinus(3), Rel.NE, whole);
+
+        assertInstanceOf(ProjectionCertification.Certified.class,
+                onADifference.projectionCertification());
+        assertInstanceOf(ProjectionCertification.NotEveryRuleIsProven.class,
+                onASum.projectionCertification());
+    }
+
+    private static final Function<String, Granularity> WHOLE = _ -> Granularity.DISCRETE;
+
+    private static final Map<String, ExactRatio> AB = Map.of(A, ExactRatio.ONE, B, ExactRatio.of(-1));
+    private static final Map<String, ExactRatio> BC = Map.of(B, ExactRatio.ONE, "c", ExactRatio.of(-1));
+    private static final Map<String, ExactRatio> AC = Map.of(A, ExactRatio.ONE, "c", ExactRatio.ONE);
+
+    /** Holes on two differences, each beside a bound; and on a sum, a run of them from its bound
+     *  down, with a position the sum names bounded both ways. */
+    private static List<AffineConstraint<String>> holesOnSumsAndDifferences() {
+        List<AffineConstraint<String>> rules = new ArrayList<>(List.of(
+                half(AB, 3), hole(AB, 3), half(BC, 3), hole(BC, 3),
+                half(Map.of("c", ExactRatio.ONE), 5), half(Map.of("c", ExactRatio.of(-1)), 0),
+                half(AC, 10)));
+        for (long at = 10; at >= 5; at--) {
+            rules.add(hole(AC, at));
+        }
+        return rules;
     }
 
     /** Whether {@code value} is on the inner side of {@code cut}: at or above it for a lower end,
