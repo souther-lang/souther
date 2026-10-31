@@ -1,12 +1,10 @@
 package souther.compiler.query;
 
 import souther.compiler.diag.EveryShippedMessageCatalogIsCompleteAndValidTest;
+import souther.test.RepositoryJavaSources;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
@@ -44,7 +42,7 @@ class EverySurfaceReadsTheSameReportsTest {
     private static final String READS_IT = "souther/compiler/query/Compilation.java";
 
     @Test
-    void nothingOutsideTheOneReadingCollectsTheRawReports() throws IOException {
+    void nothingOutsideTheOneReadingCollectsTheRawReports() {
         List<Path> sources = EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources();
         assertFalse(sources.isEmpty(), "found no sources at all — the scan missed the tree");
 
@@ -56,7 +54,7 @@ class EverySurfaceReadsTheSameReportsTest {
             }
             // A call and not a mention: a reference in prose writes `Db#allReports()`, and saying
             // where the raw collection lives is what those references are for.
-            if (Files.readString(source, StandardCharsets.UTF_8).contains(".allReports(")) {
+            if (RepositoryJavaSources.forThisFork().mainText(source).contains(".allReports(")) {
                 reading.add(within);
             }
         }
@@ -74,7 +72,7 @@ class EverySurfaceReadsTheSameReportsTest {
      * readings inside one class before they were two classes.
      */
     @Test
-    void theOneReadingReadsItOnce() throws IOException {
+    void theOneReadingReadsItOnce() {
         Path reading = null;
         for (Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
             if (source.toString().replace('\\', '/').endsWith(READS_IT)) {
@@ -83,7 +81,7 @@ class EverySurfaceReadsTheSameReportsTest {
         }
         assertNotNull(reading, "the one reading is not where this test looks for it");
 
-        String text = Files.readString(reading, StandardCharsets.UTF_8);
+        String text = RepositoryJavaSources.forThisFork().mainText(reading);
         int read = 0;
         for (int at = text.indexOf(".allReports("); at >= 0;
                 at = text.indexOf(".allReports(", at + 1)) {

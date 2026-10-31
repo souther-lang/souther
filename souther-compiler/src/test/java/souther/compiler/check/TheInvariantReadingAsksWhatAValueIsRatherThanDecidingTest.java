@@ -2,11 +2,9 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.RepositoryJavaSources;
 import souther.test.RepositoryLayout;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,7 +49,7 @@ class TheInvariantReadingAsksWhatAValueIsRatherThanDecidingTest {
      * are not the same thing to this check.
      */
     @Test
-    void theReadingResolvesNoDeclarationOfItsOwn() throws IOException {
+    void theReadingResolvesNoDeclarationOfItsOwn() {
         List<String> resolving = new ArrayList<>();
         for (Path source : theReading()) {
             String code = code(source);
@@ -76,7 +74,7 @@ class TheInvariantReadingAsksWhatAValueIsRatherThanDecidingTest {
      * it from the declarations.
      */
     @Test
-    void whatASumsCasesShareIsDerivedInOnePlace() throws IOException {
+    void whatASumsCasesShareIsDerivedInOnePlace() {
         List<String> deriving = new ArrayList<>();
         for (Path source : REPOSITORY.mainJavaSources()) {
             if (code(source).contains("new Shape.CommonProduct.Shared(")) {
@@ -89,7 +87,7 @@ class TheInvariantReadingAsksWhatAValueIsRatherThanDecidingTest {
                         + " off the shape everywhere else");
     }
 
-    private static List<Path> theReading() throws IOException {
+    private static List<Path> theReading() {
         List<Path> found = new ArrayList<>();
         for (Path source : REPOSITORY.mainJavaSources()) {
             if (THE_READING.contains(source.getFileName().toString())) {
@@ -101,8 +99,8 @@ class TheInvariantReadingAsksWhatAValueIsRatherThanDecidingTest {
         return found;
     }
 
-    private static String code(Path source) throws IOException {
-        return withoutComments(Files.readString(source, StandardCharsets.UTF_8));
+    private static String code(Path source) {
+        return withoutComments(RepositoryJavaSources.forThisFork().mainText(source));
     }
 
     /**

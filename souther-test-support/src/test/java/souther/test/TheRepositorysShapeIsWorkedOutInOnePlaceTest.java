@@ -9,7 +9,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -94,19 +93,9 @@ class TheRepositorysShapeIsWorkedOutInOnePlaceTest {
      * everything else.
      */
     private static List<Path> sourcesThatCouldRederive() {
-        List<Path> out = new ArrayList<>();
-        for (Path tree : REPOSITORY.sourceTrees()) {
-            try (Stream<Path> walk = Files.walk(tree)) {
-                walk.filter(Files::isRegularFile)
-                        .filter(each -> each.getFileName().toString().endsWith(".java"))
-                        .filter(each -> !QUOTE_THEM.contains(each.getFileName().toString()))
-                        .forEach(out::add);
-            } catch (IOException unreadable) {
-                throw new UncheckedIOException(unreadable);
-            }
-        }
-        out.sort(Path::compareTo);
-        return out;
+        return REPOSITORY.filesUnderSourceTrees(".java").stream()
+                .filter(each -> !QUOTE_THEM.contains(each.getFileName().toString()))
+                .toList();
     }
 
     private static String read(Path source) {

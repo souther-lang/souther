@@ -3,10 +3,8 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.EveryShippedMessageCatalogIsCompleteAndValidTest;
+import souther.test.RepositoryJavaSources;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -67,7 +65,7 @@ class OnlyTheQuantityAnswersForItsOwnVariantsTest {
             "souther/compiler/partition/Partitions.java");
 
     @Test
-    void noReaderOutsideTheQuantityAsksWhichQuantityItIs() throws IOException {
+    void noReaderOutsideTheQuantityAsksWhichQuantityItIs() {
         List<String> variants = variantNames();
         assertFalse(variants.isEmpty(), "found no variants — the reading missed the sealed type");
 
@@ -84,7 +82,7 @@ class OnlyTheQuantityAnswersForItsOwnVariantsTest {
             if (MAY_NAME_ONE.contains(named)) {
                 continue;
             }
-            String text = Files.readString(source, StandardCharsets.UTF_8);
+            String text = RepositoryJavaSources.forThisFork().mainText(source);
             // A file that spells no variant anywhere spells none in its code either.
             if (variants.stream().noneMatch(text::contains)) {
                 continue;

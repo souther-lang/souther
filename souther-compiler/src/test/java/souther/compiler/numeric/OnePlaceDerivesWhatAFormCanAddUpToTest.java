@@ -3,10 +3,8 @@ package souther.compiler.numeric;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.EveryShippedMessageCatalogIsCompleteAndValidTest;
+import souther.test.RepositoryJavaSources;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
@@ -48,7 +46,7 @@ class OnePlaceDerivesWhatAFormCanAddUpToTest {
     /** Taking the factors of ten out of a number, which is what makes a divisor over the finite
      *  decimals canonical. Two and five named together in one file is what the copy looked like. */
     @Test
-    void theUnitsOfTheFiniteDecimalsAreTakenOutInOnePlace() throws IOException {
+    void theUnitsOfTheFiniteDecimalsAreTakenOutInOnePlace() {
         assertEquals(Set.of(), sourcesMatching(code ->
                         code.contains("BigInteger.TWO") && code.contains("valueOf(5)")),
                 "ten is a unit among the finite decimals and so are two and five; a second place"
@@ -57,14 +55,13 @@ class OnePlaceDerivesWhatAFormCanAddUpToTest {
 
     /** And the divisor the coefficients share, which is the other half of the same answer. */
     @Test
-    void theDivisorCoefficientsShareIsFoundInOnePlace() throws IOException {
+    void theDivisorCoefficientsShareIsFoundInOnePlace() {
         assertEquals(Set.of(), sourcesMatching(code -> code.contains("ExactRatio.gcd(")),
                 "the divisor of a form's coefficients is what its values are multiples of; ask"
                         + " AdditiveImage for it rather than folding one alongside");
     }
 
-    private static Set<String> sourcesMatching(java.util.function.Predicate<String> holds)
-            throws IOException {
+    private static Set<String> sourcesMatching(java.util.function.Predicate<String> holds) {
         List<Path> sources = EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources();
         assertFalse(sources.isEmpty(), "found no sources at all — the scan missed the tree");
         Set<String> found = new TreeSet<>();
@@ -76,7 +73,7 @@ class OnePlaceDerivesWhatAFormCanAddUpToTest {
             // Asked of the whole file first. What each check asks is that some code is written, and
             // taking the comments out only takes text away, so a file it does not hold of whole is
             // one it does not hold of without them.
-            String text = Files.readString(source, StandardCharsets.UTF_8);
+            String text = RepositoryJavaSources.forThisFork().mainText(source);
             if (holds.test(text) && holds.test(withoutComments(text))) {
                 found.add(named);
             }
