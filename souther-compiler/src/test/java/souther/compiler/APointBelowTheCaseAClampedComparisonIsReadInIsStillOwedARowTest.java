@@ -224,7 +224,7 @@ class APointBelowTheCaseAClampedComparisonIsReadInIsStillOwedARowTest {
      */
     @Test
     void anApplicationNotToldApartFromTheOthersIsNotARowThatMissesTheClass() {
-        ItemAssessment.Owed owed = theOutClassOfEachElement("""
+        String source = """
                 module p
                 data Yes
                 data No
@@ -234,10 +234,14 @@ class APointBelowTheCaseAClampedComparisonIsReadInIsStillOwedARowTest {
                     then Yes else No
                 example f
                     | "mixed" : ([[], [1, 2]]) -> Yes
-                """);
+                """;
+        ItemAssessment.Owed owed = theOutClassOfEachElement(source);
 
         assertInstanceOf(Measurement.Partial.class, owed.coverage(),
                 () -> "the row could not be told apart, which is not a complete miss: " + owed);
+        String human = report(source);
+        assertTrue(human.contains("which application of the comparison belongs to that element"),
+                () -> "and the reason it went without is that one: " + human);
     }
 
     private static ItemAssessment.Owed theOutClassOfEachElement(String source) {

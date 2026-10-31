@@ -419,33 +419,18 @@ public final class StandingAtAPoint {
          * Whether the run got to the rule, and for a point of a class whether it got the answer the
          * class says out of it.
          *
-         * <p>The run's record is of the place the comparison is made at and not of the element a
-         * reading chose. Where every application came out as the class says, the answer is that.
-         * Where all came out the other way, or none was made, it is no. Where applications came out
-         * both ways ({@link RulesTaken.ExecutionEvidence#BOTH_WAYS}), or the visits were not all
-         * kept, a record of the answer says nothing of which application belongs to the element:
-         * that is not told, and is neither of the others.
+         * <p>The run's record is of the places the comparison is made at, which are the copies of
+         * it, and not of the element a reading chose. All of them are read before any answer is:
+         * an answer at one place says nothing of which application belongs to the element while
+         * another place answered the other way. Where every application anywhere came out as the
+         * class says, the answer is that. Where all came out the other way, or none was made, it
+         * is no. Where applications came out both ways ({@link
+         * RulesTaken.ExecutionEvidence#BOTH_WAYS}), at one place or between places, or the visits
+         * to a place were not all kept, the record does not say which application belongs to the
+         * element: that is not told, and is neither of the others.
          */
         Arrived by(AlignedObservation account) {
-            if (asAClass.isEmpty()) {
-                return gotAnAnswerOutOfTheRule(watched, account) ? Arrived.REACHED
-                        : Arrived.NOT_REACHED;
-            }
-            boolean holds = asAClass.get().holds();
-            boolean untold = false;
-            for (ConditionOutcomeSite site : watched) {
-                RulesTaken.ExecutionEvidence seen = RulesTaken.ExecutionEvidence.of(
-                        account.saw(site, holds), account.saw(site, !holds));
-                boolean kept = account.keptEveryVisit(site);
-                if (seen == RulesTaken.ExecutionEvidence.AS_THE_RULE_SAYS && kept) {
-                    return Arrived.REACHED;
-                }
-                untold |= seen == RulesTaken.ExecutionEvidence.BOTH_WAYS
-                        || (seen != RulesTaken.ExecutionEvidence.UNOBSERVED && !kept);
-            }
-            return untold ? new Arrived.CouldNotTell(Set.of(new ReadingGap.ReachNotRead(
-                    ReadingGap.ReachNotRead.Why.APPLICATIONS_NOT_TOLD_APART)))
-                    : Arrived.NOT_REACHED;
+            return arrivedAt(watched, asAClass.map(AsAClass::holds), account);
         }
 
         List<WhereAPartDecides.AskedOfRows> elsewhere() {
@@ -453,21 +438,59 @@ public final class StandingAtAPoint {
         }
     }
 
-    /** Whether a run got to the rule, in the three answers a record of it can give. */
-    private sealed interface Arrived {
+    /**
+     * What {@code account} says of a comparison recorded at {@code watched}: whether it was made,
+     * and where {@code holds} is given, whether every application of it came out that way.
+     *
+     * <p>Every place is read before an answer is given. The places are the copies of one
+     * comparison, and a record of any one says nothing of which application belongs to the
+     * element a reading chose while another place answered the other way.
+     */
+    static Arrived arrivedAt(List<ConditionOutcomeSite> watched, Optional<Boolean> holds,
+                             AlignedObservation account) {
+        if (holds.isEmpty()) {
+            return gotAnAnswerOutOfTheRule(watched, account) ? Arrived.MATCHED : Arrived.MISSED;
+        }
+        boolean asTheClassSays = false;
+        boolean theOtherWay = false;
+        boolean untold = false;
+        for (ConditionOutcomeSite site : watched) {
+            RulesTaken.ExecutionEvidence seen = RulesTaken.ExecutionEvidence.of(
+                    account.saw(site, holds.get()), account.saw(site, !holds.get()));
+            asTheClassSays |= seen == RulesTaken.ExecutionEvidence.AS_THE_RULE_SAYS;
+            theOtherWay |= seen == RulesTaken.ExecutionEvidence.THE_OTHER_WAY;
+            untold |= seen == RulesTaken.ExecutionEvidence.BOTH_WAYS
+                    || (seen != RulesTaken.ExecutionEvidence.UNOBSERVED
+                            && !account.keptEveryVisit(site));
+        }
+        if (untold || (asTheClassSays && theOtherWay)) {
+            return new Arrived.Untold(Set.of(new ReadingGap.ReachNotRead(
+                    ReadingGap.ReachNotRead.Why.APPLICATIONS_NOT_TOLD_APART)));
+        }
+        return asTheClassSays ? Arrived.MATCHED : Arrived.MISSED;
+    }
 
-        Arrived REACHED = new Reached();
+    /**
+     * What a run's record says of the comparison a point is read at, in the three answers it can
+     * give.
+     *
+     * <p>Named for the record and not for the point: whether a row stands at a point is {@link Met},
+     * and this is one thing it is made of. Reading one for the other is what these names keep apart.
+     */
+    sealed interface Arrived {
 
-        Arrived NOT_REACHED = new NotReached();
+        Arrived MATCHED = new Matched();
 
-        /** It did, and for a point of a class by the answer the class says. */
-        record Reached() implements Arrived {}
+        Arrived MISSED = new Missed();
 
-        /** It did not, or it came out another way every time. */
-        record NotReached() implements Arrived {}
+        /** The run made the comparison, and for a point of a class every time as the class says. */
+        record Matched() implements Arrived {}
+
+        /** It did not make it, or it came out another way every time. */
+        record Missed() implements Arrived {}
 
         /** The record does not say which application belongs to the element a reading chose. */
-        record CouldNotTell(Set<ReadingGap> why) implements Arrived {}
+        record Untold(Set<ReadingGap> why) implements Arrived {}
     }
 
     private static Met met(MeasuredInput.BorderReading line,
@@ -510,11 +533,11 @@ public final class StandingAtAPoint {
                 switch (one.watched()) {
                     case Generator.Watched.Ran(var account) -> {
                         switch (arrival.by(account)) {
-                            case Arrived.Reached _ -> {
+                            case Arrived.Matched _ -> {
                                 return Met.REACHED;
                             }
-                            case Arrived.CouldNotTell it -> unreadable.addAll(it.why());
-                            case Arrived.NotReached _ -> { }
+                            case Arrived.Untold it -> unreadable.addAll(it.why());
+                            case Arrived.Missed _ -> { }
                         }
                     }
                     // It stands where the line is and nothing watched it get there. Said rather
@@ -681,11 +704,11 @@ public final class StandingAtAPoint {
                 switch (one.watched()) {
                     case Generator.Watched.Ran(var account) -> {
                         switch (arrival.by(account)) {
-                            case Arrived.Reached _ -> { }
-                            case Arrived.NotReached _ -> {
+                            case Arrived.Matched _ -> { }
+                            case Arrived.Missed _ -> {
                                 continue;   // it ran and never met this rule, so it says nothing
                             }
-                            case Arrived.CouldNotTell it -> {
+                            case Arrived.Untold it -> {
                                 unreadable.addAll(it.why());
                                 continue;
                             }

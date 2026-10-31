@@ -1001,7 +1001,8 @@ final class Coverages {
      * idle here.
      */
     static List<ReadingOfALine> assess(
-            List<Border> lines, souther.compiler.partition.MeasuredInput subject,
+            List<Border> lines, List<Border> everyLine,
+            souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
             Function<Border, ItemAssessment.WritabilityProjection> projection,
             RowsPutToTheLines put, ReachingCuts reaching) {
@@ -1013,7 +1014,6 @@ final class Coverages {
         // ({@link #besideEachLine}), and the readings are brought together by {@link #merged}.
         List<ReadingOfALine> out = new ArrayList<>();
         MeasuredInput.Lines read = subject.lines();
-        List<Border> everyLine = everyLineOf(subject.partitioning());
         for (Border each : lines) {
             out.add(assessed(each, reading(read.at(each), projection.apply(each),
                             elsewhere(lines, each),
@@ -1032,7 +1032,7 @@ final class Coverages {
      * readings of one comparison drawn on two positions would be sought among a part, and a row
      * could be a row of a class when an author wrote it and not when a search composed it.
      */
-    private static List<Border> everyLineOf(Partitions.Partitioning partitioning) {
+    static List<Border> everyLineOf(Partitions.Partitioning partitioning) {
         List<Border> out = new ArrayList<>();
         for (Axis axis : partitioning.axes()) {
             out.addAll(partitioning.along(axis));
@@ -2884,7 +2884,7 @@ final class Coverages {
      * not counted, the same account any other unpromised edge gets.
      */
     static List<ReadingOfALine> assessBetween(
-            souther.compiler.partition.MeasuredInput subject,
+            List<Border> everyLine, souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
             RowsPutToTheLines put, ReachingCuts reaching) {
         Partitions.Partitioning partitioning = subject.partitioning();
@@ -2893,7 +2893,6 @@ final class Coverages {
         // reading's own has been asked ({@link #merged}).
         List<ReadingOfALine> out = new ArrayList<>();
         MeasuredInput.Lines read = subject.lines();
-        List<Border> everyLine = everyLineOf(partitioning);
         for (Border each : partitioning.between()) {
             out.add(assessed(each, reading(read.at(each),
                             ItemAssessment.WritabilityProjection.NOT_COMPUTED,
