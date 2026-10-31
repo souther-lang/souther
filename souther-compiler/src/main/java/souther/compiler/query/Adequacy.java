@@ -7268,9 +7268,9 @@ public final class Adequacy {
                                 spec.name(), observed.gaps())));
             }
             // A row refused before its values were handed over is evidence of nothing and leaves
-            // nothing undecided, so the generator does not see it. One that stopped is seen with
-            // no values placed: what it covers is unknown, and that is what a row placed nowhere
-            // says.
+            // nothing undecided, so the generator does not see it. One that stopped is seen, and
+            // placed as the classes place it: the inputs it built stand where they were written and
+            // the ones it never built are unknown.
             Set<RowRef> stoppedBefore = observed.rowsStoppedBeforeTheirValues();
             List<RowOutcome> rows = observed.rowsSeen().stream()
                     .filter(row -> row.valuesHandedOver()
@@ -7286,8 +7286,8 @@ public final class Adequacy {
             // body's combinations the row was seen filling.
             List<Generator.ObservedRow> existing = rows.stream()
                     .map(row -> {
-                        Map<AxisId, Classification> placed = InputClassifications.of(
-                                row.valuesHandedOver() ? row.inputs() : List.of(), axes);
+                        Map<AxisId, Classification> placed =
+                                InputClassifications.of(row.inputs(), axes);
                         return new Generator.ObservedRow(
                                 Lookup.built(put -> placed.forEach(put::put)),
                                 // What the row's run recorded, which is the row's own answer. A

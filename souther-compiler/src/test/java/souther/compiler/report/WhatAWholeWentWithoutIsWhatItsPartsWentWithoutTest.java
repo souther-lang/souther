@@ -216,13 +216,14 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
     }
 
     /**
-     * A type whose clause draws a line, carried by two behaviors, one of whose rows is never read.
+     * A type whose clause draws a line, carried by two behaviors, one of whose rows hands over a
+     * value the observation budget cut short.
      *
      * <p>Both points of that line are owed to the declaration that drew it, so neither behavior is
-     * owed a row at either — and the row nobody read leaves the value at that point unreadable. What
+     * owed a row at either — and the cut value leaves the value at that point unreadable. What
      * comes of that is a reason only the module's declaration account holds.
      */
-    private static final String ONE_ROW_UNREAD = """
+    private static final String ROW_WITH_TRUNCATED_VALUE = """
             module example.owed
 
             data Amount = Int
@@ -252,7 +253,7 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
                 | "inside the run" : (Draft { groups = someGroups(1), n = Amount(5) }) -> Ok { n = 5 }
 
             example unread
-                | "never read" : (Draft { groups = someGroups(64), n = Amount(0) }) -> Ok { n = 0 }
+                | "truncated observation" : (Draft { groups = someGroups(64), n = Amount(0) }) -> Ok { n = 0 }
             """;
 
     /**
@@ -270,7 +271,7 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
      */
     @Test
     void aModuleHoldsWhatOnlyItsDeclarationsWentWithout() {
-        Compilation compilation = Compilation.ofSource(ONE_ROW_UNREAD, "Main");
+        Compilation compilation = Compilation.ofSource(ROW_WITH_TRUNCATED_VALUE, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         AdequacyReport.ModuleReport module =

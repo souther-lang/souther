@@ -235,6 +235,11 @@ public record RowOutcome(SourcePos at,
      * the row's inputs. A row that did not has what was built before it stopped or was refused,
      * and that is not a tuple of the behavior's parameters: a position past its end is not a value
      * that could not be read.
+     *
+     * <p>What a reader does with that prefix is the reader's own question. One that places each
+     * input where it was written (the classes, the generator) takes the prefix as it is, and the
+     * positions it never reached are unknown. One that needs the whole tuple at once (a border,
+     * which asks where the row stands on a line) takes only the rows that answer true here.
      */
     public boolean valuesHandedOver() {
         return stage.reached(Stage.FIXTURES_VALIDATED);
