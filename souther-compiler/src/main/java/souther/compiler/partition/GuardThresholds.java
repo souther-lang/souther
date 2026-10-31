@@ -308,9 +308,10 @@ public final class GuardThresholds {
                             // statement of several is asked again with where it decides taken in.
                             List<ComparisonArrival> arrivals = at.observations().stream()
                                     .map(one -> one.arrival()).toList();
-                            WaysToACase wayToACase = new WaysToACase(decides ->
-                                    Reachability.gettingPast(Reachability.of(new WayToTheBorder(
-                                            each.wayToACase(aCase.apply(decides))),
+                            WaysToACase wayToACase = new WaysToACase(each.assumed(),
+                                    decides -> aCase.apply(decides).entries(), put ->
+                                    Reachability.gettingPast(Reachability.of(
+                                            new WayToTheBorder(each.wayToACase(put)),
                                             read.quantities().region()), each.getsPast()));
                             ComparisonAssessment arrived =
                                     ComparisonAssessment.narrowedByWhatArrives(admitted.read(),

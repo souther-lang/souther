@@ -414,6 +414,29 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         return ASKED_OF_A_ROW.positions(entry);
     }
 
+    /**
+     * Whether {@code entry} is shown to ask nothing of the value at {@code at}: what it asks of a
+     * row turns on no position at {@code at}, under it or around it ({@link #positionsOf}), in
+     * every alternative it leaves a row and every statement it counts. Not shown of a condition
+     * this reading has no words for, which may ask anything.
+     */
+    static boolean asksNothingOf(TermPath at, OnTheWay entry) {
+        return switch (entry) {
+            // A narrowing leaving several cases leaves each at the position it narrows.
+            case OnTheWay.TakenIn _, OnTheWay.Narrowed _ -> positionsOf(entry).stream()
+                    .noneMatch(one -> one.isAtOrUnder(at) || at.isAtOrUnder(one));
+            case OnTheWay.OneOf oneOf -> oneOf.alternatives().stream()
+                    .allMatch(way -> asksNothingOf(at, way));
+            case OnTheWay.Counted counted -> asksNothingOf(at, counted.parts());
+            case OnTheWay.Settled _ -> true;
+            case OnTheWay.Declined _ -> false;
+        };
+    }
+
+    private static boolean asksNothingOf(TermPath at, List<OnTheWay> entries) {
+        return entries.stream().allMatch(one -> asksNothingOf(at, one));
+    }
+
     /** The conditions on this way a row is past one of several ways of
      *  ({@link OnTheWay#alternatives}), in the order the walk met them. */
     public List<OnTheWay> severalWays() {
