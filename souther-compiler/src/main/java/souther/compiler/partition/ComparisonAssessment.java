@@ -11,6 +11,7 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.EachWayItComesOut;
 import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -28,12 +29,16 @@ import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.CasesOfALineAsked;
 import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WrittenChoice;
 import souther.compiler.meaning.WrittenLine;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumberRegion;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
 import souther.compiler.reach.ComparisonArrival;
@@ -721,6 +726,147 @@ sealed interface ComparisonAssessment {
                 });
             }
             return out;
+        }
+
+        /**
+         * The places at every value of which the arms of the one choice this statement is of,
+         * joined, show how it comes out each way, and at which what they show changes only where
+         * one of its lines is drawn.
+         *
+         * <p>A row takes one arm, and there the statement is the arm's relation: it comes out a way
+         * at a value where some arm is shown to come out so there, and never where none can
+         * ({@link EachWayItComesOut#eitherOf}). So a value one arm leaves unshown another may
+         * show. {@code Decimal.min(x, 0.0m) <= c} is {@code x <= c} where {@code x} is below
+         * nought, which no decimal {@code x} fails at the finest step below nought, so that arm
+         * alone shows nothing of {@code c}; and {@code 0.0m <= c} elsewhere, which fails at every
+         * {@code c} below nought. Joined, the two come out either way below nought and only
+         * holding from nought up, and the line at nought parts the two.
+         *
+         * <p>Only where the statement is plainly its arms: the parts about the place are the
+         * answers of two arms of one choice, each read in one case, and the two cases a condition
+         * and its denial, so that every row is in one of them and none in both. A relation says
+         * how it comes out as it was shown ({@link UndividedByARelation.WhatItLeaves#comesOut}),
+         * and a line as the sides it parts. A place an arm says nothing of, a value neither way is
+         * shown at, or a change no line is drawn at leaves the place as each arm alone leaves it.
+         */
+        Set<FilingCoordinate> shownByItsArms() {
+            List<Part> arms = new ArrayList<>();
+            WrittenChoice choice = null;
+            for (Part part : parts) {
+                List<WrittenLine.Arm> taken = part.id().line().line().arms();
+                if (taken.size() != 1 || taken.getFirst().selects()) {
+                    continue;
+                }
+                if (choice != null && !choice.equals(taken.getFirst().at())) {
+                    return Set.of();
+                }
+                choice = taken.getFirst().at();
+                arms.add(part);
+            }
+            if (arms.size() != 2 || !inACaseAndItsDenial(arms.get(0), arms.get(1))) {
+                return Set.of();
+            }
+            Set<FilingCoordinate> out = new LinkedHashSet<>();
+            for (Part arm : arms) {
+                if (arm.line() instanceof AcrossPositions across) {
+                    across.left().comesOut().forEach((term, each) -> {
+                        FilingCoordinate at = FilingCoordinate.of(term);
+                        if (!out.contains(at) && armsShow(at, each, arms)) {
+                            out.add(at);
+                        }
+                    });
+                }
+            }
+            return out;
+        }
+
+        /** Whether each of two parts is read in one case, and the two are one condition holding
+         *  and failing. */
+        private static boolean inACaseAndItsDenial(Part one, Part other) {
+            if (one.cases().size() != 1 || other.cases().size() != 1
+                    || !one.cases().getFirst().saidAlone()
+                    || !other.cases().getFirst().saidAlone()) {
+                return false;
+            }
+            return one.cases().getFirst().condition() instanceof Proposition.Compared mine
+                    && other.cases().getFirst().condition() instanceof Proposition.Compared theirs
+                    && mine.relation().equals(theirs.relation()) && mine.holds() != theirs.holds();
+        }
+
+        /**
+         * Whether {@code arms}, joined, show every value of {@code at} each way, and change only
+         * where a line on it is drawn — and no other part of the statement is about it.
+         *
+         * @param over how one arm comes out there, whose values are the ones asked of
+         */
+        private boolean armsShow(FilingCoordinate at, EachWayItComesOut over, List<Part> arms) {
+            for (Part part : parts) {
+                if (!arms.contains(part) && (part.line().filedAt().contains(at)
+                        || (part.line() instanceof AtAPosition line
+                                && FilingCoordinate.of(line.position()).equals(at)))) {
+                    return false;
+                }
+            }
+            List<EachWayItComesOut> alternatives = new ArrayList<>();
+            List<ExactCut> drawn = new ArrayList<>();
+            for (Part arm : arms) {
+                switch (arm.line()) {
+                    case AcrossPositions across -> {
+                        EachWayItComesOut its = null;
+                        for (Map.Entry<NumericTerm, EachWayItComesOut> each
+                                : across.left().comesOut().entrySet()) {
+                            if (FilingCoordinate.of(each.getKey()).equals(at)) {
+                                its = each.getValue();
+                            }
+                        }
+                        if (its == null) {
+                            return false;
+                        }
+                        alternatives.add(its);
+                        for (AtAPosition line : across.settling()) {
+                            ExactCut start = startOfTheValuesAbove(line);
+                            if (start != null && FilingCoordinate.of(line.position()).equals(at)) {
+                                drawn.add(start);
+                            }
+                        }
+                    }
+                    case AtAPosition line when FilingCoordinate.of(line.position()).equals(at) -> {
+                        ExactCut start = startOfTheValuesAbove(line);
+                        if (start == null || !(line.cutting().claim()
+                                instanceof ComparisonClaim.Cut cut)) {
+                            return false;
+                        }
+                        alternatives.add(EachWayItComesOut.parted(start,
+                                (cut.valueBelongs() == Towards.ABOVE) == cut.holdsAtTheValue(),
+                                over));
+                        drawn.add(start);
+                    }
+                    default -> {
+                        return false;
+                    }
+                }
+            }
+            EachWayItComesOut joined = EachWayItComesOut.eitherOf(alternatives);
+            if (joined == null || !joined.showsEveryValue()) {
+                return false;
+            }
+            for (ExactCut turn : joined.whereItTurns()) {
+                if (drawn.stream().noneMatch(start -> start.at().compareTo(turn.at()) == 0
+                        && start.inclusive() == turn.inclusive())) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** Where the values above {@code line} start: at its value where the value is among
+         *  them, and just past it where not. Null where the line parts no order there. */
+        private static ExactCut startOfTheValuesAbove(AtAPosition line) {
+            if (line.places() != Places.ACROSS_THE_VALUE || !(line.value() instanceof Count value)
+                    || !(line.cutting().claim() instanceof ComparisonClaim.Cut cut)) {
+                return null;
+            }
+            return new ExactCut(value.exactly(), cut.valueBelongs() == Towards.ABOVE);
         }
 
         /**
@@ -2005,6 +2151,9 @@ sealed interface ComparisonAssessment {
                 // left as the part with no such reading leaves it.
                 Set<FilingCoordinate> parted = new LinkedHashSet<>();
                 several.partnered().keySet().forEach(term -> parted.add(FilingCoordinate.of(term)));
+                // A place the arms of a choice show between them, at every value, is not one
+                // whose values an arm alone leaves unshown ({@link Several#shownByItsArms}).
+                Set<FilingCoordinate> shownByTheArms = several.shownByItsArms();
                 yield several.parts().stream()
                         .flatMap(part -> switch (part.line()) {
                             case AcrossPositions across -> leftWithAcross(across, parted).stream();
@@ -2014,6 +2163,9 @@ sealed interface ComparisonAssessment {
                         })
                         .filter(left -> left.why() instanceof BlockReason.RuleReadingStopped
                                 || !divided.contains(left.at()))
+                        .filter(left -> !(left.why()
+                                instanceof BlockReason.RelationNotShownToReachEveryValue
+                                && shownByTheArms.contains(left.at())))
                         .distinct()
                         .toList();
             }

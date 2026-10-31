@@ -29,6 +29,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DecimalOperation;
+import souther.compiler.inputs.EachWayItComesOut;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.EveryRunStops;
@@ -463,14 +464,29 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   partner can hold, and those strings: the values there some value of the
      *                   partner equals, and the rest, which no value of it does. In the order of
      *                   the relation's sides
+     * @param comesOut   each term of a relation of numbers, and how the relation comes out at
+     *                   its values each way on its own ({@link EachWayItComesOut}): what a reader
+     *                   joining this relation with others a row takes one of asks, and not what
+     *                   divides a place. Said of rows that get to the relation, so of none where a
+     *                   run may stop before it
      */
     record WhatItLeaves(Set<FilingCoordinate> undivided,
                         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
                         boolean rowsArrive, Set<Figure> stoppedAt,
                         Set<FilingCoordinate> mayStopBefore,
-                        Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered) {
+                        Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered,
+                        Map<NumericTerm, EachWayItComesOut> comesOut) {
+
+        WhatItLeaves(Set<FilingCoordinate> undivided,
+                     Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
+                     boolean rowsArrive, Set<Figure> stoppedAt,
+                     Set<FilingCoordinate> mayStopBefore,
+                     Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered) {
+            this(undivided, settled, rowsArrive, stoppedAt, mayStopBefore, partnered, Map.of());
+        }
 
         WhatItLeaves {
+            comesOut = Collections.unmodifiableMap(new LinkedHashMap<>(comesOut));
             undivided = Set.copyOf(undivided);
             settled = Map.copyOf(settled);
             stoppedAt = Set.copyOf(stoppedAt);
@@ -516,7 +532,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
             stops.removeAll(parted);
             return new WhatItLeaves(stillUndivided, settled, rowsArrive, stoppedAt, stops,
-                    strings);
+                    strings, comesOut);
+        }
+
+        /** This, with how the relation comes out each way at the values of each term in
+         *  {@code each}. */
+        WhatItLeaves comingOut(Map<NumericTerm, EachWayItComesOut> each) {
+            return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, mayStopBefore,
+                    partnered, each);
         }
 
         /** What a way that no row comes along shows of {@code places}: every one of them, of the
@@ -530,12 +553,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * them shown undivided are still, and are said not to be shown getting there at every
          * value. A place not shown undivided keeps what it was not shown for, which is no claim
          * about every value getting there. What the relation settles stays as it is, since a value
-         * settling it settles it wherever a row gets there.
+         * settling it settles it wherever a row gets there. How it comes out at the values of a
+         * term at one of them is not, since a row reaching a way there is a row getting there.
          */
         WhatItLeaves mayStopBefore(Set<FilingCoordinate> places) {
             Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
             places.stream().filter(undivided::contains).forEach(stops::add);
-            return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, stops, partnered);
+            Map<NumericTerm, EachWayItComesOut> stillReached = new LinkedHashMap<>(comesOut);
+            stillReached.keySet().removeIf(term -> places.contains(FilingCoordinate.of(term)));
+            return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, stops, partnered,
+                    stillReached);
         }
 
         /** What both this and {@code other} show, for rows that may come along either: a place
@@ -572,7 +599,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     alikeStrings.put(term, strings.orAnother(theirs));
                 }
             });
-            return new WhatItLeaves(both, alike, true, stopped, stops, alikeStrings);
+            // A row comes along one way or the other, so a way the relation comes out is reached
+            // where it is along either, and never reached only where it is along neither.
+            Map<NumericTerm, EachWayItComesOut> eitherWay = new LinkedHashMap<>();
+            comesOut.forEach((term, each) -> {
+                EachWayItComesOut theirs = other.comesOut.get(term);
+                EachWayItComesOut joined = theirs == null ? null
+                        : EachWayItComesOut.eitherOf(List.of(each, theirs));
+                if (joined != null) {
+                    eitherWay.put(term, joined);
+                }
+            });
+            return new WhatItLeaves(both, alike, true, stopped, stops, alikeStrings, eitherWay);
         }
     }
 
@@ -2258,7 +2296,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 putDown(at, leaves.get(at), out, settled);
             }
         }
-        WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped);
+        // How the relation comes out each way at each side's values, for a reader joining it with
+        // relations a row takes another of: what was shown of the side where something was, and
+        // each way asked apart where nothing was. Not off its line, where a row at the line is no
+        // row of either way.
+        Map<NumericTerm, EachWayItComesOut> comesOut = new LinkedHashMap<>();
+        for (int at = 0; at < sides.size() && !offItsLine; at++) {
+            if (sides.get(at).number() == null) {
+                continue;
+            }
+            WhatARelationLeavesUndivided.Leaves shownOfIt = leaves.get(at) == null
+                    && out.containsAll(sides.get(at).madeOf())
+                    ? new WhatARelationLeavesUndivided.Leaves.Undivided() : leaves.get(at);
+            EachWayItComesOut each = WhatARelationLeavesUndivided.eachWayItComesOut(shownOfIt,
+                    terms, at, constant, relation, overlapping, independent,
+                    granularityOf(carriers.get(at)), greatestOf(carriers.get(at)), operations);
+            if (each != null) {
+                comesOut.put(sides.get(at).number(), each);
+            }
+        }
+        WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped).comingOut(comesOut);
         Set<TermPath> accountedFor = Set.of();
         if (sides.size() == 2 && heldWhole && independent.between(0, 1)) {
             Partnering partnering = stringsAPartnerCanHold(carriers, out, read, lengthsRoom,
