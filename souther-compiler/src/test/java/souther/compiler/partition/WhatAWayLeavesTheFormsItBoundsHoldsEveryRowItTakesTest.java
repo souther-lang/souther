@@ -11,6 +11,7 @@ import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -34,6 +35,7 @@ class WhatAWayLeavesTheFormsItBoundsHoldsEveryRowItTakesTest {
 
     private static final int REACH = 5;
     private static final int WAYS = 600;
+    private static final List<Rel> RELATIONS = List.copyOf(EnumSet.allOf(Rel.class));
 
     /** A condition, and whether a pair of values of {@code x} and {@code y} meets it. */
     private sealed interface Asked {
@@ -109,7 +111,7 @@ class WhatAWayLeavesTheFormsItBoundsHoldsEveryRowItTakesTest {
             }
             int onX = random.nextInt(5) - 2;
             int onY = onX == 0 ? 1 + random.nextInt(2) : random.nextInt(3) - 1;
-            Rel rel = Rel.values()[random.nextInt(Rel.values().length)];
+            Rel rel = RELATIONS.get(random.nextInt(RELATIONS.size()));
             int threshold = random.nextInt(7) - 3;
             return new Bound(onX, onY, rel, threshold,
                     WaysReadAgain.weighed(onX, onY, rel, threshold));
