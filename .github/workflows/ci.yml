@@ -44,11 +44,13 @@ jobs:
   # compiler runners finish together: the compiler's own package is the largest share and cannot
   # be split by package, so it is in `compiler-b` with the small ones, and the rest are here.
   #
-  # The tests that read the repository's models are a fourth runner of their own, and the other
-  # two compiler runners leave them out by their tag. Reading the models costs compiling them, once
-  # for a JVM; spread over the forks of the runners above, every fork one of them reached first
-  # compiled them again. Here they are one fork, and the models are compiled once. Which tests
-  # carry the tag is read off what they reach, so a test added among them lands here.
+  # The tests that read every one of the repository's models are asked once a night, in the job
+  # below, and are not among the runners here. Reading the models costs compiling them, once for a
+  # JVM, and a runner's forks would each compile them again; what such a test finds is as well found
+  # by the morning as by the change that caused it. Which tests read them is read off what they
+  # reach, and `EveryTestThatSweepsACorpusSaysWhatItClaimsTest` fails a change that adds one the
+  # nightly does not ask — so no runner here is left to carry them, and none is kept for the tag
+  # that used to say so.
   #
   # Error Prone is not run here. The `lint` profile is on wherever `CI` is set, which every runner
   # is, and it reads the whole reactor at every compile — the same findings three times over, in
@@ -70,18 +72,13 @@ jobs:
           - name: compiler-a
             modules: '-pl souther-compiler -am'
             tests: 'souther/compiler/partition/**,souther/compiler/check/**,souther/compiler/doc/**,souther/compiler/inputs/**,souther/compiler/report/**,souther/compiler/meta/**'
-            tags: '-Dtest.excluded.groups=nightly,repository-models'
+            tags: '-Dtest.excluded.groups=nightly'
             forks: '$(nproc)'
           - name: compiler-b
             modules: '-pl souther-compiler -am'
             tests: 'souther/compiler/**,!souther/compiler/partition/**,!souther/compiler/check/**,!souther/compiler/doc/**,!souther/compiler/inputs/**,!souther/compiler/report/**,!souther/compiler/meta/**'
-            tags: '-Dtest.excluded.groups=nightly,repository-models'
+            tags: '-Dtest.excluded.groups=nightly'
             forks: '$(nproc)'
-          - name: compiler-models
-            modules: '-pl souther-compiler -am'
-            tests: 'souther/compiler/**'
-            tags: '-Dgroups=repository-models -Dtest.excluded.groups=nightly'
-            forks: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Set up JDK 25

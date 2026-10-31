@@ -1,7 +1,6 @@
 package souther.compiler.conformance;
 
 import souther.test.CheckedInObservation;
-import souther.test.ReadsTheRepositorysModels;
 
 import org.junit.jupiter.api.Test;
 
@@ -28,9 +27,12 @@ import java.util.List;
  * mechanism: the value of it is not in this class but in the diff a rule's author has to show.
  *
  * <p>What it does not claim is that the answers are good ones. It records what they are.
+ *
+ * <p>Each corpus is analysed here for itself and not through {@link RepositoryModels}, which
+ * compiles every model the repository carries: the answers of the conformance corpora are all this
+ * reads.
  */
 @CheckedInObservation
-@ReadsTheRepositorysModels
 class TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest {
 
     /**
@@ -69,7 +71,7 @@ class TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest {
         }
         List<Document> out = new ArrayList<>();
         for (ConformanceCorpus corpus : corpora) {
-            ConformanceCorpus.Analysed analysed = RepositoryModels.analysed(corpus);
+            ConformanceCorpus.Analysed analysed = corpus.analyse();
             out.add(new Document(corpus.name(), corpus.name() + "/expected.report.json",
                     ConformanceSnapshot.report(analysed)));
             out.add(new Document(corpus.name(), corpus.name() + "/expected.diagnostics.txt",

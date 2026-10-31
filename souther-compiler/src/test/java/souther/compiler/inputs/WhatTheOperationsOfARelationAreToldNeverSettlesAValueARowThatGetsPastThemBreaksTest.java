@@ -22,6 +22,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -93,7 +95,11 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
     /** Two values in the middle, one of them shown. */
     private static final Shape THE_MIDDLE_SHOWN_ONE = new Shape(0, 1, 1, 1);
 
-    /** Every shape a term may have but the full one. */
+    /**
+     * Every shape a term may have but the full one: what it may hold, and what it is shown to take
+     * of that, are two ranges, and these differ in each — held anywhere and shown at an end, held
+     * at the end alone, held in the middle and shown in all of it or in part.
+     */
     private static final List<Shape> NARROWER =
             List.of(SHOWN_ONE, ONLY_THE_END, THE_MIDDLE, THE_MIDDLE_SHOWN_ONE);
 
@@ -243,6 +249,17 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
             new Program("(a + 1) - 1 >= b", List.of(1, -1),
                     List.of(sum(1, "a", 1), sum(0, "a", 1)), true));
 
+    /** The constants a relation is asked against. */
+    private static final List<Integer> CONSTANTS_ASKED = List.of(-3, -2, -1, 0, 1, 2, 3);
+
+    /**
+     * The values a constant and a third term held still are asked at: every value of the type. A
+     * sum of them with a term is held to the ends of the type, and the term it stops at moves with
+     * each of them, so none stands for another.
+     */
+    private static final List<Integer> VALUES_ASKED =
+            IntStream.rangeClosed(LEAST, GREATEST).boxed().toList();
+
     /** Every relation, the equalities among them: two terms compared with each other and nothing
      *  added are asked of a witness only for those. */
     private static final List<Rel> RELATIONS =
@@ -255,11 +272,14 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
     @Test
     void whatIsSaidOfATermIsTrueOfEveryRowThatGetsPastTheOperations() {
         for (Program program : PROGRAMS) {
+            Map<Integer, RowsAt> rows = new LinkedHashMap<>();
             for (Shape taken : TAKEN) {
-                for (int constant = -3; constant <= 3; constant++) {
+                for (int constant : CONSTANTS_ASKED) {
                     for (Rel relation : RELATIONS) {
                         for (int at = 0; at < program.weights().size(); at++) {
-                            check(program, program.sums(), constant, relation, at, taken);
+                            check(program, program.sums(), constant, relation, at, taken,
+                                    rows.computeIfAbsent(at,
+                                            each -> rowsOfATerm(program, program.sums(), each)));
                         }
                     }
                 }
@@ -276,9 +296,12 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
         for (int constant = -3; constant <= 3; constant++) {
             List<IntSum> adding = new ArrayList<>(compared.sums());
             adding.add(sum(constant, "a", 1, "b", 1, "c", 1));
+            Map<Integer, RowsAt> rows = new LinkedHashMap<>();
             for (Rel relation : RELATIONS) {
                 for (int at = 0; at < 3; at++) {
-                    check(compared, adding, constant, relation, at, TAKEN.getFirst());
+                    check(compared, adding, constant, relation, at, TAKEN.getFirst(),
+                            rows.computeIfAbsent(at,
+                                    each -> rowsOfATerm(compared, adding, each)));
                 }
             }
         }
@@ -298,7 +321,8 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
             }
             for (List<Shape> shapes : PAIRS) {
                 for (List<OnTheDifference> statements : STATEMENTS) {
-                    for (int constant = -3; constant <= 3; constant++) {
+                    Map<Integer, RowsAt> rows = new LinkedHashMap<>();
+                    for (int constant : CONSTANTS_ASKED) {
                         for (Rel relation : RELATIONS) {
                             for (int at = 0; at < 2; at++) {
                                 List<Term<String>> terms = termsOf(program, shapes);
@@ -311,8 +335,9 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                                                 BigInteger.valueOf(GREATEST), operations,
                                                 Map.of(), operations.theSizesAreRowsComputed(
                                                         terms, ExactRatio.of(constant)));
-                                verify(program, program.sums(), constant, relation, at, said, -1,
-                                        0, shapes, statements);
+                                verify(program, constant, relation, at, said, -1, 0, shapes,
+                                        rows.computeIfAbsent(at, each -> rowsAt(program,
+                                                program.sums(), each, -1, 0, shapes, statements)));
                             }
                         }
                     }
@@ -332,6 +357,9 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
      * <p>Not asked of a program no reading was made of: it is taken to add the form up with the
      * sizes symmetric about nought, which leave out the least value of the type, and what is
      * said of it is that approximation and not a claim about the rows.
+     *
+     * <p>Asked at the values where the type's ends and nought decide it, and of the shapes that
+     * tell which of the two terms is the narrow one.
      */
     @Test
     void whatIsSaidOfTwoTermsWithAThirdHeldStillIsTrueOfEveryRowWithTheThirdThere() {
@@ -346,10 +374,11 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
             // large as the type is.
             for (List<Shape> shapes : PAIRS) {
                 List<Term<String>> all = termsOf(program, shapesOf(program, shapes));
-                for (int constant = LEAST; constant <= GREATEST; constant++) {
+                Map<Asked, RowsAt> rows = new LinkedHashMap<>();
+                for (int constant : VALUES_ASKED) {
                     boolean sizesAreRowsComputed =
                             operations.theSizesAreRowsComputed(all, ExactRatio.of(constant));
-                    for (int held = LEAST; held <= GREATEST; held++) {
+                    for (int held : VALUES_ASKED) {
                         Beside beside = new Beside(List.of(ExactRatio.of(constant),
                                 program.weightOf(2).times(ExactRatio.of(held)).orNull()));
                         for (Rel relation : RELATIONS) {
@@ -361,8 +390,14 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                                                 BigInteger.valueOf(GREATEST), operations,
                                                 Map.of(NAMES.get(2), ExactRatio.of(held)),
                                                 sizesAreRowsComputed);
-                                verify(program, program.sums(), constant, relation, at, said, 2,
-                                        held, shapesOf(program, shapes));
+                                // The rows depend on where the third is held and which term is
+                                // asked of, and not on the constant or the relation.
+                                verify(program, constant, relation, at, said, 2, held,
+                                        shapesOf(program, shapes),
+                                        rows.computeIfAbsent(new Asked(at, held),
+                                                each -> rowsAt(program, program.sums(), each.at(),
+                                                        2, each.held(), shapesOf(program, shapes),
+                                                        List.of())));
                             }
                         }
                     }
@@ -370,6 +405,9 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
             }
         }
     }
+
+    /** Which term is asked of, and the value the third is held at. */
+    private record Asked(int at, int held) {}
 
     /**
      * The check above holds for an answer of nothing, so it is held to say something too: a
@@ -556,23 +594,20 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
         return out;
     }
 
+    /** The rows a term asked of alone is held to: every term anywhere in the type. */
+    private static RowsAt rowsOfATerm(Program program, List<IntSum> sums, int at) {
+        return rowsAt(program, sums, at, -1, 0, shapesOf(program, List.of(FULL, FULL)),
+                List.of());
+    }
+
     private static void check(Program program, List<IntSum> sums, int constant, Rel relation,
-                              int at, Shape taken) {
+                              int at, Shape taken, RowsAt rows) {
         Leaves said = WhatARelationLeavesUndivided.leavesOf(termsOf(program, taken), at,
                 ExactRatio.of(constant), relation, String::equals, (one, other) -> true,
                 Granularity.DISCRETE, BigInteger.valueOf(GREATEST), List.of(),
                 new Operations(sums, program.state()));
-        verify(program, sums, constant, relation, at, said, -1, 0,
-                shapesOf(program, List.of(FULL, FULL)));
-    }
-
-    /**
-     * Holds {@code said} of the term {@code at} to the rows of the program, those with the term
-     * at {@code held} standing at {@code heldValue} where it is not negative.
-     */
-    private static void verify(Program program, List<IntSum> sums, int constant, Rel relation,
-                               int at, Leaves said, int held, int heldValue, List<Shape> shapes) {
-        verify(program, sums, constant, relation, at, said, held, heldValue, shapes, List.of());
+        verify(program, constant, relation, at, said, -1, 0,
+                shapesOf(program, List.of(FULL, FULL)), rows);
     }
 
     /** Whether each of {@code statements} holds at the row, about the sum of the first two terms
@@ -591,35 +626,46 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
         return true;
     }
 
-    private static void verify(Program program, List<IntSum> sums, int constant, Rel relation,
-                               int at, Leaves said, int held, int heldValue, List<Shape> shapes,
-                               List<OnTheDifference> statements) {
+    /**
+     * What a row that gets past the operations weighs, scaled as the form is, and whether every
+     * term of it but the one asked of is at a value it is shown to take. Rows alike in both say
+     * the same of every constant and every relation, so one stands for them.
+     */
+    private record Weighed(ExactRatio scaled, boolean shown) {}
+
+    /**
+     * The rows of a program that get past its operations, by the value of the term asked of.
+     * Which rows those are does not turn on the constant or the relation held to them, so they
+     * are worked out once for the many of each that are asked.
+     *
+     * @param low     the least value of the term asked of
+     * @param byValue for each value from {@code low} on, what its rows weigh
+     */
+    private record RowsAt(int low, List<List<Weighed>> byValue) {}
+
+    /**
+     * The rows of the program with the term {@code at} at each value it may hold, every other term
+     * anywhere it may hold, and the term {@code held} at {@code heldValue} where it is not
+     * negative, that get past the operations and the {@code statements}.
+     */
+    private static RowsAt rowsAt(Program program, List<IntSum> sums, int at, int held,
+                                 int heldValue, List<Shape> shapes,
+                                 List<OnTheDifference> statements) {
         int size = program.weights().size();
-        String where = program.name() + ", constant " + constant + " " + relation + " 0, term "
-                + at + (held < 0 ? "" : ", term " + held + " held at " + heldValue)
-                + ", shapes " + shapes + ": " + said;
         // A row is a row of the program where it gets past every operation the program works out,
         // told or not: the code was given those it was told of.
         List<IntSum> operations = new ArrayList<>(sums);
         operations.addAll(program.hidden());
         int[][] everyOperation = compiled(operations);
-        // For each run it says, whether some value of it has a row that gets past the operations:
-        // a run no row stands in settles nothing and is settled for want of one.
-        int runsSaid = said instanceof Leaves.Settled settled ? settled.runs().size() : 0;
-        boolean[] aRowStandsIn = new boolean[runsSaid];
         int others = 1;
         for (int i = 0; i < size; i++) {
             others *= i == at || i == held ? 1 : shapes.get(i).high() - shapes.get(i).low() + 1;
         }
+        List<List<Weighed>> byValue = new ArrayList<>();
         // The values the term may hold are the ones asked of, and a row has each other term at
         // any value it may hold.
         for (int value = shapes.get(at).low(); value <= shapes.get(at).high(); value++) {
-            // The rows with each other term anywhere it may hold, and among them the ones with
-            // each at a value it is shown to take.
-            boolean sawTrue = false;
-            boolean sawFalse = false;
-            boolean shownTrue = false;
-            boolean shownFalse = false;
+            Map<Integer, Weighed> distinct = new LinkedHashMap<>();
             for (int code = 0; code < others; code++) {
                 int[] row = new int[size];
                 boolean shown = true;
@@ -639,28 +685,64 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
                 if (!getsPast(everyOperation, row) || !statementsHold(program, statements, row)) {
                     continue;
                 }
-                if (holds(relation, formAt(program, constant, row).signum())) {
+                int weighed = weighedAt(program, row);
+                boolean allShown = shown;
+                distinct.computeIfAbsent(weighed * 2 + (allShown ? 1 : 0), each -> new Weighed(
+                        program.scale().times(ExactRatio.of(weighed)).orNull(), allShown));
+            }
+            byValue.add(List.copyOf(distinct.values()));
+        }
+        return new RowsAt(shapes.get(at).low(), List.copyOf(byValue));
+    }
+
+    /**
+     * Holds {@code said} of the term {@code at} to the rows of the program, those with the term
+     * at {@code held} standing at {@code heldValue} where it is not negative.
+     */
+    private static void verify(Program program, int constant, Rel relation, int at, Leaves said,
+                               int held, int heldValue, List<Shape> shapes, RowsAt rows) {
+        // Said only of a case that fails, which is none of the many that hold.
+        Supplier<String> where = () -> program.name() + ", constant " + constant + " " + relation
+                + " 0, term " + at + (held < 0 ? "" : ", term " + held + " held at " + heldValue)
+                + ", shapes " + shapes + ": " + said;
+        // For each run it says, whether some value of it has a row that gets past the operations:
+        // a run no row stands in settles nothing and is settled for want of one.
+        int runsSaid = said instanceof Leaves.Settled settled ? settled.runs().size() : 0;
+        boolean[] aRowStandsIn = new boolean[runsSaid];
+        for (int value = rows.low(); value < rows.low() + rows.byValue().size(); value++) {
+            // The rows with each other term anywhere it may hold, and among them the ones with
+            // each at a value it is shown to take.
+            boolean sawTrue = false;
+            boolean sawFalse = false;
+            boolean shownTrue = false;
+            boolean shownFalse = false;
+            for (Weighed row : rows.byValue().get(value - rows.low())) {
+                ExactRatio form = ExactRatio.of(constant).plus(row.scaled()).orNull();
+                if (holds(relation, form.signum())) {
                     sawTrue = true;
-                    shownTrue |= shown;
+                    shownTrue |= row.shown();
                 } else {
                     sawFalse = true;
-                    shownFalse |= shown;
+                    shownFalse |= row.shown();
                 }
             }
             // Left either way is shown by rows of values taken, wherever there is a row at all.
             if (said instanceof Leaves.Undivided) {
-                assertTrue(!(sawTrue || sawFalse) || (shownTrue && shownFalse),
-                        "undivided, yet only one side has a row shown at " + value + ": "
-                                + where);
+                int at0 = value;
+                boolean one = sawTrue || sawFalse;
+                boolean both = shownTrue && shownFalse;
+                assertTrue(!one || both, () -> "undivided, yet only one side has a row shown at "
+                        + at0 + ": " + where.get());
             }
             if (said instanceof Leaves.Settled settled) {
                 for (int i = 0; i < settled.runs().size(); i++) {
                     SettledRun each = settled.runs().get(i);
                     if (contains(each, value)) {
-                        assertTrue(each.holds() ? !sawFalse : !sawTrue,
-                                "settled " + each.holds() + " at " + value
-                                        + ", yet a row that gets past the operations breaks it: "
-                                        + where);
+                        int at0 = value;
+                        boolean sawTheOtherWay = each.holds() ? sawFalse : sawTrue;
+                        assertTrue(!sawTheOtherWay, () -> "settled " + each.holds() + " at " + at0
+                                + ", yet a row that gets past the operations breaks it: "
+                                + where.get());
                         aRowStandsIn[i] |= shownTrue || shownFalse;
                     }
                 }
@@ -671,8 +753,8 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
         boolean ofTheModel = said instanceof Leaves.Settled settled
                 && settled.ofTheTypeAlone().isEmpty();
         for (int i = 0; i < runsSaid && ofTheModel; i++) {
-            assertTrue(aRowStandsIn[i], "a run is settled that no row gets past the operations"
-                    + " in: " + where);
+            assertTrue(aRowStandsIn[i], () -> "a run is settled that no row gets past the"
+                    + " operations in: " + where.get());
         }
     }
 
@@ -693,14 +775,20 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
         return out;
     }
 
-    /** The form at the row: the constant, and the terms weighed, all the weights times
-     *  {@code scale}. */
-    private static ExactRatio formAt(Program program, int constant, int[] row) {
+    /** The terms of the row weighed, before the form's scale. */
+    private static int weighedAt(Program program, int[] row) {
         int weighed = 0;
         for (int i = 0; i < row.length; i++) {
             weighed += program.weights().get(i) * row[i];
         }
-        return ExactRatio.of(constant).plus(program.scale().times(ExactRatio.of(weighed)).orNull())
+        return weighed;
+    }
+
+    /** The form at the row: the constant, and the terms weighed, all the weights times
+     *  {@code scale}. */
+    private static ExactRatio formAt(Program program, int constant, int[] row) {
+        return ExactRatio.of(constant)
+                .plus(program.scale().times(ExactRatio.of(weighedAt(program, row))).orNull())
                 .orNull();
     }
 
