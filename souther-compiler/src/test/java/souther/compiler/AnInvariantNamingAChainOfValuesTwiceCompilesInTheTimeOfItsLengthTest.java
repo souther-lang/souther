@@ -1,12 +1,18 @@
 package souther.compiler;
 
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
 
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
@@ -42,10 +48,49 @@ class AnInvariantNamingAChainOfValuesTwiceCompilesInTheTimeOfItsLengthTest {
             let wrap (n) = Wrapped { total = 1, w = n }
             """;
 
+    private static final String BUILDS_AGAINST_THE_WRAPPER = """
+            module app.x exposing ( through )
+            import app.w ( Wrapped, wrap )
+            behavior through : (n: Int) -> Wrapped
+            let through (n) = wrap(n)
+            """;
+
+    private static final String BUILDS_THE_TYPE = """
+            behavior mk : (n: Int) -> Base
+            let mk (n) = Base { total = 1 }
+            example mk
+                | "one" : (1) -> Base { total = 1 }
+            """;
+
     @Test
     void theModuleAndAModuleThatIncludesItsTypeCompileAtThirtyLinks() {
         assertTimeoutPreemptively(Duration.ofSeconds(60), () ->
                 Compiler.compileModules(List.of(INCLUDES_THE_TYPE),
                         ModulePath.of(Compiler.compile(chainModule()))));
+    }
+
+    @Test
+    void aThirdModuleBuiltAgainstThatOneCompilesAtThirtyLinks() {
+        assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
+            Map<String, ClassFileImage> lib = Compiler.compile(chainModule());
+            Map<String, ClassFileImage> path = new HashMap<>(lib);
+            path.putAll(Compiler.compileModules(List.of(INCLUDES_THE_TYPE), ModulePath.of(lib)));
+            Compiler.compileModules(List.of(BUILDS_AGAINST_THE_WRAPPER), ModulePath.of(path));
+        });
+    }
+
+    /** Every reading that follows the compile — what the type's values are, the classes of its
+     *  behaviors, the emission sites — meets the clause too, and none of them finds more nodes
+     *  than the clause has. */
+    @Test
+    void everyReadingOfAModuleHoldingTheChainAnswersAtThirtyLinks() {
+        Compilation compilation = assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
+            Compilation one = Compilation.ofSource(chainModule() + BUILDS_THE_TYPE, "Main");
+            one.measure(Adequacy.Asked.fullReport());
+            one.answerEverything();
+            return one;
+        });
+
+        assertEquals(List.of(), compilation.errors());
     }
 }

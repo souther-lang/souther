@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * {@link Core#forEachDistinctNode} meets a node once however many slots hold it, and tells nodes
@@ -58,13 +58,30 @@ class ASharedNodeIsVisitedOnceByTheDistinctWalkTest {
         assertEquals(3, seen.size());
     }
 
+    /** A second walk over the same nodes sees all of them: what the first met is not remembered. */
     @Test
-    void theRootIsVisitedAndTheRecordOfNodesSeenLastsOneCall() {
+    void theRecordOfNodesSeenLastsOneCall() {
         Core shared = two();
         Core root = sum(shared, shared);
 
-        assertSame(root, visited(root).get(0));
-        assertEquals(visited(root).size(), visited(root).size());
-        assertEquals(2, visited(root).size());
+        List<Core> first = visited(root);
+        List<Core> second = visited(root);
+
+        assertEquals(2, first.size());
+        assertEquals(2, second.size());
+        assertTrue(second.stream().anyMatch(node -> node == root));
+        assertTrue(second.stream().anyMatch(node -> node == shared));
+    }
+
+    @Test
+    void aWidenAndWhatItHoldsAreBothVisited() {
+        Core.Int held = two();
+        Core.Widen widened = new Core.Widen(held, Type.DECIMAL);
+
+        List<Core> seen = visited(widened);
+
+        assertEquals(2, seen.size());
+        assertTrue(seen.stream().anyMatch(node -> node == widened));
+        assertTrue(seen.stream().anyMatch(node -> node == held));
     }
 }

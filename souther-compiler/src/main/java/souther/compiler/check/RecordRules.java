@@ -198,7 +198,7 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
     }
 
     /** The fields of the record {@code e} reads. */
-    private static void readFrom(Core e, Map<BindingId, String> fields, Set<String> out) {
+    static void readFrom(Core e, Map<BindingId, String> fields, Set<String> out) {
         Core.forEachDistinctNode(e, node -> {
             if (node instanceof Core.Read read && fields.containsKey(read.binding())) {
                 out.add(fields.get(read.binding()));
