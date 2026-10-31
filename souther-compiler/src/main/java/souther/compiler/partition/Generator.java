@@ -10064,7 +10064,11 @@ public final class Generator {
     /** What a row is about, named as the report names the class it is owed for: the class's id at
      * the term it divides. */
     private static String label(Axis axis, int cls) {
-        return axis.classes().get(cls).id() + " at " + axis.id().term();
+        return label(axis, axis.classes().get(cls));
+    }
+
+    private static String label(Axis axis, PartitionClass cls) {
+        return cls.id() + " at " + axis.id().term();
     }
 
     /**
@@ -10081,7 +10085,7 @@ public final class Generator {
             }
             for (PartitionClass cls : axis.classes()) {
                 if (cls.id().equals(owed.classId())) {
-                    return cls.id() + " at " + axis.id().term();
+                    return label(axis, cls);
                 }
             }
         }
