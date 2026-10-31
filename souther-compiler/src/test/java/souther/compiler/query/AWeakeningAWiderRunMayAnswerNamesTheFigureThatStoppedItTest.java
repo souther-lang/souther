@@ -213,8 +213,11 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
         for (ClosureGap gap : closureGaps()) {
             out.put("ModelReadingIncomplete " + gap, new Weakening.ModelReadingIncomplete(gap));
         }
-        out.put("OutputCasesUnreadable", new Weakening.OutputCasesUnreadable("b"));
-        out.put("InputCasesUnreadable", new Weakening.InputCasesUnreadable("b", 0));
+        RowRef unread = new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1));
+        out.put("OutputCasesUnreadable",
+                new Weakening.OutputCasesUnreadable("b", Set.of(unread)));
+        out.put("InputCasesUnreadable",
+                new Weakening.InputCasesUnreadable("b", 0, Set.of(unread)));
         out.put("ItemsPlaceNotWorkedOut", new Weakening.ItemsPlaceNotWorkedOut(border(),
                 UnheldNumber.MORE_ROOM_COULD_ANSWER));
         out.put("AReadingNotTiedToItsLine", new Weakening.AReadingNotTiedToItsLine(border()));

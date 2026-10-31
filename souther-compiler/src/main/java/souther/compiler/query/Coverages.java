@@ -80,6 +80,7 @@ import souther.compiler.partition.WhyKept;
 
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -422,7 +423,17 @@ final class Coverages {
          * it holds, which is what an axis from another measurement gets a wrong answer out of.
          */
         record AxisReading(Axis axis, int at, Map<String, RowWitnesses> covered, int couldNotSay,
-                           List<Incompleteness> stopped) {}
+                           List<Incompleteness> stopped) {
+
+            /**
+             * Whether a class of this measure has no row in it, which is what a row that could not
+             * be placed here may be the one in. With a row in every class there is nothing for it
+             * to decide: the classes are counted exactly without it.
+             */
+            boolean aClassHasNoRow() {
+                return axis.classes().stream().anyMatch(each -> !covered.containsKey(each.id()));
+            }
+        }
 
         /** Where one row was placed at each measure, in the order the measures are walked, and what
          *  the row is as a witness of the classes it was placed in. Null at a measure the row is not
@@ -502,24 +513,33 @@ final class Coverages {
         }
 
         /**
-         * Whether every row said where it was at {@code read}.
+         * What the measure went without: the rows never seen, and the reasons {@code undecided}
+         * rows could not be placed.
          *
-         * <p>Only then does a class or a combination nothing sits in mean nothing reaches it. One
-         * row that could not be placed at one of the positions leaves every class of that position,
-         * and every combination it takes part in, undecided rather than untried.
+         * <p>A row that could not be placed leaves undecided a class or a combination nothing sits
+         * in, which would otherwise mean nothing reaches it. So its reason counts where such a
+         * class or combination is left that the row may be in, and nowhere else: handed the reason
+         * of a row that cannot be in what is left, it would hold open a count that is exact
+         * without it. Which reasons those are is the caller's, who holds what each measure counts.
          */
-        WeakeningSet weakening(List<AxisReading> read) {
+        WeakeningSet weakening(Collection<Incompleteness> undecided) {
             Set<Weakening> out = new LinkedHashSet<>();
             for (Incompleteness.Met gap : unseen) {
                 out.add(new Weakening.ObservationIncomplete(gap));
             }
-            // Every reading's, whatever else met the same thing. What makes two of these one fact
+            // Every reason, whatever else met the same thing. What makes two of these one fact
             // and what happens to the places they were met at is the account's, asked once there
             // rather than settled again by whichever reading this walk reached first.
-            for (AxisReading each : read) {
-                each.stopped().forEach(gap -> out.add(Weakening.ObservationIncomplete.of(gap)));
-            }
+            undecided.forEach(gap -> out.add(Weakening.ObservationIncomplete.of(gap)));
             return WeakeningSet.ofAll(out);
+        }
+
+        /**
+         * Whether a row's value at a position may be in the class {@code id}: it was placed there,
+         * or some value of it could not be, and that one could be anywhere.
+         */
+        static boolean mayBeIn(Classification placed, String id) {
+            return placed.stopped() != null || placed.classIds().contains(id);
         }
 
         /**
@@ -688,9 +708,70 @@ final class Coverages {
         reached.forEach((between, cells) -> found.put(between, RowWitnesses.Gathering.done(cells)));
         PartitionEvidence.PairSpace.CoveredBetween made =
                 new PartitionEvidence.PairSpace.CoveredBetween(found);
-        WeakeningSet by = readings.weakening(read);
+        WeakeningSet by = readings.weakening(unplacedRowsThatMayBeIn(owed, reached, readings));
         return new PartitionEvidence.PairSpace(space, by.isEmpty()
                 ? new Measurement.Complete<>(made) : new Measurement.Partial<>(made, by));
+    }
+
+    /**
+     * Why rows could not be placed, for the rows that may be in a combination nothing was seen in.
+     *
+     * <p>A row is in a combination when it is in a class of each of its two positions. One that
+     * was placed at both and is not in it is not the row that is, whatever else it is; one that
+     * could not be placed at either may be in any class there, and one placed at the other
+     * position only may be in the combination if it is in that class. So a combination left with no
+     * row asks of each row that could not be placed whether it may be in it, and holds the measure
+     * open by the reasons of those that may, and by no others. Asked of the positions alone, a row
+     * placed at one position in a class that excludes every combination left would hold open a
+     * count it cannot change.
+     *
+     * <p>The classes a row was placed in, whichever elements gave them: a row whose list holds
+     * elements either side of a line is in both, and whether one element is in both a combination's
+     * classes is {@link Classification#pairsOf}'s question for a combination that was reached. Here
+     * it errs towards the row being in it, which can hold a measure open without need and never
+     * close one that is open.
+     */
+    private static List<Incompleteness> unplacedRowsThatMayBeIn(
+            List<OwedBetween> owed,
+            Map<PartitionEvidence.PairSpace.Between,
+                    Map<PartitionEvidence.PairSpace.Cell, RowWitnesses.Gathering>> reached,
+            Readings readings) {
+        List<Readings.WhereARowSat> unplaced = readings.byRow().stream()
+                .filter(row -> row.at().stream()
+                        .anyMatch(placed -> placed != null && placed.stopped() != null))
+                .toList();
+        if (unplaced.isEmpty()) {
+            return List.of();
+        }
+        Set<Incompleteness> reasons = new LinkedHashSet<>();
+        for (OwedBetween each : owed) {
+            Map<PartitionEvidence.PairSpace.Cell, RowWitnesses.Gathering> reachedHere =
+                    reached.get(each.between());
+            List<PartitionEvidence.PairSpace.Cell> left = each.cells().stream()
+                    .filter(cell -> !reachedHere.containsKey(cell)).toList();
+            if (left.isEmpty()) {
+                continue;
+            }
+            for (Readings.WhereARowSat row : unplaced) {
+                Classification one = row.at().get(each.one());
+                Classification other = row.at().get(each.other());
+                if (one == null || other == null
+                        || (one.stopped() == null && other.stopped() == null)) {
+                    continue;
+                }
+                boolean mayBeIn = left.stream().anyMatch(cell ->
+                        Readings.mayBeIn(one, cell.one()) && Readings.mayBeIn(other, cell.other()));
+                if (mayBeIn) {
+                    if (one.stopped() != null) {
+                        reasons.add(one.stopped());
+                    }
+                    if (other.stopped() != null) {
+                        reasons.add(other.stopped());
+                    }
+                }
+            }
+        }
+        return List.copyOf(reasons);
     }
 
     /**
@@ -876,7 +957,8 @@ final class Coverages {
         PartitionEvidence.AxisCoverage.Reached reached =
                 new PartitionEvidence.AxisCoverage.Reached(reading.covered(),
                         reading.couldNotSay());
-        WeakeningSet by = readings.weakening(List.of(reading));
+        WeakeningSet by = readings.weakening(
+                reading.aClassHasNoRow() ? reading.stopped() : List.of());
         return new PartitionEvidence.AxisCoverage(axis.id(), axis.term().toString(),
                 classes, axis.divides(), toldApart, use, read, by.isEmpty()
                         ? new Measurement.Complete<>(reached)

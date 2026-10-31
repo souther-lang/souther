@@ -110,6 +110,7 @@ import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowRef;
 import souther.compiler.observe.Stage;
+import souther.compiler.observe.Target;
 import souther.compiler.partition.AnswersStoodIn;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
@@ -1882,7 +1883,7 @@ public final class Adequacy {
             for (RowOutcome row : rows) {
                 watched.add(WitnessedRow.of(row, numbering));
             }
-            return DecisionEvidence.of(rules.behavior(), against, watched,
+            return DecisionEvidence.of(rules.behavior(), against, rules.rules(), watched,
                     observed.measured().weakening(), cases);
         }
     }
@@ -10582,7 +10583,7 @@ public final class Adequacy {
         Set<TypeSymbol> specified = new LinkedHashSet<>();
         Set<TypeSymbol> observed = new LinkedHashSet<>();
         Set<TypeSymbol> verified = new LinkedHashSet<>();
-        int unreadableOut = 0;
+        List<UnreadCase> unreadableOut = new ArrayList<>();
         int answered = 0;
 
         List<Type> ins = sig.inputTypes();
@@ -10591,10 +10592,11 @@ public final class Adequacy {
         List<Set<TypeSymbol>> inExecuted = new ArrayList<>(ins.size());
         List<Set<TypeSymbol>> inVerified = new ArrayList<>(ins.size());
         List<Set<TypeSymbol>> inExcluded = new ArrayList<>(ins.size());
-        int[] unreadableIn = new int[ins.size()];
+        List<List<InputCaseEvidence.Unread>> unreadableIn = new ArrayList<>(ins.size());
         for (int i = 0; i < ins.size(); i++) {
             Set<TypeSymbol> declared = inputCoverableCases(ins.get(i), inners, kinds, sums);
             declaredIn.add(declared);
+            unreadableIn.add(new ArrayList<>());
             inSpecified.add(new LinkedHashSet<>());
             inExecuted.add(new LinkedHashSet<>());
             inVerified.add(new LinkedHashSet<>());
@@ -10617,17 +10619,34 @@ public final class Adequacy {
                     : SignatureEvidence.notAsked(out, none, layout);
         }
 
+        // What stopped each row the reading went without, as it was written where the row stopped.
+        // A case not read of such a row is not read because of that, and says so by carrying it.
+        Map<RowRef, List<Incompleteness.Met>> stoppedBy = new HashMap<>();
+        for (Incompleteness.Met gap : seen.gaps()) {
+            if (gap.fact().target() instanceof Target.OfRow(RowRef stopped)) {
+                stoppedBy.computeIfAbsent(stopped, _ -> new ArrayList<>()).add(gap);
+            }
+        }
         for (RowOutcome row : rows) {
             boolean held = row.disposition() == Disposition.HELD;
-            if (row.expectedArm() != null) {
+            RowRef rowRef = RowRef.of(row);
+            switch (row.expectedCase()) {
                 // Only a case of the output. A row naming a type the output does not have expects
                 // none of its cases. A case of it nothing reachable produces is kept: the row does
                 // expect it, and what the count is out of is the evidence's to apply.
-                if (outputCases.contains(row.expectedArm())) {
-                    specified.add(row.expectedArm());
+                case RowOutcome.ExpectedCase.Names(TypeSymbol arm) -> {
+                    if (outputCases.contains(arm)) {
+                        specified.add(arm);
+                    }
                 }
-            } else if (!declaredOut.isEmpty()) {
-                unreadableOut++;   // an expectation neither the text nor its value says a case of
+                // Its answer is owed: it expects nothing, so no case waits on it.
+                case RowOutcome.ExpectedCase.NoneAsserted _ -> { }
+                // An expectation neither the text nor its value says a case of.
+                case RowOutcome.ExpectedCase.Unread _ -> {
+                    if (!declaredOut.isEmpty()) {
+                        unreadableOut.addAll(whyNotRead(row, rowRef, stoppedBy.get(rowRef), false));
+                    }
+                }
             }
             if (row.answered()) {
                 answered++;
@@ -10638,22 +10657,32 @@ public final class Adequacy {
                     verified.add(row.resultArm());
                 }
             }
+            // How far the row's case got, decided once for the cases that were read and the ones
+            // that were not: reading a case is what tells the two apart, and a second account of
+            // how far a row got would be a second answer to where it counts.
+            InputCaseEvidence.Reached reached = held ? InputCaseEvidence.Reached.VERIFIED
+                    : row.stage().reached(Stage.INVOKED) ? InputCaseEvidence.Reached.EXECUTED
+                    : row.stage().reached(Stage.FIXTURES_VALIDATED)
+                            ? InputCaseEvidence.Reached.SPECIFIED
+                            : InputCaseEvidence.Reached.NOWHERE;
             for (int i = 0; i < ins.size(); i++) {
                 if (declaredIn.get(i).isEmpty()) {
                     continue;   // not a sum: nothing to cover at this position
                 }
                 TypeSymbol written = i < row.inputCases().size() ? row.inputCases().get(i) : null;
                 if (written == null) {
-                    unreadableIn[i]++;
+                    for (UnreadCase why : whyNotRead(row, rowRef, stoppedBy.get(rowRef), true)) {
+                        unreadableIn.get(i).add(new InputCaseEvidence.Unread(why, reached));
+                    }
                     continue;
                 }
-                if (row.stage().reached(Stage.FIXTURES_VALIDATED)) {
+                if (reached.isIn(InputCaseEvidence.Reached.SPECIFIED)) {
                     inSpecified.get(i).add(written);
                 }
-                if (row.stage().reached(Stage.INVOKED)) {
+                if (reached.isIn(InputCaseEvidence.Reached.EXECUTED)) {
                     inExecuted.get(i).add(written);
                 }
-                if (held) {
+                if (reached.isIn(InputCaseEvidence.Reached.VERIFIED)) {
                     inVerified.get(i).add(written);
                 }
             }
@@ -10663,7 +10692,7 @@ public final class Adequacy {
         // may hold the row that covers a case, so a count over what remains is a count over some of
         // them — and that is these measures' own business, not something the signature above them
         // holds on their behalf. A row that was seen and did not finish is not here: it arrives
-        // through the case it could not be classified into, which is what the counts already say.
+        // through the case it could not be read, carrying what stopped it.
         Set<Weakening> unseen = new LinkedHashSet<>();
         for (Incompleteness.Met gap : seen.gaps()) {
             if (gap.fact().code().leftNoRowRead()) {
@@ -10679,7 +10708,7 @@ public final class Adequacy {
         for (int i = 0; i < ins.size(); i++) {
             inputs.add(InputCaseEvidence.of(name, i, declaredIn.get(i), inExcluded.get(i),
                     new InputCaseEvidence.Cases(inSpecified.get(i), inExecuted.get(i),
-                            inVerified.get(i), unreadableIn[i]), anyRowWasSeen,
+                            inVerified.get(i), unreadableIn.get(i)), anyRowWasSeen,
                     observedWentWithout));
         }
         // Asked before the rows are, because it is not about them. A signature with no sum anywhere
@@ -10700,6 +10729,34 @@ public final class Adequacy {
     }
 
     private Adequacy() {}
+
+    /**
+     * Why a case of this row was not read, from how far the row got and what is on record about it
+     * ({@link UnreadCase} has the table).
+     *
+     * <p>Total over what a row can be. A row that never had its values handed over was stopped, with
+     * the stop written where it stopped, or refused; one whose values were handed over wrote a case
+     * nothing here reads. A row both of those can be at once — its text names no case and a stop
+     * came after — is both, where the stop can still change which sets the case is in.
+     *
+     * @param stops             what stopped the row, null where nothing did
+     * @param runDecidesMore    whether the sets the case would be in are settled by how the run went
+     *                          after the fixtures, as an input's are (applied, held). The
+     *                          expectation of the output is settled by the fixtures alone, so a
+     *                          stop after them changes nothing about it
+     */
+    private static List<UnreadCase> whyNotRead(RowOutcome row, RowRef ref,
+                                               List<Incompleteness.Met> stops,
+                                               boolean runDecidesMore) {
+        boolean stopped = stops != null;
+        if (!row.stage().reached(Stage.FIXTURES_VALIDATED)) {
+            return List.of(stopped ? new UnreadCase.Stopped(ref, stops)
+                    : new UnreadCase.Refused(ref));
+        }
+        return stopped && runDecidesMore
+                ? List.of(new UnreadCase.NoCaseRead(ref), new UnreadCase.Stopped(ref, stops))
+                : List.of(new UnreadCase.NoCaseRead(ref));
+    }
 
     /**
      * Whether the row is waiting for its answer, so that what it went through is not evidence that

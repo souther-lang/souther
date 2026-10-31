@@ -4,6 +4,8 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.RowOutcome;
+import souther.compiler.observe.RowRef;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.ClosureGap;
@@ -14,8 +16,11 @@ import souther.compiler.partition.DerivedValue;
 import souther.compiler.partition.Replacement;
 import souther.compiler.types.SourceConstructOrigin;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * One thing that leaves a measurement weaker than it looks.
@@ -150,24 +155,59 @@ public sealed interface Weakening {
     }
 
     /**
-     * Rows were observed and what a behavior answered with could not be read back as a case.
+     * Rows that state an expectation whose case was not read ({@link
+     * RowOutcome.ExpectedCase.Unread}) while a case of the output is expected by no row, so that
+     * case is undecided rather than missing. A row whose answer is owed is not one of them: it
+     * expects nothing, and no case waits on it.
      *
-     * <p>Not an observation that went missing: the row ran and came back. How many there were is the
-     * measurement's own count, and is not repeated here — this says which position could not be
-     * read, which is what nothing else says.
+     * <p>Rows whose text names no case, and only those ({@link UnreadCase.NoCaseRead}). A row that
+     * stopped before its expectation was read is stopped by something a wider run may get past, and
+     * says what: it arrives as that reason, which is how it is met everywhere else, and is not
+     * restated here as a fact about the text.
+     *
+     * <p>Where every case is expected by some row there is nothing for these rows to decide, and
+     * this is not met.
+     *
+     * @param unread which rows, so that a reader is sent to the ones to write the case out in. A
+     *               set, in the order the rows were read: which rows they are is the fact, and two
+     *               of these holding the same rows are one fact however they were gathered
      */
-    record OutputCasesUnreadable(String behavior) implements Weakening {
+    record OutputCasesUnreadable(String behavior, Set<RowRef> unread) implements Weakening {
 
-        /** The row ran and came back, and what it answered with could not be read as a case. A run
-         *  that allows more reads it exactly as well. */
+        public OutputCasesUnreadable {
+            unread = Collections.unmodifiableSet(new LinkedHashSet<>(unread));
+            if (unread.isEmpty()) {
+                throw new IllegalArgumentException("no row of `" + behavior
+                        + "` went unread, so no case of it waits on one");
+            }
+        }
+
+        /** Whether a row's text names a case is the same however much a run allows. */
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
         }
     }
 
-    /** The same at one of a behavior's inputs, counted from zero. */
-    record InputCasesUnreadable(String behavior, int at) implements Weakening {
+    /**
+     * The same at one of a behavior's inputs, counted from zero: rows whose input case was not
+     * read ({@link UnreadCase.NoCaseRead}), where a set they would be in lacks a case a row can be
+     * written at. A row that stopped arrives as what stopped it.
+     *
+     * @param unread which rows, those whose case could change one of those sets, as a set in the
+     *               order they were read. A row whose sets are already full is not among them:
+     *               reading it would change nothing
+     */
+    record InputCasesUnreadable(String behavior, int at, Set<RowRef> unread)
+            implements Weakening {
+
+        public InputCasesUnreadable {
+            unread = Collections.unmodifiableSet(new LinkedHashSet<>(unread));
+            if (unread.isEmpty()) {
+                throw new IllegalArgumentException("no row of `" + behavior
+                        + "` went unread at input #" + (at + 1) + ", so no case there waits on one");
+            }
+        }
 
         /** The same, for the same reason. */
         @Override
