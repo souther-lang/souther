@@ -102,6 +102,7 @@ jobs:
           mvn -B --no-transfer-progress verify ${{ matrix.shard.modules }} $REPOSITORIES \
             -P '!lint' \
             -DforkCount=${{ matrix.shard.forks }} \
+            -DrunOrder=filesystem \
             ${{ matrix.shard.tags }} \
             -Dsurefire.failIfNoSpecifiedTests=false \
             '-Dtest=${{ matrix.shard.tests }}'
@@ -151,4 +152,5 @@ jobs:
         run: |
           echo "forks: $(nproc)"
           mvn -B --no-transfer-progress verify $REPOSITORIES -DforkCount=$(nproc) \
+            -DrunOrder=filesystem \
             -Dtest.excluded.groups=
