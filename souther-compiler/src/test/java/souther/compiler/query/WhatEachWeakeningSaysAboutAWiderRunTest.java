@@ -264,8 +264,9 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         out.add(new Weakening.BorderValueUnreadable(border(), ReadingGap.of(aLimit)));
         out.add(new Weakening.ModelReadingIncomplete(new ClosureGap.RulesNotReached(
                 "b", new PositionId(TermPath.of("x")))));
-        out.add(new Weakening.OutputCasesUnreadable("b"));
-        out.add(new Weakening.InputCasesUnreadable("b", 0));
+        RowRef unread = new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1));
+        out.add(new Weakening.OutputCasesUnreadable("b", Set.of(unread)));
+        out.add(new Weakening.InputCasesUnreadable("b", 0, Set.of(unread)));
         out.add(new Weakening.BodyNotInEvaluation("b"));
         out.add(new Weakening.BoundaryNotDerived("b"));
         out.add(new Weakening.InputNotRead("b"));

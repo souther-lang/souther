@@ -3166,7 +3166,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 out.append(String.format("      %s%s — %s%n",
                         said(each.subject(), rendering, places, rewrites),
                         inCopies(readAt(each, pointsReadAt), copies, rendering, null),
-                        next(each)));
+                        next(each, rendering)));
             }
         }
         // What the mark above means, said by the report that wrote it. The count was said only by
@@ -3287,8 +3287,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // Counted against the cases a row can be written at. A case the body answers `unreachable`
             // for is one the compiler refuses a row for, so leaving it in the denominator would ask
             // for work that cannot be done and hold the model one case short for ever.
-            out.append(String.format("                in #%d specified %d/%d%s%n", input.at() + 1,
-                    input.specifiedCount(), input.coverable().size(),
+            out.append(String.format("                in %s specified %d/%d%s%n",
+                    inputSaid(input.at()), input.specifiedCount(), input.coverable().size(),
                     input.excluded().isEmpty() ? ""
                             : "   excluded " + input.excluded().size()));
             for (Adequacy.Finding f : behavior.findings()) {
@@ -9788,7 +9788,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     "", PublishedRuleHandle.of(handle(asked.cited(), places), places),
                     " — " + asked(asked.asked()) + " " + subjectOf(asked));
             case About.ACaseNoRowAppliesItTo(var input, var missing, var _) ->
-                    words(missing.name() + " (in #" + (input.at() + 1) + ")");
+                    words(missing.name() + " (in " + inputSaid(input.at()) + ")");
             // The point and the line, and no quantity: a body's line is owed once wherever it is
             // read, so what joins this to a `partition.obligations` entry is the role, where on
             // the line, and the rule — the same three that entry is keyed on.
@@ -10217,7 +10217,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             };
             case Subject.AtASpelledPosition it -> it.behavior() + "/" + it.path();
             case Subject.AtAPosition it -> it.behavior() + "/" + it.at();
-            case Subject.AtAnInput it -> "input " + it.at() + " of " + it.behavior();
+            case Subject.AtAnInput it -> "input " + inputSaid(it.at()) + " of " + it.behavior();
             // The position and what stopped the reading there. A line telling a reader to read
             // the rule and what stopped it, and naming neither, sends them to another array for
             // both.
@@ -10261,6 +10261,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * One of a behavior's inputs as a person is shown it: {@code #1} for the first. Every line
+     * naming an input asks this, so the signature line and the line saying what keeps a verdict
+     * open name one input alike.
+     */
+    private static String inputSaid(int at) {
+        return "#" + (at + 1);
+    }
+
+    /**
      * Where on a line a point stands, in the words this document writes for it.
      *
      * <p>The same three the location of an obligation is written under, spelled once and read from
@@ -10285,17 +10294,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * the reading as well: raising it lifts nothing today, and it is what they meet once the rule
      * is read.
      */
-    private static String next(AdequacyUncertainty unanswered) {
+    private static String next(AdequacyUncertainty unanswered, SourceRendering rendering) {
         ReaderDisposition disposition = ReaderDisposition.of(unanswered);
-        String next = next(disposition);
+        String next = next(disposition, rendering);
         return disposition instanceof ReaderDisposition.StoppedAtAFigure
                 || unanswered.figures().isEmpty() ? next
                 : next + "; it stopped at " + figuresSaid(unanswered.figures()) + " as well";
     }
 
     /** What a reader does next, as the disposition says. */
-    private static String next(ReaderDisposition disposition) {
+    private static String next(ReaderDisposition disposition, SourceRendering rendering) {
         return switch (disposition) {
+            // Each row as a line of this report names one, so two rows never read as one.
+            case ReaderDisposition.WriteTheCaseOutIn it ->
+                    "rows with a case this cannot read: "
+                            + it.unread().stream()
+                                    .map(row -> row.shown(rendering.names().nameOf(row.source())))
+                                    .collect(Collectors.joining(", "))
+                            + "; a case no row is counted at may be theirs — write each case out"
+                            + " in its row";
             // The figures named here, as what stopped carried them, and nothing a run is given sets
             // them.
             case ReaderDisposition.StoppedAtAFigure it -> switch (it.settledBy()) {

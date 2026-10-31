@@ -8,6 +8,9 @@ import souther.compiler.coverage.DecidedBy;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.observe.RowIdentity;
+import souther.compiler.observe.RowRef;
+import souther.compiler.source.SourceId;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BorderAssessment;
@@ -23,6 +26,7 @@ import souther.compiler.report.AdequacyReport;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -753,7 +757,8 @@ class AMeasureWithNoNumberSaysWhyTest {
         Weakening b = new Weakening.ArmsUnsettled(
                 new souther.compiler.types.SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
                         souther.compiler.types.SourceConstruct.IF));
-        Weakening c = new Weakening.OutputCasesUnreadable("take");
+        Weakening c = new Weakening.OutputCasesUnreadable("take",
+                Set.of(new RowRef("take", new SourceId("m.sou"), new RowIdentity.Unnamed(1))));
 
         assertEquals(WeakeningSet.of(a), WeakeningSet.of(a).union(WeakeningSet.none()));
         assertEquals(WeakeningSet.of(a), WeakeningSet.none().union(WeakeningSet.of(a)));
