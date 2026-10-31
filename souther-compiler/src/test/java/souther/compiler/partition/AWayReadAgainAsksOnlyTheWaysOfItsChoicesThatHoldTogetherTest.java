@@ -194,4 +194,23 @@ class AWayReadAgainAsksOnlyTheWaysOfItsChoicesThatHoldTogetherTest {
                 () -> "left off, the way is not split: " + every.as());
         assertEquals(Optional.empty(), apart.as(), "kept, it is read as it is");
     }
+
+    /**
+     * Under {@code ((x <= 0 || x > 0) && t || y >= 10 && u)} the choice inside the first
+     * alternative leaves {@code x} every value and comes to nothing, so the first alternative
+     * asks nothing of the relation and the choice around it comes to nothing as well, though its
+     * alternatives bound two numbers between them.
+     */
+    @Test
+    void aChoiceInsideAnAlternativeComesToNothingWhereItsAlternativesLeaveEveryValue() {
+        AWayReadForARelation.ReadAgain again = WaysReadAgain.readAgain(List.of(
+                oneOf(1, List.of(
+                        List.of(oneOf(2, List.of(List.of(x(1, Rel.LE, 0)),
+                                List.of(x(1, Rel.GT, 0)))), truth("t", true)),
+                        List.of(WaysReadAgain.y(1, Rel.GE, 10), truth("u", true))))));
+
+        assertTrue(again.as().orElse(null) instanceof Reachability.Reaching reaching
+                        && reaching.ways() instanceof Reachability.Ways.One,
+                () -> "left off, the way is not split: " + again.as());
+    }
 }

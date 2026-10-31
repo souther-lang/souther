@@ -206,10 +206,8 @@ final class AWayReadForARelation {
             ChoiceRead one = parted.get(each);
             if (one == null) {
                 rest.add(each);
-            } else if (leavesEveryValueDeclared(one)) {
-                readAsLess = true;
             } else {
-                readAsLess |= !one.whole();
+                readAsLess |= one.comesToLess();
                 one.standingFor().ifPresent(rest::add);
             }
         }
@@ -217,18 +215,16 @@ final class AWayReadForARelation {
     }
 
     /**
-     * Whether what {@code choice} asks bearing on the relation, one alternative or another, holds
-     * of every value the declarations leave, so that it comes to nothing for the relation where
-     * what it asks apart is met, as a choice some alternative of which asks nothing of it does.
+     * Whether what the alternatives of a choice ask bearing on the relation, {@code bearing},
+     * one or another, holds of every value the declarations leave.
      *
      * <p>Shown where the alternatives between them are read as bounds on one form, and the runs
-     * they leave it hold every value the declarations leave the form ({@link FormsLeft#onOneForm}):
-     * a lookup of a value in a table, whose rows' lines between them leave the value nowhere out.
+     * they leave it hold every value the declarations leave the form ({@link FormsLeft#onOneForm}).
      */
-    private boolean leavesEveryValueDeclared(ChoiceRead choice) {
+    private boolean leavesEveryValueDeclared(List<List<OnTheWay>> bearing) {
         FormsRead forms = new FormsRead();
         FormsLeft left = null;
-        for (List<OnTheWay> alternative : choice.bearing()) {
+        for (List<OnTheWay> alternative : bearing) {
             FormsLeft one = forms.of(alternative);
             left = left == null ? one : left.join(one);
         }
@@ -770,11 +766,19 @@ final class AWayReadForARelation {
      * it is a row past the choice — so it comes to the parts bearing on it, which is how
      * {@code !(age >= 70 && ancestor && !apart)} comes to the age alone.
      *
-     * @param bearing what each alternative asks that bears on the relation, in their order
-     * @param apart   what each asks apart from that
+     * <p>And where those parts between them leave the relation's places every value the
+     * declarations leave, it comes to nothing for the relation in the same way: a lookup of a
+     * value in a table, whose rows' lines leave the value nowhere out
+     * ({@link AWayReadForARelation#leavesEveryValueDeclared}).
+     *
+     * @param bearing          what each alternative asks that bears on the relation, in their
+     *                         order
+     * @param apart            what each asks apart from that
+     * @param leavesEveryValue whether the parts in {@code bearing} between them are shown to
+     *                         leave every value the declarations leave
      */
     record ChoiceRead(OnTheWay choice, List<List<OnTheWay>> bearing,
-                      List<List<OnTheWay>> apart) {
+                      List<List<OnTheWay>> apart, boolean leavesEveryValue) {
 
         /**
          * {@code choice} parted by the positions {@code reading} has bearing on the relation — or
@@ -805,8 +809,15 @@ final class AWayReadForARelation {
                 bearing.add(on);
                 apart.add(off);
             }
-            ChoiceRead out = new ChoiceRead(choice, bearing, apart);
+            ChoiceRead out = new ChoiceRead(choice, bearing, apart,
+                    reading.leavesEveryValueDeclared(bearing));
             return out.whole() || out.leftOut() || choice instanceof OnTheWay.OneOf ? out : null;
+        }
+
+        /** Whether the relation is read as less for it than as it stands, where what it asks
+         *  apart is met. */
+        boolean comesToLess() {
+            return !whole() || standingFor().isEmpty();
         }
 
         /** Whether nothing it asks is apart from the relation. */
@@ -847,9 +858,12 @@ final class AWayReadForARelation {
         }
 
         /** What the choice comes to for the relation, where what it asks apart is met: nothing
-         *  where some alternative asks nothing bearing on it, and the parts bearing on it
-         *  otherwise. */
+         *  where the parts bearing on it leave every value the declarations leave, or some
+         *  alternative asks nothing bearing on it, and the parts bearing on it otherwise. */
         Optional<OnTheWay> standingFor() {
+            if (leavesEveryValue) {
+                return Optional.empty();
+            }
             if (whole()) {
                 return Optional.of(choice);
             }
