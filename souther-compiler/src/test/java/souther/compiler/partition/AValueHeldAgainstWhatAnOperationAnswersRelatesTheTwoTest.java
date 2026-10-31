@@ -164,12 +164,12 @@ class AValueHeldAgainstWhatAnOperationAnswersRelatesTheTwoTest {
 
     @Test
     void twoAnswersOfOnePositionOrOneAgainstAConstantAreNotARelation() {
-        assertEquals(List.of(madeFrom("3:33", "s")), said(measured("""
+        assertEquals(List.of(madeFrom("3:33", "s") + ", at 3:13"), said(measured("""
                 module w1
                 behavior m : (s: String) -> Bool
                 let m (s) = String.lowercase(s) == String.uppercase(s)
                 """)));
-        assertEquals(List.of(madeFrom("3:33", "s")), said(measured("""
+        assertEquals(List.of(madeFrom("3:33", "s") + ", at 3:13"), said(measured("""
                 module w1
                 behavior m : (s: String) -> Bool
                 let m (s) = String.lowercase(s) == "abc"

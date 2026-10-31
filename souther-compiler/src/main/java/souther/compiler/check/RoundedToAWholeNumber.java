@@ -5,6 +5,8 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.WhereAnOperatorAnswers;
+import souther.compiler.types.Type;
 
 import java.math.BigInteger;
 import java.util.Objects;
@@ -131,14 +133,24 @@ public final class RoundedToAWholeNumber {
         if (whole == null) {
             return null;
         }
-        // The ends of what the call answers, which a rounding past them aborts at.
-        Carrier answered = Carrier.ofValue(rounding.answered().type(), sides.declarations());
-        OrderedInterval ends = answered == null ? null : answered.extent();
+        WhereAnOperatorAnswers.WhereItsExactValueIsHeld ends =
+                whereTheRoundedNumberIsHeld(rounding.answered().type(), sides.declarations());
+        return ends == null ? null : new Read<>(rounding.answered(), value, rounding.at(),
+                statementOf(way, rounding.written(), whole, ends.least(), ends.greatest()));
+    }
+
+    /**
+     * The ends of what a rounding answering {@code answered} answers, which a rounding past them
+     * aborts at — or null where the type has no whole numbers at either end, as a decimal has not.
+     */
+    public static WhereAnOperatorAnswers.WhereItsExactValueIsHeld whereTheRoundedNumberIsHeld(
+            Type answered, DeclarationAccess declarations) {
+        Carrier carrier = Carrier.ofValue(answered, declarations);
+        OrderedInterval ends = carrier == null ? null : carrier.extent();
         BigInteger least = ends == null ? null : WholeUnitsBetween.wholeNumberOf(ends.low());
         BigInteger most = ends == null ? null : WholeUnitsBetween.wholeNumberOf(ends.high());
-        return least == null || most == null ? null : new Read<>(rounding.answered(), value,
-                rounding.at(),
-                statementOf(way, rounding.written(), whole, least, most));
+        return least == null || most == null || least.compareTo(most) > 0 ? null
+                : new WhereAnOperatorAnswers.WhereItsExactValueIsHeld(least, most);
     }
 
     /**
@@ -228,6 +240,18 @@ public final class RoundedToAWholeNumber {
             case ConstantComparison.Either(var first, var second) ->
                     ConstantComparison.either(dividedBy(first, by), dividedBy(second, by));
         };
+    }
+
+    /**
+     * What the number before rounding stands to exactly where its rounding by {@code way} lies
+     * from {@code least} to {@code most}: where a run gets past a rounding, or the making of a
+     * value around it, that stops it outside them.
+     */
+    public static ConstantComparison heldBetween(WholeRounding way, BigInteger least,
+                                                 BigInteger most) {
+        return ConstantComparison.both(
+                ConstantComparison.ofAWholeNumber(Rel.GE, least, way::atLeast),
+                ConstantComparison.ofAWholeNumber(Rel.LE, most, way::atLeast));
     }
 
     /**

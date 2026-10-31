@@ -481,10 +481,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     /**
      * A run that may stop before the relation on what no region says leaves no value of what the
      * relation reads shown to get to it, and the relation is not read as dividing none of them.
-     * A square, a product of the two, a construction refusing nought and a sum in an arm each stop
-     * a run on {@code a} where nothing says, and {@code a} and {@code b} are not shown reached. A
-     * sum a region says, the same arithmetic after the comparison and a stop on a number the
-     * relation does not read leave it relating the two.
+     * A square, a product of the two and a sum in an arm each stop a run on {@code a} where
+     * nothing says, and {@code a} and {@code b} are not shown reached. A sum a region says, a
+     * construction refusing nought, which is said as the run its clauses leave, the same
+     * arithmetic after the comparison and a stop on a number the relation does not read leave it
+     * relating the two.
      */
     @Test
     void aRunThatMayStopBeforeARelationOnWhatItReadsLeavesNoValueShownToGetThere() {
@@ -492,7 +493,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String inputs = "a: Yen, b: Yen, p: Yen, c: Bool";
         Map<String, String> notReached = Map.of("a", NOT_REACHED, "b", NOT_REACHED);
         for (String before : List.of("a.value * a.value", "a.value * b.value",
-                "Yen(a.value - 1)", "if c then a.value + 9223372036854775807 else 0")) {
+                "if c then a.value + 9223372036854775807 else 0")) {
             assertEquals(notReached, left(inputs, yen,
                     "{\n    let before = " + before + "\n    a.value == b.value\n}", "6:13"),
                     before);
@@ -505,6 +506,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("a", RELATES), left(inputs, yen,
                 "{\n    let before = a.value + 9223372036854775807\n    a.value == b.value\n}",
                 "6:13"));
+        assertEquals(Map.of("a", RELATES), left(inputs, yen,
+                "{\n    let before = Yen(a.value - 1)\n    a.value == b.value\n}", "6:13"));
     }
 
     /**
@@ -3637,25 +3640,36 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     /**
      * A construction written inside another is not the value a field is read off: the access takes
      * the field out of the outer one, whose other parts are made all the same. Here {@code other}
-     * is refused wherever {@code d} is above nought, and a run stops there, so the field read is
-     * not told as the check of the inner construction alone.
+     * is refused at some {@code d}, and a run stops there, so the field read is not told as the
+     * check of the inner construction alone.
+     *
+     * <p>Where the clauses of {@code other} leave one run, its check is told as the operation it
+     * is: {@code Yen(0 - d)} refuses every {@code d} above nought, so a row at the comparison holds
+     * {@code d} at nought and the comparison relates what it reads, as it does past any operator
+     * of its own that stops a run. Where they leave a hole, what stops a run there is not told,
+     * and nothing is shown reached.
      */
     @Test
     void aFieldTakenOffAConstructionInsideAnotherIsNotToldAsTheInnerOnesCheck() {
-        String source = """
+        String model = """
                 module w1
                 data Yen = Int invariant value >= 0
-                data Pay = { base: Yen, other: Yen }
+                data Hole = Int invariant value == 0 || value == 100
+                data Pay = { base: Yen, other: %s }
                 behavior m : (a: Yen, b: Yen, d: Yen) -> Yen | Exceeds
-                    constructs Yen, Pay
+                    constructs Yen, Hole, Pay
                 let m (a, b, d) = {
-                    guard Pay { base = Yen(a.value + b.value), other = Yen(0 - d.value) }
+                    guard Pay { base = Yen(a.value + b.value), other = %s(0 - d.value) }
                         .base.value >= d.value else Exceeds
-                    Yen(d.value)
+                    Yen(Hole(d.value).value)
                 }
                 """;
+        String told = model.formatted("Yen", "Yen");
+        assertEquals(Map.of("a", RELATES, "b", RELATES, "d", RELATES),
+                leftIn(told, whereWritten(told, ">= d.value")));
+        String untold = model.formatted("Hole", "Hole");
         assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN, "d", NOT_SHOWN),
-                leftIn(source, whereWritten(source, ">= d.value")));
+                leftIn(untold, whereWritten(untold, ">= d.value")));
     }
 
     /**
@@ -3674,8 +3688,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * A name that stands for one element of a list written out is one of the values the list
      * holds, and is read the way the walk reads a name that is one of several, however many there
      * are. The construction written in the list is made before the comparison reads the element,
-     * so a run may stop there and the places are not shown reached; the same list of {@code Int}
-     * makes nothing that can stop.
+     * and stops a run only where the sum it wraps is below nought or past an {@code Int}, which
+     * is where the same list of {@code Int} stops one: the two are read alike.
      */
     @Test
     void aNameForTheOnlyElementOfAListOfConstructionsIsReadAsOneOfSeveral() {
@@ -3683,7 +3697,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 "guard List.any(g -> g.value >= d.value, [Yen(a.value + b.value)]) else Exceeds");
         String ofInt = CONSTRUCTED_ABOVE.formatted("", "Yen",
                 "guard List.any(g -> g >= d.value, [a.value + b.value]) else Exceeds");
-        assertEquals(Map.of("a", NOT_REACHED, "b", NOT_REACHED),
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
                 leftIn(over, whereWritten(over, ">= d.value")));
         assertEquals(Map.of("a", RELATES, "b", RELATES),
                 leftIn(ofInt, whereWritten(ofInt, ">= d.value")));

@@ -688,10 +688,6 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + "L" + c + "inputs/InputReads;)L" + c + "partition/Pullback$Sized;", 1,
                 "asked of the value its caller took past a Widen, which is the field access whose"
                         + " target is a call of a behavior");
-        row(out, c + "partition/Pullback", "whereEachOperatorAnswers",
-                "(L" + c + "partition/Pullback$Operators;)Ljava/util/List;", 1,
-                "asked of the operators AffineForms told of, each of which it took past a Widen"
-                        + " before it composed it");
         row(out, c + "partition/ComparisonReadings", "wayTo", "(" + core + core + "L" + c
                 + "inputs/InputReads;L" + c + "partition/ComparisonReadings$Body;)L" + c
                 + "partition/ComparisonReadings$Way;", 2, GOES_ON_INTO_IT);

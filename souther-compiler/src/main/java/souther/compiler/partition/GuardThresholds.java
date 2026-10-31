@@ -25,12 +25,12 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
-import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.RuleSite;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.ReadMeaning;
@@ -681,8 +681,20 @@ public final class GuardThresholds {
                                                         InputReading read, InputReads reads,
                                                         Arrivals answering) {
         return new Cutting.Read.Stopped(
-                leftAtEachPlace(comparison, stopped, read, reads, answering),
+                PlacesStopped.of(leftAtEachPlace(comparison, stopped, read, reads, answering),
+                        stoppedAtThe(stopped)),
                 whereItStopped(stopped, read));
+    }
+
+    /**
+     * Where a reader is sent about the stop: the expression the arithmetic failed to take apart,
+     * as the construct its author wrote — the call inside the calls the library states the form
+     * of — and the rule itself where that is no call its author wrote, which is not a place
+     * anybody can be sent to.
+     */
+    private static RuleSite stoppedAtThe(AffineReading.OfAComparison.Stopped stopped) {
+        return RuleSite.ofTheCallStoppedAt(stopped.failure().firstStop().node())
+                .orElse(RuleSite.theRuleItself());
     }
 
     /**
@@ -1078,13 +1090,7 @@ public final class GuardThresholds {
         // nothing but whether its reading finished. There is no reading that says what a body's
         // comparison raises — a line it comes to owes its rows by having been read — so where the
         // reading stopped there is nothing that was determined and nothing that could have been.
-        read.whatEachPlaceIsLeftWith().forEach(left -> {
-            if (left.why() instanceof BlockReason.RuleReadingStopped stopped) {
-                out.unclassified(cited, readAt, left.at(), stopped);
-            } else {
-                out.add(RuleWithoutALine.of(cited, readAt, left.at(), left.why()));
-            }
-        });
+        read.whatEachPlaceIsLeftWith().forEach(left -> left.filedIn(cited, readAt, out));
     }
 
     /** How a row meets a line a body's condition drew, which is a guard's own answer: what it takes

@@ -12,7 +12,6 @@ import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
-import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.values.TextExtents;
@@ -119,8 +118,7 @@ public final class ContainerSizesUnderAWitness {
     /** Whether an {@code Int} sum coming to {@code total} answers it, as the language says
      *  ({@link WhereAnOperatorAnswers}). */
     private static boolean anIntSumAnswersAt(BigInteger total) {
-        return WhereAnOperatorAnswers.ofAnOperator(BinOp.ADD, Type.INT,
-                List.of(Type.INT, Type.INT))
+        return WhereAnOperatorAnswers.ofATotal(Type.INT)
                 instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(
                         BigInteger least, BigInteger greatest)
                 && total.compareTo(least) >= 0 && total.compareTo(greatest) <= 0;

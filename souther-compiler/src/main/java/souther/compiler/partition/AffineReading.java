@@ -45,7 +45,6 @@ import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.TakenAs;
@@ -543,13 +542,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             @Override
             public void composed(Core operation, LinearForm<NumericTerm> form,
                                  List<LinearForm<NumericTerm>> operands) {
-                WhereAnOperatorAnswers where = switch (Core.withoutStanding(operation)) {
-                    case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
-                            binary.type(), List.of(binary.left().type(), binary.right().type()));
-                    case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
-                    default -> null;
-                };
-                tell(operation, form, operands, where);
+                tell(operation, form, operands, AffineForms.whereItAnswers(operation));
             }
 
             /**
@@ -566,49 +559,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return;
                 }
                 WhereAnOperatorAnswers.WhereItsExactValueIsHeld where =
-                        whereMakingSucceeds(construct, type);
+                        DeclaredBounds.whereMakingSucceeds(construct, type,
+                                ofTheInput.ruleReading());
                 if (where == null) {
                     told.exact = false;
                     return;
                 }
                 tell(construct, value, List.of(value), where);
-            }
-
-            /**
-             * The numbers a construction of {@code type} over an {@code Int} succeeds for: the
-             * whole run its clauses leave, within the ends of an {@code Int}. Null where they leave
-             * none that is shown to be the whole of what they say.
-             */
-            private WhereAnOperatorAnswers.WhereItsExactValueIsHeld whereMakingSucceeds(
-                    Core.Construct construct, TypeView type) {
-                if (construct.values().get(0).value().type() != Type.INT) {
-                    return null;
-                }
-                NumericDomain.Bounds run =
-                        DeclaredBounds.wholeRunOf(type, ofTheInput.ruleReading());
-                if (run == null) {
-                    return null;
-                }
-                WhereAnOperatorAnswers.WhereItsExactValueIsHeld ofAnInt =
-                        WhereAnOperatorAnswers.WHAT_AN_INT_HOLDS;
-                BigInteger least = ofAnInt.least();
-                BigInteger greatest = ofAnInt.greatest();
-                if (run.min() != null) {
-                    BigInteger end = run.min().wholeAdmitted(true);
-                    if (end == null) {
-                        return null;
-                    }
-                    least = least.max(end);
-                }
-                if (run.max() != null) {
-                    BigInteger end = run.max().wholeAdmitted(false);
-                    if (end == null) {
-                        return null;
-                    }
-                    greatest = greatest.min(end);
-                }
-                return least.compareTo(greatest) > 0 ? null
-                        : new WhereAnOperatorAnswers.WhereItsExactValueIsHeld(least, greatest);
             }
 
             /**
@@ -768,8 +725,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              */
             private void tellAnIntTotal(Core node, LinearForm<NumericTerm> total,
                                         List<Integer> after) {
-                WhereAnOperatorAnswers where = WhereAnOperatorAnswers.ofAnOperator(BinOp.ADD,
-                        Type.INT, List.of(Type.INT, Type.INT));
+                WhereAnOperatorAnswers where = WhereAnOperatorAnswers.ofATotal(Type.INT);
                 if (heldAside(where, total)) {
                     return;
                 }
@@ -967,9 +923,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         || !(Core.withoutStanding(wrapped) instanceof Core.Int written)) {
                     return false;
                 }
-                WhereAnOperatorAnswers.WhereItsExactValueIsHeld where = whereMakingSucceeds(
-                        construct, TypeView.asWritten(Type.ref(construct.typeName()), symbols(),
-                                declarations().kinds(), declarations().sums()));
+                WhereAnOperatorAnswers.WhereItsExactValueIsHeld where =
+                        DeclaredBounds.whereMakingSucceeds(construct,
+                                TypeView.asWritten(Type.ref(construct.typeName()), symbols(),
+                                        declarations().kinds(), declarations().sums()),
+                                ofTheInput.ruleReading());
                 BigInteger number = BigInteger.valueOf(written.value());
                 return where != null && where.least().compareTo(number) <= 0
                         && number.compareTo(where.greatest()) <= 0;

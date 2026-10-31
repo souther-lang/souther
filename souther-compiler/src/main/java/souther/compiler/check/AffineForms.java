@@ -656,6 +656,24 @@ public final class AffineForms {
                 java.util.Objects.requireNonNull(at, "and was reading it in something");
                 Objects.requireNonNull(why, "and stopped for a reason");
             }
+
+            /**
+             * The stop this one comes to, through however many calls the library states the form of
+             * it was reached under: the expression the reading failed to take apart, and the one
+             * {@link Halt#nonAffineOperation} and {@link Halt#declinedFigure} are the reason of.
+             *
+             * <p>This stop's own {@link #node} is the call the reader wrote around it, which is
+             * where the stop is reported and is not what an author changes: the product inside
+             * {@code Decimal.round(2, HALF_UP, a * b)} is the stop, and the call around it took
+             * nothing of the reason.
+             */
+            public StoppedAt<A, E> firstStop() {
+                StoppedAt<A, E> at = this;
+                while (at.why() instanceof Halt.AnArgumentStopped<A, E>(var argument)) {
+                    at = argument;
+                }
+                return at;
+            }
         }
     }
 
@@ -1194,6 +1212,23 @@ public final class AffineForms {
                 && of(call.args().get(divides.getAsInt()), at, reading, following)
                         instanceof Outcome.Composed<A, E> composed
                 && !composed.form().coefs().isEmpty();
+    }
+
+    /**
+     * Where {@code operation}, an operator a walk composed and told a reading of
+     * ({@link Reading#composed}), answers, as the operator's own account says
+     * ({@link WhereAnOperatorAnswers}): a sum, a difference or a product as its operator and
+     * types say, and a negation as its type says. Every reading that asks where the operations
+     * it is told of answer asks it here.
+     */
+    public static WhereAnOperatorAnswers whereItAnswers(Core operation) {
+        return switch (Core.withoutStanding(operation)) {
+            case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
+                    binary.type(), List.of(binary.left().type(), binary.right().type()));
+            case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
+            default -> throw new IllegalArgumentException(
+                    "a walk composes an operator and nothing else: " + operation);
+        };
     }
 
     /** {@code form}, with the reading told {@code operation} came to it ({@link Reading#composed})
