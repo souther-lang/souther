@@ -86,8 +86,8 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
     void aParameterRefusedAtSomeOfItsClassesIsStillBuiltAtTheOthers() {
         Offered three = offeredWithTheGateRefusedOpen(3);
         Offered six = offeredWithTheGateRefusedOpen(6);
-        assertTrue(three.classes().contains("left.f0=On")
-                        && three.classes().contains("left.f0=Off"),
+        assertTrue(three.classes().contains("On at left.f0")
+                        && three.classes().contains("Off at left.f0"),
                 "a row is offered for each class of the first record's field, with the gate shut: "
                         + three.classes());
         assertEquals(three.classes(), six.classes(),
@@ -150,7 +150,7 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
         Set<String> forty = assertTimeoutPreemptively(Duration.ofSeconds(60),
                 () -> besideTheOtherParameter(writtenAgainstAValueOfTheFirst(40)));
         Set<String> three = besideTheOtherParameter(writtenAgainstAValueOfTheFirst(3));
-        assertTrue(three.contains("left.inner.g=Off"),
+        assertTrue(three.contains("Off at left.inner.g"),
                 "a row is composed for the class the stated value does not have: " + three);
         assertEquals(three, forty,
                 "and the rows for the first parameter's classes and for the decisions together are"
@@ -167,7 +167,7 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
             for (Generator.Purpose purpose : row.purposes()) {
                 switch (purpose) {
                     case Generator.Purpose.ForAClass cls -> {
-                        if (cls.label().startsWith("left.")) {
+                        if (cls.at().term().startsWith("left.")) {
                             out.add(cls.label());
                         }
                     }

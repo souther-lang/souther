@@ -544,15 +544,15 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
     void aRunOrARestTheDeclarationsLeaveNothingInIsNoClass() {
         String runs = "if c.value < 2 then Accepted { at = \"x\" }"
                 + " else if c.value < 3 then Accepted { at = \"y\" } else Accepted { at = \"z\" }";
-        assertEquals(List.of("c/1 <= x < 2", "c/3 <= x <= 5"),
+        assertEquals(List.of("c: 1 <= x < 2", "c: 3 <= x <= 5"),
                 withBody(over(" && value /= 2", runs), "classify"));
-        assertEquals(List.of("c/1 <= x < 2", "c/2 <= x < 3", "c/3 <= x <= 5"),
+        assertEquals(List.of("c: 1 <= x < 2", "c: 2 <= x < 3", "c: 3 <= x <= 5"),
                 withBody(over("", runs), "classify"));
         String singled = "if c.value == 1 then Accepted { at = \"x\" }"
                 + " else if c.value == 5 then Accepted { at = \"y\" } else Accepted { at = \"z\" }";
-        assertEquals(List.of("c/= 1", "c/= 5"),
+        assertEquals(List.of("c: = 1", "c: = 5"),
                 withBody(over(" && value /= 2 && value /= 3 && value /= 4", singled), "classify"));
-        assertEquals(List.of("c/= 1", "c/= 5", "c//= 1, 5"),
+        assertEquals(List.of("c: = 1", "c: = 5", "c: /= 1, 5"),
                 withBody(over("", singled), "classify"));
     }
 
@@ -566,10 +566,10 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
      */
     @Test
     void aRunOfANumberTakenOfTheValuesNamedThatNoneComesToIsNoClass() {
-        assertEquals(List.of("String.length(c)/0 <= x < 2", "String.length(c)/3 <= x"),
+        assertEquals(List.of("String.length(c): 0 <= x < 2", "String.length(c): 3 <= x"),
                 lengthClasses("value == \"a\" || value == \"bbb\""));
-        assertEquals(List.of("String.length(c)/0 <= x < 2", "String.length(c)/2 <= x < 3",
-                        "String.length(c)/3 <= x"),
+        assertEquals(List.of("String.length(c): 0 <= x < 2", "String.length(c): 2 <= x < 3",
+                        "String.length(c): 3 <= x"),
                 lengthClasses("value == \"a\" || value == \"bb\" || value == \"bbb\""));
     }
 
@@ -600,7 +600,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 """;
         PartitionClass rest = drawnByTheBody(model, "classify").axes().stream()
                 .flatMap(axis -> axis.classes().stream())
-                .filter(each -> each.id().equals("String.length(c)//= 2"))
+                .filter(each -> each.id().equals("String.length(c): /= 2"))
                 .findFirst().orElseThrow(() -> new AssertionError("no class beside the length two"));
         RepresentativeSource.Values values = assertInstanceOf(RepresentativeSource.Values.class,
                 rest.representatives(), rest::toString);

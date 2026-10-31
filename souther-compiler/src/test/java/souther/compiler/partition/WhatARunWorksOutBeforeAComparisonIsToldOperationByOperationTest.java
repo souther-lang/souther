@@ -143,11 +143,11 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
 
     /** The classes of {@code previous} where the fixed part of the first month runs to its end. */
     private static final List<String> NOTHING_STOPS_BEFORE_IT =
-            List.of("previous/0 <= x < 2000000000001", "previous/2000000000001 <= x");
+            List.of("previous: 0 <= x < 2000000000001", "previous: 2000000000001 <= x");
 
     /** The same where the base of the first month is nought on every run that gets past. */
     private static final List<String> THE_BASE_IS_NOUGHT =
-            List.of("previous/0 <= x < 1000000000001", "previous/1000000000001 <= x");
+            List.of("previous: 0 <= x < 1000000000001", "previous: 1000000000001 <= x");
 
     private static PartitionEvidence judged(String name) {
         PartitionEvidence evidence = MEASURED.get(name);
@@ -254,7 +254,7 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
      */
     @Test
     void aTotalReadInsideASumLeavesEachApplicationToBeTold() {
-        assertEquals(List.of("previous/0 <= x < 1003074457346", "previous/1003074457346 <= x"),
+        assertEquals(List.of("previous: 0 <= x < 1003074457346", "previous: 1003074457346 <= x"),
                 previous("summedInASum"));
     }
 
@@ -318,7 +318,7 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
      */
     @Test
     void aRoundingMadeAValueIsHeldWhereTheWayOfRoundingPutsTheEnds() {
-        assertEquals(List.of("previous/0 <= x < 1000000000003", "previous/1000000000003 <= x"),
+        assertEquals(List.of("previous: 0 <= x < 1000000000003", "previous: 1000000000003 <= x"),
                 previous("down"));
         assertEquals(THE_BASE_IS_NOUGHT, previous("floor"));
     }
@@ -330,7 +330,7 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
      */
     @Test
     void aTotalIsHeldToAnIntOnceItIsAddedUp() {
-        assertEquals(List.of("previous/0 <= x < 1768614336405", "previous/1768614336405 <= x"),
+        assertEquals(List.of("previous: 0 <= x < 1768614336405", "previous: 1768614336405 <= x"),
                 previous("total"));
     }
 

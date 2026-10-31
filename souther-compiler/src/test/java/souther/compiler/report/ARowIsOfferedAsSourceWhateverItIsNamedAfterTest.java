@@ -60,7 +60,7 @@ class ARowIsOfferedAsSourceWhateverItIsNamedAfterTest {
         String block = offered(NAMED_AFTER_A_RULE_ABOUT_STRINGS);
 
         assertTrue(block.contains("""
-                    | "code=String.startsWith(\\"JP\\", x)"\
+                    | "code: String.startsWith(\\"JP\\", x) at code"\
                 """),
                 () -> "a row named after a rule about strings, as source: " + block);
     }

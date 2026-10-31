@@ -66,8 +66,8 @@ class ATypeInvariantChoosingBetweenRangesLeavesAValueInOneOfThemTest {
         String block = blockFor("Int", "value > 100 || value < 0", BESIDE_ANOTHER_INPUT);
 
         assertFalse(block.contains("no row for"), block);
-        assertTrue(block.contains("n=x < 3"), block);
-        assertTrue(block.contains("n=3 <= x"), block);
+        assertTrue(block.contains("n: x < 3 at n"), block);
+        assertTrue(block.contains("n: 3 <= x at n"), block);
     }
 
     @Test
@@ -77,8 +77,8 @@ class ATypeInvariantChoosingBetweenRangesLeavesAValueInOneOfThemTest {
                 BESIDE_ANOTHER_INPUT);
 
         assertFalse(block.contains("no row for"), block);
-        assertTrue(block.contains("n=x < 3"), block);
-        assertTrue(block.contains("n=3 <= x"), block);
+        assertTrue(block.contains("n: x < 3 at n"), block);
+        assertTrue(block.contains("n: 3 <= x at n"), block);
     }
 
     /**
@@ -396,7 +396,7 @@ class ATypeInvariantChoosingBetweenRangesLeavesAValueInOneOfThemTest {
         String block = blockOf(manyCasesBeforeOne("{ ...Paging, r: R }\n"
                 + "    invariant own = limit < 0\n"));
 
-        assertTrue(block.contains("fills n=x < 3"), block);
+        assertTrue(block.contains("fills n: x < 3 at n"), block);
         assertTrue(block.contains("(Holder { q = C10 { limit = 101, r = S { s = 0 } } }, 3)"),
                 block);
         assertFalse(block.contains("no row for `n"), block);

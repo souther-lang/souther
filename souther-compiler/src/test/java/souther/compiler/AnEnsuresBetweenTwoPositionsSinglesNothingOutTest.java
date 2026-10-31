@@ -102,7 +102,7 @@ class AnEnsuresBetweenTwoPositionsSinglesNothingOutTest {
     /** While one about a single position still puts the value in a class of its own. */
     @Test
     void andOneAboutASinglePositionStillDoes() {
-        assertEquals(List.of("r.a/= 20", "r.a//= 20"), classes("r.a == 20"));
+        assertEquals(List.of("r.a: = 20", "r.a: /= 20"), classes("r.a == 20"));
     }
 
     /**

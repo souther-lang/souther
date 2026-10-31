@@ -141,10 +141,10 @@ class GeneratorTest {
         assertEquals(List.of(), filled.unresolved());
         assertEquals(4, filled.rows().size(), texts(filled).toString());
         assertEquals(List.of(
-                        List.of("request.kind=Domestic"),
-                        List.of("request.kind=Overseas"),
-                        List.of("request.urgent=true"),
-                        List.of("request.urgent=false")),
+                        List.of("Domestic at request.kind"),
+                        List.of("Overseas at request.kind"),
+                        List.of("true at request.urgent"),
+                        List.of("false at request.urgent")),
                 filled.rows().stream().map(row -> row.labels()).toList());
     }
 
@@ -173,7 +173,7 @@ class GeneratorTest {
                 GenerationFixtures.fill(subject, List.of(Generator.ObservedRow.unseen(written)),
                         Generator.CandidateCheck.ANY, Budgets.generation());
 
-        assertEquals(List.of(List.of("request.kind=Overseas"), List.of("request.urgent=false")),
+        assertEquals(List.of(List.of("Overseas at request.kind"), List.of("false at request.urgent")),
                 filled.rows().stream().map(row -> row.labels()).toList(),
                 "the two classes that row is in are not asked for again");
     }
@@ -284,7 +284,7 @@ class GeneratorTest {
                         left.why().reason() == Generator.UnresolvedCombination.Reason
                                 .ALL_CANDIDATES_REJECTED),
                 filled.unresolved().toString());
-        assertEquals(List.of(List.of("a=low"), List.of("b=high")),
+        assertEquals(List.of(List.of("low at a"), List.of("high at b")),
                 filled.unresolved().stream().map(each -> each.why().classes()).toList(),
                 "the class each row was owed for, and not the pair they would have made");
     }
@@ -309,7 +309,7 @@ class GeneratorTest {
 
         List<String> subjects = filled.unresolved().stream()
                 .map(each -> each.why().subject()).distinct().toList();
-        assertEquals(List.of("a=opaque"), subjects,
+        assertEquals(List.of("opaque at a"), subjects,
                 "the class with nothing, once — not the three combinations it is in");
         assertEquals(3, filled.rows().size(),
                 "the other three classes are still asked for, each standing where `a` can be built");
@@ -374,7 +374,7 @@ class GeneratorTest {
 
         assertEquals(List.of(), filled.rows(), "nothing was composed at the first position");
         assertTrue(filled.unresolved().stream()
-                        .anyMatch(left -> left.why().classes().contains("a=empty")),
+                        .anyMatch(left -> left.why().classes().contains("empty at a")),
                 () -> "a class nothing can write a value for is still a class, and the row it wants"
                         + " is still owed: " + filled.unresolved());
         CameToNothing only = filled.unresolved().getFirst();
@@ -405,7 +405,7 @@ class GeneratorTest {
                 GenerationFixtures.fill(subject, List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
 
         assertEquals(List.of("1", "9"), texts(filled));
-        assertEquals(List.of(List.of("a=low"), List.of("a=high")),
+        assertEquals(List.of(List.of("low at a"), List.of("high at a")),
                 filled.rows().stream().map(row -> row.labels()).toList());
     }
 }

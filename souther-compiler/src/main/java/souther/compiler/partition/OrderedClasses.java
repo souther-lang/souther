@@ -165,7 +165,7 @@ final class OrderedClasses {
                 perWitness.get(), UsualPlaces.of(orders.term(), carrier, ruleReading.today()));
         String label = "/= " + String.join(", ",
                 values.stream().map(carrier::written).toList());
-        classes.add(classAt(orders.term().atOnePosition() + "/" + label, label,
+        classes.add(classAt(PartitionClass.idOf(orders.term().atOnePosition(), label), label,
                 orders, rest, other, type, reading, ruleReading));
         return classes;
     }
@@ -174,7 +174,8 @@ final class OrderedClasses {
     private static PartitionClass theValue(Place value, TermOrders orders, Type type,
                                            Quantities reading, RuleReadingContext ruleReading) {
         String written = orders.answered().written(value);
-        return classAt(orders.term().atOnePosition() + "/= " + written, "= " + written,
+        String label = "= " + written;
+        return classAt(PartitionClass.idOf(orders.term().atOnePosition(), label), label,
                 orders, new NumericSet.At(value), value, type, reading, ruleReading);
     }
 

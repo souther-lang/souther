@@ -198,7 +198,7 @@ final class Intervals {
         // line, so the class an author reads is spelled in dates where the position holds them.
         Carrier carrier = orders.answered();
         String label = rangeOf(run, min, max).label(carrier, taken);
-        String id = of + "/" + label;
+        String id = PartitionClass.idOf(of, label);
         // The run's own answer about what is in it. Read off a range of the position's counts,
         // a class whose line falls at a place the position has no value for had no end to state
         // — so it held every value, and two such classes each held everything the other did.

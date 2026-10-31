@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class ARuleOverAValueChosenByCasesIsReadOnEachCaseTest {
 
     /** The line the choice is made on, and the one the first case's threshold draws. */
-    private static final String ON_EACH_CASE = "[n/x <= 0, n/0 < x < 100000, n/100000 <= x] unread []";
+    private static final String ON_EACH_CASE = "[n: x <= 0, n: 0 < x < 100000, n: 100000 <= x] unread []";
 
     @Test
     void eachCaseDrawsTheLineOfWhatItAnswers() {

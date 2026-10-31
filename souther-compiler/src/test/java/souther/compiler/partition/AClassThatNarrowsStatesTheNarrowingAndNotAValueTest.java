@@ -115,7 +115,7 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
     @Test
     void aRowForAClassUnderAWrappingCaseCarriesThatClassesValue() {
         for (Generator.GeneratedRow row : rowsOf(WRAPPED)) {
-            if (!row.labels().equals(List.of("x@Special=10 < x"))) {
+            if (!row.labels().equals(List.of("x@Special: 10 < x at x@Special"))) {
                 continue;
             }
             // The value the class above the line asks for, and not the one the `Special` class of

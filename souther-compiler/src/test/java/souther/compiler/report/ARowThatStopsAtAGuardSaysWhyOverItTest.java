@@ -97,7 +97,7 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
         String block = offered(ONLY_NAMED);
         int line = ONLY_NAMED.lines().toList().indexOf(ONLY_NAMED.lines()
                 .filter(each -> each.contains("guard ")).findFirst().orElseThrow()) + 1;
-        String said = over(block, "kind=Plain");
+        String said = over(block, "Plain at kind");
         assertTrue(said.lines().anyMatch(
                         each -> each.startsWith("// stops at the guard at settle.sou:" + line + ":")),
                 () -> "over the row, the guard it stops at: " + block);
@@ -109,7 +109,7 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
      */
     @Test
     void theWayPastIsSaidAsThisCompilerComposingNothing() {
-        String said = over(offered(ONLY_NAMED), "kind=Plain");
+        String said = over(offered(ONLY_NAMED), "Plain at kind");
         assertTrue(said.contains("way 1 past it: the value built at `request.level` cannot be"
                         + " written"),
                 () -> "the word the search for the way came to: " + said);
@@ -122,9 +122,9 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
     @Test
     void aRowPastTheGuardHasNothingSaidOverIt() {
         String block = offered(GOES_ON);
-        assertFalse(over(block, "kind=Express").contains("// stops at"),
+        assertFalse(over(block, "Express at kind").contains("// stops at"),
                 () -> "nothing over a row that went on: " + block);
-        assertTrue(over(block, "amount=x <= 0").contains("// stops at the guard at"),
+        assertTrue(over(block, "amount: x <= 0 at amount").contains("// stops at the guard at"),
                 () -> "and the row that does stop is said to: " + block);
     }
 
@@ -137,7 +137,7 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
         // The guard is one rule with a line at each of its relations, so it divides the amount, and
         // the row for the class between nought and four is the one it refuses.
         String said = over(offered(GOES_ON.replace("guard amount > 0",
-                "guard (if amount > 0 then amount else 0 - amount) > 4")), "amount=0 < x <= 4");
+                "guard (if amount > 0 then amount else 0 - amount) > 4")), "amount: 0 < x <= 4 at amount");
         assertTrue(said.contains("the ways past it could not be read off the body")
                         && said.contains("which does not make it a guard no row goes past"),
                 () -> "the guard's ways were not read, said as such: " + said);
@@ -159,7 +159,7 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
         String said = over(offered(GOES_ON
                 .replace("(kind: Kind, amount: Int)", "(kind: Kind, amount: Int, open: Bool)")
                 .replace("(kind, amount)", "(kind, amount, open)")
-                .replace("guard amount > 0", "guard open")), "open=false");
+                .replace("guard amount > 0", "guard open")), "false at open");
         assertTrue(said.contains("way 1 past it: `open` is asked by the way to hold true and is"
                         + " written another value"),
                 () -> "the word the search for the way came to: " + said);

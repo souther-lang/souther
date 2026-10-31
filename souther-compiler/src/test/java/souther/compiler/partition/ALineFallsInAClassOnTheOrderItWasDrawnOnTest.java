@@ -136,7 +136,7 @@ class ALineFallsInAClassOnTheOrderItWasDrawnOnTest {
 
         List<PartitionClass> holding = minute.holding(minute.line());
 
-        assertEquals(List.of("Time.minute(slot.at)/30 <= x <= 59"),
+        assertEquals(List.of("Time.minute(slot.at): 30 <= x <= 59"),
                 holding.stream().map(PartitionClass::id).toList(),
                 "the run the line opens, and only that one");
     }
@@ -168,7 +168,7 @@ class ALineFallsInAClassOnTheOrderItWasDrawnOnTest {
     void aLineOnAPositionsOwnValueFallsInAClassOfIt() {
         Measured own = measured(OWN, "gate/slot.n");
 
-        assertEquals(List.of("slot.n/30 <= x"),
+        assertEquals(List.of("slot.n: 30 <= x"),
                 own.holding(own.line()).stream().map(PartitionClass::id).toList());
     }
 

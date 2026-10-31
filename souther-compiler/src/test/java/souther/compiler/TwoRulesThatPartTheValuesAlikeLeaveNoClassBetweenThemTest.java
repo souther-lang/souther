@@ -65,7 +65,7 @@ class TwoRulesThatPartTheValuesAlikeLeaveNoClassBetweenThemTest {
     /** One clause, as the baseline the other is read against. */
     @Test
     void oneClauseLeavesTheTwoClassesItParts() {
-        assertEquals(List.of("n/x <= 4", "n/4 < x"),
+        assertEquals(List.of("n: x <= 4", "n: 4 < x"),
                 classesOf("    ensures asked = Yes -> n <= 4", ""));
     }
 
@@ -81,7 +81,7 @@ class TwoRulesThatPartTheValuesAlikeLeaveNoClassBetweenThemTest {
      */
     @Test
     void twoDivisionsAtOneNumberLeaveThatNumberBetweenThem() {
-        assertEquals(List.of("n/x < 0.5", "n/0.5 <= x <= 0.5", "n/0.5 < x"),
+        assertEquals(List.of("n: x < 0.5", "n: 0.5 <= x <= 0.5", "n: 0.5 < x"),
                 classesOf("Decimal", "    ensures asked = Yes -> n <= 0.5m",
                         "    guard n < 0.5m else No { why = 0 }"));
     }
@@ -95,7 +95,7 @@ class TwoRulesThatPartTheValuesAlikeLeaveNoClassBetweenThemTest {
      */
     @Test
     void theSameDivisionSaidTwoWaysLeavesTheSameTwoClasses() {
-        assertEquals(List.of("n/x <= 4", "n/4 < x"),
+        assertEquals(List.of("n: x <= 4", "n: 4 < x"),
                 classesOf("    ensures asked = Yes -> n <= 4",
                         "    guard n < 5 else No { why = 0 }"));
     }

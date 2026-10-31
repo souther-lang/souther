@@ -140,7 +140,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
 
         assertTrue(report.contains("read as f/a: = 5"), report);
         assertTrue(report.contains("read as f/a: = 6"), report);
-        assertTrue(report.contains("`a/5 < x <= 10`"),
+        assertTrue(report.contains("`a: 5 < x <= 10`"),
                 "and the position is divided at five, not left undivided:\n" + report);
         assertFalse(report.contains("2 * a"),
                 "twice a position is not a quantity beside it:\n" + report);
@@ -197,8 +197,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         // b's own, and between them a reaches either side.
         String relating = "it relates the value here to another value rather than dividing the"
                 + " values here, about `a`";
-        String settledAbove = "`b/9 <= x <= 10`";
-        String between = "`b/3 < x < 9`";
+        String settledAbove = "`b: 9 <= x <= 10`";
+        String between = "`b: 3 < x < 9`";
         assertTrue(report.contains(relating), report);
         assertTrue(report.contains(settledAbove) && report.contains(between), report);
         String again = report(guarded(

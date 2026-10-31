@@ -190,7 +190,7 @@ class CompileExampleGenerateTest {
         for (CameToNothing left : filled.unresolved()) {
             assertEquals(Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
                     left.why().reason());
-            assertTrue(left.why().classes().contains("request.lo=100 < x"),
+            assertTrue(left.why().classes().contains("request.lo: 100 < x at request.lo"),
                     left.why().classes().toString());
         }
         // And the class beside it is not left unwritten with it. A row for `request.hi = 50 < x`
@@ -671,7 +671,7 @@ class CompileExampleGenerateTest {
         for (CameToNothing each : left) {
             assertEquals(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                     each.why().reason(), each.toString());
-            assertTrue(each.why().subject().startsWith("request.flag="),
+            assertTrue(each.why().subject().endsWith(" at request.flag"),
                     "and it is still about the combination: " + each.why().subject());
         }
     }
@@ -885,7 +885,7 @@ class CompileExampleGenerateTest {
 
         assertEquals(List.of("Cond { ...none, f = C }", "Cond { ...none, g = G2 }"),
                 inputs(filled));
-        assertEquals(List.of(List.of("c.f=C"), List.of("c.g=G2")),
+        assertEquals(List.of(List.of("C at c.f"), List.of("G2 at c.g")),
                 filled.rows().stream().map(row -> row.labels()).toList(),
                 "each named for the one class it moves");
     }
@@ -1093,8 +1093,10 @@ class CompileExampleGenerateTest {
     /** Each named for the one class it is about, whatever it took to write one. */
     @Test
     void aFieldMovedToMakeARowBuildableIsNoPartOfWhatItIsFor() {
-        assertEquals(List.of(List.of("request.hi=0 <= x <= 60"), List.of("request.hi=60 < x"),
-                        List.of("request.lo=0 <= x <= 50"), List.of("request.lo=50 < x")),
+        assertEquals(List.of(List.of("request.hi: 0 <= x <= 60 at request.hi"),
+                        List.of("request.hi: 60 < x at request.hi"),
+                        List.of("request.lo: 0 <= x <= 50 at request.lo"),
+                        List.of("request.lo: 50 < x at request.lo")),
                 generated(CORRELATED).get("submit").composed().rows().stream()
                         .map(row -> row.labels()).toList());
     }

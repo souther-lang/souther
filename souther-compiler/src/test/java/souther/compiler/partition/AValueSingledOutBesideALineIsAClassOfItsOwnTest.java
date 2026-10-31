@@ -136,7 +136,7 @@ class AValueSingledOutBesideALineIsAClassOfItsOwnTest {
                 example pick
                     | "at three" : (3) -> High
                 """);
-        assertTrue(RowsOfABlock.of(block).stream().anyMatch(row -> row.isFor("x=x < 10 and x /= 3")),
+        assertTrue(RowsOfABlock.of(block).stream().anyMatch(row -> row.isFor("x: x < 10 and x /= 3 at x")),
                 block);
         List<Long> offered = offeredAt(block);
         assertTrue(offered.stream().anyMatch(at -> at < 10 && at != 3), block);

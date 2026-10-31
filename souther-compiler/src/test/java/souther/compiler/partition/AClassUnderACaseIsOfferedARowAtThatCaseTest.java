@@ -97,7 +97,7 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
 
         assertEquals(List.of(), filled.unresolved(), filled.unresolved().toString());
         assertTrue(filled.rows().stream().map(Generator.GeneratedRow::labels)
-                        .anyMatch(each -> each.equals(List.of("query@GlobalQuery.tag=Some"))),
+                        .anyMatch(each -> each.equals(List.of("Some at query@GlobalQuery.tag"))),
                 () -> "no row for the optional under the case: "
                         + filled.rows().stream().map(Generator.GeneratedRow::labels).toList());
     }

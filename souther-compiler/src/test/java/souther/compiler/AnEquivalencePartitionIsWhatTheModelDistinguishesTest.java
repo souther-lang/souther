@@ -92,7 +92,7 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
      */
     @Test
     void aLineTheCarrierNamesNoValueAtStillDividesThePosition() {
-        assertEquals(List.of("n/3 * x <= 1", "n/1 < 3 * x"),
+        assertEquals(List.of("n: 3 * x <= 1", "n: 1 < 3 * x"),
                 classesOf("Decimal", "    guard 3m * n <= 1m else No { why = 0 }"),
                 "named by the rule, in numbers this language has, rather than by a third");
     }
@@ -109,7 +109,7 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
                 classesOf("Decimal", "    guard 6m * n <= 2m else No { why = 0 }"),
                 "a third and two sixths are one place, and the classes either side are the same"
                         + " two");
-        assertEquals(List.of("n/3 * x <= 1", "n/1 < 3 * x"),
+        assertEquals(List.of("n: 3 * x <= 1", "n: 1 < 3 * x"),
                 classesOf("Decimal", "    guard 6m * n <= 2m else No { why = 0 }"),
                 "and the name is the reduced one, so the rule that wrote it in sixths does not"
                         + " leave a class nothing else can be compared against");
@@ -123,7 +123,7 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
      */
     @Test
     void twoLinesAtTwoSuchPlacesLeaveThreeClasses() {
-        assertEquals(List.of("n/3 * x <= 1", "n/1 < 3 * x <= 2", "n/2 < 3 * x"),
+        assertEquals(List.of("n: 3 * x <= 1", "n: 1 < 3 * x <= 2", "n: 2 < 3 * x"),
                 classesOf("Decimal", """
                     guard 3m * n > 1m else No { why = 0 }
                     guard 3m * n > 2m else No { why = 1 }"""));
@@ -170,7 +170,7 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
                 .axes().get(0)).covered().stream().sorted().toList();
 
         assertEquals(3, covered.size(), "one row in each of the three classes: " + covered);
-        assertEquals(List.of("n/0.2 < x and 3 * x <= 1", "n/1 < 3 * x", "n/x <= 0.2"), covered,
+        assertEquals(List.of("n: 0.2 < x and 3 * x <= 1", "n: 1 < 3 * x", "n: x <= 0.2"), covered,
                 "and the class between the two lines says where it stops, in the words each line"
                         + " can be said in");
     }
@@ -210,9 +210,9 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
         String rows = souther.compiler.report.GeneratedRows.of(compilation, "example.between", "f",
                 souther.compiler.diag.SourceRendering.namedByIdentity(compilation.texts())).text();
 
-        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(row -> row.isFor("n=1 < 3 * x <= 2")),
+        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(row -> row.isFor("n: 1 < 3 * x <= 2 at n")),
                 "the class between the two lines is offered a row:\n" + rows);
-        assertFalse(rows.contains("no row for `n=1 < 3 * x <= 2`"),
+        assertFalse(rows.contains("no row for `n: 1 < 3 * x <= 2 at n`"),
                 "and is not reported as one nothing can be written in:\n" + rows);
     }
 
@@ -250,7 +250,7 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
         String rows = souther.compiler.report.GeneratedRows.of(compilation, "example.narrow", "f",
                 souther.compiler.diag.SourceRendering.namedByIdentity(compilation.texts())).text();
 
-        assertFalse(rows.contains("no row for `n=1 < 3 * x and"),
+        assertFalse(rows.contains("no row for `n: 1 < 3 * x and"),
                 "a decimal lies between the two lines, so the class between them is not one nothing"
                         + " can be written in:\n" + rows);
     }
@@ -275,7 +275,7 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
                 "    | \"one\" : (0.1m) -> No { why = 0 }");
         String middle = measured.axes().get(0).classes().get(1);
 
-        assertEquals("n/1 < 3 * x <= 2", middle);
+        assertEquals("n: 1 < 3 * x <= 2", middle);
         assertEquals("1 < 3 * n <= 2",
                 lines("Decimal", """
                             guard 3m * n > 1m else No { why = 0 }
@@ -311,7 +311,7 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
                         .filter(each -> each.label().equals("3 * n = 1")).findFirst()
                         .orElseThrow().against(souther.compiler.partition.PointRole.IN),
                 "and not `2 * 3 * n`, which is the same rule said twice over");
-        assertEquals("n/1 < 3 * x and 6 * x <= 5", measured.axes().get(0).classes().get(1),
+        assertEquals("n: 1 < 3 * x and 6 * x <= 5", measured.axes().get(0).classes().get(1),
                 "which is what the class that is this run says");
     }
 
@@ -368,7 +368,7 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
      */
     @Test
     void aLineThatFallsOnAValueOfThePositionIsNamedByThatValue() {
-        assertEquals(List.of("n/x <= 4", "n/4 < x"),
+        assertEquals(List.of("n: x <= 4", "n: 4 < x"),
                 classesOf("Int", "    guard 2 * n <= 9 else No { why = 0 }"));
     }
 }

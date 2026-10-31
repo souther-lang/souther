@@ -70,8 +70,8 @@ class ARowAboutAListsLengthIsBuiltAroundWhatTheRowAsksInsideItTest {
                     | "empty" : (Cart { items = [] }) -> Empty
                 """);
 
-        for (String cls : List.of("c.items[*].quantity/x < 1", "c.items[*].quantity/1 <= x",
-                "List.length(c.items)/0 < x")) {
+        for (String cls : List.of("c.items[*].quantity: x < 1", "c.items[*].quantity: 1 <= x",
+                "List.length(c.items): 0 < x")) {
             List<String> rows = rowsFor(said, Set.of(cls));
             assertTrue(!rows.isEmpty() && rows.stream().allMatch(row -> row.contains("Item {")),
                     () -> "a row with an element is offered for " + cls + ": " + said);
@@ -86,7 +86,7 @@ class ARowAboutAListsLengthIsBuiltAroundWhatTheRowAsksInsideItTest {
                 """);
 
         assertEquals(List.of("Cart { items = [] }"),
-                rowsFor(said, Set.of("List.length(c.items)/0 <= x <= 0")),
+                rowsFor(said, Set.of("List.length(c.items): 0 <= x <= 0")),
                 () -> "the empty list stands at no class of what it would hold: " + said);
     }
 
@@ -101,7 +101,7 @@ class ARowAboutAListsLengthIsBuiltAroundWhatTheRowAsksInsideItTest {
                 """);
 
         List<String> rows = rowsFor(said,
-                Set.of("List.length(c.items)/2 <= x", "c.items[*].quantity/x < 1"));
+                Set.of("List.length(c.items): 2 <= x", "c.items[*].quantity: x < 1"));
         assertTrue(!rows.isEmpty() && rows.stream().allMatch(row -> elementsIn(row) >= 2),
                 () -> "two elements at least, for the pair of the two classes: " + said);
     }
@@ -116,8 +116,8 @@ class ARowAboutAListsLengthIsBuiltAroundWhatTheRowAsksInsideItTest {
                     | "empty" : (Cart { items = [] }) -> Empty
                 """);
 
-        for (String inside : List.of("c.items[*].quantity/x < 1", "c.items[*].quantity/1 <= x")) {
-            List<String> rows = rowsFor(said, Set.of("List.length(c.items)/0 <= x < 2", inside));
+        for (String inside : List.of("c.items[*].quantity: x < 1", "c.items[*].quantity: 1 <= x")) {
+            List<String> rows = rowsFor(said, Set.of("List.length(c.items): 0 <= x < 2", inside));
             assertTrue(!rows.isEmpty() && rows.stream().allMatch(row -> elementsIn(row) == 1),
                     () -> "one element, for " + inside + " beside a list of fewer than two: "
                             + said);
@@ -134,8 +134,8 @@ class ARowAboutAListsLengthIsBuiltAroundWhatTheRowAsksInsideItTest {
                     | "one" : (Cart { items = [Item { quantity = 1, unitPrice = 1 }] }) -> Empty
                 """);
 
-        for (String inside : List.of("c.items[*].quantity/x < 1", "c.items[*].quantity/1 <= x")) {
-            List<String> rows = rowsFor(said, Set.of("List.length(c.items)//= 1", inside));
+        for (String inside : List.of("c.items[*].quantity: x < 1", "c.items[*].quantity: 1 <= x")) {
+            List<String> rows = rowsFor(said, Set.of("List.length(c.items): /= 1", inside));
             assertTrue(!rows.isEmpty() && rows.stream().allMatch(row -> elementsIn(row) >= 2),
                     () -> "two elements at least, for " + inside + " beside a list of any count"
                             + " but one: " + said);

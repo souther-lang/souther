@@ -94,7 +94,7 @@ class CompileExampleBoundaryTest {
                     | (Draft { cost = Amount(50) }) -> Submitted
                 """);
 
-        assertEquals(List.of("request.cost/100 < x"), names(cost(one).uncovered()));
+        assertEquals(List.of("request.cost: 100 < x"), names(cost(one).uncovered()));
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(cost(one).reached()));
 
         PartitionEvidence both = evidence(MODEL + """

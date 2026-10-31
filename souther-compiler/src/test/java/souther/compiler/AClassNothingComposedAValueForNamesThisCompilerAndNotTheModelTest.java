@@ -84,7 +84,7 @@ class AClassNothingComposedAValueForNamesThisCompilerAndNotTheModelTest {
     void theClassSaysWhatNothingHereComposed() {
         String rows = rowsOffered();
 
-        assertTrue(rows.contains("no row for `code=spring < x` in `take`: this compiler writes"
+        assertTrue(rows.contains("no row for `code: spring < x at code` in `take`: this compiler writes"
                         + " some of the places inside one run a value is named at rather than all"
                         + " of them: nothing here composed a value whose value is in this range,"
                         + " which does not make one unwritable"),

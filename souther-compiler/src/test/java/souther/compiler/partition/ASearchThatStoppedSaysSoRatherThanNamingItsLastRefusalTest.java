@@ -97,7 +97,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
         FillResult filled = fill(model, _ -> missed(model));
 
         assertEquals(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
-                reasonFor(filled, List.of("member=Premium", "delivery=Express")),
+                reasonFor(filled, List.of("Premium at member", "Express at delivery")),
                 "a fourth set of values, and no run left to watch it at: " + filled.unresolved());
     }
 
@@ -113,7 +113,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
         FillResult filled = fill(model, _ -> missed(model));
 
         assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
-                reasonFor(filled, List.of("member=Premium", "delivery=Express")),
+                reasonFor(filled, List.of("Premium at member", "Express at delivery")),
                 "one position left to choose, and both of its values were run: "
                         + filled.unresolved());
     }
@@ -121,7 +121,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
     /**
      * A run already watched at some values costs nothing, so a search that ends on them is complete.
      *
-     * <p>{@code member=Premium} leaves two positions to choose, which is four sets of values — more
+     * <p>{@code Premium at member} leaves two positions to choose, which is four sets of values — more
      * than the three a reading may be run for. By the time this combination is looked in, every one
      * of them is a set something has already been watched at, so the reading spends nothing and
      * reaches the end of its candidates.
@@ -135,7 +135,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
         FillResult filled = fill(model, _ -> missed(model));
 
         assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
-                reasonFor(filled, List.of("member=Premium")),
+                reasonFor(filled, List.of("Premium at member")),
                 "more candidates than a reading may run for, and every one of them already run: "
                         + filled.unresolved());
     }

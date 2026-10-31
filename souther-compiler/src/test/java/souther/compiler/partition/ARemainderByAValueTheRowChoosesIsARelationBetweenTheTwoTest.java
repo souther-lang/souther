@@ -39,7 +39,7 @@ class ARemainderByAValueTheRowChoosesIsARelationBetweenTheTwoTest {
         assertTrue(bordersOf(linesOf(compilation)).contains("0"),
                 bordersOf(linesOf(compilation)).toString());
         Map<String, List<String>> classes = classesOf(measured(compilation));
-        assertEquals(List.of("eaches/= 0", "eaches//= 0"), classes.get("eaches"),
+        assertEquals(List.of("eaches: = 0", "eaches: /= 0"), classes.get("eaches"),
                 classes.toString());
         assertTrue(classes.containsKey("pack"), classes.toString());
     }
@@ -49,7 +49,7 @@ class ARemainderByAValueTheRowChoosesIsARelationBetweenTheTwoTest {
     void writtenTheOtherWayRoundItIsTheSameRelation() {
         Map<String, List<String>> classes =
                 classesOf(measured(compiled("0 == Int.floorMod(eaches, pack)")));
-        assertEquals(List.of("eaches/= 0", "eaches//= 0"), classes.get("eaches"),
+        assertEquals(List.of("eaches: = 0", "eaches: /= 0"), classes.get("eaches"),
                 classes.toString());
     }
 
@@ -64,8 +64,8 @@ class ARemainderByAValueTheRowChoosesIsARelationBetweenTheTwoTest {
                 data Pack = Int
                     invariant value >= 2
                 """, "eaches: Int, pack: Pack", "Int.floorMod(eaches, pack.value) == 0");
-        assertEquals(List.of("eaches/x < -1", "eaches/-1 <= x <= -1", "eaches/-1 < x <= 0",
-                        "eaches/0 < x <= 1", "eaches/1 < x"),
+        assertEquals(List.of("eaches: x < -1", "eaches: -1 <= x <= -1", "eaches: -1 < x <= 0",
+                        "eaches: 0 < x <= 1", "eaches: 1 < x"),
                 classesOf(measured(compilation)).get("eaches"));
     }
 
@@ -74,7 +74,7 @@ class ARemainderByAValueTheRowChoosesIsARelationBetweenTheTwoTest {
     void theTwoDivisorsThatDivideEveryDividendAreTwoClassesOfTheDivisor() {
         Map<String, List<String>> classes = classesOf(measured(compiled(
                 "Int.floorMod(eaches, pack) == 0")));
-        assertEquals(List.of("pack/= -1", "pack/= 1", "pack//= -1, 1"), classes.get("pack"),
+        assertEquals(List.of("pack: = -1", "pack: = 1", "pack: /= -1, 1"), classes.get("pack"),
                 classes.toString());
     }
 
@@ -88,8 +88,8 @@ class ARemainderByAValueTheRowChoosesIsARelationBetweenTheTwoTest {
                 data Positive = Int
                     invariant value >= 1
                 """, "eaches: Positive, pack: Int", "Int.floorMod(eaches.value, pack) == 0");
-        assertEquals(List.of("pack/= -9223372036854775808", "pack/= -1", "pack/= 1",
-                        "pack//= -9223372036854775808, -1, 1"),
+        assertEquals(List.of("pack: = -9223372036854775808", "pack: = -1", "pack: = 1",
+                        "pack: /= -9223372036854775808, -1, 1"),
                 classesOf(measured(compilation)).get("pack"));
     }
 
@@ -100,7 +100,7 @@ class ARemainderByAValueTheRowChoosesIsARelationBetweenTheTwoTest {
                 data Negative = Int
                     invariant value <= -1
                 """, "eaches: Negative, pack: Int", "Int.floorMod(eaches.value, pack) == 0");
-        assertEquals(List.of("pack/= -1", "pack/= 1", "pack//= -1, 1"),
+        assertEquals(List.of("pack: = -1", "pack: = 1", "pack: /= -1, 1"),
                 classesOf(measured(compilation)).get("pack"));
     }
 

@@ -135,8 +135,8 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
     void aStringTheLengthRuleLeavesNoRoomForIsShownNeverToHoldANeed() {
         Map<String, List<String>> held = classes(
                 measuredNeed("String.length(value) >= 1", "String.contains(p.value, i.text)"));
-        assertEquals(List.of("i.text/x can be a string holding i.needs[*]",
-                "i.text/x is never a string holding i.needs[*]"), held.get("i.text"));
+        assertEquals(List.of("i.text: x can be a string holding i.needs[*]",
+                "i.text: x is never a string holding i.needs[*]"), held.get("i.text"));
 
         Compilation tied = measured("""
                 data Need = { value: String, room: Int } invariant String.length(value) <= room""",
@@ -279,8 +279,8 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
                     """.formatted(pain), "Main");
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();
-            assertEquals(List.of("needs[*]/x can be a string inside businessCase",
-                    "needs[*]/x is never a string inside businessCase"),
+            assertEquals(List.of("needs[*]: x can be a string inside businessCase",
+                    "needs[*]: x is never a string inside businessCase"),
                     classes(compilation).get("needs[*]"), pain);
         }
     }

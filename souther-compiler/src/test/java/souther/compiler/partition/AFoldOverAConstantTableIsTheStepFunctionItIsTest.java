@@ -64,7 +64,7 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                   Row { grade = 3, lowerBound = 200 } ]""", "r.lowerBound <= monthly",
                 "computed < 3");
         assertEquals(List.of(), notRead(measured));
-        assertEquals(List.of("pay/x < 100", "pay/100 <= x < 200", "pay/200 <= x"),
+        assertEquals(List.of("pay: x < 100", "pay: 100 <= x < 200", "pay: 200 <= x"),
                 classesOf(measured, "pay"));
     }
 
@@ -76,7 +76,7 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
         PartitionEvidence one = measured("[ Row { grade = 1, lowerBound = 100 } ]",
                 "r.lowerBound <= monthly", "computed < 1");
         assertEquals(List.of(), notRead(one));
-        assertEquals(List.of("pay/x < 100", "pay/100 <= x"), classesOf(one, "pay"));
+        assertEquals(List.of("pay: x < 100", "pay: 100 <= x"), classesOf(one, "pay"));
     }
 
     /** What the step selects may be a number as well as a row. */
@@ -98,8 +98,8 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                 }
                 """.formatted(ASCENDING), "Main"), "f");
         assertEquals(List.of(), notRead(measured));
-        assertEquals(List.of("pay/x < 100", "pay/100 <= x < 200", "pay/200 <= x < 300",
-                "pay/300 <= x"), classesOf(measured, "pay"));
+        assertEquals(List.of("pay: x < 100", "pay: 100 <= x < 200", "pay: 200 <= x < 300",
+                "pay: 300 <= x"), classesOf(measured, "pay"));
     }
 
     /** A step that can end a run for any reason is not one whose earlier applications are dropped. */
