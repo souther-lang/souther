@@ -110,6 +110,64 @@ class APointBelowTheCaseAClampedComparisonIsReadInIsStillOwedARowTest {
                 .toList();
     }
 
+    /**
+     * One comparison read in two cases, the clamp in one and the length as it is in the other. A row
+     * of the case that has its own line is a row of that line's classes, and is no row of a class
+     * the other reading cuts although the number is in it and the comparison comes out the same way.
+     */
+    private static final String PER_TERM = """
+            module p
+            data Term = OneYear | TwoYear
+            data Yes
+            data No
+            behavior f : (term: Term, xs: List<Int>) -> Yes | No
+            let f (term, xs) =
+                if (match term with
+                        | OneYear -> List.length(List.drop(1, xs))
+                        | TwoYear -> List.length(xs)) >= 1
+                then Yes else No
+            """;
+
+    private static ItemAssessment.Owed theOneYearOutClass(String source) {
+        List<ItemAssessment.Owed> out = owedPointsBelowTheLine(source);
+        assertEquals(1, out.size(), () -> "one owed point below the one-year line: " + out);
+        return out.getFirst();
+    }
+
+    @Test
+    void theOneYearOutClassIsComposedWithAOneYearRow() {
+        ItemAssessment.Owed owed = theOneYearOutClass(PER_TERM);
+
+        List<List<String>> certified = owed.searches().each().stream()
+                .filter(ItemAssessment.Attempt.Certified.class::isInstance)
+                .map(ItemAssessment.Attempt.Certified.class::cast)
+                .map(row -> row.row().inputs().stream().map(input -> input.text()).toList())
+                .toList();
+        assertEquals(List.of(List.of("OneYear", "[]")), certified, () -> "searches: " + owed);
+    }
+
+    @Test
+    void aWrittenRowOfTheOtherTermIsNoRowOfTheOneYearOutClass() {
+        ItemAssessment.Owed owed = theOneYearOutClass(PER_TERM + """
+                example f
+                    | "two empty" : (TwoYear, []) -> No
+                """);
+
+        assertTrue(owed.coverage().made().filter(ItemAssessment.Coverage.NoHit.class::isInstance)
+                .isPresent(), () -> "a two-year row is no row of the one-year class: " + owed);
+    }
+
+    @Test
+    void aWrittenRowOfTheOneYearTermIsARowOfItsOutClass() {
+        ItemAssessment.Owed owed = theOneYearOutClass(PER_TERM + """
+                example f
+                    | "one empty" : (OneYear, []) -> No
+                """);
+
+        assertTrue(owed.coverage().made().filter(ItemAssessment.Coverage.Hit.class::isInstance)
+                .isPresent(), () -> "a one-year row is a row of the one-year class: " + owed);
+    }
+
     /** The comparison inside a conjunction is read as it is alone: the class is owed. */
     @Test
     void aComparisonInAConjunctionHasTheSameOwedClassAndAWrittenRowMeetsIt() {
