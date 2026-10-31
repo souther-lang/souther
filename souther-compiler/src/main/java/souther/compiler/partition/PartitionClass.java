@@ -63,8 +63,8 @@ public record PartitionClass(String id, String label, Recognition recognises,
 
     /**
      * The id of a class of {@code term}'s numbers, which is the term and the condition the class
-     * is told by. Separated by a colon, which no condition spells, so a condition that begins with
-     * a relation is not run into the separator.
+     * is told by. Separated by a colon, which is not a relation, so a condition that begins with
+     * one is not run into the separator.
      */
     public static String idOf(NumericTerm.FromOnePosition term, String label) {
         return term + ": " + label;
