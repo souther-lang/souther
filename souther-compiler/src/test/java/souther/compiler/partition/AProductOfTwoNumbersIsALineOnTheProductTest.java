@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.OfferedAtTheLines;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
@@ -509,6 +510,294 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         compilation.answerEverything();
         assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE),
                 unreadReasonsOf(measured(compilation)));
+    }
+
+    /**
+     * A construction of a number held to at least nought by the operation that made it stops no
+     * run: {@code Refund(Decimal.max(0.0m, x))} is told so whatever {@code x} is, and the
+     * comparison after it is not kept from being shown reached.
+     */
+    @Test
+    void aConstructionOfAMaximumWithNoughtStopsNoRun() {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Refund = Decimal
+                    invariant value >= 0.0m
+                data Money = Decimal
+                    invariant value >= 0.0m
+                data Plan = { fee: Refund, within: Bool }
+
+                behavior f : (gross: Money, rate: Decimal, c: Money) -> Plan
+                    constructs Plan, Refund
+                let f (gross, rate, c) = {
+                    let fee = Decimal.multiply(gross.value, rate)
+                    let net = Decimal.max(0.0m, Decimal.subtract(gross.value, fee))
+                    Plan {
+                        fee = Refund(net),
+                        within = Decimal.compare(net, c.value) <= 0
+                    }
+                }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.diagnostics().values().stream()
+                .flatMap(List::stream).map(each -> each.diagnostic().code()).toList());
+        assertEquals(List.of(), unreadReasonsOf(measured(compilation)));
+    }
+
+    /**
+     * What the library says of the larger of two is held to the clauses of the type it is made
+     * into: at nought or above is not above nought, so {@code Positive(Decimal.max(0.0m, x))} may
+     * still stop a run, for an {@code x} at nought or below.
+     */
+    @Test
+    void aMaximumWithNoughtIsNoProofOfAnythingAboveNought() {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Positive = Decimal
+                    invariant value > 0.0m
+                data Plan = { p: Positive, within: Bool }
+
+                behavior f : (x: Decimal, c: Decimal) -> Plan
+                    constructs Plan, Positive
+                let f (x, c) = {
+                    let net = Decimal.max(0.0m, x)
+                    Plan {
+                        p = Positive(net),
+                        within = Decimal.compare(net, c) <= 0
+                    }
+                }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE),
+                unreadReasonsOf(measured(compilation)));
+    }
+
+    /** A newtype over {@code kind} holding {@code clause}, made of {@code number} in a plan that
+     *  then compares the value the number is made of, so that only the making can keep the
+     *  comparison from being shown reached. */
+    private static Compilation aNumberMadeInto(String kind, String clause, String number) {
+        String compared = kind.equals("Int") ? "x <= c" : "Decimal.compare(x, c) <= 0";
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Held = KIND
+                    invariant CLAUSE
+                data Plan = { p: Held, within: Bool }
+
+                behavior f : (x: KIND, c: KIND) -> Plan
+                    constructs Plan, Held
+                let f (x, c) = {
+                    let net = NUMBER
+                    Plan {
+                        p = Held(net),
+                        within = COMPARED
+                    }
+                }
+                """.replace("KIND", kind).replace("CLAUSE", clause).replace("NUMBER", number)
+                .replace("COMPARED", compared), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation;
+    }
+
+    /**
+     * The end a choice keeps puts the same end on its answer whichever argument is the constant,
+     * whichever end it is, and however the constant is written: the lesser is at most each of the
+     * two and the greater at least each.
+     */
+    @Test
+    void aChoiceBetweenAValueAndAConstantIsHeldToTheEndItKeeps() {
+        String[][] held = {
+                {"Decimal", "value <= 0.0m", "Decimal.min(0.0m, x)"},
+                {"Decimal", "value <= 0.0m", "Decimal.min(x, 0.0m)"},
+                {"Decimal", "value >= 0.0m", "Decimal.max(x, 0.0m)"},
+                {"Decimal", "value >= -1.0m", "Decimal.max(-1.0m, x)"},
+                {"Decimal", "value >= 1.0m", "Decimal.max(0.5m + 0.5m, x)"},
+                {"Int", "value <= 0", "Int.min(0, x)"},
+                {"Int", "value <= 0", "Int.min(x, 0)"},
+                {"Int", "value >= 0", "Int.max(x, 0)"}};
+        for (String[] each : held) {
+            assertEquals(List.of(),
+                    unreadReasonsOf(measured(aNumberMadeInto(each[0], each[1], each[2]))),
+                    each[2] + " held to " + each[1]);
+        }
+    }
+
+    /** The end a choice keeps is the only one it puts: the lesser of a value and nought is not
+     *  at nought or above, nor the greater at nought or below. */
+    @Test
+    void aChoiceBetweenAValueAndAConstantIsNotHeldToTheEndItDoesNotKeep() {
+        String[][] notHeld = {
+                {"Decimal", "value >= 0.0m", "Decimal.min(0.0m, x)"},
+                {"Decimal", "value <= 0.0m", "Decimal.max(0.0m, x)"},
+                {"Decimal", "value >= 1.0m", "Decimal.max(0.5m, x)"},
+                {"Int", "value >= 0", "Int.min(0, x)"},
+                {"Int", "value <= 0", "Int.max(0, x)"}};
+        for (String[] each : notHeld) {
+            assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE),
+                    unreadReasonsOf(measured(aNumberMadeInto(each[0], each[1], each[2]))),
+                    each[2] + " held to " + each[1]);
+        }
+    }
+
+    /**
+     * What the argument of the maximum is worked out with still stops a run when it can: the
+     * construction of a number at nought or above says nothing of the sum under it.
+     */
+    @Test
+    void aMaximumWithNoughtLeavesTheOperationsUnderItAsTheyWere() {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Count = Int
+                    invariant value >= 0
+                data Plan = { n: Count, within: Bool }
+
+                behavior f : (a: Int, b: Int, c: Int) -> Plan
+                    constructs Plan, Count
+                let f (a, b, c) = {
+                    let net = Int.max(0, a + b)
+                    Plan {
+                        n = Count(net),
+                        within = net <= c
+                    }
+                }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
+                unreadReasonsOf(measured(compilation)));
+    }
+
+    /**
+     * The shape of a refund plan, measured: the total of the agreed lines at their unit prices, a
+     * fee taken off it, the rest held at nought or above and compared with what was invoiced.
+     * {@code restockingFee} is the number the plan's second refund is made of; {@code examples} is
+     * the rows written under it, if any.
+     */
+    private static Compilation aRefundPlanWith(String restockingFee, String examples) {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Sku = String
+                    invariant String.length(value) >= 1
+                data Rma = String
+                    invariant String.matches("RMA-[0-9]{8}", value)
+                data InvoiceNo = String
+                    invariant String.matches("INV-[0-9]{4}-[0-9]{6}", value)
+                data Amount = Decimal
+                    invariant value >= 0.0m
+                data Refund = Decimal
+                    invariant value >= 0.0m
+                data Accepted = { rma: Rma, skus: Set<Sku>, daysSinceDispatch: Int }
+                data Reconciliation =
+                    { agreed: Map<Sku, Int>
+                    , declaredOnly: Map<Sku, Int>
+                    , receivedOnly: Map<Sku, Int>
+                    , inDispute: Int
+                    }
+                data RefundPlan =
+                    { rma: Rma
+                    , invoiceNo: InvoiceNo
+                    , refund: Refund
+                    , restockingFee: Refund
+                    , withinInvoiced: Bool
+                    , repeatReturn: Bool
+                    , recentRmas: List<Rma>
+                    }
+
+                let lineValue (sku: Sku, quantity: Int, unitPrices: Map<Sku, Int>): Int = {
+                    let price = Map.get(sku, unitPrices) |> Option.withDefault(0)
+                    price * quantity
+                }
+
+                let agreedValue (reconciliation: Reconciliation, unitPrices: Map<Sku, Int>): Int =
+                    Map.fold((acc, sku, quantity) -> acc + lineValue(sku, quantity, unitPrices), 0,
+                             reconciliation.agreed)
+
+                behavior f : (accepted: Accepted, reconciliation: Reconciliation,
+                               unitPrices: Map<Sku, Int>, invoiceNo: InvoiceNo,
+                               invoicedGross: Amount, restockingRate: Decimal,
+                               history: List<Rma>, previousSkus: List<Sku>) -> RefundPlan
+                    constructs RefundPlan, Refund
+                let f (accepted, reconciliation, unitPrices, invoiceNo, invoicedGross,
+                       restockingRate, history, previousSkus) = {
+                    let gross = Decimal.fromInt(agreedValue(reconciliation, unitPrices))
+                    let fee = Decimal.multiply(gross, restockingRate)
+                    let net = Decimal.max(0.0m, Decimal.subtract(gross, fee))
+                    RefundPlan {
+                        rma = accepted.rma,
+                        invoiceNo = invoiceNo,
+                        refund = Refund(net),
+                        restockingFee = Refund(RESTOCKING_FEE),
+                        withinInvoiced = Decimal.compare(net, invoicedGross.value) <= 0,
+                        repeatReturn = Set.fold((acc, sku) -> acc || List.contains(sku, previousSkus),
+                                                false, accepted.skus),
+                        recentRmas = List.take(3, List.reverse(history))
+                    }
+                }
+                """.replace("RESTOCKING_FEE", restockingFee) + examples, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation;
+    }
+
+    /** Whether a run may stop on the way to the plan's comparison, for values this compiler does
+     *  not say. */
+    private static boolean aPlanStopsABorderRunsThrough(Compilation compilation) {
+        return unreadReasonsOf(measured(compilation))
+                .contains(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE);
+    }
+
+    /** The refund held at nought or above by the maximum stops no run, so nothing in the plan
+     *  keeps the comparison from being shown reached. */
+    @Test
+    void aRefundPlanWhoseOnlyRefundIsHeldAtNoughtKeepsNoRunFromTheComparison() {
+        assertTrue(!aPlanStopsABorderRunsThrough(aRefundPlanWith("0.0m", "")));
+    }
+
+    /** The second refund, the lesser of the fee and the gross, is refused for a negative rate, and
+     *  that alone is what keeps the comparison from being shown reached. */
+    @Test
+    void aRefundPlanIsStoppedByTheLesserOfTheFeeAndTheGrossForANegativeRate() {
+        assertTrue(aPlanStopsABorderRunsThrough(aRefundPlanWith("Decimal.min(fee, gross)", "")));
+    }
+
+    /**
+     * A row past the invoiced amount is offered, and the offered row, written out as an example
+     * with what it must come to, is run: the comparison comes out false and no row does not hold.
+     */
+    @Test
+    void theRowOfferedPastTheInvoicedAmountRunsAndComesOutPastIt() {
+        Compilation offering = aRefundPlanWith("Decimal.min(fee, gross)", "");
+        Generator.GenerationResult offered = OfferedAtTheLines.of(
+                offering, offering.modules().get(0), "f");
+        List<List<String>> beyond = offered.rows().stream()
+                .filter(row -> row.purposes().stream().anyMatch(purpose ->
+                        purpose instanceof Generator.Purpose.ForAPoint point
+                                && point.label().startsWith("0 < List.sum(")))
+                .map(row -> row.inputs().stream().map(each -> each.text()).toList())
+                .toList();
+        assertEquals(1, beyond.size(), beyond.toString());
+        String row = String.join(", ", beyond.getFirst());
+        Compilation run = aRefundPlanWith("Decimal.min(fee, gross)", """
+
+                example f
+                    | "past the invoiced amount" : (%s)
+                        -> RefundPlan { rma = Rma("RMA-00000000"),
+                                        invoiceNo = InvoiceNo("INV-0000-000000"),
+                                        refund = Refund(1.0m), restockingFee = Refund(0.0m),
+                                        withinInvoiced = false, repeatReturn = false,
+                                        recentRmas = [] }
+                """.formatted(row));
+        String human = AdequacyReport.of(run)
+                .human(SourceRendering.namedByIdentity(run.texts())).toString();
+        assertTrue(human.contains("rows 1"), human);
+        assertTrue(!human.contains("does not hold"), human);
     }
 
     /** A decimal times itself is no product of two numbers apart, and is named as a product. */
