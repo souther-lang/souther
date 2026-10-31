@@ -40,7 +40,8 @@ class PlacesStoppedTest {
                 new WrittenOwner.Body("m", "b"), ordinal, 0, SourceConstruct.CALL));
     }
 
-    /** One reading: one place, stopped for one reason, at one call. */
+    /** One reading: one place, stopped for one reason, at one call — or at none an author wrote,
+     *  which sends a reader to the rule. */
     private record Reading(FilingCoordinate place, BlockReason.RuleReadingStopped why,
                            RuleSite call) {
 
@@ -48,7 +49,7 @@ class PlacesStoppedTest {
             LinkedHashMap<FilingCoordinate, BlockReason.RuleReadingStopped> reasons =
                     new LinkedHashMap<>();
             reasons.put(place, why);
-            return PlacesStopped.of(reasons, new LinkedHashSet<>(List.of(call)));
+            return PlacesStopped.of(reasons, call);
         }
     }
 
@@ -56,7 +57,7 @@ class PlacesStoppedTest {
         List<Reading> out = new ArrayList<>();
         for (FilingCoordinate place : List.of(A, B)) {
             for (BlockReason.RuleReadingStopped why : List.of(DERIVED, FORM)) {
-                for (RuleSite call : List.of(call(1), call(2))) {
+                for (RuleSite call : List.of(call(1), call(2), RuleSite.theRuleItself())) {
                     out.add(new Reading(place, why, call));
                 }
             }
@@ -72,6 +73,13 @@ class PlacesStoppedTest {
         return out;
     }
 
+    /** Where a reader goes about {@code place}, as the stops left it; nowhere for a place no stop
+     *  met. */
+    private static Set<RuleSite> sentTo(PlacesStopped result, FilingCoordinate place) {
+        PlacesStopped.Decided decided = result.decided().get(place);
+        return decided == null ? Set.of() : decided.sentTo();
+    }
+
     /** What the property says a place is left with, worked out from the readings alone. */
     private static void assertEachPlaceIsLeftWithItsOwn(List<Reading> readings) {
         PlacesStopped result = together(readings);
@@ -79,7 +87,7 @@ class PlacesStoppedTest {
             List<Reading> here = readings.stream().filter(each -> each.place().equals(place))
                     .toList();
             if (here.isEmpty()) {
-                assertEquals(Set.of(), result.sentTo(place), "nothing met " + place);
+                assertEquals(Set.of(), sentTo(result, place), "nothing met " + place);
                 continue;
             }
             BlockReason.RuleReadingStopped first = here.getFirst().why();
@@ -88,7 +96,7 @@ class PlacesStoppedTest {
                     .equals(BlockReason.factOf(first))).forEach(each -> calls.add(each.call()));
             assertEquals(first, result.reasons().get(place),
                     () -> "the first reading to meet " + place + " decides its reason: " + readings);
-            assertEquals(calls, result.sentTo(place),
+            assertEquals(calls, sentTo(result, place),
                     () -> place + " is sent to the calls that stopped it for that reason and to"
                             + " no other: " + readings);
         }
@@ -116,7 +124,7 @@ class PlacesStoppedTest {
 
     /** A place no reading stopped at is sent to the rule, whatever stopped the places beside it. */
     @Test
-    void aPlaceNoReadingStoppedAtIsSentToNoCall() {
+    void aPlaceNoReadingStoppedAtIsSentToTheRule() {
         PlacesStopped stopped = new Reading(A, DERIVED, call(1)).stopped();
         LinkedHashMap<FilingCoordinate, BlockReason.RuleReadingStopped> more =
                 new LinkedHashMap<>();
@@ -125,8 +133,8 @@ class PlacesStoppedTest {
 
         PlacesStopped also = stopped.alsoFiledAt(more);
 
-        assertEquals(Set.of(call(1)), also.sentTo(A));
-        assertEquals(Set.of(), also.sentTo(B));
+        assertEquals(Set.of(call(1)), sentTo(also, A));
+        assertEquals(Set.of(RuleSite.theRuleItself()), sentTo(also, B));
         assertEquals(DERIVED, also.reasons().get(A), "a place already answered keeps its answer");
         assertEquals(FORM, also.reasons().get(B));
     }

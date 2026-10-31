@@ -24,10 +24,11 @@ import java.util.SequencedSet;
  * stops, and everything a reader asks is selected from them by the one policy below.
  *
  * <p><b>The policy.</b> A place is left with the reason of the first stop that met it, as a map
- * keeps the first of what is put at a key. It is sent to the calls of every stop at it for that
- * same reason ({@link BlockReason#factOf}, which leaves out the figures a reason was met at), and
- * to none of the calls that stopped it for another. A stop at no call an author wrote sends a
- * reader to the rule, and adds nothing to the calls.
+ * keeps the first of what is put at a key. It is sent to where every stop at it for that same
+ * reason sent a reader ({@link BlockReason#factOf}, which leaves out the figures a reason was met
+ * at), and to nowhere a stop for another reason did. Where a stop sent a reader is a call its
+ * author wrote or the rule itself, and the rule is a place like the others: a place stopped at a
+ * call by one reading and at no call by another is sent to both, and neither goes unsaid.
  *
  * @param stops the stops, each once, in the order they were met
  */
@@ -58,22 +59,14 @@ record PlacesStopped(SequencedSet<Stop> stops) {
 
     /** These places and their reasons, stopped at no expression an author wrote. */
     static PlacesStopped of(SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> reasons) {
-        return of(reasons, RuleSite.NO_SITES);
+        return of(reasons, RuleSite.theRuleItself());
     }
 
-    /**
-     * These places and their reasons, all left by the one stop at {@code sentTo} — at none where
-     * that is empty.
-     */
+    /** These places and their reasons, all left by the one stop that sent a reader to {@code sentTo}. */
     static PlacesStopped of(SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> reasons,
-                            SequencedSet<RuleSite> sentTo) {
+                            RuleSite sentTo) {
         SequencedSet<Stop> out = new LinkedHashSet<>();
-        reasons.forEach((place, reason) -> {
-            if (sentTo.isEmpty()) {
-                out.add(new Stop(place, reason, RuleSite.theRuleItself()));
-            }
-            sentTo.forEach(site -> out.add(new Stop(place, reason, site)));
-        });
+        reasons.forEach((place, reason) -> out.add(new Stop(place, reason, sentTo)));
         return new PlacesStopped(out);
     }
 
@@ -105,9 +98,9 @@ record PlacesStopped(SequencedSet<Stop> stops) {
      * What a place is left with.
      *
      * @param reason the reason of the first stop that met the place
-     * @param sentTo the calls an author wrote that the arithmetic stopped at to leave the rule
-     *               here for that reason; empty where it stopped at none, and a reader is sent to
-     *               the rule
+     * @param sentTo where a reader goes about it: one place for each stop at this place for that
+     *               reason, which is a call an author wrote or the rule itself, each once. Never
+     *               empty: a place a stop met has been sent somewhere
      */
     record Decided(BlockReason.RuleReadingStopped reason, SequencedSet<RuleSite> sentTo) {}
 
@@ -120,14 +113,13 @@ record PlacesStopped(SequencedSet<Stop> stops) {
         reasons.forEach((place, reason) -> words.put(place, BlockReason.factOf(reason)));
         Map<FilingCoordinate, SequencedSet<RuleSite>> calls = new LinkedHashMap<>();
         for (Stop stop : stops) {
-            if (!(stop.sentTo() instanceof RuleSite.TheRuleItself)
-                    && words.get(stop.place()).equals(BlockReason.factOf(stop.reason()))) {
+            if (words.get(stop.place()).equals(BlockReason.factOf(stop.reason()))) {
                 calls.computeIfAbsent(stop.place(), _ -> new LinkedHashSet<>()).add(stop.sentTo());
             }
         }
         SequencedMap<FilingCoordinate, Decided> out = new LinkedHashMap<>();
         reasons.forEach((place, reason) -> out.put(place,
-                new Decided(reason, RuleSite.held(calls.getOrDefault(place, RuleSite.NO_SITES)))));
+                new Decided(reason, RuleSite.held(calls.get(place)))));
         return out;
     }
 
@@ -136,12 +128,6 @@ record PlacesStopped(SequencedSet<Stop> stops) {
         SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out = new LinkedHashMap<>();
         stops.forEach(stop -> out.putIfAbsent(stop.place(), stop.reason()));
         return out;
-    }
-
-    /** The calls {@code place} is sent to, as {@link Decided} says; none for a place no stop met. */
-    SequencedSet<RuleSite> sentTo(FilingCoordinate place) {
-        Decided decided = decided().get(place);
-        return decided == null ? RuleSite.NO_SITES : decided.sentTo();
     }
 
     /**

@@ -72,7 +72,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
-import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -688,17 +687,14 @@ public final class GuardThresholds {
     }
 
     /**
-     * The expression the arithmetic failed to take apart, as the construct its author wrote — the
-     * call inside the calls the library states the form of, and none where that is no call its
-     * author wrote, which is not a place anybody can be sent to.
+     * Where a reader is sent about the stop: the expression the arithmetic failed to take apart,
+     * as the construct its author wrote — the call inside the calls the library states the form
+     * of — and the rule itself where that is no call its author wrote, which is not a place
+     * anybody can be sent to.
      */
-    private static SequencedSet<RuleSite> stoppedAtThe(
-            AffineReading.OfAComparison.Stopped stopped) {
-        return RuleSite.ofTheCallStoppedAt(stopped.failure().firstStop().node()).map(site -> {
-            SequencedSet<RuleSite> out = new LinkedHashSet<>();
-            out.add(site);
-            return out;
-        }).orElse(RuleSite.NO_SITES);
+    private static RuleSite stoppedAtThe(AffineReading.OfAComparison.Stopped stopped) {
+        return RuleSite.ofTheCallStoppedAt(stopped.failure().firstStop().node())
+                .orElse(RuleSite.theRuleItself());
     }
 
     /**

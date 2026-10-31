@@ -8292,7 +8292,7 @@
                     },
                     "sentTo": {
                       "$ref": "#/$defs/at",
-                      "description": "Where inside the rule a reader goes about this one, for an entry about a part of it rather than about the whole. `rule` beside the entry sends them to the rule, which is the whole answer wherever what they lift is the rule; a choice whose other alternative went unread is lifted at the `||`, and the clause `rule` names reads perfectly well. Absent where the rule is the whole of it, and absent where the part is in a text this document cannot point at. The same place the `notRead` entry for the same choice carries, so a consumer holding what the values were short of and what the ends were short of knows the two are one thing to fix."
+                      "description": "Where inside the rule a reader goes about this one, for an entry about a part of it rather than about the whole. `rule` beside the entry sends them to the rule, which is the whole answer wherever what they lift is the rule; a choice whose other alternative went unread is lifted at the `||`, and the clause `rule` names reads perfectly well; where the arithmetic stopped, it is the call the arithmetic failed to take apart, which is where lifting begins. Absent where the rule is the whole of it, and absent where the part is in a text this document cannot point at. The same place the `notRead` entry for the same choice carries, so a consumer holding what the values were short of and what the ends were short of knows the two are one thing to fix."
                     },
                     "leftOpen": {
                       "type": "object",
@@ -8585,7 +8585,7 @@
               },
               "sentTo": {
                 "$ref": "#/$defs/at",
-                "description": "Where inside the rule a reader goes, for an entry about a part of it rather than about the whole. `rule` beside this sends them to the rule, which is the whole answer wherever what they lift is the rule; an end a choice left open is lifted at the `||`, and the clause `rule` names reads perfectly well. Absent where the rule is the whole of it, and absent where the part is in a text this document cannot point at. Part of what tells two entries apart: two choices of one clause agree about the position, the rule and the reason, so without this the second was a repeat of the first."
+                "description": "Where inside the rule a reader goes, for an entry about a part of it rather than about the whole. `rule` beside this sends them to the rule, which is the whole answer wherever what they lift is the rule; an end a choice left open is lifted at the `||`, and the clause `rule` names reads perfectly well; where the arithmetic stopped, it is the call the arithmetic failed to take apart, which is where lifting begins. Absent where the rule is the whole of it, and absent where the part is in a text this document cannot point at. Part of what tells two entries apart: two choices of one clause agree about the position, the rule and the reason, so without this the second was a repeat of the first."
               }
             }
           }

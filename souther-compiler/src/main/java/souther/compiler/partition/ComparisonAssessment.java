@@ -2074,8 +2074,9 @@ sealed interface ComparisonAssessment {
      *
      * @param at  the place
      * @param why what is left there, in the words of the line that left it
-     * @param sentTo the expressions its author wrote that the reading stopped at to leave the
-     *               rule here; empty where it did not stop at one
+     * @param sentTo where a reader goes about it, which is a call its author wrote the reading
+     *               stopped at or the rule itself, each once. Never empty: the rule itself is how
+     *               it is said that nothing narrower is known
      */
     record LeftAt(FilingCoordinate at, BlockReason.RuleWithoutLineReason why,
                   SequencedSet<RuleSite> sentTo) {
@@ -2083,11 +2084,14 @@ sealed interface ComparisonAssessment {
         public LeftAt {
             Objects.requireNonNull(at, "something is left somewhere");
             Objects.requireNonNull(why, "something left somewhere is left for a reason");
+            if (sentTo.isEmpty()) {
+                throw new IllegalArgumentException("something left somewhere is sent somewhere");
+            }
             sentTo = RuleSite.held(sentTo);
         }
 
         LeftAt(FilingCoordinate at, BlockReason.RuleWithoutLineReason why) {
-            this(at, why, RuleSite.NO_SITES);
+            this(at, why, RuleSite.THE_RULE_ONLY);
         }
 
         /**

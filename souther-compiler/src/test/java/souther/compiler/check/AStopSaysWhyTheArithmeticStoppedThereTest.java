@@ -125,7 +125,27 @@ class AStopSaysWhyTheArithmeticStoppedThereTest {
         assertSame(around, stopped.node());
         assertSame(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES,
                 stopped.why().nonAffineOperation().orElseThrow());
+        assertSame(product, stopped.firstStop().node(),
+                "and the expression it failed to take apart is the product and not the call");
         assertInstanceOf(AffineForms.Halt.NoRule.class, stopOf(call(X)).why());
+    }
+
+    /**
+     * The first stop is the one no argument stopped under, at whatever depth the calls the library
+     * states the form of were nested, and a stop no argument stopped under is its own.
+     */
+    @Test
+    void theFirstStopIsFoundThroughTheCallsAnArgumentStoppedUnder() {
+        AffineForms.Outcome.StoppedAt<String, String> innermost =
+                new AffineForms.Outcome.StoppedAt<>(X, "at", new AffineForms.Halt.NoRule<>());
+        AffineForms.Outcome.StoppedAt<String, String> once = new AffineForms.Outcome.StoppedAt<>(
+                Y, "at", new AffineForms.Halt.AnArgumentStopped<>(innermost));
+        AffineForms.Outcome.StoppedAt<String, String> twice = new AffineForms.Outcome.StoppedAt<>(
+                ONE_OF_TWO, "at", new AffineForms.Halt.AnArgumentStopped<>(once));
+
+        assertSame(innermost, twice.firstStop());
+        assertSame(innermost, once.firstStop());
+        assertSame(innermost, innermost.firstStop());
     }
 
     private static Core call(Core argument) {

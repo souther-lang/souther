@@ -9,6 +9,7 @@ import souther.compiler.types.SourceConstructOrigin;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.SequencedSet;
 
@@ -125,7 +126,11 @@ public sealed interface RuleSite {
                 : Optional.empty();
     }
 
-    /** No site, shared: most readings stop at no expression an author wrote. */
+    /** The rule and nothing in it, shared: where a reader is sent when nothing says otherwise. */
+    SequencedSet<RuleSite> THE_RULE_ONLY =
+            Collections.unmodifiableSequencedSet(new LinkedHashSet<>(List.of(THE_RULE_ITSELF)));
+
+    /** No site, shared: what is held where there is nothing to hold. */
     SequencedSet<RuleSite> NO_SITES =
             Collections.unmodifiableSequencedSet(new LinkedHashSet<>());
 
