@@ -133,6 +133,11 @@
              come down to a single JVM. The ceiling is written as itself, and a machine with fewer
              cores than this is told the number it has — which is what CI is passed. -->
         <forkCount>4</forkCount>
+        <!-- The order classes go to the forks in. `balanced` uses the durations recorded by the last
+             run in this checkout, and rewrites the whole record after every class. A checkout that
+             keeps no record between runs gets nothing from it and still pays for the rewrite, so CI
+             passes -DrunOrder=filesystem. Named here for the same reason the fork count is. -->
+        <runOrder>balanced</runOrder>
         <!-- How a fork compiles and collects. Named for the same reason the fork count is: a literal
              in the plugin's configuration is not overridable, and what these are worth has to be
              measurable against the suite as it stands rather than the one they were chosen on.
@@ -316,7 +321,7 @@
                              the build waits on that fork: the compiler's suite is 156s of tests
                              over sixteen forks, and it came to 28s rather than the 14s its longest
                              class alone would cost. A checkout with no record behaves as before. -->
-                        <runOrder>balanced</runOrder>
+                        <runOrder>${runOrder}</runOrder>
                         <!-- C1 only, and a collector that runs no threads of its own. A test class
                              is a few seconds of work, over well before C2 has finished compiling
                              what it profiled, and with a JVM per core the compiler and collector
