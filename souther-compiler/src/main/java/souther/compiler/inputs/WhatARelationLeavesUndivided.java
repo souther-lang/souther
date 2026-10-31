@@ -24,6 +24,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiPredicate;
 import java.util.function.IntFunction;
+import java.util.function.Predicate;
 
 /**
  * Which of the places a relation is written over it is shown to leave undivided.
@@ -756,92 +757,31 @@ public final class WhatARelationLeavesUndivided {
      * of the term at {@code at}, each way on its own ({@link EachWayItComesOut}) — or null where
      * neither is worked out.
      *
-     * <p>Where {@code leaves}, what {@link #leavesOf} showed of the term, says something, it is
-     * what is said: a value it settles comes out that way and never the other, and every other
-     * value it holds, either way. A value of no row shown computed is shown neither. Only where it
-     * showed nothing is each way asked apart, and only of a dense term in a relation whose rows
-     * nothing can stop: a value settles a way never reached where every value the others may hold
-     * puts it on the other side, and a run of the values between is reached a way where some other
-     * term, apart from the rest and tied to none of them, takes beside each value of it a value
-     * that comes out so ({@link #reachedOneWayBySome}). What neither shows stays not shown.
+     * <p>Every value the term may hold is said, each way, in one of three words, and what says
+     * each is a different proof. A way is never reached at a value where every value the others
+     * may hold puts the relation the other way there: a claim about every row, made over where
+     * the terms may lie ({@link Term#holds}). A way is reached at a value only where a row is
+     * shown with the term there coming out so: the term is shown to take the value
+     * ({@link Term#realizes}), and either the relation is settled that way there, so that any row
+     * with the term at it comes out so, or some other term, apart from the rest and tied to none
+     * of them, is shown to take beside it a value that comes out so
+     * ({@link #reachedOneWayBySome}). What neither proof shows stays not shown. That the relation
+     * settles a run, or leaves it undivided ({@link #leavesOf}), says how a row there would come
+     * out and not that there is one, so it is not asked here.
      *
-     * @param leaves what {@link #leavesOf} answered for the term, the relation as it stands
+     * <p>Worked out only for a dense term, of a relation of order whose rows nothing can stop;
+     * any other is null.
      */
-    public static <P> EachWayItComesOut eachWayItComesOut(Leaves leaves, List<Term<P>> terms,
-                                                          int at, ExactRatio constant,
-                                                          Rel relation, BiPredicate<P, P> overlap,
+    public static <P> EachWayItComesOut eachWayItComesOut(List<Term<P>> terms, int at,
+                                                          ExactRatio constant, Rel relation,
+                                                          BiPredicate<P, P> overlap,
                                                           Independence independent,
                                                           Granularity granularity,
                                                           BigInteger greatest,
                                                           Operations operations) {
-        if (granularity == null) {
-            return null;
-        }
-        NumericDomain.Bounds held = terms.get(at).holds();
-        return switch (leaves) {
-            case Leaves.Undivided _ -> new EachWayItComesOut(granularity, List.of(
-                    new EachWayItComesOut.Stretch(null, null, EachWayItComesOut.Shown.REACHED,
-                            EachWayItComesOut.Shown.REACHED))).within(held);
-            case Leaves.Settled settled -> eachWayOfTheRuns(settled, granularity);
-            case null -> granularity == Granularity.DENSE
-                    ? eachWayOfADenseTerm(terms, at, constant, relation, overlap, independent,
-                            RowsComputed.upTo(greatest).withOperations(operations))
-                    : null;
-        };
-    }
-
-    /** The runs {@code settled} holds, each way: a run settling the relation comes out that way
-     *  and never the other, a run of no row shown computed is shown neither, and every value the
-     *  term holds between them comes out either way. */
-    private static EachWayItComesOut eachWayOfTheRuns(Leaves.Settled settled,
-                                                      Granularity granularity) {
-        List<EachWayItComesOut.Stretch> runs = new ArrayList<>();
-        for (SettledRun each : settled.runs()) {
-            runs.add(new EachWayItComesOut.Stretch(each.from(), each.to(),
-                    each.holds() ? EachWayItComesOut.Shown.REACHED : EachWayItComesOut.Shown.NEVER,
-                    each.holds() ? EachWayItComesOut.Shown.NEVER
-                            : EachWayItComesOut.Shown.REACHED));
-        }
-        for (SettledRun each : settled.noRowShownComputed()) {
-            runs.add(new EachWayItComesOut.Stretch(each.from(), each.to(),
-                    EachWayItComesOut.Shown.NOT_SHOWN, EachWayItComesOut.Shown.NOT_SHOWN));
-        }
-        List<EachWayItComesOut.Stretch> inOrder =
-                new EachWayItComesOut(granularity, runs).stretches();
-        List<EachWayItComesOut.Stretch> out = new ArrayList<>(inOrder);
-        // Every value held between two runs, or between an end of what the term holds and the run
-        // nearest it, leaves the relation either way.
-        ExactCut from = settled.least();
-        boolean open = true;
-        for (EachWayItComesOut.Stretch each : inOrder) {
-            if (open && each.from() != null) {
-                out.add(new EachWayItComesOut.Stretch(from,
-                        EachWayItComesOut.endBefore(each.from()), EachWayItComesOut.Shown.REACHED,
-                        EachWayItComesOut.Shown.REACHED));
-            }
-            open = each.to() != null;
-            from = open ? EachWayItComesOut.startAfter(each.to()) : null;
-        }
-        if (open) {
-            out.add(new EachWayItComesOut.Stretch(from, settled.greatest(),
-                    EachWayItComesOut.Shown.REACHED, EachWayItComesOut.Shown.REACHED));
-        }
-        return new EachWayItComesOut(granularity, out).withoutRunsOfNoValue();
-    }
-
-    /**
-     * Each way the relation comes out at the values of a dense term, where nothing stops a row:
-     * the runs it settles, each never reached the other way and reached its own where every other
-     * term is shown to take some value, and the values between, each way reached where
-     * {@link #reachedOneWayBySome} shows it and not shown otherwise.
-     */
-    private static <P> EachWayItComesOut eachWayOfADenseTerm(List<Term<P>> terms, int at,
-                                                             ExactRatio constant, Rel relation,
-                                                             BiPredicate<P, P> overlap,
-                                                             Independence independent,
-                                                             RowsComputed arithmetic) {
-        if (!arithmetic.nothingStopsARow() || constant == null || relation == Rel.EQ
-                || relation == Rel.NE) {
+        if (granularity != Granularity.DENSE || constant == null || relation == Rel.EQ
+                || relation == Rel.NE
+                || !RowsComputed.upTo(greatest).withOperations(operations).nothingStopsARow()) {
             return null;
         }
         Term<P> it = terms.get(at);
@@ -850,13 +790,9 @@ public final class WhatARelationLeavesUndivided {
         if (held == null || rest == null) {
             return null;
         }
-        boolean rowsAtEveryValue = true;
-        for (int i = 0; i < terms.size(); i++) {
-            rowsAtEveryValue &= i == at || (terms.get(i).realizes() != null
-                    && terms.get(i).realizes().holdsAValue());
-        }
-        EachWayItComesOut.Shown settledWay = rowsAtEveryValue ? EachWayItComesOut.Shown.REACHED
-                : EachWayItComesOut.Shown.NOT_SHOWN;
+        // The values the term is shown to take, where a row stands with it there; none where
+        // nothing is shown, or the ends are no numbers.
+        Span taken = it.realizes() == null ? null : Span.ofTheValues(it.realizes());
         List<EachWayItComesOut.Stretch> out = new ArrayList<>();
         List<Span> between = List.of(held);
         for (boolean holds : List.of(true, false)) {
@@ -887,24 +823,69 @@ public final class WhatARelationLeavesUndivided {
                 if (within == Span.Occupancy.UNKNOWN) {
                     return null;
                 }
-                if (within == Span.Occupancy.HOLDS) {
-                    out.add(new EachWayItComesOut.Stretch(here.lower(), here.upper(),
-                            holds ? settledWay : EachWayItComesOut.Shown.NEVER,
-                            holds ? EachWayItComesOut.Shown.NEVER : settledWay));
+                if (within == Span.Occupancy.HOLDS && !shownOver(here, taken, out,
+                        _ -> holds, _ -> !holds, holds, !holds)) {
+                    return null;
                 }
             }
         }
         for (Span each : between) {
-            Interval values = new Interval(each.lower(), each.upper());
-            out.add(new EachWayItComesOut.Stretch(each.lower(), each.upper(),
-                    reachedOneWayBySome(terms, at, values, constant, relation, true, overlap,
-                            independent) ? EachWayItComesOut.Shown.REACHED
-                            : EachWayItComesOut.Shown.NOT_SHOWN,
-                    reachedOneWayBySome(terms, at, values, constant, relation, false, overlap,
-                            independent) ? EachWayItComesOut.Shown.REACHED
-                            : EachWayItComesOut.Shown.NOT_SHOWN));
+            if (!shownOver(each, taken, out,
+                    values -> reachedOneWayBySome(terms, at, values, constant, relation, true,
+                            overlap, independent),
+                    values -> reachedOneWayBySome(terms, at, values, constant, relation, false,
+                            overlap, independent),
+                    false, false)) {
+                return null;
+            }
         }
         return new EachWayItComesOut(Granularity.DENSE, out);
+    }
+
+    /**
+     * {@code run} said into {@code out}: at the values of it the term is shown to take
+     * ({@code taken}), a way reached where {@code holding} or {@code failing} shows a row of it
+     * over them; at the rest, where no row is shown, reached nowhere. A way {@code holdsNever} or
+     * {@code failsNever} says no row comes out is never reached at any of them. False where
+     * whether a part of {@code run} holds a value is not worked out.
+     *
+     * @param taken the values the term is shown to take, or null where none is shown
+     */
+    private static boolean shownOver(Span run, Span taken, List<EachWayItComesOut.Stretch> out,
+                                     Predicate<Interval> holding, Predicate<Interval> failing,
+                                     boolean failsNever, boolean holdsNever) {
+        List<Span> unshown = taken == null ? List.of(run) : run.without(taken);
+        if (unshown == null) {
+            return false;
+        }
+        for (Span each : unshown) {
+            out.add(new EachWayItComesOut.Stretch(each.lower(), each.upper(),
+                    holdsNever ? EachWayItComesOut.Shown.NEVER : EachWayItComesOut.Shown.NOT_SHOWN,
+                    failsNever ? EachWayItComesOut.Shown.NEVER
+                            : EachWayItComesOut.Shown.NOT_SHOWN));
+        }
+        if (taken == null) {
+            return true;
+        }
+        Span shown = run.meet(taken);
+        switch (shown.occupancy()) {
+            case UNKNOWN -> {
+                return false;
+            }
+            case EMPTY -> {
+                return true;
+            }
+            case HOLDS -> { }
+        }
+        Interval values = new Interval(shown.lower(), shown.upper());
+        out.add(new EachWayItComesOut.Stretch(shown.lower(), shown.upper(),
+                holdsNever ? EachWayItComesOut.Shown.NEVER : reachedIf(holding.test(values)),
+                failsNever ? EachWayItComesOut.Shown.NEVER : reachedIf(failing.test(values))));
+        return true;
+    }
+
+    private static EachWayItComesOut.Shown reachedIf(boolean shown) {
+        return shown ? EachWayItComesOut.Shown.REACHED : EachWayItComesOut.Shown.NOT_SHOWN;
     }
 
     /**

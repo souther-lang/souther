@@ -464,29 +464,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   partner can hold, and those strings: the values there some value of the
      *                   partner equals, and the rest, which no value of it does. In the order of
      *                   the relation's sides
-     * @param comesOut   each term of a relation of numbers, and how the relation comes out at
-     *                   its values each way on its own ({@link EachWayItComesOut}): what a reader
-     *                   joining this relation with others a row takes one of asks, and not what
-     *                   divides a place. Said of rows that get to the relation, so of none where a
-     *                   run may stop before it
      */
     record WhatItLeaves(Set<FilingCoordinate> undivided,
                         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
                         boolean rowsArrive, Set<Figure> stoppedAt,
                         Set<FilingCoordinate> mayStopBefore,
-                        Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered,
-                        Map<NumericTerm, EachWayItComesOut> comesOut) {
-
-        WhatItLeaves(Set<FilingCoordinate> undivided,
-                     Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
-                     boolean rowsArrive, Set<Figure> stoppedAt,
-                     Set<FilingCoordinate> mayStopBefore,
-                     Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered) {
-            this(undivided, settled, rowsArrive, stoppedAt, mayStopBefore, partnered, Map.of());
-        }
+                        Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered) {
 
         WhatItLeaves {
-            comesOut = Collections.unmodifiableMap(new LinkedHashMap<>(comesOut));
             undivided = Set.copyOf(undivided);
             settled = Map.copyOf(settled);
             stoppedAt = Set.copyOf(stoppedAt);
@@ -532,14 +517,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
             stops.removeAll(parted);
             return new WhatItLeaves(stillUndivided, settled, rowsArrive, stoppedAt, stops,
-                    strings, comesOut);
-        }
-
-        /** This, with how the relation comes out each way at the values of each term in
-         *  {@code each}. */
-        WhatItLeaves comingOut(Map<NumericTerm, EachWayItComesOut> each) {
-            return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, mayStopBefore,
-                    partnered, each);
+                    strings);
         }
 
         /** What a way that no row comes along shows of {@code places}: every one of them, of the
@@ -553,16 +531,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * them shown undivided are still, and are said not to be shown getting there at every
          * value. A place not shown undivided keeps what it was not shown for, which is no claim
          * about every value getting there. What the relation settles stays as it is, since a value
-         * settling it settles it wherever a row gets there. How it comes out at the values of a
-         * term at one of them is not, since a row reaching a way there is a row getting there.
+         * settling it settles it wherever a row gets there.
          */
         WhatItLeaves mayStopBefore(Set<FilingCoordinate> places) {
             Set<FilingCoordinate> stops = new LinkedHashSet<>(mayStopBefore);
             places.stream().filter(undivided::contains).forEach(stops::add);
-            Map<NumericTerm, EachWayItComesOut> stillReached = new LinkedHashMap<>(comesOut);
-            stillReached.keySet().removeIf(term -> places.contains(FilingCoordinate.of(term)));
-            return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, stops, partnered,
-                    stillReached);
+            return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, stops, partnered);
         }
 
         /** What both this and {@code other} show, for rows that may come along either: a place
@@ -599,18 +573,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     alikeStrings.put(term, strings.orAnother(theirs));
                 }
             });
-            // A row comes along one way or the other, so a way the relation comes out is reached
-            // where it is along either, and never reached only where it is along neither.
-            Map<NumericTerm, EachWayItComesOut> eitherWay = new LinkedHashMap<>();
-            comesOut.forEach((term, each) -> {
-                EachWayItComesOut theirs = other.comesOut.get(term);
-                EachWayItComesOut joined = theirs == null ? null
-                        : EachWayItComesOut.eitherOf(List.of(each, theirs));
-                if (joined != null) {
-                    eitherWay.put(term, joined);
-                }
-            });
-            return new WhatItLeaves(both, alike, true, stopped, stops, alikeStrings, eitherWay);
+            return new WhatItLeaves(both, alike, true, stopped, stops, alikeStrings);
         }
     }
 
@@ -1259,6 +1222,150 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return leftWhereRowsArrive(read, ways, witnesses).undivided();
     }
 
+    /**
+     * What the declarations leave each side, which no way changes, and the order each side's
+     * values are counted on, which says where its type ends.
+     *
+     * @param sources  what each side is, or is taken of, in the order of the sides
+     * @param carriers the order each is counted on, or null where it has none
+     */
+    private record SidesAsDeclared(List<Source> sources, List<Carrier> carriers) {}
+
+    /**
+     * Each side as the declarations leave it — or null where two of them stand on no one order,
+     * and nothing is shown of any of them.
+     */
+    private SidesAsDeclared sidesAsDeclared(InputReading read) {
+        // A side a walk kept an end of is asked of the element's number, which is what the end
+        // lies between.
+        List<Source> sources = new ArrayList<>();
+        for (Side each : sides) {
+            sources.add(each.kept() == null ? sourceOfSide(each, read)
+                    : keptSource(each.kept(), read));
+        }
+        List<Carrier> carriers = new ArrayList<>();
+        for (Side each : sides) {
+            carriers.add(carrierOfSide(each, read));
+        }
+        // Where each side stands is compared with where the others do, which says something only
+        // where they stand on one order: a case of one enumeration has no place on another's.
+        // Nothing a side is shown to take is then a place on another's order, and two values of
+        // two orders never take the same values, so nothing is shown of any of them.
+        for (Carrier one : carriers) {
+            for (Carrier other : carriers) {
+                if (one != null && other != null && !Carrier.onOneOrder(one, other)) {
+                    return null;
+                }
+            }
+        }
+        // Two sides each standing at the other's value are compared as one value against another,
+        // so a side with no order of its own here — what an operation answered — stands on the
+        // other's: a string is held equal to a string, and none is below the empty one.
+        if (WhatARelationLeavesUndivided.eachStandsAtTheOthersValue(
+                sides.stream().map(Side::weight).toList(), constant)) {
+            Carrier known = carriers.get(0) != null ? carriers.get(0) : carriers.get(1);
+            carriers = Arrays.asList(carriers.get(0) != null ? carriers.get(0) : known,
+                    carriers.get(1) != null ? carriers.get(1) : known);
+        }
+        return new SidesAsDeclared(sources, carriers);
+    }
+
+    /**
+     * How this relation comes out each way at the values of each of its sides that is a number,
+     * over the rows that come along {@code ways} ({@link EachWayItComesOut}) — the claim a reader
+     * joining it with relations a row takes another of makes, and not what it leaves its places.
+     *
+     * <p>Asked of each way as it is written, every condition of it taken in. What the relation
+     * leaves its places is asked of a row beside its line, and the statements such a row meets
+     * and the rules it needs nothing of are left out there ({@link #leftAlong}); but a row that
+     * comes out one way is a row of the whole way, and what it meets is part of what makes it
+     * one. So the terms here are the way's own: a side takes a value where the region the way
+     * leads to shows a row at it, and two sides stand apart where neither the declarations nor any
+     * condition of the way ties them. A way a run may stop on before the relation, or that
+     * something unread bears on, shows no row of it.
+     *
+     * <p>A row comes along one way or another, so a way the relation comes out is reached where
+     * it is along one of them, and never reached only where it is along none
+     * ({@link EachWayItComesOut#eitherOf}). A side is said only where every way says it. Empty
+     * where some way is not taken apart, or this is no relation of numbers weighed and added.
+     */
+    Map<NumericTerm, EachWayItComesOut> comingOutAlong(InputReading read,
+                                                       List<Reachability.Reaching> ways) {
+        SidesAsDeclared declared = kind == Kind.AFFINE && remainder == null ? sidesAsDeclared(read)
+                : null;
+        if (declared == null || ways.isEmpty()) {
+            return Map.of();
+        }
+        List<Reachability.Reaching> branches = new ArrayList<>();
+        for (Reachability.Reaching each : ways) {
+            if (!branchesOf(each, branches, read, new LinkedHashSet<>())) {
+                return Map.of();
+            }
+        }
+        Map<NumericTerm, EachWayItComesOut> out = null;
+        for (Reachability.Reaching each : branches) {
+            Map<NumericTerm, EachWayItComesOut> along = comingOutOn(read, declared, each);
+            if (out == null) {
+                out = along;
+                continue;
+            }
+            Map<NumericTerm, EachWayItComesOut> joined = new LinkedHashMap<>();
+            for (Map.Entry<NumericTerm, EachWayItComesOut> one : out.entrySet()) {
+                EachWayItComesOut other = along.get(one.getKey());
+                EachWayItComesOut either = other == null ? null
+                        : EachWayItComesOut.eitherOf(List.of(one.getValue(), other));
+                if (either != null) {
+                    joined.put(one.getKey(), either);
+                }
+            }
+            out = joined;
+        }
+        return out == null ? Map.of() : out;
+    }
+
+    /** {@link #comingOutAlong} over the rows of the one way {@code way}. */
+    private Map<NumericTerm, EachWayItComesOut> comingOutOn(InputReading read,
+                                                            SidesAsDeclared declared,
+                                                            Reachability.Reaching way) {
+        List<OnAWay> written = conditionsOf(way, remainder);
+        Optional<Set<String>> declined = parametersDeclined(way);
+        DemandReading.Answered past = new DemandReading.Answered(way.gotPast(), way.tied(),
+                way.unsaid(), way.owed(), way.before());
+        if (!nothingUnreadBearsOnIt(way)
+                || mayStopOnWhatItReads(past, read, way.region(), written, declined, Set.of())) {
+            return Map.of();
+        }
+        List<Source> sources = declared.sources();
+        List<Carrier> carriers = declared.carriers();
+        WayRead entire = wayRead(written, past, false, way.region(), false, read, sources, true);
+        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = termsAlong(read,
+                sources, carriers, entire.along(), entire.declared(), entire.conditions(), null,
+                entire.stating(), true, entire.narrowing(), false);
+        TiedOnTheWay tied = TiedOnTheWay.of(entire.conditions(), read, Set.of());
+        List<Set<Object>> tiedTo = new ArrayList<>();
+        for (int i = 0; i < sides.size(); i++) {
+            tiedTo.add(tiedTo(i, tied, entire.conditions(), sources, read, Set.of()));
+        }
+        WhatARelationLeavesUndivided.Independence independent = (one, other) ->
+                apartByTheDeclarations(one, other, sources, read)
+                        && Collections.disjoint(tiedTo.get(one), tiedTo.get(other));
+        WhatARelationLeavesUndivided.Operations operations = operationsOverTheSides(read,
+                entire.conditions(), true, totalsWrittenByOneElement(terms));
+        Map<NumericTerm, EachWayItComesOut> out = new LinkedHashMap<>();
+        for (int at = 0; at < sides.size(); at++) {
+            if (sides.get(at).number() == null) {
+                continue;
+            }
+            EachWayItComesOut each = WhatARelationLeavesUndivided.eachWayItComesOut(terms, at,
+                    constant, relation, UndividedByARelation::overlap, independent,
+                    granularityOf(carriers.get(at)), greatestOf(carriers.get(at)), operations);
+            if (each != null) {
+                out.put(sides.get(at).number(), each);
+            }
+        }
+        return out;
+    }
+
     /** What this leaves its places over what the declarations leave. */
     WhatItLeaves left(InputReading read, CountWitnesses.Lookup witnesses) {
         return leftWhereRowsArrive(read, List.of(), witnesses);
@@ -1283,39 +1390,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                      CountWitnesses.Lookup witnesses) {
         WhatItLeaves nothingShown = new WhatItLeaves(new LinkedHashSet<>(amongThemselves),
                 Map.of());
-        // What the declarations leave each side, which no way changes: asked once for all of them.
-        // A side a walk kept an end of is asked of the element's number, which is what the end
-        // lies between.
-        List<Source> sources = new ArrayList<>();
-        for (Side each : sides) {
-            sources.add(each.kept() == null ? sourceOfSide(each, read)
-                    : keptSource(each.kept(), read));
+        SidesAsDeclared declared = sidesAsDeclared(read);
+        if (declared == null) {
+            return nothingShown;
         }
-        // And the order each side's values are counted on, which says where its type ends.
-        List<Carrier> carriers = new ArrayList<>();
-        for (Side each : sides) {
-            carriers.add(carrierOfSide(each, read));
-        }
-        // Where each side stands is compared with where the others do, which says something only
-        // where they stand on one order: a case of one enumeration has no place on another's.
-        // Nothing a side is shown to take is then a place on another's order, and two values of
-        // two orders never take the same values, so nothing is shown of any of them.
-        for (Carrier one : carriers) {
-            for (Carrier other : carriers) {
-                if (one != null && other != null && !Carrier.onOneOrder(one, other)) {
-                    return nothingShown;
-                }
-            }
-        }
-        // Two sides each standing at the other's value are compared as one value against another,
-        // so a side with no order of its own here — what an operation answered — stands on the
-        // other's: a string is held equal to a string, and none is below the empty one.
-        if (WhatARelationLeavesUndivided.eachStandsAtTheOthersValue(
-                sides.stream().map(Side::weight).toList(), constant)) {
-            Carrier known = carriers.get(0) != null ? carriers.get(0) : carriers.get(1);
-            carriers = Arrays.asList(carriers.get(0) != null ? carriers.get(0) : known,
-                    carriers.get(1) != null ? carriers.get(1) : known);
-        }
+        List<Source> sources = declared.sources();
+        List<Carrier> carriers = declared.carriers();
         if (ways.isEmpty()) {
             return leftAlong(read, sources, carriers, read.quantities().region(), List.of(),
                     null, true, Optional.of(Set.of()), DemandReading.Answered.NOTHING, witnesses);
@@ -2296,26 +2376,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 putDown(at, leaves.get(at), out, settled);
             }
         }
-        // How the relation comes out each way at each side's values, for a reader joining it with
-        // relations a row takes another of: what was shown of the side where something was, and
-        // each way asked apart where nothing was. Not off its line, where a row at the line is no
-        // row of either way.
-        Map<NumericTerm, EachWayItComesOut> comesOut = new LinkedHashMap<>();
-        for (int at = 0; at < sides.size() && !offItsLine; at++) {
-            if (sides.get(at).number() == null) {
-                continue;
-            }
-            WhatARelationLeavesUndivided.Leaves shownOfIt = leaves.get(at) == null
-                    && out.containsAll(sides.get(at).madeOf())
-                    ? new WhatARelationLeavesUndivided.Leaves.Undivided() : leaves.get(at);
-            EachWayItComesOut each = WhatARelationLeavesUndivided.eachWayItComesOut(shownOfIt,
-                    terms, at, constant, relation, overlapping, independent,
-                    granularityOf(carriers.get(at)), greatestOf(carriers.get(at)), operations);
-            if (each != null) {
-                comesOut.put(sides.get(at).number(), each);
-            }
-        }
-        WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped).comingOut(comesOut);
+        WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped);
         Set<TermPath> accountedFor = Set.of();
         if (sides.size() == 2 && heldWhole && independent.between(0, 1)) {
             Partnering partnering = stringsAPartnerCanHold(carriers, out, read, lengthsRoom,

@@ -149,6 +149,44 @@ class AChoiceComesOutAlikeWhicheverArmTakesTheTieTest {
                 unreadReasonsOf(measured(compilation)).toString());
     }
 
+    /**
+     * What an arm shows is of the rows that take it and of no other. In
+     * {@code if c < 0.0m then x else 1.0m} with {@code x} below nought, the arm answering
+     * {@code x} is taken only below nought, where it fails at no {@code c} at the finest step
+     * below nought; the arm answering one fails below one but is taken only from nought up, so it
+     * shows no row failing below nought, and the value is still said unshown.
+     */
+    @Test
+    void anArmShowsNothingOfTheValuesOfTheRowsThatTakeTheOther() {
+        Compilation compilation = compiled("""
+                data Neg = Decimal
+                    invariant value < 0.0m
+                """, "x: Neg, c: Decimal",
+                "Decimal.compare(if c < 0.0m then x.value else 1.0m, c) <= 0", "");
+        assertTrue(unreadReasonsOf(measured(compilation))
+                        .contains(UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
+                unreadReasonsOf(measured(compilation)).toString());
+    }
+
+    /**
+     * Where what the arms show changes is a line of the statement, or the place is said as each
+     * arm leaves it: with {@code x} at minus five or above, the lesser of {@code x} and nought is
+     * held at most a {@code c} below minus five by no row, and by some from there, and no line is
+     * drawn at minus five to part the two.
+     */
+    @Test
+    void aChangeNoLineIsDrawnAtLeavesThePlaceUnshown() {
+        Compilation compilation = compiled("""
+                data Low = Decimal
+                    invariant value >= -5.0m
+                """, "x: Low, c: Decimal",
+                "Decimal.compare(Decimal.min(x.value, 0.0m), c) <= 0", "");
+        assertEquals(List.of("0"), valuesOfTheLinesOn("f/c", linesOf(compilation)));
+        assertTrue(unreadReasonsOf(measured(compilation))
+                        .contains(UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
+                unreadReasonsOf(measured(compilation)).toString());
+    }
+
     /** What the row built for {@code point} of {@code line} was written as, one text per input. */
     private static List<String> rowAt(BorderAssessment line, String point) {
         List<String> out = new ArrayList<>();

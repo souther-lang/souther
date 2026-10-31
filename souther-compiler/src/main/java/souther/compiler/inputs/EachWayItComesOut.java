@@ -1,10 +1,7 @@
 package souther.compiler.inputs;
 
-import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.Granularity;
-import souther.compiler.numeric.NumericDomain;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -30,11 +27,16 @@ import java.util.TreeSet;
  * below nought by the arm answering nought, wherever the arm answering {@code x} is not.
  *
  * <p>Neither way's answer stands for the other. A way not shown reached is not shown never
- * reached ({@link Shown#NOT_SHOWN}), and is never read as either.
+ * reached ({@link Shown#NOT_SHOWN}), and is never read as either. What says a way is reached is a
+ * row: a value the term is shown to take, with values of the others it is shown to take beside it
+ * ({@link WhatARelationLeavesUndivided#eachWayItComesOut}). That a relation settles a run of
+ * values, or leaves them undivided, says how a row there would come out and not that there is one.
  *
- * @param spacing   how the term's values are spaced, which says whether a stretch holds any
- * @param stretches runs of the term's values in order, apart, each answering the same at every
- *                  value it holds. A number in none is no value of the term
+ * @param spacing   how the term's values are spaced, which says whether a run holds any
+ * @param stretches runs of the values the term may hold in order, each starting where the one
+ *                  before ends, together every value it may hold, each answering the same at every
+ *                  value it holds. A number before the first or after the last is no value of the
+ *                  term. None where it may hold none
  */
 public record EachWayItComesOut(Granularity spacing, List<Stretch> stretches) {
 
@@ -78,88 +80,32 @@ public record EachWayItComesOut(Granularity spacing, List<Stretch> stretches) {
         }
     }
 
+    /** Whether a run of numbers holds a value of the term: it does, it does not, or that is not
+     *  worked out, which is neither. */
+    enum Occupancy { HOLDS, EMPTY, UNKNOWN }
+
     public EachWayItComesOut {
         Objects.requireNonNull(spacing, "a term's values are spaced somehow");
         stretches = stretches.stream().sorted(Comparator.comparing(Stretch::from,
                 Comparator.nullsFirst(EachWayItComesOut::byStart))).toList();
-    }
-
-    /**
-     * A term parted by one line, at the values of {@code over}: the values from {@code start} up
-     * hold the statement where {@code holdsAbove}, and the values below fail it, or the other way
-     * round. Each side reaches its own way: a line is drawn where rows stand on both sides of it.
-     *
-     * @param over what holds the values the term is asked at, whose least and greatest ends are
-     *             the term's ({@link #least}, {@link #greatest})
-     */
-    public static EachWayItComesOut parted(ExactCut start, boolean holdsAbove,
-                                           EachWayItComesOut over) {
-        if (over.stretches().isEmpty()) {
-            return over;
-        }
-        Shown above = holdsAbove ? Shown.REACHED : Shown.NEVER;
-        Shown below = holdsAbove ? Shown.NEVER : Shown.REACHED;
-        return new EachWayItComesOut(over.spacing(), List.of(
-                new Stretch(null, endBefore(start), below, above),
-                new Stretch(start, null, above, below))).within(over.least(), over.greatest());
-    }
-
-    /** The lower end of the values a stretch holds, or null where they have no least. */
-    public ExactCut least() {
-        return stretches.isEmpty() ? null : stretches.getFirst().from();
-    }
-
-    /** The upper end of the values a stretch holds, or null where they have no greatest. */
-    public ExactCut greatest() {
-        return stretches.isEmpty() ? null : stretches.getLast().to();
-    }
-
-    /** This, at the values of {@code held} alone; the same where {@code held} is null. Null
-     *  where an end of {@code held} is no number. */
-    EachWayItComesOut within(NumericDomain.Bounds held) {
-        if (held == null) {
-            return this;
-        }
-        ExactCut least = cutOf(held.min());
-        ExactCut greatest = cutOf(held.max());
-        if ((held.min() != null && least == null) || (held.max() != null && greatest == null)) {
-            return null;
-        }
-        return within(least, greatest);
-    }
-
-    /** This, at the values from {@code least} to {@code greatest} alone, each null where there
-     *  is no end on that side. */
-    private EachWayItComesOut within(ExactCut least, ExactCut greatest) {
-        List<Stretch> out = new ArrayList<>();
-        for (Stretch each : stretches) {
-            ExactCut from = ExactCut.tighterLower(each.from(), least);
-            ExactCut to = ExactCut.tighterUpper(each.to(), greatest);
-            if (holdsAValue(spacing, from, to) == Boolean.FALSE) {
-                continue;
+        // Each where the one before ends, or with no value of the term between them.
+        for (int i = 1; i < stretches.size(); i++) {
+            ExactCut end = stretches.get(i - 1).to();
+            ExactCut start = stretches.get(i).from();
+            if (end == null || start == null || byStart(start, startAfter(end)) < 0
+                    || (byStart(startAfter(end), start) != 0 && occupancy(spacing,
+                            startAfter(end), endBefore(start)) != Occupancy.EMPTY)) {
+                throw new IllegalArgumentException("the stretches of a term's values follow on"
+                        + " from one another: " + stretches);
             }
-            out.add(new Stretch(from, to, each.holding(), each.failing()));
         }
-        return new EachWayItComesOut(spacing, out);
-    }
-
-    /** This, without the stretches shown to hold no value of the term. */
-    EachWayItComesOut withoutRunsOfNoValue() {
-        return new EachWayItComesOut(spacing, stretches.stream()
-                .filter(each -> holdsAValue(spacing, each.from(), each.to()) != Boolean.FALSE)
-                .toList());
-    }
-
-    private static ExactCut cutOf(Endpoint end) {
-        return end != null && end.at() instanceof Count count
-                ? new ExactCut(count.exactly(), end.inclusive()) : null;
     }
 
     /**
      * What the statement several alternatives answer shows of each way, a row taking one of them:
      * at each value, a way is reached where some alternative reaches it and never reached where
-     * none can, and a value is one of the term's where it is one of some alternative's. An
-     * alternative that holds no value somewhere reaches nothing there.
+     * none can. A value some alternative may hold is one of the term's, and an alternative that
+     * holds no value there has no row there, so reaches neither way.
      *
      * <p>Null where the alternatives are spaced differently, or where whether a run between their
      * ends holds a value is not worked out.
@@ -175,50 +121,60 @@ public record EachWayItComesOut(Granularity spacing, List<Stretch> stretches) {
         // Every place a stretch of some alternative starts or stops, as the start of what lies
         // above it: between two in a row, every alternative answers one way throughout.
         TreeSet<ExactCut> starts = new TreeSet<>(EachWayItComesOut::byStart);
+        boolean noLeast = false;
+        boolean noGreatest = false;
         for (EachWayItComesOut each : alternatives) {
             for (Stretch stretch : each.stretches()) {
                 if (stretch.from() != null) {
                     starts.add(stretch.from());
+                } else {
+                    noLeast = true;
                 }
                 if (stretch.to() != null) {
                     starts.add(startAfter(stretch.to()));
+                } else {
+                    noGreatest = true;
                 }
             }
         }
+        if (starts.isEmpty() && !noLeast) {
+            return new EachWayItComesOut(spacing, List.of());
+        }
+        // The values from the least any alternative may hold to the greatest: a number of no
+        // alternative between them is one of the term's that no row holds.
         List<ExactCut> inOrder = new ArrayList<>(starts);
+        int first = noLeast ? 0 : 1;
+        int last = noGreatest ? inOrder.size() : inOrder.size() - 1;
         List<Stretch> out = new ArrayList<>();
-        // Whether the stretch before is the run just below, nothing of the term lying between.
-        boolean besideTheLast = false;
-        for (int i = 0; i <= inOrder.size(); i++) {
+        for (int i = first; i <= last; i++) {
             ExactCut from = i == 0 ? null : inOrder.get(i - 1);
             ExactCut to = i == inOrder.size() ? null : endBefore(inOrder.get(i));
-            Boolean holds = holdsAValue(spacing, from, to);
-            if (holds == null) {
-                return null;
-            }
-            if (!holds) {
-                continue;
+            switch (occupancy(spacing, from, to)) {
+                case UNKNOWN -> {
+                    return null;
+                }
+                case EMPTY -> {
+                    // Nothing between: the stretch below and the one above follow on at once.
+                    if (!out.isEmpty()) {
+                        Stretch below = out.removeLast();
+                        out.add(new Stretch(below.from(), to, below.holding(), below.failing()));
+                    }
+                    continue;
+                }
+                case HOLDS -> { }
             }
             List<Shown> holding = new ArrayList<>();
             List<Shown> failing = new ArrayList<>();
-            boolean ofTheTerm = false;
             for (EachWayItComesOut each : alternatives) {
                 Stretch at = each.stretchStartingAt(from);
-                ofTheTerm |= at != null;
                 holding.add(at == null ? Shown.NEVER : at.holding());
                 failing.add(at == null ? Shown.NEVER : at.failing());
             }
-            if (!ofTheTerm) {
-                besideTheLast = false;
-                continue;
-            }
             Stretch here = new Stretch(from, to, Shown.eitherOf(holding), Shown.eitherOf(failing));
-            if (besideTheLast && out.getLast().showsAlike(here)) {
-                Stretch last = out.removeLast();
-                here = new Stretch(last.from(), to, here.holding(), here.failing());
+            if (!out.isEmpty() && out.getLast().showsAlike(here)) {
+                here = new Stretch(out.removeLast().from(), to, here.holding(), here.failing());
             }
             out.add(here);
-            besideTheLast = true;
         }
         return new EachWayItComesOut(spacing, out);
     }
@@ -239,15 +195,15 @@ public record EachWayItComesOut(Granularity spacing, List<Stretch> stretches) {
         return null;
     }
 
-    /** Whether neither way is left unshown at any value of the term. */
+    /** Whether the term may hold some value, and neither way is left unshown at any of them. */
     public boolean showsEveryValue() {
-        return stretches.stream().allMatch(each -> each.holding() != Shown.NOT_SHOWN
-                && each.failing() != Shown.NOT_SHOWN);
+        return !stretches.isEmpty() && stretches.stream().allMatch(each ->
+                each.holding() != Shown.NOT_SHOWN && each.failing() != Shown.NOT_SHOWN);
     }
 
     /**
      * Where what is shown changes, each as the start of the values above it: the start of each
-     * stretch that shows the two ways otherwise than the one below it.
+     * stretch that shows the two ways otherwise than the one below it, which it follows on from.
      */
     public List<ExactCut> whereItTurns() {
         List<ExactCut> out = new ArrayList<>();
@@ -281,27 +237,29 @@ public record EachWayItComesOut(Granularity spacing, List<Stretch> stretches) {
         return new ExactCut(start.at(), !start.inclusive());
     }
 
-    /**
-     * Whether a run from {@code from} to {@code to} holds a value spaced {@code spacing}, or null
-     * where that is not worked out. A run open on a side holds one.
-     */
-    private static Boolean holdsAValue(Granularity spacing, ExactCut from, ExactCut to) {
+    /** Whether a run from {@code from} to {@code to} holds a value spaced {@code spacing}. A run
+     *  open on a side holds one. */
+    static Occupancy occupancy(Granularity spacing, ExactCut from, ExactCut to) {
         if (from == null || to == null) {
-            return true;
+            return Occupancy.HOLDS;
         }
         int order = from.at().compareTo(to.at());
         if (order > 0) {
-            return false;
+            return Occupancy.EMPTY;
         }
         if (order == 0) {
-            return from.inclusive() && to.inclusive() && Lattice.holds(spacing, from.at());
+            return from.inclusive() && to.inclusive() && Lattice.holds(spacing, from.at())
+                    ? Occupancy.HOLDS : Occupancy.EMPTY;
         }
         Lattice.Point least = Lattice.least(spacing, from);
         Lattice.Point greatest = Lattice.greatest(spacing, to);
         if (least == null || greatest == null) {
-            return null;
+            return Occupancy.UNKNOWN;
         }
         Integer placed = Lattice.compare(least, greatest);
-        return placed == null ? null : placed <= 0;
+        if (placed == null) {
+            return Occupancy.UNKNOWN;
+        }
+        return placed <= 0 ? Occupancy.HOLDS : Occupancy.EMPTY;
     }
 }
