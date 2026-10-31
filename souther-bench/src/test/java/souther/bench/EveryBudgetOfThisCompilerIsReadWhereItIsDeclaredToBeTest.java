@@ -931,6 +931,12 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Cutting$Read;",
                     "counts the lines one quantity is cut by against the readings figure, and"
                             + " says that figure where a statement's lines are not worked out"),
+            Map.entry("souther.compiler.meaning.TheWholeNumbersAListStartsWith#of("
+                            + "Lsouther/compiler/meaning/Proposition;)"
+                            + "Lsouther/compiler/meaning/TheWholeNumbersAListStartsWith$Read;",
+                    "reads a comparison on no element of a list of whole numbers where its"
+                            + " divisors come round in more elements than the readings figure, and"
+                            + " hands that over for the comparison to be said not read at it"),
             Map.entry("souther.compiler.partition.Cutting#asLines("
                             + "Ljava/lang/String;"
                             + "Lsouther/compiler/check/StatedComparison;"
