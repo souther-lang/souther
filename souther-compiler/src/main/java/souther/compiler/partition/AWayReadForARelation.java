@@ -5,12 +5,23 @@ import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.CanonicalForm;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedRuns;
+import souther.compiler.numeric.Rel;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -188,19 +199,50 @@ final class AWayReadForARelation {
                 again = true;
             }
         }
-        if (parted.values().stream().allMatch(ChoiceRead::whole)) {
-            return Optional.empty();
-        }
+        boolean readAsLess = false;
         List<OnTheWay> rest = new ArrayList<>();
         for (OnTheWay each : entries) {
             ChoiceRead one = parted.get(each);
             if (one == null) {
                 rest.add(each);
+            } else if (leavesEveryValueDeclared(one)) {
+                readAsLess = true;
             } else {
+                readAsLess |= !one.whole();
                 one.standingFor().ifPresent(rest::add);
             }
         }
-        return Optional.ofNullable(walked(rest));
+        return readAsLess ? Optional.ofNullable(walked(rest)) : Optional.empty();
+    }
+
+    /**
+     * Whether what {@code choice} asks bearing on the relation, one alternative or another, holds
+     * of every value the declarations leave, so that it comes to nothing for the relation where
+     * what it asks apart is met, as a choice some alternative of which asks nothing of it does.
+     *
+     * <p>Shown where each alternative asks bounds on one form and nothing else, and the runs they
+     * leave it together hold every value the declarations leave the form
+     * ({@link RunsOfOneForm}): a lookup of a value in a table, whose rows' lines between them
+     * leave the value nowhere out.
+     */
+    private boolean leavesEveryValueDeclared(ChoiceRead choice) {
+        RunsOfOneForm runs = new RunsOfOneForm();
+        OrderedRuns left = OrderedRuns.nothing();
+        for (List<OnTheWay> alternative : choice.bearing()) {
+            OrderedRuns one = runs.leftBy(alternative);
+            if (one == null) {
+                return false;
+            }
+            left = left.join(one);
+        }
+        if (!(runs.form().map(whole.from().declarations()::projectionOf)
+                .orElse(null) instanceof NumericDomain.FormProjection.Within(
+                        NumericDomain.Bounds declared))) {
+            return false;
+        }
+        OrderedRuns everyValue =
+                OrderedRuns.of(new OrderedInterval(declared.min(), declared.max()));
+        return everyValue.meet(left).sameValuesAs(everyValue);
     }
 
     /**
@@ -244,8 +286,9 @@ final class AWayReadForARelation {
      * {@code z} is both — each alternative is asked with its own value. Conditions apart that ask
      * of no position in common, nor of two the declarations tie, are met each by its own value,
      * so the alternatives are asked together only where they meet such a condition: every way of
-     * taking the alternatives of the choices in one such part together is asked ({@link Part#met}),
-     * and where they are more ways than a way is looked along, nothing is shown.
+     * taking the alternatives of the choices in one such part together that may hold together is
+     * asked ({@link Part#met}), and where they are more ways than a way is looked along, nothing
+     * is shown.
      */
     private boolean metApart(List<OnTheWay> stated, List<ChoiceRead> read) {
         List<OnTheWay> all = new ArrayList<>(apartOf(stated));
@@ -355,41 +398,265 @@ final class AWayReadForARelation {
          * {@code (x <= 0 && z == 0 || x >= 10 && z == 1)} and
          * {@code (x <= 3 && z == 0 || x >= 7 && z == 1)}, no {@code z} is nought and one, and
          * no {@code x} is at or below nought and at or above seven either.
+         *
+         * <p>Or every value of the relation's places that what they ask bearing on it leaves is
+         * one some way met leaves them, with a value met apart beside it. Under
+         * {@code (x >= 10 && z <= 1 || x < 10 && z == 5)} and
+         * {@code (x >= 10 && z >= 5 || x >= 10 && z == 0 || x < 10 && z == 5)}, no {@code z} is at
+         * or below one and at or above five, but every {@code x} at or above ten is one a row
+         * takes with {@code z} nought. That no value meets what a way asks apart is not enough on
+         * its own: the values it leaves the relation's places may be none a row past the choices
+         * holds them at ({@link #insideWhatIsMet}).
+         *
+         * <p>Only the ways that may hold together are asked, and they are what a way is looked
+         * along with ({@link #heldTogether}).
          */
         boolean met(List<OnTheWay> stated) {
-            List<ChoiceRead> those = List.copyOf(inOrder);
-            long count = 1;
-            for (ChoiceRead each : those) {
-                count *= each.apart().size();
-                if (count > CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum()) {
-                    stoppedAt.add(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
-                    return false;
-                }
+            List<OnTheWay> bearingTaken = bearingOf(stated);
+            List<TakenTogether> ways = heldTogether(bearingTaken);
+            if (ways == null) {
+                return false;
             }
-            return metAlongEach(those, 0, conditions, bearingOf(stated));
-        }
-
-        private boolean metAlongEach(List<ChoiceRead> those, int at, List<OnTheWay> apart,
-                                     List<OnTheWay> bearingTaken) {
-            if (at == those.size()) {
-                if (aValueMeets(apart)) {
-                    return true;
+            List<Set<OnTheWay>> met = new ArrayList<>();
+            List<Set<OnTheWay>> notMet = new ArrayList<>();
+            for (TakenTogether way : ways) {
+                List<OnTheWay> apart = new ArrayList<>(conditions);
+                Set<OnTheWay> chosen = new LinkedHashSet<>();
+                for (int at = 0; at < inOrder.size(); at++) {
+                    ChoiceRead choice = inOrder.get(at);
+                    int alternative = way.alternatives().get(at);
+                    apart.addAll(alternatives.get(choice).getOrDefault(alternative, List.of()));
+                    chosen.addAll(choice.bearing().get(alternative));
                 }
-                Reachability taken = walked(bearingTaken);
-                return taken != null && !(taken instanceof Reachability.Reaching);
+                (aValueMeets(apart) ? met : notMet).add(chosen);
             }
-            ChoiceRead choice = those.get(at);
-            for (int alternative = 0; alternative < choice.apart().size(); alternative++) {
-                List<OnTheWay> withApart = new ArrayList<>(apart);
-                withApart.addAll(alternatives.get(choice).getOrDefault(alternative, List.of()));
-                List<OnTheWay> withBearing = new ArrayList<>(bearingTaken);
-                withBearing.addAll(choice.bearing().get(alternative));
-                if (!metAlongEach(those, at + 1, withApart, withBearing)) {
+            RunsOfOneForm runs = new RunsOfOneForm();
+            for (Set<OnTheWay> chosen : notMet) {
+                if (insideWhatIsMet(chosen, met, runs)) {
+                    continue;
+                }
+                List<OnTheWay> bearingAlong = new ArrayList<>(bearingTaken);
+                bearingAlong.addAll(chosen);
+                Reachability taken = walked(bearingAlong);
+                if (taken == null || taken instanceof Reachability.Reaching) {
                     return false;
                 }
             }
             return true;
         }
+
+        /**
+         * Whether every row {@code chosen}, what a way asks of the relation beside what the way
+         * states of it, leaves is one some way of {@code met} leaves, each what such a way asks.
+         * What the way states is asked of all of them alike, so it is left out.
+         *
+         * <p>Shown where {@code chosen} asks all one of them asks and more. Or where each of what
+         * {@code chosen} asks is a bound on one form, the alternatives of a choice in it too: the
+         * runs of the form it leaves are then inside those the ways of {@code met} asking only
+         * bounds on that form leave together ({@link RunsOfOneForm}). That is how choices that
+         * part one number by the same lines are read, where what each alternative asks apart was
+         * asked of every line at once ({@link ChoiceRead#toMeet}) and so is met by no value beside
+         * another.
+         */
+        private static boolean insideWhatIsMet(Set<OnTheWay> chosen, List<Set<OnTheWay>> met,
+                                               RunsOfOneForm runs) {
+            if (met.stream().anyMatch(chosen::containsAll)) {
+                return true;
+            }
+            OrderedRuns left = runs.leftBy(chosen);
+            if (left == null) {
+                return false;
+            }
+            OrderedRuns leftByMet = OrderedRuns.nothing();
+            for (Set<OnTheWay> each : met) {
+                OrderedRuns one = runs.leftBy(each);
+                if (one != null) {
+                    leftByMet = leftByMet.join(one);
+                }
+            }
+            return left.meet(leftByMet).sameValuesAs(left);
+        }
+
+        /**
+         * The ways of taking an alternative of each choice here that may hold together, in the
+         * order the choices came and their alternatives in each — or null where they are more
+         * than a way is looked along with, which is then a figure this was stopped at.
+         *
+         * <p>A way whose numbers bearing on the relation nothing the declarations leave meets,
+         * beside what the way states of the relation, is one no row takes, which is the second
+         * half of what {@link #met} accepts, and a way narrower than it is one no row takes
+         * either. So such a way is met and not counted, nor is any way it is part of. Choices
+         * that each part one number by the same lines — two lookups of one value in one table —
+         * hold together only where they agree on the part, and are counted as that many ways and
+         * not as the product of their sizes. Choices of numbers apart from one another hold
+         * together in every way, and are counted as the product.
+         *
+         * <p>Only what is stated of the numbers outside a choice nested in an alternative is
+         * asked, which leaves more than the alternative and so shows no more ways closed than
+         * are. And the ways counted are those of the choices taken so far, each time one more is
+         * taken, so a way is never counted past the figure only to be closed by the choices
+         * after it.
+         */
+        private List<TakenTogether> heldTogether(List<OnTheWay> bearingTaken) {
+            SearchRegion declared = whole.from().declarations();
+            List<TakenConstraint> stated = numbersIn(bearingTaken);
+            List<TakenTogether> ways = List.of(new TakenTogether(List.of(), stated,
+                    TakenConstraint.narrowedBy(stated, declared)));
+            for (ChoiceRead choice : inOrder) {
+                List<TakenTogether> wider = new ArrayList<>();
+                for (TakenTogether way : ways) {
+                    for (int alternative = 0; alternative < choice.bearing().size();
+                         alternative++) {
+                        List<TakenConstraint> asked = numbersIn(choice.bearing().get(alternative));
+                        List<TakenConstraint> numbers = new ArrayList<>(way.numbers());
+                        numbers.addAll(asked);
+                        SearchRegion region = TakenConstraint.narrowedBy(asked, way.region());
+                        if (!asked.isEmpty() && TakenConstraint.nothingIsLeftFor(numbers, region)) {
+                            continue;
+                        }
+                        List<Integer> taken = new ArrayList<>(way.alternatives());
+                        taken.add(alternative);
+                        wider.add(new TakenTogether(taken, numbers, region));
+                        if (wider.size() > CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum()) {
+                            stoppedAt.add(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
+                            return null;
+                        }
+                    }
+                }
+                ways = wider;
+            }
+            return ways;
+        }
+    }
+
+    /**
+     * One way of taking an alternative of each of some choices together, and what the numbers
+     * bearing on the relation are asked along it.
+     *
+     * @param alternatives the alternative taken of each choice, in their order
+     * @param numbers      what is stated of the numbers along it
+     * @param region       what the declarations leave with {@code numbers} taken in
+     */
+    private record TakenTogether(List<Integer> alternatives, List<TakenConstraint> numbers,
+                                 SearchRegion region) {}
+
+    /**
+     * The runs of one form that what ways ask of the relation leave it, where all they ask is a
+     * bound on that form.
+     *
+     * <p>Every value of the input a way asks this of is one whose form lies in the runs it leaves,
+     * and every value whose form lies there is one it asks: what it asks of the input is what it
+     * asks of the form and nothing else. So one way's runs inside another's is its values inside
+     * the other's, whatever else is asked of the input beside them all alike. Which form is the
+     * first one met, as it was written there, and the runs are of it. A bound on it is read
+     * however it is written: {@code 2 * x <= 10}, {@code x <= 5} and {@code -x >= -5} are one
+     * bound, which is what their {@link CanonicalForm} says; a bound on any other form is not read.
+     *
+     * <p>Over every value of the form between its places and not only those a count steps through,
+     * so runs a counted order leaves no value between are still two, and one way is shown inside
+     * others only where it is over the values between as well.
+     */
+    private static final class RunsOfOneForm {
+
+        /** The form the runs are of, as the first bound read wrote it with its constant left
+         *  out. */
+        private LinearForm<NumericTerm> form;
+
+        /** That form in lowest terms, and what it is that times. */
+        private CanonicalForm<NumericTerm> lowest;
+        private ExactRatio scaled;
+
+        /** What each condition leaves the form, read once; empty where it is not a bound on it. */
+        private final Map<OnTheWay, Optional<OrderedRuns>> read = new HashMap<>();
+
+        /** The form the runs are of; empty where no bound was read. */
+        Optional<LinearForm<NumericTerm>> form() {
+            return Optional.ofNullable(form);
+        }
+
+        /** The runs {@code conditions} together leave the form, or null where one of them is not
+         *  a bound on it. */
+        OrderedRuns leftBy(Collection<OnTheWay> conditions) {
+            OrderedRuns out = OrderedRuns.of(OrderedInterval.OPEN);
+            for (OnTheWay each : conditions) {
+                Optional<OrderedRuns> one = read.get(each);
+                if (one == null) {
+                    one = Optional.ofNullable(leftBy(each));
+                    read.put(each, one);
+                }
+                if (one.isEmpty()) {
+                    return null;
+                }
+                out = out.meet(one.get());
+            }
+            return out;
+        }
+
+        private OrderedRuns leftBy(OnTheWay condition) {
+            return switch (condition) {
+                case OnTheWay.TakenIn(var _, RowDemand.Relational(
+                        TakenConstraint.Affine(LinearForm<NumericTerm> written, Rel rel))) ->
+                        leftBy(written, rel);
+                case OnTheWay.OneOf several -> {
+                    OrderedRuns out = OrderedRuns.nothing();
+                    for (List<OnTheWay> alternative : several.alternatives()) {
+                        OrderedRuns one = leftBy(alternative);
+                        if (one == null) {
+                            yield null;
+                        }
+                        out = out.join(one);
+                    }
+                    yield out;
+                }
+                case OnTheWay.TakenIn _, OnTheWay.Narrowed _, OnTheWay.Settled _,
+                     OnTheWay.Counted _, OnTheWay.Declined _ -> null;
+            };
+        }
+
+        /** What {@code written rel 0} leaves the form, or null where it is no bound on it or its
+         *  threshold is no place of the form's order. */
+        private OrderedRuns leftBy(LinearForm<NumericTerm> written, Rel rel) {
+            if (!(CanonicalForm.of(written.coefs()) instanceof CanonicalForm.Scaled<NumericTerm>(
+                    CanonicalForm<NumericTerm> on, ExactRatio by))) {
+                return null;
+            }
+            if (form == null) {
+                form = new LinearForm<>(ExactRatio.ZERO, written.coefs());
+                lowest = on;
+                scaled = by;
+            }
+            boolean turned;
+            if (on.equals(lowest)) {
+                turned = false;
+            } else if (on.isNegationOf(lowest)) {
+                turned = true;
+            } else {
+                return null;
+            }
+            // by * on + constant rel 0 is on rel -constant / by, and the form is scaled times
+            // the lowest terms, which on is or is turned round from.
+            if (!(written.constant().negated().dividedBy(by).flatMap(threshold ->
+                    (turned ? threshold.negated() : threshold).times(scaled))
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio at))) {
+                return null;
+            }
+            if (!(Count.written(at) instanceof ExactAnswer.Held<Optional<Count>>(
+                    Optional<Count> place)) || place.isEmpty()) {
+                return null;
+            }
+            return OrderedRuns.leftBy(turned ? rel.turned() : rel, place.get());
+        }
+    }
+
+    /** What {@code onTheWay} states of the numbers outside the choices in it. */
+    private static List<TakenConstraint> numbersIn(List<OnTheWay> onTheWay) {
+        List<TakenConstraint> out = new ArrayList<>();
+        for (OnTheWay each : onTheWay) {
+            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.Relational(var constraint))) {
+                out.add(constraint);
+            }
+        }
+        return out;
     }
 
     /**

@@ -262,10 +262,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // come to less once the walks are spent. Each figure reached is handed back with what
             // the way was read again as, and where the relation is then shown nothing of the way
             // it says it stopped at them.
-            Map.entry("souther.compiler.partition.AWayReadForARelation$Part#met("
-                            + "Ljava/util/List;)Z",
-                    "keeps a choice as it stands past the ways looked along, and hands the figure"
-                            + " to what the relation says it stopped at"),
+            Map.entry("souther.compiler.partition.AWayReadForARelation$Part#heldTogether("
+                            + "Ljava/util/List;)Ljava/util/List;",
+                    "keeps a choice as it stands past the ways looked along that may hold"
+                            + " together, and hands the figure to what the relation says it"
+                            + " stopped at"),
             Map.entry("souther.compiler.partition.AWayReadForARelation#walked("
                             + "Ljava/util/List;)Lsouther/compiler/partition/Reachability;",
                     "stops walking a way read again at the walks it is read again with, and hands"

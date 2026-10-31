@@ -18,6 +18,19 @@ public record OrderedInterval(Endpoint low, Endpoint high) {
     /** Every value of the order, for a scale that stops nowhere. */
     public static final OrderedInterval OPEN = new OrderedInterval(null, null);
 
+    /** What {@code rel} against {@code at} leaves a value on the order, or null where it leaves a
+     *  hole rather than a range ({@link OrderedRuns#leftBy}). */
+    public static OrderedInterval leftBy(Rel rel, Place at) {
+        return switch (rel) {
+            case GE -> new OrderedInterval(Endpoint.inclusive(at), null);
+            case GT -> new OrderedInterval(Endpoint.exclusive(at), null);
+            case LE -> new OrderedInterval(null, Endpoint.inclusive(at));
+            case LT -> new OrderedInterval(null, Endpoint.exclusive(at));
+            case EQ -> new OrderedInterval(Endpoint.inclusive(at), Endpoint.inclusive(at));
+            case NE -> null;
+        };
+    }
+
     /**
      * Whether the rules leave this position no value.
      *
