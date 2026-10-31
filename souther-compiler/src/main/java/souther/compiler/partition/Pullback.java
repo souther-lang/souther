@@ -1350,13 +1350,13 @@ final class Pullback {
         if (ClausesInOrder.at(construct, read.rules()).governsNothing()) {
             return true;
         }
-        NumericDomain.Bounds run = DeclaredBounds.wholeRunOf(made, read.ruleReading());
-        if (run == null) {
-            return false;
-        }
         Denotation number = reads.standing(construct.values().getFirst().value(),
                 read.rules().symbols(), read.rules().newtypes());
         if (!(Core.withoutStanding(number.value()) instanceof Core.PreservedCall call)) {
+            return false;
+        }
+        NumericDomain.Bounds run = DeclaredBounds.wholeRunOf(made, read.ruleReading());
+        if (run == null) {
             return false;
         }
         Function<Core, BigDecimal> constant = argument -> {
