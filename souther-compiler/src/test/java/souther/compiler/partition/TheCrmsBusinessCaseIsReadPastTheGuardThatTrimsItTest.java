@@ -2,11 +2,9 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.TestDay;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
-import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -47,8 +45,7 @@ class TheCrmsBusinessCaseIsReadPastTheGuardThatTrimsItTest {
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
         private static Compilation measure() {
-            Compilation crm = Compilation.ofSources(ConformanceCorpus.sourcesOf("crm"),
-                    ModulePath.EMPTY).writtenOn(TestDay.DATE);
+            Compilation crm = ConformanceCorpus.load("crm").compilation();
             crm.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
             crm.answerEverything();
             return crm;
