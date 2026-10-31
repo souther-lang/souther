@@ -199,11 +199,11 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
 
     /** The fields of the record {@code e} reads. */
     private static void readFrom(Core e, Map<BindingId, String> fields, Set<String> out) {
-        Core node = Core.withoutStanding(e);
-        if (node instanceof Core.Read read && fields.containsKey(read.binding())) {
-            out.add(fields.get(read.binding()));
-        }
-        Core.forEachChild(node, child -> readFrom(child, fields, out));
+        Core.forEachDistinctNode(e, node -> {
+            if (node instanceof Core.Read read && fields.containsKey(read.binding())) {
+                out.add(fields.get(read.binding()));
+            }
+        });
     }
 
     /** The field the place {@code e} is, or null where it is no field of this record. */
