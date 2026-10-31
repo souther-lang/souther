@@ -81,23 +81,46 @@ public record ModelOccurrences(List<ModelOccurrence> inOrder)
      */
     public static final class Gathering {
 
+        /** What was gathered while it is one value of copies added and nothing else, which is
+         *  then what is gathered, and is not taken apart into {@link #held} to be put together
+         *  again as itself. */
+        private ModelOccurrences only;
         private final Set<ModelOccurrence> held = new LinkedHashSet<>();
 
         public Gathering add(ModelOccurrences copies) {
+            if (copies.isEmpty()) {
+                return this;
+            }
+            if (only == null && held.isEmpty()) {
+                only = copies;
+                return this;
+            }
+            spill();
             held.addAll(copies.inOrder);
             return this;
         }
 
         public Gathering add(ModelOccurrence copy) {
+            spill();
             held.add(copy);
             return this;
         }
 
+        private void spill() {
+            if (only != null) {
+                held.addAll(only.inOrder);
+                only = null;
+            }
+        }
+
         public boolean isEmpty() {
-            return held.isEmpty();
+            return only == null && held.isEmpty();
         }
 
         public ModelOccurrences gathered() {
+            if (only != null) {
+                return only;
+            }
             return held.isEmpty() ? NONE : new ModelOccurrences(List.copyOf(held));
         }
     }
