@@ -522,6 +522,16 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at,
         }
 
         /**
+         * One occurrence of this fact, at the first of its figures and with no place: what a reader
+         * that carries a reason as an occurrence is handed for a fact it met elsewhere. The places
+         * are not part of what makes the fact one, and they are gathered where the fact is.
+         */
+        public Incompleteness occurrence() {
+            return new Incompleteness(fact.code(), fact.target(), Optional.empty(),
+                    figures.stream().findFirst());
+        }
+
+        /**
          * Both occurrences of one fact, as one: the fact, cited everywhere either was met and at
          * every figure either was met at.
          *
