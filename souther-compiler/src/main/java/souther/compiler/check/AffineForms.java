@@ -1196,6 +1196,23 @@ public final class AffineForms {
                 && !composed.form().coefs().isEmpty();
     }
 
+    /**
+     * Where {@code operation}, an operator a walk composed and told a reading of
+     * ({@link Reading#composed}), answers, as the operator's own account says
+     * ({@link WhereAnOperatorAnswers}): a sum, a difference or a product as its operator and
+     * types say, and a negation as its type says. Every reading that asks where the operations
+     * it is told of answer asks it here.
+     */
+    public static WhereAnOperatorAnswers whereItAnswers(Core operation) {
+        return switch (Core.withoutStanding(operation)) {
+            case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
+                    binary.type(), List.of(binary.left().type(), binary.right().type()));
+            case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
+            default -> throw new IllegalArgumentException(
+                    "a walk composes an operator and nothing else: " + operation);
+        };
+    }
+
     /** {@code form}, with the reading told {@code operation} came to it ({@link Reading#composed})
      *  — where it came to one. */
     private static <A, E> LinearForm<A> told(Core operation, LinearForm<A> form,

@@ -1,15 +1,18 @@
 package souther.compiler.check;
 
+import souther.compiler.core.Core;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenArguments;
+import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -255,6 +258,46 @@ public final class DeclaredBounds {
             return null;
         }
         return FieldDomains.of(outermost, reading).wholeRunAt(RuleKey.THE_VALUE);
+    }
+
+    /**
+     * The numbers making {@code construct}, a value of {@code type} over an {@code Int}, succeeds
+     * for: the whole run its clauses leave ({@link #wholeRunOf}), within the ends of an
+     * {@code Int}. Null where they leave none that is shown to be the whole of what they say, or
+     * the number it wraps is not an {@code Int}.
+     *
+     * <p>Every reader that tells a construction as the operation it is asks this, so a run is held
+     * to the same numbers at a construction whichever reading meets it.
+     */
+    public static WhereAnOperatorAnswers.WhereItsExactValueIsHeld whereMakingSucceeds(
+            Core.Construct construct, TypeView type, RuleReadingContext reading) {
+        if (construct.values().get(0).value().type() != Type.INT) {
+            return null;
+        }
+        NumericDomain.Bounds run = wholeRunOf(type, reading);
+        if (run == null) {
+            return null;
+        }
+        WhereAnOperatorAnswers.WhereItsExactValueIsHeld ofAnInt =
+                WhereAnOperatorAnswers.WHAT_AN_INT_HOLDS;
+        BigInteger least = ofAnInt.least();
+        BigInteger greatest = ofAnInt.greatest();
+        if (run.min() != null) {
+            BigInteger end = run.min().wholeAdmitted(true);
+            if (end == null) {
+                return null;
+            }
+            least = least.max(end);
+        }
+        if (run.max() != null) {
+            BigInteger end = run.max().wholeAdmitted(false);
+            if (end == null) {
+                return null;
+            }
+            greatest = greatest.min(end);
+        }
+        return least.compareTo(greatest) > 0 ? null
+                : new WhereAnOperatorAnswers.WhereItsExactValueIsHeld(least, greatest);
     }
 
     /**
