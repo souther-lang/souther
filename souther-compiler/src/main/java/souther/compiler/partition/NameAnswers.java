@@ -5,7 +5,6 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueStanding;
-import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReads;
@@ -70,16 +69,20 @@ final class NameAnswers {
 
     /**
      * The arm of the match {@code node} that a run takes, where it matches on a lookup that finds an
-     * element of a list written out ({@link ElementsWrittenOut#picked}) and working the lookup out
-     * ends no run: the arm taking {@code Some}, read where choosing it puts the reading. Null where
-     * the lookup settles nothing, which leaves the match to be read some other way.
+     * element of a list written out ({@link ElementsWrittenOut#picked}) and working the lookup out,
+     * and what each name in it was given, ends no run: the arm taking {@code Some}, read where
+     * choosing it puts the reading. Null where the lookup settles nothing, which leaves the match
+     * to be read some other way.
      *
-     * <p>The arms the lookup rules out are not read, so what they would end a run for is not asked.
+     * <p>Which arm is taken is a question of values; what is worked out to reach the lookup is
+     * asked of the scrutinee as it is written. The arms the lookup rules out are not read, so what
+     * they would end a run for is not asked.
      */
     static ValueStanding.ReadThrough<InputReads> armOfAMatchOnAFoundElement(
-            Core node, InputReads at, Symbols symbols, DeclarationNewtypes newtypes) {
+            Core node, InputReads at, Symbols symbols, DeclarationNewtypes newtypes,
+            WorkedOutToReachIt reached) {
         if (!(Core.withoutStanding(node) instanceof Core.Match match)
-                || !WhatARunMayEndFor.endsNoneBeneath(match.scrutinee())
+                || !reached.endsNoRun(new Denotation(match.scrutinee(), at))
                 || ElementsWrittenOut.picked(match.scrutinee(), at,
                         WrittenOutElements.reading(symbols, newtypes)) == null) {
             return null;

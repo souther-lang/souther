@@ -240,6 +240,103 @@ class ACodePointHeldAgainstARemainderOfTheOthersIsReadAtItsIndexTest {
                 () -> report(measured(MODEL_WITH_A_NAMED_MAP)));
     }
 
+    private static String withAWeightedSum(String definition) {
+        return MODEL.replaceFirst("(?s)let weightedSum.*?\\n(let expectedCheckDigit)",
+                java.util.regex.Matcher.quoteReplacement(definition) + "\n$1");
+    }
+
+    /** A map bound to a name, with what else the binding works out beside the map. */
+    private static String weightedSumOverANamedMap(String besideTheMap) {
+        return withAWeightedSum("""
+                let weightedSum (body: List<Int>): Int = {
+                    let weighed = {
+                        %s
+                        List.mapIndexed(
+                            (i, c) -> (if i <= 5 then i + 2 else i - 4) * digitValue(c),
+                            List.reverse(body))
+                    }
+                    List.sum(weighed)
+                }""".formatted(besideTheMap));
+    }
+
+    /**
+     * What a name stands for is worked out where it is bound, and the map it stands for is not all
+     * of it: a binding that multiplies past what an {@code Int} holds beside the map ends a run,
+     * whether or not anything reads what it computes.
+     */
+    @Test
+    void whatABindingWorksOutBesideTheMapItNamesIsWorkedOutToo() {
+        String unsafe = report(measured(weightedSumOverANamedMap(
+                "let unused = List.length(body) * 9223372036854775807")));
+        assertTrue(unsafe.contains("not read:"), unsafe);
+        String safe = report(measured(weightedSumOverANamedMap(
+                "let unused = 1 + 1")));
+        assertFalse(safe.contains("not read:"), safe);
+    }
+
+    private static String remainderByTheDivisor(String divisor) {
+        return MODEL.replace("Int.floorMod(weightedSum(body), 11)",
+                "Int.floorMod(weightedSum(body), " + divisor + ")");
+    }
+
+    /**
+     * That the divisor comes to eleven says nothing of what is worked out to get there: a block
+     * that multiplies past what an {@code Int} holds and then answers eleven ends the run first.
+     */
+    @Test
+    void aDivisorThatComesToElevenIsWorkedOutToReachIt() {
+        String unsafe = report(measured(remainderByTheDivisor(
+                "{ let unused = List.length(body) * 9223372036854775807\n 11 }")));
+        assertTrue(unsafe.contains("not read:"), unsafe);
+        String safe = report(measured(remainderByTheDivisor(
+                "{ let unused = 1 + 1\n 11 }")));
+        assertFalse(safe.contains("not read:"), safe);
+    }
+
+    /**
+     * That a library call answers whatever it is handed is the call's own, and not its arguments':
+     * working out a count that multiplies past what an {@code Int} holds ends the run, whatever
+     * the call then does with the eleven it comes to.
+     */
+    @Test
+    void aCallThatAnswersWhateverItIsHandedStillWorksOutItsArguments() {
+        String safe = report(measured(MODEL.replace("List.take(11, codes)",
+                "List.take({ let unused = 1 + 1\n 11 }, codes)")));
+        assertFalse(safe.contains("not read:"), safe);
+        String unsafe = report(measured(MODEL.replace("List.take(11, codes)",
+                "List.take({ let unused = List.length(codes) * 9223372036854775807\n 11 }, codes)")));
+        assertTrue(unsafe.contains("not read:"), unsafe);
+    }
+
+    private static String digitValueOver(String zeros, String taken) {
+        return MODEL.replaceFirst("(?s)let digitValue.*?\\n(let weightedSum)", """
+                let digitValue (c: Int): Int = {
+                    let zeros = %s
+                    match List.get(0, zeros) with
+                        | Some zero -> %s
+                        | None -> unreachable "a one-character string has a first code point"
+                }
+                $1""".formatted(zeros, taken));
+    }
+
+    /**
+     * The lookup a match is read at the arm of finds its element in a list a name stands for, and
+     * what is worked out to build that list is worked out all the same; so is the arm taken,
+     * while the arm not taken is not.
+     */
+    @Test
+    void aMatchIsReadAtItsArmOnlyWhereWhatDecidesItAndTheArmTakenEndNoRun() {
+        String plain = "String.codePoints(\"0\")";
+        String taken = "c - zero";
+        assertFalse(report(measured(digitValueOver(plain, taken))).contains("not read:"));
+        String buildsUnsafely = report(measured(digitValueOver(
+                "{ let unused = c * 9223372036854775807\n " + plain + " }", taken)));
+        assertTrue(buildsUnsafely.contains("not read:"), buildsUnsafely);
+        String armUnsafe = report(measured(digitValueOver(plain,
+                "c * 9223372036854775807 - zero")));
+        assertTrue(armUnsafe.contains("not read:"), armUnsafe);
+    }
+
     /** Two closures over code points, one inside the other, are each read at the arm their
      *  match takes. Each is read by a reading of its own, so the inner one cannot turn off what
      *  the outer one is read with; this holds the two together. */

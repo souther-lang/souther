@@ -699,7 +699,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return;
                 }
                 if (tellsTheClosuresMakingAnOption(binding.value(), at)
-                        || isARemainderOfAReadForm(binding.value(), at, this, ruleSource)) {
+                        || isARemainderOfAReadForm(binding.value(), at, this, ruleSource,
+                                reached)) {
                     return;
                 }
                 told.exact = false;
@@ -1283,7 +1284,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                             at);
                 }
                 if (!WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(making).endsNone()) {
-                    return totalOfWhatIsMadeOfTheCodePointsOfAString(call, making, at);
+                    return totalOfWhatIsMadeOfTheCodePointsOfAString(call,
+                            new Denotation(call.args().get(operand), at), making, at);
                 }
                 Core.ListLit list = null;
                 InputReads listAt = at;
@@ -1294,7 +1296,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     Optional<AffineForms.ListWrittenOut<InputReads>> written = list != null
                             ? Optional.empty() : AffineForms.listWrittenOutBy(argument, at, this);
                     if (written.isEmpty()) {
-                        return totalOfWhatIsMadeOfTheCodePointsOfAString(call, making, at);
+                        return totalOfWhatIsMadeOfTheCodePointsOfAString(call,
+                                new Denotation(call.args().get(operand), at), making, at);
                     }
                     list = written.get().list();
                     listAt = written.get().at();
@@ -1318,9 +1321,29 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             /**
+             * Whether working out {@code operand}, the expression a total is taken over, and what
+             * each name in it was given, ends no run apart from the closures written at
+             * {@code making}, whose applications are read one by one.
+             *
+             * <p>Which call the operand stands for and which code points its list holds are
+             * questions of values: following a name or a block to its answer leaves out what it
+             * works out beside it, and that is worked out all the same. So the evaluation is
+             * asked of the operand as it is written, and the values only of the walk.
+             */
+            private boolean theOperandEndsNoRunApartFromTheApplications(
+                    Denotation operand, Core.PreservedCall making) {
+                List<Core> applied = making.args().stream()
+                        .filter(argument -> Core.withoutStanding(argument) instanceof Core.Block)
+                        .toList();
+                return reached.besideWhatWasRestated(applied, null).endsNoRun(operand);
+            }
+
+            /**
              * The same, where the operand of the total is a name that stands for the call that
-             * makes the list: a code point list is read as the call it stands for is, and the
-             * binding of the name is then told with it and not read again.
+             * makes the list: a code point list is read as the call it stands for is. What the
+             * binding works out beside that call is asked of the binding
+             * ({@link #theOperandEndsNoRunApartFromTheApplications}), and the binding is then not
+             * read again.
              */
             private Attempt totalOfWhatIsMadeOfWhatANameStandsFor(Core.PreservedCall call,
                                                                  Core operand, InputReads at) {
@@ -1332,8 +1355,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (!(Core.withoutStanding(stands.value()) instanceof Core.PreservedCall making)) {
                     return new Attempt.NotApplicable();
                 }
-                Attempt made = totalOfWhatIsMadeOfTheCodePointsOfAString(call, making,
-                        stands.at());
+                Attempt made = totalOfWhatIsMadeOfTheCodePointsOfAString(call,
+                        new Denotation(operand, at), making, stands.at());
                 if (made instanceof Attempt.Form) {
                     told.readByATerm(operand);
                 }
@@ -1353,7 +1376,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * compiler's work.
              */
             private Attempt totalOfWhatIsMadeOfTheCodePointsOfAString(
-                    Core.PreservedCall call, Core.PreservedCall making, InputReads at) {
+                    Core.PreservedCall call, Denotation operand, Core.PreservedCall making,
+                    InputReads at) {
                 BindingId element = WalkElements.elementBindingOf(making, at, ruleSource.symbols(),
                         ruleSource.newtypes());
                 Core listed = element == null ? null : at.containerOfTheElementHandedTo(element);
@@ -1368,12 +1392,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (walked == null) {
                     return new Attempt.NotApplicable();
                 }
-                // Which code points the list holds is a question of values, and following a block
-                // to its answer leaves out what it works out beside it. The list is built all the
-                // same, so the operations are every one only where it is built by nothing that may
-                // end a run. A name it reads is bound, and worked out, where the walk that reached
-                // it read the binding.
-                if (!reached.endsNoRun(new Denotation(listed, at))) {
+                if (!theOperandEndsNoRunApartFromTheApplications(operand, making)) {
                     told.exact = false;
                 }
                 Optional<WhyUnread> declined = told.declinedAtCounting(walked.indices().size());
@@ -1725,7 +1744,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 ValueStanding.ReadThrough<InputReads> as = NameAnswers.taken(node, at);
                 return as != null || !at.isInsideAnApplicationOverCodePoints() ? as
                         : NameAnswers.armOfAMatchOnAFoundElement(node, at, ruleSource.symbols(),
-                                ruleSource.newtypes());
+                                ruleSource.newtypes(), reached);
             }
 
             @Override
@@ -2079,7 +2098,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         for (Core side : List.of(comparison.left(), comparison.right())) {
             if (AffineForms.outcome(side, at, reading)
                     instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>
-                    && !isARemainderOfAReadForm(side, at, reading, ofTheInput.rules())) {
+                    && !isARemainderOfAReadForm(side, at, reading, ofTheInput.rules(),
+                            WorkedOutToReachIt.of(ofTheInput))) {
                 told.exact = false;
             }
         }
@@ -2090,10 +2110,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * Whether {@code side} is a floor remainder by a positive constant and the number it takes the
      * remainder of reads as a form. Working it out runs nothing but the number it divides, whose
      * operations are told as that is read, and the remainder is not an operation a run stops at.
+     *
+     * <p>That the divisor comes to a positive number is a question of values. What is worked out
+     * to reach the divisor, and whatever else {@code side} is written with, is asked of
+     * {@code side} as it is written, apart from the dividend and the remainder itself.
      */
     private static boolean isARemainderOfAReadForm(
             Core side, InputReads reads, AffineForms.Reading<NumericTerm, InputReads> reading,
-            RuleReadingSource rules) {
+            RuleReadingSource rules, WorkedOutToReachIt reached) {
         Denotation standing = reads.standing(side, rules.symbols(), rules.newtypes());
         InputReads at = standing.at();
         if (!(Core.withoutStanding(standing.value()) instanceof Core.PreservedCall call)) {
@@ -2108,7 +2132,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         return at.folded(call.args().get(divisor.getAsInt()), rules.symbols(), rules.newtypes())
                         .orElse(null) instanceof Long by && by > 0
                 && AffineForms.outcome(call.args().get(dividend), at, reading)
-                        instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads>;
+                        instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads>
+                && reached.besideWhatWasRestated(List.of(call.args().get(dividend)), call)
+                        .endsNoRun(new Denotation(side, reads));
     }
 
     /** Whether what {@code expression} works out ends no run, apart from the closures
