@@ -30,6 +30,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
+import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
@@ -790,19 +791,19 @@ class HowLongThePathASearchAnswersIsReadTest {
                 .rowsByBehavior().getOrDefault("approvalChainFor", List.of()).stream()
                 .map(row -> row.inputs().stream().map(FixtureTemplate::text).toList())
                 .toList()) {
-            int nodes = inputs.getFirst().split("reports = \\[RoleNode", -1).length;
             String role = inputs.get(2);
             int needed = switch (role) {
                 case "SalesManager" -> 1;
                 case "RegionalVp" -> 2;
-                default -> 3;
+                case "Cfo" -> 3;
+                default -> throw new AssertionError("a role this model does not have: " + role);
             };
-            int above = nodes - 1;
-            String answer = above >= needed
-                    ? "ApprovalChain { role = " + role + ", approvers = ["
-                            + "UserId(\"x\"), ".repeat(needed - 1) + "UserId(\"x\") ] }"
+            List<String> above = holdersAbove(inputs.getFirst(), inputs.get(1));
+            String answer = above.size() >= needed
+                    ? "ApprovalChain { role = " + role + ", approvers = [ "
+                            + String.join(", ", above.subList(0, needed)) + " ] }"
                     : "NoAuthorityAbove { submitter = " + inputs.get(1) + ", needed = " + needed
-                            + ", available = " + above + " }";
+                            + ", available = " + above.size() + " }";
             written.append("                | \"offered ").append(named++).append("\" : (")
                     .append(String.join(", ", inputs)).append(") -> ").append(answer)
                     .append('\n');
@@ -810,17 +811,57 @@ class HowLongThePathASearchAnswersIsReadTest {
         Compilation after = measuredModel(model + written);
         assertEquals(List.of(), after.errors().stream()
                 .map(each -> each.diagnostic().code()).toList());
-        String measured = humanOf(after);
-        String afterChain = measured.substring(measured.indexOf("  approvalChainFor "));
-        // Every point of every border is met by a row the language ran, but the one at a line of
-        // no node, which the guard of chainTo keeps out of this branch: it is said not to be
-        // shown, and is not said to be unreachable.
-        assertTrue(afterChain.contains("borders 3   obligations 7/8"), measured);
-        assertTrue(afterChain.contains("nothing could show a row can be written at the OUT point"),
-                measured);
-        assertFalse(afterChain.contains("no row can stand at the OUT point"), measured);
-        assertTrue(afterChain.contains("branch      7/7"), measured);
-        assertTrue(afterChain.contains("decision    rules 7   taken 7"), measured);
+        List<BorderAssessment.Point> owed = BorderAssessment.pointsOf(
+                        Adequacy.searchedBoundariesOf(after.db(), "demo").get("approvalChainFor"))
+                .stream().filter(point -> point.owed() != null)
+                .filter(point -> point.asked().contains(" where role is "))
+                .toList();
+        String line = "List.length({line below root through reports to the node whose holder is"
+                + " submitter})";
+        // A row the language ran stands at the ON and OFF point of every role's border, and past
+        // the border of the role that has room for it.
+        assertEquals(List.of(
+                        "IN in 4 < " + line + " where role is Cfo",
+                        "OFF = 1 where role is SalesManager",
+                        "OFF = 2 where role is RegionalVp",
+                        "OFF = 3 where role is Cfo",
+                        "ON = 2 where role is SalesManager",
+                        "ON = 3 where role is RegionalVp",
+                        "ON = 4 where role is Cfo"),
+                owed.stream().filter(point -> point.owed().hasRowWitness())
+                        .map(HowLongThePathASearchAnswersIsReadTest::pointNamed)
+                        .distinct().sorted().toList());
+        // Whatever is left owed is the line of no node, which the guard of chainTo keeps out of
+        // this branch. It may come to be proved unreachable, and then it is not owed.
+        assertEquals(List.of(PointRole.OUT), owed.stream()
+                .filter(point -> !point.owed().hasRowWitness())
+                .map(BorderAssessment.Point::role).distinct().toList());
+    }
+
+    /** A point of a border by its role and what it asks, as a report writes it. */
+    private static String pointNamed(BorderAssessment.Point point) {
+        return point.role() + " " + point.asked();
+    }
+
+    /**
+     * The holders of the nodes above the first node, met in the order a search reads the tree,
+     * that holds {@code submitter}, the nearest first.
+     */
+    private static List<String> holdersAbove(String tree, String submitter) {
+        List<String> open = new ArrayList<>();
+        for (int at = 0; at < tree.length(); at++) {
+            if (tree.startsWith("RoleNode {", at)) {
+                int from = tree.indexOf("holder = ", at) + "holder = ".length();
+                String holder = tree.substring(from, tree.indexOf(')', from) + 1);
+                open.add(holder);
+                if (holder.equals(submitter)) {
+                    return open.subList(0, open.size() - 1).reversed();
+                }
+            } else if (tree.charAt(at) == '}') {
+                open.removeLast();
+            }
+        }
+        throw new AssertionError("no node holds " + submitter + " in " + tree);
     }
 
     // The proposition and its helpers.
