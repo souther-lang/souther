@@ -671,6 +671,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         List<UndividedByARelation> relations = new ArrayList<>();
         Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
         Map<ALineRead, List<UndividedByARelation.Working>> workings = new HashMap<>();
+        Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> relating = new LinkedHashMap<>();
+        boolean relatedOnlySomewhere = false;
         InputReads statingNoRelation = null;
         for (ClosureApplications.Application one : each) {
             if (one.reached() instanceof Proposition.Always(boolean made) && !made) {
@@ -705,6 +707,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         }
                     });
                     relations.addAll(alone.relations());
+                    ALineRead key = new ALineRead(new PlaceOfALine(THE_COMPARISON,
+                            spelled(onTheInput.stated().proposition())), alone);
+                    relating.computeIfAbsent(key, _ -> new ArrayList<>())
+                            .add(WhereAnApplicationIsMade.OnOne.wherever(one.reached()));
+                    workings.computeIfAbsent(key, _ -> new ArrayList<>())
+                            .add(workingOf(onTheInput));
+                    relatedOnlySomewhere |= !(one.reached() instanceof Proposition.Always(
+                            boolean holds) && holds);
                 }
                 case Read.Several several -> several.parts().forEach(part -> {
                     ALineRead key = new ALineRead(part.id(), part.line());
@@ -729,9 +739,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return new Read.Stopped(stopped, stoppedWhere);
         }
         // Every application's statement is a line or none of them is drawn, and one that relates
-        // the input to another value is no line.
+        // the input to another value is no line. Where only relations are read and some of them
+        // on an application not every run makes, each is read in the case where its application
+        // is made: a row at a line parting the values that settle it is one that makes it. Only
+        // where a row can be asked whether it makes each; otherwise the relation is read as one,
+        // and a line parting its values is read wherever a row arrives.
         if (!against.isEmpty()) {
-            return new Read.AgainstAnotherValue(against, relations);
+            List<Read.Several.Part> parts = new ArrayList<>();
+            relating.forEach((relation, readings) -> parts.add(new Read.Several.Part(
+                    relation.id(), relation.read(), WhereAnApplicationIsMade.decidesOn(readings),
+                    UndividedByARelation.Working.together(workings.get(relation)))));
+            return relatedOnlySomewhere && lines.isEmpty() && parts.stream().allMatch(part ->
+                    part.cases().stream().allMatch(one -> AStatementAtARow.askable(
+                            one.condition())))
+                    ? new Read.Several(parts) : new Read.AgainstAnotherValue(against, relations);
         }
         // A statement of no relation on some application is no line there, and the lines the
         // others draw would be drawn as though the comparison were only them.

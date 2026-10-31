@@ -5151,11 +5151,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>What it is shown to take is said where the first end is a number written down and the
      * last a number of one place moved by one, a place every value of whose type the declarations
-     * leave, which nothing on the way and no other side of the relation reads. A row then holds the
-     * place wherever the run asks, and its list every number from the first end to there: so the
-     * element takes every number from the first end on, as far as a list is let hold. A list the
-     * run cannot make — one holding more than {@link GetsPast#MOST_ELEMENTS} — hands its step
-     * nothing.
+     * leave, which no other side of the relation reads and nothing on the way reads but bounds of
+     * it alone. A row then holds the place wherever the run asks between those bounds, and its
+     * list every number from the first end to there: so the element takes every number from the
+     * first end on, as far as the bounds and a list are let hold. A list the run cannot make — one
+     * holding more than {@link GetsPast#MOST_ELEMENTS} — hands its step nothing.
      *
      * <p>Whether the walk hands its step every element of the list it makes is not this term's
      * to say. Where it stops on an answer, the elements past that answer are not handed, and the
@@ -5169,7 +5169,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NumericDomain.Bounds to = whereAnEndLies(number.to(), region);
         NumericDomain.Bounds holds = new NumericDomain.Bounds(from.min(), to.max());
         NumericDomain.Bounds realizes = heldWhole ? wholeNumbersTaken(side, number, read,
-                conditions) : null;
+                region, conditions) : null;
         return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
                 asARelationReadsIt(holds, carrier), asARelationReadsIt(realizes, carrier), null,
                 false, spacingOf(carrier), wholeNumbersStop(from, carrier), side.key());
@@ -5210,10 +5210,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * The whole numbers the element of {@code number} is shown to take, as {@link
-     * #wholeNumberAlong} says where — or null where that is not shown.
+     * #wholeNumberAlong} says where, over the rows in {@code region} — or null where that is not
+     * shown.
      */
     private NumericDomain.Bounds wholeNumbersTaken(Side side, Quantity.AWholeNumberInTurn number,
-                                                   InputReading read, List<OnAWay> conditions) {
+                                                   InputReading read, SearchRegion region,
+                                                   List<OnAWay> conditions) {
         if (!number.from().coefs().isEmpty() || !number.from().constant().isWhole()
                 || number.to().coefs().size() != 1) {
             return null;
@@ -5226,11 +5228,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         List<TermPath> ends = place.placesReadOff();
+        boolean bounded = false;
         for (OnAWay each : conditions) {
-            if (each.positions().stream().anyMatch(at -> ends.stream()
+            if (each.positions().stream().noneMatch(at -> ends.stream()
                     .anyMatch(end -> overlap(at, end)))) {
+                continue;
+            }
+            // A bound of the last end and of nothing else leaves a row any value between the
+            // bounds there, whatever the rest of the way holds.
+            if (each.affine() == null || !each.affine().terms().equals(Set.of(place))) {
                 return null;
             }
+            bounded = true;
         }
         for (Side other : sides) {
             if (other == side) {
@@ -5247,9 +5256,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (first == null) {
             return null;
         }
-        return new NumericDomain.Bounds(Endpoint.inclusive(new Count(new BigDecimal(first))),
+        NumericDomain.Bounds taken = new NumericDomain.Bounds(
+                Endpoint.inclusive(new Count(new BigDecimal(first))),
                 Endpoint.inclusive(new Count(new BigDecimal(
                         first.add(GetsPast.MOST_ELEMENTS).subtract(BigInteger.ONE)))));
+        if (!bounded) {
+            return taken;
+        }
+        // Each number is taken by a row whose last end is at it or past it, so the numbers are
+        // the first end's up to the most the way leaves the last end, where it leaves it some at
+        // all from which the list is one a run makes.
+        if (!(region.projectionOf(number.to()) instanceof NumericDomain.FormProjection.Within(
+                NumericDomain.Bounds last)) || !last.holdsAValue()) {
+            return null;
+        }
+        NumericDomain.Bounds reached = taken.meet(new NumericDomain.Bounds(null, last.max()));
+        boolean madeSomewhere = last.min() == null
+                || new NumericDomain.Bounds(last.min(), null).meet(taken).holdsAValue();
+        return madeSomewhere && reached.holdsAValue() ? reached : null;
     }
 
     /**
@@ -5319,13 +5343,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** Where the positions a walk hands its step lie: below how many the region leaves the
      *  container holding, and open where that is not read. Not ended where the language ends a
-     *  container, which is no distinction a model made. */
+     *  container, which is no distinction a model made: a region whose most is that end, as one
+     *  stating the container holds something leaves it, leaves the positions without a most. */
     private static NumericDomain.Bounds positionsLie(Quantity.PositionInTheWalk position,
                                                      SearchRegion region) {
         NumericDomain.Bounds lie = region.projectionOf(position.howMany())
                 instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds sizes)
-                ? positionsIn(sizes, position.howMany(), false) : null;
+                ? positionsIn(withoutTheLanguagesEnd(sizes, position.howMany()),
+                        position.howMany(), false) : null;
         return lie == null ? NumericDomain.Bounds.OPEN : lie;
+    }
+
+    /** {@code sizes} with no most where its most is no nearer than where the language ends
+     *  {@code size}. */
+    private static NumericDomain.Bounds withoutTheLanguagesEnd(NumericDomain.Bounds sizes,
+                                                               NumericTerm.FromOnePosition size) {
+        Endpoint end = RepresentationBounds.of(size).max();
+        return end != null && sizes.max() != null && end.equals(sizes.meet(
+                RepresentationBounds.of(size)).max())
+                ? new NumericDomain.Bounds(sizes.min(), null) : sizes;
     }
 
     /**
