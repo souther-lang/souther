@@ -65,6 +65,15 @@ public sealed interface Core {
 
     SourcePos pos();
 
+    /**
+     * A hash of {@code e} that does not walk it: what kind of node it is and where it stands. Equal
+     * nodes agree on both, so it is a hash for a key that holds a node, which asks it for every
+     * lookup, where the hash a record writes for itself walks the tree under the node each time.
+     */
+    static int hashWithoutWalking(Core e) {
+        return 31 * e.getClass().getName().hashCode() + e.pos().hashCode();
+    }
+
     /** The type the checker decided for this expression. */
     Type type();
 

@@ -74,6 +74,12 @@ public record ClosureUses(List<Application> applications, boolean usedElsewhere)
             }
         }
 
+        @Override
+        public int hashCode() {
+            return Objects.hash(operation, lineage, Core.hashWithoutWalking(container),
+                    applied, Core.hashWithoutWalking(call), position, held);
+        }
+
         /**
          * The parameters whose value at one application the applications before it make: every one
          * the closure is not handed what the container holds on — the position, which counts them,
