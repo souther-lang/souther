@@ -80,10 +80,6 @@ public record EachWayItComesOut(Granularity spacing, List<Stretch> stretches) {
         }
     }
 
-    /** Whether a run of numbers holds a value of the term: it does, it does not, or that is not
-     *  worked out, which is neither. */
-    enum Occupancy { HOLDS, EMPTY, UNKNOWN }
-
     public EachWayItComesOut {
         Objects.requireNonNull(spacing, "a term's values are spaced somehow");
         stretches = stretches.stream().sorted(Comparator.comparing(Stretch::from,
@@ -93,8 +89,8 @@ public record EachWayItComesOut(Granularity spacing, List<Stretch> stretches) {
             ExactCut end = stretches.get(i - 1).to();
             ExactCut start = stretches.get(i).from();
             if (end == null || start == null || byStart(start, startAfter(end)) < 0
-                    || (byStart(startAfter(end), start) != 0 && occupancy(spacing,
-                            startAfter(end), endBefore(start)) != Occupancy.EMPTY)) {
+                    || (byStart(startAfter(end), start) != 0 && Lattice.occupancy(spacing,
+                            startAfter(end), endBefore(start)) != Lattice.Occupancy.EMPTY)) {
                 throw new IllegalArgumentException("the stretches of a term's values follow on"
                         + " from one another: " + stretches);
             }
@@ -149,7 +145,7 @@ public record EachWayItComesOut(Granularity spacing, List<Stretch> stretches) {
         for (int i = first; i <= last; i++) {
             ExactCut from = i == 0 ? null : inOrder.get(i - 1);
             ExactCut to = i == inOrder.size() ? null : endBefore(inOrder.get(i));
-            switch (occupancy(spacing, from, to)) {
+            switch (Lattice.occupancy(spacing, from, to)) {
                 case UNKNOWN -> {
                     return null;
                 }
@@ -235,31 +231,5 @@ public record EachWayItComesOut(Granularity spacing, List<Stretch> stretches) {
     /** The end of the values below a run starting at {@code start}. */
     static ExactCut endBefore(ExactCut start) {
         return new ExactCut(start.at(), !start.inclusive());
-    }
-
-    /** Whether a run from {@code from} to {@code to} holds a value spaced {@code spacing}. A run
-     *  open on a side holds one. */
-    static Occupancy occupancy(Granularity spacing, ExactCut from, ExactCut to) {
-        if (from == null || to == null) {
-            return Occupancy.HOLDS;
-        }
-        int order = from.at().compareTo(to.at());
-        if (order > 0) {
-            return Occupancy.EMPTY;
-        }
-        if (order == 0) {
-            return from.inclusive() && to.inclusive() && Lattice.holds(spacing, from.at())
-                    ? Occupancy.HOLDS : Occupancy.EMPTY;
-        }
-        Lattice.Point least = Lattice.least(spacing, from);
-        Lattice.Point greatest = Lattice.greatest(spacing, to);
-        if (least == null || greatest == null) {
-            return Occupancy.UNKNOWN;
-        }
-        Integer placed = Lattice.compare(least, greatest);
-        if (placed == null) {
-            return Occupancy.UNKNOWN;
-        }
-        return placed <= 0 ? Occupancy.HOLDS : Occupancy.EMPTY;
     }
 }

@@ -12,6 +12,8 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -171,6 +173,68 @@ class AWayIsReachedWhereSomeArmReachesItTest {
                 new Stretch(ExactCut.exclusive(ExactRatio.of(5)), null, Shown.NOT_SHOWN,
                         Shown.NEVER)),
                 xAtMostC(atNoughtOrBelow, fiveEitherSide).stretches());
+    }
+
+    /**
+     * What a relation shows of a term each way covers every value the term may hold, from the
+     * end of what it holds to the other, the stretches following on from one another: asked of
+     * every order, either weight, the other term held to runs open, closed or with no end on each
+     * side, and the term itself held and shown to take a run or nothing, whatever is or is not
+     * shown at each value.
+     */
+    @Test
+    void eachWayIsSaidOfEveryValueTheTermMayHold() {
+        List<NumericDomain.Bounds> runs = new ArrayList<>();
+        List<Endpoint> lows = new ArrayList<>();
+        lows.add(null);
+        lows.add(Endpoint.inclusive(Count.of(-1)));
+        lows.add(Endpoint.exclusive(Count.of(-1)));
+        List<Endpoint> highs = new ArrayList<>();
+        highs.add(null);
+        highs.add(Endpoint.inclusive(Count.of(1)));
+        highs.add(Endpoint.exclusive(Count.of(1)));
+        for (Endpoint low : lows) {
+            for (Endpoint high : highs) {
+                runs.add(new NumericDomain.Bounds(low, high));
+            }
+        }
+        int asked = 0;
+        for (Rel relation : List.of(Rel.LT, Rel.LE, Rel.GT, Rel.GE)) {
+            for (long weight : new long[] {1, -1}) {
+                for (NumericDomain.Bounds other : runs) {
+                    for (NumericDomain.Bounds held : runs) {
+                        for (NumericDomain.Bounds taken : Arrays.asList(null,
+                                NumericDomain.Bounds.OPEN, held)) {
+                            List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                                    new WhatARelationLeavesUndivided.Term<>(List.of("c"),
+                                            ExactRatio.of(weight), held, taken, null, true,
+                                            Granularity.DENSE, NumericDomain.Bounds.OPEN),
+                                    new WhatARelationLeavesUndivided.Term<>(List.of("x"),
+                                            ExactRatio.ONE, other, other, null, true,
+                                            Granularity.DENSE, NumericDomain.Bounds.OPEN));
+                            EachWayItComesOut each = WhatARelationLeavesUndivided
+                                    .eachWayItComesOut(terms, 0, ExactRatio.ZERO, relation,
+                                            String::equals, (one, two) -> true, Granularity.DENSE,
+                                            null, WhatARelationLeavesUndivided.Operations.NONE);
+                            String which = relation + " " + weight + " " + other + " " + held
+                                    + " " + taken;
+                            assertTrue(each != null && !each.stretches().isEmpty(), which);
+                            assertEquals(cutOf(held.min()), each.stretches().getFirst().from(),
+                                    which);
+                            assertEquals(cutOf(held.max()), each.stretches().getLast().to(),
+                                    which);
+                            asked++;
+                        }
+                    }
+                }
+            }
+        }
+        assertEquals(4 * 2 * 9 * 9 * 3, asked);
+    }
+
+    private static ExactCut cutOf(Endpoint end) {
+        return end == null ? null
+                : new ExactCut(((Count) end.at()).exactly(), end.inclusive());
     }
 
     /** A term that may hold no value shows nothing of any, and joined arms none of which holds a

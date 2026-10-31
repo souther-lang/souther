@@ -39,7 +39,6 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumberRegion;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
-import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
@@ -782,26 +781,19 @@ sealed interface ComparisonAssessment {
             return out;
         }
 
-        /** The choice the line {@code id} is a place of answers an arm of, where it is what one
-         *  arm of one choice answers — or null where it is anything else, the way an arm is
-         *  selected among them. */
+        /** The choice the line {@code id} is a place of answers an arm of
+         *  ({@link WrittenLine#choiceAnArmOfWhichItAnswers}), or null. */
         static WrittenChoice choiceAnsweredBy(PlaceOfALine id) {
-            List<WrittenLine.Arm> taken = id.line().line().arms();
-            return taken.size() != 1 || taken.getFirst().selects() ? null
-                    : taken.getFirst().at();
+            return id.line().line().choiceAnArmOfWhichItAnswers();
         }
 
-        /** Whether each of two parts is read in one case, and the two are one condition holding
-         *  and failing. */
+        /** Whether each of two parts is read in one case, and the one case is the denial of the
+         *  other ({@link Proposition#denied}). */
         private static boolean inACaseAndItsDenial(Part one, Part other) {
-            if (one.cases().size() != 1 || other.cases().size() != 1
-                    || !one.cases().getFirst().saidAlone()
-                    || !other.cases().getFirst().saidAlone()) {
-                return false;
-            }
-            return one.cases().getFirst().condition() instanceof Proposition.Compared mine
-                    && other.cases().getFirst().condition() instanceof Proposition.Compared theirs
-                    && mine.relation().equals(theirs.relation()) && mine.holds() != theirs.holds();
+            return one.cases().size() == 1 && other.cases().size() == 1
+                    && one.cases().getFirst().saidAlone() && other.cases().getFirst().saidAlone()
+                    && one.cases().getFirst().condition()
+                            .equals(other.cases().getFirst().condition().denied());
         }
 
         /**
@@ -1620,12 +1612,8 @@ sealed interface ComparisonAssessment {
                 || !(line.cutting().claim() instanceof ComparisonClaim.Cut cut)) {
             return null;
         }
-        boolean aboveTakesTheValue = cut.valueBelongs() == Towards.ABOVE;
-        boolean holdsAbove = aboveTakesTheValue == cut.holdsAtTheValue();
-        Rel relation = holdsAbove ? (aboveTakesTheValue ? Rel.GE : Rel.GT)
-                : (aboveTakesTheValue ? Rel.LT : Rel.LE);
         return UndividedByARelation.ofTheInputsNumbers(LinearForm.atom(line.position()),
-                value.exactly().negated(), relation);
+                value.exactly().negated(), cut.statedRelation());
     }
 
     /**

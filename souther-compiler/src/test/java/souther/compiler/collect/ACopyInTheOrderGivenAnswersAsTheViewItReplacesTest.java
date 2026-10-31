@@ -72,25 +72,30 @@ class ACopyInTheOrderGivenAnswersAsTheViewItReplacesTest {
         }
     }
 
-    /** The keys of a copy as a list are its keys in its order, as the view's keys listed are, and
-     *  the list refuses every change; so are those of a map this did not make. */
+    /** The keys of a map listed answer as the view's keys listed do, null key and all, whether
+     *  the map is a copy made here or any other: in its order, and every change refused. */
     @Test
-    void theKeysOfACopyAreListedInItsOrder() {
+    void theKeysOfAMapAreListedAsTheViewsAre() {
         for (int size : SIZES) {
-            List<Object> expected = new ArrayList<>(given(size).keySet());
-            List<Object> keys = InTheOrderGiven.keys(InTheOrderGiven.map(given(size)));
-            assertEquals(expected, keys, "the keys of " + size);
-            assertEquals(expected.hashCode(), keys.hashCode());
-            for (int at = 0; at < size; at++) {
-                assertEquals(expected.get(at), keys.get(at));
+            List<Object> expected =
+                    new ArrayList<>(Collections.unmodifiableMap(given(size)).keySet());
+            for (Map<Object, Object> map : List.of(given(size),
+                    InTheOrderGiven.map(given(size)))) {
+                List<Object> keys = InTheOrderGiven.keys(map);
+                String which = "the keys of " + size + " in a " + map.getClass().getSimpleName();
+                assertEquals(expected, keys, which);
+                assertEquals(keys, expected, which);
+                assertEquals(expected.hashCode(), keys.hashCode(), which);
+                assertEquals(expected.size(), keys.size(), which);
+                for (int at = 0; at < size; at++) {
+                    assertEquals(expected.get(at), keys.get(at), which);
+                }
+                assertEquals(expected.contains(null), keys.contains(null), which);
+                assertThrows(IndexOutOfBoundsException.class, () -> keys.get(size), which);
+                assertThrows(UnsupportedOperationException.class, () -> keys.add("k"), which);
+                assertThrows(UnsupportedOperationException.class, keys::clear, which);
             }
-            assertThrows(IndexOutOfBoundsException.class, () -> keys.get(size));
-            assertThrows(UnsupportedOperationException.class, () -> keys.add("k"));
         }
-        Map<String, Integer> plain = new LinkedHashMap<>();
-        plain.put("b", 1);
-        plain.put("a", 2);
-        assertEquals(List.of("b", "a"), InTheOrderGiven.keys(plain));
     }
 
     @Test

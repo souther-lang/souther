@@ -8,7 +8,6 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -125,20 +124,7 @@ public sealed interface LinearQuantity extends BorderQuantity
      * did.
      */
     default QuantityReading read(Observation observation) {
-        Map<TermOrders, WhatATermRead> answers = new HashMap<>();
-        for (NumericTerm term : terms()) {
-            TermOrders orders = ordersOf(term);
-            WhatATermRead read = WhatATermRead.ofTerm(orders, observation);
-            // One entry per term, which the orders say they are of, so two could only meet where a
-            // quantity is taken of one term twice. Refused rather than let the second stand: a
-            // reading that kept one of them would answer for a term with what another one read.
-            if (answers.put(orders, read) != null) {
-                throw new IllegalStateException(
-                        "a quantity is taken of each of its terms once, and this names " + orders
-                                + " among " + terms());
-            }
-        }
-        return new QuantityReading(answers);
+        return QuantityReading.of(this, observation);
     }
 
     /**

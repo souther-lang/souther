@@ -1323,6 +1323,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return out == null ? Map.of() : out;
     }
 
+    /**
+     * Whether two sides stand apart along a way stating {@code conditions}: neither the
+     * declarations nor any of those ties the one to the other, the rules in {@code ignoring} left
+     * out ({@link #rulesLeavingRoomAroundTheLine}).
+     */
+    private WhatARelationLeavesUndivided.Independence apartOnTheWay(List<OnAWay> conditions,
+                                                                   List<Source> sources,
+                                                                   InputReading read,
+                                                                   Set<Object> ignoring) {
+        TiedOnTheWay tied = TiedOnTheWay.of(conditions, read, ignoring);
+        List<Set<Object>> tiedTo = new ArrayList<>();
+        for (int i = 0; i < sides.size(); i++) {
+            tiedTo.add(tiedTo(i, tied, conditions, sources, read, ignoring));
+        }
+        return (one, other) -> apartByTheDeclarations(one, other, sources, read, ignoring)
+                && Collections.disjoint(tiedTo.get(one), tiedTo.get(other));
+    }
+
     /** {@link #comingOutAlong} over the rows of the one way {@code way}. */
     private Map<NumericTerm, EachWayItComesOut> comingOutOn(InputReading read,
                                                             SidesAsDeclared declared,
@@ -1341,14 +1359,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = termsAlong(read,
                 sources, carriers, entire.along(), entire.declared(), entire.conditions(), null,
                 entire.stating(), true, entire.narrowing(), false);
-        TiedOnTheWay tied = TiedOnTheWay.of(entire.conditions(), read, Set.of());
-        List<Set<Object>> tiedTo = new ArrayList<>();
-        for (int i = 0; i < sides.size(); i++) {
-            tiedTo.add(tiedTo(i, tied, entire.conditions(), sources, read, Set.of()));
-        }
-        WhatARelationLeavesUndivided.Independence independent = (one, other) ->
-                apartByTheDeclarations(one, other, sources, read)
-                        && Collections.disjoint(tiedTo.get(one), tiedTo.get(other));
+        WhatARelationLeavesUndivided.Independence independent =
+                apartOnTheWay(entire.conditions(), sources, read, Set.of());
         WhatARelationLeavesUndivided.Operations operations = operationsOverTheSides(read,
                 entire.conditions(), true, totalsWrittenByOneElement(terms));
         Map<NumericTerm, EachWayItComesOut> out = new LinkedHashMap<>();
@@ -2230,11 +2242,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // A way that relates a term to other numbers leaves it the run the region answers, and
         // the pair is asked whether the way ties them as well as whether the declarations do.
         Set<Object> roomy = room.rules();
-        TiedOnTheWay tied = TiedOnTheWay.of(beside.conditions(), read, roomy);
-        List<Set<Object>> tiedTo = new ArrayList<>();
-        for (int i = 0; i < sides.size(); i++) {
-            tiedTo.add(tiedTo(i, tied, beside.conditions(), sources, read, roomy));
-        }
+        WhatARelationLeavesUndivided.Independence onTheWay =
+                apartOnTheWay(beside.conditions(), sources, read, roomy);
         // A code point of the string the remainder's form is of stands apart from the form where
         // the format shows the form leaves every remainder whatever that code point is, and the
         // way states nothing of it that holds a string back: then all the way ties the two by is
@@ -2242,8 +2251,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         WhatARelationLeavesUndivided.Independence independent =
                 (one, other) -> (byTheFormat != null && apartByTheFormat(one, other)
                         && terms.get(one).realizes() != null && terms.get(other).realizes() != null)
-                        || (apartByTheDeclarations(one, other, sources, read, roomy)
-                                && Collections.disjoint(tiedTo.get(one), tiedTo.get(other)));
+                        || onTheWay.between(one, other);
         BiPredicate<FilingCoordinate, FilingCoordinate> overlapping = byTheFormat == null
                 ? UndividedByARelation::overlap
                 : (one, other) -> !apartByTheFormat(one, other) && overlap(one, other);

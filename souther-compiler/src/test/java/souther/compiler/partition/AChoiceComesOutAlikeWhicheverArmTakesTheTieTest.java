@@ -96,20 +96,69 @@ class AChoiceComesOutAlikeWhicheverArmTakesTheTieTest {
 
     /**
      * With {@code x} declared at nought or above, the lesser is nought: no line is drawn from the
-     * arm answering {@code x}, which no row reaches, and the line on {@code c} is the other's.
+     * arm answering {@code x}, which no row reaches, and the line on {@code c} is the other's. No
+     * row is built that holds the comparison at a {@code c} below nought: every row built there,
+     * written out as an example that comes to {@code No}, is run and holds.
      */
     @Test
     void anArmNoRowReachesDrawsNothing() {
-        Compilation compilation = compiled("""
+        String prelude = """
                 data NonNeg = Decimal
                     invariant value >= 0.0m
-                """, "x: NonNeg, c: Decimal", "Decimal.compare(Decimal.min(x.value, 0.0m), c) <= 0",
-                "");
+                """;
+        Compilation compilation = compiled(prelude, "x: NonNeg, c: Decimal",
+                "Decimal.compare(Decimal.min(x.value, 0.0m), c) <= 0", "");
         assertEquals(List.of(), unreadReasonsOf(measured(compilation)));
         List<BorderAssessment> lines = linesOf(compilation);
         assertEquals(List.of("0"), valuesOfTheLinesOn("f/c", lines));
         assertEquals(List.of(), valuesOfTheLinesOn("f/x", lines).stream()
                 .filter(value -> !value.equals("0")).toList());
+        assertTrue(everyRowBelowNoughtComesToNo(prelude, "x: NonNeg, c: Decimal",
+                "Decimal.compare(Decimal.min(x.value, 0.0m), c) <= 0"));
+        // The control: with x free, a row below nought holds the comparison, and is caught.
+        assertTrue(!everyRowBelowNoughtComesToNo("", "x: Decimal, c: Decimal",
+                "Decimal.compare(Decimal.min(x, 0.0m), c) <= 0"));
+    }
+
+    /**
+     * Whether every row built for {@code f} with its second input, {@code c}, below nought, written
+     * out as an example coming to {@code No}, is run and holds — some such row being built.
+     */
+    private static boolean everyRowBelowNoughtComesToNo(String prelude, String parameters,
+                                                        String condition) {
+        List<List<String>> belowNought = new ArrayList<>();
+        for (BorderAssessment line : linesOf(compiled(prelude, parameters, condition, ""))) {
+            for (List<String> row : rowsBuiltFor(line)) {
+                if (row.get(1).startsWith("-") && !belowNought.contains(row)) {
+                    belowNought.add(row);
+                }
+            }
+        }
+        assertTrue(!belowNought.isEmpty(), "a row is built below nought");
+        StringBuilder examples = new StringBuilder("\nexample f\n");
+        for (int i = 0; i < belowNought.size(); i++) {
+            examples.append("    | \"below nought ").append(i).append("\" : (")
+                    .append(String.join(", ", belowNought.get(i))).append(") -> No\n");
+        }
+        String human = human(compiled(prelude, parameters, condition, examples.toString()));
+        assertTrue(human.contains("rows " + belowNought.size()), human);
+        return !human.contains("does not hold");
+    }
+
+    /** What each row built for some point of {@code line} was written as, one text per input. */
+    private static List<List<String>> rowsBuiltFor(BorderAssessment line) {
+        List<List<String>> out = new ArrayList<>();
+        line.items().forEach((at, item) -> {
+            if (item instanceof ItemAssessment.Owed owed) {
+                for (ItemAssessment.Attempt attempt : owed.searches().each()) {
+                    if (attempt instanceof ItemAssessment.Attempt.Certified certified) {
+                        out.add(certified.row().inputs().stream().map(each -> each.text())
+                                .toList());
+                    }
+                }
+            }
+        });
+        return out;
     }
 
     /**

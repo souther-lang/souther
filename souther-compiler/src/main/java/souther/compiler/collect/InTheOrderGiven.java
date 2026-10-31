@@ -4,6 +4,7 @@ import java.util.AbstractCollection;
 import java.util.AbstractList;
 import java.util.AbstractMap;
 import java.util.AbstractSet;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
@@ -170,7 +171,8 @@ public final class InTheOrderGiven {
 
         @Override
         List<K> keysInOrder() {
-            return new KeysOf<>(entries);
+            // Refusing every change as a view does, one that would change nothing among them.
+            return Collections.unmodifiableList(new KeysOf<>(entries));
         }
 
         @Override
@@ -320,13 +322,15 @@ public final class InTheOrderGiven {
     }
 
     /**
-     * The keys of {@code map} in its order, as a list. Of a copy made here, the keys where they
-     * are held, read in place and not copied: a form's terms are walked as a list every time a
-     * row is read at it, and a copy of them each time is as many arrays as rows.
+     * The keys of {@code map} in its order, as a list every change to which is refused, a null
+     * key among them as any other — as the keys of the view over a {@code LinkedHashMap} listed
+     * are, whichever map it is. Of a copy made here, the keys where they are held, read in place
+     * and not copied: a form's terms are walked as a list every time a row is read at it, and a
+     * copy of them each time is as many arrays as rows.
      */
     public static <K> List<K> keys(Map<K, ?> map) {
         return map instanceof Refusing<K, ?> held ? held.keysInOrder()
-                : List.copyOf(map.keySet());
+                : Collections.unmodifiableList(new ArrayList<>(map.keySet()));
     }
 
     /** The keys of a {@link HeldMap}'s entries, every other one of them, read where they are. */
