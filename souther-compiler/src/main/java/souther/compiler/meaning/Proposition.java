@@ -213,8 +213,8 @@ public sealed interface Proposition {
             case Quantity.SumOver(DecisionSubject summed, Quantity each) ->
                     isAnElementOf(summed, container) || mayBeAnElementOf(each, container);
             case Quantity.RemainderOfADividend(var _, var dividend, var _) ->
-                    dividend.coefs().keySet().stream().anyMatch(term -> isAnElementOf(
-                            new DecisionSubject.AnInput(term.subjectPath()), container));
+                    dividend.coefs().keySet().stream()
+                            .anyMatch(each -> mayBeAnElementOf(each, container));
             case Quantity.RemainderByAnInput remainder -> remainder.operands().stream()
                     .anyMatch(term -> isAnElementOf(
                             new DecisionSubject.AnInput(term.subjectPath()), container));

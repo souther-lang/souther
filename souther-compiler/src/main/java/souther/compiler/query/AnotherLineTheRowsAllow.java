@@ -1513,7 +1513,7 @@ public sealed interface AnotherLineTheRowsAllow {
                         if (Collections.disjoint(remainder.terms(), moved)) {
                             continue;
                         }
-                        if (!(OrderedAffineBoundary.at(remainder.remainder().dividend(), at)
+                        if (!(OrderedAffineBoundary.at(remainder.dividend(), at)
                                 instanceof ExactAnswer.Held<ExactRatio>(ExactRatio comes))
                                 || !comes.isWhole()
                                 || !(comes.floor() instanceof ExactAnswer.Held<BigInteger>(

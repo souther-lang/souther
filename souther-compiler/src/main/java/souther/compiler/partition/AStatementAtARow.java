@@ -278,7 +278,7 @@ final class AStatementAtARow {
         // A number beside the remainder is apart from the form it is the remainder of, and not
         // merely another number: one read off a place the form reads moves with it.
         for (NumericTerm term : otherNumbersWithTheRemainder(affine.form()).coefs().keySet()) {
-            for (NumericTerm of : remainder.dividend().coefs().keySet()) {
+            for (NumericTerm of : remainder.numbersOfTheInput().keySet()) {
                 if (term.sharesAPlaceWith(of)) {
                     return null;
                 }
@@ -450,7 +450,7 @@ final class AStatementAtARow {
                             into.addAll(remainder.operands());
                         } else if (remainderOfADividendIn(affine)
                                 instanceof Quantity.RemainderOfADividend remainder) {
-                            into.addAll(remainder.dividend().coefs().keySet());
+                            into.addAll(remainder.numbersOfTheInput().keySet());
                             into.addAll(
                                     otherNumbersWithTheRemainder(affine.form()).coefs().keySet());
                         }
@@ -2167,7 +2167,7 @@ final class AStatementAtARow {
                     : Cutting.readAt(behavior, added, quantities);
             if (of == null || (addedNumbers == null && !added.coefs().isEmpty())) {
                 Map<NumericTerm, ExactRatio> every = new LinkedHashMap<>(
-                        remainder.dividend().coefs());
+                        remainder.numbersOfTheInput());
                 every.putAll(added.coefs());
                 return new NoQuantity(new LinearForm<>(ExactRatio.ZERO, every));
             }

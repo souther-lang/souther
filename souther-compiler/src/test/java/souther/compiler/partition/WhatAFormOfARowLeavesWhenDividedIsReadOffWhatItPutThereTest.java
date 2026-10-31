@@ -119,7 +119,7 @@ class WhatAFormOfARowLeavesWhenDividedIsReadOffWhatItPutThereTest {
     /** {@code floorMod(x, 11) + z == 7}: a number of the input beside the remainder. */
     private static final Proposition SEVEN_WITH_A_NUMBER = new Proposition.Compared(
             new Relation.Affine(new LinearForm<>(ExactRatio.of(-7), Map.of(
-                    new Quantity.RemainderOfADividend(
+                    Quantity.RemainderOfADividend.ofTheInput(
                             ValueName.Stdlib.operation("Int", "floorMod"),
                             new LinearForm<>(ExactRatio.ZERO,
                                     Map.of(new NumericTerm.ValueOf(X), ExactRatio.ONE)),
@@ -155,7 +155,7 @@ class WhatAFormOfARowLeavesWhenDividedIsReadOffWhatItPutThereTest {
 
     /** {@code weight * x + y + constant}, by eleven. */
     private static Quantity.RemainderOfADividend remainder(long onX, long onY, long constant) {
-        return new Quantity.RemainderOfADividend(ValueName.Stdlib.operation("Int", "floorMod"),
+        return Quantity.RemainderOfADividend.ofTheInput(ValueName.Stdlib.operation("Int", "floorMod"),
                 new LinearForm<>(ExactRatio.of(constant), Map.of(
                         new NumericTerm.ValueOf(X), ExactRatio.of(onX),
                         new NumericTerm.ValueOf(Y), ExactRatio.of(onY))),

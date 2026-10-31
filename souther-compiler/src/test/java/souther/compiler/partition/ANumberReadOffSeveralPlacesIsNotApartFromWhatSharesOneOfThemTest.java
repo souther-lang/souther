@@ -70,7 +70,7 @@ class ANumberReadOffSeveralPlacesIsNotApartFromWhatSharesOneOfThemTest {
 
     /** {@code Int.floorMod(k, 11) - beside}, the remainder first as a relation faces. */
     private static Relation.Affine remainderOfTheKeyBeside(NumericTerm beside) {
-        Quantity.RemainderOfADividend remainder = new Quantity.RemainderOfADividend(
+        Quantity.RemainderOfADividend remainder = Quantity.RemainderOfADividend.ofTheInput(
                 ValueName.Stdlib.operation("Int", "floorMod"),
                 new LinearForm<>(ExactRatio.ZERO, Map.of(THE_KEY, ExactRatio.ONE)),
                 BigInteger.valueOf(11));

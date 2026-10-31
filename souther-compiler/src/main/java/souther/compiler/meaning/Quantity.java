@@ -435,11 +435,19 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * <p>Whole numbers throughout. A form that weighs a number by a fraction, or is moved by one, is
      * no dividend of a remainder, and nothing here reads it as one.
      *
+     * <p>The dividend may be over a value read off a binding — the element of a list of every
+     * whole number between two — as well as over the input's numbers. Which values a row puts at
+     * such a value is not one of the row's numbers, so the remainder is one meaning however its
+     * dividend is made, and a reader that works the remainder out of the row's numbers asks for
+     * them ({@link #overTheInput}) and has none of them where the dividend is over such a value.
+     *
      * @param operation the library's floor remainder that answers it
-     * @param dividend the form the division is of, constant included
+     * @param dividend the form the division is of, constant included: the input's numbers as
+     *                 {@link DecisionAtom.OfTheInput}, and a value read off a binding as
+     *                 {@link OfABinding}
      * @param divisor the number it is divided by, above nought
      */
-    record RemainderOfADividend(ValueName operation, LinearForm<NumericTerm> dividend,
+    record RemainderOfADividend(ValueName operation, LinearForm<Quantity> dividend,
                                 BigInteger divisor) implements Quantity {
 
         public RemainderOfADividend {
@@ -451,6 +459,49 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                         + " some numbers by a divisor above nought: " + operation + " of "
                         + dividend + " by " + divisor);
             }
+            for (Quantity each : dividend.coefs().keySet()) {
+                if (!(each instanceof DecisionAtom.OfTheInput || each instanceof OfABinding)) {
+                    throw new IllegalArgumentException("a dividend is a form of the input's"
+                            + " numbers and of values read off bindings: " + dividend);
+                }
+            }
+        }
+
+        /** A remainder of a form of the input's numbers alone. */
+        public static RemainderOfADividend ofTheInput(ValueName operation,
+                                                      LinearForm<NumericTerm> dividend,
+                                                      BigInteger divisor) {
+            Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+            dividend.coefs().forEach((term, by) -> coefs.put(new DecisionAtom.OfTheInput(term), by));
+            return new RemainderOfADividend(operation, new LinearForm<>(dividend.constant(), coefs),
+                    divisor);
+        }
+
+        /**
+         * The dividend as a form of the input's numbers — or null where some value of it is read
+         * off a binding, and so is no number a row holds.
+         */
+        public LinearForm<NumericTerm> overTheInput() {
+            Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+            for (Map.Entry<Quantity, ExactRatio> each : dividend.coefs().entrySet()) {
+                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))) {
+                    return null;
+                }
+                coefs.put(term, each.getValue());
+            }
+            return new LinearForm<>(dividend.constant(), coefs);
+        }
+
+        /** The numbers of the input the dividend weighs, each with its weight: all of it but the
+         *  values read off bindings, and its constant. */
+        public Map<NumericTerm, ExactRatio> numbersOfTheInput() {
+            Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>();
+            dividend.coefs().forEach((each, by) -> {
+                if (each instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+                    out.put(term, by);
+                }
+            });
+            return out;
         }
 
         /** What the operation was handed beside the dividend: the divisor, where it takes it. */
@@ -472,14 +523,28 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         }
 
         /** The text {@link #spelled} writes, with each term of the dividend held as its own
-         *  spelling ({@link NumericTerm#spelling}). */
+         *  spelling ({@link NumericTerm#spelling}), and a value read off a binding as its own,
+         *  after them in the order of their texts. */
         @Override
         public Spelling spelling() {
             List<Object> out = new ArrayList<>();
             out.add("floorMod(");
-            NumericTerms.entriesInOrder(dividend.coefs()).forEach(each -> {
+            LinearForm<NumericTerm> ofTheInput = overTheInput();
+            List<Map.Entry<Object, ExactRatio>> terms = new ArrayList<>();
+            if (ofTheInput != null) {
+                NumericTerms.entriesInOrder(ofTheInput.coefs()).forEach(each ->
+                        terms.add(Map.entry(each.getKey().spelling(), each.getValue())));
+            } else {
+                dividend.coefs().entrySet().stream()
+                        .sorted(Comparator.comparing(each -> each.getKey().spelled()))
+                        .forEach(each -> terms.add(Map.entry(
+                                each.getKey() instanceof DecisionAtom.OfTheInput(var term)
+                                        ? term.spelling() : each.getKey().spelling(),
+                                each.getValue())));
+            }
+            terms.forEach(each -> {
                 out.add((out.size() == 1 ? "" : " + ") + each.getValue().spelled() + "·");
-                out.add(each.getKey().spelling());
+                out.add(each.getKey());
             });
             if (dividend.constant().signum() != 0) {
                 out.add(" + " + dividend.constant().spelled());

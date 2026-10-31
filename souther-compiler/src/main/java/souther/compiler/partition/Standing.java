@@ -256,7 +256,7 @@ public sealed interface Standing {
             WholeNumberRuns left = remainders;
             for (OnTheWay.TakenIn cut : way.boundedOnTheWay()) {
                 if (cut.demand() instanceof RowDemand.OnARemainder asked
-                        && asked.remainder().dividend().equals(dividend)
+                        && asked.dividend().equals(dividend)
                         && asked.remainder().divisor().equals(divisor)) {
                     left = left.and(asked.leaves());
                 }

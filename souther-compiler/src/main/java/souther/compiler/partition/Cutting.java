@@ -963,8 +963,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     /**
      * The remainder {@code remainder} is, read at the numbers of its form — or null where it is
-     * read at none: a number of the form whose values are not counted, or a constant that is no
-     * whole number to move the form by.
+     * read at none: a value of the form read off a binding, which is no number of a row's; a
+     * number of the form whose values are not counted; or a constant that is no whole number to
+     * move the form by.
      *
      * <p>The one place a remainder of a form becomes a quantity.
      */
@@ -972,12 +973,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                                        Quantity.RemainderOfADividend remainder,
                                                        LinearForm<NumericTerm> added,
                                                        Quantities quantities) {
-        if (!(remainder.dividend().constant().floor()
+        LinearForm<NumericTerm> dividend = remainder.overTheInput();
+        if (dividend == null || !(dividend.constant().floor()
                 instanceof ExactAnswer.Held<BigInteger> shift)) {
             return null;
         }
         Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
-        for (NumericTerm term : remainder.dividend().coefs().keySet()) {
+        for (NumericTerm term : dividend.coefs().keySet()) {
             TermOrders orders = quantities.ordersOf(term);
             if (orders == null || orders.answered() == null || !orders.answered().counts()) {
                 return null;
@@ -994,7 +996,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         return new BorderQuantity.RemainderOfAForm(behavior,
                 new BorderQuantity.OverAForm(behavior,
-                        new LinearForm<>(ExactRatio.ZERO, remainder.dividend().coefs()), on),
+                        new LinearForm<>(ExactRatio.ZERO, dividend.coefs()), on),
                 shift.value(), remainder.divisor(), added, addedOn);
     }
 
@@ -1277,6 +1279,17 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                      Pullback.OnTheInput onTheInput,
                                      Supplier<Optional<AuthorsLines>> lines) {
         Pullback.Pulled stated = onTheInput.stated();
+        // A remainder of a form over a value read off a binding is no number a row's numbers put
+        // anywhere: no line on it, no relation of it to another value, and the arithmetic that
+        // stopped at the division says where and why, as it did before the division was read.
+        if (statesARemainderNoRowPuts(stated.proposition())) {
+            return onTheInput.arithmetic().get()
+                    instanceof AffineReading.OfAComparison.Stopped stopped
+                    ? GuardThresholds.whatEachPlaceIsLeftWith(comparison, stopped, read, reads,
+                            answering)
+                    : noLine(comparison, stated.proposition(), List.of(), Set.of(),
+                            onTheInput.arithmetic(), read, reads, answering);
+        }
         Read line = stated.proposition() instanceof Proposition.Compared(
                 Relation.Affine affine, boolean holds, Spelling _)
                 ? lineOn(behavior, affine, holds, comparison.left(), read, reads) : null;
@@ -1334,6 +1347,18 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     Proposition.stopsIn(stated.proposition()), Set.of(), onTheInput.arithmetic(),
                     read, reads, answering);
         };
+    }
+
+    /** Whether some part of {@code stated} compares a remainder whose dividend is not a form of
+     *  the input's numbers alone ({@link Quantity.RemainderOfADividend#overTheInput}). */
+    private static boolean statesARemainderNoRowPuts(Proposition stated) {
+        if (stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, Spelling _)
+                && affine.form().coefs().keySet().stream().anyMatch(each ->
+                        each instanceof Quantity.RemainderOfADividend remainder
+                                && remainder.overTheInput() == null)) {
+            return true;
+        }
+        return stated.partsHeld().stream().anyMatch(Cutting::statesARemainderNoRowPuts);
     }
 
     /**

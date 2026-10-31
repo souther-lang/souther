@@ -576,14 +576,15 @@ final class MeaningAssumptions {
      * of what the places are than that their form leaves it.
      */
     private FactSubject remainderOfAForm(Quantity.RemainderOfADividend remainder) {
-        if (remainder.divisor().bitLength() >= Long.SIZE
-                || !(remainder.dividend().constant().floor()
+        LinearForm<NumericTerm> dividend = remainder.overTheInput();
+        if (dividend == null || remainder.divisor().bitLength() >= Long.SIZE
+                || !(dividend.constant().floor()
                         instanceof ExactAnswer.Held<BigInteger>(BigInteger constant))) {
             return null;
         }
         List<Map.Entry<FactSubject, BigDecimal>> weighed = new ArrayList<>();
         for (Map.Entry<NumericTerm, ExactRatio> each
-                : NumericTerms.entriesInOrder(remainder.dividend().coefs())) {
+                : NumericTerms.entriesInOrder(dividend.coefs())) {
             FactSubject place = atomOf(each.getKey());
             if (place == null || !(each.getValue().floor()
                     instanceof ExactAnswer.Held<BigInteger>(BigInteger weight))) {

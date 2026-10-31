@@ -883,7 +883,8 @@ public sealed interface RowDemand {
      * the form in the class of a remainder this leaves and placing the form's numbers to come to
      * it, as a point of the remainder's border is placed ({@link LevelRealizer}).
      *
-     * @param remainder the remainder, with the form it is of and what that is divided by
+     * @param remainder the remainder, with the form it is of and what that is divided by: a form
+     *                  of the input's numbers alone, since a row is asked to put its numbers at it
      * @param leaves    the remainders a row passing the condition may leave, none below nought and
      *                  none as large as the divisor
      */
@@ -893,6 +894,10 @@ public sealed interface RowDemand {
         public OnARemainder {
             Objects.requireNonNull(remainder, "a remainder of some form");
             Objects.requireNonNull(leaves, "the remainders the condition leaves");
+            if (remainder.overTheInput() == null) {
+                throw new IllegalArgumentException("a row puts its numbers at a remainder of a"
+                        + " form of them: " + remainder);
+            }
             WholeNumberRuns below = WholeNumberRuns.one(BigInteger.ZERO,
                     remainder.divisor().subtract(BigInteger.ONE));
             if (leaves.isNone() || !leaves.and(below).equals(leaves)) {
@@ -901,10 +906,15 @@ public sealed interface RowDemand {
             }
         }
 
+        /** The form the remainder is of, over the input's numbers. */
+        public LinearForm<NumericTerm> dividend() {
+            return remainder.overTheInput();
+        }
+
         /** The numbers of the form. */
         @Override
         public Set<NumericTerm> terms() {
-            return remainder.dividend().coefs().keySet();
+            return dividend().coefs().keySet();
         }
 
         @Override

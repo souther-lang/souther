@@ -1236,10 +1236,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** Whether {@code on} is a condition on this remainder: of the same form, moved by the
          *  same number and divided by the same divisor. */
         boolean isAskedBy(RowDemand.OnARemainder on) {
-            Quantity.RemainderOfADividend asked = on.remainder();
-            return asked.divisor().equals(divisor)
-                    && asked.dividend().coefs().equals(dividend.coefs())
-                    && asked.dividend().constant().equals(ExactRatio.of(shift));
+            LinearForm<NumericTerm> asked = on.dividend();
+            return on.remainder().divisor().equals(divisor)
+                    && asked.coefs().equals(dividend.coefs())
+                    && asked.constant().equals(ExactRatio.of(shift));
         }
     }
 

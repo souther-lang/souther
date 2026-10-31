@@ -11543,15 +11543,48 @@ final class Pullback {
         }
         LinearForm<NumericTerm> form = AffineReading.formOf(division.dividend(), division.at(),
                 read);
-        if (form == null || form.coefs().isEmpty() || !isWhole(form)) {
+        if (form == null) {
+            return remainderOverABoundValue(division);
+        }
+        if (form.coefs().isEmpty() || !isWhole(form)) {
             return null;
         }
         // Its rows are made where the form is worked out, each sum on the way a part of it
         // ({@link UndividedByARelation}), and the divisor is a number above nought.
         trial().readByTheFormOf.put(Core.withoutStanding(division.call()), division.dividend());
-        return new Quantity.RemainderOfADividend(division.call().operation(), new LinearForm<>(
-                ExactRatio.of(constantOf(form).mod(division.divisor())), form.coefs()),
-                division.divisor());
+        return Quantity.RemainderOfADividend.ofTheInput(division.call().operation(),
+                new LinearForm<>(ExactRatio.of(constantOf(form).mod(division.divisor())),
+                        form.coefs()), division.divisor());
+    }
+
+    /**
+     * The remainder {@code division} leaves of a dividend over values read off bindings as well as
+     * the input's numbers — or null where the dividend is no whole form of those.
+     *
+     * <p>Only a value read off a binding that is a number of its own ({@link
+     * UndividedByARelation.IntOperand.OfABinding#isOne}): the element of a list of every whole
+     * number between two, and where an element stands in a walk. The form is not read by its
+     * rows as one of the input's numbers is, so nothing says its rows are made where it is worked
+     * out, and the run working it out is read as it was.
+     */
+    private Quantity.RemainderOfADividend remainderOverABoundValue(
+            RemainderOfAShiftedValue.OfADivision<InputReads> division) {
+        if (!(AffineForms.outcome(division.dividend(), division.at(), quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                        LinearForm<Quantity> form))
+                || form.coefs().isEmpty() || !isWhole(form)) {
+            return null;
+        }
+        for (Quantity each : form.coefs().keySet()) {
+            if (!(each instanceof DecisionAtom.OfTheInput
+                    || (each instanceof Quantity.OfABinding bound
+                            && UndividedByARelation.IntOperand.OfABinding.isOne(bound)))) {
+                return null;
+            }
+        }
+        return new Quantity.RemainderOfADividend(division.call().operation(),
+                new LinearForm<>(ExactRatio.of(constantOf(form).mod(division.divisor())),
+                        form.coefs()), division.divisor());
     }
 
     /**
@@ -11676,13 +11709,13 @@ final class Pullback {
     }
 
     /** Whether every number of {@code form}, its constant included, is a whole one. */
-    private static boolean isWhole(LinearForm<NumericTerm> form) {
+    private static <A> boolean isWhole(LinearForm<A> form) {
         return form.constant().isWhole()
                 && form.coefs().values().stream().allMatch(ExactRatio::isWhole);
     }
 
     /** The constant of a form every number of which is whole. */
-    private static BigInteger constantOf(LinearForm<NumericTerm> form) {
+    private static <A> BigInteger constantOf(LinearForm<A> form) {
         return ((ExactAnswer.Held<BigInteger>) form.constant().floor()).value();
     }
 
