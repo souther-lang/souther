@@ -205,6 +205,11 @@ public record RowOutcome(SourcePos at,
             throw new IllegalArgumentException("a row whose answer is owed holds an answer to"
                     + " nothing: " + stage + " with " + disposition + " at " + failurePhase);
         }
+        // Nor does it expect a case: there is no expectation for one to be the case of.
+        if (owed && expectedArm != null) {
+            throw new IllegalArgumentException("a row whose answer is owed expects no case, and"
+                    + " this one is recorded expecting " + expectedArm);
+        }
         if (disposition == Disposition.FAILED && !failurePhase.failsARow()) {
             // A failed row says where the model did not do what it says. Stopped anywhere else, it
             // ends undecided, and a failed row carrying such a place would be read as a row the
@@ -239,5 +244,41 @@ public record RowOutcome(SourcePos at,
      * disagreed still saw what it saw. */
     public boolean observed() {
         return answered() && resultArm != null;
+    }
+
+    /**
+     * Which case this row expects the answer to be.
+     *
+     * <p>One of three things, and {@link #expectedArm} being absent is two of them: a row whose
+     * answer is owed expects nothing, so it is evidence for no case; a row that states an
+     * expectation whose case could not be read may expect any of them. A count of the cases rows
+     * expect is exact past the first and undecided past the second, so the two are answered apart
+     * here rather than left for each reader to tell from the null.
+     */
+    public ExpectedCase expectedCase() {
+        if (expectation == ExpectationState.OWED) {
+            return new ExpectedCase.NoneAsserted();
+        }
+        return expectedArm != null ? new ExpectedCase.Names(expectedArm)
+                : new ExpectedCase.Unread();
+    }
+
+    /** What {@link #expectedCase} answers. */
+    public sealed interface ExpectedCase {
+
+        /** The row expects this case: the one it constructs, or the one its value is of. */
+        record Names(TypeSymbol arm) implements ExpectedCase {
+
+            public Names {
+                Objects.requireNonNull(arm, "a row naming a case names one");
+            }
+        }
+
+        /** The row's answer is owed, so it expects none. */
+        record NoneAsserted() implements ExpectedCase {}
+
+        /** The row states an expectation and which case it is was not read — its value is of no
+         *  case this can name, or the row stopped before its expectation was built. */
+        record Unread() implements ExpectedCase {}
     }
 }

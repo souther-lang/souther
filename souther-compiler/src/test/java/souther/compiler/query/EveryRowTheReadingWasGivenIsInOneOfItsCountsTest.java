@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.partition.CasesTheRowsTook;
+import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.RulesTaken;
@@ -72,7 +73,9 @@ class EveryRowTheReadingWasGivenIsInOneOfItsCountsTest {
      */
     @Test
     void andARowNothingWatchedIsCountedAsOne() {
-        DecisionEvidence.RowsPlaced read = DecisionEvidence.of("classify", rulesTakenOf(compiled()),
+        Compilation compilation = compiled();
+        DecisionEvidence.RowsPlaced read = DecisionEvidence.of("classify",
+                        rulesTakenOf(compilation), rulesOf(compilation),
                         List.of(new WitnessedRow(new ObservedInputs(List.of(),
                                 new Generator.Watched.NoAccount(),
                                 new AnswerObservation.NotAnswered()), RowWitnesses.ANOTHER_ROW)),
@@ -99,6 +102,12 @@ class EveryRowTheReadingWasGivenIsInOneOfItsCountsTest {
                 .ask(new Adequacy.Decides(compilation.modules().get(0))).value().get("decides");
         return evidence.took().made()
                 .orElseThrow(() -> new AssertionError("the rows were read"));
+    }
+
+    /** The rules the body states, which is what a row may be at. */
+    private static List<DecisionRule> rulesOf(Compilation compilation) {
+        return compilation.db().ask(new Adequacy.Decides(compilation.modules().get(0))).value()
+                .get("decides").read().rules();
     }
 
     /** What the rules of this body are matched against, which a reading of no runs never asks. */
