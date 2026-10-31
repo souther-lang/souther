@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -106,6 +107,19 @@ class ADigitCountQuestionIsAnsweredWithoutCountingTheDigitsTest {
         }
         assertFalse(ExactDecimals.hasAtMostDigits(BigDecimal.ONE, 0));
         assertFalse(ExactDecimals.hasAtMostDigits(BigDecimal.ONE, Long.MIN_VALUE));
+    }
+
+    @Test
+    void theMostDigitsADecimalHasIsWhereTheGreatestBigIntegerStopsAndThePowersBeforeItAreHeld() {
+        // log10 2 and log2 10 to more places than the product with an int needs
+        BigDecimal log10Of2 = new BigDecimal("0.30102999566398119521373889472449302677");
+        BigDecimal log2Of10 = new BigDecimal("3.3219280948873623478703194294893901758");
+        BigDecimal bits = BigDecimal.valueOf(Integer.MAX_VALUE);
+        long digitsOfTheGreatest = bits.multiply(log10Of2).setScale(0, RoundingMode.FLOOR).longValueExact() + 1;
+        assertEquals(digitsOfTheGreatest, ExactDecimals.MOST_DIGITS_ANY_DECIMAL_HOLDS);
+        BigDecimal bitsOfTheLastPower = BigDecimal.valueOf(ExactDecimals.MOST_DIGITS_ANY_DECIMAL_HOLDS - 1)
+                .multiply(log2Of10);
+        assertTrue(bitsOfTheLastPower.compareTo(bits) < 0, bitsOfTheLastPower.toString());
     }
 
     @Test

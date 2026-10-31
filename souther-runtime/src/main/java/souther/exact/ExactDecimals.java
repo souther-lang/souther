@@ -126,11 +126,16 @@ public final class ExactDecimals {
     }
 
     /**
-     * The most decimal digits a number of an int's worth of bits has: {@code 10^k} is past
-     * {@code 2^(3k)}, so a number of at most {@code Integer.MAX_VALUE} bits has at most a third of
-     * that, rounded up, and no more.
+     * The most decimal digits a {@code BigInteger} has. Its bit length is an {@code int}, so its
+     * magnitude is below {@code 2^Integer.MAX_VALUE}, and that is below {@code 10^646456993}
+     * ({@code Integer.MAX_VALUE × log10 2} is 646456992.94…).
+     *
+     * <p>It is also where the powers of ten that are compared with stop being held: {@code 10^k} is
+     * below {@code 2^Integer.MAX_VALUE} for every {@code k} under it, so a {@code BigInteger} holds
+     * the power that any limit under it asks for, and a limit at or past it needs none, since every
+     * decimal is below it.
      */
-    private static final long MOST_DIGITS_ANY_DECIMAL_HOLDS = (Integer.MAX_VALUE + 2L) / 3;
+    static final long MOST_DIGITS_ANY_DECIMAL_HOLDS = 646_456_993L;
 
     /**
      * The amount {@code d} is, carried by as few digits as a {@code BigDecimal} can carry it: one
@@ -167,10 +172,12 @@ public final class ExactDecimals {
      * whole range from the start builds a power of ten as large as the range however few zeros there
      * are. Doubling builds none larger than twice the count. Divisible by {@code 10^z} holds for
      * every {@code z} up to the count and for none past it, and a number of n bits has fewer than
-     * n / 3 zeros, so that bounds the answer whatever {@code most} says.
+     * n / 3 zeros, so that bounds the answer whatever {@code most} says. No number has as many zeros
+     * as {@link #MOST_DIGITS_ANY_DECIMAL_HOLDS}, so the powers asked for are ones a {@code BigInteger}
+     * holds.
      */
     private static long trailingZeros(BigInteger digits, long most) {
-        long upper = Math.min(most, digits.bitLength() / 3);
+        long upper = Math.min(Math.min(most, digits.bitLength() / 3), MOST_DIGITS_ANY_DECIMAL_HOLDS - 1);
         if (upper < 1 || digits.remainder(BigInteger.TEN).signum() != 0) {
             return 0;
         }
