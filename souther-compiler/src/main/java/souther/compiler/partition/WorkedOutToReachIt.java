@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.abort.AbortKind;
+import souther.compiler.abort.GetsPast;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.FoldedValue;
@@ -121,8 +122,14 @@ final class WorkedOutToReachIt {
         if (written instanceof Core.Construct made) {
             return aConstructionEndsNoRun(made, value.at());
         }
-        return (closuresApart ? WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(written)
-                : WhatARunMayEndFor.itself(written)).endsNone();
+        if (!closuresApart) {
+            return WhatARunMayEndFor.itself(written).endsNone();
+        }
+        // The sites a library call works out are the ones it may end a run at, and it ends none
+        // where the library shows it answers whatever it is handed.
+        return WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(written).endsNone()
+                || WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(written)
+                        instanceof GetsPast.Always;
     }
 
     /**

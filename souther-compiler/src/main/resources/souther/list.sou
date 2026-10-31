@@ -46,8 +46,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
     let (_, out) = List.fold(
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-            (i + 1, mapped)
+            (i + 1, ys ++ [f(i, x)])
         },
         (0, []),
         xs
@@ -83,8 +82,7 @@ let unzip (ps: List<('a, 'b)>): (List<'a>, List<'b>) =
         (acc, p) -> {
             let (xs, ys) = acc
             let (x, y) = p
-            let lefts = xs ++ [x]
-            (lefts, ys ++ [y])
+            (xs ++ [x], ys ++ [y])
         },
         ([], []),
         ps
