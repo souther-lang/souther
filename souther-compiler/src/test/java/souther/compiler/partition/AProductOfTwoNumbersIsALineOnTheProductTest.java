@@ -606,13 +606,12 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
     }
 
     /**
-     * The shape of a refund plan: the total of the agreed lines at their unit prices, a fee taken
-     * off it, the rest held at nought or above, and compared with what was invoiced. Only the
-     * construction that really stops keeps the comparison from being shown reached, and a row
-     * past the invoiced amount is offered.
+     * The shape of a refund plan, measured: the total of the agreed lines at their unit prices, a
+     * fee taken off it, the rest held at nought or above and compared with what was invoiced.
+     * {@code restockingFee} is the number the plan's second refund is made of; {@code examples} is
+     * the rows written under it, if any.
      */
-    @Test
-    void aRefundPlanIsStoppedOnlyByTheConstructionThatCanStopAndOffersARowPastTheInvoice() {
+    private static Compilation aRefundPlanWith(String restockingFee, String examples) {
         Compilation compilation = Compilation.ofSource("""
                 module demo
 
@@ -666,30 +665,71 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                         rma = accepted.rma,
                         invoiceNo = invoiceNo,
                         refund = Refund(net),
-                        restockingFee = Refund(Decimal.min(fee, gross)),
+                        restockingFee = Refund(RESTOCKING_FEE),
                         withinInvoiced = Decimal.compare(net, invoicedGross.value) <= 0,
                         repeatReturn = Set.fold((acc, sku) -> acc || List.contains(sku, previousSkus),
                                                 false, accepted.skus),
                         recentRmas = List.take(3, List.reverse(history))
                     }
                 }
-                """, "Main");
+                """.replace("RESTOCKING_FEE", restockingFee) + examples, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        assertTrue(unreadReasonsOf(measured(compilation))
-                        .contains(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE),
-                "Refund(Decimal.min(fee, gross)) stops a run, for a negative rate");
+        return compilation;
+    }
+
+    /** Whether a run may stop on the way to the plan's comparison, for values this compiler does
+     *  not say. */
+    private static boolean aPlanStopsABorderRunsThrough(Compilation compilation) {
+        return unreadReasonsOf(measured(compilation))
+                .contains(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE);
+    }
+
+    /** The refund held at nought or above by the maximum stops no run, so nothing in the plan
+     *  keeps the comparison from being shown reached. */
+    @Test
+    void aRefundPlanWhoseOnlyRefundIsHeldAtNoughtKeepsNoRunFromTheComparison() {
+        assertTrue(!aPlanStopsABorderRunsThrough(aRefundPlanWith("0.0m", "")));
+    }
+
+    /** The second refund, the lesser of the fee and the gross, is refused for a negative rate, and
+     *  that alone is what keeps the comparison from being shown reached. */
+    @Test
+    void aRefundPlanIsStoppedByTheLesserOfTheFeeAndTheGrossForANegativeRate() {
+        assertTrue(aPlanStopsABorderRunsThrough(aRefundPlanWith("Decimal.min(fee, gross)", "")));
+    }
+
+    /**
+     * A row past the invoiced amount is offered, and the offered row, written out as an example
+     * with what it must come to, is run: the comparison comes out false and no row does not hold.
+     */
+    @Test
+    void theRowOfferedPastTheInvoicedAmountRunsAndComesOutPastIt() {
+        Compilation offering = aRefundPlanWith("Decimal.min(fee, gross)", "");
         Generator.GenerationResult offered = OfferedAtTheLines.of(
-                compilation, compilation.modules().get(0), "f");
-        List<String> beyond = offered.rows().stream()
-                .filter(row -> row.purposes().toString().contains("[ForAPoint[label=0 < List.sum"))
-                .map(row -> row.inputs().stream().map(each -> each.text()).toList().toString())
+                offering, offering.modules().get(0), "f");
+        List<List<String>> beyond = offered.rows().stream()
+                .filter(row -> row.purposes().stream().anyMatch(purpose ->
+                        purpose instanceof Generator.Purpose.ForAPoint point
+                                && point.label().startsWith("0 < List.sum(")))
+                .map(row -> row.inputs().stream().map(each -> each.text()).toList())
                 .toList();
-        assertEquals(List.of("[Accepted { rma = Rma(\"RMA-00000000\"), skus = [], "
-                        + "daysSinceDispatch = 0 }, Reconciliation { agreed = [(Sku(\"x\"), 1)], "
-                        + "declaredOnly = [], receivedOnly = [], inDispute = 0 }, "
-                        + "[(Sku(\"x\"), 1)], InvoiceNo(\"INV-0000-000000\"), Amount(0m), 0m, [], []]"),
-                beyond, "one unit at one, nothing taken off, and nothing invoiced");
+        assertEquals(1, beyond.size(), beyond.toString());
+        String row = String.join(", ", beyond.getFirst());
+        Compilation run = aRefundPlanWith("Decimal.min(fee, gross)", """
+
+                example f
+                    | "past the invoiced amount" : (%s)
+                        -> RefundPlan { rma = Rma("RMA-00000000"),
+                                        invoiceNo = InvoiceNo("INV-0000-000000"),
+                                        refund = Refund(1.0m), restockingFee = Refund(0.0m),
+                                        withinInvoiced = false, repeatReturn = false,
+                                        recentRmas = [] }
+                """.formatted(row));
+        String human = AdequacyReport.of(run)
+                .human(SourceRendering.namedByIdentity(run.texts())).toString();
+        assertTrue(human.contains("rows 1"), human);
+        assertTrue(!human.contains("does not hold"), human);
     }
 
     /** A decimal times itself is no product of two numbers apart, and is named as a product. */

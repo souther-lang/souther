@@ -1302,11 +1302,12 @@ final class Pullback {
     }
 
     /**
-     * {@code construct}, told where it makes a newtype over a number: everywhere where its type
-     * checks no clause, and where the number is in the run the clauses leave
-     * ({@link DeclaredBounds#whereMakingSucceeds}) where they leave one — over the number's form,
-     * or the rounding it is of ({@link #madeOfARounding}). Untold where they leave anything else,
-     * and so left where nothing is said of it.
+     * {@code construct}, told where it makes a newtype over a number: on every run where the
+     * number is held to the type by what made it ({@link #isHeldToTheTypeByTheLibrary}), which is
+     * asked first and whatever form the number has; else where the number is in the run the
+     * clauses leave ({@link DeclaredBounds#whereMakingSucceeds}) where they leave one — over the
+     * number's form, or the rounding it is of ({@link #madeOfARounding}). Untold where they leave
+     * anything else, and so left where nothing is said of it.
      */
     private void aConstruction(Core.Construct construct, InputReads reads) {
         if (construct.values().size() != 1) {
@@ -1317,18 +1318,13 @@ final class Pullback {
         if (!made.isWrapped()) {
             return;
         }
-        LinearForm<Quantity> value = composedAs(construct, reads);
-        if (value == null) {
-            if (isHeldToTheTypeByTheLibrary(construct, made, reads)) {
-                operated.tell(construct, new Answers.Anywhere());
-            } else {
-                madeOfARounding(construct, made, reads);
-            }
+        if (isHeldToTheTypeByTheLibrary(construct, made, reads)) {
+            operated.tell(construct, new Answers.Anywhere());
             return;
         }
-        if (ClausesInOrder.at(construct, read.rules()).governsNothing()) {
-            operated.tell(construct,
-                    new Answers.AsAnOperator(value, new WhereAnOperatorAnswers.Everywhere()));
+        LinearForm<Quantity> value = composedAs(construct, reads);
+        if (value == null) {
+            madeOfARounding(construct, made, reads);
             return;
         }
         WhereAnOperatorAnswers.WhereItsExactValueIsHeld where =
@@ -1411,11 +1407,6 @@ final class Pullback {
     private void madeOfARounding(Core.Construct construct, TypeView made, InputReads reads) {
         Rounding rounding = roundingOf(construct.values().getFirst().value(), reads);
         if (rounding == null) {
-            return;
-        }
-        if (ClausesInOrder.at(construct, read.rules()).governsNothing()) {
-            operated.tell(construct, new Answers.AsAnOperator(rounding.before(),
-                    new WhereAnOperatorAnswers.Everywhere()));
             return;
         }
         WhereAnOperatorAnswers.WhereItsExactValueIsHeld run =
