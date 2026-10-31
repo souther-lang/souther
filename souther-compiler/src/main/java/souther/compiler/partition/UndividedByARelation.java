@@ -5168,8 +5168,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NumericDomain.Bounds from = whereAnEndLies(number.from(), region);
         NumericDomain.Bounds to = whereAnEndLies(number.to(), region);
         NumericDomain.Bounds holds = new NumericDomain.Bounds(from.min(), to.max());
-        NumericDomain.Bounds realizes = heldWhole ? wholeNumbersTaken(side, number, read,
+        NumericDomain.Bounds taken = heldWhole ? wholeNumbersTaken(side, number, read,
                 region, conditions) : null;
+        NumericDomain.Bounds realizes = taken == null || !taken.meet(holds).holdsAValue() ? null
+                : taken.meet(holds);
         return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
                 asARelationReadsIt(holds, carrier), asARelationReadsIt(realizes, carrier), null,
                 false, spacingOf(carrier), wholeNumbersStop(from, carrier), side.key());
@@ -5264,16 +5266,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return taken;
         }
         // Each number is taken by a row whose last end is at it or past it, so the numbers are
-        // the first end's up to the most the way leaves the last end, where it leaves it some at
-        // all from which the list is one a run makes.
+        // the first end's up to the most the way leaves the last end — which is where the
+        // element may lie, and the term holds them to it — where the way leaves the last end
+        // somewhere from which the list is one a run makes.
         if (!(region.projectionOf(number.to()) instanceof NumericDomain.FormProjection.Within(
                 NumericDomain.Bounds last)) || !last.holdsAValue()) {
             return null;
         }
-        NumericDomain.Bounds reached = taken.meet(new NumericDomain.Bounds(null, last.max()));
-        boolean madeSomewhere = last.min() == null
-                || new NumericDomain.Bounds(last.min(), null).meet(taken).holdsAValue();
-        return madeSomewhere && reached.holdsAValue() ? reached : null;
+        return last.min() == null
+                || new NumericDomain.Bounds(last.min(), null).meet(taken).holdsAValue()
+                ? taken : null;
     }
 
     /**

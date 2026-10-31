@@ -2,11 +2,13 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,10 +36,9 @@ class ALineThroughAnElementIsMeasuredByRowsThatHoldTheElementTest {
      */
     @Test
     void aLineThroughAWholeNumberInTurnIsMeasuredByRowsWhoseListHoldsIt() {
-        Compilation compilation = compiled("a: Int, days: Int", "List<Int>",
-                "List.rangeInclusive(3, days) |> List.filter(n -> a + n >= 10)");
-        assertEquals(List.of("7"), lines(compilation));
-        List<ObservedInputs> rows = rowsAtEveryItem(compilation);
+        Compilation compilation = compiled("a: Int, days: Int", "List<Int>", FROM_THREE);
+        assertEquals(List.of("7"), linesOn(compilation, "a"));
+        List<ObservedInputs> rows = rowsAtEveryItem(compilation, "a");
         assertFalse(rows.isEmpty(), "the line has its rows");
         assertRowsHold(rows, 1, value -> value instanceof ObservedValue.Integer(long days)
                 && days >= 3);
@@ -52,11 +53,87 @@ class ALineThroughAnElementIsMeasuredByRowsThatHoldTheElementTest {
     void aLineThroughWhereAnElementStandsIsMeasuredByRowsThatHoldAnElement() {
         Compilation compilation = compiled("a: Int, xs: List<Int>", "List<Bool>",
                 "List.mapIndexed((i, _) -> a + i >= 3, xs)");
-        assertEquals(List.of("3"), lines(compilation));
-        List<ObservedInputs> rows = rowsAtEveryItem(compilation);
+        assertEquals(List.of("3"), linesOn(compilation, "a"));
+        List<ObservedInputs> rows = rowsAtEveryItem(compilation, "a");
         assertFalse(rows.isEmpty(), "the line has its rows");
         assertRowsHold(rows, 1, value -> value instanceof ObservedValue.Sequence(var elements)
                 && !elements.isEmpty());
+    }
+
+    /**
+     * A way holding the last end at five or less leaves the element every number from three to
+     * five and no other, so {@code a + n >= 10} is settled true from seven and false to four; rows
+     * at both lines make a list holding the element there.
+     */
+    @Test
+    void aWayBoundingTheLastEndDrawsALineAtTheMostTheElementTakes() {
+        Compilation compilation = compiled("a: Int, days: Int", "List<Int>",
+                "if days <= 5 then " + FROM_THREE + " else []");
+        assertEquals(List.of("4", "7"), linesOn(compilation, "a"));
+        assertRowsHold(rowsAtEveryItem(compilation, "a"), 1, value ->
+                value instanceof ObservedValue.Integer(long days) && days >= 3 && days <= 5);
+    }
+
+    /**
+     * A way leaving out the last end's most and the one below it leaves the element three alone:
+     * one line, and none where a number the way leaves out would have put one.
+     */
+    @Test
+    void aNumberTheWayLeavesOutDrawsNoLine() {
+        Compilation compilation = compiled("a: Int, days: Int", "List<Int>",
+                "if days <= 5 then (if days == 5 then [] else (if days == 4 then [] else "
+                        + FROM_THREE + ")) else []");
+        assertEquals(List.of("6"), linesOn(compilation, "a"));
+        assertRowsHold(rowsAtEveryItem(compilation, "a"), 1, value ->
+                value instanceof ObservedValue.Integer(long days) && days == 3);
+    }
+
+    /** A way on which the list holds nothing makes no application: no line through the element,
+     *  and no run that may stop in the sum over it. */
+    @Test
+    void aWayOnWhichTheListHoldsNothingDrawsNothingThroughTheElement() {
+        Compilation compilation = compiled("a: Int, days: Int", "List<Int>",
+                "if days < 3 then " + FROM_THREE + " else []");
+        assertEquals(List.of(), linesOn(compilation, "a"));
+        assertEquals(List.of(), report(compilation).stream()
+                .filter(line -> line.startsWith("· may stop")).toList());
+    }
+
+    /** Ends that move together are not shown to leave the element every number, so nothing is
+     *  said of which values of {@code a} settle the comparison. */
+    @Test
+    void endsThatMoveTogetherShowNothingTheElementTakes() {
+        Compilation compilation = compiled("a: Int, days: Int", "List<Int>",
+                "List.rangeInclusive(days, days + 3) |> List.filter(n -> a + n >= 10)");
+        assertEquals(List.of(), linesOn(compilation, "a"));
+    }
+
+    /**
+     * Where an element stands is kept below the most a list holds in what an operation over it
+     * is shown to come to, along a way stating the list holds something as without one: one
+     * added to it stops no run, and {@code a} added to it may.
+     */
+    @Test
+    void theMostAListHoldsStillKeepsAnOperationOverWhereAnElementStands() {
+        String holding = "if List.length(xs) >= 1 then List.mapIndexed((i, _) -> %s, xs) else []";
+        assertEquals(List.of(), mayStop(compiled("a: Int, xs: List<Int>", "List<Bool>",
+                holding.formatted("i + 1 == a"))));
+        assertEquals(1, mayStop(compiled("a: Int, xs: List<Int>", "List<Bool>",
+                holding.formatted("a + i >= 3"))).size());
+    }
+
+    private static final String FROM_THREE =
+            "List.rangeInclusive(3, days) |> List.filter(n -> a + n >= 10)";
+
+    private static List<String> mayStop(Compilation compilation) {
+        return report(compilation).stream().filter(line -> line.startsWith("· may stop"))
+                .toList();
+    }
+
+    private static List<String> report(Compilation compilation) {
+        return AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .map(String::strip).toList();
     }
 
     private static void assertRowsHold(List<ObservedInputs> rows, int parameter,
@@ -66,11 +143,14 @@ class ALineThroughAnElementIsMeasuredByRowsThatHoldTheElementTest {
         }
     }
 
-    /** The rows read back at every item owed of every line of {@code m}, every item owed having
-     *  some. */
-    private static List<ObservedInputs> rowsAtEveryItem(Compilation compilation) {
+    /** The rows read back at every item owed of every line of {@code m} on {@code quantity}, every
+     *  item owed having some. */
+    private static List<ObservedInputs> rowsAtEveryItem(Compilation compilation, String quantity) {
         List<ObservedInputs> rows = new ArrayList<>();
         for (BorderAssessment line : measured(compilation)) {
+            if (!line.left().equals(quantity)) {
+                continue;
+            }
             line.items().forEach((point, item) -> {
                 if (!(item instanceof ItemAssessment.Owed owed)) {
                     return;
@@ -86,8 +166,11 @@ class ALineThroughAnElementIsMeasuredByRowsThatHoldTheElementTest {
         return rows;
     }
 
-    private static List<String> lines(Compilation compilation) {
-        return measured(compilation).stream().map(BorderAssessment::value).toList();
+    /** Where the lines of {@code m} on {@code quantity} are drawn, in the order they are
+     *  measured. */
+    private static List<String> linesOn(Compilation compilation, String quantity) {
+        return measured(compilation).stream().filter(line -> line.left().equals(quantity))
+                .map(BorderAssessment::value).toList();
     }
 
     private static List<BorderAssessment> measured(Compilation compilation) {

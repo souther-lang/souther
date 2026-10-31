@@ -742,8 +742,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // the input to another value is no line. Where only relations are read and some of them
         // on an application not every run makes, each is read in the case where its application
         // is made: a row at a line parting the values that settle it is one that makes it. Only
-        // where a row can be asked whether it makes each; otherwise the relation is read as one,
-        // and a line parting its values is read wherever a row arrives.
+        // where a row can be asked whether it makes each, and where making it asks nothing of an
+        // element: the values settling a relation are asked again over the rows of each case, and
+        // a case stating something of some element of a container leaves the relation over
+        // another element of it nothing shown. Otherwise the relation is read as one, and a line
+        // parting its values is read wherever a row arrives.
         if (!against.isEmpty()) {
             List<Read.Several.Part> parts = new ArrayList<>();
             relating.forEach((relation, readings) -> parts.add(new Read.Several.Part(
@@ -751,7 +754,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     UndividedByARelation.Working.together(workings.get(relation)))));
             return relatedOnlySomewhere && lines.isEmpty() && parts.stream().allMatch(part ->
                     part.cases().stream().allMatch(one -> AStatementAtARow.askable(
-                            one.condition())))
+                            one.condition()) && saysNothingOfAnElement(one.condition())))
                     ? new Read.Several(parts) : new Read.AgainstAnotherValue(against, relations);
         }
         // A statement of no relation on some application is no line there, and the lines the
@@ -786,6 +789,28 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return parts.getFirst().line();
         }
         return new Read.Several(parts);
+    }
+
+    /**
+     * Whether {@code stated} says nothing of any element of a container: it compares numbers of
+     * the input no container holds, or says a container holds something or nothing, or is made
+     * of such statements. Anything else is taken to say something of one.
+     */
+    private static boolean saysNothingOfAnElement(Proposition stated) {
+        return switch (stated) {
+            case Proposition.Always _ -> true;
+            case Proposition.All(var parts, var _) ->
+                    parts.stream().allMatch(Cutting::saysNothingOfAnElement);
+            case Proposition.Any(var parts, var _) ->
+                    parts.stream().allMatch(Cutting::saysNothingOfAnElement);
+            case Proposition.Some(var _, var ofTheElement, var _, var _) ->
+                    ofTheElement instanceof Proposition.Always(boolean holds) && holds;
+            case Proposition.Compared(Relation.Affine(var form, var _), var _, var _) ->
+                    form.coefs().keySet().stream().allMatch(each ->
+                            each instanceof DecisionAtom.OfTheInput(var term)
+                                    && !term.subjectPath().insideAContainer());
+            default -> false;
+        };
     }
 
     /**

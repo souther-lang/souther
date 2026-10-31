@@ -297,18 +297,21 @@ public final class GuardThresholds {
                                     Reachability.gettingPast(Reachability.of(new WayToTheBorder(
                                             each.wayToACase(aCase.apply(decides))),
                                             read.quantities().region()), each.getsPast()));
+                            Reachability toIt = Reachability.gettingPast(Reachability.of(
+                                    new WayToTheBorder(each.assumed()),
+                                    read.quantities().region()), each.getsPast());
                             ComparisonAssessment arrived =
                                     ComparisonAssessment.narrowedByWhatArrives(admitted.read(),
-                                            Reachability.gettingPast(Reachability.of(
-                                                    new WayToTheBorder(each.assumed()),
-                                                    read.quantities().region()),
-                                                    each.getsPast()),
-                                            wayToACase, arrivals, false, read, each.witnesses());
+                                            toIt, wayToACase, arrivals, false, read,
+                                            each.witnesses());
                             // And whether a run that some row takes stops in it, which the line it
                             // draws does not say: a stop the ways before it rule out is no run's.
                             // A comparison every run stops in is already said as that.
                             // An operation over a bound value no value of it is shown to keep
-                            // within its type is one too.
+                            // within its type is one too, on an application some row is shown
+                            // not to be kept from: one made on rows the way rules out works
+                            // nothing out. Where those rows cannot be put on the way, the
+                            // application is taken as made.
                             boolean aRunStops = !(arrived instanceof ComparisonAssessment
                                     .AnswersNowhere)
                                     && ((each.stopsWhere().isPresent()
@@ -316,7 +319,15 @@ public final class GuardThresholds {
                                             wayToACase.apply(each.stopsWhere().get()), arrivals))
                                     || each.worksOutOnEach().map(applications -> applications
                                             .stream().anyMatch(one -> one.working()
-                                                    .aRunMayStopOverABoundValue()))
+                                                    .aRunMayStopOverABoundValue()
+                                                    && (one.reached() instanceof Proposition
+                                                            .Always(boolean holds) && holds
+                                                            ? ComparisonAssessment.someRowArrives(
+                                                                    toIt, arrivals)
+                                                            : each.statedAsACondition().isEmpty()
+                                                            || ComparisonAssessment.someRowArrives(
+                                                                    wayToACase.apply(one.reached()),
+                                                                    arrivals))))
                                             .orElseGet(() -> arrived.relationsRead().stream()
                                                     .anyMatch(UndividedByARelation
                                                             ::aRunMayStopOverABoundValue)));
