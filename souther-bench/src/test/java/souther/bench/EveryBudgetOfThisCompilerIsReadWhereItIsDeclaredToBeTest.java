@@ -266,8 +266,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;"
                             + "Lsouther/compiler/partition/AWayReadForARelation$FormsRead;)"
                             + "Ljava/util/List;",
-                    "keeps a choice as it stands past the ways looked along that may hold"
-                            + " together, and hands the figure to what the relation says it"
+                    "keeps a choice as it stands past the alternatives looked at to find the ways"
+                            + " that may hold together, or past the ways looked along once they"
+                            + " are found, and hands the figure to what the relation says it"
                             + " stopped at"),
             Map.entry("souther.compiler.partition.AWayReadForARelation#walked("
                             + "Ljava/util/List;)Lsouther/compiler/partition/Reachability;",

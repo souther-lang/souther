@@ -39,9 +39,14 @@ class AWayReadAgainAsksOnlyTheWaysOfItsChoicesThatHoldTogetherTest {
      * together are asked one by one.
      */
     private static OnTheWay parting(int at, Bound number) {
+        return parting(at, number, LINES);
+    }
+
+    /** The same at each of {@code lines} lines. */
+    private static OnTheWay parting(int at, Bound number, int lines) {
         List<List<OnTheWay>> runs = new ArrayList<>();
-        for (int run = 0; run <= LINES; run++) {
-            List<OnTheWay> asked = new ArrayList<>(theRun(run, number));
+        for (int run = 0; run <= lines; run++) {
+            List<OnTheWay> asked = new ArrayList<>(theRun(run, number, lines));
             asked.addAll(askedApart(run));
             runs.add(asked);
         }
@@ -55,9 +60,9 @@ class AWayReadAgainAsksOnlyTheWaysOfItsChoicesThatHoldTogetherTest {
     private static OnTheWay partingInside(int at, Bound number) {
         List<List<OnTheWay>> runs = new ArrayList<>();
         for (int run = 0; run <= LINES; run++) {
-            List<OnTheWay> below = new ArrayList<>(theRun(run, number));
+            List<OnTheWay> below = new ArrayList<>(theRun(run, number, LINES));
             below.add(number.of(1, Rel.LT, run * 10L + 5));
-            List<OnTheWay> above = new ArrayList<>(theRun(run, number));
+            List<OnTheWay> above = new ArrayList<>(theRun(run, number, LINES));
             above.add(number.of(1, Rel.GE, run * 10L + 5));
             List<OnTheWay> asked = new ArrayList<>();
             asked.add(oneOf(at * 100 + run, List.of(below, above)));
@@ -67,16 +72,16 @@ class AWayReadAgainAsksOnlyTheWaysOfItsChoicesThatHoldTogetherTest {
         return oneOf(at, runs);
     }
 
-    /** The lines either side of the run numbered {@code run}. */
-    private static List<OnTheWay> theRun(int run, Bound number) {
-        List<OnTheWay> lines = new ArrayList<>();
+    /** The lines either side of the run numbered {@code run} of those {@code lines} lines leave. */
+    private static List<OnTheWay> theRun(int run, Bound number, int lines) {
+        List<OnTheWay> out = new ArrayList<>();
         if (run > 0) {
-            lines.add(number.of(1, Rel.GE, run * 10L));
+            out.add(number.of(1, Rel.GE, run * 10L));
         }
-        if (run < LINES) {
-            lines.add(number.of(1, Rel.LT, (run + 1) * 10L));
+        if (run < lines) {
+            out.add(number.of(1, Rel.LT, (run + 1) * 10L));
         }
-        return lines;
+        return out;
     }
 
     /** What the run numbered {@code run} asks apart. */
@@ -104,6 +109,34 @@ class AWayReadAgainAsksOnlyTheWaysOfItsChoicesThatHoldTogetherTest {
     void choicesPartingOneNumberInsideTheirAlternativesAreAskedAlongTheRunsTheyAgreeOn() {
         AWayReadForARelation.ReadAgain again = WaysReadAgain.readAgain(List.of(
                 partingInside(1, WaysReadAgain::x), partingInside(2, WaysReadAgain::x)));
+
+        assertFalse(again.stoppedAt().contains(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG),
+                () -> "the ways were not more than a way is looked along with: "
+                        + again.stoppedAt());
+        assertTrue(again.as().isPresent(), "and the way is read as less for the relation");
+    }
+
+    /**
+     * A choice of more runs than a way is looked along with, and after it one parting the first
+     * run in two, both asking apart of the one truth {@code c} — every run of the first that it
+     * is held at and every other that it is not, so that no value meets what all the runs ask at
+     * once. The ways of the first alone are past the figure, and the second closes all but the two
+     * inside its run: the ways looked along are those left once every choice is taken.
+     */
+    @Test
+    void waysPastTheFigureBeforeTheLastChoiceAreCountedWhereItLeavesThem() {
+        int lines = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum();
+        List<List<OnTheWay>> runs = new ArrayList<>();
+        for (int run = 0; run <= lines; run++) {
+            List<OnTheWay> asked = new ArrayList<>(theRun(run, WaysReadAgain::x, lines));
+            asked.add(truth("c", run % 2 == 0));
+            runs.add(asked);
+        }
+        OnTheWay halves = oneOf(2, List.of(
+                List.of(x(1, Rel.LT, 5), truth("c", true)),
+                List.of(x(1, Rel.GE, 5), x(1, Rel.LT, 10), truth("c", true))));
+        AWayReadForARelation.ReadAgain again = WaysReadAgain.readAgain(
+                List.of(oneOf(1, runs), halves));
 
         assertFalse(again.stoppedAt().contains(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG),
                 () -> "the ways were not more than a way is looked along with: "

@@ -13,6 +13,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -122,6 +123,19 @@ final class WaysReadAgain {
     /** {@code weight * y rel threshold}, asked of the other number the relation reads. */
     static OnTheWay y(long weight, Rel rel, long threshold) {
         return number(Y, weight, rel, threshold);
+    }
+
+    /** {@code onX * x + onY * y rel threshold}, one of the weights at least not nought. */
+    static OnTheWay weighed(long onX, long onY, Rel rel, long threshold) {
+        Map<NumericTerm, ExactRatio> weights = new LinkedHashMap<>();
+        if (onX != 0) {
+            weights.put(new NumericTerm.ValueOf(X), ExactRatio.of(onX));
+        }
+        if (onY != 0) {
+            weights.put(new NumericTerm.ValueOf(Y), ExactRatio.of(onY));
+        }
+        return new OnTheWay.TakenIn(anchor(0), new RowDemand.Relational(new TakenConstraint.Affine(
+                new LinearForm<>(ExactRatio.of(-threshold), weights), rel)));
     }
 
     /** {@code weight * xs[*] rel threshold}, asked of an element the relation reads. */

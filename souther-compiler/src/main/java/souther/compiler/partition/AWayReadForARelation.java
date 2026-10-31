@@ -112,6 +112,10 @@ final class AWayReadForARelation {
      *  ({@link CompositionBudget#PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH}). */
     private long pairs;
 
+    /** How many alternatives this has taken in beside the ways of the choices before them
+     *  ({@link CompositionBudget#CHOICES_ON_A_WAY_LOOKED_AT}). */
+    private int lookedAt;
+
     private final Set<CompositionBudget> stoppedAt = new LinkedHashSet<>();
 
     private AWayReadForARelation(Reachability.Ways.Whole whole, Set<TermPath> read,
@@ -480,7 +484,8 @@ final class AWayReadForARelation {
         /**
          * The ways of taking an alternative of each choice here that may hold together, in the
          * order the choices came and their alternatives in each — or null where they are more
-         * than a way is looked along with, which is then a figure this was stopped at.
+         * than a way is looked along with, or this has taken in as many alternatives as a way's
+         * choices are looked at with, which is then a figure this was stopped at.
          *
          * <p>A way no value of whose forms lies in the runs what it asks bearing on the relation
          * leaves them, beside what the way states of the relation, is one no row takes, which is
@@ -493,9 +498,12 @@ final class AWayReadForARelation {
          * together in every way, and are counted as the product.
          *
          * <p>What is read of a way is what it leaves at most ({@link FormsLeft}), so it shows no
-         * more ways closed than are. And the ways counted are those of the choices taken so far,
-         * each time one more is taken, so a way is never counted past the figure only to be closed
-         * by the choices after it.
+         * more ways closed than are. The figures are the ones the walk of a way finds its open
+         * ways by ({@link OneOfEach}): every alternative taken in beside a way of the choices
+         * before it is one looked at, counted over the whole reading again, and only the ways
+         * left once every choice is taken are the ways looked along. So the ways of the choices
+         * taken so far may be more than are looked along, where the choices after them close all
+         * but a few.
          */
         private List<TakenTogether> heldTogether(List<OnTheWay> bearingTaken, FormsRead forms) {
             List<TakenTogether> ways = List.of(new TakenTogether(List.of(),
@@ -505,6 +513,11 @@ final class AWayReadForARelation {
                 for (TakenTogether way : ways) {
                     for (int alternative = 0; alternative < choice.bearing().size();
                          alternative++) {
+                        if (lookedAt >= CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT.maximum()) {
+                            stoppedAt.add(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT);
+                            return null;
+                        }
+                        lookedAt++;
                         FormsLeft left = way.left().meet(
                                 forms.of(choice.bearing().get(alternative)));
                         if (left.holdsNothing()) {
@@ -513,13 +526,13 @@ final class AWayReadForARelation {
                         List<Integer> taken = new ArrayList<>(way.alternatives());
                         taken.add(alternative);
                         wider.add(new TakenTogether(taken, left));
-                        if (wider.size() > CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum()) {
-                            stoppedAt.add(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
-                            return null;
-                        }
                     }
                 }
                 ways = wider;
+            }
+            if (ways.size() > CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum()) {
+                stoppedAt.add(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
+                return null;
             }
             return ways;
         }
@@ -556,7 +569,7 @@ final class AWayReadForARelation {
      * @param exact whether every row with each form in its runs takes the way, which is so where
      *              every condition was read as bounds, and the alternatives of a choice too
      */
-    private record FormsLeft(Map<CanonicalForm<NumericTerm>, OrderedRuns> runs, boolean exact) {
+    record FormsLeft(Map<CanonicalForm<NumericTerm>, OrderedRuns> runs, boolean exact) {
 
         /** What nothing asks: every value of every form, and every row. */
         static final FormsLeft EVERY_VALUE = new FormsLeft(Map.of(), true);
@@ -618,10 +631,10 @@ final class AWayReadForARelation {
     }
 
     /** A form, and the runs a way leaves it. */
-    private record OnOneForm(CanonicalForm<NumericTerm> form, OrderedRuns runs) {}
+    record OnOneForm(CanonicalForm<NumericTerm> form, OrderedRuns runs) {}
 
     /** What conditions leave the forms they bound ({@link FormsLeft}), each condition read once. */
-    private static final class FormsRead {
+    static final class FormsRead {
 
         private final Map<OnTheWay, FormsLeft> read = new HashMap<>();
 
