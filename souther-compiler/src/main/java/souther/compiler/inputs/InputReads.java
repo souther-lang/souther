@@ -128,6 +128,12 @@ public final class InputReads {
      *  {@link #pathsUnder}; null until it is first asked. No part of what this reading is. */
     private Map<Core, PathResolution> paths;
     private DeclarationNewtypes pathsUnder;
+    /** What each name {@link #meaningOf} was asked of means here, under the library
+     *  {@link #meaningsAmong} and the declarations {@link #meaningsUnder}; null until it is first
+     *  asked. No part of what this reading is. */
+    private Map<Core, ReadMeaning> meanings;
+    private Symbols meaningsAmong;
+    private DeclarationNewtypes meaningsUnder;
 
     /**
      * The applications of closures, the arms of choices and the calls of behaviors a reading here is
@@ -3856,7 +3862,23 @@ public final class InputReads {
      * positions walks into it, and neither is the other's rule.
      */
     public ReadMeaning meaningOf(Core.Read read, Symbols symbols, DeclarationNewtypes newtypes) {
-        return meaningOf(read, symbols, newtypes, new HashSet<>());
+        // Answered once for each name asked here, as where a node stands is ({@link #pathOf}): a
+        // name an operation hands each element of a container written out is answered by writing
+        // the container out, and every reader of a condition asks it of the same names in the same
+        // reading. What it comes to turns on nothing but the name and this reading.
+        if (meanings == null) {
+            meanings = new IdentityHashMap<>();
+            meaningsAmong = symbols;
+            meaningsUnder = newtypes;
+        } else if (meaningsAmong != symbols || meaningsUnder != newtypes) {
+            return meaningOf(read, symbols, newtypes, new HashSet<>());
+        }
+        ReadMeaning held = meanings.get(read);
+        if (held == null) {
+            held = meaningOf(read, symbols, newtypes, new HashSet<>());
+            meanings.put(read, held);
+        }
+        return held;
     }
 
     /**

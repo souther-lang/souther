@@ -9,6 +9,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -127,9 +128,22 @@ public final class WrittenOutElements {
         return new Names(symbols, newtypes, Set.of());
     }
 
+    /** {@code one} as this reading's occurrence. Most are kept by nothing, and a walk writes out
+     *  every occurrence each time it is asked, so the truths are turned over by hand and none is
+     *  made where there is none. */
     private static ReadMeaning.Occurrence occurrence(ElementsWrittenOut.Occurrence<InputReads> one) {
-        return new ReadMeaning.Occurrence(denotation(one.value()), one.keptWhere().stream()
-                .map(WrittenOutElements::kept).toList(), one.answered(), one.within());
+        List<ElementsWrittenOut.Kept<InputReads>> keptWhere = one.keptWhere();
+        List<ReadMeaning.Occurrence.Kept> kept;
+        if (keptWhere.isEmpty()) {
+            kept = List.of();
+        } else {
+            kept = new ArrayList<>(keptWhere.size());
+            for (ElementsWrittenOut.Kept<InputReads> each : keptWhere) {
+                kept.add(kept(each));
+            }
+        }
+        return new ReadMeaning.Occurrence(denotation(one.value()), kept, one.answered(),
+                one.within());
     }
 
     private static ReadMeaning.Occurrence.Kept kept(ElementsWrittenOut.Kept<InputReads> kept) {
