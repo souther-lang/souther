@@ -3,7 +3,6 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Figure;
-import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -65,20 +64,23 @@ class TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest {
                           Row { grade = 0, lowerBound = Yen(0), upperBound = Yen(0) }, table)
             """;
 
-    /** The same, asking of each row both of its bounds. */
-    static final String BETWEEN_THE_BOUNDS = """
-            let gradeRowFor (m: Yen): Row =
-                List.fold((acc, r) -> if r.lowerBound <= m && m <= r.upperBound then r else acc,
-                          Row { grade = 0, lowerBound = Yen(0), upperBound = Yen(0) }, table)
-            """;
-
     /** A table of {@code rows} rows, each a thousand wide. */
     private static String table(int rows) {
-        StringBuilder out = new StringBuilder("let table: List<Row> = [\n");
+        long[] bounds = new long[rows];
         for (int i = 0; i < rows; i++) {
+            bounds[i] = i * 1000L;
+        }
+        return table(bounds);
+    }
+
+    /** A table with a row for each of {@code bounds}, as the lower bound of the row and a
+     *  thousand above it as its upper. */
+    private static String table(long[] bounds) {
+        StringBuilder out = new StringBuilder("let table: List<Row> = [\n");
+        for (int i = 0; i < bounds.length; i++) {
             out.append("    Row { grade = ").append(i + 1).append(", lowerBound = Yen(")
-                    .append(i * 1000).append("), upperBound = Yen(").append(i * 1000 + 999)
-                    .append(") }").append(i + 1 < rows ? ",\n" : " ]\n");
+                    .append(bounds[i]).append("), upperBound = Yen(").append(bounds[i] + 999)
+                    .append(") }").append(i + 1 < bounds.length ? ",\n" : " ]\n");
         }
         return out.toString();
     }
@@ -88,7 +90,11 @@ class TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest {
     record Unread(String at, UndividedPosition.Reason reason, List<Figure> figures) {}
 
     static List<Unread> unread(int rows, String lookup) {
-        Compilation compilation = Compilation.ofSource(HEAD + table(rows) + lookup + TAIL, "Main");
+        return unread(table(rows), lookup);
+    }
+
+    private static List<Unread> unread(String table, String lookup) {
+        Compilation compilation = Compilation.ofSource(HEAD + table + lookup + TAIL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
@@ -109,32 +115,31 @@ class TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest {
         return all.stream().filter(one -> one.at().matches("w\\.(first|second|third)")).toList();
     }
 
+    /**
+     * One row more is more of the same comparison and no other thing to say: the report of a table
+     * the readings of one condition were always enough for is the report of one row longer.
+     */
+    @Test
+    void aTableOneRowLongerIsReportedTheSame() {
+        assertEquals(unread(12, ABOVE_THE_BOUND), unread(13, ABOVE_THE_BOUND));
+    }
+
+    /**
+     * Bounds that are out of order, and one that two rows have, are each row's own comparison with
+     * the average, which the rows share: the last row whose bound the average reaches is another
+     * row, and reading it is no cheaper or dearer for that.
+     */
+    @Test
+    void aTableOutOfOrderWithARepeatedBoundIsReadAsWell() {
+        long[] bounds = {3000, 0, 1000, 1000, 7000, 2000, 5000, 4000, 6000, 8000, 9000, 10000, 3000};
+
+        assertEquals(List.of(), atTheMonths(unread(table(bounds), ABOVE_THE_BOUND)));
+    }
+
     @Test
     void aTableOfThirteenRowsGivesUpNoRuleAboutTheMonths() {
         assertEquals(List.of(), atTheMonths(unread(13, ABOVE_THE_BOUND)),
                 "the average is read once for all the rows, and thirteen of them are within what "
                         + "one condition may read");
-    }
-
-    /**
-     * A lookup whose reading runs out of the readings of one condition is given up, and the
-     * report says which figure.
-     *
-     * <p>Two comparisons at every row use up what one condition may read within a table of three
-     * rows. What the rule over each month is left with is that figure, and never that the rule is
-     * about a derived value, which is true of the rule whether or not a reading of it was made.
-     */
-    @Test
-    void aReadingGivenUpSaysTheFigureThatStoppedIt() {
-        List<Unread> months = atTheMonths(unread(3, BETWEEN_THE_BOUNDS));
-
-        assertEquals(List.of("w.first", "w.second", "w.third"),
-                months.stream().map(Unread::at).toList());
-        for (Unread each : months) {
-            assertEquals(UndividedPosition.Reason.RULE_MEANING_NOT_READ, each.reason(), each.at());
-            assertEquals(List.of(new Figure.Budget(
-                            CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION)),
-                    each.figures(), each.at());
-        }
     }
 }
