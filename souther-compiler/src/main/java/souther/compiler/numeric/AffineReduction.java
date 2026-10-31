@@ -1,8 +1,11 @@
 package souther.compiler.numeric;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -57,13 +60,26 @@ public final class AffineReduction {
     /** What a round of reading the rules the other way found. */
     public sealed interface Reduction<A> {
 
-        /** The ends found, each of them at least as tight as the one it came in with. */
-        record Tightened<A>(Map<A, ExactCut> atLeast, Map<A, ExactCut> atMost)
+        /**
+         * The ends found, each of them at least as tight as the one it came in with, and the
+         * half-spaces the holes came to.
+         *
+         * <p>The half-spaces are the same facts the ends were drawn from, kept as statements about
+         * the forms they are on. A bound on each position of {@code a + b} does not say how far
+         * {@code a + b} itself runs, so a reader asking that has to be given the half-space.
+         *
+         * @param sided the half-spaces the holes came to against the state this round started in,
+         *              each with its bound already moved onto what its form can reach. A set: which
+         *              rule arrived first is not part of what they come to
+         */
+        record Tightened<A>(Map<A, ExactCut> atLeast, Map<A, ExactCut> atMost,
+                            Set<AffineConstraint.HalfSpace<A>> sided)
                 implements Reduction<A> {
 
             public Tightened {
                 atLeast = Map.copyOf(atLeast);
                 atMost = Map.copyOf(atMost);
+                sided = Collections.unmodifiableSet(new LinkedHashSet<>(sided));
             }
         }
 
@@ -96,9 +112,17 @@ public final class AffineReduction {
         List<AffineConstraint<A>> constraints = reading.rules();
         Map<A, ExactCut> atLeast = new LinkedHashMap<>();
         Map<A, ExactCut> atMost = new LinkedHashMap<>();
+        Set<AffineConstraint.HalfSpace<A>> sided = new LinkedHashSet<>();
         for (AffineConstraint<A> each : constraints) {
-            List<AffineConstraint.HalfSpace<A>> halves = each instanceof
-                    AffineConstraint.Disequality<A> hole ? sidedBy(hole, reading) : each.halfSpaces();
+            List<AffineConstraint.HalfSpace<A>> halves;
+            if (each instanceof AffineConstraint.Disequality<A> hole) {
+                halves = sidedBy(hole, reading, spacing);
+                if (halves != null) {
+                    sided.addAll(halves);
+                }
+            } else {
+                halves = each.halfSpaces();
+            }
             if (halves == null) {
                 return new Reduction.NothingIsLeft<>();
             }
@@ -113,7 +137,7 @@ public final class AffineReduction {
                 }
             }
         }
-        return new Reduction.Tightened<>(atLeast, atMost);
+        return new Reduction.Tightened<>(atLeast, atMost, sided);
     }
 
     /**
@@ -140,11 +164,16 @@ public final class AffineReduction {
      * ({@link AffineConstraint#halfSpaces}), so it is not among what the reading may take as a
      * premise, and nothing here has to arrange for that.
      *
+     * <p>The bound is moved onto what the sum can reach, the way every other rule's is
+     * ({@link AdditiveImage#tightenUpper}): beside a reach of at most 50, {@code f /= 50} over whole
+     * numbers is {@code f <= 49}, and over a dense range it stays {@code f < 50}.
+     *
      * @return the half-spaces it comes to, empty where the sum can still fall either side, or null
      *         where the sum is pinned at the very value it is held away from
      */
     private static <A> List<AffineConstraint.HalfSpace<A>> sidedBy(
-            AffineConstraint.Disequality<A> hole, FormReach<A> reading) {
+            AffineConstraint.Disequality<A> hole, FormReach<A> reading,
+            Function<A, Granularity> spacing) {
         Reach reach = reading.of(hole.form().coefs(), ExactRatio.ZERO);
         ExactRatio away = hole.at();
         boolean neverBelow = reach.least() != null && reach.least().at().compareTo(away) >= 0;
@@ -155,12 +184,13 @@ public final class AffineReduction {
             return null;   // the sum is held at the one value it is held away from
         }
         if (neverBelow) {
-            return List.of(new AffineConstraint.HalfSpace<>(
-                    hole.form().negated(), ExactCut.exclusive(away.negated())));
+            CanonicalForm<A> below = hole.form().negated();
+            return List.of(new AffineConstraint.HalfSpace<>(below,
+                    below.imageOver(spacing).tightenUpper(ExactCut.exclusive(away.negated()))));
         }
         if (neverAbove) {
-            return List.of(new AffineConstraint.HalfSpace<>(
-                    hole.form(), ExactCut.exclusive(away)));
+            return List.of(new AffineConstraint.HalfSpace<>(hole.form(),
+                    hole.form().imageOver(spacing).tightenUpper(ExactCut.exclusive(away))));
         }
         return List.of();
     }

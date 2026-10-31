@@ -57,7 +57,8 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
     private static final Map<String, String> READ_AND_SETTLED = Map.of(
             "souther/compiler/numeric/AffineReduction#sidedBy"
                     + "(Lsouther/compiler/numeric/AffineConstraint$Disequality;"
-                    + "Lsouther/compiler/numeric/FormReach;)Ljava/util/List;",
+                    + "Lsouther/compiler/numeric/FormReach;Ljava/util/function/Function;)"
+                    + "Ljava/util/List;",
             "what it hands back holds at most one half-space, and which one is settled by which"
                     + " side of the value the sum is proved to lie rather than by any walk");
 
