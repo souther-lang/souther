@@ -2162,7 +2162,8 @@ public final class WhatARelationLeavesUndivided {
                 return true;
             }
         }
-        return (!arithmetic.mayStopARow() && reachedWithoutEnd(terms, relation, free))
+        return ((!arithmetic.mayStopARow() || arithmetic.stopsNoRowThatIsBuilt())
+                && reachedWithoutEnd(terms, relation, free))
                 || (within == null
                         && reachedByTheOthersAddedUp(terms, at, constant, relation, free,
                                 arithmetic))
@@ -4124,7 +4125,7 @@ public final class WhatARelationLeavesUndivided {
         // The rows built at the ends of the run are asked of every value between them. For a sum of
         // whole numbers that holds, each being a straight function of the term. For decimals it
         // holds of what each operation reads, and nothing is claimed of an operation that reads
-        // the term asked of together with another.
+        // the term asked of together with another unless its room is the same at every number.
         if (!arithmetic.decimalsAllowAClaimOver(terms.get(of).key(), terms.get(by).key())) {
             return false;
         }

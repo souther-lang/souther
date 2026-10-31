@@ -2053,7 +2053,7 @@ public final class ExampleVerifier {
         try {
             result = applying.to(handed(fixtures, target, args, ins));
         } catch (InvocationFailure f) {
-            applicationFailed(fixtures, row, stated, f.getCause(), out, state);
+            applicationFailed(fixtures, row, stated, sig.outputType(), f.getCause(), out, state);
             return;
         } catch (ImplementationNotReached e) {
             // Nothing was applied: what would have applied it could not be reached. Told as the row
@@ -2061,7 +2061,8 @@ public final class ExampleVerifier {
             // one throw — saying it differently is a change to what a row is told, and a different
             // thing from where the two are told apart.
             state.neverEntered();
-            aborted(fixtures, row, stated, String.valueOf(e.getMessage()), out, state);
+            aborted(fixtures, row, stated, sig.outputType(), String.valueOf(e.getMessage()), out,
+                    state);
             return;
         } catch (FixtureException fe) {
             // The row's input could not be put in the form the answerer reads. Nothing about the row
@@ -2110,7 +2111,7 @@ public final class ExampleVerifier {
             // The whole of each side, so the two can be read against each other, and then where they
             // part: a row that wrote a name the answer does not wear differs at one position by its
             // type, which reading two whole values does not say on its own.
-            out.add(mismatch(fixtures, row, fixtures.shown(stated),
+            out.add(mismatch(fixtures, row, fixtures.shown(stated, sig.outputType()),
                     answerShown(fixtures, stated, result, sig.outputType()), differs));
             state.failed(FailurePhase.COMPARISON);
             return;
@@ -2686,7 +2687,8 @@ public final class ExampleVerifier {
      * where the row is given its deadline, and read as anything else the reason is lost.
      */
     private void applicationFailed(FixtureReader fixtures, Hir.ExampleRow row, Expectation stated,
-                                   Throwable cause, List<Diagnostic> out, RowState state) {
+                                   Type answers, Throwable cause, List<Diagnostic> out,
+                                   RowState state) {
         EvaluationContext.rethrowIfOverspent(cause);
         if (cause instanceof FakeMissException fm) {
             out.add(Diagnostic.at(row.pos())
@@ -2713,15 +2715,15 @@ public final class ExampleVerifier {
             state.incomplete(FailurePhase.STACK_EXHAUSTED);
             return;
         }
-        aborted(fixtures, row, stated,
+        aborted(fixtures, row, stated, answers,
                 cause == null ? "aborted" : String.valueOf(cause.getMessage()), out, state);
     }
 
     /** The behavior stopped itself while the row ran — an invariant it broke, or anything else it
      * ended with. Reported against what the row said it would answer, so the two can be read together. */
-    private void aborted(FixtureReader fixtures, Hir.ExampleRow row, Expectation stated, String why,
-                         List<Diagnostic> out, RowState state) {
-        out.add(mismatch(fixtures, row, fixtures.shown(stated), "aborted: " + why, null));
+    private void aborted(FixtureReader fixtures, Hir.ExampleRow row, Expectation stated,
+                         Type answers, String why, List<Diagnostic> out, RowState state) {
+        out.add(mismatch(fixtures, row, fixtures.shown(stated, answers), "aborted: " + why, null));
         state.failed(FailurePhase.INVOCATION);
     }
 }

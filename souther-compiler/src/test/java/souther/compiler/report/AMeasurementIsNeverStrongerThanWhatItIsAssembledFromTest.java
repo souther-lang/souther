@@ -206,7 +206,7 @@ class AMeasurementIsNeverStrongerThanWhatItIsAssembledFromTest {
      * file added to the corpus would leave this reading a model nobody writes any more.
      */
     private static String humanOfTheCorpus() {
-        List<String> sources = ConformanceCorpus.sourcesOf("catalog");
+        List<String> sources = ConformanceCorpus.load("catalog").sources();
         Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

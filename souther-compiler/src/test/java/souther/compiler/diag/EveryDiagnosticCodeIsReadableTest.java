@@ -3,10 +3,12 @@ package souther.compiler.diag;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
@@ -14,6 +16,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
+
+import souther.test.RepositoryJavaSources;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -146,13 +150,12 @@ class EveryDiagnosticCodeIsReadableTest {
      * failing test rather than a diagnostic quietly losing its identity again.
      */
     @Test
-    void nothingRaisesADiagnosticWithoutACode() throws IOException {
+    void nothingRaisesADiagnosticWithoutACode() {
         List<String> raising = new ArrayList<>();
-        for (java.nio.file.Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
-            String text = java.nio.file.Files.readString(source, StandardCharsets.UTF_8);
-            Matcher m = Pattern.compile("Diagnostic\\.literal\\(").matcher(text);
+        for (Map.Entry<Path, String> source : mainSources().entrySet()) {
+            Matcher m = Pattern.compile("Diagnostic\\.literal\\(").matcher(source.getValue());
             while (m.find()) {
-                raising.add(source.toString().replace('\\', '/')
+                raising.add(source.getKey().toString().replace('\\', '/')
                         .replaceAll(".*/src/main/java/", ""));
             }
         }
@@ -178,14 +181,14 @@ class EveryDiagnosticCodeIsReadableTest {
      * context.
      */
     @Test
-    void everyCodeIsNamedByCompilerSource() throws IOException {
+    void everyCodeIsNamedByCompilerSource() {
         Set<String> referenced = new TreeSet<>();
         Pattern named = Pattern.compile("DiagnosticCode\\.(E[0-9]{4})");
-        for (java.nio.file.Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
-            if (source.getFileName().toString().equals("DiagnosticCode.java")) {
+        for (Map.Entry<Path, String> source : mainSources().entrySet()) {
+            if (source.getKey().getFileName().toString().equals("DiagnosticCode.java")) {
                 continue;   // the declaration is not a use
             }
-            Matcher m = named.matcher(java.nio.file.Files.readString(source, StandardCharsets.UTF_8));
+            Matcher m = named.matcher(source.getValue());
             while (m.find()) {
                 referenced.add(m.group(1));
             }
@@ -213,13 +216,12 @@ class EveryDiagnosticCodeIsReadableTest {
      * The rest is read, and was.
      */
     @Test
-    void aKeyNamedForACodeIsEmittedUnderIt() throws IOException {
+    void aKeyNamedForACodeIsEmittedUnderIt() {
         Pattern emission = Pattern.compile(
                 "DiagnosticCode\\.(E[0-9]{4})\\s*,\\s*\\n?\\s*(?:[^;]{0,160}?)\"(e([0-9]{4})\\.[a-z.]+)\"");
         List<String> disagreeing = new ArrayList<>();
-        for (java.nio.file.Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
-            Matcher m = emission.matcher(
-                    java.nio.file.Files.readString(source, StandardCharsets.UTF_8));
+        for (String text : mainSources().values()) {
+            Matcher m = emission.matcher(text);
             while (m.find()) {
                 if (!m.group(1).equals("E" + m.group(3))) {
                     disagreeing.add(m.group(2) + " emitted as " + m.group(1));
@@ -255,6 +257,11 @@ class EveryDiagnosticCodeIsReadableTest {
         }
         assertEquals(List.of(), borrowed,
                 "a code is shown under a title named for another; give it a category of its own");
+    }
+
+    /** Every main source and what it says, read once for the fork. */
+    private static Map<Path, String> mainSources() {
+        return RepositoryJavaSources.forThisFork().mainTexts();
     }
 
     private static String spec() throws IOException {

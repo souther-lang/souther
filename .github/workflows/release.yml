@@ -227,7 +227,7 @@ jobs:
           cache: maven
 
       - name: Build and test
-        run: mvn -B --no-transfer-progress verify
+        run: mvn -B --no-transfer-progress verify -DrunOrder=filesystem
 
       # The CLI's really-executable launcher and the shaded language server are build outputs of the
       # reactor; the grammar is a committed resource that `verify` has just checked is not stale.

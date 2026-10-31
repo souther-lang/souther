@@ -110,9 +110,9 @@ final class DecimalPoints {
 
     /** Whether {@code at} is a decimal written at no more places than a row is built at. */
     static boolean isBuiltAt(ExactRatio at) {
-        return at.writtenDecimal() instanceof ExactAnswer.Held<Optional<BigDecimal>> written
-                && written.value().filter(number -> Math.abs((long) number.scale())
-                <= DecimalOperation.PLACES_A_ROW_IS_BUILT_AT).isPresent();
+        return DecimalOperation.writtenForARow(at)
+                instanceof ExactAnswer.Held<Optional<BigDecimal>> written
+                && written.value().isPresent();
     }
 
     /**

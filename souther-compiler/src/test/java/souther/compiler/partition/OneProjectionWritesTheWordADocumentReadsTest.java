@@ -3,10 +3,8 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.EveryShippedMessageCatalogIsCompleteAndValidTest;
+import souther.test.RepositoryJavaSources;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
@@ -36,13 +34,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 class OneProjectionWritesTheWordADocumentReadsTest {
 
     @Test
-    void nothingButTheProjectionNamesAPublishedReason() throws IOException {
+    void nothingButTheProjectionNamesAPublishedReason() {
         List<Path> sources = EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources();
         assertFalse(sources.isEmpty(), "found no sources at all — the scan missed the tree");
 
         Set<String> naming = new TreeSet<>();
         for (Path source : sources) {
-            String text = Files.readString(source, StandardCharsets.UTF_8);
+            String text = RepositoryJavaSources.forThisFork().mainText(source);
             if (text.contains("UndividedPosition.Reason.")) {
                 naming.add(source.getFileName().toString());
             }

@@ -2,14 +2,13 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.conformance.RepositoryModels;
+import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.test.CheckedInObservation;
-import souther.test.ReadsTheRepositorysModels;
 
 import java.util.regex.Pattern;
 
@@ -23,10 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * two strings is shown over the business cases that do, and the report says which are left open:
  * those holding none.
  *
- * <p>Held against the model the repository carries, so that a change that reads it differently
- * moves this with it and says so.
+ * <p>Held against the sources of the model the repository carries, so that a change that reads it
+ * differently moves this with it and says so. Measured at {@code witness}: what is read here is how
+ * the positions divide and why a relation stops, and none of it turns on a value composed at a line.
  */
-@ReadsTheRepositorysModels
 @CheckedInObservation
 class TheCrmsBusinessCaseIsReadPastTheGuardThatTrimsItTest {
 
@@ -46,8 +45,8 @@ class TheCrmsBusinessCaseIsReadPastTheGuardThatTrimsItTest {
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
         private static Compilation measure() {
-            Compilation crm = RepositoryModels.byCorpus().get("crm");
-            crm.measure(Adequacy.Asked.fullReport());
+            Compilation crm = ConformanceCorpus.load("crm").compilation();
+            crm.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
             crm.answerEverything();
             return crm;
         }

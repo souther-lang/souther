@@ -10,6 +10,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.DecimalOperation;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.NumericTerm;
@@ -1189,7 +1190,7 @@ final class ContainersAddingUp {
                             .flatMap(carried::plus))
                     .flatMap(constants -> ExactRatio.of(total).minus(constants))
                     .flatMap(remains -> remains.dividedBy(weight))
-                    .flatMap(ExactRatio::writtenDecimal);
+                    .flatMap(DecimalOperation::writtenForARow);
         }
 
         /**
@@ -1696,7 +1697,7 @@ final class ContainersAddingUp {
                 return new Split.NotWorkedOut(unheldAt.why());
             }
             ExactAnswer<Optional<BigDecimal>> written =
-                    ((ExactAnswer.Held<ExactRatio>) atAnswer).value().writtenDecimal();
+                    DecimalOperation.writtenForARow(((ExactAnswer.Held<ExactRatio>) atAnswer).value());
             if (written instanceof ExactAnswer.Unheld<Optional<BigDecimal>> unheldWritten) {
                 return new Split.NotWorkedOut(unheldWritten.why());
             }
@@ -1805,7 +1806,7 @@ final class ContainersAddingUp {
     private static Raised raisedBy(ExactRatio from, ExactAnswer<ExactRatio> by, int sign) {
         ExactAnswer<Optional<BigDecimal>> written = by
                 .flatMap(step -> sign < 0 ? from.minus(step) : from.plus(step))
-                .flatMap(ExactRatio::writtenDecimal);
+                .flatMap(DecimalOperation::writtenForARow);
         return switch (written) {
             case ExactAnswer.Unheld<Optional<BigDecimal>> unheld -> new Raised(null, unheld.why());
             case ExactAnswer.Held<Optional<BigDecimal>> held -> held.value().isPresent()
@@ -2416,7 +2417,7 @@ final class ContainersAddingUp {
         Map<TermPath, List<FixtureTemplate>> among = new LinkedHashMap<>(inside.among());
         for (Map.Entry<ElementProjection, ExactRatio> each : fixing.at().entrySet()) {
             Carrier carrier = orders.fieldCarrier(each.getKey());
-            BigDecimal written = each.getValue().writtenDecimal()
+            BigDecimal written = DecimalOperation.writtenForARow(each.getValue())
                     instanceof ExactAnswer.Held<Optional<BigDecimal>>(Optional<BigDecimal> held)
                     ? held.orElse(null) : null;
             // A value of the position, wearing every name the declaration puts there: what is
