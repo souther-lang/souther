@@ -1,9 +1,12 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -54,13 +57,11 @@ public final class DateMonthMoves {
             return null;
         }
         BigDecimal count = FoldedValue.number(folded.apply(args.get(months)));
-        if (count == null || count.stripTrailingZeros().scale() > 0) {
+        if (count == null || !ExactRatio.of(count).isWhole()
+                || !(ExactRatio.of(count).truncated() instanceof ExactAnswer.Held<BigInteger> whole)
+                || whole.value().bitLength() >= Long.SIZE) {
             return null;
         }
-        try {
-            return new Step(count.longValueExact(), args.get(date), law);
-        } catch (ArithmeticException _) {
-            return null;
-        }
+        return new Step(whole.value().longValue(), args.get(date), law);
     }
 }

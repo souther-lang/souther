@@ -1123,9 +1123,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return new AffineForms.Leaf.Form<>(numbers);
                 }
                 if (stoppedAt == null) {
-                    if (keptAtAFigure == null) {
-                        keptAtAFigure = stoppedInTheDividend(node, at);
-                    }
                     return keptAtAFigure == null ? new AffineForms.Leaf.None<>()
                             : new AffineForms.Leaf.Stopped<>(keptAtAFigure);
                 }
@@ -1154,36 +1151,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     }
                 }
                 return new AffineForms.Leaf.Form<>(LinearForm.atom(aside.atom));
-            }
-
-            /**
-             * The stop at {@code node}, a floor remainder, that the reading of its dividend comes
-             * to — or null where it is no floor remainder or its dividend reads.
-             *
-             * <p>A remainder is a number the analysis that draws a line on it reads, of its
-             * dividend's form, so where the dividend has no form that analysis has none, for the
-             * dividend's reason: what an author would change is in the dividend. Said at the call,
-             * as an argument that stopped, as a dividend that stopped on arithmetic no form says
-             * already is.
-             */
-            private AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stoppedInTheDividend(
-                    Core node, InputReads at) {
-                if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)
-                        || call.args().size() != 2) {
-                    return null;
-                }
-                OptionalInt divisor = DefaultBoundOperationFacts.get()
-                        .divisorOfAFloorRemainder(call.operation());
-                if (divisor.isEmpty()) {
-                    return null;
-                }
-                Core dividend = call.args().get(1 - divisor.getAsInt());
-                return AffineForms.outcome(dividend, at, reading(ofTheInput,
-                        new LinkedHashSet<>(), met.copied(), told.apart()))
-                        instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stop
-                        ? new AffineForms.Outcome.StoppedAt<>(node, at,
-                                new AffineForms.Halt.AnArgumentStopped<>(stop))
-                        : null;
             }
 
             /**

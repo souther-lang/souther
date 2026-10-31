@@ -43,10 +43,10 @@ public final class CalendarMonths {
      * the calendar's years are months, and lands past it.
      */
     public static LocalDate movedBy(long months, LocalDate date) {
-        long landed;
-        try {
-            landed = Math.addExact(monthsFromYearNought(date), months);
-        } catch (ArithmeticException _) {
+        long from = monthsFromYearNought(date);
+        long landed = from + months;
+        // Past what a count holds only where both added are of one sign and the sum is not.
+        if (((from ^ landed) & (months ^ landed)) < 0) {
             return null;
         }
         long year = Math.floorDiv(landed, A_YEAR);

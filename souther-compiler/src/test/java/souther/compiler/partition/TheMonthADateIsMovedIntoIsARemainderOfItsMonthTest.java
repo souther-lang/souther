@@ -110,24 +110,29 @@ class TheMonthADateIsMovedIntoIsARemainderOfItsMonthTest {
     }
 
     /**
-     * A comparison of the date a move answers is stopped at the move, for being a date no form of
+     * A comparison of the date a move answers is stopped for the move, for being a date no form of
      * the one it moves, wherever the move is written: in the comparison, behind a name, inside a
-     * remainder, or in a function it is handed to.
+     * remainder, or in a function it is handed to. Each is sent to the call it stopped at, which
+     * is the move, or the remainder the move is read through, written in place or behind a name
+     * alike.
      */
     @Test
-    void theDateAMoveAnswersIsStoppedAtTheMoveWhereverItIsWritten() {
+    void theDateAMoveAnswersIsStoppedForTheMoveWhereverItIsWritten() {
         String[][] written = {
-                {"", "Date.daysBetween(c, Date.addMonths(1, d)) >= 3"},
-                {"let e = Date.addMonths(1, d)", "Date.daysBetween(c, e) >= 3"},
-                {"", "Int.floorMod(Date.daysBetween(c, Date.addMonths(1, d)), 7) >= 1"},
-                {"let e = Date.addMonths(1, d)", "Int.floorMod(Date.daysBetween(c, e), 7) >= 1"},
-                {"", "weekday(c, Date.addMonths(1, d)) >= 1"}};
+                {"", "Date.daysBetween(c, Date.addMonths(1, d)) >= 3", "Date.addMonths"},
+                {"let e = Date.addMonths(1, d)", "Date.daysBetween(c, e) >= 3", "Date.addMonths"},
+                {"", "Int.floorMod(Date.daysBetween(c, Date.addMonths(1, d)), 7) >= 1",
+                        "Int.floorMod(Date.daysBetween(c, Date"},
+                {"let e = Date.addMonths(1, d)", "Int.floorMod(Date.daysBetween(c, e), 7) >= 1",
+                        "Int.floorMod(Date.daysBetween(c, e)"},
+                {"", "weekday(c, Date.addMonths(1, d)) >= 1",
+                        "Int.floorMod(Date.daysBetween(c, d)"}};
         for (String[] each : written) {
             String human = human(each[0], each[1]);
             assertTrue(human.contains("what Date.addMonths answers, a date moved by months"),
                     each[1] + "\n" + human);
             assertFalse(human.contains("states no form of"), each[1] + "\n" + human);
-            assertEquals(Set.of(at(each[0] + "\n" + each[1], "Date.addMonths")),
+            assertEquals(Set.of(at(MODEL.formatted(each[0], each[1]), each[2])),
                     sentTo(json(each[0], each[1])), each[1]);
         }
     }
@@ -203,19 +208,16 @@ class TheMonthADateIsMovedIntoIsARemainderOfItsMonthTest {
         return out;
     }
 
-    /** Where {@code call} is first written in the body {@code written} is, as
-     *  {@code line:column} of the model. */
-    private static String at(String written, String call) {
-        String model = MODEL.formatted(written.lines().toList().getFirst(),
-                written.lines().toList().getLast());
+    /** Where {@code call} is first written in {@code model}, as {@code line:column}. */
+    private static String at(String model, String call) {
         List<String> lines = model.lines().toList();
         for (int i = 0; i < lines.size(); i++) {
             int column = lines.get(i).indexOf(call);
-            if (column >= 0 && i > lines.indexOf("let f (c, d) = {")) {
+            if (column >= 0) {
                 return (i + 1) + ":" + (column + 1);
             }
         }
-        throw new AssertionError(call + " is not written in " + written);
+        throw new AssertionError(call + " is not written in " + model);
     }
 
     private static String human(String before, String comparison) {
