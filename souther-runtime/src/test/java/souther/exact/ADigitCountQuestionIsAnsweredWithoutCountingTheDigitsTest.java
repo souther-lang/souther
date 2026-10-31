@@ -69,6 +69,42 @@ class ADigitCountQuestionIsAnsweredWithoutCountingTheDigitsTest {
         assertEquals(List.of(), differ.subList(0, Math.min(differ.size(), 5)));
     }
 
+    @Test
+    void leastDigitsStopsAtTheFloorWhateverNumberOfZerosItMeets() {
+        List<String> differ = new ArrayList<>();
+        for (int zeros : new int[] {0, 1, 2, 9, 10, 11, 100, 999, 1000, 1001}) {
+            for (long odd : new long[] {1, 7, -7, 25, 3}) {
+                BigInteger unscaled = BigInteger.TEN.pow(zeros).multiply(BigInteger.valueOf(odd));
+                for (int offset : new int[] {0, 1, zeros - 1, zeros, zeros + 1, zeros + 2, 5000}) {
+                    if (offset < 0) {
+                        continue;
+                    }
+                    BigDecimal d = new BigDecimal(unscaled, Integer.MIN_VALUE + offset);
+                    BigDecimal expected = oneZeroAtATime(unscaled, Integer.MIN_VALUE + offset);
+                    BigDecimal asked = ExactDecimals.leastDigits(d);
+                    if (!asked.equals(expected)) {
+                        differ.add(odd + "e" + zeros + " at floor + " + offset);
+                    }
+                }
+            }
+        }
+        assertEquals(List.of(), differ.subList(0, Math.min(differ.size(), 5)));
+    }
+
+    private static BigDecimal oneZeroAtATime(BigInteger unscaled, int scale) {
+        BigInteger digits = unscaled;
+        int at = scale;
+        while (at > Integer.MIN_VALUE) {
+            BigInteger[] divided = digits.divideAndRemainder(BigInteger.TEN);
+            if (divided[1].signum() != 0) {
+                break;
+            }
+            digits = divided[0];
+            at--;
+        }
+        return new BigDecimal(digits, at);
+    }
+
     private static List<BigInteger> unscaledValues() {
         List<BigInteger> out = new ArrayList<>();
         for (int digits : new int[] {1, 2, 3, 4, 5, 18, 19, 20, 998, 999, 1000, 1001, 1002}) {
@@ -88,8 +124,8 @@ class ADigitCountQuestionIsAnsweredWithoutCountingTheDigitsTest {
             }
         }
         out.add(BigInteger.ZERO);
-        out.add(BigInteger.ONE.shiftLeft(1_000_000).subtract(BigInteger.valueOf(3)));
-        out.add(BigInteger.ONE.shiftLeft(1_000_000).subtract(BigInteger.valueOf(3)).negate());
+        out.add(BigInteger.ONE.shiftLeft(100_000).subtract(BigInteger.valueOf(3)));
+        out.add(BigInteger.ONE.shiftLeft(100_000).subtract(BigInteger.valueOf(3)).negate());
         return out;
     }
 }

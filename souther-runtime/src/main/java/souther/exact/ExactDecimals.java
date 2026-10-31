@@ -137,16 +137,23 @@ public final class ExactDecimals {
             return d.stripTrailingZeros();
         }
         BigInteger digits = d.unscaledValue();
-        int scale = d.scale();
-        for (long left = room; left > 0; left--) {
-            BigInteger[] divided = digits.divideAndRemainder(BigInteger.TEN);
-            if (divided[1].signum() != 0) {
-                break;
-            }
-            digits = divided[0];
-            scale--;
+        if (room == 0 || digits.remainder(BigInteger.TEN).signum() != 0) {
+            return new BigDecimal(digits, d.scale());
         }
-        return new BigDecimal(digits, scale);
+        // The most zeros there are is found by halving, because taking them off one at a time
+        // divides the whole number once for each. Divisible by 10^z holds for every z up to the
+        // count of zeros and for none past it, and a number of n bits has fewer than n / 3 of them.
+        long fewest = 1;
+        long most = Math.min(room, digits.bitLength() / 3);
+        while (fewest < most) {
+            long middle = (fewest + most + 1) / 2;
+            if (digits.remainder(BigInteger.TEN.pow((int) middle)).signum() == 0) {
+                fewest = middle;
+            } else {
+                most = middle - 1;
+            }
+        }
+        return new BigDecimal(digits.divide(BigInteger.TEN.pow((int) fewest)), d.scale() - (int) fewest);
     }
 
     /**
