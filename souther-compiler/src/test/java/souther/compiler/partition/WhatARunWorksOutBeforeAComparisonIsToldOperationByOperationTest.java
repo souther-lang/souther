@@ -54,6 +54,7 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
             let fixedOf (p: Pay): Yen = p.base + p.extra
             let totalOf (p: Pay): Yen = fixedOf(p) + p.variable
             let monthsOf (w: Window): List<Month> = [ w.first, w.second, w.third ]
+            let noMonths (w: Window): List<Month> = []
             let averageOf (months: List<Month>): Yen =
                 Yen(Rational.toInt(DOWN,
                     List.sum(List.map(m -> totalOf(m.pay).value, months)) / List.length(months)))
@@ -95,6 +96,23 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
                 COUNT));
         out.put("someOnly", List.of("List.map(n -> Yen(0 - n), [ window.second.pay.base.value,"
                 + " if window.second.days > 0 then window.first.pay.base.value else 0 ])", COUNT));
+        out.put("summedSomeOnly", List.of("[ List.sum(List.map(n -> Yen(0 - n).value,"
+                + " [ window.second.pay.base.value,"
+                + " if window.second.days > 0 then window.first.pay.base.value else 0 ])) ]",
+                COUNT));
+        out.put("summedBoth", List.of("[ List.sum(List.map(n -> Yen(0 - n).value,"
+                + " [ window.second.pay.base.value, window.first.pay.base.value ])) ]", COUNT));
+        out.put("summedInASum", List.of("[ List.sum(List.map(n -> n * 3000000000,"
+                + " [ window.second.pay.base.value, window.first.pay.base.value ])) * 0 ]",
+                COUNT));
+        out.put("summedSomeOnlyInASum", List.of("[ List.sum(List.map(n -> n * 3000000000,"
+                + " [ window.second.pay.base.value,"
+                + " if window.second.days > 0 then window.first.pay.base.value else 0 ])) * 0 ]",
+                COUNT));
+        out.put("summedKept", List.of("[ List.sum(List.map(m -> Yen(0 - m.pay.base.value).value,"
+                + " List.filter(m -> m.days >= 17, [ window.first ]))) ]", COUNT));
+        out.put("neverApplied", List.of("List.map(m -> Yen(m.days - window.first.pay.base.value),"
+                + " noMonths(window))", COUNT));
         out.put("kept", List.of("List.map(m -> Yen(0 - m.pay.base.value),"
                 + " List.filter(m -> m.days >= 17, [ window.first ]))", COUNT));
         out.put("down", List.of(
@@ -201,6 +219,70 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
     void aBodyToldOnSomeApplicationsOnlyIsLeftUnsaid() {
         assertEquals(List.of("window.first.pay.base", "window.first.pay.extra"),
                 notReachedAtEveryValue("someOnly"));
+    }
+
+    /**
+     * The same applications added up: reading what the total comes to reads each application's
+     * number, and where one of them is no form, the reading of the total tells nothing of the
+     * body either. What each application works out is told by the walk of what a run works out,
+     * on each application, and by nothing that reads a value along the way.
+     */
+    @Test
+    void aBodyAddedUpOnSomeApplicationsOnlyIsLeftUnsaid() {
+        assertEquals(List.of("window.first.pay.base", "window.first.pay.extra"),
+                notReachedAtEveryValue("summedSomeOnly"));
+    }
+
+    /**
+     * Added up over what a filter keeps, the construction in the body is made on the runs that keep
+     * the month only, so it holds the base to nought on those and on no other: the total's reading
+     * reads the body on the month kept, and what it reads there is no operation every run makes.
+     */
+    @Test
+    void aBodyAddedUpOverWhatAFilterKeepsIsLeftUnsaid() {
+        assertEquals(List.of("window.first.pay.base", "window.first.pay.extra"),
+                notReachedAtEveryValue("summedKept"));
+    }
+
+    /**
+     * A total read inside a sum is read for the number it comes to, and reading it reads each
+     * application's product: that reading is not the run's working out of them. The second
+     * application's product, over the first month, is what holds its base to the most three
+     * thousand million times of which an {@code Int} holds, whoever reads the total first.
+     */
+    @Test
+    void aTotalReadInsideASumLeavesEachApplicationToBeTold() {
+        assertEquals(List.of("previous/0 <= x < 1003074457346", "previous/1003074457346 <= x"),
+                previous("summedInASum"));
+    }
+
+    /**
+     * The same where the second application is handed a number no form is read of: the product
+     * in the body is told on no application, whatever a reading of the total read of the first,
+     * and the places the closure is handed are left tied.
+     */
+    @Test
+    void aTotalReadInsideASumTellsNothingOfABodyReadOnSomeApplicationsOnly() {
+        assertEquals(List.of("window.first.pay.base", "window.first.pay.extra"),
+                notReachedAtEveryValue("summedSomeOnlyInASum"));
+    }
+
+    /** Added up over two months each read, the second application holds the first month's base to
+     *  nought as it does where the applications are not added up. */
+    @Test
+    void aBodyAddedUpOnEveryApplicationIsToldOnEach() {
+        assertEquals(THE_BASE_IS_NOUGHT, previous("summedBoth"));
+        assertEquals(List.of(), notReachedAtEveryValue("summedBoth"));
+    }
+
+    /**
+     * A closure handed a container that holds nothing on any row is applied on no run, so nothing
+     * its body works out stops one, however it reads the places outside it.
+     */
+    @Test
+    void aClosureAppliedOnNoRunStopsNone() {
+        assertEquals(NOTHING_STOPS_BEFORE_IT, previous("neverApplied"));
+        assertEquals(List.of(), notReachedAtEveryValue("neverApplied"));
     }
 
     /**
