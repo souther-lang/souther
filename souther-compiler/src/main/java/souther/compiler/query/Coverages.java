@@ -1075,14 +1075,12 @@ final class Coverages {
             WayToTheBorder way = wayTo(border.border(), reaching);
             OneSearchOfABorder search = searching(border.border(), read, input, probe,
                     realizer, way);
-            // The second search of a class the line cuts, along the way to the comparison. The
-            // first is along the way to the case the line decides in. Where that proves the class
-            // has no value in the case, the class lies wholly outside it, and a row there is a row
-            // of the class by the answer the comparison came out with: nothing in the case could
-            // be one, so a row outside it does not stand in for a row inside. Where the class has
-            // values in the case, a search that fell short settles nothing about rows outside it,
-            // and none is looked for. Made at the first point that asks, so that a border none of
-            // whose points come to that pays for one walk.
+            // A class the line cuts that lies wholly outside the case the line decides in is
+            // looked for along the way to the comparison, and a row is read back against it by the
+            // answer the comparison came out with. Nothing in the case could stand at it, so a row
+            // outside the case does not stand in for a row inside. Any other class is looked for
+            // along the case, as the points against the line are. Made at the first point that
+            // asks, so that a border none of whose points come to that pays for one walk.
             OneSearchOfABorder overTheComparison = null;
             java.util.Map<DomainPoint, ItemAssessment> items = new java.util.LinkedHashMap<>();
             for (DomainPoint point : border.items().keySet()) {
@@ -1093,28 +1091,20 @@ final class Coverages {
                 // search stopped at one call would come out stopped at every call of the line.
                 if (item instanceof ItemAssessment.Owed owed && owed.worthSearching()) {
                     String label = border.border().label(point);
-                    Optional<Boolean> answeredAs = answeredAs(border.border(), point);
-                    SearchOutcomes outcomes =
-                            search.search(owed.criterion(), label, Optional.empty());
-                    if (answeredAs.isPresent() && outcomes.provesInfeasible()) {
+                    Optional<Boolean> answeredAs = answeredAs(border.border(), point)
+                            .filter(_ -> search.classLiesOutsideTheCase(owed.criterion()));
+                    OneSearchOfABorder looking = search;
+                    if (answeredAs.isPresent()) {
                         if (overTheComparison == null) {
-                            WayToTheBorder toTheComparison =
-                                    reaching.wayToTheComparison(border.border().origin());
-                            overTheComparison = toTheComparison.equals(way) ? search
-                                    : searching(border.border(), read, input, probe, realizer,
-                                            toTheComparison);
+                            overTheComparison = searching(border.border(), read, input, probe,
+                                    realizer,
+                                    reaching.wayToTheComparison(border.border().origin()));
                         }
-                        if (overTheComparison != search) {
-                            // Contains the first. A proof it reaches settles the class, a row it
-                            // finds is a row of it, and anything else leaves the class open for
-                            // what each of the two stopped at.
-                            SearchOutcomes wider =
-                                    overTheComparison.search(owed.criterion(), label, answeredAs);
-                            outcomes = wider.certified() || wider.provesInfeasible() ? wider
-                                    : outcomes.plus(wider);
-                        }
+                        looking = overTheComparison;
                     }
-                    items.put(point, owed.settledBy(outcomes.readAt(border.readAt())));
+                    items.put(point, owed.settledBy(
+                            looking.search(owed.criterion(), label, answeredAs)
+                                    .readAt(border.readAt())));
                 } else {
                     items.put(point, item);
                 }
@@ -1332,6 +1322,27 @@ final class Coverages {
     }
 
     /**
+     * Whether the region of the case the line is read in leaves {@code criterion}'s class no value:
+     * the class lies wholly outside the case. The realizer's own proof of it, asked without looking
+     * for a row.
+     *
+     * <p>The one place this is decided, for measuring the rows an author wrote and for searching.
+     * Where it holds, nothing in the case can stand at the class, and a row outside the case is a
+     * row of it by the answer the comparison came out with. Where it does not, a row outside the
+     * case stands in for nothing, and the class is read where the line decides like the points
+     * against the line.
+     *
+     * <p>False where nothing reaches the line, or where the quantity is one only a run works out
+     * and no proof is made of it.
+     */
+    private static boolean classLiesOutsideTheCase(BorderQuantity quantity, Criterion criterion,
+                                                   Reachability reaching) {
+        return reaching instanceof Reachability.Reaching able
+                && new LevelRealizer().leavesNoValue(
+                        quantity.searchGoalAt(criterion).alongTheWay(able), able.region());
+    }
+
+    /**
      * How a row for one border came to be looked for where it is.
      *
      * <p>Beside the border and not part of it. What a border is is what the rows are owed at, and it
@@ -1407,6 +1418,9 @@ final class Coverages {
          *                   the line
          */
         SearchOutcomes search(Criterion criterion, String label, Optional<Boolean> answeredAs);
+
+        /** {@link Coverages#classLiesOutsideTheCase}, of the region this search looks in. */
+        boolean classLiesOutsideTheCase(Criterion criterion);
 
         /**
          * What looking for a row that rules out {@code direction} on one side of this line came to.
@@ -1754,29 +1768,18 @@ final class Coverages {
      * What the rows come to at one point of a border.
      *
      * <p>Read where the line decides, which is how a row shows where the line falls. A point of a
-     * class the line cuts is read again by the answer the comparison came out with where that
-     * finds no row and the class lies wholly outside the case the line is read in
-     * ({@link OneShapeOfBorder#classLiesOutsideTheCase}): nothing in the case can then stand at
-     * it, so a row outside the case is a row of the class. It is the definition a search reads a
-     * row back against at the same point ({@link #searched}).
+     * class the line cuts that lies wholly outside the case the line is read in is read by the
+     * answer the comparison came out with ({@link OneShapeOfBorder#classLiesOutsideTheCase}):
+     * nothing in the case can stand at it, so a row outside the case is a row of the class. A
+     * search reads a row back against the same question at the same point ({@link #searched}).
      */
     private static Measurement<ItemAssessment.Coverage> standingAtPoint(
             OneShapeOfBorder shape, Border border, DomainPoint point, Criterion criterion,
             RowsPutToTheLines put, boolean guard, Adequacy.RowReading observed) {
-        Measurement<ItemAssessment.Coverage> read =
-                standingAt(shape, Optional.empty(), criterion, put, guard, border, observed);
-        Optional<Boolean> answeredAs = answeredAs(border, point);
-        if (answeredAs.isEmpty() || put.all().isEmpty() || isAHit(read)
-                || !shape.classLiesOutsideTheCase(criterion)) {
-            return read;
-        }
-        Measurement<ItemAssessment.Coverage> asAClass =
-                standingAt(shape, answeredAs, criterion, put, guard, border, observed);
-        return isAHit(asAClass) ? asAClass : read;
-    }
-
-    private static boolean isAHit(Measurement<ItemAssessment.Coverage> coverage) {
-        return coverage.made().filter(ItemAssessment.Coverage.Hit.class::isInstance).isPresent();
+        // No row, nothing to read, and no proof to ask for.
+        Optional<Boolean> answeredAs = answeredAs(border, point).filter(_ ->
+                !put.all().isEmpty() && shape.classLiesOutsideTheCase(criterion));
+        return standingAt(shape, answeredAs, criterion, put, guard, border, observed);
     }
 
     /**
@@ -1879,22 +1882,10 @@ final class Coverages {
                 return answeredAs.map(toRows::forAClass).orElse(toRows).met(rows, criterion);
             }
 
-            /** Worked out at the first class that asks and kept: it is the region of the line,
-             *  which is the same for every point of it. */
-            private Reachability.Reaching region;
-            private boolean regionAsked;
-
             @Override
             public boolean classLiesOutsideTheCase(Criterion criterion) {
-                if (!regionAsked) {
-                    regionAsked = true;
-                    if (Reachability.of(way, declarations) instanceof Reachability.Reaching able) {
-                        region = able;
-                    }
-                }
-                return region != null && new LevelRealizer().leavesNoValue(
-                        line.quantity().searchGoalAt(criterion).alongTheWay(region),
-                        region.region());
+                return Coverages.classLiesOutsideTheCase(line.quantity(), criterion,
+                        Reachability.of(way, declarations));
             }
 
             @Override
@@ -2034,6 +2025,11 @@ final class Coverages {
         // walks every position of the input at every point a row is searched for.
         souther.compiler.partition.WitnessSearch looking = input.witnessSearch();
         return new OneSearchOfABorder() {
+
+            @Override
+            public boolean classLiesOutsideTheCase(Criterion criterion) {
+                return Coverages.classLiesOutsideTheCase(quantity, criterion, reaching);
+            }
 
             @Override
             public SearchOutcomes search(Criterion criterion, String label,

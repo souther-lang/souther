@@ -4,10 +4,17 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -74,13 +81,73 @@ class APointBelowTheCaseAClampedComparisonIsReadInIsStillOwedARowTest {
         assertFalse(human.contains(REFUTED_OUT), human);
     }
 
-    /** The search composes a row for the class, reads it back and has it certified. */
+    /** The search composes a row for the class, reads it back, and has it certified: the empty list. */
     @Test
-    void aRowCanBeWrittenAtTheClass() {
-        String human = report(modelComparing(DROPPED));
+    void theSearchComposesTheEmptyListAndReadsItBackAtTheOutClass() {
+        List<ItemAssessment.Owed> out = owedPointsBelowTheLine(modelComparing(DROPPED));
 
-        assertFalse(human.contains("nothing could show a row can be written at the OUT point"),
-                human);
+        assertEquals(1, out.size(), () -> "the OUT class is one owed point: " + out);
+        List<List<String>> certified = out.getFirst().searches().each().stream()
+                .filter(ItemAssessment.Attempt.Certified.class::isInstance)
+                .map(ItemAssessment.Attempt.Certified.class::cast)
+                .map(row -> row.row().inputs().stream().map(input -> input.text()).toList())
+                .toList();
+        assertEquals(List.of(List.of("[]")), certified, () -> "searches: " + out.getFirst());
+    }
+
+    private static List<ItemAssessment.Owed> owedPointsBelowTheLine(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, List<BorderAssessment>> all =
+                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
+        assertNotNull(all, () -> "the model compiles: " + compilation.errors());
+        return BorderAssessment.pointsOf(all.get("f")).stream()
+                .filter(point -> point.label() != null && point.label().contains("< 1"))
+                .map(BorderAssessment.Point::item)
+                .filter(ItemAssessment.Owed.class::isInstance)
+                .map(ItemAssessment.Owed.class::cast)
+                .toList();
+    }
+
+    /** The comparison inside a conjunction is read as it is alone: the class is owed. */
+    @Test
+    void aComparisonInAConjunctionHasTheSameOwedClassAndAWrittenRowMeetsIt() {
+        String source = """
+                module p
+                data Yes
+                data No
+                behavior f : (xs: List<Int>, enabled: Bool) -> Yes | No
+                let f (xs, enabled) =
+                    if List.length(List.drop(1, xs)) >= 1 && enabled then Yes else No
+                example f
+                    | "empty" : ([], true) -> No
+                """;
+        String human = report(source);
+
+        assertTrue(human.contains("obligations 1/4"), human);
+        assertFalse(human.contains(REFUTED_OUT), human);
+        assertFalse(human.contains("no row is at an OUT point"), human);
+    }
+
+    /** A negated comparison: the rule's holding is the comparison's not holding. */
+    @Test
+    void aNegatedComparisonIsReadByTheSideTheRuleHoldsOn() {
+        String source = """
+                module p
+                data Yes
+                data No
+                behavior f : (xs: List<Int>) -> Yes | No
+                let f (xs) = if Bool.not(List.length(List.drop(1, xs)) < 1) then Yes else No
+                example f
+                    | "empty" : ([]) -> No
+                    | "three" : ([1, 2, 3]) -> Yes
+                """;
+        String human = report(source);
+
+        assertFalse(human.contains(REFUTED_OUT), human);
+        assertFalse(human.contains("no row is at an OUT point"), human);
+        assertFalse(human.contains("no row is at an IN point"), human);
     }
 
     /** A row an author wrote is a row of the class as a composed one is. */
