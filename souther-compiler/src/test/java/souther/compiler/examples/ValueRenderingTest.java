@@ -8,6 +8,7 @@ import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
@@ -47,6 +48,20 @@ class ValueRenderingTest {
 
     private static ObservedValue n(long v) {
         return new ObservedValue.Integer(v);
+    }
+
+    @Test
+    void aSetOfNumbersIsWrittenInTheOrderOfTheirValuesAndAListInItsOwn() {
+        ObservedValue.Sequence built = new ObservedValue.Sequence(List.of(n(10), n(-3), n(2)));
+        assertEquals("Set.fromList([ -3, 2, 10 ])", rendering().show(built, Type.set(Type.INT)));
+        assertEquals("[ 10, -3, 2 ]", rendering().show(built, Type.list(Type.INT)));
+    }
+
+    @Test
+    void aSetOfTextIsWrittenInTheOrderOfItsText() {
+        ObservedValue.Sequence built = new ObservedValue.Sequence(List.of(
+                new ObservedValue.Text("10"), new ObservedValue.Text("2")));
+        assertEquals("Set.fromList([ \"10\", \"2\" ])", rendering().show(built, Type.set(Type.STRING)));
     }
 
     @Test

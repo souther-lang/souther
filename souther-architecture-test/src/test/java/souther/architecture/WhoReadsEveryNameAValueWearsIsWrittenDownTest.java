@@ -236,6 +236,9 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(" + TYPE + "L" + INPUTS + "TermPath;L" + INPUTS + "TermPath;" + CONTEXT
                             + ")" + TYPE,
                     THE_POSITION),
+            row(PARTITION + "ObservedFixtures", "inSetOrder",
+                    "(Ljava/util/List;Ljava/util/List;" + TYPE + SOURCE + ")Ljava/util/List;",
+                    THE_POSITION),
             row(PARTITION + "ObservedFixtures", "of",
                     "(Lsouther/compiler/observe/ObservedValue;" + TYPE + CONTEXT + ")L" + PARTITION
                             + "ObservedFixtures$Writing;",

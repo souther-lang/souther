@@ -1,9 +1,12 @@
 package souther.compiler.examples;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.cst.CstLexer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.Alignment;
 import souther.compiler.observe.Asserted;
+import souther.compiler.observe.CanonicalSetOrder;
 import souther.compiler.observe.Expectation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.PathElement;
@@ -14,6 +17,7 @@ import souther.compiler.types.TypeSymbol;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * A structured value written the way a fixture writes one.
@@ -186,17 +190,55 @@ final class ValueRendering {
      *  the ones that have none. */
     private String unordered(Alignment.Unordered set, Type position) {
         Type element = elementOf(position);
+        Function<ObservedValue, Place> placing = placing(element);
         List<String> out = new ArrayList<>();
-        for (Alignment.Stood each : atTheirRank(set.written(), it -> show(it.stated()))) {
+        for (Alignment.Stood each : CanonicalSetOrder.of(set.written(),
+                it -> placing.apply(it.element()), it -> show(it.stated()))) {
             out.add(against(each.element(), each.under(), element));
         }
-        List<String> rest = new ArrayList<>();
-        for (ObservedValue each : set.rest()) {
-            rest.add(canonical(each, element));
-        }
-        rest.sort(String::compareTo);
-        out.addAll(rest);
+        out.addAll(inSetOrder(set.rest(), element));
         return written(out);
+    }
+
+    /**
+     * A set's elements, each written, in the order {@link CanonicalSetOrder} puts them in: by value
+     * where the element is a number or a name over one, by text otherwise.
+     */
+    private List<String> inSetOrder(List<ObservedValue> elements, Type element) {
+        Function<ObservedValue, Place> placing = placing(element);
+        List<Map.Entry<ObservedValue, String>> written = new ArrayList<>(elements.size());
+        for (ObservedValue each : elements) {
+            written.add(Map.entry(each, canonical(each, element)));
+        }
+        return CanonicalSetOrder.of(written, it -> placing.apply(it.getKey()), Map.Entry::getValue)
+                .stream().map(Map.Entry::getValue).toList();
+    }
+
+    /**
+     * Where a value of {@code element} sits on the order of its number, or null for every value of a
+     * type that is not one.
+     *
+     * <p>The names are the type's: each is taken off the value only where the type says the position
+     * wears it, so a record that happens to hold a {@code value} field is not a name over its
+     * number.
+     */
+    private Function<ObservedValue, Place> placing(Type element) {
+        List<TypeSymbol> worn = new ArrayList<>();
+        Type at = element == null ? null : NeutralForm.open(element);
+        while (at instanceof Type.Ref ref && neutral.isNewtype(ref.name())
+                && !worn.contains(ref.name())) {
+            worn.add(ref.name());
+            Type base = neutral.newtypeBaseType(ref.name());
+            at = base == null ? null : NeutralForm.open(base);
+        }
+        Carrier carrier = at == null ? null : Carrier.ofPrimitive(at);
+        if (!(carrier instanceof Carrier.Whole || carrier instanceof Carrier.Dense)) {
+            return value -> null;
+        }
+        return value -> {
+            ObservedValue inside = ObservedValue.wearing(worn, value);
+            return inside == null ? null : carrier.placeOf(inside);
+        };
     }
 
     /** The pairs that have a counterpart, each at the place its counterpart takes, then the rest. */
@@ -273,14 +315,9 @@ final class ValueRendering {
             }
             case ObservedValue.Sequence s -> {
                 Type element = elementOf(position);
-                List<String> out = new ArrayList<>();
-                for (ObservedValue each : s.elements()) {
-                    out.add(canonical(each, element));
-                }
-                if (open instanceof Type.SetOf) {
-                    out.sort(String::compareTo);
-                }
-                yield written(out);
+                yield written(open instanceof Type.SetOf
+                        ? inSetOrder(s.elements(), element)
+                        : s.elements().stream().map(each -> canonical(each, element)).toList());
             }
             case ObservedValue.Constructed c -> {
                 Map<String, Type> declared = neutral.fieldTypes(c.type());

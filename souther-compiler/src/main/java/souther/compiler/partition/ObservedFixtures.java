@@ -1,10 +1,12 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.CanonicalSetOrder;
 import souther.compiler.observe.ElementsTaken;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
@@ -346,7 +348,7 @@ final class ObservedFixtures {
         return new Writing.Written<>(FixtureTemplate.record(name, fields));
     }
 
-    /** A list in the order it holds its elements, and a set in the order of their text. */
+    /** A list in the order it holds its elements, and a set in the order of their values. */
     private static Writing<FixtureTemplate> sequence(List<ObservedValue> elements,
                                                      Shape.Sequence sequence,
                                                      RuleReadingContext reading) {
@@ -360,9 +362,36 @@ final class ObservedFixtures {
             }
         }
         if (sequence.kind() == Shape.Sequence.Kind.SET) {
-            written.sort(Comparator.comparing(FixtureTemplate::text));
+            written = inSetOrder(elements, written, sequence.element(), reading.source());
         }
         return new Writing.Written<>(FixtureTemplate.collection(written));
+    }
+
+    /**
+     * The elements of a set in the order {@link CanonicalSetOrder} writes them: by value where the
+     * element type is a number or a name over one, and by text otherwise.
+     *
+     * <p>The place is taken off the observed value, with the names the position wears off it by the
+     * walk {@link #of} takes them off by, so a number is never read back out of its text.
+     */
+    private static List<FixtureTemplate> inSetOrder(List<ObservedValue> observed,
+                                                    List<FixtureTemplate> written, Type element,
+                                                    RuleReadingSource source) {
+        Carrier carrier = Carrier.ofValue(element, source.declarations());
+        boolean counted = carrier instanceof Carrier.Whole || carrier instanceof Carrier.Dense;
+        List<TypeSymbol> worn = TypeView.of(element, source.inners(), source.symbols(),
+                source.kinds(), source.sums()).wrappers();
+        List<Integer> positions = new ArrayList<>();
+        for (int at = 0; at < written.size(); at++) {
+            positions.add(at);
+        }
+        return CanonicalSetOrder.of(positions, at -> {
+            if (!counted) {
+                return null;
+            }
+            ObservedValue inside = ObservedValue.wearing(worn, observed.get(at));
+            return inside == null ? null : carrier.placeOf(inside);
+        }, at -> written.get(at).text()).stream().map(written::get).toList();
     }
 
     /** A map as its entries, in the order of their text. */
