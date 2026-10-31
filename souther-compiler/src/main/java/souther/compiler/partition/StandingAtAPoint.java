@@ -416,27 +416,58 @@ public final class StandingAtAPoint {
     private record Arrival(List<ConditionOutcomeSite> watched, Optional<AsAClass> asAClass) {
 
         /**
-         * Whether the run got the answer the class says out of the rule, on every application of
-         * it.
+         * Whether the run got to the rule, and for a point of a class whether it got the answer the
+         * class says out of it.
          *
-         * <p>Every, because the run's record is of the site and not of the element a reading chose:
-         * where one application came out one way and another the other, a record of either says
-         * nothing of which belongs to the element ({@link RulesTaken.ExecutionEvidence#BOTH_WAYS}).
-         * Applications that all agree leave nothing to tell apart, and a site whose visits were not
-         * all kept is not one to read an answer off.
+         * <p>The run's record is of the place the comparison is made at and not of the element a
+         * reading chose. Where every application came out as the class says, the answer is that.
+         * Where all came out the other way, or none was made, it is no. Where applications came out
+         * both ways ({@link RulesTaken.ExecutionEvidence#BOTH_WAYS}), or the visits were not all
+         * kept, a record of the answer says nothing of which application belongs to the element:
+         * that is not told, and is neither of the others.
          */
-        boolean by(AlignedObservation account) {
-            return asAClass
-                    .map(as -> watched.stream().anyMatch(site -> account.keptEveryVisit(site)
-                            && RulesTaken.ExecutionEvidence.of(account.saw(site, as.holds()),
-                                    account.saw(site, !as.holds()))
-                                    == RulesTaken.ExecutionEvidence.AS_THE_RULE_SAYS))
-                    .orElseGet(() -> gotAnAnswerOutOfTheRule(watched, account));
+        Arrived by(AlignedObservation account) {
+            if (asAClass.isEmpty()) {
+                return gotAnAnswerOutOfTheRule(watched, account) ? Arrived.REACHED
+                        : Arrived.NOT_REACHED;
+            }
+            boolean holds = asAClass.get().holds();
+            boolean untold = false;
+            for (ConditionOutcomeSite site : watched) {
+                RulesTaken.ExecutionEvidence seen = RulesTaken.ExecutionEvidence.of(
+                        account.saw(site, holds), account.saw(site, !holds));
+                boolean kept = account.keptEveryVisit(site);
+                if (seen == RulesTaken.ExecutionEvidence.AS_THE_RULE_SAYS && kept) {
+                    return Arrived.REACHED;
+                }
+                untold |= seen == RulesTaken.ExecutionEvidence.BOTH_WAYS
+                        || (seen != RulesTaken.ExecutionEvidence.UNOBSERVED && !kept);
+            }
+            return untold ? new Arrived.CouldNotTell(Set.of(new ReadingGap.ReachNotRead(
+                    ReadingGap.ReachNotRead.Why.APPLICATIONS_NOT_TOLD_APART)))
+                    : Arrived.NOT_REACHED;
         }
 
         List<WhereAPartDecides.AskedOfRows> elsewhere() {
             return asAClass.map(as -> as.others().askedOfRows()).orElse(List.of());
         }
+    }
+
+    /** Whether a run got to the rule, in the three answers a record of it can give. */
+    private sealed interface Arrived {
+
+        Arrived REACHED = new Reached();
+
+        Arrived NOT_REACHED = new NotReached();
+
+        /** It did, and for a point of a class by the answer the class says. */
+        record Reached() implements Arrived {}
+
+        /** It did not, or it came out another way every time. */
+        record NotReached() implements Arrived {}
+
+        /** The record does not say which application belongs to the element a reading chose. */
+        record CouldNotTell(Set<ReadingGap> why) implements Arrived {}
     }
 
     private static Met met(MeasuredInput.BorderReading line,
@@ -478,8 +509,12 @@ public final class StandingAtAPoint {
                 }
                 switch (one.watched()) {
                     case Generator.Watched.Ran(var account) -> {
-                        if (arrival.by(account)) {
-                            return Met.REACHED;
+                        switch (arrival.by(account)) {
+                            case Arrived.Reached _ -> {
+                                return Met.REACHED;
+                            }
+                            case Arrived.CouldNotTell it -> unreadable.addAll(it.why());
+                            case Arrived.NotReached _ -> { }
                         }
                     }
                     // It stands where the line is and nothing watched it get there. Said rather
@@ -645,8 +680,15 @@ public final class StandingAtAPoint {
             if (!watched.isEmpty()) {
                 switch (one.watched()) {
                     case Generator.Watched.Ran(var account) -> {
-                        if (!arrival.by(account)) {
-                            continue;   // it ran and never met this rule, so it says nothing here
+                        switch (arrival.by(account)) {
+                            case Arrived.Reached _ -> { }
+                            case Arrived.NotReached _ -> {
+                                continue;   // it ran and never met this rule, so it says nothing
+                            }
+                            case Arrived.CouldNotTell it -> {
+                                unreadable.addAll(it.why());
+                                continue;
+                            }
                         }
                     }
                     case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ -> {

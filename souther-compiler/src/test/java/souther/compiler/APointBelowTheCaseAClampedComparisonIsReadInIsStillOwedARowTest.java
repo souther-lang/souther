@@ -7,6 +7,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.query.Measurement;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
@@ -14,6 +15,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -166,6 +168,94 @@ class APointBelowTheCaseAClampedComparisonIsReadInIsStillOwedARowTest {
 
         assertTrue(owed.coverage().made().filter(ItemAssessment.Coverage.Hit.class::isInstance)
                 .isPresent(), () -> "a one-year row is a row of the one-year class: " + owed);
+    }
+
+    /**
+     * One comparison with a line on each of two positions. The empty list is in the clamped line's
+     * class, and it is also in the case the line on the other position decides in, so it is a row of
+     * that reading. Written by an author or composed by a search, the same row gets the same answer.
+     */
+    private static final String TWO_POSITIONS = """
+            module p
+            data Yes
+            data No
+            behavior f : (xs: List<Int>, ys: List<Int>) -> Yes | No
+            let f (xs, ys) =
+                if Int.max(List.length(List.drop(1, xs)), List.length(ys)) >= 1
+                then Yes else No
+            """;
+
+    @Test
+    void aRowInTheCaseOfALineOnAnotherPositionIsNoRowOfTheClassWhoeverMadeIt() {
+        ItemAssessment.Owed written = theOutClassOf(TWO_POSITIONS + """
+                example f
+                    | "both empty" : ([], []) -> No
+                """, "xs");
+        assertTrue(written.coverage().made().filter(ItemAssessment.Coverage.NoHit.class::isInstance)
+                .isPresent(), () -> "a written row of the other reading is no hit: " + written);
+        assertTrue(written.searches().each().stream()
+                .noneMatch(ItemAssessment.Attempt.Certified.class::isInstance),
+                () -> "nor is a composed one certified: " + written);
+    }
+
+    private static ItemAssessment.Owed theOutClassOf(String source, String position) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, List<BorderAssessment>> all =
+                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
+        assertNotNull(all, () -> "the model compiles: " + compilation.errors());
+        List<ItemAssessment.Owed> found = BorderAssessment.pointsOf(all.get("f")).stream()
+                .filter(point -> point.label() != null
+                        && point.label().contains("0 <= List.length(" + position + ") < 1"))
+                .map(BorderAssessment.Point::item)
+                .filter(ItemAssessment.Owed.class::isInstance)
+                .map(ItemAssessment.Owed.class::cast)
+                .toList();
+        assertEquals(1, found.size(), () -> "one OUT class on " + position + ": " + found);
+        return found.getFirst();
+    }
+
+    /**
+     * A comparison made once for each element of a list. The run's record is of the place and not of
+     * the element a reading chose, and here the answers disagree: which belongs to the element is
+     * not told, and that is said as a measurement that could not look and not as a row that is not
+     * at the class.
+     */
+    @Test
+    void anApplicationNotToldApartFromTheOthersIsNotARowThatMissesTheClass() {
+        ItemAssessment.Owed owed = theOutClassOfEachElement("""
+                module p
+                data Yes
+                data No
+                behavior f : (xss: List<List<Int>>) -> Yes | No
+                let f (xss) =
+                    if List.any(xs -> List.length(List.drop(1, xs)) >= 1, xss)
+                    then Yes else No
+                example f
+                    | "mixed" : ([[], [1, 2]]) -> Yes
+                """);
+
+        assertInstanceOf(Measurement.Partial.class, owed.coverage(),
+                () -> "the row could not be told apart, which is not a complete miss: " + owed);
+    }
+
+    private static ItemAssessment.Owed theOutClassOfEachElement(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, List<BorderAssessment>> all =
+                Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
+        assertNotNull(all, () -> "the model compiles: " + compilation.errors());
+        List<ItemAssessment.Owed> found = BorderAssessment.pointsOf(all.get("f")).stream()
+                .filter(point -> point.label() != null
+                        && point.label().contains("0 <= List.length(xss[*]) < 1"))
+                .map(BorderAssessment.Point::item)
+                .filter(ItemAssessment.Owed.class::isInstance)
+                .map(ItemAssessment.Owed.class::cast)
+                .toList();
+        assertEquals(1, found.size(), () -> "one OUT class on the elements: " + found);
+        return found.getFirst();
     }
 
     /** The comparison inside a conjunction is read as it is alone: the class is owed. */

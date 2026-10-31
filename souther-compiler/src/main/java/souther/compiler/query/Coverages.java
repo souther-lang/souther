@@ -1013,9 +1013,11 @@ final class Coverages {
         // ({@link #besideEachLine}), and the readings are brought together by {@link #merged}.
         List<ReadingOfALine> out = new ArrayList<>();
         MeasuredInput.Lines read = subject.lines();
+        List<Border> everyLine = everyLineOf(subject.partitioning());
         for (Border each : lines) {
             out.add(assessed(each, reading(read.at(each), projection.apply(each),
-                            elsewhere(lines, each), otherReadingsOfTheComparison(lines, each, read),
+                            elsewhere(lines, each),
+                            otherReadingsOfTheComparison(everyLine, each, read),
                             wayTo(each, reaching), subject.quantities().region()),
                     observed, put));
         }
@@ -1023,8 +1025,25 @@ final class Coverages {
     }
 
     /**
+     * Every line of the behavior, on an axis or between positions.
+     *
+     * <p>The set the readings of one comparison are sought among, whichever of the two a measure
+     * is over and whichever stage asks. Taken from the lines a measure happens to be over, the
+     * readings of one comparison drawn on two positions would be sought among a part, and a row
+     * could be a row of a class when an author wrote it and not when a search composed it.
+     */
+    private static List<Border> everyLineOf(Partitions.Partitioning partitioning) {
+        List<Border> out = new ArrayList<>();
+        for (Axis axis : partitioning.axes()) {
+            out.addAll(partitioning.along(axis));
+        }
+        out.addAll(partitioning.between());
+        return List.copyOf(out);
+    }
+
+    /**
      * The other readings of the comparison {@code but} reads: the lines of the same statement that
-     * decide in another case or at another place of it.
+     * decide in another case or at another place of it, among {@code lines}.
      *
      * <p>A row in the case another reading decides in is a row of that reading, whatever it does
      * to this one. What a class of this line asks of a row beyond lying in it is that it lies in
@@ -1097,12 +1116,12 @@ final class Coverages {
         LevelRealizer realizer = new LevelRealizer();
         List<BorderAssessment> out = new ArrayList<>();
         MeasuredInput.Lines lines = input.lines();
-        List<Border> borders = measured.each().stream().map(BorderAssessment::border).toList();
+        List<Border> everyLine = everyLineOf(input.partitioning());
         for (BorderAssessment border : measured.each()) {
             MeasuredInput.BorderReading read = lines.at(border.border());
             WayToTheBorder way = wayTo(border.border(), reaching);
             StandingAtAPoint.OtherReadings otherReadings =
-                    otherReadingsOfTheComparison(borders, border.border(), lines);
+                    otherReadingsOfTheComparison(everyLine, border.border(), lines);
             OneSearchOfABorder search = searching(border.border(), read, input, probe,
                     realizer, way, otherReadings);
             // A class the line cuts that lies wholly outside the case the line decides in is
@@ -2874,11 +2893,12 @@ final class Coverages {
         // reading's own has been asked ({@link #merged}).
         List<ReadingOfALine> out = new ArrayList<>();
         MeasuredInput.Lines read = subject.lines();
+        List<Border> everyLine = everyLineOf(partitioning);
         for (Border each : partitioning.between()) {
             out.add(assessed(each, reading(read.at(each),
                             ItemAssessment.WritabilityProjection.NOT_COMPUTED,
                             elsewhere(partitioning.between(), each),
-                            otherReadingsOfTheComparison(partitioning.between(), each, read),
+                            otherReadingsOfTheComparison(everyLine, each, read),
                             wayTo(each, reaching), subject.quantities().region()),
                     observed, put));
         }

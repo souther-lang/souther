@@ -271,7 +271,13 @@ public sealed interface ReadingGap {
             /** It is no value the row writes: what a dependency answered, a case nothing here
              *  puts to a row, or an element of a container made of the input's in another order
              *  or of other elements. */
-            NO_VALUE_OF_THE_ROW(null);
+            NO_VALUE_OF_THE_ROW(null),
+
+            /** The run's record is of the place the comparison is made at and not of the element a
+             *  reading chose, and the comparison was made more than once there with answers that
+             *  do not agree, or its visits were not all kept: which application belongs to the
+             *  element is not told. */
+            APPLICATIONS_NOT_TOLD_APART(null);
 
             private final WhyUnread says;
 
