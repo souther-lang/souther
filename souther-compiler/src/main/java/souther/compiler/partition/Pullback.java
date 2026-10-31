@@ -4113,10 +4113,83 @@ final class Pullback {
         public Derivation same(LawProposition.Same<DeclaredArgument> same) {
             DecisionSubject one = subject(same.one());
             DecisionSubject other = subject(same.other());
-            return one == null || other == null
-                    ? unread(e, reads,
-                            new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE))
-                    : leaf(new Derivation.TheSameValue(same, one, other), e, reads);
+            if (one != null && other != null) {
+                return leaf(new Derivation.TheSameValue(same, one, other), e, reads);
+            }
+            // A value chosen by cases is the same as the other on each of them, as a comparison
+            // the source wrote of it is read ({@link #comparedWhereItsCountsAre}).
+            List<Denotation> values = new ArrayList<>();
+            for (LawSubject<DeclaredArgument> each : List.of(same.one(), same.other())) {
+                if (each instanceof LawSubject.Argument<DeclaredArgument>(DeclaredArgument at)) {
+                    values.add(new Denotation(applied.argument(at), reads));
+                }
+            }
+            Inside inside = aWayIn(values);
+            if (inside != null) {
+                return goingIn(inside, reads, new Denotation(e, reads), fixed(e, reads),
+                        taking -> new ALawRead(this, taking.apply(reads)).same(same));
+            }
+            Derivation.TheSameNumber numbers = sameNumber(same);
+            return numbers != null ? leaf(numbers, e, reads)
+                    : unread(e, reads,
+                            new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE));
+        }
+
+        /**
+         * {@code same}, where both values are numbers of the input on an order, as their
+         * difference being nought — or null where one of them is not, or the two are one number
+         * and the difference names nothing.
+         */
+        private Derivation.TheSameNumber sameNumber(LawProposition.Same<DeclaredArgument> same) {
+            LinearForm<Quantity> one = numberOf(same.one());
+            LinearForm<Quantity> other = numberOf(same.other());
+            if (one == null || other == null
+                    || !(one.minus(other) instanceof ExactAnswer.Held<LinearForm<Quantity>>(
+                            LinearForm<Quantity> difference))
+                    || difference.coefs().isEmpty()) {
+                return null;
+            }
+            return aRelation(Derivation.ComparisonReading.AS_A_CUT, difference,
+                    same.holds() ? Rel.EQ : Rel.NE,
+                    Derivation.AComparisonRead.Facing.NOTHING_WRITTEN)
+                    instanceof Derivation.AComparisonRead compared
+                    ? new Derivation.TheSameNumber(same, one, other, compared) : null;
+        }
+
+        /**
+         * The value {@code subject} names as a form over numbers, each a number of the input read
+         * on an order or one a binding names, as a comparison the source wrote of it reads it — or
+         * null where it is no such form: the element of a container that is no position, a value
+         * whose arithmetic is not read, or one on no order.
+         */
+        private LinearForm<Quantity> numberOf(LawSubject<DeclaredArgument> subject) {
+            LinearForm<Quantity> form = switch (subject) {
+                case LawSubject.Argument<DeclaredArgument>(DeclaredArgument at) ->
+                        formOf(applied.argument(at), reads);
+                case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) ->
+                        switch (elements.get(at)) {
+                            case ElementAt.AtASubject(
+                                    DecisionSubject.AnInput(TermPath container)) ->
+                                    LinearForm.atom(new DecisionAtom.OfTheInput(
+                                            new NumericTerm.ValueOf(container.element())));
+                            case ElementAt.AValue(Core value, InputReads in) -> formOf(value, in);
+                            case null, default -> null;
+                        };
+                default -> null;
+            };
+            return form != null && form.coefs().keySet().stream().allMatch(atom -> switch (atom) {
+                case DecisionAtom.OfTheInput(NumericTerm term) -> readOnAnOrder(term);
+                case Quantity.OfABinding _ -> true;
+                default -> false;
+            }) ? form : null;
+        }
+
+        /** {@code value}, read in {@code in}, as a form over what its arithmetic is read as — or
+         *  null where that is not read. */
+        private LinearForm<Quantity> formOf(Core value, InputReads in) {
+            return value != null && AffineForms.outcome(value, in, quantities())
+                    instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                            LinearForm<Quantity> form) ? form : null;
         }
 
         @Override
