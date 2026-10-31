@@ -149,6 +149,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(TYPE_VIEW, "of",
                     "(" + TYPE + INNERS + SYMBOLS + KINDS + SUMS + ")L" + TYPE_VIEW + ";",
                     THE_SPINE),
+            row(CHECK + "ValuePlaces", "read", "()L" + CHECK + "ValuePlaces$Reading;",
+                    THE_POSITION),
             row(CHECK + "ValueUniverse", "howManyDiffer", "(" + TYPE + CONTEXT + ")J",
                     THE_POSITION),
             row(INPUTS + "DeclaredInput", "readingsOf", "(" + TYPE + ")Ljava/util/List;",

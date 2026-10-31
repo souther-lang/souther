@@ -1,19 +1,23 @@
 package souther.compiler.examples;
 
+import souther.compiler.check.ValuePlaces;
 import souther.compiler.cst.CstLexer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.Alignment;
 import souther.compiler.observe.Asserted;
 import souther.compiler.observe.Expectation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.PathElement;
 import souther.compiler.observe.Position;
+import souther.compiler.observe.UnorderedOrder;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * A structured value written the way a fixture writes one.
@@ -31,54 +35,86 @@ final class ValueRendering {
         this.neutral = neutral;
     }
 
-    /** What a row stated, written the way a fixture writes one. A list is its own order; what it
-     *  states no order for is written in the one this settles on, as the answer beside it is. */
-    String show(Asserted a) {
+    /**
+     * What a row stated at {@code position}, written the way a fixture writes one and the way the
+     * answer beside it is. A list is its own order; what it states no order for is written in the
+     * one this settles on.
+     *
+     * <p>The position is what says where a number sits, so a set or a map the row wrote is put in
+     * the order of its values by the same rule the answer is ({@link UnorderedOrder}), and the two
+     * sides of a mismatch list their common parts in one order. With no position the row says
+     * nothing about its type, and what it states no order for is written in the order of its text.
+     */
+    String show(Asserted a, Type position) {
         return switch (a) {
             case Asserted.Value(ObservedValue v) -> show(v);
             case Asserted.Built built -> {
+                Map<String, Type> declared = position == null ? Map.of()
+                        : neutral.fieldTypes(built.type());
                 List<String> names = new ArrayList<>(built.fields().keySet());
                 names.sort(String::compareTo);
                 if (names.equals(List.of("value")) && neutral.isNewtype(built.type())) {
-                    yield built.type().name() + "(" + show(built.fields().get("value")) + ")";
+                    yield built.type().name() + "("
+                            + show(built.fields().get("value"), declared.get("value")) + ")";
                 }
                 List<String> out = new ArrayList<>();
                 for (String name : names) {
-                    out.add(name + " = " + show(built.fields().get(name)));
+                    out.add(name + " = " + show(built.fields().get(name), declared.get(name)));
                 }
                 yield out.isEmpty() ? built.type().name()
                         : built.type().name() + " { " + String.join(", ", out) + " }";
             }
             case Asserted.Elements elements -> {
-                List<String> out = new ArrayList<>();
-                for (Asserted e : elements.elements()) {
-                    out.add(show(e));
-                }
+                Type element = elementOf(position);
+                boolean set = elements.stated() == Asserted.Container.SET;
                 // A set states no order, so what it is written in is decided here.
-                if (elements.stated() == Asserted.Container.SET) {
-                    out.sort(String::compareTo);
-                }
-                String written = out.isEmpty() ? "[]" : "[ " + String.join(", ", out) + " ]";
+                ValuePlaces places = neutral.placesAt(element);
+                List<String> out = set
+                        ? inOrder(elements.elements(), e -> places.of(e), e -> show(e, element))
+                        : elements.elements().stream().map(e -> show(e, element)).toList();
+                String written = written(out);
                 // A row that said which collection it wrote is shown saying it, so a mismatch between
                 // a set and a list of the same elements does not read as two of the same thing.
-                yield elements.stated() == Asserted.Container.SET ? "Set.fromList(" + written + ")"
-                        : written;
+                yield set ? "Set.fromList(" + written + ")" : written;
             }
             case Asserted.Entries entries -> {
-                List<String> out = new ArrayList<>();
-                for (Asserted.Entry e : entries.entries()) {
-                    out.add(pair(e));
-                }
-                out.sort(String::compareTo);
-                String written = out.isEmpty() ? "[]" : "[ " + String.join(", ", out) + " ]";
+                Type key = keyOf(position);
+                Type value = valueOf(position);
+                ValuePlaces places = neutral.placesAt(key);
+                String written = written(inOrder(entries.entries(), e -> places.of(e.key()),
+                        e -> pair(e, key, value)));
                 yield entries.stated() ? "Map.fromList(" + written + ")" : written;
             }
         };
     }
 
-    /** One pair a row wrote, which is also what its place among the others is decided by. */
-    private String pair(Asserted.Entry e) {
-        return "(" + show(e.key()) + ", " + show(e.value()) + ")";
+    /** One pair a row wrote. */
+    private String pair(Asserted.Entry e, Type key, Type value) {
+        return "(" + show(e.key(), key) + ", " + show(e.value(), value) + ")";
+    }
+
+    /**
+     * {@code parts} of a collection that states no order, each written once and put in the order
+     * {@link UnorderedOrder} gives: by the place of the part where there is one, by its text where
+     * not.
+     */
+    private static <T> List<String> inOrder(List<T> parts, Function<T, Place> placeOf,
+                                            Function<T, String> textOf) {
+        List<Map.Entry<T, String>> written = new ArrayList<>(parts.size());
+        for (T each : parts) {
+            written.add(Map.entry(each, textOf.apply(each)));
+        }
+        return UnorderedOrder.of(written, it -> placeOf.apply(it.getKey()), Map.Entry::getValue)
+                .stream().map(Map.Entry::getValue).toList();
+    }
+
+    private static Type keyOf(Type position) {
+        return position != null && NeutralForm.open(position) instanceof Type.MapOf m ? m.key() : null;
+    }
+
+    private static Type valueOf(Type position) {
+        return position != null && NeutralForm.open(position) instanceof Type.MapOf m
+                ? m.value() : null;
     }
 
     /** What a row wrote is, named as the language names it. */
@@ -182,39 +218,45 @@ final class ValueRendering {
         return written(out);
     }
 
-    /** A set: the elements that have a counterpart, each at the place its counterpart takes, then
-     *  the ones that have none. */
+    /**
+     * A set: the elements that have a counterpart, each at the place its counterpart takes, then
+     * the ones that have none.
+     *
+     * <p>The answer's parts stand in the order the statement's are written in, and that order is
+     * {@link UnorderedOrder}'s, the one {@link #show(Asserted, Type)} writes the statement in. It is
+     * not the order the statement holds them in: what a row states is a value, worked out by running
+     * what it wrote, so its collection holds its parts in whatever a table walked, exactly as the
+     * answer does, and following it would put one accident where the other was. The place is the
+     * answer part's, which is the counterpart's, so two parts the comparison found to be one value
+     * stand together even where they are spelled apart: {@code 1.0} and {@code 1.00} are one amount.
+     * Each part is written once, because writing one is a walk of the whole of it.
+     */
     private String unordered(Alignment.Unordered set, Type position) {
         Type element = elementOf(position);
+        ValuePlaces places = neutral.placesAt(element);
         List<String> out = new ArrayList<>();
-        for (Alignment.Stood each : atTheirRank(set.written(), it -> show(it.stated()))) {
+        for (Alignment.Stood each : UnorderedOrder.of(set.written(),
+                it -> places.of(it.element()), it -> show(it.stated(), element))) {
             out.add(against(each.element(), each.under(), element));
         }
-        List<String> rest = new ArrayList<>();
-        for (ObservedValue each : set.rest()) {
-            rest.add(canonical(each, element));
-        }
-        rest.sort(String::compareTo);
-        out.addAll(rest);
+        out.addAll(inOrder(set.rest(), places::of, it -> canonical(it, element)));
         return written(out);
     }
 
     /** The pairs that have a counterpart, each at the place its counterpart takes, then the rest. */
     private String entries(Alignment.Entries entries, Type position) {
-        Type key = NeutralForm.open(position) instanceof Type.MapOf m ? m.key() : null;
-        Type value = NeutralForm.open(position) instanceof Type.MapOf m ? m.value() : null;
+        Type key = keyOf(position);
+        Type value = valueOf(position);
+        ValuePlaces places = neutral.placesAt(key);
         List<String> out = new ArrayList<>();
-        for (Alignment.Placed each : atTheirRank(entries.written(), it -> pair(it.stated()))) {
+        for (Alignment.Placed each : UnorderedOrder.of(entries.written(),
+                it -> places.of(it.entry().key()), it -> pair(it.stated(), key, value))) {
             out.add("(" + canonical(each.entry().key(), key) + ", "
                     + against(each.entry().value(), each.under(), value) + ")");
         }
-        List<String> rest = new ArrayList<>();
-        for (ObservedValue.Entry each : entries.rest()) {
-            rest.add("(" + canonical(each.key(), key) + ", " + canonical(each.value(), value) + ")");
-        }
-        rest.sort(String::compareTo);
-        out.addAll(rest);
-        return out.isEmpty() ? "[]" : "[ " + String.join(", ", out) + " ]";
+        out.addAll(inOrder(entries.rest(), it -> places.of(it.key()),
+                it -> "(" + canonical(it.key(), key) + ", " + canonical(it.value(), value) + ")"));
+        return written(out);
     }
 
     /** The fields, each beside the one the row wrote under that name where it wrote one. */
@@ -261,26 +303,20 @@ final class ValueRendering {
         Type open = position == null ? null : NeutralForm.open(position);
         return switch (v) {
             case ObservedValue.Mapping m -> {
-                Type key = open instanceof Type.MapOf map ? map.key() : null;
-                Type value = open instanceof Type.MapOf map ? map.value() : null;
-                List<String> out = new ArrayList<>();
-                for (ObservedValue.Entry each : m.entries()) {
-                    out.add("(" + canonical(each.key(), key) + ", "
-                            + canonical(each.value(), value) + ")");
-                }
-                out.sort(String::compareTo);
-                yield out.isEmpty() ? "[]" : "[ " + String.join(", ", out) + " ]";
+                Type key = keyOf(position);
+                Type value = valueOf(position);
+                ValuePlaces places = neutral.placesAt(key);
+                yield written(inOrder(m.entries(), each -> places.of(each.key()),
+                        each -> "(" + canonical(each.key(), key) + ", "
+                                + canonical(each.value(), value) + ")"));
             }
             case ObservedValue.Sequence s -> {
                 Type element = elementOf(position);
-                List<String> out = new ArrayList<>();
-                for (ObservedValue each : s.elements()) {
-                    out.add(canonical(each, element));
-                }
-                if (open instanceof Type.SetOf) {
-                    out.sort(String::compareTo);
-                }
-                yield written(out);
+                ValuePlaces places = neutral.placesAt(element);
+                yield written(open instanceof Type.SetOf
+                        ? inOrder(s.elements(), each -> places.of(each),
+                                each -> canonical(each, element))
+                        : s.elements().stream().map(each -> canonical(each, element)).toList());
             }
             case ObservedValue.Constructed c -> {
                 Map<String, Type> declared = neutral.fieldTypes(c.type());
@@ -309,37 +345,6 @@ final class ValueRendering {
             case Type.SetOf s -> s.element();
             case null, default -> null;
         };
-    }
-
-    /**
-     * The answer's parts in the places the statement's take, which is the order the statement's are
-     * written in.
-     *
-     * <p>Not the order the statement holds them in. What a row states is a value, worked out by
-     * running what it wrote — so the collection it states holds its parts in whatever a table walked,
-     * exactly as the answer does, and following it would put one accident where the other was.
-     * Whichever order the statement is written out in is the order it is read in, so that is the one
-     * the answer's parts take: the two columns line up, and neither is anybody's hash.
-     *
-     * <p>By what the statement's part is written as and not what the answer's is, so that two parts
-     * the comparison found to be one value stand together even where they are spelled apart —
-     * {@code 1.0} and {@code 1.00} are one amount and would sort to two places.
-     *
-     * <p>Each written once and sorted on what came back. Writing a part out is a walk of the whole
-     * of it, and a comparison that asked for one every time it compared two would walk each of them
-     * as many times as a sort looks at it.
-     */
-    private static <T> List<T> atTheirRank(List<T> written, java.util.function.Function<T, String> of) {
-        List<Map.Entry<String, T>> ranked = new ArrayList<>(written.size());
-        for (T each : written) {
-            ranked.add(Map.entry(of.apply(each), each));
-        }
-        ranked.sort(Map.Entry.comparingByKey());
-        List<T> out = new ArrayList<>(ranked.size());
-        for (Map.Entry<String, T> each : ranked) {
-            out.add(each.getValue());
-        }
-        return out;
     }
 
     /** A sequence written out. Which collection it is is said where the whole answer is written and
@@ -438,8 +443,9 @@ final class ValueRendering {
             switch (step) {
                 case PathElement.Field(String name) -> out.append('.').append(name);
                 case PathElement.Index(int at) -> out.append('[').append(at).append(']');
+                // A key is found by what it is, and no position declares the one it stands at.
                 case PathElement.Key(Asserted key) ->
-                        out.append('[').append(show(key)).append(']');
+                        out.append('[').append(show(key, null)).append(']');
             }
         }
         return out.toString();

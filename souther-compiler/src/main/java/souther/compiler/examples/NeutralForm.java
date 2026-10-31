@@ -7,8 +7,10 @@ import souther.compiler.check.Boundary;
 import souther.compiler.check.DeclarationFacts;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.ValuePlaces;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Position;
@@ -380,6 +382,12 @@ final class NeutralForm {
      */
     static Position declaredBy(Type declared) {
         return declared == null ? Position.UNREAD : Position.at(declared);
+    }
+
+    /** Where the values of a position of {@code type} sit on the order of their number, which is
+     *  {@link ValuePlaces}' to answer: the names are the type's and the order the carrier's. */
+    ValuePlaces placesAt(Type type) {
+        return ValuePlaces.of(type, NewtypeInners.asWritten(symbols), symbols, kinds, sums);
     }
 
     /** Whether {@code name} is a newtype — asked of a name resolution settled, never of a spelling:

@@ -4,16 +4,17 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
+import souther.compiler.check.ValuePlaces;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ElementsTaken;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.UnorderedOrder;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -346,7 +347,7 @@ final class ObservedFixtures {
         return new Writing.Written<>(FixtureTemplate.record(name, fields));
     }
 
-    /** A list in the order it holds its elements, and a set in the order of their text. */
+    /** A list in the order it holds its elements, and a set in the order of their values. */
     private static Writing<FixtureTemplate> sequence(List<ObservedValue> elements,
                                                      Shape.Sequence sequence,
                                                      RuleReadingContext reading) {
@@ -360,12 +361,37 @@ final class ObservedFixtures {
             }
         }
         if (sequence.kind() == Shape.Sequence.Kind.SET) {
-            written.sort(Comparator.comparing(FixtureTemplate::text));
+            written = inUnorderedOrder(elements, written, sequence.element(), reading.source());
         }
         return new Writing.Written<>(FixtureTemplate.collection(written));
     }
 
-    /** A map as its entries, in the order of their text. */
+    /**
+     * {@code written}, the parts of a collection that states no order, in the order
+     * {@link UnorderedOrder} writes them: by the place of {@code observed}, the value each was
+     * written from, at a position of {@code type}, and by text where that position places nothing.
+     *
+     * <p>The place is asked of {@link ValuePlaces}, of the observed value and never of its text.
+     */
+    private static List<FixtureTemplate> inUnorderedOrder(List<ObservedValue> observed,
+                                                          List<FixtureTemplate> written,
+                                                          Type type, RuleReadingSource source) {
+        ValuePlaces places = ValuePlaces.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        List<WrittenFrom> parts = new ArrayList<>(written.size());
+        for (int at = 0; at < written.size(); at++) {
+            parts.add(new WrittenFrom(observed.get(at), written.get(at)));
+        }
+        return UnorderedOrder.of(parts, part -> places.of(part.observed()),
+                part -> part.template().text()).stream().map(WrittenFrom::template).toList();
+    }
+
+    /** A part of a collection, beside the value it was written from. */
+    private record WrittenFrom(ObservedValue observed, FixtureTemplate template) {
+    }
+
+    /** A map as its entries, in the order of its keys' values where they are numbers, and of their
+     *  text otherwise. */
     private static Writing<FixtureTemplate> mapping(List<ObservedValue.Entry> entries,
                                                     Shape.Mapping mapping,
                                                     RuleReadingContext reading) {
@@ -381,8 +407,9 @@ final class ObservedFixtures {
             }
             written.add(FixtureTemplate.entry(k, v));
         }
-        written.sort(Comparator.comparing(FixtureTemplate::text));
-        return new Writing.Written<>(FixtureTemplate.collection(written));
+        List<ObservedValue> keys = entries.stream().map(ObservedValue.Entry::key).toList();
+        return new Writing.Written<>(FixtureTemplate.collection(
+                inUnorderedOrder(keys, written, mapping.key(), reading.source())));
     }
 
     private static <T> Writing<T> unread(ObservedValue value) {
