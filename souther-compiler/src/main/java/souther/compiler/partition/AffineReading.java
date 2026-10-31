@@ -1969,6 +1969,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
             }
             DecimalOperation told = new DecimalOperation(binary.op(), over, after);
+            // A total's scale is that of the list it is the sum of, which its number does not say.
+            if (!DecimalOperation.leavesNoCompletionToHowATotalIsWritten(decimals, told)) {
+                return false;
+            }
             int at = decimals.indexOf(told);
             if (at < 0) {
                 at = decimals.size();
