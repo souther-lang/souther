@@ -89,6 +89,11 @@ public final class ExactDecimals {
         if (limit < 1) {
             return false;
         }
+        // Past what any decimal holds every one has at most that many, and the bit counts below are
+        // multiples of a limit that stays within a long.
+        if (limit >= MOST_DIGITS_ANY_DECIMAL_HOLDS) {
+            return true;
+        }
         BigInteger unscaled = d.unscaledValue();
         if (bitsSayAtMostDigits(unscaled, limit)) {
             return true;
@@ -132,28 +137,38 @@ public final class ExactDecimals {
         long room = (long) d.scale() - Integer.MIN_VALUE;
         // Fewer zeros than digits, so the scale cannot fall out. Room past what any decimal has in
         // digits settles it without reading the digits; a value the room is not past by its bits
-        // goes on to take its zeros off one at a time, which stops at the first digit that is not one.
+        // takes off the zeros it has, up to the room.
         if (room >= MOST_DIGITS_ANY_DECIMAL_HOLDS || bitsSayAtMostDigits(d.unscaledValue(), room)) {
             return d.stripTrailingZeros();
         }
         BigInteger digits = d.unscaledValue();
-        if (room == 0 || digits.remainder(BigInteger.TEN).signum() != 0) {
-            return new BigDecimal(digits, d.scale());
+        int zeros = (int) trailingZeros(digits, room);
+        return zeros == 0 ? d : new BigDecimal(digits.divide(BigInteger.TEN.pow(zeros)), d.scale() - zeros);
+    }
+
+    /**
+     * How many zeros {@code digits} ends in, or {@code most} where it ends in more.
+     *
+     * <p>Found by halving, because taking them off one at a time divides the whole number once for
+     * each, which is work that grows with the square of its size. Divisible by {@code 10^z} holds for
+     * every {@code z} up to the count and for none past it, and a number of n bits has fewer than
+     * n / 3 zeros, so that bounds the answer whatever {@code most} says.
+     */
+    private static long trailingZeros(BigInteger digits, long most) {
+        long upper = Math.min(most, digits.bitLength() / 3);
+        if (upper < 1 || digits.remainder(BigInteger.TEN).signum() != 0) {
+            return 0;
         }
-        // The most zeros there are is found by halving, because taking them off one at a time
-        // divides the whole number once for each. Divisible by 10^z holds for every z up to the
-        // count of zeros and for none past it, and a number of n bits has fewer than n / 3 of them.
-        long fewest = 1;
-        long most = Math.min(room, digits.bitLength() / 3);
-        while (fewest < most) {
-            long middle = (fewest + most + 1) / 2;
+        long lower = 1;
+        while (lower < upper) {
+            long middle = (lower + upper + 1) / 2;
             if (digits.remainder(BigInteger.TEN.pow((int) middle)).signum() == 0) {
-                fewest = middle;
+                lower = middle;
             } else {
-                most = middle - 1;
+                upper = middle - 1;
             }
         }
-        return new BigDecimal(digits.divide(BigInteger.TEN.pow((int) fewest)), d.scale() - (int) fewest);
+        return lower;
     }
 
     /**
@@ -204,13 +219,13 @@ public final class ExactDecimals {
             return BigDecimal.ZERO;
         }
         long scale = (long) a.scale() + b.scale();
-        while (scale > Integer.MAX_VALUE) {
-            BigInteger[] divided = digits.divideAndRemainder(BigInteger.TEN);
-            if (divided[1].signum() != 0) {
+        if (scale > Integer.MAX_VALUE) {
+            long excess = scale - Integer.MAX_VALUE;
+            if (trailingZeros(digits, excess) < excess) {
                 return null;
             }
-            digits = divided[0];
-            scale--;
+            digits = digits.divide(BigInteger.TEN.pow((int) excess));
+            scale = Integer.MAX_VALUE;
         }
         if (scale < Integer.MIN_VALUE) {
             BigInteger zeros = BigInteger.valueOf(Integer.MIN_VALUE - scale);

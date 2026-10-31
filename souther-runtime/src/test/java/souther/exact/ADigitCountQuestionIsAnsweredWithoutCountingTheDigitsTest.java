@@ -7,7 +7,12 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
+import souther.runtime.Representations;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Whether a decimal has at most so many digits, and the two answers built on it, agree with the
@@ -58,10 +63,10 @@ class ADigitCountQuestionIsAnsweredWithoutCountingTheDigitsTest {
                 BigDecimal d = new BigDecimal(unscaled, scale);
                 BigDecimal least = ExactDecimals.leastDigits(d);
                 boolean sameAmount = d.signum() == 0 || least.compareTo(d) == 0;
-                if (!sameAmount || !least.equals(ExactDecimals.leastDigits(least))) {
+                if (!sameAmount || !sameForm(least, ExactDecimals.leastDigits(least))) {
                     differ.add(unscaled.bitLength() + " bits at " + scale);
                 }
-                if (scale > Integer.MIN_VALUE + 2000 && d.signum() != 0 && !least.equals(d.stripTrailingZeros())) {
+                if (scale > Integer.MIN_VALUE + 2000 && d.signum() != 0 && !sameForm(least, d.stripTrailingZeros())) {
                     differ.add("not stripped: " + unscaled.bitLength() + " bits at " + scale);
                 }
             }
@@ -82,13 +87,64 @@ class ADigitCountQuestionIsAnsweredWithoutCountingTheDigitsTest {
                     BigDecimal d = new BigDecimal(unscaled, Integer.MIN_VALUE + offset);
                     BigDecimal expected = oneZeroAtATime(unscaled, Integer.MIN_VALUE + offset);
                     BigDecimal asked = ExactDecimals.leastDigits(d);
-                    if (!asked.equals(expected)) {
+                    if (!sameForm(asked, expected)) {
                         differ.add(odd + "e" + zeros + " at floor + " + offset);
                     }
                 }
             }
         }
         assertEquals(List.of(), differ.subList(0, Math.min(differ.size(), 5)));
+    }
+
+    @Test
+    void aLimitPastWhatAnyDecimalHoldsIsMetByEvery() {
+        BigDecimal wide = new BigDecimal(BigInteger.ONE.shiftLeft(100_000), Integer.MIN_VALUE);
+        for (long limit : new long[] {Long.MAX_VALUE / 3 + 1, Long.MAX_VALUE / 4 + 1, Long.MAX_VALUE}) {
+            assertTrue(ExactDecimals.hasAtMostDigits(BigDecimal.ONE, limit));
+            assertTrue(ExactDecimals.hasAtMostDigits(wide, limit));
+        }
+        assertFalse(ExactDecimals.hasAtMostDigits(BigDecimal.ONE, 0));
+        assertFalse(ExactDecimals.hasAtMostDigits(BigDecimal.ONE, Long.MIN_VALUE));
+    }
+
+    @Test
+    void theCanonicalNumberSpellsOutExactlyWhereTheExpansionIsAThousandDigitsOrFewer() {
+        List<String> differ = new ArrayList<>();
+        for (BigInteger unscaled : unscaledValues()) {
+            for (int scale : new int[] {-1, -2, -5, -990, -999, -1000, -1001, -1002, Integer.MIN_VALUE + 1}) {
+                BigDecimal stripped = ExactDecimals.leastDigits(new BigDecimal(unscaled, scale));
+                BigDecimal asked = Representations.canonicalNumber(new BigDecimal(unscaled, scale));
+                boolean spelled = stripped.scale() < 0
+                        && (long) stripped.precision() - stripped.scale() <= ExactDecimals.MAX_SPELT_OUT_DIGITS;
+                BigDecimal expected = spelled ? stripped.setScale(0) : stripped;
+                if (!sameForm(asked, expected)) {
+                    differ.add(unscaled.bitLength() + " bits at " + scale);
+                }
+            }
+        }
+        assertEquals(List.of(), differ.subList(0, Math.min(differ.size(), 5)));
+    }
+
+    @Test
+    void aProductAboveTheRangeGivesUpOnlyTheZerosItHas() {
+        BigDecimal tenth = new BigDecimal(BigInteger.ONE, 1);
+        BigDecimal hundredth = new BigDecimal(BigInteger.ONE, 2);
+        BigDecimal one = new BigDecimal(BigInteger.ONE, Integer.MAX_VALUE);
+        BigDecimal ten = new BigDecimal(BigInteger.TEN, Integer.MAX_VALUE);
+        BigDecimal hundred = new BigDecimal(BigInteger.TEN.pow(2), Integer.MAX_VALUE);
+        BigDecimal thousandZeros = new BigDecimal(BigInteger.TEN.pow(1000), Integer.MAX_VALUE);
+        assertTrue(sameForm(one, ExactDecimals.product(ten, tenth)));
+        assertTrue(sameForm(new BigDecimal(BigInteger.TEN.pow(999), Integer.MAX_VALUE),
+                ExactDecimals.product(thousandZeros, tenth)));
+        assertTrue(sameForm(one, ExactDecimals.product(hundred, hundredth)));
+        assertNull(ExactDecimals.product(one, tenth));
+        assertNull(ExactDecimals.product(ten, hundredth));
+    }
+
+    /** The form a decimal is written in: the digits and the scale, which {@code compareTo} leaves out
+     *  and {@code equals} is flagged for. */
+    private static boolean sameForm(BigDecimal a, BigDecimal b) {
+        return a.unscaledValue().equals(b.unscaledValue()) && a.scale() == b.scale();
     }
 
     private static BigDecimal oneZeroAtATime(BigInteger unscaled, int scale) {
