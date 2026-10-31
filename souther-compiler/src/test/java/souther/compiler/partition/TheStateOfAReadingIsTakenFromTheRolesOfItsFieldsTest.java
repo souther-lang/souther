@@ -35,11 +35,17 @@ class TheStateOfAReadingIsTakenFromTheRolesOfItsFieldsTest {
 
     private static final class AnOwner {
         final Set<String> scoped = new HashSet<>();
+        /** Read by the state through its role, and by nothing here but a test that sets it. */
+        @SuppressWarnings("UnusedVariable")
         Object holdsOne;
         final List<String> aggregates = new ArrayList<>();
         final List<String> added = new ArrayList<>();
         final Deque<ACandidate> trials = new ArrayDeque<>();
+        /** Read by nothing: a field whose role is to be left out of the state. */
+        @SuppressWarnings("UnusedVariable")
         long budget = 10;
+        /** Read by nothing: a field whose role is to be left out of the state. */
+        @SuppressWarnings("UnusedVariable")
         final String fixed = "same";
     }
 
