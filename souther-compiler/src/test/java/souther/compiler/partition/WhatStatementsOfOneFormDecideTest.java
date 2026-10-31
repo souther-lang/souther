@@ -8,6 +8,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -108,8 +109,119 @@ class WhatStatementsOfOneFormDecideTest {
     private static boolean leavesRoom(TakenConstraint.Affine asked,
                                       TakenConstraint.Affine... stated) {
         List<TakenConstraint.Affine> met = WhatStatementsOfOneFormDecide
-                .leavingRoomAroundTheLine(List.of(stated), asked);
+                .leavingRoomAroundTheLine(List.of(stated), asked, false);
         return met.equals(List.of(stated));
+    }
+
+    /** The same, for numbers that move in whole steps. */
+    private static boolean leavesRoomInWholeSteps(TakenConstraint.Affine asked,
+                                                  TakenConstraint.Affine... stated) {
+        List<TakenConstraint.Affine> met = WhatStatementsOfOneFormDecide
+                .leavingRoomAroundTheLine(List.of(stated), asked, true);
+        return met.equals(List.of(stated));
+    }
+
+    @Test
+    void aRelationHoldingBelowTheLineIsFlippedBetweenTheLastValueBelowAndTheLine() {
+        TakenConstraint.Affine below = over(1, 1, -50, Rel.LT);
+
+        assertTrue(leavesRoomInWholeSteps(below, over(1, 1, -50, Rel.LE)),
+                "x + y <= 50 holds at 49 and 50, the two values x + y < 50 flips between");
+        assertFalse(leavesRoom(below, over(1, 1, -50, Rel.LE)),
+                "beside the line in a step either way, 51 is asked too");
+        assertFalse(leavesRoomInWholeSteps(below, over(1, 1, -49, Rel.LE)),
+                "x + y <= 49 ends before 50");
+        assertTrue(leavesRoomInWholeSteps(below, over(1, 1, -49, Rel.GE)),
+                "x + y >= 49 holds at 49 and above");
+    }
+
+    @Test
+    void theOtherRelationsAreFlippedBetweenTheirOwnTwoValues() {
+        assertTrue(leavesRoomInWholeSteps(over(1, 1, -50, Rel.GT), over(1, 1, -50, Rel.GE)),
+                "x + y > 50 flips between 50 and 51, and x + y >= 50 holds at both");
+        assertFalse(leavesRoomInWholeSteps(over(1, 1, -50, Rel.GT), over(1, 1, -51, Rel.GE)),
+                "x + y >= 51 leaves 50 out");
+        assertTrue(leavesRoomInWholeSteps(over(1, 1, -50, Rel.LE), over(1, 1, -51, Rel.LE)),
+                "x + y <= 50 flips between 50 and 51");
+        assertFalse(leavesRoomInWholeSteps(over(1, 1, -50, Rel.LE), over(1, 1, -50, Rel.LE)),
+                "x + y <= 50 ends before 51");
+        assertTrue(leavesRoomInWholeSteps(over(1, 1, -50, Rel.GE), over(1, 1, -50, Rel.LE)),
+                "x + y >= 50 flips between 49 and 50");
+    }
+
+    @Test
+    void aWeightOfTwoStillAsksForTheRangeASingleStepCanCross() {
+        TakenConstraint.Affine weighed = over(2, 1, -50, Rel.LT);
+
+        assertTrue(leavesRoomInWholeSteps(weighed, over(2, 1, -51, Rel.LE)),
+                "2x + y < 50 flips between a value in 48..49 and one in 50..51");
+        assertFalse(leavesRoomInWholeSteps(weighed, over(2, 1, -50, Rel.LE)),
+                "2x + y <= 50 ends before 51");
+    }
+
+    /**
+     * What the range in whole steps rests on, walked: a statement of the form that is met holds at
+     * both values of every pair of rows next to each other in one term that the relation tells
+     * apart. Every relation, weights of one to three, and every interval of the form around the
+     * line.
+     */
+    @Test
+    void aStatementMetInWholeStepsHoldsAtBothValuesOfEveryPairTheRelationTellsApart() {
+        int met = 0;
+        for (Rel asked : List.of(Rel.LT, Rel.LE, Rel.GT, Rel.GE)) {
+            for (int weightX = 1; weightX <= 3; weightX++) {
+                for (int weightY = 1; weightY <= 3; weightY++) {
+                    for (int constant = -3; constant <= 3; constant++) {
+                        TakenConstraint.Affine question = over(weightX, weightY, constant, asked);
+                        for (Rel rule : List.of(Rel.LT, Rel.LE, Rel.GT, Rel.GE)) {
+                            for (int at = -12; at <= 12; at++) {
+                                TakenConstraint.Affine statement =
+                                        over(weightX, weightY, at, rule);
+                                if (!leavesRoomInWholeSteps(question, statement)) {
+                                    continue;
+                                }
+                                met++;
+                                assertHoldsAtEveryPairTold(weightX, weightY, constant, asked,
+                                        at, rule);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(met > 0, "nothing was met, so nothing was walked");
+    }
+
+    /** {@code weightX * x + weightY * y + constant} against nought is {@code asked}, and the same
+     *  form with {@code at} is {@code rule}. */
+    private static void assertHoldsAtEveryPairTold(int weightX, int weightY, int constant,
+                                                   Rel asked, int at, Rel rule) {
+        for (int x = -10; x <= 10; x++) {
+            for (int y = -10; y <= 10; y++) {
+                int here = weightX * x + weightY * y;
+                for (int[] step : new int[][] {{1, 0}, {0, 1}}) {
+                    int there = here + weightX * step[0] + weightY * step[1];
+                    if (asked.holds(Integer.signum(here + constant))
+                            == asked.holds(Integer.signum(there + constant))) {
+                        continue;
+                    }
+                    String where = asked + " " + constant + " is told apart at (" + x + ", " + y
+                            + ") and one step on, but " + rule + " " + at;
+                    assertTrue(rule.holds(Integer.signum(here + at)), where + " fails here");
+                    assertTrue(rule.holds(Integer.signum(there + at)), where + " fails there");
+                }
+            }
+        }
+    }
+
+    @Test
+    void aWeightThatIsNoWholeNumberKeepsTheRangeAWholeWeightEitherSide() {
+        TakenConstraint.Affine halves = new TakenConstraint.Affine(new LinearForm<>(
+                ExactRatio.of(-50), Map.of(X, ExactRatio.of(1),
+                        Y, ExactRatio.of(BigInteger.ONE, BigInteger.TWO))), Rel.LT);
+
+        assertFalse(leavesRoomInWholeSteps(halves, over(1, 1, -50, Rel.LE)),
+                "x + y <= 50 ends before 51, which a half step can still reach");
     }
 
     /** {@code x + y < 200}, whose line is where the sum is two hundred. */
@@ -143,7 +255,7 @@ class WhatStatementsOfOneFormDecideTest {
         assertFalse(leavesRoom(BELOW_200, over(1, 1, -100, Rel.EQ)), "x + y == 100");
         assertFalse(leavesRoom(BELOW_200, over(1, 1, -100, Rel.NE)), "x + y != 100");
         assertEquals(List.of(), WhatStatementsOfOneFormDecide.leavingRoomAroundTheLine(
-                List.of(over(1, 1, -100, Rel.GE), over(1, 1, -150, Rel.NE)), BELOW_200),
+                List.of(over(1, 1, -100, Rel.GE), over(1, 1, -150, Rel.NE)), BELOW_200, false),
                 "one statement that is no order takes the others with it");
     }
 
@@ -153,14 +265,14 @@ class WhatStatementsOfOneFormDecideTest {
         assertFalse(leavesRoom(BELOW_200, on(X, 1, 0, Rel.GE)), "x >= 0");
         assertEquals(List.of(over(1, 1, -100, Rel.GE)),
                 WhatStatementsOfOneFormDecide.leavingRoomAroundTheLine(
-                        List.of(over(1, 1, -100, Rel.GE), over(1, -1, 0, Rel.GE)), BELOW_200),
+                        List.of(over(1, 1, -100, Rel.GE), over(1, -1, 0, Rel.GE)), BELOW_200, false),
                 "the one of the form asked is met, the other stays");
     }
 
     @Test
     void aStatementMetIsEveryOneOfTheFormAsked() {
         assertEquals(List.of(), WhatStatementsOfOneFormDecide.leavingRoomAroundTheLine(
-                List.of(over(1, 1, -100, Rel.GE), over(1, 1, -200, Rel.GE)), BELOW_200),
+                List.of(over(1, 1, -100, Rel.GE), over(1, 1, -200, Rel.GE)), BELOW_200, false),
                 "one statement not met takes the others with it");
     }
 

@@ -297,9 +297,10 @@ class ARuleOfADeclarationHoldingAFormToAnIntervalStillLeavesTheNextComparisonOfI
                         100, 201, 200, false, Case.Reading.READ),
                 new Case("a + b", "p.a + p.b", sum, belowAndAbove, farOff, 100, 201, 181, false,
                         Case.Reading.READ),
-                // the line is at the rule's own end, where the rule holds nothing on one side
+                // the line is at the rule's own end, which the values the guard changes between
+                // do not reach past
                 new Case("a + b", "p.a + p.b", sum, belowAndAbove, farOff, 100, 201, 201, false,
-                        Case.Reading.NOT_READ),
+                        Case.Reading.READ),
                 // an interval of one value, and one value of it either side
                 new Case("a + b", "p.a + p.b", sum, zeroToTen, zeroToTen, 10, 10, 10, false,
                         Case.Reading.SETTLED),
@@ -457,10 +458,20 @@ class ARuleOfADeclarationHoldingAFormToAnIntervalStillLeavesTheNextComparisonOfI
         assertTrue(report.contains("· not read: comparison@" + line), report);
     }
 
-    /** A rule ending at the line leaves no row beside it that the rule does not meet. */
+    /** A rule ending where a step of one field can still carry the form past it leaves a row
+     *  beside the line that the rule does not meet. {@code 2 * a - b < 200} changes between a
+     *  value of 198..199 and one of 200..201, and the rule ends at 200. */
     @Test
-    void aRuleEndingAtTheLineLeavesNoRoomAndStillTiesTheFields() {
-        String report = report("a - b <= 200", "    guard p.a - p.b < 200 else High");
+    void aRuleEndingBeforeTheLastValueTheGuardChangesAtLeavesNoRoomAndStillTiesTheFields() {
+        String report = report("2 * a - b <= 200", "    guard 2 * p.a - p.b < 200 else High");
         assertTrue(report.contains(NOT_READ), report);
+    }
+
+    /** {@code 2 * a - b <= 201} holds at every value {@code 2 * a - b < 200} changes between,
+     *  and a row at the line meets it whatever else the row says. */
+    @Test
+    void aRuleHoldingAtEveryValueTheGuardChangesBetweenLeavesRoom() {
+        String report = report("2 * a - b <= 201", "    guard 2 * p.a - p.b < 200 else High");
+        assertFalse(report.contains(NOT_READ), report);
     }
 }
