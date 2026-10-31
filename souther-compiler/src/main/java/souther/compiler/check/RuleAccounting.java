@@ -274,10 +274,11 @@ public final class RuleAccounting {
                                                 BlockReason.ofARuleTheValueReadingLeft(
                                                         each.why()))),
                                 // A part the arithmetic stopped on is the thing an author
-                                // rewrites, as a part the reading of values has no word for is.
+                                // rewrites, as a part the reading of values has no word for is,
+                                // and the call it stopped at is where they start.
                                 it.theForm().stream()
                                         .map(each -> new RuleReasons.Said(each.site(),
-                                                RuleSite.theRuleItself(), each.why())))
+                                                each.sentTo(), each.why())))
                                 .toList()),
                         WhatAQuestionStandsOn.oneOf(it.aboutTheAnswer().reasons().stream()
                                 .map(BlockReason::ofTheAnswerTheReadingCouldNotBuild).toList()));

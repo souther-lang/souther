@@ -2190,10 +2190,13 @@ public final class InputDomain {
             // a classification can have been stopped by more than one — a clause read a branch at a
             // time is stopped by whatever stopped each branch — so they are asked as the several
             // questions they are rather than one of them standing for the rest.
+            // And one for each call the arithmetic stopped at for it: two calls that stop one rule
+            // at one place are two things to look at.
             each.at().why().forEach(why ->
-                    found.asked(StandingQuestion.BoundaryUndetermined.of(each.cited(),
-                            ModelOccurrences.NONE,
-                            FilingCoordinate.at(path), why)));
+                    each.sentTo(why).forEach(sentTo ->
+                            found.asked(StandingQuestion.BoundaryUndetermined.of(each.cited(),
+                                    ModelOccurrences.NONE, FilingCoordinate.at(path), sentTo,
+                                    why))));
         }
         for (souther.compiler.check.RuleAccounting.Unanswered each : placed.unanswered(path)) {
             out.add(StandingQuestion.Exact.of(each.cited(),
@@ -2247,6 +2250,7 @@ public final class InputDomain {
             // or the other, and it is only the line that nothing came of.
             out.add(new RuleCitation.Named(each.part().rule()),
                     filedAt(path, each.at(), type, source),
+                    each.sentTo(),
                     each.why());
         }
         // And the rules whose end here a choice in them left open. Beside the walk's own findings

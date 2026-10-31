@@ -8155,9 +8155,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return sentTo(placeInTheRule(sentTo, parts), rendering, declaredIn);
     }
 
+    /**
+     * The words for a place that is laid out, and none for one the layouts hold no text of: a
+     * rendering with nothing to count lines in cannot say where a place is, and "at null" is not a
+     * place.
+     */
     private static String sentTo(Optional<PublishedAt> sentTo, SourceRendering rendering,
                                  SourceId declaredIn) {
-        return sentTo.map(at -> ", at " + PlaceProse.said(at, rendering, declaredIn)).orElse("");
+        return sentTo.filter(at -> rendering.layouts().resolve(at.at()) != null)
+                .map(at -> ", at " + PlaceProse.said(at, rendering, declaredIn)).orElse("");
     }
 
     /**

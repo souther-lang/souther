@@ -29,7 +29,9 @@ import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.StringMachineAnswers;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -438,8 +440,14 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         bounds().accounting().values().forEach(accounting ->
                 accounting.undetermined().stream()
                         .filter(each -> each.at().equals(where))
-                        .forEach(each ->
-                                out.add(new RuleUnclassifiedAt(accounting.cited(), each))));
+                        .forEach(each -> {
+                            Map<BlockReason.RuleReadingStopped, Set<RuleSite>> sentTo =
+                                    new LinkedHashMap<>();
+                            each.why().forEach(why -> sentTo.put(why, bounds()
+                                    .sentToWhereTheArithmeticStopped(accounting.cited().rule(),
+                                            each.at(), why)));
+                            out.add(new RuleUnclassifiedAt(accounting.cited(), each, sentTo));
+                        }));
         TermPath above = alsoAt(path);
         if (above != null) {
             out.addAll(alsoReaching.outer().unclassified(above));
@@ -449,7 +457,16 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
 
     /** How a reader finds the rule, which says which rule it is, and one place its classification
      *  did not come out. */
-    record RuleUnclassifiedAt(RuleCitation cited, Requirement.BoundaryUndetermined at) {}
+    record RuleUnclassifiedAt(RuleCitation cited, Requirement.BoundaryUndetermined at,
+                              Map<BlockReason.RuleReadingStopped, Set<RuleSite>> sentTo) {
+
+        /** Where a reader goes about {@code why}: each call the arithmetic stopped at for it, or
+         *  the rule itself where it stopped at none. */
+        Set<RuleSite> sentTo(BlockReason.RuleReadingStopped why) {
+            Set<RuleSite> calls = sentTo.getOrDefault(why, Set.of());
+            return calls.isEmpty() ? Set.of(RuleSite.theRuleItself()) : calls;
+        }
+    }
 
     /**
      * How much of what the rules say the bounds at {@code path} are able to state.

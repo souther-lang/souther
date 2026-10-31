@@ -3800,15 +3800,7 @@
             "path" : "amount"
           },
           "stopped" : [ {
-            "reason" : "non_constant_divisor",
-            "sentTo" : {
-              "sourceId" : "1",
-              "line" : 47,
-              "column" : 11,
-              "writtenAt" : {
-                "kind" : "here"
-              }
-            }
+            "reason" : "non_constant_divisor"
           } ]
         }, {
           "at" : "among",
@@ -3827,15 +3819,7 @@
             "path" : "among"
           },
           "stopped" : [ {
-            "reason" : "non_constant_divisor",
-            "sentTo" : {
-              "sourceId" : "1",
-              "line" : 47,
-              "column" : 11,
-              "writtenAt" : {
-                "kind" : "here"
-              }
-            }
+            "reason" : "non_constant_divisor"
           } ]
         } ],
         "claimsOffAxis" : [ ],
@@ -4350,14 +4334,6 @@
             "behavior" : "apportionExactly",
             "ordinal" : 4,
             "lowered" : 0
-          },
-          "sentTo" : {
-            "sourceId" : "1",
-            "line" : 47,
-            "column" : 11,
-            "writtenAt" : {
-              "kind" : "here"
-            }
           }
         }, {
           "position" : "among",
@@ -4370,14 +4346,6 @@
             "behavior" : "apportionExactly",
             "ordinal" : 4,
             "lowered" : 0
-          },
-          "sentTo" : {
-            "sourceId" : "1",
-            "line" : 47,
-            "column" : 11,
-            "writtenAt" : {
-              "kind" : "here"
-            }
           }
         } ]
       },

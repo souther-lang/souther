@@ -688,18 +688,17 @@ public final class GuardThresholds {
     }
 
     /**
-     * The expression the arithmetic stopped at, as the construct its author wrote — none where it
-     * is a call no author wrote, which is not a place anybody can be sent to.
+     * The expression the arithmetic failed to take apart, as the construct its author wrote — the
+     * call inside the calls the library states the form of, and none where that is no call its
+     * author wrote, which is not a place anybody can be sent to.
      */
     private static SequencedSet<RuleSite> stoppedAtThe(
             AffineReading.OfAComparison.Stopped stopped) {
-        if (Core.withoutStanding(stopped.node()) instanceof Core.PreservedCall call
-                && call.occurrence().origin().isWritten()) {
+        return RuleSite.ofTheCallStoppedAt(stopped.failure().firstStop().node()).map(site -> {
             SequencedSet<RuleSite> out = new LinkedHashSet<>();
-            out.add(new RuleSite.AConstructTheAuthorWrote(call.occurrence().origin()));
+            out.add(site);
             return out;
-        }
-        return RuleSite.NO_SITES;
+        }).orElse(RuleSite.NO_SITES);
     }
 
     /**

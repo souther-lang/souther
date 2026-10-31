@@ -656,6 +656,24 @@ public final class AffineForms {
                 java.util.Objects.requireNonNull(at, "and was reading it in something");
                 Objects.requireNonNull(why, "and stopped for a reason");
             }
+
+            /**
+             * The stop this one comes to, through however many calls the library states the form of
+             * it was reached under: the expression the reading failed to take apart, and the one
+             * {@link Halt#nonAffineOperation} and {@link Halt#declinedFigure} are the reason of.
+             *
+             * <p>This stop's own {@link #node} is the call the reader wrote around it, which is
+             * where the stop is reported and is not what an author changes: the product inside
+             * {@code Decimal.round(2, HALF_UP, a * b)} is the stop, and the call around it took
+             * nothing of the reason.
+             */
+            public StoppedAt<A, E> firstStop() {
+                StoppedAt<A, E> at = this;
+                while (at.why() instanceof Halt.AnArgumentStopped<A, E>(var argument)) {
+                    at = argument;
+                }
+                return at;
+            }
         }
     }
 

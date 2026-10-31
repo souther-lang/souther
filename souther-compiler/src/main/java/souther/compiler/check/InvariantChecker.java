@@ -2700,8 +2700,9 @@ public final class InvariantChecker {
         if (stoppedOn != null) {
             RuleSite site = RuleSite.at(AdmissibleReading.wroteIt(part).origin(), statement.part());
             BlockReason.RuleReadingStopped why = stoppedOn.said();
+            RuleSite sentTo = stoppedOn.sentTo();
             standing.forEach(name -> took.stoppedOnTheForm(rule,
-                    new FormShortfall(site, why, name), statement));
+                    new FormShortfall(site, sentTo, statement.part(), why, name), statement));
         }
     }
 
@@ -3442,6 +3443,13 @@ public final class InvariantChecker {
             return said;
         }
 
+        /** Where a reader goes about the stop: the call the arithmetic stopped at, or the rule
+         *  itself where that is no call its author wrote. */
+        RuleSite sentTo() {
+            return RuleSite.ofTheCallStoppedAt(stopped.failedAt())
+                    .orElse(RuleSite.theRuleItself());
+        }
+
         /** Whether the comparison it stopped on orders the values, rather than singling one out. */
         boolean ordersTheValues() {
             return stopped.comparison().claim() instanceof ComparisonClaim.Cut;
@@ -3683,8 +3691,14 @@ public final class InvariantChecker {
             // Where the reading stopped there is no quantity to be a subject, so every place the
             // walk met is asked, and asked for itself.
             case UnreadComparison.Quantity.NotRead<RuleKey> notRead -> {
+                // And sent to the call the arithmetic stopped at, the same at every place since it
+                // is one comparison's one stop.
+                RuleSite sentTo = read instanceof CanonicalForm.NotRead stopped
+                        ? RuleSite.ofTheCallStoppedAt(stopped.failedAt())
+                                .orElse(RuleSite.theRuleItself())
+                        : RuleSite.theRuleItself();
                 for (Coordinate each : met.values()) {
-                    file(each, part, clause,
+                    file(each, part, clause, sentTo,
                             UnreadComparison.whereItStopped(ruleAt(each, left, right), notRead,
                                     ordered),
                             out);
@@ -4245,7 +4259,14 @@ public final class InvariantChecker {
     private static void file(Coordinate where, PartId<RuleRef.Invariant> part, Core clause,
                              BlockReason.RuleWithoutLineReason why,
                              SequencedMap<Object, FieldDomains.NoLine> out) {
-        add(out, new FieldDomains.NoLine(where.at(), part, clause, why));
+        file(where, part, clause, RuleSite.theRuleItself(), why, out);
+    }
+
+    /** The same, sent to {@code sentTo}: two calls that stop one part at one place are two. */
+    private static void file(Coordinate where, PartId<RuleRef.Invariant> part, Core clause,
+                             RuleSite sentTo, BlockReason.RuleWithoutLineReason why,
+                             SequencedMap<Object, FieldDomains.NoLine> out) {
+        add(out, new FieldDomains.NoLine(where.at(), part, clause, sentTo, why));
     }
 
     /**
@@ -4321,8 +4342,9 @@ public final class InvariantChecker {
          * what a reader downstream makes of them: which subject that expression is about is an
          * answer, and holding it here would put an answer inside what a classification is asked of.
          */
-        record NotRead(StatedComparison comparison, Core stoppedAt, Denotations under,
-                       Optional<NonAffineOperation> decided) implements CanonicalForm {}
+        record NotRead(StatedComparison comparison, Core stoppedAt, Core failedAt,
+                       Denotations under, Optional<NonAffineOperation> decided)
+                implements CanonicalForm {}
 
         /**
          * Each side was read as a form, and the difference of the two has no representation.
@@ -4452,7 +4474,8 @@ public final class InvariantChecker {
                 terms.outcomeOf(recognised.right(), at, byName::containsKey);
         for (AffineForms.Outcome<FactSubject, Denotations> side : List.of(left, right)) {
             if (side instanceof AffineForms.Outcome.StoppedAt<FactSubject, Denotations> stopped) {
-                return new CanonicalForm.NotRead(recognised, stopped.node(), stopped.at(),
+                return new CanonicalForm.NotRead(recognised, stopped.node(),
+                        stopped.firstStop().node(), stopped.at(),
                         stopped.why().nonAffineOperation());
             }
         }

@@ -6,6 +6,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ChoiceToLift;
+import souther.compiler.inputs.RuleSite;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumberSpace;
@@ -865,11 +866,19 @@ public final class FieldDomains {
      *             back off the text: a reader holding the expression alone has no way to say which
      *             of two identical parts it is
      * @param read the part itself
+     * @param sentTo where a reader goes about it: the call the arithmetic stopped at where that is
+     *             why, and the rule itself otherwise
      * @param why  what would have to change before this rule could be a line, in this compiler's
      *             own terms
      */
     public record NoLine(NumberAt<RuleKey> at, PartId<RuleRef.Invariant> part, Core read,
-                         BlockReason.RuleWithoutLineReason why) {
+                         RuleSite sentTo, BlockReason.RuleWithoutLineReason why) {
+
+        /** A rule without a line that is sent to the rule itself. */
+        NoLine(NumberAt<RuleKey> at, PartId<RuleRef.Invariant> part, Core read,
+               BlockReason.RuleWithoutLineReason why) {
+            this(at, part, read, RuleSite.theRuleItself(), why);
+        }
 
         /** What the value's rules call where the end was to have been placed. */
         public RuleKey path() {
@@ -877,14 +886,15 @@ public final class FieldDomains {
         }
 
         /** What tells two of these apart: all of it, with the figures its reason was met at left
-         *  out ({@link BlockReason#factOf}). */
+         *  out ({@link BlockReason#factOf}). Two calls that stop one part at one place are two
+         *  things to look at. */
         Object key() {
-            return List.of(at, part, read, BlockReason.factOf(why));
+            return List.of(at, part, read, sentTo, BlockReason.factOf(why));
         }
 
         /** Two readers' account of one of these, as one, met at every figure either met it at. */
         NoLine together(NoLine other) {
-            return new NoLine(at, part, read, BlockReason.together(why, other.why));
+            return new NoLine(at, part, read, sentTo, BlockReason.together(why, other.why));
         }
     }
 
@@ -1713,6 +1723,17 @@ public final class FieldDomains {
         AStandingQuestionWithNoAccount(RuleRef rule, List<FactSubject> named) {
             super("a question stands that nothing accounts for: " + rule + " at " + named);
         }
+    }
+
+    /**
+     * The calls the arithmetic stopped at on a part of {@code rule}, at the place {@code at}, for
+     * the reason {@code why}: where a reader is sent about it. Empty where it stopped at none, and
+     * the reader is sent to the rule.
+     */
+    public Set<RuleSite> sentToWhereTheArithmeticStopped(RuleRef rule, RuleKey at,
+                                                         BlockReason.RuleReadingStopped why) {
+        return rule instanceof RuleRef.Invariant invariant
+                ? took.sentToWhereTheFormStopped(invariant, null, named(at), why) : Set.of();
     }
 
     /** Every subject the place at {@code path} answers to. */

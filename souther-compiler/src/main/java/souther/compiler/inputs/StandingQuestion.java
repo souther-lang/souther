@@ -487,8 +487,15 @@ public sealed interface StandingQuestion {
         public static BoundaryUndetermined of(RuleCitation cited, ModelOccurrences readAt,
                                               FilingCoordinate at,
                                               BlockReason.RuleReadingStopped why) {
+            return of(cited, readAt, at, RuleSite.theRuleItself(), why);
+        }
+
+        /** The same, for a reader that has the call the arithmetic stopped at to send anybody to. */
+        public static BoundaryUndetermined of(RuleCitation cited, ModelOccurrences readAt,
+                                              FilingCoordinate at, RuleSite sentTo,
+                                              BlockReason.RuleReadingStopped why) {
             return new BoundaryUndetermined(
-                    new BoundaryUndetermined.Filed(cited.rule(), at, why),
+                    new BoundaryUndetermined.Filed(cited.rule(), at, sentTo, why),
                     RuleCitation.anchorOf(cited), readAt);
         }
 
@@ -512,9 +519,16 @@ public sealed interface StandingQuestion {
             return filed.why();
         }
 
+        /** Where inside the rule a reader goes about it: the call the arithmetic stopped at, or the
+         *  rule itself. */
+        public RuleSite sentTo() {
+            return filed.sentTo();
+        }
+
         @Override
         public WhatAQuestionStandsOn stopped() {
-            return new WhatAQuestionStandsOn(RuleReasons.one(filed.why()), Optional.empty());
+            return new WhatAQuestionStandsOn(RuleReasons.one(filed.sentTo(), filed.why()),
+                    Optional.empty());
         }
 
         @Override
@@ -535,7 +549,7 @@ public sealed interface StandingQuestion {
             Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
             both.addAll(it.reachedBy);
             return new BoundaryUndetermined(
-                    new BoundaryUndetermined.Filed(filed.rule(), filed.at(),
+                    new BoundaryUndetermined.Filed(filed.rule(), filed.at(), filed.sentTo(),
                     BlockReason.together(filed.why(), it.filed.why())),
                     both, readAt.and(it.readAt));
         }
@@ -545,14 +559,15 @@ public sealed interface StandingQuestion {
             return "undetermined BOUNDARY of " + filed.rule() + " at " + filed.at();
         }
 
-        /** Which rule, where and what stopped it — the whole of what makes two of these one, for
-         *  the reason {@link Exact.Fact} gives about the citation, with the figures the reason was
-         *  met at left out for the one {@link NothingClassifiesIt.Filed} gives. */
-        public record Filed(RuleRef rule, FilingCoordinate at,
+        /** Which rule, where, the call it stopped at and what stopped it — the whole of what makes
+         *  two of these one, for the reason {@link Exact.Fact} gives about the citation, with the
+         *  figures the reason was met at left out for the one {@link NothingClassifiesIt.Filed}
+         *  gives. */
+        public record Filed(RuleRef rule, FilingCoordinate at, RuleSite sentTo,
                             BlockReason.RuleReadingStopped why) {
 
             public Filed {
-                if (rule == null || at == null || why == null) {
+                if (rule == null || at == null || sentTo == null || why == null) {
                     throw new IllegalArgumentException("a question nothing worked out is one of"
                             + " one rule, filed somewhere, for a reason");
                 }
@@ -560,7 +575,7 @@ public sealed interface StandingQuestion {
 
             /** What makes two of these one, as {@link NothingClassifiesIt.Filed#fact} says. */
             Object fact() {
-                return List.of(rule, at, BlockReason.factOf(why));
+                return List.of(rule, at, sentTo, BlockReason.factOf(why));
             }
         }
     }

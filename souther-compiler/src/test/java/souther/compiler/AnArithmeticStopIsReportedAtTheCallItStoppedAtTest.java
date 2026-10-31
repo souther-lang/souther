@@ -10,6 +10,7 @@ import souther.compiler.report.AdequacyReport;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -79,6 +80,35 @@ class AnArithmeticStopIsReportedAtTheCallItStoppedAtTest {
             let f (s, a, b) = List.any(v -> v >= 1, [ weekOf(s, a), fiveDaysOf(s, b) ])
             """;
 
+    /** The same stop in a rule written on a type, in one part and in two. */
+    private static final String ONE_PART = """
+            module probe.inv
+
+            data Slot = { at: Date, xs: List<Date> }
+                invariant ok = Int.floorMod(Date.daysBetween(at,
+                    Option.withDefault(at, List.find(d -> d == at, xs))), 7) >= 1
+
+            data Done
+
+            behavior f : (s: Slot) -> Done
+            let f (s) = Done
+            """;
+
+    private static final String TWO_PARTS = """
+            module probe.inv
+
+            data Slot = { at: Date, xs: List<Date> }
+                invariant ok = Int.floorMod(Date.daysBetween(at,
+                    Option.withDefault(at, List.find(d -> d == at, xs))), 7) >= 1
+                    && Int.floorMod(Date.daysBetween(at,
+                    Option.withDefault(at, List.find(d -> d == at, xs))), 5) >= 1
+
+            data Done
+
+            behavior f : (s: Slot) -> Done
+            let f (s) = Done
+            """;
+
     private static final String DERIVED = "rule_about_a_derived_value";
 
     /** What one compilation said, as the document and as the text. */
@@ -86,11 +116,15 @@ class AnArithmeticStopIsReportedAtTheCallItStoppedAtTest {
 
     private static Said weekdays;
     private static Said pairs;
+    private static Said onePart;
+    private static Said twoParts;
 
     @BeforeAll
     static void compileTheModelsOnce() {
         weekdays = said(WEEKDAYS);
         pairs = said(TWO_REMAINDERS);
+        onePart = said(ONE_PART);
+        twoParts = said(TWO_PARTS);
     }
 
     private static Said said(String source) {
@@ -105,12 +139,22 @@ class AnArithmeticStopIsReportedAtTheCallItStoppedAtTest {
                 report.human(rendering));
     }
 
-    /** Where the first {@code needle} in {@code source} is, as a report spells a place. */
+    /** Where the one {@code needle} in {@code source} is, as a report spells a place. */
     private static String placeOf(String source, String needle) {
-        int offset = source.indexOf(needle);
-        assertEquals(source.lastIndexOf(needle), offset, needle + " is written once");
+        return placeOf(source, "", needle);
+    }
+
+    /**
+     * Where {@code needle} is, found by what is written just before it: the place a call is
+     * written at when the same call is written more than once.
+     */
+    private static String placeOf(String source, String before, String needle) {
+        int offset = source.indexOf(before + needle);
+        assertEquals(source.lastIndexOf(before + needle), offset,
+                before + needle + " is written once");
+        offset += before.length();
         int line = (int) source.substring(0, offset).chars().filter(c -> c == '\n').count() + 1;
-        return line + ":" + (offset - source.lastIndexOf('\n', offset)) ;
+        return line + ":" + (offset - source.lastIndexOf('\n', offset));
     }
 
     /**
@@ -184,6 +228,55 @@ class AnArithmeticStopIsReportedAtTheCallItStoppedAtTest {
 
         assertEquals(Map.of("s", Set.of(week, five), "a", Set.of(week), "b", Set.of(five)),
                 sentTo(pairs, "f"));
+    }
+
+    /**
+     * Every place the document sends a reader about a rule of a type whose arithmetic stopped: the
+     * rules not read and the questions left open. Each must be sent somewhere, and the places are
+     * returned as a set since the rule is one and the position is another.
+     */
+    private static Set<String> sentToAboutTheRuleOfAType(Said said) {
+        Set<String> out = new TreeSet<>();
+        List<JsonNode> entries = new ArrayList<>();
+        for (JsonNode behavior : said.document().findParents("partition")) {
+            behavior.get("partition").get("notRead").forEach(entries::add);
+            for (JsonNode question : behavior.get("partition").get("unanswered")) {
+                question.get("stopped").forEach(entries::add);
+            }
+        }
+        for (JsonNode entry : entries) {
+            if (!DERIVED.equals(entry.get("reason").asString())) {
+                continue;
+            }
+            JsonNode at = entry.get("sentTo");
+            assertFalse(at == null, () -> "a rule of a type is sent to the call too: " + entry);
+            out.add(at.get("line").asInt() + ":" + at.get("column").asInt());
+        }
+        return out;
+    }
+
+    @Test
+    void aRuleWrittenOnATypeIsSentToTheCallInTheDocumentAndInTheText() {
+        String call = placeOf(ONE_PART, "= ", "Int.floorMod(");
+
+        assertEquals(Set.of(call), sentToAboutTheRuleOfAType(onePart));
+        List<String> lines = onePart.text().lines().map(String::strip)
+                .filter(line -> line.startsWith("· not read: invariant")).toList();
+        assertFalse(lines.isEmpty(), "the model stops the reading, or this checks nothing");
+        lines.forEach(line -> assertEquals(true, line.endsWith(", at " + call),
+                () -> "the text names the call: " + line));
+    }
+
+    /**
+     * Two parts of one rule stopped at two calls: a reader is sent to both of them, and to the
+     * call a part stopped at and never to the rule in place of one.
+     */
+    @Test
+    void eachPartOfARuleIsSentToItsOwnCall() {
+        String week = placeOf(TWO_PARTS, "= ", "Int.floorMod(");
+        String five = placeOf(TWO_PARTS, "&& ", "Int.floorMod(");
+
+        assertEquals(Set.of(week, five), sentToAboutTheRuleOfAType(twoParts));
     }
 
     /** And the text a person reads names the same place the document does. */

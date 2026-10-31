@@ -148,7 +148,8 @@ class WhatARuleIsAnswerableForIsToldApartByThePartItsAuthorWroteTest {
         ReadingEvidence took = new ReadingEvidence();
         decidedIn.forEach(each -> took.stoppedBy(rule, fact, each));
         took.stoppedOnTheForm(rule, new FormShortfall(RuleSite.at(stoppedOn.part()),
-                new BlockReason.RuleAboutADerivedValue(), POSITION), stoppedOn);
+                RuleSite.theRuleItself(), stoppedOn.part(), new BlockReason.RuleAboutADerivedValue(),
+                POSITION), stoppedOn);
         return took.decidedWhereTheArithmeticStopped(rule, Set.of(fact));
     }
 

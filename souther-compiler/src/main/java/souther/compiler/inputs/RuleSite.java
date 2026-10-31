@@ -3,11 +3,13 @@ package souther.compiler.inputs;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
+import souther.compiler.core.Core;
 import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
+import java.util.Optional;
 import java.util.SequencedSet;
 
 /**
@@ -107,6 +109,21 @@ public sealed interface RuleSite {
 
     /** The one of those, since it holds nothing and two of them say the same thing. */
     RuleSite THE_RULE_ITSELF = new TheRuleItself();
+
+    /**
+     * The call its author wrote that the arithmetic stopped at, where {@code node} is one.
+     *
+     * <p>The one place that says what an arithmetic stop is sent to, for a comparison in a body
+     * and for one in a data invariant alike. Nothing for a call no author wrote — an expansion
+     * composed it, and a reader sent there would be pointed at something nobody can edit — and for
+     * an expression that is no call.
+     */
+    static Optional<RuleSite> ofTheCallStoppedAt(Core node) {
+        return Core.withoutStanding(node) instanceof Core.PreservedCall call
+                && call.occurrence().origin().isWritten()
+                ? Optional.of(new AConstructTheAuthorWrote(call.occurrence().origin()))
+                : Optional.empty();
+    }
 
     /** No site, shared: most readings stop at no expression an author wrote. */
     SequencedSet<RuleSite> NO_SITES =
