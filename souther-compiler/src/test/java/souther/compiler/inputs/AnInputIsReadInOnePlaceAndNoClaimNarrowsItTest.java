@@ -2,11 +2,10 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.RepositoryJavaSources;
 import souther.test.RepositoryLayout;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -63,7 +62,7 @@ class AnInputIsReadInOnePlaceAndNoClaimNarrowsItTest {
 
         List<String> callers = new ArrayList<>();
         for (Path source : sources) {
-            String text = Files.readString(source, StandardCharsets.UTF_8);
+            String text = RepositoryJavaSources.forThisFork().mainText(source);
             // The declaration itself, and prose naming it, are not calls.
             if (source.endsWith(Path.of("inputs", "InputDomain.java"))
                     || !text.contains("InputDomain.of(")) {
@@ -87,7 +86,7 @@ class AnInputIsReadInOnePlaceAndNoClaimNarrowsItTest {
                 continue;
             }
             reading.add(where);
-            if (Files.readString(source, StandardCharsets.UTF_8).contains("souther.compiler.claims")) {
+            if (RepositoryJavaSources.forThisFork().mainText(source).contains("souther.compiler.claims")) {
                 naming.add(where);
             }
         }
@@ -106,7 +105,7 @@ class AnInputIsReadInOnePlaceAndNoClaimNarrowsItTest {
     void theClaimsAreReadWhereTheyAreJudgedAndReported() throws IOException {
         List<String> readers = new ArrayList<>();
         for (Path source : mainSources()) {
-            if (Files.readString(source, StandardCharsets.UTF_8).contains("souther.compiler.claims")
+            if (RepositoryJavaSources.forThisFork().mainText(source).contains("souther.compiler.claims")
                     && !source.getParent().getFileName().toString().equals("claims")) {
                 readers.add(source.getParent().getFileName() + "/" + source.getFileName());
             }

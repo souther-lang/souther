@@ -7,11 +7,9 @@ import souther.compiler.types.TypeKey;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.RepositoryJavaSources;
 import souther.test.RepositoryLayout;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -206,14 +204,14 @@ class WhetherADeclarationWearsOneValueWasSettledWhenItWasIndexedTest {
      * such reading is cheapest to add.
      */
     @Test
-    void theReadersStillTakingThisOffADeclarationAreListed() throws IOException {
+    void theReadersStillTakingThisOffADeclarationAreListed() {
         List<Path> sources = REPOSITORY.mainJavaSources();
         assertTrue(sources.size() > 100,
                 () -> "the scan found only " + sources.size() + " sources, which is not the tree");
 
         List<String> calls = new ArrayList<>();
         for (Path source : sources) {
-            String code = withoutComments(Files.readString(source, StandardCharsets.UTF_8));
+            String code = withoutComments(RepositoryJavaSources.forThisFork().mainText(source));
             assertFalse(code.contains("import static souther.compiler.check.DeclarationNewtypes"),
                     () -> source.getFileName() + " takes the question under a bare name, which is a"
                             + " call site this counts by the spelling it is written in");

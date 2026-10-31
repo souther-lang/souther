@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.RepositoryJavaSources;
 import souther.test.RepositoryLayout;
 
 import souther.compiler.TestDay;
@@ -25,8 +26,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -233,7 +232,7 @@ class AConstructionPositionIsNotAnInputPositionTest {
 
         List<String> both = new ArrayList<>();
         for (Path source : sources) {
-            String text = code(Files.readString(source, StandardCharsets.UTF_8));
+            String text = code(RepositoryJavaSources.forThisFork().mainText(source));
             if (!text.contains("ConstructionPlan") || !text.contains("InputDomain")) {
                 continue;
             }

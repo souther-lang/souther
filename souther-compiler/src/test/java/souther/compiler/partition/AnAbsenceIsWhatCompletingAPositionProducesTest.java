@@ -17,10 +17,8 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
+import souther.test.RepositoryJavaSources;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
@@ -318,14 +316,14 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
      * the line this fails on.
      */
     @Test
-    void theAbsenceIsNamedOnlyWhereItIsProduced() throws IOException {
+    void theAbsenceIsNamedOnlyWhereItIsProduced() {
         List<Path> sources = EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources();
         assertFalse(sources.isEmpty(), "found no sources at all — the scan missed the tree");
 
         Set<String> naming = new TreeSet<>();
         Set<String> producing = new TreeSet<>();
         for (Path source : sources) {
-            String text = Files.readString(source, StandardCharsets.UTF_8);
+            String text = RepositoryJavaSources.forThisFork().mainText(source);
             if (text.contains("Absent.PROVEN")) {
                 naming.add(source.getFileName().toString());
             }

@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.RepositoryJavaSources;
 import souther.test.RepositoryLayout;
 
 import souther.compiler.DefaultStdlib;
@@ -14,8 +15,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -314,7 +313,7 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
     }
 
     private static String code(Path source) throws IOException {
-        return withoutComments(Files.readString(source, StandardCharsets.UTF_8));
+        return withoutComments(RepositoryJavaSources.forThisFork().mainText(source));
     }
 
     /**

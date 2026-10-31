@@ -49,6 +49,19 @@ public final class RepositoryJavaSources {
         return main;
     }
 
+    /**
+     * What {@code source} says, for a check that is walking the files {@link
+     * RepositoryLayout#mainJavaSources} names and wants each one's text. Refused for a file that is
+     * not one of them, so a path from anywhere else is not read through a store of this repository.
+     */
+    public String mainText(Path source) {
+        String text = mainTexts().get(source);
+        if (text == null) {
+            throw new IllegalArgumentException(source + " is not a main Java source of this repository");
+        }
+        return text;
+    }
+
     private static String readUtf8(Path source) {
         try {
             return Files.readString(source, StandardCharsets.UTF_8);
