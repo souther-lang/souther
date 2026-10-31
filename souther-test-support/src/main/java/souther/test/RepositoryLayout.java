@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 /**
@@ -82,9 +83,16 @@ public final class RepositoryLayout {
      * repository root, and run by an editor from somewhere else all get the same answer. Walking up
      * also reads no more of the repository than the path it is standing on.
      */
-    public static RepositoryLayout ofWorkingDirectory() {
-        return of(Path.of(""));
+    public static synchronized RepositoryLayout ofWorkingDirectory() {
+        if (ofTheWorkingDirectory == null) {
+            ofTheWorkingDirectory = of(Path.of(""));
+        }
+        return ofTheWorkingDirectory;
     }
+
+    /** The one reading of the working directory's repository, so what a layout holds once is held
+     *  once for every check of a fork that asks. A layout made by {@link #of} is its own. */
+    private static RepositoryLayout ofTheWorkingDirectory;
 
     /**
      * The repository {@code start} is in, for a caller that already knows where it is standing.
@@ -485,8 +493,19 @@ public final class RepositoryLayout {
      * <p>What the checks that hold a rule over the compiler itself read. Held as one answer because
      * six of them had worked it out for themselves, and a rule about where something may be written
      * says nothing about a module its scan did not reach.
+     *
+     * <p>Walked once per layout, because the repository does not move while a run happens.
      */
-    public List<Path> mainJavaSources() {
+    public synchronized List<Path> mainJavaSources() {
+        if (mainJava == null) {
+            mainJava = walkTheMainJavaSources();
+        }
+        return mainJava;
+    }
+
+    private List<Path> mainJava;
+
+    private List<Path> walkTheMainJavaSources() {
         List<Path> out = new ArrayList<>();
         for (Path tree : mainJavaTrees()) {
             try (Stream<Path> walk = Files.walk(tree)) {
@@ -634,8 +653,17 @@ public final class RepositoryLayout {
      * <p>Sorted and held rather than streamed: the walk's handles are closed before this returns,
      * so a caller cannot leak one, and a parameterized test over the result names its cases in the
      * same order on every machine.
+     *
+     * <p>Walked once per suffix and layout: the files a suffix names are the same answer each time
+     * it is asked, and only the files are held, so what a check makes of them stays its own.
      */
     public List<Path> filesUnderSourceTrees(String suffix) {
+        return walkedBySuffix.computeIfAbsent(suffix, this::walkTheSourceTrees);
+    }
+
+    private final Map<String, List<Path>> walkedBySuffix = new ConcurrentHashMap<>();
+
+    private List<Path> walkTheSourceTrees(String suffix) {
         List<Path> out = new ArrayList<>();
         for (Path tree : sourceTrees) {
             try (Stream<Path> walk = Files.walk(tree)) {

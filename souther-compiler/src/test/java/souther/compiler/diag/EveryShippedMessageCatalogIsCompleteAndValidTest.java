@@ -11,6 +11,7 @@ import souther.compiler.diag.msg.MessageValues;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.RepositoryJavaSources;
 import souther.test.RepositoryLayout;
 
 import souther.compiler.check.Ordering;
@@ -25,6 +26,7 @@ import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -941,19 +943,9 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
         return keys;
     }
 
-    private static List<String> texts;
-
-    /** What every main source says, read once for the class. */
-    private static List<String> mainSourceTexts() throws IOException {
-        if (texts != null) {
-            return texts;
-        }
-        List<String> read = new ArrayList<>();
-        for (Path source : mainSources()) {
-            read.add(Files.readString(source, StandardCharsets.UTF_8));
-        }
-        texts = List.copyOf(read);
-        return texts;
+    /** What every main source says, read once for the fork. */
+    private static Collection<String> mainSourceTexts() {
+        return RepositoryJavaSources.forThisFork().mainTexts().values();
     }
 
     /**
@@ -1006,14 +998,8 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
     }
 
     /** Every module's main sources. Any module may name a message key. */
-    public static List<Path> mainSources() throws IOException {
-        List<Path> sources = new ArrayList<>();
-        for (Path root : moduleDirectories("java")) {
-            try (Stream<Path> walk = Files.walk(root)) {
-                walk.filter(p -> p.toString().endsWith(".java")).forEach(sources::add);
-            }
-        }
-        return sources;
+    public static List<Path> mainSources() {
+        return REPOSITORY.mainJavaSources();
     }
 
     /** Every module's {@code src/main/<kind>}, for the modules that have one. The test runs in its
