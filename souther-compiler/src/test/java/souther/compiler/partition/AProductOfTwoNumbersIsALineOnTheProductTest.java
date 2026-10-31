@@ -576,6 +576,74 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 unreadReasonsOf(measured(compilation)));
     }
 
+    /** A newtype over {@code kind} holding {@code clause}, made of {@code number} in a plan that
+     *  then compares the value the number is made of, so that only the making can keep the
+     *  comparison from being shown reached. */
+    private static Compilation aNumberMadeInto(String kind, String clause, String number) {
+        String compared = kind.equals("Int") ? "x <= c" : "Decimal.compare(x, c) <= 0";
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Held = KIND
+                    invariant CLAUSE
+                data Plan = { p: Held, within: Bool }
+
+                behavior f : (x: KIND, c: KIND) -> Plan
+                    constructs Plan, Held
+                let f (x, c) = {
+                    let net = NUMBER
+                    Plan {
+                        p = Held(net),
+                        within = COMPARED
+                    }
+                }
+                """.replace("KIND", kind).replace("CLAUSE", clause).replace("NUMBER", number)
+                .replace("COMPARED", compared), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation;
+    }
+
+    /**
+     * The end a choice keeps puts the same end on its answer whichever argument is the constant,
+     * whichever end it is, and however the constant is written: the lesser is at most each of the
+     * two and the greater at least each.
+     */
+    @Test
+    void aChoiceBetweenAValueAndAConstantIsHeldToTheEndItKeeps() {
+        String[][] held = {
+                {"Decimal", "value <= 0.0m", "Decimal.min(0.0m, x)"},
+                {"Decimal", "value <= 0.0m", "Decimal.min(x, 0.0m)"},
+                {"Decimal", "value >= 0.0m", "Decimal.max(x, 0.0m)"},
+                {"Decimal", "value >= -1.0m", "Decimal.max(-1.0m, x)"},
+                {"Decimal", "value >= 1.0m", "Decimal.max(0.5m + 0.5m, x)"},
+                {"Int", "value <= 0", "Int.min(0, x)"},
+                {"Int", "value <= 0", "Int.min(x, 0)"},
+                {"Int", "value >= 0", "Int.max(x, 0)"}};
+        for (String[] each : held) {
+            assertEquals(List.of(),
+                    unreadReasonsOf(measured(aNumberMadeInto(each[0], each[1], each[2]))),
+                    each[2] + " held to " + each[1]);
+        }
+    }
+
+    /** The end a choice keeps is the only one it puts: the lesser of a value and nought is not
+     *  at nought or above, nor the greater at nought or below. */
+    @Test
+    void aChoiceBetweenAValueAndAConstantIsNotHeldToTheEndItDoesNotKeep() {
+        String[][] notHeld = {
+                {"Decimal", "value >= 0.0m", "Decimal.min(0.0m, x)"},
+                {"Decimal", "value <= 0.0m", "Decimal.max(0.0m, x)"},
+                {"Decimal", "value >= 1.0m", "Decimal.max(0.5m, x)"},
+                {"Int", "value >= 0", "Int.min(0, x)"},
+                {"Int", "value <= 0", "Int.max(0, x)"}};
+        for (String[] each : notHeld) {
+            assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE),
+                    unreadReasonsOf(measured(aNumberMadeInto(each[0], each[1], each[2]))),
+                    each[2] + " held to " + each[1]);
+        }
+    }
+
     /**
      * What the argument of the maximum is worked out with still stops a run when it can: the
      * construction of a number at nought or above says nothing of the sum under it.

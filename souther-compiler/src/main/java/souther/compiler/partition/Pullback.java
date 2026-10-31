@@ -1292,6 +1292,18 @@ final class Pullback {
         }
     }
 
+    /** The number {@code e} comes to where no number of the input is in it, written out as the
+     *  library's own bound arithmetic is handed it — or null where it is none, or has no such
+     *  writing. */
+    private BigDecimal writtenConstant(Core e, InputReads reads) {
+        return AffineForms.outcome(e, reads, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)
+                && form.coefs().isEmpty()
+                && form.constant().writtenDecimal()
+                        instanceof ExactAnswer.Held<Optional<BigDecimal>> held
+                ? held.value().orElse(null) : null;
+    }
+
     /** The form {@code e} is composed as, or null where the arithmetic composes it as none
      *  ({@link #quantities(Core, Consumer)}) — or as more than one, which is no one account of
      *  where it answers. */
@@ -1355,15 +1367,7 @@ final class Pullback {
         if (run == null) {
             return false;
         }
-        Function<Core, BigDecimal> constant = argument -> {
-            Denotation each = number.at().standing(argument, read.rules().symbols(),
-                    read.rules().newtypes());
-            return switch (Core.withoutStanding(each.value())) {
-                case Core.Decimal written -> written.value();
-                case Core.Int written -> BigDecimal.valueOf(written.value());
-                default -> null;
-            };
-        };
+        Function<Core, BigDecimal> constant = argument -> writtenConstant(argument, number.at());
         return ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(call.operation()),
                         CallArguments.readAs(call, constant))
                 .meet(Extreme.boundsOf(call, constant)).liesWithin(run);
