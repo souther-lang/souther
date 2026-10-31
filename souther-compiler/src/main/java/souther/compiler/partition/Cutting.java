@@ -1538,6 +1538,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     static BlockReason.WhatItStatesIsNoLine whatItStates(Proposition stated,
                                                          List<WhyUnread> stops) {
+        if (stops.isEmpty()) {
+            return wordOfTheStatement(stated);
+        }
+        return whatStopsSay(stops);
+    }
+
+    /**
+     * What parts that stopped for {@code stops} say of the statement they are parts of — or null
+     * where one is worded by each place the rule is filed at. A figure that stopped a part is the
+     * word, in the order the words are declared, and any other stop is a part not read.
+     *
+     * @param stops what stopped the parts, which are not empty
+     */
+    static BlockReason.WhatItStatesIsNoLine whatStopsSay(List<WhyUnread> stops) {
         if (stops.stream().anyMatch(Cutting::wordedByThePlace)) {
             return null;
         }
@@ -1550,10 +1564,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         stops.stream().filter(why -> why.figure().isPresent()).findFirst().ifPresent(why -> {
             throw new IllegalStateException("no word says a part stopped at " + why);
         });
-        if (!stops.isEmpty()) {
-            return new BlockReason.WhatItStatesIsNoLine(
-                    BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ);
-        }
+        return new BlockReason.WhatItStatesIsNoLine(
+                BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ);
+    }
+
+    /** What a statement none of whose parts stopped says of itself when it draws no line. */
+    private static BlockReason.WhatItStatesIsNoLine wordOfTheStatement(Proposition stated) {
         return new BlockReason.WhatItStatesIsNoLine(switch (stated) {
             case Proposition.Compared _ ->
                     BlockReason.WhatItStatesIsNoLine.Why.A_NUMBER_NO_POSITION_HOLDS;
