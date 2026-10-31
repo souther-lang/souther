@@ -162,7 +162,6 @@ import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.Generator;
-import souther.compiler.partition.InputClassifications;
 import souther.compiler.partition.InputNumbersAnAnswerTurnsOn;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.BodyInputReading;
@@ -5561,18 +5560,44 @@ public final class Adequacy {
          * it is evidence of nothing and leaves nothing undecided.
          */
         public Set<RowRef> rowsStoppedBeforeTheirValues() {
+            Map<RowRef, List<Incompleteness.Met>> stops = stopsByRow();
             Set<RowRef> stopped = new HashSet<>();
-            for (Incompleteness.Met gap : gaps()) {
-                if (gap.fact().target() instanceof Target.OfRow(RowRef ref)) {
+            for (RowOutcome row : rowsSeen()) {
+                RowRef ref = RowRef.of(row);
+                if (!row.valuesHandedOver() && stops.containsKey(ref)) {
                     stopped.add(ref);
                 }
             }
-            for (RowOutcome row : rowsSeen()) {
-                if (row.valuesHandedOver()) {
-                    stopped.remove(RowRef.of(row));
+            return Set.copyOf(stopped);
+        }
+
+        /**
+         * The rows the generator places: the ones that handed their values over, and the ones that
+         * stopped with some of them built. A row refused before its values is not among them, since
+         * it is evidence of nothing and a generator that placed what it wrote would count it as a
+         * witness. The classes read every row seen instead, because they count a refused row as one
+         * that was not read and hold a class open by it only where no other row is in the class.
+         */
+        public List<RowOutcome> rowsToPlace() {
+            Set<RowRef> stopped = rowsStoppedBeforeTheirValues();
+            return rowsSeen().stream()
+                    .filter(row -> row.valuesHandedOver() || stopped.contains(RowRef.of(row)))
+                    .toList();
+        }
+
+        /**
+         * What stopped each row the reading went without, as it was written where the row stopped.
+         * The one place a row's stop is read off the reasons, so that a row stopped and a row
+         * refused are told apart the same way by every reader.
+         */
+        public Map<RowRef, List<Incompleteness.Met>> stopsByRow() {
+            Map<RowRef, List<Incompleteness.Met>> stops = new HashMap<>();
+            for (Incompleteness.Met gap : gaps()) {
+                if (gap.fact().target() instanceof Target.OfRow(RowRef stopped)) {
+                    stops.computeIfAbsent(stopped, _ -> new ArrayList<>()).add(gap);
                 }
             }
-            return Set.copyOf(stopped);
+            return stops;
         }
 
         /** What this reading went without, as the reasons themselves, each once and with everywhere
@@ -7271,11 +7296,8 @@ public final class Adequacy {
             // nothing undecided, so the generator does not see it. One that stopped is seen, and
             // placed as the classes place it: the inputs it built stand where they were written and
             // the ones it never built are unknown.
-            Set<RowRef> stoppedBefore = observed.rowsStoppedBeforeTheirValues();
-            List<RowOutcome> rows = observed.rowsSeen().stream()
-                    .filter(row -> row.valuesHandedOver()
-                            || stoppedBefore.contains(RowRef.of(row)))
-                    .toList();
+            List<RowOutcome> rows = observed.rowsToPlace();
+            Map<RowRef, List<Incompleteness.Met>> stops = observed.stopsByRow();
             // The measurement's own axes, so that a row is placed by the walk it was measured at.
             souther.compiler.partition.MeasuredInput.MeasuredAxes axes = asked.subject().axes();
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
@@ -7286,8 +7308,14 @@ public final class Adequacy {
             // body's combinations the row was seen filling.
             List<Generator.ObservedRow> existing = rows.stream()
                     .map(row -> {
-                        Map<AxisId, Classification> placed =
-                                InputClassifications.of(row.inputs(), axes);
+                        List<Classification> where = Coverages.Readings.placedAt(
+                                row, stops.get(RowRef.of(row)), axes);
+                        Map<AxisId, Classification> placed = new LinkedHashMap<>();
+                        for (int at = 0; at < axes.size(); at++) {
+                            if (where.get(at) != null) {
+                                placed.put(axes.get(at).id(), where.get(at));
+                            }
+                        }
                         return new Generator.ObservedRow(
                                 Lookup.built(put -> placed.forEach(put::put)),
                                 // What the row's run recorded, which is the row's own answer. A
@@ -10658,12 +10686,7 @@ public final class Adequacy {
 
         // What stopped each row the reading went without, as it was written where the row stopped.
         // A case not read of such a row is not read because of that, and says so by carrying it.
-        Map<RowRef, List<Incompleteness.Met>> stoppedBy = new HashMap<>();
-        for (Incompleteness.Met gap : seen.gaps()) {
-            if (gap.fact().target() instanceof Target.OfRow(RowRef stopped)) {
-                stoppedBy.computeIfAbsent(stopped, _ -> new ArrayList<>()).add(gap);
-            }
-        }
+        Map<RowRef, List<Incompleteness.Met>> stoppedBy = seen.stopsByRow();
         for (RowOutcome row : rows) {
             boolean held = row.disposition() == Disposition.HELD;
             RowRef rowRef = RowRef.of(row);
@@ -10699,7 +10722,7 @@ public final class Adequacy {
             // how far a row got would be a second answer to where it counts.
             InputCaseEvidence.Reached reached = held ? InputCaseEvidence.Reached.VERIFIED
                     : row.stage().reached(Stage.INVOKED) ? InputCaseEvidence.Reached.EXECUTED
-                    : row.stage().reached(Stage.FIXTURES_VALIDATED)
+                    : row.valuesHandedOver()
                             ? InputCaseEvidence.Reached.SPECIFIED
                             : InputCaseEvidence.Reached.NOWHERE;
             for (int i = 0; i < ins.size(); i++) {
@@ -10786,7 +10809,7 @@ public final class Adequacy {
                                                List<Incompleteness.Met> stops,
                                                boolean runDecidesMore) {
         boolean stopped = stops != null;
-        if (!row.stage().reached(Stage.FIXTURES_VALIDATED)) {
+        if (!row.valuesHandedOver()) {
             return List.of(stopped ? new UnreadCase.Stopped(ref, stops)
                     : new UnreadCase.Refused(ref));
         }

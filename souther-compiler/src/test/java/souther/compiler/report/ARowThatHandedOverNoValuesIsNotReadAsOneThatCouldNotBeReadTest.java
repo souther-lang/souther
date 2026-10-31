@@ -1,9 +1,13 @@
 package souther.compiler.report;
 
+import souther.compiler.observe.Incompleteness;
+import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Measurement;
 import souther.compiler.query.ObligationSummary;
+import souther.compiler.query.PartitionEvidence;
 import souther.compiler.query.Weakening;
 
 import org.junit.jupiter.api.Test;
@@ -13,6 +17,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -155,8 +160,151 @@ class ARowThatHandedOverNoValuesIsNotReadAsOneThatCouldNotBeReadTest {
         compilation.answerEverything();
 
         Adequacy.Filling generated = Adequacy.generatedOf(compilation.db(), "m").get("f");
-        assertFalse(generated.composed().rows().isEmpty(),
-                () -> "a row for Blue is offered: " + generated.composed().reasons());
+        List<Adequacy.GenerationDisposition> uncovered = generated.generation().stream()
+                .filter(each -> each.finding().kind() == Adequacy.Kind.AXIS_CLASS_UNCOVERED)
+                .toList();
+        assertFalse(uncovered.isEmpty(), "Blue is uncovered");
+        for (Adequacy.GenerationDisposition each : uncovered) {
+            assertInstanceOf(GenerationOutcome.Generated.class, each.outcome(),
+                    () -> "a row for the class is offered, and the position is not withheld: "
+                            + each.outcome());
+        }
+    }
+
+    private static final String SHADES = """
+            module m
+
+            data Red
+            data Blue
+            data Color = Red | Blue
+            data Light
+            data Dark
+            data Shade = Light | Dark
+
+            behavior f : (color: Color, shade: Shade) -> Int
+
+            let f (color, shade) =
+                match color with
+                    | Red -> match shade with | Light -> 1 | Dark -> 2
+                    | Blue -> 0
+
+            partial let spinShade (n: Int) : Shade = if n < 0 then Light else spinShade(n + 1)
+
+            example f
+                | "lit red" : (Red, Light) -> 1
+            """;
+
+    private static PartitionEvidence.AxisCoverage theShade(AdequacyReport report) {
+        return report.modules().getFirst().behaviors().getFirst().partition().axes().stream()
+                .filter(each -> each.path().endsWith("shade"))
+                .findFirst().orElseThrow();
+    }
+
+    /**
+     * A stop is one reason, and it is the row's own: the position the row never reached is unknown
+     * because the row stopped, and not because a value could not be read.
+     */
+    @Test
+    void anAxisThatAStoppedRowNeverReachedIsOpenByTheStopAndNotByAnUnreadableValue() {
+        AdequacyReport report = WrittenWitness.refusedOnly(List.of("E1910"),
+                SHADES + "    | \"stops\" : (Red, spinShade(1)) -> 2\n");
+        PartitionEvidence.AxisCoverage shade = theShade(report);
+
+        Measurement.Partial<?> partial = assertInstanceOf(Measurement.Partial.class,
+                shade.reached(), () -> "Dark may be where the row would have been: "
+                        + shade.reached());
+        assertTrue(partial.weakening().causes().stream().anyMatch(each ->
+                        each instanceof Weakening.ObservationIncomplete it
+                                && it.met().fact().code()
+                                        == Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED),
+                () -> "the stop: " + partial.weakening());
+        assertFalse(partial.weakening().causes().stream().anyMatch(each ->
+                        each instanceof Weakening.ObservationIncomplete it
+                                && it.met().fact().code() == Incompleteness.Code.VALUE_UNREADABLE),
+                () -> "and no value it never had: " + partial.weakening());
+    }
+
+    /** The inputs the stopped row built stand where they were written. */
+    @Test
+    void theInputsAStoppedRowBuiltStillCoverTheirClass() {
+        AdequacyReport report = WrittenWitness.refusedOnly(List.of("E1910"),
+                SHADES + "    | \"stops\" : (Red, spinShade(1)) -> 2\n");
+        PartitionEvidence.AxisCoverage color = report.modules().getFirst().behaviors()
+                .getFirst().partition().axes().stream()
+                .filter(each -> each.path().endsWith("color")).findFirst().orElseThrow();
+
+        assertInstanceOf(Measurement.Complete.class, color.reached(),
+                () -> "Red is covered and Blue is not, which is known: " + color.reached());
+    }
+
+    /** A row refused before its values is evidence of nothing, and leaves the class as it was. */
+    @Test
+    void anAxisIsNotOpenByARowRefusedBeforeItsValues() {
+        AdequacyReport report = WrittenWitness.refusedOnly(List.of("E1903"),
+                SHADES + "    | \"one input\" : (Red) -> 2\n");
+
+        assertInstanceOf(Measurement.Complete.class, theShade(report).reached(),
+                () -> "nothing is left to decide by the refused row: "
+                        + theShade(report).reached());
+    }
+
+    /**
+     * A stop and a value that really was cut short are two reasons, and each is kept. The value is
+     * one the observation budget cut; the row beside it stopped before it had any.
+     */
+    @Test
+    void aStopAndAValueCutShortAreBothKept() {
+        String model = """
+                module example.budget
+
+                data Amount = Int
+                    invariant value >= 0 && value <= 1000
+
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Item = { a: String, b: String, c: String }
+                data Group = { items: List<Item> }
+
+                data Draft = { groups: List<Group>, cost: Amount, flag: Flag }
+                data Ok = { n: Int }
+
+                behavior take : (request: Draft) -> Ok
+                    constructs Ok
+
+                let take (request) =
+                    match request.flag with | Yes | No -> Ok { n = request.cost.value }
+
+                partial let spin (n: Int) : Int = if n < 0 then 0 else spin(n + 1)
+
+                let someItems (n: Int): List<Item> =
+                    List.map({ (i) -> Item { a = "x", b = "x", c = "x" } }, List.rangeInclusive(1, n))
+
+                let someGroups (n: Int): List<Group> =
+                    List.map({ (i) -> Group { items = someItems(64) } }, List.rangeInclusive(1, n))
+
+                example take
+                    | "cut short" : (Draft { groups = someGroups(64), cost = Amount(0), flag = Yes }) -> Ok { n = 0 }
+                    | "stops" : (Draft { groups = [], cost = Amount(spin(1)), flag = Yes }) -> Ok { n = 0 }
+                """;
+        AdequacyReport report = WrittenWitness.refusedOnly(List.of("E1910"), model);
+        PartitionEvidence.AxisCoverage flag = report.modules().getFirst().behaviors().getFirst()
+                .partition().axes().stream().filter(each -> each.path().endsWith("flag"))
+                .findFirst().orElseThrow();
+
+        Measurement.Partial<?> partial = assertInstanceOf(Measurement.Partial.class,
+                flag.reached(), () -> "No is covered by neither: " + flag.reached());
+        Set<Incompleteness.Code> codes = new java.util.HashSet<>();
+        partial.weakening().causes().forEach(each -> {
+            if (each instanceof Weakening.ObservationIncomplete it) {
+                codes.add(it.met().fact().code());
+            }
+        });
+        assertTrue(codes.contains(Incompleteness.Code.VALUE_TRUNCATED), codes::toString);
+        assertTrue(codes.contains(Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED),
+                codes::toString);
+        assertFalse(codes.contains(Incompleteness.Code.VALUE_UNREADABLE), codes::toString);
     }
 
     @Test

@@ -83,6 +83,8 @@ import souther.compiler.partition.WhyKept;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -351,7 +353,6 @@ final class Coverages {
                                 souther.compiler.query.Adequacy.RowReading observed,
                                 souther.compiler.partition.AdequacyPolicy.OfTheMeasures budget,
                                 BodyInputReading body, InputUses uses) {
-        List<RowOutcome> rows = observed.rowsSeen();
         Partitions.Partitioning partitioning = subject.partitioning();
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
@@ -359,7 +360,7 @@ final class Coverages {
         // The measures that divide their number, which are the ones a row is placed at. Handed
         // every measure, this asks a classifier about numbers there are no classes to place a value
         // in, and the count it comes back with is over a set no answer here is about.
-        Readings readings = Readings.of(rows, subject,
+        Readings readings = Readings.of(observed, subject,
                 observed.gaps().stream()
                         .filter(gap -> gap.fact().code().leftNoRowRead()).toList());
         // Walked as the reading holds it: a location at a time, and each measure beside the
@@ -442,16 +443,46 @@ final class Coverages {
          *  placed by, which is one the model only bounds. */
         record WhereARowSat(List<Classification> at, RowWitnesses by) {}
 
-        static Readings of(List<RowOutcome> rows,
+        /**
+         * Where a row sits at each measure, by how far it got.
+         *
+         * <p>A row that handed its values over is placed by them. One that stopped before doing so
+         * is placed by the inputs it built, and the positions it never reached are unknown for the
+         * reason it stopped — not for a value that could not be read, which it never had. One
+         * refused before its values is placed nowhere: it is evidence of nothing, and a measure
+         * is held open by it through nothing but the count of rows it did not read.
+         *
+         * @param stops what stopped the row, null where nothing did
+         */
+        static List<Classification> placedAt(
+                RowOutcome row, List<Incompleteness.Met> stops,
+                souther.compiler.partition.MeasuredInput.MeasuredAxes axes) {
+            if (row.valuesHandedOver()) {
+                return InputClassifications.placedAt(row.inputs(), axes);
+            }
+            if (stops == null) {
+                return Collections.nCopies(axes.size(), null);
+            }
+            // One reason for the row, whichever order the reasons arrived in.
+            Incompleteness.Met why = stops.stream()
+                    .min(Comparator.comparing((Incompleteness.Met each) -> each.fact().code())
+                            .thenComparing(each -> each.fact().toString()))
+                    .orElseThrow();
+            return InputClassifications.placedAt(row.inputs(), axes, why.occurrence());
+        }
+
+        static Readings of(Adequacy.RowReading observed,
                            souther.compiler.partition.MeasuredInput subject,
                            List<Incompleteness.Met> unseen) {
             // The measures a row is placed at, in the measurement's own order, and what each row
             // came to at each of them — asked for in that order and answered in it, so nothing
             // here looks a measure up in what it was just handed.
             souther.compiler.partition.MeasuredInput.MeasuredAxes walked = subject.partitionAxes();
+            List<RowOutcome> rows = observed.rowsSeen();
+            Map<RowRef, List<Incompleteness.Met>> stops = observed.stopsByRow();
             List<WhereARowSat> read = new ArrayList<>(rows.size());
             for (RowOutcome row : rows) {
-                read.add(new WhereARowSat(InputClassifications.placedAt(row.inputs(), walked),
+                read.add(new WhereARowSat(placedAt(row, stops.get(RowRef.of(row)), walked),
                         RowWitnesses.of(row)));
             }
             // And the same run of measures cut where the locations cut it, which is what the walk
