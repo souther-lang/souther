@@ -247,6 +247,22 @@ final class NumericWitness {
             return new HeldClass.OfResidues(new Congruences(value, modulus));
         }
 
+        /** Whether every number of the form stands at {@code standing} at a whole number that
+         *  brings the form to the residue. */
+        boolean metBy(Map<NumericTerm, Place> standing) {
+            BigInteger sum = whole(form.constant());
+            for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+                Place at = standing.get(each.getKey());
+                if (at == null || !(Count.number(at).exactly().floor()
+                        instanceof ExactAnswer.Held<BigInteger>(BigInteger value))
+                        || !Count.number(at).exactly().isWhole()) {
+                    return false;
+                }
+                sum = sum.add(whole(each.getValue()).multiply(value));
+            }
+            return sum.mod(divisor).equals(residue);
+        }
+
         private static BigInteger whole(ExactRatio ratio) {
             return ((ExactAnswer.Held<BigInteger>) ratio.floor()).value();
         }
@@ -496,6 +512,13 @@ final class NumericWitness {
                                 SequencedMap<NumericTerm, Place> standing,
                                 Met met) {
         if (at == terms.size()) {
+            // An assignment outside the congruence is no witness of it, however it was reached:
+            // offered to be composed it would be a row standing elsewhere. Not reached by any walk
+            // above, so said as a walk that left something unwalked rather than as a proof.
+            if (congruent != null && !congruent.metBy(standing)) {
+                met.leftUnwalked = true;
+                return false;
+            }
             return switch (composing.composes(standing)) {
                 case Composed.Built _ -> true;
                 case Composed.Refuted _ -> {
@@ -555,14 +578,45 @@ final class NumericWitness {
         // luck, and every value between two members is one the rules refuse.
         HeldClass held = term instanceof NumericTerm.ValueOf value
                 ? within.classAt(value) : HeldClass.NONE;
-        // The last number of a congruence, which the others standing leave a class of.
+        // The last number of a congruence, which the others standing leave a class of. The class is
+        // of the whole number the term counts to, whatever order it stands on, so it is walked as
+        // that: held together with what the region holds the term to only where both are classes
+        // of the numbers the order counts, and otherwise walked by itself, each member kept where
+        // the region's class holds it. Joined with a class of days, a class of residues says
+        // nothing of the days its members are — not that there are none.
         if (congruent != null && at == terms.size() - 1) {
             HeldClass left = congruent.leavesTheLast(term, standing);
             if (left instanceof HeldClass.NoValue) {
                 return false;
             }
-            held = held.and(left);
-            if (held instanceof HeldClass.NoValue) {
+            boolean joined = left instanceof HeldClass.None || (left.countsOn(carrier)
+                    && (held instanceof HeldClass.None || held instanceof HeldClass.OfResidues));
+            if (joined) {
+                held = held.and(left);
+                if (held instanceof HeldClass.NoValue) {
+                    return false;
+                }
+            } else {
+                if (!(Count.number(first).exactly().floor()
+                        instanceof ExactAnswer.Held<BigInteger> from)) {
+                    met.leftUnwalked = true;
+                    return false;
+                }
+                ClassMembers inside = left.nearest(from.value(), runs,
+                        VALUES_A_POSITION_IS_TRIED_AT);
+                for (Place tried : inside.notApart(apart)) {
+                    if (Count.number(tried).exactly().floor()
+                            instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
+                            && held.holds(whole) && carrier.admitted(admits, tried)
+                            && tryingAt(within, term, tried, terms, at, on, looking, composing,
+                                    congruent, standing, met)) {
+                        return true;
+                    }
+                }
+                if (inside.stoppedShort()) {
+                    met.leftUnwalked = true;
+                    met.figures.add(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT);
+                }
                 return false;
             }
         }
