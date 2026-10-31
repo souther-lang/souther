@@ -2,7 +2,7 @@ package souther.architecture;
 
 import souther.test.CheckedInObservation;
 import souther.test.ClosedWorldContract;
-import souther.test.ReadsTheRepositorysModels;
+import souther.test.Nightly;
 import souther.test.RepositoryLayout;
 
 import org.junit.jupiter.api.Test;
@@ -44,10 +44,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Asked for instead: a test that reaches a corpus and says nothing fails here, and the author writes
  * the one word that settles it.
  *
- * <p><b>And it says nothing about when the test runs.</b> {@link souther.test.Nightly} is the other
- * annotation and is free of this one: a contract too slow to wait on carries both, and a test whose
- * claim this is about carries this one whether or not a plain run asks it. Neither is derived from
- * the other, because what a test establishes is stable and what it is worth paying for is not.
+ * <p><b>And the claim says little about when the test runs.</b> {@link souther.test.Nightly} is the
+ * other annotation, and a contract too slow to wait on carries both. What a test establishes is
+ * stable and what it is worth paying for is not, so neither is derived from the other, with two
+ * exceptions that are held below: a test that reaches every model the repository carries is asked
+ * only at night, since no smaller set stands for what it claims and every fork would compile the
+ * models again; and a test holding an answer checked in is never asked only at night, since the
+ * diff of the document is what it is for.
  *
  * <p>The corpora are named below rather than recognised. A corpus is a thing somebody wrote to be
  * swept, and there are few of them; a rule that guessed which classes were corpora would be a second
@@ -146,24 +149,24 @@ class EveryTestThatSweepsACorpusSaysWhatItClaimsTest {
     /** The corpus a test that reads it pays for in every JVM it is first in. */
     private static final String REPOSITORY_MODELS = "souther/compiler/conformance/RepositoryModels";
 
-    private static final String READS_THE_REPOSITORYS_MODELS =
-            "L" + ReadsTheRepositorysModels.class.getName().replace('.', '/') + ";";
+    private static final String NIGHTLY = "L" + Nightly.class.getName().replace('.', '/') + ";";
 
     /**
-     * Every test that reaches the repository's models carries the tag that asks it with the others,
-     * and no other test does.
+     * Every test that reaches the repository's models is asked once a night, and not in the run a
+     * change waits on.
      *
-     * <p>Not declared, as the claim above is, but read off what the test reaches: where it is asked
-     * is a matter of what it costs, and what it costs is compiling the models, which a test that
-     * reaches them pays wherever it is the first of them in its JVM. Held both ways. A test missing
-     * the tag is handed to the forks that each compile the models again; one carrying it that no
-     * longer reaches them is asked in a runner kept for them, for nothing.
+     * <p>Not declared, as the claim above is, but read off what the test reaches: what such a test
+     * costs is compiling every model the repository carries, which it pays wherever it is the
+     * first of them in its JVM, and the forks of a run each compile them again. A property of the
+     * whole set of models is also what no smaller set stands for, so there is no cheaper way to
+     * ask it. Held in this direction only. A test that is deferred without reaching the models is
+     * deferred for a reason of its own, which {@link Nightly} asks the class to say.
      *
-     * <p>Of the file and not of the class, as the tag is: a nested test is covered by the class it
-     * is written in.
+     * <p>Of the file and not of the class, as the deferral is: a nested test is covered by the
+     * class it is written in.
      */
     @Test
-    void everyTestReachingTheRepositorysModelsIsAskedWithTheOthers() {
+    void everyTestReachingTheRepositorysModelsIsAskedOnlyAtNight() {
         Set<String> reaching = new TreeSet<>();
         for (String each : reaching(referencesByClass(), Set.of(REPOSITORY_MODELS))) {
             if (each.endsWith("Test")) {
@@ -174,21 +177,56 @@ class EveryTestThatSweepsACorpusSaysWhatItClaimsTest {
                 "no test reaches " + REPOSITORY_MODELS + ", so the name is stale and this holds for a"
                         + " reason other than the one it states");
 
-        Set<String> tagged = new TreeSet<>();
+        Set<String> awaited = new TreeSet<>(reaching);
+        awaited.removeAll(deferred());
+        assertEquals(List.of(), List.copyOf(awaited),
+                "a test that reaches every model the repository carries is one a change waits on,"
+                        + " and each fork it is handed to compiles them all again: it is "
+                        + Nightly.class.getSimpleName() + ", or it stops reaching them");
+    }
+
+    /**
+     * A test that holds what the compiler answers against an answer written down here is asked in
+     * the run a change waits on.
+     *
+     * <p>The diff of the document is the whole mechanism: it is what the author of a change has to
+     * show, in the commit that moved the answer. Asked only at night, the answer is moved by a
+     * change whose author never saw it red, and the document is rewritten by somebody else. That
+     * is said in {@link CheckedInObservation} and is held here, because a sentence there is not
+     * something a run of the suite reads.
+     */
+    @Test
+    void aCheckedInObservationIsAskedWhereTheChangeIsMade() {
+        Set<String> observations = new TreeSet<>();
+        compiledTests().forEach((name, every) -> {
+            if (name.equals(outermost(name)) && claims(name).contains(CheckedInObservation.class)) {
+                observations.add(name.replace('/', '.'));
+            }
+        });
+        assertFalse(observations.isEmpty(),
+                "no test holds an answer checked in, so this walked nothing and would hold either way");
+
+        Set<String> deferred = new TreeSet<>(observations);
+        deferred.retainAll(deferred());
+        assertEquals(List.of(), List.copyOf(deferred),
+                "a test holding an answer checked in, asked only at night: the document would be"
+                        + " rewritten by somebody who did not make the change");
+    }
+
+    /** The tests deferred to the nightly run, by binary name, which are whole files. */
+    private static Set<String> deferred() {
+        Set<String> out = new TreeSet<>();
         compiledTests().forEach((name, every) -> {
             for (ClassModel each : every) {
                 each.findAttribute(Attributes.runtimeVisibleAnnotations()).ifPresent(annotations ->
                         annotations.annotations().forEach(annotation -> {
-                            if (annotation.className().stringValue()
-                                    .equals(READS_THE_REPOSITORYS_MODELS)) {
-                                tagged.add(name.replace('/', '.'));
+                            if (annotation.className().stringValue().equals(NIGHTLY)) {
+                                out.add(name.replace('/', '.'));
                             }
                         }));
             }
         });
-        assertEquals(List.copyOf(reaching), List.copyOf(tagged),
-                "the tests that reach the repository's models are the ones tagged "
-                        + ReadsTheRepositorysModels.class.getSimpleName());
+        return out;
     }
 
     /** The class one is written inside at the top of its file. */

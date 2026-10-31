@@ -86,7 +86,7 @@ class ACandidateTheWayPastAGuardLeavesNoRoomForIsNotBuiltTest {
         List<String> stopping = block.lines().filter(line -> line.contains("stops at the guard"))
                 .toList();
         assertFalse(stopping.isEmpty(), block);
-        assertTrue(stopping.stream().allMatch(line -> line.contains("`w.days=x < 17`")),
+        assertTrue(stopping.stream().allMatch(line -> line.contains("`w.days: x < 17 at w.days`")),
                 () -> "a row for a class of another field stopped at the guard: " + stopping);
         assertTrue(block.contains("many = 1, one = 0, days = 17"), block);
     }

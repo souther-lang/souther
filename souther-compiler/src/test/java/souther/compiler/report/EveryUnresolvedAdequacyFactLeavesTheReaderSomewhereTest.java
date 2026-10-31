@@ -4,7 +4,7 @@ import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
-import souther.test.ReadsTheRepositorysModels;
+import souther.test.Nightly;
 
 import org.junit.jupiter.api.Test;
 
@@ -35,9 +35,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * disposition worked out from a hand-made entry says the switch is total, which javac already
  * says; what it does not say is that the entries a real model produces reach the arms anybody
  * expected. Those are two claims and only the second can go wrong quietly.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
-@ReadsTheRepositorysModels
+@Nightly
 class EveryUnresolvedAdequacyFactLeavesTheReaderSomewhereTest {
 
     /**

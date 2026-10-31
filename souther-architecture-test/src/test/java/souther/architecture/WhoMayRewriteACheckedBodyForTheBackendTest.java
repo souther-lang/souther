@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * <p>{@code GrowingFold} is the one pass between checking and emission, in two halves: the builds
  * are made where the check answers, and the joins of two walks into one are made by the backend,
  * for the classes that record nothing. What either hands out is held to the typing a checked tree
- * is held to by {@code EveryTreeTheBackendIsHandedIsTypedTest} in {@code souther-compiler}. That
+ * is held to by {@code TheTreesOfAModelTheBackendIsHandedAreTypedTest} in {@code souther-compiler}. That
  * test reads what each of the queries below hands on — a behavior's body, and the definitions a
  * module's check emits — and the form the backend emits them in, because there is no one product
  * they all come out of. A method that rewrote a body somewhere else would hand the backend a tree
@@ -48,7 +48,7 @@ class WhoMayRewriteACheckedBodyForTheBackendTest {
     void everyMethodThatRewritesACheckedBodyIsOneTheContractReads() {
         assertEquals(REWRITING, new ArrayList<>(rewriting()),
                 "a class rewriting a checked body for the backend whose answer"
-                        + " EveryTreeTheBackendIsHandedIsTypedTest does not read");
+                        + " TheTreesOfAModelTheBackendIsHandedAreTypedTest does not read");
     }
 
     /** Every class outside the pass that calls into it. */

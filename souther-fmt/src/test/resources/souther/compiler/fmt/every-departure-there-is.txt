@@ -168,7 +168,7 @@ let (yes, no) = acc
         s
     )
 
-=== 752 | at no column at all | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_DESTRUCTURE / a group's own break at depth 2 and column 4
+=== 720 | at no column at all | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_DESTRUCTURE / a group's own break at depth 2 and column 4
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -180,8 +180,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
 let (_, out) = List.fold(
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-            (i + 1, mapped)
+            (i + 1, ys ++ [f(i, x)])
         },
         (0, []),
         xs
@@ -197,20 +196,25 @@ let x: Int = 1
     x
 }
 
-=== 744 | at no column at all | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_STMT / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 4 and column 12
+=== 1047 | at no column at all | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_STMT / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 4 and column 12
 module souther.list
 
-// `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
-// index of its own, so it threads one in a pair accumulator `(i, ys)` — the same tuple-accumulator
-// shape as `distinct`/`partition` below — and drops the counter at the end. It saves the caller from
-// hand-rolling that `(i, acc)` fold for a weighted sum or a positional transform (a check-digit
-// weighting reads `mapIndexed((i, c) -> w(i) * d(c)) |> sum`).
-let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
+// `zipShortest` pairs two lists element by element, and `unzip` takes the pairs apart again. The
+// pair a caller wants out of two parallel lists is a tuple, which Souther has, so these two cover
+// what Elm reaches `map2` for: `zipShortest(xs, ys) |> map(f)` is `map2(f, xs, ys)`.
+//
+// The name says what a length mismatch does, because languages disagree: Elm's `map2` truncates,
+// F#'s `List.zip` raises. This one truncates to the shorter list, and says so rather than leaving
+// the caller to find out. It walks `xs` with the same `(i, ys)` pair accumulator `mapIndexed` uses
+// and reads the partner with `List.get`, so a missing partner simply ends the pairing.
+let zipShortest (xs: List<'a>, ys: List<'b>): List<('a, 'b)> = {
     let (_, out) = List.fold(
         (acc, x) -> {
-            let (i, ys) = acc
-let mapped = ys ++ [f(i, x)]
-            (i + 1, mapped)
+            let (i, pairs) = acc
+let next = i + 1
+            match List.get(i, ys) with
+                | Some y -> (next, pairs ++ [(x, y)])
+                | None -> (next, pairs)
         },
         (0, []),
         xs
@@ -398,7 +402,7 @@ match List.get(i, ys) with
     out
 }
 
-=== 744 | at no column at all | MEMBERS_TAKE_LINES_OF_THEIR_OWN / TUPLE_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
+=== 712 | at no column at all | MEMBERS_TAKE_LINES_OF_THEIR_OWN / TUPLE_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -410,8 +414,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
     let (_, out) = List.fold(
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-(i + 1, mapped)
+(i + 1, ys ++ [f(i, x)])
         },
         (0, []),
         xs
@@ -978,7 +981,7 @@ let partition (keep: ('a) -> Bool, s: Set<'a>): (Set<'a>, Set<'a>) =
         s
     )
 
-=== 755 | one column back | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_DESTRUCTURE / a group's own break at depth 2 and column 4
+=== 723 | one column back | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_DESTRUCTURE / a group's own break at depth 2 and column 4
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -990,8 +993,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
    let (_, out) = List.fold(
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-            (i + 1, mapped)
+            (i + 1, ys ++ [f(i, x)])
         },
         (0, []),
         xs
@@ -1007,20 +1009,25 @@ let annotated (a: Int): Int = {
     x
 }
 
-=== 755 | one column back | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_STMT / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 4 and column 12
+=== 1058 | one column back | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_STMT / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 4 and column 12
 module souther.list
 
-// `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
-// index of its own, so it threads one in a pair accumulator `(i, ys)` — the same tuple-accumulator
-// shape as `distinct`/`partition` below — and drops the counter at the end. It saves the caller from
-// hand-rolling that `(i, acc)` fold for a weighted sum or a positional transform (a check-digit
-// weighting reads `mapIndexed((i, c) -> w(i) * d(c)) |> sum`).
-let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
+// `zipShortest` pairs two lists element by element, and `unzip` takes the pairs apart again. The
+// pair a caller wants out of two parallel lists is a tuple, which Souther has, so these two cover
+// what Elm reaches `map2` for: `zipShortest(xs, ys) |> map(f)` is `map2(f, xs, ys)`.
+//
+// The name says what a length mismatch does, because languages disagree: Elm's `map2` truncates,
+// F#'s `List.zip` raises. This one truncates to the shorter list, and says so rather than leaving
+// the caller to find out. It walks `xs` with the same `(i, ys)` pair accumulator `mapIndexed` uses
+// and reads the partner with `List.get`, so a missing partner simply ends the pairing.
+let zipShortest (xs: List<'a>, ys: List<'b>): List<('a, 'b)> = {
     let (_, out) = List.fold(
         (acc, x) -> {
-            let (i, ys) = acc
-           let mapped = ys ++ [f(i, x)]
-            (i + 1, mapped)
+            let (i, pairs) = acc
+           let next = i + 1
+            match List.get(i, ys) with
+                | Some y -> (next, pairs ++ [(x, y)])
+                | None -> (next, pairs)
         },
         (0, []),
         xs
@@ -1208,7 +1215,7 @@ let zipShortest (xs: List<'a>, ys: List<'b>): List<('a, 'b)> = {
     out
 }
 
-=== 755 | one column back | MEMBERS_TAKE_LINES_OF_THEIR_OWN / TUPLE_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
+=== 723 | one column back | MEMBERS_TAKE_LINES_OF_THEIR_OWN / TUPLE_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -1220,8 +1227,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
     let (_, out) = List.fold(
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-           (i + 1, mapped)
+           (i + 1, ys ++ [f(i, x)])
         },
         (0, []),
         xs
@@ -1926,7 +1932,7 @@ let partition (keep: ('a) -> Bool, s: Set<'a>): (Set<'a>, Set<'a>) =
         s
     )
 
-=== 757 | one column further in | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_DESTRUCTURE / a group's own break at depth 2 and column 4
+=== 725 | one column further in | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_DESTRUCTURE / a group's own break at depth 2 and column 4
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -1938,8 +1944,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
      let (_, out) = List.fold(
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-            (i + 1, mapped)
+            (i + 1, ys ++ [f(i, x)])
         },
         (0, []),
         xs
@@ -1955,20 +1960,25 @@ let annotated (a: Int): Int = {
     x
 }
 
-=== 757 | one column further in | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_STMT / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 4 and column 12
+=== 1060 | one column further in | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_STMT / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 4 and column 12
 module souther.list
 
-// `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
-// index of its own, so it threads one in a pair accumulator `(i, ys)` — the same tuple-accumulator
-// shape as `distinct`/`partition` below — and drops the counter at the end. It saves the caller from
-// hand-rolling that `(i, acc)` fold for a weighted sum or a positional transform (a check-digit
-// weighting reads `mapIndexed((i, c) -> w(i) * d(c)) |> sum`).
-let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
+// `zipShortest` pairs two lists element by element, and `unzip` takes the pairs apart again. The
+// pair a caller wants out of two parallel lists is a tuple, which Souther has, so these two cover
+// what Elm reaches `map2` for: `zipShortest(xs, ys) |> map(f)` is `map2(f, xs, ys)`.
+//
+// The name says what a length mismatch does, because languages disagree: Elm's `map2` truncates,
+// F#'s `List.zip` raises. This one truncates to the shorter list, and says so rather than leaving
+// the caller to find out. It walks `xs` with the same `(i, ys)` pair accumulator `mapIndexed` uses
+// and reads the partner with `List.get`, so a missing partner simply ends the pairing.
+let zipShortest (xs: List<'a>, ys: List<'b>): List<('a, 'b)> = {
     let (_, out) = List.fold(
         (acc, x) -> {
-            let (i, ys) = acc
-             let mapped = ys ++ [f(i, x)]
-            (i + 1, mapped)
+            let (i, pairs) = acc
+             let next = i + 1
+            match List.get(i, ys) with
+                | Some y -> (next, pairs ++ [(x, y)])
+                | None -> (next, pairs)
         },
         (0, []),
         xs
@@ -2156,7 +2166,7 @@ let zipShortest (xs: List<'a>, ys: List<'b>): List<('a, 'b)> = {
     out
 }
 
-=== 757 | one column further in | MEMBERS_TAKE_LINES_OF_THEIR_OWN / TUPLE_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
+=== 725 | one column further in | MEMBERS_TAKE_LINES_OF_THEIR_OWN / TUPLE_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -2168,8 +2178,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
     let (_, out) = List.fold(
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-             (i + 1, mapped)
+             (i + 1, ys ++ [f(i, x)])
         },
         (0, []),
         xs
@@ -2948,7 +2957,7 @@ let partition (keep: ('a) -> Bool, s: Set<'a>): (Set<'a>, Set<'a>) =
         s
     )
 
-=== 748 | run on into the next line | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_DESTRUCTURE / a group's own break at depth 2 and column 4
+=== 716 | run on into the next line | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_DESTRUCTURE / a group's own break at depth 2 and column 4
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -2959,8 +2968,7 @@ module souther.list
 let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
     let (_, out) = List.fold( (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-            (i + 1, mapped)
+            (i + 1, ys ++ [f(i, x)])
         },
         (0, []),
         xs
@@ -3163,7 +3171,7 @@ let zipShortest (xs: List<'a>, ys: List<'b>): List<('a, 'b)> = {
     out
 }
 
-=== 748 | run on into the next line | MEMBERS_TAKE_LINES_OF_THEIR_OWN / TUPLE_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
+=== 716 | run on into the next line | MEMBERS_TAKE_LINES_OF_THEIR_OWN / TUPLE_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -3175,8 +3183,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
     let (_, out) = List.fold(
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-            (i + 1, mapped) },
+            (i + 1, ys ++ [f(i, x)]) },
         (0, []),
         xs
     )
@@ -3874,7 +3881,7 @@ data N = Int
     invariant value >= 0
 
 
-=== 757 | with a blank line under it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_DESTRUCTURE / a group's own break at depth 2 and column 4
+=== 725 | with a blank line under it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_DESTRUCTURE / a group's own break at depth 2 and column 4
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -3887,8 +3894,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
 
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-            (i + 1, mapped)
+            (i + 1, ys ++ [f(i, x)])
         },
         (0, []),
         xs
@@ -4086,7 +4092,7 @@ let zipShortest (xs: List<'a>, ys: List<'b>): List<('a, 'b)> = {
     out
 }
 
-=== 757 | with a blank line under it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / TUPLE_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
+=== 725 | with a blank line under it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / TUPLE_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -4098,8 +4104,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
     let (_, out) = List.fold(
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-            (i + 1, mapped)
+            (i + 1, ys ++ [f(i, x)])
 
         },
         (0, []),
@@ -4187,7 +4192,7 @@ module souther.bool
 let not (b: Bool): Bool = if b then false else true
 
 
-=== 757 | with a blank line under it | NOTHING_SHARES_A_COMMENTS_LINE / FN_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
+=== 725 | with a blank line under it | NOTHING_SHARES_A_COMMENTS_LINE / FN_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -4200,8 +4205,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
     let (_, out) = List.fold(
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-            (i + 1, mapped)
+            (i + 1, ys ++ [f(i, x)])
         },
         (0, []),
         xs
@@ -4977,7 +4981,7 @@ let partition (keep: ('a) -> Bool, s: Set<'a>): (Set<'a>, Set<'a>) =
         s
     )
 
-=== 757 | with a space at the end of it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_DESTRUCTURE / a group's own break at depth 2 and column 4
+=== 725 | with a space at the end of it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_DESTRUCTURE / a group's own break at depth 2 and column 4
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -4989,8 +4993,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
     let (_, out) = List.fold( 
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-            (i + 1, mapped)
+            (i + 1, ys ++ [f(i, x)])
         },
         (0, []),
         xs
@@ -5006,20 +5009,25 @@ let annotated (a: Int): Int = {
     x
 }
 
-=== 757 | with a space at the end of it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_STMT / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 4 and column 12
+=== 1060 | with a space at the end of it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_STMT / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 4 and column 12
 module souther.list
 
-// `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
-// index of its own, so it threads one in a pair accumulator `(i, ys)` — the same tuple-accumulator
-// shape as `distinct`/`partition` below — and drops the counter at the end. It saves the caller from
-// hand-rolling that `(i, acc)` fold for a weighted sum or a positional transform (a check-digit
-// weighting reads `mapIndexed((i, c) -> w(i) * d(c)) |> sum`).
-let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
+// `zipShortest` pairs two lists element by element, and `unzip` takes the pairs apart again. The
+// pair a caller wants out of two parallel lists is a tuple, which Souther has, so these two cover
+// what Elm reaches `map2` for: `zipShortest(xs, ys) |> map(f)` is `map2(f, xs, ys)`.
+//
+// The name says what a length mismatch does, because languages disagree: Elm's `map2` truncates,
+// F#'s `List.zip` raises. This one truncates to the shorter list, and says so rather than leaving
+// the caller to find out. It walks `xs` with the same `(i, ys)` pair accumulator `mapIndexed` uses
+// and reads the partner with `List.get`, so a missing partner simply ends the pairing.
+let zipShortest (xs: List<'a>, ys: List<'b>): List<('a, 'b)> = {
     let (_, out) = List.fold(
         (acc, x) -> {
-            let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)] 
-            (i + 1, mapped)
+            let (i, pairs) = acc
+            let next = i + 1 
+            match List.get(i, ys) with
+                | Some y -> (next, pairs ++ [(x, y)])
+                | None -> (next, pairs)
         },
         (0, []),
         xs
@@ -5207,7 +5215,7 @@ let zipShortest (xs: List<'a>, ys: List<'b>): List<('a, 'b)> = {
     out
 }
 
-=== 757 | with a space at the end of it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / TUPLE_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
+=== 725 | with a space at the end of it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / TUPLE_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -5219,8 +5227,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
     let (_, out) = List.fold(
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-            (i + 1, mapped) 
+            (i + 1, ys ++ [f(i, x)]) 
         },
         (0, []),
         xs
@@ -6033,7 +6040,7 @@ let partition (keep: ('a) -> Bool, s: Set<'a>): (Set<'a>, Set<'a>) =
         s
     )
 
-=== 757 | with a space doubled in it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_DESTRUCTURE / a group's own break at depth 2 and column 4
+=== 725 | with a space doubled in it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_DESTRUCTURE / a group's own break at depth 2 and column 4
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -6045,8 +6052,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
     let  (_, out) = List.fold(
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-            (i + 1, mapped)
+            (i + 1, ys ++ [f(i, x)])
         },
         (0, []),
         xs
@@ -6062,20 +6068,25 @@ let annotated (a: Int): Int = {
     x
 }
 
-=== 757 | with a space doubled in it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_STMT / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 4 and column 12
+=== 1060 | with a space doubled in it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_STMT / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 4 and column 12
 module souther.list
 
-// `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
-// index of its own, so it threads one in a pair accumulator `(i, ys)` — the same tuple-accumulator
-// shape as `distinct`/`partition` below — and drops the counter at the end. It saves the caller from
-// hand-rolling that `(i, acc)` fold for a weighted sum or a positional transform (a check-digit
-// weighting reads `mapIndexed((i, c) -> w(i) * d(c)) |> sum`).
-let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
+// `zipShortest` pairs two lists element by element, and `unzip` takes the pairs apart again. The
+// pair a caller wants out of two parallel lists is a tuple, which Souther has, so these two cover
+// what Elm reaches `map2` for: `zipShortest(xs, ys) |> map(f)` is `map2(f, xs, ys)`.
+//
+// The name says what a length mismatch does, because languages disagree: Elm's `map2` truncates,
+// F#'s `List.zip` raises. This one truncates to the shorter list, and says so rather than leaving
+// the caller to find out. It walks `xs` with the same `(i, ys)` pair accumulator `mapIndexed` uses
+// and reads the partner with `List.get`, so a missing partner simply ends the pairing.
+let zipShortest (xs: List<'a>, ys: List<'b>): List<('a, 'b)> = {
     let (_, out) = List.fold(
         (acc, x) -> {
-            let (i, ys) = acc
-            let  mapped = ys ++ [f(i, x)]
-            (i + 1, mapped)
+            let (i, pairs) = acc
+            let  next = i + 1
+            match List.get(i, ys) with
+                | Some y -> (next, pairs ++ [(x, y)])
+                | None -> (next, pairs)
         },
         (0, []),
         xs
@@ -6253,7 +6264,7 @@ let zipShortest (xs: List<'a>, ys: List<'b>): List<('a, 'b)> = {
     out
 }
 
-=== 757 | with a space doubled in it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / TUPLE_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
+=== 725 | with a space doubled in it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / TUPLE_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -6265,8 +6276,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
     let (_, out) = List.fold(
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-            (i  + 1, mapped)
+            (i  + 1, ys ++ [f(i, x)])
         },
         (0, []),
         xs
@@ -6636,7 +6646,7 @@ let partition (keep: ('a) -> Bool, s: Set<'a>): (Set<'a>, Set<'a>) =
         s
     )
 
-=== 755 | with a space taken out of it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_DESTRUCTURE / a group's own break at depth 2 and column 4
+=== 723 | with a space taken out of it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / LET_DESTRUCTURE / a group's own break at depth 2 and column 4
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -6648,8 +6658,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
     let(_, out) = List.fold(
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-            (i + 1, mapped)
+            (i + 1, ys ++ [f(i, x)])
         },
         (0, []),
         xs
@@ -6801,7 +6810,7 @@ let groupBy (key: ('a) -> 'k, xs: List<'a>): Map<'k, List<'a>> =
         xs
     )
 
-=== 755 | with a space taken out of it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / TUPLE_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
+=== 723 | with a space taken out of it | MEMBERS_TAKE_LINES_OF_THEIR_OWN / TUPLE_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
 module souther.list
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
@@ -6813,8 +6822,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
     let (_, out) = List.fold(
         (acc, x) -> {
             let (i, ys) = acc
-            let mapped = ys ++ [f(i, x)]
-            (i+ 1, mapped)
+            (i+ 1, ys ++ [f(i, x)])
         },
         (0, []),
         xs
