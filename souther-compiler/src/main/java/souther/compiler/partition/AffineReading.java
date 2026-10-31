@@ -923,6 +923,26 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 return true;
             }
 
+            /**
+             * Whether working {@code node} out does no more than move a date at a place by a number
+             * of months written out and take the month it lands in, which the analysis that drew
+             * the lines reads as a remainder of that date's month. A run works out the months from
+             * year nought to the one the move lands in, and stops where that is past the calendar's
+             * first or last year: told as an operation of its own, which a row of a line gets past
+             * and a run stops in, unless the dates the place holds keep it within the calendar.
+             */
+            private boolean worksOutAMoveByMonths(Core node) {
+                UndividedByARelation.IntOperation landed = stoppedAt.landsInAMonth(node);
+                if (landed == null) {
+                    return false;
+                }
+                if (!UndividedByARelation.stopsNoRow(landed, ofTheInput)) {
+                    told.add(node, landed);
+                }
+                stoppedAt.worksOutTheFormItIsReadAs(node);
+                return true;
+            }
+
             /** The names read under {@code e} whose value is a bound value an operation of whole
              *  numbers can be over. */
             private void collectBoundValues(Core e, InputReads at, Set<Core> into) {
@@ -1103,6 +1123,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return new AffineForms.Leaf.Form<>(numbers);
                 }
                 if (stoppedAt == null) {
+                    if (keptAtAFigure == null) {
+                        keptAtAFigure = stoppedInTheDividend(node, at);
+                    }
                     return keptAtAFigure == null ? new AffineForms.Leaf.None<>()
                             : new AffineForms.Leaf.Stopped<>(keptAtAFigure);
                 }
@@ -1122,7 +1145,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         operandsOfTheQuotient(node, at);
                     } else if (!theStopIsAnsweredFor(node, at)
                             && !roundingWorkedOut(node, at, aside)
-                            && !worksOutADividendBesideTheRows(node, at)) {
+                            && !worksOutADividendBesideTheRows(node, at)
+                            && !worksOutAMoveByMonths(node)) {
                         told.exact = false;
                     }
                     if (aside.aChoice) {
@@ -1130,6 +1154,36 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     }
                 }
                 return new AffineForms.Leaf.Form<>(LinearForm.atom(aside.atom));
+            }
+
+            /**
+             * The stop at {@code node}, a floor remainder, that the reading of its dividend comes
+             * to — or null where it is no floor remainder or its dividend reads.
+             *
+             * <p>A remainder is a number the analysis that draws a line on it reads, of its
+             * dividend's form, so where the dividend has no form that analysis has none, for the
+             * dividend's reason: what an author would change is in the dividend. Said at the call,
+             * as an argument that stopped, as a dividend that stopped on arithmetic no form says
+             * already is.
+             */
+            private AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stoppedInTheDividend(
+                    Core node, InputReads at) {
+                if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)
+                        || call.args().size() != 2) {
+                    return null;
+                }
+                OptionalInt divisor = DefaultBoundOperationFacts.get()
+                        .divisorOfAFloorRemainder(call.operation());
+                if (divisor.isEmpty()) {
+                    return null;
+                }
+                Core dividend = call.args().get(1 - divisor.getAsInt());
+                return AffineForms.outcome(dividend, at, reading(ofTheInput,
+                        new LinkedHashSet<>(), met.copied(), told.apart()))
+                        instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stop
+                        ? new AffineForms.Outcome.StoppedAt<>(node, at,
+                                new AffineForms.Halt.AnArgumentStopped<>(stop))
+                        : null;
             }
 
             /**
@@ -2371,25 +2425,31 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * is told for where a run stops, and is nothing a row gets past. And
      * the value it reads an expression held aside as, where that is the value of a name
      * ({@code boundAs}, null where it is not): an operation over it is one over that value, which
-     * a relation over the value is asked to get past.
+     * a relation over the value is asked to get past. And those it reads as the month a date at a
+     * place lands in moved by months ({@code landsInAMonth} answers the count of months that
+     * move comes to, which a run stops at past the calendar): working one out works that count
+     * out and nothing else that may stop a run.
      */
     record WhatTheAnalysisAnswersFor(Predicate<Core> readAgain,
                                      Function<Core, Core> readByTheFormOf,
                                      Function<Core, Core> dividendBesideTheRows,
-                                     BiFunction<Core, InputReads, Quantity.OfABinding> boundAs) {
+                                     BiFunction<Core, InputReads, Quantity.OfABinding> boundAs,
+                                     Function<Core, UndividedByARelation.IntOperation>
+                                             landsInAMonth) {
 
-        static final WhatTheAnalysisAnswersFor NOTHING =
-                new WhatTheAnalysisAnswersFor(_ -> false, _ -> null, _ -> null, (_, _) -> null);
+        static final WhatTheAnalysisAnswersFor NOTHING = readingAgain(_ -> false);
 
         WhatTheAnalysisAnswersFor {
             Objects.requireNonNull(readAgain);
             Objects.requireNonNull(readByTheFormOf);
             Objects.requireNonNull(dividendBesideTheRows);
             Objects.requireNonNull(boundAs);
+            Objects.requireNonNull(landsInAMonth);
         }
 
         static WhatTheAnalysisAnswersFor readingAgain(Predicate<Core> readAgain) {
-            return new WhatTheAnalysisAnswersFor(readAgain, _ -> null, _ -> null, (_, _) -> null);
+            return new WhatTheAnalysisAnswersFor(readAgain, _ -> null, _ -> null, (_, _) -> null,
+                    _ -> null);
         }
     }
 
@@ -2577,6 +2637,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          *  reads it as none such. */
         Core dividendBesideTheRows(Core held) {
             return answersFor.dividendBesideTheRows().apply(held);
+        }
+
+        /** The count of months the move by months the analysis that drew the lines reads
+         *  {@code held} as the month of comes to, or null where it reads it as none. */
+        UndividedByARelation.IntOperation landsInAMonth(Core held) {
+            return answersFor.landsInAMonth().apply(held);
         }
 
         /** The same reading, holding {@code value} aside as the expression it stopped at: a name

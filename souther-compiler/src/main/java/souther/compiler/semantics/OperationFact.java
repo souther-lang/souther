@@ -119,6 +119,33 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers the date {@code months} calendar months on from the one at
+     * {@code date}. A date stands at the months from year nought to its own — twelve times what
+     * {@code year} answers of it, and what {@code month} answers less one — and the move lands in
+     * the month that count plus {@code months} stands at: the month is what {@code remainder}, the
+     * library's floor remainder, leaves of it by twelve, plus one.
+     *
+     * <p>Exactly, and not through a measure as a shift is: the year is that count floored by
+     * twelve, the day is the date's own or the last day of the month it lands in where that is
+     * shorter, and where that month is past the calendar the operation stops
+     * ({@code numeric.CalendarMonths}). How many days it moves a date by turns on the date, so
+     * nothing here is a count of days, and two moves are not the move by their sum.
+     */
+    record MovesADateByMonths(ArgumentRef months, ArgumentRef date,
+                              ValueName.Stdlib.Operation year, ValueName.Stdlib.Operation month,
+                              ValueName.Stdlib.Operation remainder)
+            implements OperationFact {
+
+        public MovesADateByMonths {
+            Objects.requireNonNull(months, "a move by months moves by some months");
+            Objects.requireNonNull(date, "and moves a date");
+            Objects.requireNonNull(year, "counted by the year it falls in");
+            Objects.requireNonNull(month, "and the month");
+            Objects.requireNonNull(remainder, "and lands in the month a remainder says");
+        }
+    }
+
+    /**
      * The operation answers how many whole units lie between its two arguments, counting forward
      * from {@code from} to {@code to}, where one unit is {@code perUnit} steps of the order the
      * arguments are counted on.

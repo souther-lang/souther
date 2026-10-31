@@ -321,6 +321,11 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.ShiftsBy.class);
     }
 
+    /** How {@code operation} moves a date by months, or null where it moves none so. */
+    public BoundOperationFact.MovesADateByMonths movesADateByMonths(ValueName operation) {
+        return one(BoundOperationFact.MovesADateByMonths.class, operation);
+    }
+
     /** How {@code operation} counts whole units between its two arguments, or null where it
      *  counts none. */
     public BoundOperationFact.CountsWholeUnitsBetween countsWholeUnitsBetween(

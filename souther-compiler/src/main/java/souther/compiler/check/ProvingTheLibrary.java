@@ -194,6 +194,7 @@ final class ProvingTheLibrary implements LibraryProofs {
             case BoundOperationFact.AnswersAFormOfItsArguments _ -> false;
             case BoundOperationFact.StatesTheOrderOfItsArguments _ -> false;
             case BoundOperationFact.ShiftsBy _ -> false;
+            case BoundOperationFact.MovesADateByMonths _ -> false;
             case BoundOperationFact.CountsWholeUnitsBetween _ -> false;
             case BoundOperationFact.CountsTheWholeUnitsOf _ -> false;
             case BoundOperationFact.RoundsToAStep _ -> false;

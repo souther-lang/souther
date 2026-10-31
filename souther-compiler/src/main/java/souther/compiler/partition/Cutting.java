@@ -1757,6 +1757,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  WhyUnread.NoWordsFor _, WhyUnread.NotProvedOfItsBody _,
                  WhyUnread.NoFormOfWhatItAnswers _,
                  WhyUnread.ANumberOfWhatAnOperationAnswers _,
+                 WhyUnread.ADateMovedByMonths _, WhyUnread.APartOfADateMovedByMonths _,
                  WhyUnread.CodePointsOfWhatAnOperationAnswers _,
                  WhyUnread.WhatARecursiveHelperAnswers _, WhyUnread.AtNoPosition _,
                  WhyUnread.NoMeasureOfItsSize _, WhyUnread.WhichElementARunStopsAt _ -> true;

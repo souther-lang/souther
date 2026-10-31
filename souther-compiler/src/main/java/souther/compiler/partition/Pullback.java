@@ -21,6 +21,7 @@ import souther.compiler.check.CallArguments;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.ClosureUses;
+import souther.compiler.check.DateMonthMoves;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
@@ -100,6 +101,7 @@ import souther.compiler.meaning.WhichCase;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.meaning.WrittenOfANode;
 import souther.compiler.meaning.ACarriedValue;
+import souther.compiler.numeric.CalendarMonths;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -1768,6 +1770,11 @@ final class Pullback {
          *  worked out, each with its dividend
          *  ({@link AffineReading.WhatTheAnalysisAnswersFor#dividendBesideTheRows}). */
         private final Map<Core, Core> dividendBesideTheRows = new IdentityHashMap<>();
+        /** The months a date at a place lands in moved by months, as the rule read them, each
+         *  with the count of months the move comes to
+         *  ({@link AffineReading.WhatTheAnalysisAnswersFor#landsInAMonth}). */
+        private final Map<Core, UndividedByARelation.IntOperation> landsInAMonth =
+                new IdentityHashMap<>();
         /** What each relation read under an arm of a choice works out, off the comparison read
          *  with the choice standing as that arm ({@link Pullback#tellWhatItWorksOut}). */
         private Map<Relation, UndividedByARelation.Working> relations;
@@ -1900,7 +1907,8 @@ final class Pullback {
                 readAgain == null ? _ -> false : readAgain,
                 held -> theRule.readByTheFormOf.get(Core.withoutStanding(held)),
                 held -> theRule.dividendBesideTheRows.get(Core.withoutStanding(held)),
-                this::boundValueOf));
+                this::boundValueOf,
+                held -> theRule.landsInAMonth.get(Core.withoutStanding(held))));
     }
 
     /**
@@ -9354,6 +9362,12 @@ final class Pullback {
                 if (remainder != null) {
                     return LinearForm.atom(remainder);
                 }
+                // The month a date moved by months lands in, which is a remainder of the month of
+                // the date moved.
+                LinearForm<Quantity> landedIn = monthAMoveLandsIn(node, at);
+                if (landedIn != null) {
+                    return landedIn;
+                }
                 // What two numbers of the input come to multiplied, where the arithmetic stopped at
                 // the product itself: one number, whichever factor was written first.
                 LinearForm<Quantity> product = productAt(node, at, inside);
@@ -11730,6 +11744,89 @@ final class Pullback {
     }
 
     /**
+     * The month a date moved by a number of months written out lands in, where {@code node} takes
+     * the month of such a date — or null where it takes none.
+     *
+     * <p>{@code Date.month(Date.addMonths(k, d))} is what {@code Date.month(d) - 1 + k} leaves by
+     * twelve, plus one, whatever year and day {@code d} has ({@link CalendarMonths#monthLandedIn}):
+     * a remainder of a number of the input, read as a remainder of a form is. So a comparison of
+     * it is a line on the remainder, and a row is a date whose month leaves it.
+     *
+     * <p>Only the month. The year a move lands in turns on the month as well as the year, and the
+     * day on how long the month it lands in is, and neither is read here.
+     *
+     * <p>A run works out the months from year nought to the one the move lands in, and stops past
+     * the calendar's first or last year. Of a date at a place that is a count over its year and
+     * its month, and is told as what working the month out works out
+     * ({@link Trial#landsInAMonth}); of a date moved first, which may stop a run as well, nothing
+     * is told, and the operations told are not every one.
+     */
+    private LinearForm<Quantity> monthAMoveLandsIn(Core node, InputReads at) {
+        if (!(AnOperationApplied.of(Core.withoutStanding(node)) instanceof AnOperationApplied taken)
+                || !(taken.operation() instanceof ValueName.Stdlib measure)
+                || taken.args().size() != 1) {
+            return null;
+        }
+        Symbols symbols = read.rules().symbols();
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        Denotation moved = at.standing(taken.args().getFirst(), symbols, newtypes);
+        DateMonthMoves.Step step = DateMonthMoves.stepOf(moved.value(),
+                each -> moved.at().folded(each, symbols, newtypes));
+        if (step == null || !measure.equals(step.law().month().operation())) {
+            return null;
+        }
+        NumericTerm month = InputNumber.takenOf(measure, step.date(), read.domain(), moved.at(),
+                read.rules());
+        if (month == null) {
+            return null;
+        }
+        UndividedByARelation.IntOperation count = monthsToWhereAMoveLands(step, month, moved.at());
+        if (count != null) {
+            trial().landsInAMonth.put(Core.withoutStanding(node), count);
+        }
+        long movedBy = Math.floorMod(Math.floorMod(step.months(), CalendarMonths.A_YEAR)
+                - CalendarMonths.FIRST, CalendarMonths.A_YEAR);
+        Quantity.RemainderOfADividend left = new Quantity.RemainderOfADividend(
+                step.law().remainder().operation(),
+                new LinearForm<>(ExactRatio.of(movedBy),
+                        Map.of(new DecisionAtom.OfTheInput(month), ExactRatio.ONE)),
+                BigInteger.valueOf(CalendarMonths.A_YEAR));
+        return new LinearForm<>(ExactRatio.of(CalendarMonths.FIRST), Map.of(left, ExactRatio.ONE));
+    }
+
+    /**
+     * The months from year nought to the one {@code step} lands in, as an operation a run stops
+     * at past the calendar: twelve times the year of the date moved, its month, and the months it
+     * is moved by less one, between the first month of the calendar's first year and the last of
+     * its last. Null where the date moved is no date at a place as it stands, which {@code month},
+     * the month of it, says.
+     */
+    private UndividedByARelation.IntOperation monthsToWhereAMoveLands(
+            DateMonthMoves.Step step, NumericTerm month, InputReads at) {
+        if (!(month instanceof NumericTerm.TakenOf ofTheDate)
+                || !ValueTransformation.NONE.equals(ofTheDate.transformation())
+                || !(step.law().year().operation() instanceof ValueName.Stdlib yearOf)) {
+            return null;
+        }
+        NumericTerm year = InputNumber.takenOf(yearOf, step.date(), read.domain(), at,
+                read.rules());
+        if (year == null) {
+            return null;
+        }
+        BigInteger aYear = BigInteger.valueOf(CalendarMonths.A_YEAR);
+        Map<NumericTerm, ExactRatio> weights = new LinkedHashMap<>();
+        weights.put(year, ExactRatio.of(aYear));
+        weights.put(month, ExactRatio.ONE);
+        return UndividedByARelation.IntOperation.overTheInput(
+                new LinearForm<>(ExactRatio.of(BigInteger.valueOf(step.months())
+                        .subtract(BigInteger.valueOf(CalendarMonths.FIRST))), weights),
+                BigInteger.valueOf(Year.MIN_VALUE).multiply(aYear),
+                BigInteger.valueOf(Year.MAX_VALUE).multiply(aYear).add(aYear)
+                        .subtract(BigInteger.ONE),
+                List.of());
+    }
+
+    /**
      * The remainder {@code division} leaves of a dividend over values read off bindings as well as
      * the input's numbers — or null where the dividend is no whole form of those.
      *
@@ -12961,10 +13058,48 @@ final class Pullback {
                 if (facts.takenAs(operation) != null && !applied.args().isEmpty()) {
                     yield noNumberOf(operation, applied.args().getFirst(), in);
                 }
-                yield new WhyUnread.NoFormOfWhatItAnswers(operation);
+                // A move by months is stated, and as where it lands in the calendar, which is no
+                // count of days.
+                if (facts.movesADateByMonths(operation) != null) {
+                    yield new WhyUnread.ADateMovedByMonths(operation);
+                }
+                WhyUnread ofTheDividend = whyTheDividendIsNoForm(e, in);
+                yield ofTheDividend != null ? ofTheDividend
+                        : new WhyUnread.NoFormOfWhatItAnswers(operation);
             }
             default -> new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
         };
+    }
+
+    /**
+     * Why {@code e}, a remainder by a written number, is no number here because its dividend is
+     * none — or null where it is no such remainder, or its dividend is a form this reads a
+     * remainder of or one over nothing that stopped.
+     *
+     * <p>A remainder is read of its dividend's form ({@link #remainderAt}), so where the dividend
+     * has none the reason is the dividend's, which is where an author would change it: why its
+     * reading stopped, or why a value the body worked out that it is made of is no number of the
+     * input. The same reason whether the dividend is written in the call or behind a name.
+     */
+    private WhyUnread whyTheDividendIsNoForm(Core e, InputReads in) {
+        RemainderOfAShiftedValue.OfADivision<InputReads> division =
+                RemainderOfAShiftedValue.ofADivision(e, in, sides());
+        if (division == null) {
+            return null;
+        }
+        switch (AffineForms.outcome(division.dividend(), division.at(), quantities())) {
+            case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
+                return noFormOf(stopped);
+            }
+            case AffineForms.Outcome.Composed<Quantity, InputReads>(LinearForm<Quantity> form) -> {
+                for (Quantity each : form.coefs().keySet()) {
+                    if (each instanceof Quantity.OfABinding bound && bound.madeOf().isPresent()) {
+                        return bound.madeOf().get();
+                    }
+                }
+                return null;
+            }
+        }
     }
 
     /**
@@ -12986,7 +13121,11 @@ final class Pullback {
             return new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
         }
         WhyUnread element = whyAnElementOfTheRunIsNoForm(measure, measured, reads);
-        return element != null ? element
+        if (element != null) {
+            return element;
+        }
+        return DefaultBoundOperationFacts.get().movesADateByMonths(madeBy) != null
+                ? new WhyUnread.APartOfADateMovedByMonths(measure, madeBy)
                 : new WhyUnread.ANumberOfWhatAnOperationAnswers(measure, madeBy);
     }
 

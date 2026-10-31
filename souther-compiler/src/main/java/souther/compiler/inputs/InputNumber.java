@@ -155,6 +155,27 @@ public final class InputNumber {
     }
 
     /**
+     * The number {@code measure} takes of {@code of}, which takes no argument beside it, as the
+     * term a call of it over {@code of} reads as — or null where {@code of} is no location and no
+     * value made of one that such a taking is read off.
+     *
+     * <p>For a reader holding the value a number is taken of and no call taking it: the month of a
+     * date a move by months is made of is the month of that date, whatever was written round it.
+     */
+    public static NumericTerm takenOf(ValueName.Stdlib measure, Core of, InputDomain inputs,
+                                      InputReads reads, RuleReadingSource source) {
+        TakenAs how = DefaultBoundOperationFacts.get().takenAs(measure);
+        if (how == null) {
+            return null;
+        }
+        NumericMeasures.Measured measured =
+                new NumericMeasures.Measured(measure, of, TakenArguments.NONE, how);
+        ObservationSource from = sourceOf(measured, reads, source);
+        return from == null ? null : NumericTerm.TakenOf.of(measure, from, TakenArguments.NONE,
+                inputs.typeAt(from.position(), source), source.inners(), source.symbols());
+    }
+
+    /**
      * The step of a coarser order that the value at a location falls in, where {@code e} is a call
      * of an operation counting whole units, or null where it is none.
      *

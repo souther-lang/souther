@@ -5894,6 +5894,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyUnread.ANumberOfWhatAnOperationAnswers(var measure, var madeBy) ->
                     "a comparison over " + measure.qualified() + " of what " + madeBy.qualified()
                             + " answers, which the library states no law of";
+            case WhyUnread.ADateMovedByMonths(var operation) -> "a comparison over what "
+                    + operation.qualified() + " answers, a date moved by months: how many days it"
+                    + " lands from the date it moves turns on the month, so it is no form of that"
+                    + " date, and the calendar's cases it could be are not projected onto the"
+                    + " input here";
+            case WhyUnread.APartOfADateMovedByMonths(var measure, var madeBy) ->
+                    "a comparison over " + measure.qualified() + " of what " + madeBy.qualified()
+                            + " answers, which moves a date by months and is read here only for"
+                            + " the month a date at a place lands in";
             case WhyUnread.CodePointsOfWhatAnOperationAnswers(var madeBy) -> "a comparison over"
                     + " how many code points of a class what " + madeBy.qualified() + " answers"
                     + " holds, which the library states no law of";
@@ -6769,6 +6778,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case WhyUnread.NoWordsFor _ -> "no_words_for_what_it_comes_to";
                     case WhyUnread.NotProvedOfItsBody _ -> "not_proved_of_its_body";
                     case WhyUnread.NoFormOfWhatItAnswers _ -> "no_form_of_what_it_answers";
+                    case WhyUnread.ADateMovedByMonths _ -> "date_moved_by_months";
+                    case WhyUnread.APartOfADateMovedByMonths _ ->
+                            "part_of_a_date_moved_by_months";
                     // A count of code points is a number of what the operation answered, and the
                     // document's word for it is that one.
                     case WhyUnread.ANumberOfWhatAnOperationAnswers _,
