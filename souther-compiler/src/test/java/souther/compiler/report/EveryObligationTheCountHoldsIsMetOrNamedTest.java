@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import souther.compiler.diag.SourceRendering;
 import souther.test.ClosedWorldContract;
+import souther.test.Nightly;
 import souther.test.ReadsTheRepositorysModels;
 import org.junit.jupiter.api.Test;
 
@@ -43,8 +44,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Every arm is populated before anything is asserted about it. A law over three states two of
  * which no source reaches is a law that passes by not applying, and the counts below are what says
  * it does apply.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
+@Nightly
 @ReadsTheRepositorysModels
 class EveryObligationTheCountHoldsIsMetOrNamedTest {
 

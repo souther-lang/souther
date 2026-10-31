@@ -12,9 +12,9 @@ import java.lang.annotation.Target;
  *
  * <p>Reading them costs compiling them, which is done once for a JVM and shared by every class in it
  * ({@code RepositoryModels}). A run hands classes to its forks one at a time, so readers handed to
- * several forks compile the models once in each. The tag is what lets a run keep them together: the
- * runners a change waits on that spread the compiler's tests over forks leave these out, and one
- * runner asks them in a single fork.
+ * several forks compile the models once in each. The tag is what lets a run ask them together, in
+ * one fork, by naming it; the tests that read the models are deferred to the nightly run
+ * ({@link Nightly}), so no runner a change waits on reads them.
  *
  * <p>Said by what the test reaches and not chosen. A test that reaches the models carries this, and
  * no other does — {@code EveryTestThatSweepsACorpusSaysWhatItClaimsTest} asks both — so it says

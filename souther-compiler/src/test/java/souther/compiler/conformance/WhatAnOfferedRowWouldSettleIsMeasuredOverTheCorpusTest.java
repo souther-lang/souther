@@ -9,6 +9,7 @@ import souther.compiler.query.RowKey;
 import souther.compiler.query.Settlement;
 import souther.compiler.query.Settlements;
 import souther.test.ClosedWorldContract;
+import souther.test.Nightly;
 import souther.test.ReadsTheRepositorysModels;
 
 import java.util.LinkedHashSet;
@@ -43,8 +44,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * row nothing watched run, and a row whose values could not be read at the point, are offered and
  * come back {@code Undetermined} here. Strengthening the assertion to {@code Settles} would be
  * asserting something nothing establishes.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
+@Nightly
 @ReadsTheRepositorysModels
 class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
 

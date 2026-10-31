@@ -11,6 +11,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.types.TypeSymbols;
 import souther.test.ClosedWorldContract;
+import souther.test.Nightly;
 import souther.test.ReadsTheRepositorysModels;
 
 import org.junit.jupiter.api.Test;
@@ -47,8 +48,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * module in each of the ways a class can: calling a behavior by name, building a stage, holding a
  * dependency, reading a field, reading a published value, taking an answer apart through a bridge
  * case.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
+@Nightly
 @ReadsTheRepositorysModels
 class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
 

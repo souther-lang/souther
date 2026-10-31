@@ -93,7 +93,11 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
     /** Two values in the middle, one of them shown. */
     private static final Shape THE_MIDDLE_SHOWN_ONE = new Shape(0, 1, 1, 1);
 
-    /** Every shape a term may have but the full one. */
+    /**
+     * Every shape a term may have but the full one: what it may hold, and what it is shown to take
+     * of that, are two ranges, and these differ in each — held anywhere and shown at an end, held
+     * at the end alone, held in the middle and shown in all of it or in part.
+     */
     private static final List<Shape> NARROWER =
             List.of(SHOWN_ONE, ONLY_THE_END, THE_MIDDLE, THE_MIDDLE_SHOWN_ONE);
 
@@ -243,6 +247,18 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
             new Program("(a + 1) - 1 >= b", List.of(1, -1),
                     List.of(sum(1, "a", 1), sum(0, "a", 1)), true));
 
+    /** The constants a relation is asked against. */
+    private static final List<Integer> CONSTANTS_ASKED = List.of(-3, -2, -1, 0, 1, 2, 3);
+
+    /**
+     * The values a constant and a third term held still are asked at. Where a sum of them with a
+     * term lands against the ends of the type is what changes the answer, so these are the ends,
+     * the values one in from each end, and the values on either side of nought, where the sum
+     * leaves the type on the other side.
+     */
+    private static final List<Integer> VALUES_ASKED =
+            List.of(LEAST, LEAST + 1, -1, 0, 1, GREATEST - 1, GREATEST);
+
     /** Every relation, the equalities among them: two terms compared with each other and nothing
      *  added are asked of a witness only for those. */
     private static final List<Rel> RELATIONS =
@@ -256,7 +272,7 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
     void whatIsSaidOfATermIsTrueOfEveryRowThatGetsPastTheOperations() {
         for (Program program : PROGRAMS) {
             for (Shape taken : TAKEN) {
-                for (int constant = -3; constant <= 3; constant++) {
+                for (int constant : CONSTANTS_ASKED) {
                     for (Rel relation : RELATIONS) {
                         for (int at = 0; at < program.weights().size(); at++) {
                             check(program, program.sums(), constant, relation, at, taken);
@@ -298,7 +314,7 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
             }
             for (List<Shape> shapes : PAIRS) {
                 for (List<OnTheDifference> statements : STATEMENTS) {
-                    for (int constant = -3; constant <= 3; constant++) {
+                    for (int constant : CONSTANTS_ASKED) {
                         for (Rel relation : RELATIONS) {
                             for (int at = 0; at < 2; at++) {
                                 List<Term<String>> terms = termsOf(program, shapes);
@@ -332,6 +348,9 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
      * <p>Not asked of a program no reading was made of: it is taken to add the form up with the
      * sizes symmetric about nought, which leave out the least value of the type, and what is
      * said of it is that approximation and not a claim about the rows.
+     *
+     * <p>Asked at the values where the type's ends and nought decide it, and of the shapes that
+     * tell which of the two terms is the narrow one.
      */
     @Test
     void whatIsSaidOfTwoTermsWithAThirdHeldStillIsTrueOfEveryRowWithTheThirdThere() {
@@ -346,10 +365,10 @@ class WhatTheOperationsOfARelationAreToldNeverSettlesAValueARowThatGetsPastThemB
             // large as the type is.
             for (List<Shape> shapes : PAIRS) {
                 List<Term<String>> all = termsOf(program, shapesOf(program, shapes));
-                for (int constant = LEAST; constant <= GREATEST; constant++) {
+                for (int constant : VALUES_ASKED) {
                     boolean sizesAreRowsComputed =
                             operations.theSizesAreRowsComputed(all, ExactRatio.of(constant));
-                    for (int held = LEAST; held <= GREATEST; held++) {
+                    for (int held : VALUES_ASKED) {
                         Beside beside = new Beside(List.of(ExactRatio.of(constant),
                                 program.weightOf(2).times(ExactRatio.of(held)).orNull()));
                         for (Rel relation : RELATIONS) {

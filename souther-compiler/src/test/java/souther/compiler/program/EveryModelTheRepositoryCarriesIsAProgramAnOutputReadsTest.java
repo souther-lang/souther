@@ -4,6 +4,7 @@ import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.diag.CompileException;
 import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
+import souther.test.Nightly;
 import souther.test.ReadsTheRepositorysModels;
 
 import org.junit.jupiter.api.Test;
@@ -28,8 +29,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Taken from the compilations {@link RepositoryModels} already answered, through the assembler's
  * entry for a compilation in hand, which asks the same verdict and makes the same snapshot as the
  * entry an output calls with sources.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
+@Nightly
 @ReadsTheRepositorysModels
 class EveryModelTheRepositoryCarriesIsAProgramAnOutputReadsTest {
 

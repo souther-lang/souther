@@ -16,6 +16,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.test.ClosedWorldContract;
+import souther.test.Nightly;
 import souther.test.ReadsTheRepositorysModels;
 
 import java.util.ArrayList;
@@ -40,8 +41,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * failure here rather than a line in a report nobody looked at: the day one turns up, somebody comes
  * and decides what a reader should be told about it. So a shorter list is a failure as much as a
  * longer one.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
+@Nightly
 @ReadsTheRepositorysModels
 class NoRuleIsPlacedWhereNothingAccountsForItTest {
 

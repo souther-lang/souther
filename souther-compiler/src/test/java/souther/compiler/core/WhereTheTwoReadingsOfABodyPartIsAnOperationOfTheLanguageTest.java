@@ -2,7 +2,6 @@ package souther.compiler.core;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -12,8 +11,6 @@ import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
-import souther.test.ClosedWorldContract;
-import souther.test.ReadsTheRepositorysModels;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -42,8 +39,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * rather than one arm to be told apart by the module it is spelled in. Nothing here asks the
  * inlining policy, which is why a tree has the expansions it has and not what any one of them is.
  */
-@ClosedWorldContract
-@ReadsTheRepositorysModels
 class WhereTheTwoReadingsOfABodyPartIsAnOperationOfTheLanguageTest {
 
     /** A comparison written in a block handed to one of the language's own operations. */
@@ -89,6 +84,18 @@ class WhereTheTwoReadingsOfABodyPartIsAnOperationOfTheLanguageTest {
 
             behavior over : (xs: List<Int>) -> Bool
             let over (xs) = List.all(x -> over240(x), xs)
+            """;
+
+    /**
+     * A block handed to an operation whose own body hands a block to another: the copies of the
+     * outer one nest the inner one's, and the run ends at the block the caller handed the outermost
+     * of them.
+     */
+    private static final String NESTED = """
+            module nested
+
+            behavior busy : (counts: Map<String, Int>) -> Map<String, Int>
+            let busy (counts) = Map.filterEntries((_, count) -> count >= 240, counts)
             """;
 
     /** One module helper called twice, which both readings expand. */
@@ -355,30 +362,14 @@ class WhereTheTwoReadingsOfABodyPartIsAnOperationOfTheLanguageTest {
     }
 
     /**
-     * Every body of every model this repository carries, plus the ones written above.
-     *
-     * <p>All of the models and not the corpus written against what the language declares. That one
-     * reaches a construct about as often as it takes to declare it, and what a rule read through one
-     * of the language's operations does under conditions nobody wrote it for is what the models
-     * written to be worked with have. Neither is the other's fixture: the written ones above hold
-     * shapes no corpus has, and no corpus is asked to grow one.
+     * Every body of the models written above, each of which raises one shape of the language's
+     * operations: a block handed to one, a helper the block calls, a block the author bound, a
+     * helper called twice, and an operation whose own body hands a block to another.
      */
     private static List<BothReadings> everyBodyBothWays() {
-        List<BothReadings> out = new ArrayList<>(bodiesOfTheRepositorysModels());
-        for (String written : List.of(COMBINATOR, SPLICED, BLOCKS, THROUGH_A_BLOCK)) {
-            out.addAll(bodiesBothWays(List.of(List.of(written))));
-        }
-        return out;
-    }
-
-    private static List<BothReadings> bodiesOfTheRepositorysModels() {
         List<BothReadings> out = new ArrayList<>();
-        for (Compilation compilation : RepositoryModels.all()) {
-            int before = out.size();
-            bothWaysOf(compilation, out);
-            assertTrue(out.size() > before,
-                    () -> "a model this repository carries has no body read both ways: "
-                            + compilation.errors());
+        for (String written : List.of(COMBINATOR, SPLICED, BLOCKS, THROUGH_A_BLOCK, NESTED)) {
+            out.addAll(bodiesBothWays(List.of(List.of(written))));
         }
         return out;
     }

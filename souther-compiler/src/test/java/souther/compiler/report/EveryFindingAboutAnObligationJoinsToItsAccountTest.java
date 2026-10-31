@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import souther.compiler.diag.SourceRendering;
 import souther.test.ClosedWorldContract;
+import souther.test.Nightly;
 import souther.test.ReadsTheRepositorysModels;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -46,8 +47,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * and a finding that names none under one word, and a consumer acting on the second has nothing to
  * look up. That is what the second test below refuses. It was false when it was written: the two
  * kinds it would have caught are the ones this class now reaches on purpose.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
+@Nightly
 @ReadsTheRepositorysModels
 class EveryFindingAboutAnObligationJoinsToItsAccountTest {
 

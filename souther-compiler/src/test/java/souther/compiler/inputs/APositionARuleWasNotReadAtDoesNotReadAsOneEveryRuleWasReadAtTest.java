@@ -9,6 +9,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Answer;
 import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
+import souther.test.Nightly;
 import souther.test.ReadsTheRepositorysModels;
 
 import java.util.ArrayList;
@@ -33,8 +34,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * this holds for every position carrying the other kind and says nothing about the rest — which is
  * why the population here is every position of every model this repository carries, and the reason
  * is read off the finding rather than looked for in one place.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
+@Nightly
 @ReadsTheRepositorysModels
 class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
 
