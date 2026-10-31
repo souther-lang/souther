@@ -162,7 +162,9 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
     /**
      * Whether every operation of {@code all} that reads {@code asked} reads another term with it
      * and has room at every number ({@link #roomsOf}). A run with no end on a side is asked at the
-     * edge of what is built for such operations: the room is the same there as at any number.
+     * edge of what is built for such operations: the room is the same there as at any number. An
+     * operation reading the term alone has room by the scale the term is written at, which the far
+     * side of a run with no end does not say, and is not taken here.
      */
     static boolean everyOperationReadingItHasRoomAtEveryNumber(List<DecimalOperation> all,
                                                                Object asked) {
@@ -194,32 +196,42 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
     }
 
     /**
-     * Whether {@code next}, told after {@code told}, leaves what its operations complete at to the
-     * numbers and not to how a total is written. A total is worked out as the sum of a list a row
-     * holds, and a list is no one thing: the same number is the sum of lists of elements written
-     * at any scale, so a total's scale is not a fact of its number. An operation worked out of a
-     * total, directly or through those told before, is therefore told only where its room does not
-     * turn on that scale: its operands and its answer are kept to what is shown room for. One that
-     * is not (a factor at the edge of the scale range has room for a total at one scale and none
-     * at the next) is not told, and no row is shown to get past it.
+     * Whether what {@code all} complete at is left to the numbers and not to how a total is
+     * written. A total is worked out as the sum of a list a row holds, and a list is no one thing:
+     * the same number is the sum of lists of elements written at any scale, so a total's scale is
+     * not a fact of its number. An operation worked out of a total, directly or through those
+     * before it, is therefore worked out on a row only where its room does not turn on that scale:
+     * its operands and its answer are kept to what is shown room for. One that is not (a factor at
+     * the edge of the scale range has room for a total at one scale and none at the next) is
+     * completed at no row, whichever representative of the total a row is worked out with.
      */
-    public static boolean leavesNoCompletionToHowATotalIsWritten(List<DecimalOperation> told,
-                                                                 DecimalOperation next) {
-        boolean[] dependsOnATotal = new boolean[told.size() + 1];
-        List<DecimalOperation> all = new ArrayList<>(told);
-        all.add(next);
+    static boolean leavesNoCompletionToHowATotalIsWritten(List<DecimalOperation> all) {
+        if (all.stream().noneMatch(each -> each.operands.stream().anyMatch(Total.class::isInstance))) {
+            return true;
+        }
+        boolean[] dependsOnATotal = new boolean[all.size()];
+        boolean any = false;
         for (int i = 0; i < all.size(); i++) {
             for (Operand operand : all.get(i).operands) {
                 dependsOnATotal[i] |= operand instanceof Total
                         || (operand instanceof Worked worked && worked.operation() < i
                         && dependsOnATotal[worked.operation()]);
             }
+            any |= dependsOnATotal[i];
         }
-        if (!dependsOnATotal[told.size()]) {
+        if (!any) {
             return true;
         }
         Rooms rooms = roomsOf(all);
-        return rooms != null && rooms.bounded().get(told.size());
+        if (rooms == null) {
+            return false;
+        }
+        for (int i = 0; i < all.size(); i++) {
+            if (dependsOnATotal[i] && !rooms.bounded().get(i)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -338,8 +350,9 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * scale: it is no fact of the number. So a total is told only to operations whose room does
      * not turn on it ({@link #leavesNoCompletionToHowATotalIsWritten}), and is worked out here at
      * the fewest places the number is written with, as a place of the input is. That stands for
-     * a total of a row whose elements are built at no more places than a row is built at, as
-     * theirs are.
+     * a total of a row because the elements of a list a row is built with are written at no more
+     * places than the total, the ends of the elements' range, or one, whichever is greatest, so
+     * the list's scale stays within what rows are built at and far inside what room is shown for.
      *
      * @param term the key of the total, as {@link Formed} keys its places
      */
@@ -372,11 +385,17 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
     /**
      * Whether every operation of {@code all} is worked out on a row whose terms stand at
      * {@code values}, each by its key, in the order they are told — and so whether a run that
-     * works them out gets past them. False where an operand is a number the row does not have.
+     * works them out gets past them. False where an operand is a number the row does not have,
+     * and where an operation's room turns on how a total is written
+     * ({@link #leavesNoCompletionToHowATotalIsWritten}): a row has a representative of a total,
+     * and an operation it is no fact of is not shown worked out on it.
      */
     public static boolean allCompleteAt(List<DecimalOperation> all, Map<Object, ExactRatio> values) {
         if (all.isEmpty()) {
             return true;
+        }
+        if (!leavesNoCompletionToHowATotalIsWritten(all)) {
+            return false;
         }
         BigDecimal[] results = new BigDecimal[all.size()];
         for (int i = 0; i < all.size(); i++) {

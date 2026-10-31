@@ -1969,10 +1969,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
             }
             DecimalOperation told = new DecimalOperation(binary.op(), over, after);
-            // A total's scale is that of the list it is the sum of, which its number does not say.
-            if (!DecimalOperation.leavesNoCompletionToHowATotalIsWritten(decimals, told)) {
-                return false;
-            }
             int at = decimals.indexOf(told);
             if (at < 0) {
                 at = decimals.size();
@@ -2006,7 +2002,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
 
         /** The term {@code form} is, where it is the total of the decimals a container holds or
-         *  of one path inside each element, added as they are; null where it is anything else. */
+         *  of one path inside each element, added as they are; null where it is anything else.
+         *  The scale of such a total is that of the elements, which a row writes at the places of
+         *  the total: a total of products has the sum of the scales of their factors, which
+         *  {@link DecimalOperation.Total} does not bound. */
         private static NumericTerm aPlainTotal(LinearForm<NumericTerm> form) {
             if (form.coefs().size() != 1 || !form.constant().isZero()) {
                 return null;

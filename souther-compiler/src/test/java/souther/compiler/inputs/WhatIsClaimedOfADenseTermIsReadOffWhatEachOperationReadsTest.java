@@ -50,9 +50,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <li>an operation reading the term asked of and nothing else has room at a number or has none,
  * whichever other term is put where;
  * <li>an operation reading it with another term has room by what the other is put at, which is no
- * fact about the number, and nothing is claimed, unless every place of the input it is worked out
- * of is weighed by whole numbers and the scales it is worked out at are kept to what room is shown
- * for: it then has room at every pair of numbers a row is built at;
+ * fact about the number, and nothing is claimed, unless every operand is a decimal wherever there
+ * is a row (a place of the input as it stands, a total, a literal) and the scales it is worked out
+ * at are kept to what room is shown for: it then has room at every pair of numbers a row is built
+ * at;
  * <li>an operation reading the term put beside it is worked out over numbers chosen at no more than
  * the places a row is built at, and has room for all of them or not.
  * </ul>
@@ -444,7 +445,7 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
     /** Each operand is built at no more places than a row is built at, so the sum has room
      *  whatever the two are put at. */
     @Test
-    void anOperationReadingBothTermsWeighedByWholeNumbersIsClaimedOver() {
+    void anOperationReadingBothTermsAsTheyStandIsClaimedOver() {
         DecimalOperation together = sum(H, S);
         assertInstanceOf(Leaves.Settled.class, left(0, together));
         assertInstanceOf(Leaves.Settled.class, left(1, together));
@@ -516,21 +517,24 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
         Total total = new Total("t");
         DecimalOperation minusTheTotal = new DecimalOperation(BinOp.SUB, List.of(H, total),
                 List.of());
-        assertTrue(DecimalOperation.leavesNoCompletionToHowATotalIsWritten(List.of(),
-                minusTheTotal));
+        Map<Object, ExactRatio> four = Map.of("t", ExactRatio.of(4), "h", ExactRatio.ONE);
+        assertTrue(DecimalOperation.leavesNoCompletionToHowATotalIsWritten(List.of(minusTheTotal)));
+        assertTrue(DecimalOperation.allCompleteAt(List.of(minusTheTotal), four));
+        // A representative of the total at scale nought would complete, and is not asked.
         DecimalOperation againstTheFloor = new DecimalOperation(BinOp.MUL,
                 List.of(new Written(AT_THE_FLOOR), total), List.of());
-        assertFalse(DecimalOperation.leavesNoCompletionToHowATotalIsWritten(List.of(),
-                againstTheFloor));
+        assertFalse(DecimalOperation.leavesNoCompletionToHowATotalIsWritten(
+                List.of(againstTheFloor)));
+        assertFalse(DecimalOperation.allCompleteAt(List.of(againstTheFloor), four));
+        // And through an operation before it.
         DecimalOperation plusOne = sum(total, new Written(BigDecimal.ONE));
         DecimalOperation thenTheFloor = new DecimalOperation(BinOp.MUL,
                 List.of(new Worked(0), new Written(AT_THE_FLOOR)), List.of(0));
-        assertTrue(DecimalOperation.leavesNoCompletionToHowATotalIsWritten(List.of(), plusOne));
-        assertFalse(DecimalOperation.leavesNoCompletionToHowATotalIsWritten(List.of(plusOne),
-                thenTheFloor));
+        assertTrue(DecimalOperation.allCompleteAt(List.of(plusOne), four));
+        assertFalse(DecimalOperation.allCompleteAt(List.of(plusOne, thenTheFloor), four));
         // The same factor against a place says nothing of a total.
-        assertTrue(DecimalOperation.leavesNoCompletionToHowATotalIsWritten(List.of(plusOne),
-                product(H, new Written(AT_THE_FLOOR))));
+        DecimalOperation placeAgainstTheFloor = product(H, new Written(AT_THE_FLOOR));
+        assertTrue(DecimalOperation.allCompleteAt(List.of(plusOne, placeAgainstTheFloor), four));
     }
 
     /** A total is worked out at the fewest places its number is written with. */
