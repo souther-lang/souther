@@ -31,15 +31,9 @@ class TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest {
 
             data Yen = Int
                 invariant value >= 0
-            data Pay = { a: Yen, b: Yen, c: Yen, d: Yen, e: Yen }
-                invariant a.value <= 1000000000000
-                invariant b.value <= 1000000000000
-                invariant c.value <= 1000000000000
-                invariant d.value <= 1000000000000
-                invariant e.value <= 1000000000000
             data Days = Int
                 invariant value >= 0 && value <= 31
-            data Month = { days: Days, pay: Pay }
+            data Month = { days: Days, pay: Yen }
             data Window = { first: Month, second: Month, third: Month }
             data Row = { grade: Int, lowerBound: Yen, upperBound: Yen }
             data Decision = { grade: Int }
@@ -47,13 +41,12 @@ class TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest {
             """;
 
     private static final String TAIL = """
-            let totalOf (p: Pay): Yen = p.a + p.b + p.c + p.d + p.e
             let monthsOf (w: Window): List<Month> = [ w.first, w.second, w.third ]
             let payableOf (w: Window): List<Month> =
                 List.filter(r -> r.days >= 17, monthsOf(w))
             let averageOf (records: List<Month>): Yen =
                 Yen(Rational.toInt(DOWN,
-                    List.sum(List.map(r -> totalOf(r.pay).value, records))
+                    List.sum(List.map(r -> r.pay.value, records))
                     / List.length(records)))
 
             behavior f : (w: Window) -> Decision | NoPayable
