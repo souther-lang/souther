@@ -982,7 +982,7 @@ public final class NumericDomain<A> {
         FormReach<A> had = reach;
         if (had == null) {
             ClosedState<A> state = closed();
-            had = FormReach.over(rules(), state.box(), state.differences(), order,
+            had = FormReach.over(rules(), state.sided(), state.box(), state.differences(), order,
                     closedStates.walksIn(order));
             reach = had;
         }
