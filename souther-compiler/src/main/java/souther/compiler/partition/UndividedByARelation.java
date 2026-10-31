@@ -1330,7 +1330,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>Each pair worked out once. A reader asks which terms are free of every other for each
      * term it reads and each relation it is asked, so the same pair is asked as many times as
-     * there are terms and relations, and the answer is the same each time.
+     * there are terms and relations, and the answer is the same each time. Held as two bits a
+     * pair, whether it was worked out and what it came to: each term asked of is asked beside
+     * every other, and the terms are those of the one relation.
      */
     private WhatARelationLeavesUndivided.Independence apartOnTheWay(List<OnAWay> conditions,
                                                                    List<Source> sources,
@@ -1341,15 +1343,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (int i = 0; i < sides.size(); i++) {
             tiedTo.add(tiedTo(i, tied, conditions, sources, read, ignoring));
         }
-        Boolean[][] apart = new Boolean[sides.size()][sides.size()];
+        int count = sides.size();
+        BitSet worked = new BitSet(count * count);
+        BitSet apart = new BitSet(count * count);
         return (one, other) -> {
-            Boolean known = apart[one][other];
-            if (known == null) {
-                known = apartByTheDeclarations(one, other, sources, read, ignoring)
-                        && Collections.disjoint(tiedTo.get(one), tiedTo.get(other));
-                apart[one][other] = known;
+            int pair = one * count + other;
+            if (!worked.get(pair)) {
+                apart.set(pair, apartByTheDeclarations(one, other, sources, read, ignoring)
+                        && Collections.disjoint(tiedTo.get(one), tiedTo.get(other)));
+                worked.set(pair);
             }
-            return known;
+            return apart.get(pair);
         };
     }
 
