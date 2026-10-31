@@ -1,6 +1,7 @@
 package souther.compiler.report;
 
 import souther.compiler.observe.Figure;
+import souther.compiler.observe.RowRef;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.BodyDistinction;
 import souther.compiler.query.NotMeasuredReason;
@@ -87,7 +88,8 @@ public sealed interface ReaderDisposition {
     /**
      * What a measure went without, in the word this document has for it.
      *
-     * <p>For everything a weakening names that is neither a rule nor a fork nor an arm: a module
+     * <p>For everything a weakening names that is neither a rule nor a fork nor an arm, nor rows
+     * whose case could not be read ({@link WriteTheCaseOutIn}): a module
      * whose bodies were not made, a behavior whose boundary nothing worked out, a source nothing
      * was observed from. There is no rule to send a reader to at any of them, and an arm that said
      * there was would be naming a thing the fact never carried.
@@ -104,6 +106,27 @@ public sealed interface ReaderDisposition {
      */
     record LookAtWhyNothingWasMeasured(Subject subject, NotMeasuredReason why)
             implements ReaderDisposition {}
+
+    /**
+     * The rows whose case could not be read, which is what to write differently.
+     *
+     * <p>An operation and not a judgement: a row naming its case where it writes the value is read,
+     * and the case it covers is then counted. A row writing a helper's answer at an input, or
+     * owing its answer, is no worse a row for that; it is that nothing here can say which case it
+     * is, while a case is left that only it may cover.
+     *
+     * @param unread which rows, never empty, in the order they were read
+     */
+    record WriteTheCaseOutIn(Subject subject, List<RowRef> unread) implements ReaderDisposition {
+
+        public WriteTheCaseOutIn {
+            unread = List.copyOf(unread);
+            if (unread.isEmpty()) {
+                throw new IllegalArgumentException("a row is what a reader is sent to, so there is"
+                        + " one to name");
+            }
+        }
+    }
 
     /** The point, and what did or did not show that a row can be written at it. */
     record LookAtWhatShowedNoRow(Subject subject) implements ReaderDisposition {}
@@ -193,6 +216,12 @@ public sealed interface ReaderDisposition {
             // answer, and it is at the behavior that states it.
             case AdequacyUncertainty.EveryRowReachesAnUnreachable _ ->
                     new LookAtWhatShowedNoRow(subject);
+            // A case no row is counted at while rows went unread: the rows are what a reader goes
+            // to, and they are the fact's own.
+            case AdequacyUncertainty.ByWeakening(Weakening.InputCasesUnreadable it) ->
+                    new WriteTheCaseOutIn(subject, it.unread());
+            case AdequacyUncertainty.ByWeakening(Weakening.OutputCasesUnreadable it) ->
+                    new WriteTheCaseOutIn(subject, it.unread());
             case AdequacyUncertainty.ByWeakening it -> switch (subject) {
                 case Subject.AtARule _ -> new LookAtTheRule(subject);
                 case Subject.AtAFork _ -> new LookAtTheFork(subject);

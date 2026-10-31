@@ -2,7 +2,10 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.observe.RowIdentity;
+import souther.compiler.observe.RowRef;
 import souther.compiler.partition.WhereNothingIsAnswered;
+import souther.compiler.source.SourceId;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeSymbol;
@@ -135,14 +138,21 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
 
         // Read to the end: every row said which case it expected.
         OutputCaseEvidence output = OutputCaseEvidence.of("sort", Set.of(kept, dropped),
-                new OutputCaseEvidence.Cases(Set.of(kept), Set.of(kept), Set.of(kept), 0, 1),
+                new OutputCaseEvidence.Cases(Set.of(kept), Set.of(kept), Set.of(kept), List.of(),
+                        1),
                 true, WeakeningSet.none());
-        // And one input with a row whose case could not be read.
+        // And one input with a row whose case could not be read, while a case is left no row is
+        // counted at.
         InputCaseEvidence unreadable = InputCaseEvidence.of("sort", 0, Set.of(small, large),
-                Set.of(), new InputCaseEvidence.Cases(Set.of(small), Set.of(small), Set.of(small), 1),
+                Set.of(), new InputCaseEvidence.Cases(Set.of(small), Set.of(small), Set.of(small),
+                        List.of(new InputCaseEvidence.Unread(
+                                new RowRef("sort", new SourceId("m.sou"),
+                                        new RowIdentity.Unnamed(2)),
+                                InputCaseEvidence.Reached.VERIFIED))),
                 true, WeakeningSet.none());
         InputCaseEvidence read = InputCaseEvidence.of("sort", 1, Set.of(small, large), Set.of(),
-                new InputCaseEvidence.Cases(Set.of(small), Set.of(small), Set.of(small), 0),
+                new InputCaseEvidence.Cases(Set.of(small), Set.of(small), Set.of(small),
+                        List.of()),
                 true, WeakeningSet.none());
 
         // What the declaration calls the two inputs, which is what a case of one is a class of.

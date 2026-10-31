@@ -4,6 +4,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.RowRef;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.ClosureGap;
@@ -150,24 +151,52 @@ public sealed interface Weakening {
     }
 
     /**
-     * Rows were observed and what a behavior answered with could not be read back as a case.
+     * Rows whose expected case could not be read — an answer owed, or a value whose case nothing
+     * here reads — while a case of the output is expected by no row, so that case is undecided
+     * rather than missing.
      *
-     * <p>Not an observation that went missing: the row ran and came back. How many there were is the
-     * measurement's own count, and is not repeated here — this says which position could not be
-     * read, which is what nothing else says.
+     * <p>Not an observation that went missing: the rows were read, and what they state does not
+     * say a case. Where every case is expected by some row there is nothing for these rows to
+     * decide, and this is not met.
+     *
+     * @param unread which rows, so that a reader is sent to the ones to write the case out in.
+     *               Every value here is what a reader is told, so two of these are one fact exactly
+     *               when they are equal
      */
-    record OutputCasesUnreadable(String behavior) implements Weakening {
+    record OutputCasesUnreadable(String behavior, List<RowRef> unread) implements Weakening {
 
-        /** The row ran and came back, and what it answered with could not be read as a case. A run
-         *  that allows more reads it exactly as well. */
+        public OutputCasesUnreadable {
+            unread = List.copyOf(unread);
+            if (unread.isEmpty()) {
+                throw new IllegalArgumentException("no row of `" + behavior
+                        + "` went unread, so no case of it waits on one");
+            }
+        }
+
+        /** What a row wrote is read the same however much a run allows. */
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
         }
     }
 
-    /** The same at one of a behavior's inputs, counted from zero. */
-    record InputCasesUnreadable(String behavior, int at) implements Weakening {
+    /**
+     * The same at one of a behavior's inputs, counted from zero: rows whose input case could not be
+     * read, where a set they would be in lacks a case a row can be written at.
+     *
+     * @param unread which rows, those whose case could change one of those sets. A row whose sets
+     *               are already full is not among them: reading it would change nothing
+     */
+    record InputCasesUnreadable(String behavior, int at, List<RowRef> unread)
+            implements Weakening {
+
+        public InputCasesUnreadable {
+            unread = List.copyOf(unread);
+            if (unread.isEmpty()) {
+                throw new IllegalArgumentException("no row of `" + behavior
+                        + "` went unread at input #" + (at + 1) + ", so no case there waits on one");
+            }
+        }
 
         /** The same, for the same reason. */
         @Override

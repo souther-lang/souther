@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.MeasureReason;
+import souther.compiler.observe.RowRef;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
@@ -37,24 +38,31 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Measure<Cases> cases)
      * <p>A behavior with no {@code let} can reach {@link #specified} and no further, which is the
      * honest account of a model that has been described and not yet written.
      *
-     * @param unclassifiedRows rows whose case could not be read. While this is above zero a missing
-     *                         case is undecided rather than missing, because one of those rows may
-     *                         cover it — and the measurement around it says so rather than leaving a
-     *                         reader to compare this with zero
-     * @param answeredRows     rows the behavior answered for. Not the size of {@link #observed}: an
-     *                         answer of a type no declaration names is an answer this cannot place,
-     *                         so a run that got one has an empty {@code observed} and a count above
-     *                         zero. What separates a run that produced nothing from one whose
-     *                         answers could not be named is this, and neither of the case sets says
-     *                         it.
+     * @param unread       rows whose expected case could not be read, in the order they were read.
+     *                     While one of them is here a case no row expects is undecided rather than
+     *                     missing, because that row may expect it — and the measurement around it
+     *                     says so rather than leaving a reader to compare a count with zero. Only
+     *                     {@link #specified} waits on them: what was observed and verified is read
+     *                     off the answer, not off what the row wrote
+     * @param answeredRows rows the behavior answered for. Not the size of {@link #observed}: an
+     *                     answer of a type no declaration names is an answer this cannot place, so a
+     *                     run that got one has an empty {@code observed} and a count above zero.
+     *                     What separates a run that produced nothing from one whose answers could
+     *                     not be named is this, and neither of the case sets says it.
      */
     public record Cases(Set<TypeSymbol> specified, Set<TypeSymbol> observed,
-                        Set<TypeSymbol> verified, int unclassifiedRows, int answeredRows) {
+                        Set<TypeSymbol> verified, List<RowRef> unread, int answeredRows) {
 
         public Cases {
             specified = Evidence.ordered(specified);
             observed = Evidence.ordered(observed);
             verified = Evidence.ordered(verified);
+            unread = List.copyOf(unread);
+        }
+
+        /** How many rows' expected case could not be read. */
+        public int unclassifiedRows() {
+            return unread.size();
         }
     }
 
@@ -134,8 +142,12 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Measure<Cases> cases)
         if (!anyRowWasSeen && observed.isEmpty()) {
             return new OutputCaseEvidence(declared, new Measurement.NotMeasured<>(NoRows.NO_ROWS));
         }
-        WeakeningSet by = cases.unclassifiedRows() == 0 ? observed
-                : observed.union(WeakeningSet.of(new Weakening.OutputCasesUnreadable(behavior)));
+        // Where every case is expected by a row, what the unread rows expect is one of those, and
+        // the count is exact without them — the same question the inputs ask.
+        WeakeningSet by = cases.unread().isEmpty()
+                || Evidence.missingFrom(declared, cases.specified()).isEmpty() ? observed
+                : observed.union(WeakeningSet.of(
+                        new Weakening.OutputCasesUnreadable(behavior, cases.unread())));
         return new OutputCaseEvidence(declared, by.isEmpty()
                 ? new Measurement.Complete<>(cases) : new Measurement.Partial<>(cases, by));
     }

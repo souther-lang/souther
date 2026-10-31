@@ -1,9 +1,11 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.MeasureReason;
+import souther.compiler.observe.RowRef;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -43,15 +45,70 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
      *   <li>{@link #verified} — the row that did so held.</li>
      * </ul>
      *
-     * @param unclassifiedRows rows whose input case could not be read
+     * @param unread rows whose input case could not be read, in the order they were read, each with
+     *               how far its case could have got
      */
     public record Cases(Set<TypeSymbol> specified, Set<TypeSymbol> executed,
-                        Set<TypeSymbol> verified, int unclassifiedRows) {
+                        Set<TypeSymbol> verified, List<Unread> unread) {
 
         public Cases {
             specified = Evidence.ordered(specified);
             executed = Evidence.ordered(executed);
             verified = Evidence.ordered(verified);
+            unread = List.copyOf(unread);
+        }
+
+        /** How many rows' case at this position could not be read. */
+        public int unclassifiedRows() {
+            return unread.size();
+        }
+
+        /** The cases of one of the three sets. {@link Reached#NOWHERE} is none of them. */
+        public Set<TypeSymbol> of(Reached set) {
+            return switch (set) {
+                case SPECIFIED -> specified;
+                case EXECUTED -> executed;
+                case VERIFIED -> verified;
+                case NOWHERE -> throw new IllegalArgumentException(
+                        "a row that got nowhere is in no set, so there is none to read");
+            };
+        }
+    }
+
+    /**
+     * How far a row got at this position, which is which of the sets of {@link Cases} its case is
+     * in: every set up to and including this one. One value and not a set of them, because a row
+     * gets to them in order — what held was applied, and what was applied was built.
+     */
+    public enum Reached {
+        /** Its input was not built, so its case is in none of them. */
+        NOWHERE,
+        SPECIFIED,
+        EXECUTED,
+        VERIFIED;
+
+        /** The three sets, in the order a row gets to them. */
+        public static final List<Reached> SETS = List.of(SPECIFIED, EXECUTED, VERIFIED);
+
+        /** Whether a row that got this far has its case in {@code set}. */
+        public boolean isIn(Reached set) {
+            return set != NOWHERE && compareTo(set) >= 0;
+        }
+    }
+
+    /**
+     * A row whose case at this position could not be read.
+     *
+     * @param rowRef   which row, so that a reader can be sent to it
+     * @param mayReach how far its case would have got, had it been read. Decided as it is for a row
+     *                 that was read, by how far the row got — except that a row that did not finish
+     *                 has no such answer, and may have got to any of them
+     */
+    public record Unread(RowRef rowRef, Reached mayReach) {
+
+        public Unread {
+            Objects.requireNonNull(rowRef, "a row nobody can name cannot be sent to");
+            Objects.requireNonNull(mayReach, "a row got somewhere, if only nowhere");
         }
     }
 
@@ -118,10 +175,27 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
             return new InputCaseEvidence(at, declared, excluded,
                     new Measurement.NotMeasured<>(NoRows.NO_ROWS));
         }
-        WeakeningSet by = cases.unclassifiedRows() == 0 ? observed
-                : observed.union(WeakeningSet.of(new Weakening.InputCasesUnreadable(behavior, at)));
+        // Only the rows whose case could still change a set. An unclassified row leaves undecided
+        // a case no row is counted at (example-adequacy), so a row whose sets already hold every
+        // case a row can be written at decides nothing by being read, and the count is exact
+        // without it.
+        List<RowRef> deciding = cases.unread().stream()
+                .filter(each -> Reached.SETS.stream().anyMatch(set -> each.mayReach().isIn(set)
+                        && !missing(declared, excluded, cases.of(set)).isEmpty()))
+                .map(Unread::rowRef)
+                .toList();
+        WeakeningSet by = deciding.isEmpty() ? observed
+                : observed.union(WeakeningSet.of(
+                        new Weakening.InputCasesUnreadable(behavior, at, deciding)));
         return new InputCaseEvidence(at, declared, excluded, by.isEmpty()
                 ? new Measurement.Complete<>(cases) : new Measurement.Partial<>(cases, by));
+    }
+
+    /** The cases of {@code declared} a row can be written at and {@code covered} does not hold. */
+    private static List<TypeSymbol> missing(Set<TypeSymbol> declared, Set<TypeSymbol> excluded,
+                                            Set<TypeSymbol> covered) {
+        return Evidence.missingFrom(declared, covered).stream()
+                .filter(each -> !excluded.contains(each)).toList();
     }
 
     /** What the rows reached at this position, where a measurement was made. Throws where none was,
@@ -146,8 +220,7 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
      *  where nothing was measured. */
     public List<TypeSymbol> unspecified() {
         return cases.made()
-                .map(it -> Evidence.missingFrom(declared, it.specified()).stream()
-                        .filter(each -> !excluded.contains(each)).toList())
+                .map(it -> missing(declared, excluded, it.specified()))
                 .orElseGet(List::of);
     }
 }
