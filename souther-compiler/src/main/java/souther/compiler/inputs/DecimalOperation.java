@@ -347,12 +347,20 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      *
      * <p>The scale of a total is that of the list it is the sum of ({@code max(0, scales of the
      * elements)}), and the same number is the sum of lists whose elements are written at any
-     * scale: it is no fact of the number. So a total is told only to operations whose room does
+     * scale: it is no fact of the number, and the list a row holds is the builder's to choose
+     * ({@code ContainersAddingUp}), not this analysis'. What is claimed of the rows is claimed of
+     * the rows that are built, and the builder writes every element through
+     * {@link #writtenForARow}, so the scale of any list it builds, and of its sum, is no more than
+     * {@link #PLACES_A_ROW_IS_BUILT_AT}: that is the bound a total is given here, and it is the
+     * builder's own, not an assumption made about it. A list written at any other scale (the sum
+     * of {@code [0E-2147483647]} is the number nought at the greatest scale) is not one that is
+     * built.
+     *
+     * <p>Within that bound the scale is still the builder's choice ({@code [0.5, 0.5]} sums to one
+     * at a place, and {@code [1]} at none), so a total is told only to operations whose room does
      * not turn on it ({@link #leavesNoCompletionToHowATotalIsWritten}), and is worked out here at
-     * the fewest places the number is written with, as a place of the input is. That stands for
-     * a total of a row because the elements of a list a row is built with are written at no more
-     * places than the total, the ends of the elements' range, or one, whichever is greatest, so
-     * the list's scale stays within what rows are built at and far inside what room is shown for.
+     * the fewest places its number is written with, as a representative that completes where
+     * every scale within the bound does.
      *
      * @param term the key of the total, as {@link Formed} keys its places
      */
@@ -369,17 +377,32 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
         }
     }
 
-    /** The number {@code sum} is, written at the fewest places; empty where it is no decimal
-     *  or is written at more places than a row is built at ({@link #PLACES_A_ROW_IS_BUILT_AT}). */
-    private static Optional<BigDecimal> builtAt(ExactRatio sum) {
-        if (sum == null) {
-            return Optional.empty();
-        }
-        return switch (sum.writtenDecimal()) {
-            case ExactAnswer.Held<Optional<BigDecimal>> written -> written.value()
-                    .filter(number -> Math.abs((long) number.scale()) <= PLACES_A_ROW_IS_BUILT_AT);
-            case ExactAnswer.Unheld<Optional<BigDecimal>> _ -> Optional.empty();
+    /**
+     * The number {@code number} as a row is built with it: written at the fewest places, and
+     * empty where it is no decimal or is written at more places than a row is built at
+     * ({@link #PLACES_A_ROW_IS_BUILT_AT}).
+     *
+     * <p>The one place that says what a decimal of a row is. What the analysis shows of a row is
+     * shown of the decimals it is built with, so whatever writes a decimal into a row (a place of
+     * the input, an element of a list a total is the sum of) writes it through here, and the
+     * analysis may take what it reads off the rows from this alone: the scale of a decimal of a
+     * row, and so of the total of a list of them, is no more than the places a row is built at.
+     * Written elsewhere, a decimal could have a scale this does not bound, and no claim made
+     * of the rows would be a claim of the rows that are built.
+     */
+    public static ExactAnswer<Optional<BigDecimal>> writtenForARow(ExactRatio number) {
+        return switch (number.writtenDecimal()) {
+            case ExactAnswer.Held<Optional<BigDecimal>> written -> ExactAnswer.held(written.value()
+                    .filter(each -> Math.abs((long) each.scale()) <= PLACES_A_ROW_IS_BUILT_AT));
+            case ExactAnswer.Unheld<Optional<BigDecimal>> unheld ->
+                    ExactAnswer.unheld(unheld.why());
         };
+    }
+
+    private static Optional<BigDecimal> builtAt(ExactRatio number) {
+        return number != null && writtenForARow(number)
+                instanceof ExactAnswer.Held<Optional<BigDecimal>> written
+                ? written.value() : Optional.empty();
     }
 
     /**
