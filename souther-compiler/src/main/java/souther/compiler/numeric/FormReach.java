@@ -2,6 +2,7 @@ package souther.compiler.numeric;
 
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -59,6 +60,11 @@ import java.util.function.Function;
 final class FormReach<A> {
 
     private final List<AffineConstraint<A>> rules;
+
+    /** What the holes among the rules came to against an earlier reading: premises beside the rules,
+     *  never among them, so a caller reducing {@link #rules} does not reduce a bound the hole it came
+     *  from is being read to again. */
+    private final Collection<AffineConstraint.HalfSpace<A>> derived;
     private final Box<A> ends;
     private final DifferenceBounds<A> differences;
 
@@ -81,10 +87,12 @@ final class FormReach<A> {
     private long merged;
     private long heldAgainstTheEnds;
 
-    private FormReach(List<AffineConstraint<A>> rules, Box<A> ends,
+    private FormReach(List<AffineConstraint<A>> rules,
+                      Collection<AffineConstraint.HalfSpace<A>> derived, Box<A> ends,
                       DifferenceBounds<A> differences, CanonicalOrder<A> order,
                       Function<CanonicalForm<A>, List<Map.Entry<A, ExactRatio>>> walked) {
         this.rules = rules;
+        this.derived = derived;
         this.ends = ends;
         this.differences = differences;
         this.order = order;
@@ -105,6 +113,14 @@ final class FormReach<A> {
         return over(rules, ends, differences, order, form -> form.entriesIn(order));
     }
 
+    /** The same, with {@code derived} beside the rules; see the overload that walks through a
+     *  function. */
+    static <A> FormReach<A> over(List<AffineConstraint<A>> rules,
+                                 Collection<AffineConstraint.HalfSpace<A>> derived, Box<A> ends,
+                                 DifferenceBounds<A> differences, CanonicalOrder<A> order) {
+        return over(rules, derived, ends, differences, order, form -> form.entriesIn(order));
+    }
+
     /**
      * The same, walking a rule's form through {@code walked} rather than sorting it each time it is
      * asked: the walk of a form is settled by the form and the order, and a reading is asked about
@@ -115,11 +131,41 @@ final class FormReach<A> {
     static <A> FormReach<A> over(List<AffineConstraint<A>> rules, Box<A> ends,
                                  DifferenceBounds<A> differences, CanonicalOrder<A> order,
                                  Function<CanonicalForm<A>, List<Map.Entry<A, ExactRatio>>> walked) {
+        return over(rules, List.of(), ends, differences, order, walked);
+    }
+
+    /**
+     * The same, with the half-spaces the holes among {@code rules} came to read as premises beside
+     * them.
+     *
+     * @param derived implied by the rules, so a premise like any other; not among {@link #rules}
+     */
+    static <A> FormReach<A> over(List<AffineConstraint<A>> rules,
+                                 Collection<AffineConstraint.HalfSpace<A>> derived, Box<A> ends,
+                                 DifferenceBounds<A> differences, CanonicalOrder<A> order,
+                                 Function<CanonicalForm<A>, List<Map.Entry<A, ExactRatio>>> walked) {
         if (differences.holdsNothing()) {
             throw new IllegalStateException(
                     "nothing is left, so there is no reach to read; ask holdsNothing first");
         }
-        return new FormReach<>(rules, ends, differences, order, walked);
+        return new FormReach<>(rules, derived, ends, differences, order, walked);
+    }
+
+    /**
+     * This reading with {@code more} read as premises beside what it already reads.
+     *
+     * <p>A new value and not a change to this one: what a reading answers is a function of what it
+     * was handed, and the index of premises it keeps is of those.
+     */
+    FormReach<A> alsoReading(Collection<AffineConstraint.HalfSpace<A>> more) {
+        List<AffineConstraint.HalfSpace<A>> both = new ArrayList<>(derived);
+        both.addAll(more);
+        return new FormReach<>(rules, both, ends, differences, order, walked);
+    }
+
+    /** The premises read beside the rules; see {@link #derived}. */
+    Collection<AffineConstraint.HalfSpace<A>> derived() {
+        return derived;
     }
 
     /** The ends this was handed, for a reader that needs them as well and must not derive a second
@@ -576,13 +622,11 @@ final class FormReach<A> {
             Map<A, List<Integer>> naming = new HashMap<>();
             for (AffineConstraint<A> rule : rules) {
                 for (AffineConstraint.HalfSpace<A> half : rule.halfSpaces()) {
-                    Premise<A> premise = new Premise<>(rule, half, out.size());
-                    for (Map.Entry<A, ExactRatio> weighed : walked.apply(half.form())) {
-                        naming.computeIfAbsent(weighed.getKey(), _ -> new ArrayList<>())
-                                .add(premise.place());
-                    }
-                    out.add(premise);
+                    addPremise(rule, half, out, naming);
                 }
+            }
+            for (AffineConstraint.HalfSpace<A> half : derived) {
+                addPremise(half, half, out, naming);
             }
             // Each position holds the places of the premises that name it and no more, so the
             // index holds as many places as the premises name positions: one set of bits per
@@ -594,6 +638,16 @@ final class FormReach<A> {
             premises = read;
         }
         return read;
+    }
+
+    private void addPremise(AffineConstraint<A> rule, AffineConstraint.HalfSpace<A> half,
+                            List<Premise<A>> out, Map<A, List<Integer>> naming) {
+        Premise<A> premise = new Premise<>(rule, half, out.size());
+        for (Map.Entry<A, ExactRatio> weighed : walked.apply(half.form())) {
+            naming.computeIfAbsent(weighed.getKey(), _ -> new ArrayList<>())
+                    .add(premise.place());
+        }
+        out.add(premise);
     }
 
     /** {@link #premises}: each premise, and the places of the premises naming each position

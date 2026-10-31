@@ -3,6 +3,7 @@ package souther.compiler.numeric;
 import souther.compiler.numeric.DifferenceBounds.Apart;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -36,6 +37,13 @@ import java.util.function.Function;
  * {@link #theRulesLeaveAFormNothing}. What a query may take as a premise is one rule and is
  * {@link FormReach}'s to say; what reaches that query besides is whatever the rounds have already
  * put in the ends, so nothing here is a count of how many rules a proof may come from.
+ *
+ * <p><b>A hole is a rule that becomes a bound.</b> {@code f /= v} beside what puts {@code f} on one
+ * side of {@code v} is a half-space about {@code f}, and it is kept as one ({@link #sided}): read as
+ * a premise by every query about a form, and, where it bounds the difference of two positions,
+ * closed with the differences. Which side a hole falls on is settled to the end in the round that
+ * reads it ({@link AffineReduction}) and not left to the rounds, which exist for the ends that
+ * need not settle at all.
  *
  * <p>What "against what the closure leaves" means is {@link FormReach}, which says what it reads
  * and how much of it one query may take. A chain of rules composes here, through the ends a round
@@ -135,14 +143,17 @@ public final class ClosedState<A> {
 
     private final Box<A> box;
     private final DifferenceBounds<A> differences;
+    private final Set<AffineConstraint.HalfSpace<A>> sided;
     private final boolean holdsNothing;
     private final Status status;
     private final boolean everyBoundWasComposed;
 
-    private ClosedState(Box<A> box, DifferenceBounds<A> differences, boolean holdsNothing,
+    private ClosedState(Box<A> box, DifferenceBounds<A> differences,
+                        Set<AffineConstraint.HalfSpace<A>> sided, boolean holdsNothing,
                         Status status, boolean everyBoundWasComposed) {
         this.box = box;
         this.differences = differences;
+        this.sided = sided;
         this.holdsNothing = holdsNothing;
         this.status = status;
         this.everyBoundWasComposed = everyBoundWasComposed;
@@ -192,10 +203,12 @@ public final class ClosedState<A> {
         Map<A, ExactCut> most = LinkedHashMap.newLinkedHashMap(mostSize);
         Status status = Status.STABLE;
         boolean everyBoundWasComposed = true;
+        Set<AffineConstraint.HalfSpace<A>> sided = new LinkedHashSet<>();
         for (ClosedState<A> closure : closures) {
             if (closure.holdsNothing) {
                 return empty(differences);
             }
+            sided.addAll(closure.sided);
             least.putAll(closure.box.atLeast());
             most.putAll(closure.box.atMost());
             if (closure.status == Status.BUDGET_EXHAUSTED) {
@@ -203,7 +216,8 @@ public final class ClosedState<A> {
             }
             everyBoundWasComposed &= closure.everyBoundWasComposed;
         }
-        return settled(new Box<>(least, most), differences, status, everyBoundWasComposed);
+        return settled(new Box<>(least, most), differences, Collections.unmodifiableSet(sided), status,
+                everyBoundWasComposed);
     }
 
     /**
@@ -226,12 +240,16 @@ public final class ClosedState<A> {
             return empty(differences);
         }
         boolean everyBoundWasComposed = differences.everyHopWasComposed();
+        Set<AffineConstraint.HalfSpace<A>> sided = Set.of();
+        Set<AffineConstraint.HalfSpace<A>> folded = Set.of();
         for (int round = 0; round < ROUNDS; round++) {
             // The reading is made afresh from the box this round starts in, and every rule is read
             // against that one. A reading that carried the box along as the rules narrowed it would
             // answer a rule differently depending on which rules had been read before it, which is
-            // the order deciding the result — the thing the rounds exist to be rid of.
-            FormReach<A> reading = FormReach.over(constraints, box, differences, order);
+            // the order deciding the result — the thing the rounds exist to be rid of. The holes
+            // the last round sided are read with the rules for the same reason the box is: they are
+            // that round's finding, taken whole at the start of this one.
+            FormReach<A> reading = FormReach.over(constraints, sided, box, differences, order);
             if (theRulesLeaveAFormNothing(reading, constraints)) {
                 return empty(differences);
             }
@@ -241,19 +259,54 @@ public final class ClosedState<A> {
             }
             AffineReduction.Reduction.Tightened<A> tightened =
                     (AffineReduction.Reduction.Tightened<A>) found;
-            Carried<A> carried = throughDifferences(
-                    box.meeting(tightened.atLeast(), tightened.atMost()), differences, positions);
+            Box<A> met = box.meeting(tightened.atLeast(), tightened.atMost());
+            // A hole that came to a bound on a difference is a rule of that shape from here on, and
+            // a path of differences runs through it as through any other. Folded in where the
+            // closure is made, so that which rules are of the shape is still decided in one place.
+            Set<AffineConstraint.HalfSpace<A>> between = relatingTwoPositions(tightened.sided(), order);
+            if (!between.equals(folded)) {
+                differences = DifferenceBounds.over(withThe(constraints, between), order);
+                if (differences.holdsNothing()) {
+                    return empty(differences);
+                }
+                Box<A> held = boxOf(differences, positions);
+                met = met.meeting(held.atLeast(), held.atMost());
+                everyBoundWasComposed &= differences.everyHopWasComposed();
+                folded = between;
+            }
+            Carried<A> carried = throughDifferences(met, differences, positions);
             everyBoundWasComposed &= carried.everyBoundWasComposed();
             Box<A> next = carried.box();
             if (!next.holdsAValue()) {
                 return empty(differences);
             }
-            if (next.equals(box)) {
-                return settled(box, differences, Status.STABLE, everyBoundWasComposed);
+            if (next.equals(box) && tightened.sided().equals(sided)) {
+                return settled(box, differences, sided, Status.STABLE, everyBoundWasComposed);
             }
             box = next;
+            sided = tightened.sided();
         }
-        return settled(box, differences, Status.BUDGET_EXHAUSTED, everyBoundWasComposed);
+        return settled(box, differences, sided, Status.BUDGET_EXHAUSTED, everyBoundWasComposed);
+    }
+
+    /** The half-spaces among {@code sided} that bound the difference of two positions. */
+    private static <A> Set<AffineConstraint.HalfSpace<A>> relatingTwoPositions(
+            Set<AffineConstraint.HalfSpace<A>> sided, CanonicalOrder<A> order) {
+        Set<AffineConstraint.HalfSpace<A>> out = new LinkedHashSet<>();
+        for (AffineConstraint.HalfSpace<A> each : sided) {
+            if (DifferenceBounds.relatesTwoPositions(each, order)) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    /** {@code constraints} with {@code more} beside them, as the difference bounds are made over. */
+    private static <A> List<AffineConstraint<A>> withThe(List<AffineConstraint<A>> constraints,
+                                                         Set<AffineConstraint.HalfSpace<A>> more) {
+        List<AffineConstraint<A>> out = new ArrayList<>(constraints);
+        out.addAll(more);
+        return out;
     }
 
     /**
@@ -334,17 +387,18 @@ public final class ClosedState<A> {
      * not the rounds settled.
      */
     private static <A> ClosedState<A> settled(Box<A> box, DifferenceBounds<A> differences,
+                                              Set<AffineConstraint.HalfSpace<A>> sided,
                                               Status status, boolean everyBoundWasComposed) {
         assert box.equals(carriedAlong(box, differences))
                 : "a difference still narrows the box that is about to be handed back";
-        return new ClosedState<>(box, differences, false, status, everyBoundWasComposed);
+        return new ClosedState<>(box, differences, sided, false, status, everyBoundWasComposed);
     }
 
     private static <A> ClosedState<A> empty(DifferenceBounds<A> differences) {
         // Nothing is left, so there is no box for the arithmetic to have failed to carry a bound
         // onto: emptiness is either the difference closure's own proof or a form the rules leave
         // nothing, and both hold whatever the closure could or could not compose.
-        return new ClosedState<>(Box.unbounded(), differences, true, Status.STABLE, true);
+        return new ClosedState<>(Box.unbounded(), differences, Set.of(), true, Status.STABLE, true);
     }
 
     private static <A> Set<A> positionsOf(List<AffineConstraint<A>> constraints,
@@ -454,6 +508,16 @@ public final class ClosedState<A> {
                     "nothing is left, so there is no box; ask holdsNothing first");
         }
         return box;
+    }
+
+    /**
+     * The half-spaces the holes among the rules came to against this state: each a statement about
+     * the sum its hole is on, which the box says only position by position.
+     *
+     * <p>Implied by the rules, so a reader may take them as premises beside the rules.
+     */
+    Set<AffineConstraint.HalfSpace<A>> sided() {
+        return sided;
     }
 
     /** The difference-bound part, closed, for a question about two positions rather than one. */

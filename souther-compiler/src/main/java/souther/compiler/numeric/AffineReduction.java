@@ -1,8 +1,14 @@
 package souther.compiler.numeric;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -57,13 +63,26 @@ public final class AffineReduction {
     /** What a round of reading the rules the other way found. */
     public sealed interface Reduction<A> {
 
-        /** The ends found, each of them at least as tight as the one it came in with. */
-        record Tightened<A>(Map<A, ExactCut> atLeast, Map<A, ExactCut> atMost)
+        /**
+         * The ends found, each of them at least as tight as the one it came in with, and the
+         * half-spaces the holes came to.
+         *
+         * <p>The half-spaces are the same facts the ends were drawn from, kept as statements about
+         * the forms they are on. A bound on each position of {@code a + b} does not say how far
+         * {@code a + b} itself runs, so a reader asking that has to be given the half-space.
+         *
+         * @param sided the half-spaces the holes came to against the state this round started in,
+         *              each with its bound already moved onto what its form can reach. A set: which
+         *              rule arrived first is not part of what they come to
+         */
+        record Tightened<A>(Map<A, ExactCut> atLeast, Map<A, ExactCut> atMost,
+                            Set<AffineConstraint.HalfSpace<A>> sided)
                 implements Reduction<A> {
 
             public Tightened {
                 atLeast = Map.copyOf(atLeast);
                 atMost = Map.copyOf(atMost);
+                sided = Collections.unmodifiableSet(new LinkedHashSet<>(sided));
             }
         }
 
@@ -79,10 +98,10 @@ public final class AffineReduction {
     }
 
     /**
-     * Every bound the rules put on a position given {@code reading}, read once each against the same
-     * state.
+     * Every bound the rules put on a position given {@code given}, read once each against the same
+     * state, with the holes among them settled first ({@link #settle}).
      *
-     * @param reading     the rules to read this way, the ends the round started in, and the one
+     * @param given       the rules to read this way, the ends the round started in, and the one
      *                    reading of how far a form runs under them. Ends and relations both, because
      *                    the rest of a rule is a sum and a sum is bounded by things no position's own
      *                    ends carry. Rules the difference bounds already hold in full can be among
@@ -90,18 +109,26 @@ public final class AffineReduction {
      * @param spacing     how each position's values are spaced, for the reason
      *                    {@link AffineConstraint#of} wants it
      */
-    public static <A> Reduction<A> over(FormReach<A> reading, Function<A, Granularity> spacing,
+    public static <A> Reduction<A> over(FormReach<A> given, Function<A, Granularity> spacing,
                                         CanonicalOrder<A> order) {
+        Settled<A> settled = settle(given, spacing);
+        if (settled == null) {
+            return new Reduction.NothingIsLeft<>();
+        }
+        FormReach<A> reading = settled.reading();
         Box<A> from = reading.ends();
         List<AffineConstraint<A>> constraints = reading.rules();
         Map<A, ExactCut> atLeast = new LinkedHashMap<>();
         Map<A, ExactCut> atMost = new LinkedHashMap<>();
+        // Per form the tightest bound only: two holes on one sum come to two bounds on it, and the
+        // looser is held by the tighter.
+        Map<CanonicalForm<A>, ExactCut> sided = new LinkedHashMap<>();
+        settled.sidedOf().values().forEach(halves -> halves.forEach(
+                half -> sided.merge(half.form(), half.bound(), ExactCut::tighterUpper)));
         for (AffineConstraint<A> each : constraints) {
             List<AffineConstraint.HalfSpace<A>> halves = each instanceof
-                    AffineConstraint.Disequality<A> hole ? sidedBy(hole, reading) : each.halfSpaces();
-            if (halves == null) {
-                return new Reduction.NothingIsLeft<>();
-            }
+                    AffineConstraint.Disequality<A> hole
+                    ? settled.sidedOf().getOrDefault(hole, List.of()) : each.halfSpaces();
             for (AffineConstraint.HalfSpace<A> half : halves) {
                 // Walked in the one order the positions decide. A bound worked out at each of them
                 // is written into a reading the next of them is read against, so what this takes
@@ -113,8 +140,165 @@ public final class AffineReduction {
                 }
             }
         }
-        return new Reduction.Tightened<>(atLeast, atMost);
+        Set<AffineConstraint.HalfSpace<A>> tightest = new LinkedHashSet<>();
+        sided.forEach((form, bound) -> tightest.add(new AffineConstraint.HalfSpace<>(form, bound)));
+        return new Reduction.Tightened<>(atLeast, atMost, tightest);
     }
+
+    /**
+     * The holes among the rules, each settled that can be, and the reading they were settled
+     * against.
+     *
+     * <p>Which side a hole falls on is not an approximation that more rounds make better. A hole
+     * that has a side keeps it for as long as the state only narrows, and there are as many holes
+     * as were said. So the holes are settled to the end here and not one step a round, beside the
+     * rounds that narrow the ends: a run of holes on one sum — {@code f /= 50}, {@code f /= 49},
+     * {@code f /= 48} — has each one's side decided by the one before it, and a run longer than the
+     * rounds would otherwise stop part way.
+     *
+     * <p>Every pass asks the holes still open of one reading, the way every other rule is read
+     * against one state, and the next pass reads what that one found beside it. A pass that settles
+     * nothing is the last, and each pass before it settles a hole, so this stops after as many
+     * passes as there are holes.
+     *
+     * @return null where a hole's sum is pinned at the value it is held away from
+     */
+    private static <A> Settled<A> settle(FormReach<A> given, Function<A, Granularity> spacing) {
+        List<AffineConstraint.Disequality<A>> open = new ArrayList<>();
+        for (AffineConstraint<A> each : given.rules()) {
+            if (each instanceof AffineConstraint.Disequality<A> hole) {
+                open.add(hole);
+            }
+        }
+        Map<AffineConstraint.Disequality<A>, List<AffineConstraint.HalfSpace<A>>> sidedOf =
+                new LinkedHashMap<>();
+        FormReach<A> reading = given;
+        Map<CanonicalForm<A>, ExactCut> known = new LinkedHashMap<>();
+        given.derived().forEach(half -> known.merge(half.form(), half.bound(), ExactCut::tighterUpper));
+        if (!known.isEmpty()) {
+            List<AffineConstraint.Disequality<A>> unsettled = new ArrayList<>();
+            for (AffineConstraint.Disequality<A> hole : open) {
+                List<AffineConstraint.HalfSpace<A>> halves = alreadySided(hole, known, spacing);
+                if (halves.isEmpty()) {
+                    unsettled.add(hole);
+                } else {
+                    sidedOf.put(hole, halves);
+                }
+            }
+            open = unsettled;
+        }
+        while (!open.isEmpty()) {
+            Map<AffineConstraint.Disequality<A>, List<AffineConstraint.HalfSpace<A>>> found =
+                    new LinkedHashMap<>();
+            List<AffineConstraint.Disequality<A>> stillOpen = new ArrayList<>();
+            for (List<AffineConstraint.Disequality<A>> onOneSum : onOneSumEach(open)) {
+                if (!settleOnOneSum(onOneSum, reading, spacing, found, stillOpen)) {
+                    return null;
+                }
+            }
+            if (found.isEmpty()) {
+                break;
+            }
+            sidedOf.putAll(found);
+            List<AffineConstraint.HalfSpace<A>> more = new ArrayList<>();
+            found.values().forEach(more::addAll);
+            reading = reading.alsoReading(more);
+            open = stillOpen;
+        }
+        return new Settled<>(reading, sidedOf);
+    }
+
+    /**
+     * {@code holes} grouped by the sum they are on, in the order the first of each was said.
+     *
+     * <p>{@code f /= v} and {@code -f /= -v} are one rule ({@link AffineConstraint.Disequality}), so
+     * they are on one sum and in one group, each written the way the first of the group was. The
+     * hole kept is equal to the one said, so what is found for it is found for that one.
+     */
+    private static <A> Collection<List<AffineConstraint.Disequality<A>>> onOneSumEach(
+            List<AffineConstraint.Disequality<A>> holes) {
+        Map<CanonicalForm<A>, List<AffineConstraint.Disequality<A>>> grouped = new LinkedHashMap<>();
+        for (AffineConstraint.Disequality<A> hole : holes) {
+            List<AffineConstraint.Disequality<A>> there = grouped.get(hole.form());
+            AffineConstraint.Disequality<A> written = hole;
+            if (there == null) {
+                there = grouped.get(hole.form().negated());
+                written = new AffineConstraint.Disequality<>(hole.form().negated(), hole.at().negated());
+            }
+            if (there == null) {
+                there = new ArrayList<>();
+                grouped.put(hole.form(), there);
+                written = hole;
+            }
+            there.add(written);
+        }
+        return grouped.values();
+    }
+
+    /**
+     * The holes on one sum, settled against one asking of how far the sum runs.
+     *
+     * <p>What a hole settled on this sum says of the sum is read straight off its half-space, and
+     * the next hole on it is held to that: {@code f /= 50} putting {@code f} at 49 or below is what
+     * lets {@code f /= 49} put it at 48, and asking {@link FormReach} again for each step of such a
+     * run would ask it once per hole. The answer is the same as asking again — the half-space is the
+     * very premise that asking would take — and what asking could find besides, from the other sums,
+     * is found by the next pass.
+     *
+     * <p>Run until no hole on the sum settles, which is as many times round as there are holes, and
+     * in whatever order they come: each settles for the same reason when the sum has come far enough.
+     *
+     * @return false where a hole's sum is pinned at the value it is held away from
+     */
+    private static <A> boolean settleOnOneSum(
+            List<AffineConstraint.Disequality<A>> holes, FormReach<A> reading,
+            Function<A, Granularity> spacing,
+            Map<AffineConstraint.Disequality<A>, List<AffineConstraint.HalfSpace<A>>> found,
+            List<AffineConstraint.Disequality<A>> stillOpen) {
+        Reach reach = reading.of(holes.getFirst().form().coefs(), ExactRatio.ZERO);
+        List<AffineConstraint.Disequality<A>> pending = new ArrayList<>(holes);
+        boolean progress = true;
+        while (progress) {
+            progress = false;
+            for (Iterator<AffineConstraint.Disequality<A>> each = pending.iterator(); each.hasNext();) {
+                AffineConstraint.Disequality<A> hole = each.next();
+                List<AffineConstraint.HalfSpace<A>> halves = sidedBy(hole, reach, spacing);
+                if (halves == null) {
+                    return false;
+                }
+                if (!halves.isEmpty()) {
+                    found.put(hole, halves);
+                    reach = narrowedBy(reach, halves, hole.form());
+                    each.remove();
+                    progress = true;
+                }
+            }
+        }
+        stillOpen.addAll(pending);
+        return true;
+    }
+
+    /** {@code reach} of {@code form} with what {@code halves} say of it: a half-space on the form
+     *  bounds it above, and one on its negation bounds it below. */
+    private static <A> Reach narrowedBy(Reach reach, List<AffineConstraint.HalfSpace<A>> halves,
+                                        CanonicalForm<A> form) {
+        ExactCut least = reach.least();
+        ExactCut most = reach.most();
+        for (AffineConstraint.HalfSpace<A> half : halves) {
+            if (half.form().equals(form)) {
+                most = ExactCut.tighterUpper(most, half.bound());
+            } else {
+                least = ExactCut.tighterLower(least,
+                        new ExactCut(half.bound().at().negated(), half.bound().inclusive()));
+            }
+        }
+        return new Reach(least, most);
+    }
+
+    /** The reading the holes were settled against, and the half-spaces each settled hole came to. */
+    private record Settled<A>(
+            FormReach<A> reading,
+            Map<AffineConstraint.Disequality<A>, List<AffineConstraint.HalfSpace<A>>> sidedOf) {}
 
     /**
      * A hole turned into a bound, where what is known says which side of it the sum lies.
@@ -136,16 +320,19 @@ public final class AffineReduction {
      * asking the ends for it left a {@code guard} that wrote {@code /=} beside a relation stating
      * nothing, while the same {@code /=} beside a range on the value itself was read.
      *
-     * <p>The hole cannot side itself. A disequality states no half-space
-     * ({@link AffineConstraint#halfSpaces}), so it is not among what the reading may take as a
-     * premise, and nothing here has to arrange for that.
+     * <p>The hole is not a premise of its own question: a disequality states no half-space
+     * ({@link AffineConstraint#halfSpaces}). What the holes settled before it are, and they are
+     * implied by the rules, so reading them cannot admit less than the rules do.
+     *
+     * <p>The bound is moved onto what the sum can reach, the way every other rule's is
+     * ({@link AdditiveImage#tightenUpper}): beside a reach of at most 50, {@code f /= 50} over whole
+     * numbers is {@code f <= 49}, and over a dense range it stays {@code f < 50}.
      *
      * @return the half-spaces it comes to, empty where the sum can still fall either side, or null
      *         where the sum is pinned at the very value it is held away from
      */
     private static <A> List<AffineConstraint.HalfSpace<A>> sidedBy(
-            AffineConstraint.Disequality<A> hole, FormReach<A> reading) {
-        Reach reach = reading.of(hole.form().coefs(), ExactRatio.ZERO);
+            AffineConstraint.Disequality<A> hole, Reach reach, Function<A, Granularity> spacing) {
         ExactRatio away = hole.at();
         boolean neverBelow = reach.least() != null && reach.least().at().compareTo(away) >= 0;
         boolean neverAbove = reach.most() != null && reach.most().at().compareTo(away) <= 0;
@@ -155,12 +342,49 @@ public final class AffineReduction {
             return null;   // the sum is held at the one value it is held away from
         }
         if (neverBelow) {
-            return List.of(new AffineConstraint.HalfSpace<>(
-                    hole.form().negated(), ExactCut.exclusive(away.negated())));
+            return List.of(aboveIt(hole, spacing));
         }
         if (neverAbove) {
-            return List.of(new AffineConstraint.HalfSpace<>(
-                    hole.form(), ExactCut.exclusive(away)));
+            return List.of(belowIt(hole, spacing));
+        }
+        return List.of();
+    }
+
+    /** The half-space a hole comes to where the sum is known not to go below the value it is held
+     *  away from. It depends on the hole and the spacing and on nothing that is known. */
+    private static <A> AffineConstraint.HalfSpace<A> aboveIt(AffineConstraint.Disequality<A> hole,
+                                                             Function<A, Granularity> spacing) {
+        CanonicalForm<A> below = hole.form().negated();
+        return new AffineConstraint.HalfSpace<>(below,
+                below.imageOver(spacing).tightenUpper(ExactCut.exclusive(hole.at().negated())));
+    }
+
+    /** The half-space a hole comes to where the sum is known not to go above the value it is held
+     *  away from. */
+    private static <A> AffineConstraint.HalfSpace<A> belowIt(AffineConstraint.Disequality<A> hole,
+                                                             Function<A, Granularity> spacing) {
+        return new AffineConstraint.HalfSpace<>(hole.form(),
+                hole.form().imageOver(spacing).tightenUpper(ExactCut.exclusive(hole.at())));
+    }
+
+    /**
+     * Whether what an earlier reading derived already puts the sum on one side of the hole, and the
+     * half-space that comes to if so.
+     *
+     * <p>A side, once decided, is kept while the state only narrows, and the bound it comes to is
+     * the hole's and the spacing's alone. So a derived bound on the hole's form at least as tight as
+     * that one says the sum is on that side already, and asking {@link FormReach} again would
+     * return what is known.
+     */
+    private static <A> List<AffineConstraint.HalfSpace<A>> alreadySided(
+            AffineConstraint.Disequality<A> hole, Map<CanonicalForm<A>, ExactCut> known,
+            Function<A, Granularity> spacing) {
+        for (AffineConstraint.HalfSpace<A> candidate : List.of(
+                aboveIt(hole, spacing), belowIt(hole, spacing))) {
+            ExactCut held = known.get(candidate.form());
+            if (held != null && ExactCut.tighterUpper(held, candidate.bound()).equals(held)) {
+                return List.of(candidate);
+            }
         }
         return List.of();
     }
