@@ -308,17 +308,12 @@ final class ReadingEvidence {
      * The calls the arithmetic stopped at, on a part of {@code rule}, at any of {@code positions},
      * for the reason {@code why} — the places a reader is sent about that stop, each once.
      *
-     * <p>The one question that says where a stop is sent, asked by everything that reports a
-     * reason of this kind: a reason is a word and carries no place, and the place is what this
-     * keeps with the part, the position and the word it was filed under. Empty where the arithmetic
-     * stopped at none, and for a reason the arithmetic did not give; the caller sends a reader to
-     * the rule.
-     *
-     * @param part the part of the rule the stop is asked of, or null for any part of it — a
-     *             question about the rule as a whole is sent to every part that stopped it
+     * <p>A reason is a word and carries no place, and the place is what this keeps with the
+     * position and the word it was filed under. A question about the rule as a whole is sent to
+     * every part that stopped it. Empty where the arithmetic stopped at none, and for a reason the
+     * arithmetic did not give; the caller sends a reader to the rule.
      */
     Set<RuleSite> sentToWhereTheFormStopped(RuleRef.Invariant rule,
-                                            PartId<RuleRef.Invariant> part,
                                             Collection<FactSubject> positions,
                                             BlockReason.RuleReadingStopped why) {
         Set<FormShortfall> here = formStopped.get(rule);
@@ -329,7 +324,6 @@ final class ReadingEvidence {
         Set<RuleSite> out = new LinkedHashSet<>();
         here.forEach(each -> {
             if (positions.contains(each.position())
-                    && (part == null || part.equals(each.part()))
                     && word.equals(BlockReason.factOf(each.why()))) {
                 out.add(each.sentTo());
             }

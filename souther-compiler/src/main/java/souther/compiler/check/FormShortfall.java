@@ -25,16 +25,14 @@ import souther.compiler.inputs.RuleSite;
  *                 author's order of the parts is asked of
  * @param sentTo   where a reader goes about it: the call the arithmetic stopped at, or the rule
  *                 itself where that is no call its author wrote
- * @param part     the part of the rule the comparison is written in, which is what tells the
- *                 stops of two parts of one rule apart
  * @param why      what the arithmetic stopped on
  * @param position what was left with no reading of the part
  */
-record FormShortfall(RuleSite site, RuleSite sentTo, PartId<RuleRef.Invariant> part,
-                     BlockReason.RuleReadingStopped why, FactSubject position) {
+record FormShortfall(RuleSite site, RuleSite sentTo, BlockReason.RuleReadingStopped why,
+                     FactSubject position) {
 
     FormShortfall {
-        if (site == null || sentTo == null || part == null || why == null || position == null) {
+        if (site == null || sentTo == null || why == null || position == null) {
             throw new IllegalArgumentException(
                     "where the arithmetic stopped is about a comparison somebody wrote, and says"
                             + " what it stopped on and at which position");

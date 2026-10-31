@@ -104,16 +104,13 @@ record PlacesStopped(SequencedMap<FilingCoordinate, Stop> at) {
     /**
      * These places beside the ones already here, where the values a side holds came from.
      *
-     * <p>A place that was not stopped at by any reading has no stop of its own to be sent to. The
-     * comparison it is filed for was read and stopped, so it is sent to every expression this
-     * reading stopped at, which is the whole of what is known about why the comparison was not
-     * read.
+     * <p>A place no reading stopped at has no stop of its own to be sent to, and is left sent to
+     * the rule: an expression another place was stopped by says nothing of why this one was filed.
      */
     PlacesStopped alsoFiledAt(Map<FilingCoordinate, BlockReason.RuleReadingStopped> more) {
-        SequencedSet<RuleSite> every = new LinkedHashSet<>();
-        at.values().forEach(stop -> every.addAll(stop.sentTo()));
         SequencedMap<FilingCoordinate, Stop> out = new LinkedHashMap<>(at);
-        more.forEach((place, reason) -> out.putIfAbsent(place, new Stop(reason, every)));
+        more.forEach((place, reason) ->
+                out.putIfAbsent(place, new Stop(reason, RuleSite.NO_SITES)));
         return new PlacesStopped(out);
     }
 }

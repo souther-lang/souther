@@ -1733,7 +1733,7 @@ public final class FieldDomains {
     public Set<RuleSite> sentToWhereTheArithmeticStopped(RuleRef rule, RuleKey at,
                                                          BlockReason.RuleReadingStopped why) {
         return rule instanceof RuleRef.Invariant invariant
-                ? took.sentToWhereTheFormStopped(invariant, null, named(at), why) : Set.of();
+                ? took.sentToWhereTheFormStopped(invariant, named(at), why) : Set.of();
     }
 
     /** Every subject the place at {@code path} answers to. */

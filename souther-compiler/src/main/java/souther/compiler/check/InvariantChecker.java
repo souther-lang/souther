@@ -2702,7 +2702,7 @@ public final class InvariantChecker {
             BlockReason.RuleReadingStopped why = stoppedOn.said();
             RuleSite sentTo = stoppedOn.sentTo();
             standing.forEach(name -> took.stoppedOnTheForm(rule,
-                    new FormShortfall(site, sentTo, statement.part(), why, name), statement));
+                    new FormShortfall(site, sentTo, why, name), statement));
         }
     }
 
