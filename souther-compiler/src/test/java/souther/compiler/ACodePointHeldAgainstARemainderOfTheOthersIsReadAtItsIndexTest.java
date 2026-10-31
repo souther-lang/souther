@@ -203,180 +203,139 @@ class ACodePointHeldAgainstARemainderOfTheOthersIsReadAtItsIndexTest {
                 + " dividing"), open);
     }
 
-    private static final String MODEL_WITH_REBUILT_CODES = MODEL.replace(
-            "let body = List.take(11, codes)", """
-                    let rebuilt = {
-                        let unused = List.length(codes) * 9223372036854775807
-                        codes
-                    }
-                    let body = List.take(11, rebuilt)""");
+    private static final String OVERFLOWS = "9223372036854775807";
 
-    /**
-     * What builds the list the closure is applied over is worked out all the same. The list is
-     * the string's code points whatever else the block that answers it computes, but that block
-     * multiplies past what an {@code Int} holds, so a run through it does not get through.
-     */
-    @Test
-    void whatBuildsTheListTheClosureIsAppliedOverIsWorkedOutToo() {
-        String report = report(measured(MODEL_WITH_REBUILT_CODES));
-        assertTrue(report.contains("not read:"), report);
+    /** A block answering {@code value} that first multiplies a number of the input past what an
+     *  {@code Int} holds, and never reads the product. */
+    private static String afterAnOverflow(String value) {
+        return "{ let unused = String.length(p.value) * " + OVERFLOWS + "\n " + value + " }";
     }
 
-    private static final String MODEL_WITH_A_NAMED_MAP = MODEL.replaceFirst(
-            "(?s)let weightedSum.*?\\n(let expectedCheckDigit)", """
-                    let weightedSum (body: List<Int>): Int = {
-                        let weighed = List.mapIndexed(
-                            (i, c) -> (if i <= 5 then i + 2 else i - 4) * digitValue(c),
-                            List.reverse(body))
-                        List.sum(weighed)
-                    }
-                    $1""");
-
-    /** The total of a map bound to a name is read as the total of the map written in place. */
-    @Test
-    void aMapBoundToANameIsReadAsTheMapWrittenInPlace() {
-        assertTrue(!MODEL_WITH_A_NAMED_MAP.equals(MODEL));
-        assertFalse(report(measured(MODEL_WITH_A_NAMED_MAP)).contains("not read:"),
-                () -> report(measured(MODEL_WITH_A_NAMED_MAP)));
-    }
-
-    private static String withAWeightedSum(String definition) {
-        return MODEL.replaceFirst("(?s)let weightedSum.*?\\n(let expectedCheckDigit)",
-                java.util.regex.Matcher.quoteReplacement(definition) + "\n$1");
-    }
-
-    /** A map bound to a name, with what else the binding works out beside the map. */
-    private static String weightedSumOverANamedMap(String besideTheMap) {
-        return withAWeightedSum("""
-                let weightedSum (body: List<Int>): Int = {
-                    let weighed = {
-                        %s
-                        List.mapIndexed(
-                            (i, c) -> (if i <= 5 then i + 2 else i - 4) * digitValue(c),
-                            List.reverse(body))
-                    }
-                    List.sum(weighed)
-                }""".formatted(besideTheMap));
+    /** A block answering {@code value} that first works out a sum of two written numbers. */
+    private static String afterASafeSum(String value) {
+        return "{ let unused = 1 + 1\n " + value + " }";
     }
 
     /**
-     * What a name stands for is worked out where it is bound, and the map it stands for is not all
-     * of it: a binding that multiplies past what an {@code Int} holds beside the map ends a run,
-     * whether or not anything reads what it computes.
+     * The least rule that holds a code point of a three-digit string against the remainder a
+     * total over the first two leaves: the list, the closure, the map and the divisor are each a
+     * hole to put what the case is about in. With nothing put in, the first digit, weighed by the
+     * divisor, is apart from the remainder.
      */
-    @Test
-    void whatABindingWorksOutBesideTheMapItNamesIsWorkedOutToo() {
-        String unsafe = report(measured(weightedSumOverANamedMap(
-                "let unused = List.length(body) * 9223372036854775807")));
-        assertTrue(unsafe.contains("not read:"), unsafe);
-        String safe = report(measured(weightedSumOverANamedMap(
-                "let unused = 1 + 1")));
-        assertFalse(safe.contains("not read:"), safe);
+    private static String tiny(String codes, String closure, String map, String divisor) {
+        return """
+                module p
+                data Pair = String
+                    invariant String.matches("[0-9]{3}", value)
+                behavior pick : (p: Pair) -> Int
+                let digitValue (c: Int): Int =
+                    match List.get(0, String.codePoints("0")) with
+                        | Some zero -> c - zero
+                        | None -> unreachable "a one-character string has a first code point"
+                let pick (p) = {
+                    let codes = %s
+                    let weighed = %s
+                    let r = Int.floorMod(List.sum(weighed), %s)
+                    match List.get(2, codes) with
+                        | Some c -> if c + r == 55 then 1 else 0
+                        | None -> unreachable "three digits"
+                }
+                """.formatted(codes, map.formatted(closure), divisor);
     }
 
-    private static String remainderByTheDivisor(String divisor) {
-        return MODEL.replace("Int.floorMod(weightedSum(body), 11)",
-                "Int.floorMod(weightedSum(body), " + divisor + ")");
+    private static final String CODES = "String.codePoints(p.value)";
+    private static final String CLOSURE = "(i, c) -> (if i == 0 then 7 else 1) * digitValue(c)";
+    private static final String MAP = "List.mapIndexed(%s, List.take(2, codes))";
+    private static final String DIVISOR = "7";
+    private static final String APART =
+            "it relates the value here to another value rather than dividing";
+
+    /** Whether the rule is read so that the first digit is shown apart from the remainder. */
+    private static boolean readsApart(String codes, String closure, String map, String divisor) {
+        return report(measured(tiny(codes, closure, map, divisor))).contains(APART);
+    }
+
+    /** The control every case below departs from in one place. */
+    @Test
+    void theLeastRuleOverTheCodePointsOfAStringIsRead() {
+        assertTrue(readsApart(CODES, CLOSURE, MAP, DIVISOR));
     }
 
     /**
-     * That the divisor comes to eleven says nothing of what is worked out to get there: a block
-     * that multiplies past what an {@code Int} holds and then answers eleven ends the run first.
+     * What a name, a block or a divisor stands for is a value, and what is worked out to reach
+     * it is worked out all the same: the list the closure is applied over, the map a name stands
+     * for and the divisor each multiply past what an {@code Int} holds beside the value they
+     * come to, and the run ends there. Where what they work out ends no run, the rule is read
+     * as it is with the value written in place.
      */
     @Test
-    void aDivisorThatComesToElevenIsWorkedOutToReachIt() {
-        String unsafe = report(measured(remainderByTheDivisor(
-                "{ let unused = List.length(body) * 9223372036854775807\n 11 }")));
-        assertTrue(unsafe.contains("not read:"), unsafe);
-        String safe = report(measured(remainderByTheDivisor(
-                "{ let unused = 1 + 1\n 11 }")));
-        assertFalse(safe.contains("not read:"), safe);
+    void whatIsWorkedOutToReachAValueIsWorkedOutToo() {
+        assertFalse(readsApart(afterAnOverflow(CODES), CLOSURE, MAP, DIVISOR), "the list");
+        assertFalse(readsApart(CODES, CLOSURE, afterAnOverflow(MAP), DIVISOR), "the map");
+        assertFalse(readsApart(CODES, CLOSURE, MAP, afterAnOverflow(DIVISOR)), "the divisor");
+        assertTrue(readsApart(afterASafeSum(CODES), CLOSURE, afterASafeSum(MAP),
+                afterASafeSum(DIVISOR)));
     }
 
     /**
      * That a library call answers whatever it is handed is the call's own, and not its arguments':
-     * working out a count that multiplies past what an {@code Int} holds ends the run, whatever
-     * the call then does with the eleven it comes to.
+     * a count that multiplies past what an {@code Int} holds ends the run, whatever the call then
+     * does with the two it comes to.
      */
     @Test
     void aCallThatAnswersWhateverItIsHandedStillWorksOutItsArguments() {
-        String safe = report(measured(MODEL.replace("List.take(11, codes)",
-                "List.take({ let unused = 1 + 1\n 11 }, codes)")));
-        assertFalse(safe.contains("not read:"), safe);
-        String unsafe = report(measured(MODEL.replace("List.take(11, codes)",
-                "List.take({ let unused = List.length(codes) * 9223372036854775807\n 11 }, codes)")));
-        assertTrue(unsafe.contains("not read:"), unsafe);
+        assertTrue(readsApart(CODES, CLOSURE,
+                "List.mapIndexed(%s, List.take(" + afterASafeSum("2") + ", codes))", DIVISOR));
+        assertFalse(readsApart(CODES, CLOSURE,
+                "List.mapIndexed(%s, List.take(" + afterAnOverflow("2") + ", codes))", DIVISOR));
     }
 
-    private static String digitValueOver(String zeros, String taken) {
-        return MODEL.replaceFirst("(?s)let digitValue.*?\\n(let weightedSum)", """
-                let digitValue (c: Int): Int = {
-                    let zeros = %s
-                    match List.get(0, zeros) with
-                        | Some zero -> %s
-                        | None -> unreachable "a one-character string has a first code point"
-                }
-                $1""".formatted(zeros, taken));
-    }
-
-    /**
-     * The lookup a match is read at the arm of finds its element in a list a name stands for, and
-     * what is worked out to build that list is worked out all the same; so is the arm taken,
-     * while the arm not taken is not.
-     */
+    /** A closure over code points inside another is read at the arm its match takes too. */
     @Test
-    void aMatchIsReadAtItsArmOnlyWhereWhatDecidesItAndTheArmTakenEndNoRun() {
-        String plain = "String.codePoints(\"0\")";
-        String taken = "c - zero";
-        assertFalse(report(measured(digitValueOver(plain, taken))).contains("not read:"));
-        String buildsUnsafely = report(measured(digitValueOver(
-                "{ let unused = c * 9223372036854775807\n " + plain + " }", taken)));
-        assertTrue(buildsUnsafely.contains("not read:"), buildsUnsafely);
-        String armUnsafe = report(measured(digitValueOver(plain,
-                "c * 9223372036854775807 - zero")));
-        assertTrue(armUnsafe.contains("not read:"), armUnsafe);
-    }
-
-    /** Two closures over code points, one inside the other, are each read at the arm their
-     *  match takes. Each is read by a reading of its own, so the inner one cannot turn off what
-     *  the outer one is read with; this holds the two together. */
-    @Test
-    void aClosureOverCodePointsInsideAnotherIsReadAtItsArmToo() {
-        String nested = MODEL.replace("* digitValue(c)", "* (digitValue(c) + List.sum("
-                + "List.mapIndexed((j, d) -> 0 * digitValue(d), List.take(1, body))))");
-        assertTrue(!nested.equals(MODEL));
-        assertFalse(report(measured(nested)).contains("not read:"),
-                () -> report(measured(nested)));
+    void aClosureOverCodePointsInsideAnotherIsRead() {
+        String nested = "(i, c) -> (if i == 0 then 7 else 1) * (digitValue(c) + List.sum("
+                + "List.mapIndexed((j, d) -> 0 * digitValue(d), List.take(1, codes))))";
+        assertTrue(readsApart(CODES, nested, MAP, DIVISOR));
     }
 
     /**
      * A remainder is worked out through the number it divides only where the divisor is a
-     * positive number written down. By a divisor the run takes from its input, or one that is
-     * not positive, working it out may end the run on its own, and what the weighed sum ends is
-     * not every operation the run works out.
+     * positive number written down: by one the run takes from its input, or one that is not
+     * positive, working it out may end the run on its own.
      */
     @Test
     void aRemainderByADivisorThatIsNoPositiveConstantIsNotWorkedOutThroughItsDividend() {
-        for (String divisor : List.of("0 - 11", "List.length(body)")) {
-            String model = MODEL.replace("Int.floorMod(weightedSum(body), 11)",
-                    "Int.floorMod(weightedSum(body), " + divisor + ")");
-            assertTrue(!model.equals(MODEL));
-            assertTrue(report(measured(model)).contains("not read:"),
-                    () -> divisor + "\n" + report(measured(model)));
+        for (String divisor : List.of("0 - 7", "List.length(codes)")) {
+            assertFalse(readsApart(CODES, CLOSURE, MAP, divisor), divisor);
         }
     }
 
+    private static String closureMatching(String zeros, String taken) {
+        return """
+                (i, c) -> (if i == 0 then 7 else 1) * (%s)""".formatted("""
+                { let zeros = %s
+                  match List.get(0, zeros) with
+                      | Some zero -> %s
+                      | None -> unreachable "a one-character string has a first code point" }"""
+                .formatted(zeros, taken));
+    }
+
     /**
-     * A match inside the closure is read at its taken arm only where the lookup it matches on
-     * finds an element. A lookup past the end of the one-character text finds none, so neither arm
-     * is the taken one, the {@code unreachable} one is not excluded, and what the closure works out
-     * is not shown to get through.
+     * A match in the closure is read at the arm a lookup in a list written down takes, and what
+     * is worked out to build that list, and the arm taken, end no run; the arm not taken is not
+     * asked. A lookup that finds nothing takes neither arm.
      */
     @Test
-    void aMatchWhoseLookupFindsNothingLeavesTheClosureUnshown() {
-        String report = report(measured(MODEL.replace("List.get(0, String.codePoints(\"0\"))",
-                "List.get(1, String.codePoints(\"0\"))")));
-        assertTrue(report.contains("not read:"), report);
+    void aMatchIsReadAtItsArmOnlyWhereWhatDecidesItAndTheArmTakenEndNoRun() {
+        String plain = "String.codePoints(\"0\")";
+        assertTrue(readsApart(CODES, closureMatching(plain, "c - zero"), MAP, DIVISOR));
+        for (String unsafe : List.of(
+                closureMatching("{ let unused = c * " + OVERFLOWS + "\n " + plain + " }",
+                        "c - zero"),
+                closureMatching(plain, "c * " + OVERFLOWS + " - zero"),
+                closureMatching(plain, "c - zero").replace("List.get(0,", "List.get(1,"))) {
+            assertFalse(readsApart(CODES, unsafe, MAP, DIVISOR), unsafe);
+        }
     }
 
     /**
