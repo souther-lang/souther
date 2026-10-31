@@ -1,8 +1,10 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.meaning.Proposition;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * What a search for a row at one item of a border is asked to find, by the way such a row can be
@@ -32,6 +34,18 @@ public sealed interface PointSearchGoal {
             case ByConstraints(Standing constraint) ->
                     new ByConstraints(constraint.alongTheWay(way));
             case ByObservation observed -> observed;
+        };
+    }
+
+    /**
+     * This, where a row is a witness only inside {@code decides}, the case the line decides in
+     * ({@link Standing#inTheCase}); itself where there is no such case, and for a run's goal.
+     */
+    default PointSearchGoal inTheCase(Optional<Proposition> decides) {
+        return switch (this) {
+            case ByConstraints(Standing constraint) when decides.isPresent() ->
+                    new ByConstraints(constraint.inTheCase(decides.get()));
+            case ByConstraints _, ByObservation _ -> this;
         };
     }
 

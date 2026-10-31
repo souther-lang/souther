@@ -1004,8 +1004,10 @@ public final class LevelRealizer {
             if (asked == null || !asked.isWhole()
                     || !(asked.floor() instanceof ExactAnswer.Held<BigInteger> remainder)
                     || remainder.value().signum() < 0
-                    || remainder.value().compareTo(over.divisor()) >= 0) {
-                // A remainder the divisor cannot leave: no value of the form is at it.
+                    || remainder.value().compareTo(over.divisor()) >= 0
+                    || !over.remainders().holds(remainder.value())) {
+                // A remainder the divisor cannot leave, or the way to the item does not: no value
+                // of the form along the way is at it.
                 continue;
             }
             Congruences wanted = new Congruences(remainder.value().subtract(moved), over.divisor())
@@ -1069,7 +1071,8 @@ public final class LevelRealizer {
             ExactRatio asked = level.asAnExactNumber();
             if (asked != null && asked.isWhole()
                     && asked.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger r)
-                    && r.signum() >= 0 && r.compareTo(over.divisor()) < 0) {
+                    && r.signum() >= 0 && r.compareTo(over.divisor()) < 0
+                    && over.remainders().holds(r)) {
                 congruents.add(new NumericWitness.Congruent(over.dividend(), over.divisor(), r));
             }
         }

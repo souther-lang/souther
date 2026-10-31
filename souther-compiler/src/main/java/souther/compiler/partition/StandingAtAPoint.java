@@ -317,6 +317,18 @@ public final class StandingAtAPoint {
         }
 
         /**
+         * What a row read back here has to meet for the line to decide at it, where it has to:
+         * the case of a statement of several the line is one line of. Nothing for a point of a
+         * class, which lies over the whole quantity, nor for a line that is a whole comparison's.
+         */
+        public Optional<Proposition> caseItDecidesIn() {
+            return decides.isEmpty() ? Optional.empty()
+                    : line.border().origin() instanceof LineOrigin.ComparisonOrigin comparison
+                            ? comparison.part().map(WhereAPartDecides::decides)
+                            : Optional.empty();
+        }
+
+        /**
          * This line put to rows for a point of a class it cuts, the class where the rule
          * {@code holds} or the one where it does not.
          *
