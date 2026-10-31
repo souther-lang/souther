@@ -773,12 +773,13 @@ class HowLongThePathASearchAnswersIsReadTest {
         // Rows are offered for the points of every role's border, down to a line of five nodes
         // for the role that needs three above the submitter, each holding the submitter only at
         // its last node.
-        List<String> offered = Adequacy.offeredFor(compilation.db(),
+        List<List<String>> offeredInputs = Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("demo"))
                 .rowsByBehavior().getOrDefault("approvalChainFor", List.of()).stream()
-                .map(row -> String.join(", ",
-                        row.inputs().stream().map(FixtureTemplate::text).toList()))
+                .map(row -> row.inputs().stream().map(FixtureTemplate::text).toList())
                 .toList();
+        List<String> offered = offeredInputs.stream()
+                .map(inputs -> String.join(", ", inputs)).toList();
         assertTrue(offered.stream().anyMatch(row ->
                         row.split("reports = \\[RoleNode", -1).length >= 5
                                 && row.endsWith("Cfo")),
@@ -786,11 +787,7 @@ class HowLongThePathASearchAnswersIsReadTest {
         // Written back as examples the rows are run by the language, and what they reach is read.
         StringBuilder written = new StringBuilder();
         int named = 0;
-        for (List<String> inputs : Adequacy.offeredFor(compilation.db(),
-                        OfferingRequest.overTheModule("demo"))
-                .rowsByBehavior().getOrDefault("approvalChainFor", List.of()).stream()
-                .map(row -> row.inputs().stream().map(FixtureTemplate::text).toList())
-                .toList()) {
+        for (List<String> inputs : offeredInputs) {
             String role = inputs.get(2);
             int needed = switch (role) {
                 case "SalesManager" -> 1;
@@ -812,7 +809,7 @@ class HowLongThePathASearchAnswersIsReadTest {
         assertEquals(List.of(), after.errors().stream()
                 .map(each -> each.diagnostic().code()).toList());
         List<BorderAssessment.Point> owed = BorderAssessment.pointsOf(
-                        Adequacy.searchedBoundariesOf(after.db(), "demo").get("approvalChainFor"))
+                        Adequacy.boundariesOf(after.db(), "demo").get("approvalChainFor"))
                 .stream().filter(point -> point.owed() != null)
                 .filter(point -> point.asked().contains(" where role is "))
                 .toList();
