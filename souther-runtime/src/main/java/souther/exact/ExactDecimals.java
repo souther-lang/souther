@@ -58,8 +58,61 @@ public final class ExactDecimals {
      * question asked by a caller that does have somewhere to fall back to.
      */
     public static boolean fitsPlainNotation(BigDecimal d) {
-        return plainNotationLength(d) <= MAX_SPELT_OUT_DIGITS;
+        long sign = d.signum() < 0 ? 1 : 0;
+        long scale = d.scale();
+        if (d.signum() == 0) {
+            return scale <= 0 || 2 + scale <= MAX_SPELT_OUT_DIGITS;
+        }
+        if (scale <= 0) {
+            return hasAtMostDigits(d, MAX_SPELT_OUT_DIGITS - sign + scale);
+        }
+        // With more digits than the scale the point falls among them and the length is the digits
+        // and the point; with fewer, it is the leading zeros the scale asks for. The longer of the
+        // two is the length, so both have to fit.
+        return sign + 2 + scale <= MAX_SPELT_OUT_DIGITS
+                && hasAtMostDigits(d, MAX_SPELT_OUT_DIGITS - 1 - sign);
     }
+
+    /**
+     * Whether {@code d} carries at most {@code limit} significant digits, answered from the bit
+     * length of its unscaled value and not by counting them: a count of a large value is work that
+     * grows faster than the value does.
+     *
+     * <p>A number of at most {@code 3 × limit} bits is below {@code 2^(3 × limit)}, which is below
+     * {@code 10^limit}, and a number of more than {@code 4 × limit} bits is past
+     * {@code 2^(4 × limit)}, which is past {@code 10^limit}. Only a value between the two is
+     * compared with {@code 10^limit}, and that is a value of at most {@code 4 × limit} bits, so the
+     * power built is no larger than the value compared. A caller's limit is meant to be a bound on a
+     * notation, a thousand and not a million.
+     */
+    public static boolean hasAtMostDigits(BigDecimal d, long limit) {
+        if (limit < 1) {
+            return false;
+        }
+        BigInteger unscaled = d.unscaledValue();
+        if (bitsSayAtMostDigits(unscaled, limit)) {
+            return true;
+        }
+        if (unscaled.bitLength() > 4 * limit) {
+            return false;
+        }
+        return unscaled.abs().compareTo(BigInteger.TEN.pow(Math.toIntExact(limit))) < 0;
+    }
+
+    /** Whether the bit length of {@code unscaled} alone shows it has at most {@code limit} digits. */
+    private static boolean bitsSayAtMostDigits(BigInteger unscaled, long limit) {
+        long bits = unscaled.bitLength();
+        // the least negative number of n bits has a magnitude of n + 1
+        long magnitudeBits = unscaled.signum() < 0 ? bits + 1 : bits;
+        return magnitudeBits <= 3 * limit;
+    }
+
+    /**
+     * The most decimal digits a number of an int's worth of bits has: {@code 10^k} is past
+     * {@code 2^(3k)}, so a number of at most {@code Integer.MAX_VALUE} bits has at most a third of
+     * that, rounded up, and no more.
+     */
+    private static final long MOST_DIGITS_ANY_DECIMAL_HOLDS = (Integer.MAX_VALUE + 2L) / 3;
 
     /**
      * The amount {@code d} is, carried by as few digits as a {@code BigDecimal} can carry it: one
@@ -77,8 +130,11 @@ public final class ExactDecimals {
             return BigDecimal.ZERO;                  // every way of writing nothing is one amount
         }
         long room = (long) d.scale() - Integer.MIN_VALUE;
-        if (room >= d.precision()) {
-            return d.stripTrailingZeros();           // fewer zeros than digits: it cannot fall out
+        // Fewer zeros than digits, so the scale cannot fall out. Room past what any decimal has in
+        // digits settles it without reading the digits; a value the room is not past by its bits
+        // goes on to take its zeros off one at a time, which stops at the first digit that is not one.
+        if (room >= MOST_DIGITS_ANY_DECIMAL_HOLDS || bitsSayAtMostDigits(d.unscaledValue(), room)) {
+            return d.stripTrailingZeros();
         }
         BigInteger digits = d.unscaledValue();
         int scale = d.scale();
