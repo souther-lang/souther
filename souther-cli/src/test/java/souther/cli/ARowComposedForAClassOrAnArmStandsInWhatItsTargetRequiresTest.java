@@ -85,7 +85,7 @@ class ARowComposedForAClassOrAnArmStandsInWhatItsTargetRequiresTest {
     void whatACandidateFillsIsSettledByRunningItAndTheRowSaysWhatItStoodIn() {
         String block = generated(UNREACHED);
 
-        assertTrue(block.contains("// fills s=Found"),
+        assertTrue(block.contains("// fills Found at s"),
                 () -> "the class of the position the candidate lands in is filled by it: " + block);
         assertTrue(block.contains("// fills case Found"),
                 () -> "and so is the arm the run went through: " + block);

@@ -2600,7 +2600,7 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "voucher/= spring", "voucher//= spring" ],
+          "classes" : [ "voucher: = spring", "voucher: /= spring" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
@@ -2612,7 +2612,7 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "party/1 <= x <= 4", "party/4 < x <= 8" ],
+          "classes" : [ "party: 1 <= x <= 4", "party: 4 < x <= 8" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
@@ -4551,7 +4551,7 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "ticket/String.startsWith(\"w-\", x)", "ticket/not String.startsWith(\"w-\", x)" ],
+          "classes" : [ "ticket: String.startsWith(\"w-\", x)", "ticket: not String.startsWith(\"w-\", x)" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
@@ -4563,7 +4563,7 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "party/1 <= x <= 4", "party/4 < x <= 8" ],
+          "classes" : [ "party: 1 <= x <= 4", "party: 4 < x <= 8" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
@@ -5223,8 +5223,8 @@
             "other" : "seat/party",
             "total" : 4,
             "kept" : [ {
-              "one" : "ticket/String.startsWith(\"w-\", x)",
-              "other" : "party/1 <= x <= 4",
+              "one" : "ticket: String.startsWith(\"w-\", x)",
+              "other" : "party: 1 <= x <= 4",
               "by" : [ {
                 "reason" : "a_decision_nothing_names"
               }, {
@@ -5232,8 +5232,8 @@
                 "position" : "seat/ticket"
               } ]
             }, {
-              "one" : "ticket/String.startsWith(\"w-\", x)",
-              "other" : "party/4 < x <= 8",
+              "one" : "ticket: String.startsWith(\"w-\", x)",
+              "other" : "party: 4 < x <= 8",
               "by" : [ {
                 "reason" : "a_decision_nothing_names"
               }, {
@@ -5241,8 +5241,8 @@
                 "position" : "seat/ticket"
               } ]
             }, {
-              "one" : "ticket/not String.startsWith(\"w-\", x)",
-              "other" : "party/1 <= x <= 4",
+              "one" : "ticket: not String.startsWith(\"w-\", x)",
+              "other" : "party: 1 <= x <= 4",
               "by" : [ {
                 "reason" : "a_decision_nothing_names"
               }, {
@@ -5250,8 +5250,8 @@
                 "position" : "seat/ticket"
               } ]
             }, {
-              "one" : "ticket/not String.startsWith(\"w-\", x)",
-              "other" : "party/4 < x <= 8",
+              "one" : "ticket: not String.startsWith(\"w-\", x)",
+              "other" : "party: 4 < x <= 8",
               "by" : [ {
                 "reason" : "a_decision_nothing_names"
               }, {

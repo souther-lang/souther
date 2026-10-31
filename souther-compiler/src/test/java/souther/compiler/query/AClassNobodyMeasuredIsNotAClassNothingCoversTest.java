@@ -75,7 +75,7 @@ class AClassNobodyMeasuredIsNotAClassNothingCoversTest {
      */
     @Test
     void theClassesTheRowsMissedAreOfferedARowEach() {
-        assertEquals(List.of("c=Blue", "c=Green"),
+        assertEquals(List.of("Blue at c", "Green at c"),
                 classesOffered(ONE_CLASS_COVERED, Adequacy.Asked.reportOnly(Adequacy.Level.ALL)),
                 "a row sits in Red, and the other two are work");
     }
@@ -89,7 +89,7 @@ class AClassNobodyMeasuredIsNotAClassNothingCoversTest {
      */
     @Test
     void aBehaviorWithNoRowsIsOfferedOneAtEveryClass() {
-        assertEquals(List.of("c=Blue", "c=Green", "c=Red"),
+        assertEquals(List.of("Blue at c", "Green at c", "Red at c"),
                 classesOffered(NO_ROWS_AT_ALL, Adequacy.Asked.reportOnly(Adequacy.Level.ALL)),
                 "nothing names this behavior, so each of its classes is a row to write");
     }

@@ -1696,7 +1696,7 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "worked/1 <= x < 5", "worked/5 <= x <= 7" ],
+          "classes" : [ "worked: 1 <= x < 5", "worked: 5 <= x <= 7" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
@@ -1708,7 +1708,7 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "rate/0 <= x < 0.8", "rate/0.8 <= x <= 1" ],
+          "classes" : [ "rate: 0 <= x < 0.8", "rate: 0.8 <= x <= 1" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
@@ -2925,7 +2925,7 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "hours/0 <= x <= 45", "hours/45 < x <= 100", "hours/100 < x <= 200" ],
+          "classes" : [ "hours: 0 <= x <= 45", "hours: 45 < x <= 100", "hours: 100 < x <= 200" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],

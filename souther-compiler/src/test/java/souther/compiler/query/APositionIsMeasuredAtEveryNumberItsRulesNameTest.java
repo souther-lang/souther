@@ -106,7 +106,7 @@ class APositionIsMeasuredAtEveryNumberItsRulesNameTest {
         List<Axis> axes = axesOf(THE_LENGTH_AND_THE_VALUE);
 
         assertEquals(List.of("t", "String.length(t)"), namesOf(axes));
-        assertEquals(List.of("t/String.startsWith(\"w-\", x)", "t/not String.startsWith(\"w-\", x)"),
+        assertEquals(List.of("t: String.startsWith(\"w-\", x)", "t: not String.startsWith(\"w-\", x)"),
                 classesAt(axes, "t"));
     }
 
@@ -124,10 +124,10 @@ class APositionIsMeasuredAtEveryNumberItsRulesNameTest {
 
         assertEquals(List.of("t", "String.length(t)"), namesOf(axes));
         assertEquals(List.of(
-                        "t/String.startsWith(\"w-\", x) and String.endsWith(\"-1\", x)",
-                        "t/String.startsWith(\"w-\", x) and not String.endsWith(\"-1\", x)",
-                        "t/not String.startsWith(\"w-\", x) and String.endsWith(\"-1\", x)",
-                        "t/not String.startsWith(\"w-\", x) and not String.endsWith(\"-1\", x)"),
+                        "t: String.startsWith(\"w-\", x) and String.endsWith(\"-1\", x)",
+                        "t: String.startsWith(\"w-\", x) and not String.endsWith(\"-1\", x)",
+                        "t: not String.startsWith(\"w-\", x) and String.endsWith(\"-1\", x)",
+                        "t: not String.startsWith(\"w-\", x) and not String.endsWith(\"-1\", x)"),
                 classesAt(axes, "t"));
     }
 }

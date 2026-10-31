@@ -255,9 +255,9 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
     void aReadableValueIsStillPlacedInTheClassThatHoldsIt() {
         Read read = read();
 
-        assertEquals(Classification.in("request.cost/0 <= x <= 100"),
+        assertEquals(Classification.in("request.cost: 0 <= x <= 100"),
                 at(read, read.row(), "request.cost"));
-        assertEquals(Classification.in("request.plain/x <= 10"),
+        assertEquals(Classification.in("request.plain: x <= 10"),
                 at(read, read.row(), "request.plain"));
         assertEquals(Classification.in("Domestic"),
                 at(read, read.row(), "request.kind"));
@@ -269,7 +269,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
 
         assertEquals(Classification.in("Overseas"),
                 at(read, read.acrossTheLines(), "request.kind"));
-        assertEquals(Classification.in("request.cost/100 < x"),
+        assertEquals(Classification.in("request.cost: 100 < x"),
                 at(read, read.acrossTheLines(), "request.cost"));
     }
 

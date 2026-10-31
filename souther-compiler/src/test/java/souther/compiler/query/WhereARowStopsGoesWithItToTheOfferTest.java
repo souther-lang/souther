@@ -45,7 +45,7 @@ class WhereARowStopsGoesWithItToTheOfferTest {
             """;
 
     /** The row about the class the guard refuses, which stops there. */
-    private static final String STOPS = "amount=x <= 0";
+    private static final String STOPS = "amount: x <= 0 at amount";
 
     private static FillResult filled() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");

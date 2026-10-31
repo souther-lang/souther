@@ -167,7 +167,7 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
     /** The rows about {@code kind} are past the guard: the campaigns hold the priority. */
     @Test
     void aRowAboutAnotherPositionGoesOnPastTheGuard() {
-        for (String kind : List.of("kind=Plain", "kind=Express")) {
+        for (String kind : List.of("Plain at kind", "Express at kind")) {
             List<String> row = generatedOf(HOLDING).classes().get(kind);
             assertNotNull(row, () -> "a row is offered for " + kind);
             assertTrue(holds(row.get(1), row.get(2)), () -> "the row holds the priority: " + row);
@@ -177,7 +177,7 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
     /** And past a guard on its not holding it: the campaigns are kept from the priority. */
     @Test
     void aRowAboutAnotherPositionGoesOnPastAGuardThatKeepsTheValueOut() {
-        for (String kind : List.of("kind=Plain", "kind=Express")) {
+        for (String kind : List.of("Plain at kind", "Express at kind")) {
             List<String> row = generatedOf(KEPT_OUT).classes().get(kind);
             assertNotNull(row, () -> "a row is offered for " + kind);
             assertFalse(holds(row.get(1), row.get(2)),
@@ -215,13 +215,13 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
     @Test
     void aFieldOnlyNamedIsHandedOnAsTheBoundaryBuiltIt() {
         Rows rows = generatedOf(ONLY_NAMED);
-        List<String> row = rows.classes().get("kind=Plain");
+        List<String> row = rows.classes().get("Plain at kind");
         assertNotNull(row, () -> "a row is offered for the kind: " + rows);
         assertEquals("usual", row.get(2),
                 () -> "the request is the stated value, not composed afresh: " + row);
         assertEquals(List.of("1"), elementsOf(row.get(1), "allowed"),
                 () -> "the set holds the level the stated value has: " + row);
-        assertNull(rows.stops().get("kind=Plain"),
+        assertNull(rows.stops().get("Plain at kind"),
                 () -> "and the row is past the guard: " + rows.stops());
     }
 
@@ -238,9 +238,9 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
                 .replace("Set<Int>", "Set<String>")
                 .replace("level = 1", "level = \"" + "x".repeat(Limits.DEFAULT.maxText() + 1)
                         + "\""));
-        assertEquals("usual", rows.classes().get("kind=Plain").get(2),
+        assertEquals("usual", rows.classes().get("Plain at kind").get(2),
                 () -> "the request is the stated value, not composed afresh: " + rows);
-        RepairShortfall stop = rows.stops().get("kind=Plain");
+        RepairShortfall stop = rows.stops().get("Plain at kind");
         assertTrue(stop != null && stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast,
                 () -> "the row stops at the guard with every way past it looked at: " + stop);
         List<Generator.UnresolvedCombination.Reason> said = new ArrayList<>();
@@ -293,7 +293,7 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
     @Test
     void aValueAClassChoosesWholeIsHandedOnAsItWasBuilt() {
         Rows rows = generatedOf(A_CASE_CHOSEN_WHOLE);
-        for (String label : List.of("request.level=Small", "request.level=Large")) {
+        for (String label : List.of("Small at request.level", "Large at request.level")) {
             List<String> row = rows.classes().get(label);
             assertNotNull(row, () -> "a row is offered for " + label + ": " + rows);
             String level = row.get(2).replaceAll("^Request \\{ level = (.*), note = .*$", "$1");
@@ -340,7 +340,7 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
     @Test
     void aComposedFieldBuiltAsNothingThisCanWriteIsSaidAsNothingComposingOne() {
         Rows rows = generatedOf(COMPOSED_PAST_WHAT_IS_OBSERVED);
-        RepairShortfall stop = rows.stops().get("kind=Plain");
+        RepairShortfall stop = rows.stops().get("Plain at kind");
         assertTrue(stop != null && stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast,
                 () -> "the row stops at the guard with every way past it looked at: " + rows);
         List<Generator.UnresolvedCombination.Reason> said = new ArrayList<>();
@@ -438,7 +438,7 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
     @Test
     void aTruthAskingTwoThingsAtOnceHoldsTheRowToBoth() {
         Rows rows = generatedOf(TWO_THINGS_AT_ONCE);
-        for (String kind : List.of("kind=Plain", "kind=Express")) {
+        for (String kind : List.of("Plain at kind", "Express at kind")) {
             List<String> row = rows.classes().get(kind);
             assertNotNull(row, () -> "a row is offered for " + kind + ": " + rows);
             Matcher gate = Pattern.compile("gate = (-?\\d+)").matcher(row.get(1));

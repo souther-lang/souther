@@ -456,7 +456,7 @@ class AConditionHoldingAPieceOfASplitToAPatternDividesTheStringTest {
             return AdequacyReport.of(compilation)
                     .human(SourceRendering.namedByIdentity(compilation.texts()))
                     .replaceAll("predicate@\\d+:\\d+", "predicate")
-                    .replaceAll("`list\\.s/[^`]*`", "`list.s/the rule`")
+                    .replaceAll("`list\\.s: [^`]*`", "`list.s: the rule`")
                     .lines()
                     .filter(line -> !line.strip().startsWith("replacement ")
                             && !line.contains("no row would come out differently if the fold")

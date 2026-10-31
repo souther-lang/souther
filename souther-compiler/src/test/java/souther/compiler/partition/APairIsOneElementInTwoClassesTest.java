@@ -89,7 +89,7 @@ class APairIsOneElementInTwoClassesTest {
                 [ Person { age = 17, status = Active },
                   Person { age = 20, status = Inactive } ]""");
 
-        assertEquals(List.of(Set.of("people[*].age/x < 18", "people[*].age/18 <= x"),
+        assertEquals(List.of(Set.of("people[*].age: x < 18", "people[*].age: 18 <= x"),
                         Set.of("Active", "Inactive")),
                 select.axes().stream().map(a -> WhatTheRowsReached.at(a).covered()).toList());
     }

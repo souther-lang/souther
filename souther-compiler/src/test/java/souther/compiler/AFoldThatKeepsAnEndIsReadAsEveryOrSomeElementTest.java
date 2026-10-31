@@ -225,7 +225,7 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
                 .formatted(GREATER)));
         assertFalse(unbounded.report().contains(NOT_SHOWN_TO_REACH), unbounded::report);
         assertTrue(unbounded.written().stream()
-                        .anyMatch(row -> row.isFor("lines[*].discount=x <= 0")),
+                        .anyMatch(row -> row.isFor("lines[*].discount: x <= 0 at lines[*].discount")),
                 () -> unbounded.report() + "\n" + unbounded.rows());
         String alone = report("""
                 module example.worst

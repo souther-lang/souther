@@ -88,7 +88,7 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
     void whatOnlyTheRowThatDoesNotHoldReachesIsMarkedInEveryMeasure() {
         String human = human(ONLY);
         assertEquals(List.of(
-                        "      ~ only a row that does not hold is in `t/24 <= x` at t:"
+                        "      ~ only a row that does not hold is in `t: 24 <= x` at t:"
                                 + " label 24 is warm (9:7)",
                         "      ~ only a row that does not hold is at the OFF point"
                                 + " (comparison@5:28): label 24 is warm (9:7)",
@@ -234,11 +234,11 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
     void aCombinationOfClassesOnlyARowThatDoesNotHoldIsInIsMarked() {
         String human = human(PAIRS);
         assertTrue(human.contains("      ~ only a row that does not hold is in `Metered` at"
-                + " charge/plan with `usage/100 < x` at charge/usage: charge metered, past 100"
+                + " charge/plan with `usage: 100 < x` at charge/usage: charge metered, past 100"
                 + " (21:7)\n"), human);
         JsonNode between = behavior(json(PAIRS), "charge").get("partition").get("pairs")
                 .get("between").get(0);
-        assertEquals("usage/100 < x", between.get("coveredOnlyBy").get(0).get("other").asString(),
+        assertEquals("usage: 100 < x", between.get("coveredOnlyBy").get(0).get("other").asString(),
                 between::toString);
 
         String withAnother = PAIRS + "    | \"metered, at 200\" : (Metered, Usage(200))"

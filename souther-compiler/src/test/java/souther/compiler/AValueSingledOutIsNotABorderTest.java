@@ -80,7 +80,7 @@ class AValueSingledOutIsNotABorderTest {
      *  them. */
     @Test
     void anOrderingComparisonDividesThePositionAndDrawsABorder() {
-        assertEquals(List.of("r.cost/x <= 20", "r.cost/20 < x"), classes("r.cost <= 20"));
+        assertEquals(List.of("r.cost: x <= 20", "r.cost: 20 < x"), classes("r.cost <= 20"));
         assertEquals(1, borders("r.cost <= 20"));
     }
 
@@ -93,7 +93,7 @@ class AValueSingledOutIsNotABorderTest {
      */
     @Test
     void anEqualityPutsTheValueInAClassOfItsOwn() {
-        assertEquals(List.of("r.cost/= 20", "r.cost//= 20"), classes("r.cost == 20"));
+        assertEquals(List.of("r.cost: = 20", "r.cost: /= 20"), classes("r.cost == 20"));
     }
 
     /**

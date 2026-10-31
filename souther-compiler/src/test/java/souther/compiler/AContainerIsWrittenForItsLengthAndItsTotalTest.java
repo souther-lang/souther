@@ -81,7 +81,7 @@ class AContainerIsWrittenForItsLengthAndItsTotalTest {
         assertTrue(offered.contains("| ("),
                 () -> "and rows are offered: " + offered);
 
-        String row = RowsOfABlock.forThe(offered, "ns=2 <= x").written();
+        String row = RowsOfABlock.forThe(offered, "List.length(ns): 2 <= x at List.length(ns)").written();
         List<Integer> held = elementsOf(row);
 
         assertTrue(held.size() >= 2,

@@ -92,7 +92,7 @@ class WhatAnAttemptBuiltIsReadThroughItsNameTest {
         for (String source : List.of(THRESHOLD, THRESHOLD_UNDER_A_GUARD)) {
             PartitionEvidence size = evidence(source, "size");
 
-            assertEquals(List.of("x/x <= 10", "x/10 < x"), axis(size, "x").classes(), source);
+            assertEquals(List.of("x: x <= 10", "x: 10 < x"), axis(size, "x").classes(), source);
             assertEquals(List.of(), size.notRead(), () -> "the comparison is a line: " + source);
         }
     }

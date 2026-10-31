@@ -3044,12 +3044,12 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "among/0 <= x < 1", "among/1 <= x" ],
+          "classes" : [ "among: 0 <= x < 1", "among: 1 <= x" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
-          "covered" : [ "among/0 <= x < 1", "among/1 <= x" ],
+          "covered" : [ "among: 0 <= x < 1", "among: 1 <= x" ],
           "unclassifiedRows" : 0
         } ],
         "claimsOffAxis" : [ ],
@@ -3775,12 +3775,12 @@
           "read" : {
             "extent" : "partial"
           },
-          "classes" : [ "among/0 <= x < 1", "among/1 <= x" ],
+          "classes" : [ "among: 0 <= x < 1", "among: 1 <= x" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
-          "covered" : [ "among/1 <= x" ],
+          "covered" : [ "among: 1 <= x" ],
           "unclassifiedRows" : 0
         } ],
         "unanswered" : [ {
@@ -4604,10 +4604,10 @@
       "findings" : [ {
         "kind" : "axis_class_uncovered",
         "disposition" : "refused",
-        "subject" : "among/0 <= x < 1 (at among)",
+        "subject" : "among: 0 <= x < 1 (at among)",
         "obligationId" : {
           "axis" : "apportionExactly/among",
-          "class" : "among/0 <= x < 1"
+          "class" : "among: 0 <= x < 1"
         },
         "code" : "E1931"
       }, {
@@ -5793,12 +5793,12 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "指示.重量/1 <= x <= 30000", "指示.重量/30000 < x" ],
+          "classes" : [ "指示.重量: 1 <= x <= 30000", "指示.重量: 30000 < x" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
-          "covered" : [ "指示.重量/1 <= x <= 30000", "指示.重量/30000 < x" ],
+          "covered" : [ "指示.重量: 1 <= x <= 30000", "指示.重量: 30000 < x" ],
           "unclassifiedRows" : 0
         }, {
           "axis" : "出荷する/指示.区分",
@@ -5819,12 +5819,12 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "Time.hour(指示.集荷時刻)/0 <= x < 12", "Time.hour(指示.集荷時刻)/12 <= x <= 23" ],
+          "classes" : [ "Time.hour(指示.集荷時刻): 0 <= x < 12", "Time.hour(指示.集荷時刻): 12 <= x <= 23" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
-          "covered" : [ "Time.hour(指示.集荷時刻)/0 <= x < 12", "Time.hour(指示.集荷時刻)/12 <= x <= 23" ],
+          "covered" : [ "Time.hour(指示.集荷時刻): 0 <= x < 12", "Time.hour(指示.集荷時刻): 12 <= x <= 23" ],
           "unclassifiedRows" : 0
         } ],
         "unanswered" : [ {
@@ -7984,12 +7984,12 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "Time.hour(指示.集荷時刻)/0 <= x < 12", "Time.hour(指示.集荷時刻)/12 <= x <= 23" ],
+          "classes" : [ "Time.hour(指示.集荷時刻): 0 <= x < 12", "Time.hour(指示.集荷時刻): 12 <= x <= 23" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
-          "covered" : [ "Time.hour(指示.集荷時刻)/0 <= x < 12", "Time.hour(指示.集荷時刻)/12 <= x <= 23" ],
+          "covered" : [ "Time.hour(指示.集荷時刻): 0 <= x < 12", "Time.hour(指示.集荷時刻): 12 <= x <= 23" ],
           "unclassifiedRows" : 0
         } ],
         "claimsOffAxis" : [ ],
@@ -9494,12 +9494,12 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "shelf.counts[*]/x < 3", "shelf.counts[*]/3 <= x" ],
+          "classes" : [ "shelf.counts[*]: x < 3", "shelf.counts[*]: 3 <= x" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
-          "covered" : [ "shelf.counts[*]/3 <= x", "shelf.counts[*]/x < 3" ],
+          "covered" : [ "shelf.counts[*]: 3 <= x", "shelf.counts[*]: x < 3" ],
           "unclassifiedRows" : 0
         } ],
         "claimsOffAxis" : [ ],
@@ -10101,12 +10101,12 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "shelf.counts[*]/x < 3", "shelf.counts[*]/3 <= x" ],
+          "classes" : [ "shelf.counts[*]: x < 3", "shelf.counts[*]: 3 <= x" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
-          "covered" : [ "shelf.counts[*]/3 <= x", "shelf.counts[*]/x < 3" ],
+          "covered" : [ "shelf.counts[*]: 3 <= x", "shelf.counts[*]: x < 3" ],
           "unclassifiedRows" : 0
         } ],
         "claimsOffAxis" : [ ],
@@ -11773,12 +11773,12 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "List.length(deals)/0 <= x <= 0", "List.length(deals)/0 < x" ],
+          "classes" : [ "List.length(deals): 0 <= x <= 0", "List.length(deals): 0 < x" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
-          "covered" : [ "List.length(deals)/0 < x" ],
+          "covered" : [ "List.length(deals): 0 < x" ],
           "unclassifiedRows" : 0
         } ],
         "claimsOffAxis" : [ ],
@@ -12535,10 +12535,10 @@
       "findings" : [ {
         "kind" : "axis_class_uncovered",
         "disposition" : "refused",
-        "subject" : "List.length(deals)/0 <= x <= 0 (at List.length(deals))",
+        "subject" : "List.length(deals): 0 <= x <= 0 (at List.length(deals))",
         "obligationId" : {
           "axis" : "everyDealPriced/List.length(deals)",
-          "class" : "List.length(deals)/0 <= x <= 0"
+          "class" : "List.length(deals): 0 <= x <= 0"
         },
         "code" : "E1931"
       }, {

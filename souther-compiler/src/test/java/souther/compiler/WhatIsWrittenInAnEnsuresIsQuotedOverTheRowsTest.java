@@ -90,13 +90,13 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                 //     ensures asked = NotFound -> id.value <= 0
 
                 example findTodo
-                // fills id=0 <= x <= 0
+                // fills id: 0 <= x <= 0 at id
                 // fills a decision rule (the comparison at 16:33 does not hold)
                 // fills value = 0
                 // fills ON point of ensures findTodo (asked)
                 // fills OFF point of comparison@0:16:33
                     | (TodoId(0)) -> <?>
-                // fills id=0 < x
+                // fills id: 0 < x at id
                 // fills a decision rule (the comparison at 16:33 holds)
                 // fills value in 0 < value
                 // fills OFF point of ensures findTodo (asked)

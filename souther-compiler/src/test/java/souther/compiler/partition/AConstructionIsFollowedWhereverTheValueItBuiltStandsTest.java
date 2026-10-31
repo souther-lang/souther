@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class AConstructionIsFollowedWhereverTheValueItBuiltStandsTest {
 
-    private static final String LINE = "[n/x < 100000, n/100000 <= x] unread []";
+    private static final String LINE = "[n: x < 100000, n: 100000 <= x] unread []";
 
     @Test
     void aValueIsFollowedThroughEveryProjectionWrittenAgainstIt() {

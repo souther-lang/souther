@@ -35,7 +35,7 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
      * past each of those.
      */
     private static String atAHundredThousand(String comparison) {
-        return "[n/x < 100000, n/100000 <= x] unread [] points ["
+        return "[n: x < 100000, n: 100000 <= x] unread [] points ["
                 + "ON point of " + comparison + ", "
                 + "OFF point of " + comparison + ", "
                 + "IN point of " + comparison + ", "
@@ -79,7 +79,7 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
      */
     @Test
     void membersWritingOneFormTwoWaysAreStillTheSameLine() {
-        assertEquals("[n/x <= 49999, n/49999 < x] unread [] points ["
+        assertEquals("[n: x <= 49999, n: 49999 < x] unread [] points ["
                         + "ON point of comparison@0:19:40, "
                         + "OFF point of comparison@0:19:40, "
                         + "IN point of comparison@0:19:40, "
@@ -109,7 +109,7 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
                         if List.any((k) -> reaches(n, k), ks) then Yes else No
                     }"""));
         String at = "comparison@0:13:37";
-        assertEquals("[n/x < 100000, n/100000 <= x < 200000, n/200000 <= x] unread [] points ["
+        assertEquals("[n: x < 100000, n: 100000 <= x < 200000, n: 200000 <= x] unread [] points ["
                 + "ON point of " + at + ", OFF point of " + at + ", IN point of " + at + ", "
                 + "OUT point of " + at + "]", reading("""
                 {
@@ -135,7 +135,7 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
      */
     @Test
     void aModelReachesItsThresholdThroughACandidateListAndAnArm() {
-        assertEquals("[予定費用/x < 100000, 予定費用/100000 <= x, 役職/x <= 3, 役職/3 < x] "
+        assertEquals("[予定費用: x < 100000, 予定費用: 100000 <= x, 役職: x <= 3, 役職: 3 < x] "
                         + "unread [] points ["
                         + "ON point of comparison@0:16:44, "
                         + "OFF point of comparison@0:16:44, "

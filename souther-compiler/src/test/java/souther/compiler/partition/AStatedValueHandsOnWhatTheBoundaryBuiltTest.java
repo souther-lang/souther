@@ -131,7 +131,7 @@ class AStatedValueHandsOnWhatTheBoundaryBuiltTest {
         for (FillResult.Offer offer : all.get("settle").composed().offers()) {
             for (Generator.Purpose purpose : offer.row().purposes()) {
                 if (purpose instanceof Generator.Purpose.ForAClass forAClass
-                        && forAClass.label().equals("kind=Plain")) {
+                        && forAClass.label().equals("Plain at kind")) {
                     return new Offered(
                             offer.row().inputs().stream().map(FixtureTemplate::text).toList(),
                             offer.stop());

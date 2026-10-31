@@ -101,8 +101,8 @@ class AStringRelationIsReadPastAGuardOnTheCodePointsOfAClassTest {
         assertTrue(reasons.contains("relation_shown_over_a_region"), reasons::toString);
         assertFalse(reasons.contains("relation_not_shown_to_reach_every_value"), reasons::toString);
         Map<String, List<String>> classes = classes(compilation);
-        assertEquals(List.of("a/x can be a string holding b"), classes.get("a"));
-        assertEquals(List.of("b/x can be a string inside a"), classes.get("b"));
+        assertEquals(List.of("a: x can be a string holding b"), classes.get("a"));
+        assertEquals(List.of("b: x can be a string inside a"), classes.get("b"));
         assertEquals(List.of("\"class\" : \"not_whitespace\", \"fewerThan\" : 1"),
                 openByCodePoints(compilation));
     }
@@ -155,7 +155,7 @@ class AStringRelationIsReadPastAGuardOnTheCodePointsOfAClassTest {
         NavigableSet<String> reasons = aboutTheRelation(compilation);
         assertTrue(reasons.contains("relation_shown_over_a_region"), reasons::toString);
         assertFalse(reasons.contains("relation_not_shown_to_reach_every_value"), reasons::toString);
-        assertEquals(List.of("a/x can be a string holding b", "a/x is never a string holding b"),
+        assertEquals(List.of("a: x can be a string holding b", "a: x is never a string holding b"),
                 classes(compilation).get("a"));
     }
 
@@ -210,7 +210,7 @@ class AStringRelationIsReadPastAGuardOnTheCodePointsOfAClassTest {
         Compilation word = measured("Word",
                 "guard String.length(String.trim(a.value)) >= 1 else Missed", "a.value == b.value");
         assertEquals(List.of(), openByCodePoints(word));
-        assertEquals(List.of("b/x can be a", "b/x is never a"), classes(word).get("b"));
+        assertEquals(List.of("b: x can be a", "b: x is never a"), classes(word).get("b"));
 
         Compilation blank = measured("Blank",
                 "guard String.length(String.trim(a.value)) >= 1 else Missed", "a.value == b.value");
@@ -227,7 +227,7 @@ class AStringRelationIsReadPastAGuardOnTheCodePointsOfAClassTest {
     void aStringHoldingOnlyWhitespaceIsShownNeverToBeTheOneTheGuardKeepsToOtherStrings() {
         Compilation compilation = guarded("guard String.length(String.trim(a)) >= 1",
                 "a == b.value");
-        assertEquals(List.of("b/x can be a", "b/x is never a"), classes(compilation).get("b"));
-        assertEquals(List.of("a/x can be b"), classes(compilation).get("a"));
+        assertEquals(List.of("b: x can be a", "b: x is never a"), classes(compilation).get("b"));
+        assertEquals(List.of("a: x can be b"), classes(compilation).get("a"));
     }
 }

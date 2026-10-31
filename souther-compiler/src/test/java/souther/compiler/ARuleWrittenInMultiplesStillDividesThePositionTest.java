@@ -65,7 +65,7 @@ class ARuleWrittenInMultiplesStillDividesThePositionTest {
      */
     @Test
     void twoRulesAtDifferentScalesDrawTwoLinesThroughOnePosition() {
-        assertEquals(List.of("n/x <= 10", "n/10 < x <= 20", "n/20 < x"), classesOf("""
+        assertEquals(List.of("n: x <= 10", "n: 10 < x <= 20", "n: 20 < x"), classesOf("""
                     guard n > 10 else No { n = n }
                     guard 2 * n > 40 else No { n = n }"""));
     }
@@ -79,7 +79,7 @@ class ARuleWrittenInMultiplesStillDividesThePositionTest {
      */
     @Test
     void aThresholdTheFormNeverReachesDividesAtAValueThePositionHolds() {
-        assertEquals(List.of("n/x <= 4", "n/4 < x"),
+        assertEquals(List.of("n: x <= 4", "n: 4 < x"),
                 classesOf("    guard 2 * n <= 9 else No { n = n }"));
     }
 }

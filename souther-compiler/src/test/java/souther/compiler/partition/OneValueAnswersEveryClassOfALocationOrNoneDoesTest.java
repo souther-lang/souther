@@ -504,8 +504,9 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
 
         assertFalse(rows.contains("would have to hold two values at once"), rows);
         assertFalse(rows.contains("no row for"), rows);
-        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(row -> row.isFor("c== 2")), rows);
-        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(row -> row.isFor("c=/= 2")), rows);
+        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(row -> row.isFor("String.length(c): = 2 at String.length(c)")), rows);
+        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(
+                row -> row.isFor("String.length(c): /= 2 at String.length(c)")), rows);
     }
 
     /** A whole number held to three values, divided by what it leaves by two, three and five. */

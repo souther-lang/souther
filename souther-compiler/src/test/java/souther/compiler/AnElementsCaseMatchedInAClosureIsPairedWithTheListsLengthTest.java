@@ -130,7 +130,7 @@ class AnElementsCaseMatchedInAClosureIsPairedWithTheListsLengthTest {
 
         for (String region : List.of("North", "South")) {
             List<String> rows = rowsFor(said,
-                    Set.of("List.length(u.regions)/0 <= x < 2", region));
+                    Set.of("List.length(u.regions): 0 <= x < 2", region));
             assertTrue(!rows.isEmpty() && rows.stream().allMatch(row ->
                             row.equals("Usage { regions = [" + region + "] }")),
                     () -> "one " + region + " beside a list of fewer than two: " + rows + " of "
@@ -148,7 +148,7 @@ class AnElementsCaseMatchedInAClosureIsPairedWithTheListsLengthTest {
 
         for (String region : List.of("North", "South")) {
             List<String> rows = rowsFor(said,
-                    Set.of("Map.size(u.counts)/0 <= x < 2", region));
+                    Set.of("Map.size(u.counts): 0 <= x < 2", region));
             assertTrue(!rows.isEmpty() && rows.stream().allMatch(row ->
                             row.matches("Usage \\{ counts = \\[\\(" + region + ", [^)]*\\)] }")),
                     () -> "one entry under a " + region + " beside a map of fewer than two: "
