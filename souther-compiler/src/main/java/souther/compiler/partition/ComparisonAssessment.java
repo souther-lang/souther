@@ -1645,19 +1645,16 @@ sealed interface ComparisonAssessment {
         Set<CompositionBudget> stoppedAt = EnumSet.noneOf(CompositionBudget.class);
         for (DecidingCase each : cases) {
             if (each.saidAlone()) {
-                Reachability toIt = wayToACase.apply(each.condition());
-                if (wayToACase.crossed(cutting, each.condition(), () ->
-                        crossedAtSomePlace(cutting, toIt, arrivals,
-                                cutting.keptTo(each.condition(), reading)))) {
+                if (wayToACase.crossed(cutting, each.condition(), reading, (toIt, keptTo) ->
+                        crossedAtSomePlace(cutting, toIt, arrivals, keptTo))) {
                     reached.add(each);
-                    deciding.addAll(waysArrivedBy(toIt, arrivals));
+                    deciding.addAll(waysArrivedBy(wayToACase.apply(each.condition()), arrivals));
                 }
                 continue;
             }
             CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each, condition ->
-                    wayToACase.crossed(cutting, condition, () ->
-                            crossedAtSomePlace(cutting, wayToACase.apply(condition), arrivals,
-                                    cutting.keptTo(condition, reading))));
+                    wayToACase.crossed(cutting, condition, reading, (toIt, keptTo) ->
+                            crossedAtSomePlace(cutting, toIt, arrivals, keptTo)));
             for (DecidingCase one : found.decidesIn()) {
                 reached.add(one);
                 deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));

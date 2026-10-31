@@ -1785,6 +1785,38 @@ public final class WhereEachLineDecides {
     }
 
     /**
+     * {@code stated} where {@code chosen} holds: every place it stands come out as it does
+     * ({@link #with}), and {@code stated} as it is where {@code chosen} is no one part
+     * ({@link #isOnePart}). The two hold together exactly where {@code stated} and {@code chosen}
+     * do, so a conjunction that holds {@code chosen} may hold this in place of {@code stated}.
+     */
+    static Proposition given(Proposition stated, Proposition chosen) {
+        if (!isOnePart(chosen)) {
+            return stated;
+        }
+        Proposition part = held(chosen);
+        return with(stated, part, part.spelling().equals(chosen.spelling()));
+    }
+
+    /**
+     * Whether {@code stated} is one part, which {@link #with} finds where it stands, and not a
+     * statement made of several, which it goes into — nor one no reader here is handed
+     * ({@link Proposition.Carried}), which says no way round it stands.
+     */
+    static boolean isOnePart(Proposition stated) {
+        return switch (stated) {
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.SoManyHold _, Proposition.OfTheWays _, Proposition.Always _,
+                 Proposition.Carried _ -> false;
+            case Proposition.Some _, Proposition.Compared _, Proposition.Truth _,
+                 Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                 Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _,
+                 Proposition.SomeReachable _, Proposition.Unread _,
+                 Proposition.OnAnApplication _ -> true;
+        };
+    }
+
+    /**
      * {@code stated} with every place {@code part} stands come out {@code holds}.
      *
      * <p>Inside a quantifier too, where the part is not about the element it chose: there it is

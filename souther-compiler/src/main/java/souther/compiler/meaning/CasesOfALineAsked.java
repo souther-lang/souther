@@ -42,6 +42,13 @@ import java.util.function.Predicate;
  * on both sides of what has been chosen so far may each be in a case of their own further on, so a
  * case is one the line decides in only once it is chosen to the end.
  *
+ * <p><b>As what its choices leave of it.</b> A part chosen has come out wherever it stands in the
+ * other parts chosen beside it, so a case is asked, and kept, as the parts chosen with each of them
+ * put in the others ({@link WhereEachLineDecides#given}). That is the same case: the two hold on
+ * the same rows. What it changes is how long the question is, which is what a reader of a case
+ * pays for asking it: a condition every case holds, decided by what each case chose, is asked as
+ * what the case leaves undecided of it, and a case whose choices decide it is asked without it.
+ *
  * <p><b>As many cases as are taken apart, and no more.</b> How many ways there are of choosing a
  * case is counted off the choices before any is asked ({@link DecidingCase.Cases#waysOfChoosing}),
  * and past {@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO} none is asked: those are
@@ -183,7 +190,7 @@ public final class CasesOfALineAsked {
             return new Atoms<>(List.of(), stopped);
         }
         List<Atom<T>> out = new ArrayList<>();
-        chosen(new ArrayList<>(), List.of(heldFirst(said.standsFor())), _ -> true,
+        chosen(SoFar.NOTHING, List.of(heldFirst(said.standsFor())), _ -> true,
                 chosen -> out.add(new Atom<>(chosen, answer.apply(chosen))));
         return new Atoms<>(out, stopped);
     }
@@ -206,7 +213,7 @@ public final class CasesOfALineAsked {
         if (said.saidAlone()) {
             return new Found(List.of(said), Set.of());
         }
-        chosen(new ArrayList<>(), List.of(heldFirst(said.standsFor())), crossedIn,
+        chosen(SoFar.NOTHING, List.of(heldFirst(said.standsFor())), crossedIn,
                 chosen -> dividing.add(chosen));
         // Every case divides rows and every one was worked out: the case is what it was said as,
         // and saying it again would read the line under another condition for nothing.
@@ -311,17 +318,65 @@ public final class CasesOfALineAsked {
     }
 
     /**
+     * What a case has chosen so far, as what its choices leave of it: each part chosen, with every
+     * part chosen beside it come out where it stands in the others ({@link WhereEachLineDecides#given}).
+     *
+     * <p>A part chosen holds in every case past it, so where it stands in another part it has come
+     * out already, and the two hold together exactly where the other part with it come out does.
+     * What is asked of a case is then as long as what it leaves undecided and not as long as what
+     * it was said as: the condition a whole statement of several holds under is held by every case
+     * of it and decided by each one's choices, and written beside each it would be asked of the
+     * way to every case in full.
+     *
+     * @param parts each part chosen, in the order it was, as the others leave it
+     */
+    private record SoFar(List<Proposition> parts) {
+
+        static final SoFar NOTHING = new SoFar(List.of());
+
+        SoFar {
+            parts = List.copyOf(parts);
+        }
+
+        /** This, with {@code condition} chosen as well. */
+        SoFar and(Proposition condition) {
+            List<Proposition> out = new ArrayList<>(parts);
+            for (Proposition part : condition instanceof Proposition.All all ? all.parts()
+                    : List.of(condition)) {
+                Proposition left = part;
+                for (Proposition chosen : out) {
+                    left = WhereEachLineDecides.given(left, chosen);
+                }
+                if (left instanceof Proposition.Always(boolean holds) && holds) {
+                    continue;
+                }
+                if (WhereEachLineDecides.isOnePart(left)) {
+                    Proposition one = left;
+                    out.replaceAll(each -> WhereEachLineDecides.given(each, one));
+                }
+                out.add(left);
+            }
+            return new SoFar(out);
+        }
+
+        /** The conjunction of what has been chosen. */
+        Proposition condition() {
+            return Proposition.all(parts);
+        }
+    }
+
+    /**
      * Each case holding all of {@code chosen}, and one case of each of {@code toChoose}, that holds
      * a row on each side of the line — {@code chosen} already shown to.
      *
-     * <p>{@code chosen} is the one path walked, taken a part further on the way down and given back
-     * on the way up, and written out only for a case kept. {@code goesOn} says whether what has
-     * been chosen so far is walked further, and {@code atEnd} takes each case chosen to the end.
+     * <p>{@code chosen} is the one path walked, taken a part further on the way down, and written
+     * out only for a case kept. {@code goesOn} says whether what has been chosen so far is walked
+     * further, and {@code atEnd} takes each case chosen to the end.
      */
-    private void chosen(List<Proposition> chosen, List<DecidingCase.Cases> toChoose,
+    private void chosen(SoFar chosen, List<DecidingCase.Cases> toChoose,
                         Predicate<Proposition> goesOn, Consumer<Proposition> atEnd) {
         if (toChoose.isEmpty()) {
-            atEnd.accept(Proposition.all(chosen));
+            atEnd.accept(chosen.condition());
             return;
         }
         List<DecidingCase.Cases> rest = toChoose.subList(1, toChoose.size());
@@ -331,13 +386,12 @@ public final class CasesOfALineAsked {
                     pastTheSteps(toChoose);
                     return;
                 }
-                chosen.add(condition);
-                if (goesOn.test(Proposition.all(chosen))) {
-                    chosen(chosen, rest, goesOn, atEnd);
+                SoFar further = chosen.and(condition);
+                if (goesOn.test(further.condition())) {
+                    chosen(further, rest, goesOn, atEnd);
                 } else {
                     dropped = true;
                 }
-                chosen.removeLast();
             }
             // Every alternative: one that divides rows is no answer about another. Each taken is
             // a step, and where the steps run out the ones not taken are not walked.
