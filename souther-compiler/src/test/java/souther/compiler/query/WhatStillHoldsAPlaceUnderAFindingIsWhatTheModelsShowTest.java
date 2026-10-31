@@ -209,8 +209,9 @@ class WhatStillHoldsAPlaceUnderAFindingIsWhatTheModelsShowTest {
      */
     private static Db compiled(String model) {
         Map<String, String> byId = new LinkedHashMap<>();
-        List<String> files = ConformanceCorpus.filesOf(model);
-        List<String> sources = ConformanceCorpus.sourcesOf(model);
+        ConformanceCorpus corpus = ConformanceCorpus.load(model);
+        List<String> files = corpus.files();
+        List<String> sources = corpus.sources();
         for (int i = 0; i < files.size(); i++) {
             byId.put(files.get(i), sources.get(i));
         }

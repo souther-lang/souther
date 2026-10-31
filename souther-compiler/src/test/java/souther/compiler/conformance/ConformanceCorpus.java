@@ -82,6 +82,15 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
         return out;
     }
 
+    /**
+     * The corpus the manifest names {@code name}, with the files it is made of in the order they
+     * are handed over and the text of each.
+     *
+     * <p>The one way in by name, and for any corpus the manifest names and not only a conformance
+     * one, because what a reader over every model this repository carries needs is the same
+     * reading. A name the manifest does not carry is refused here, so a reader of a model cannot go
+     * on reading one after it was taken out of the manifest.
+     */
     public static ConformanceCorpus load(String name) {
         if (!manifest().containsKey(name)) {
             throw new IllegalStateException("the manifest names no corpus `" + name + "`");
@@ -92,14 +101,7 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
         return new ConformanceCorpus(name, files, sources);
     }
 
-    /**
-     * The files one corpus is made of, in the order they are handed over.
-     *
-     * <p>Any corpus the manifest names and not only a conformance one, because what a reader over
-     * every model this repository carries needs is the same reading. Written a second time for the
-     * others, the two would part over a file added to one corpus and nothing would say so.
-     */
-    public static List<String> filesOf(String name) {
+    private static List<String> filesOf(String name) {
         List<String> out = new ArrayList<>();
         for (String line : read(MODELS + name + "/sources.txt").lines().toList()) {
             String file = line.strip();
@@ -110,13 +112,6 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
         if (out.isEmpty()) {
             throw new IllegalStateException("the `" + name + "` corpus names no source");
         }
-        return List.copyOf(out);
-    }
-
-    /** The text of each of them. */
-    public static List<String> sourcesOf(String name) {
-        List<String> out = new ArrayList<>();
-        filesOf(name).forEach(file -> out.add(read(MODELS + name + "/" + file)));
         return List.copyOf(out);
     }
 
@@ -204,6 +199,18 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /**
+     * A compilation of this corpus of its own, written on the day every test is and with nothing
+     * measured or answered yet.
+     *
+     * <p>For a reader that asks a few questions of a model and does not want the compilation
+     * {@code RepositoryModels} shares among the readers of every model, or to set what it measures
+     * on that one. What the caller measures is the caller's to say.
+     */
+    public Compilation compilation() {
+        return Compilation.ofSources(sources, ModulePath.EMPTY).writtenOn(TestDay.DATE);
     }
 
     /**
