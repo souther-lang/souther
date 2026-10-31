@@ -1766,18 +1766,19 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * none totalling nought. Held above nought, none of them takes nought, and nothing is shown of
      * the gross: that a value as near nought as asked of is taken shows no row at nought.
      *
-     * <p>Neither is any of them shown taken apart at nought, held at nought or more: what the gross
-     * less the total is worked out at is not known, since the total of the notes is a call's
-     * answer at a scale nothing here knows, so no row is shown to get past taking it off. That
-     * is not that a run stops there.
+     * <p>Held at nought or more each is taken apart at nought, whichever other two are put at
+     * what they are: the gross less the total is worked out over the total as the list of that
+     * one number sums to, at the places the number is written with, and the rows built with it
+     * so get past taking it off. Only the rows built so are shown to; the same number as the sum
+     * of a list written at another scale is no row of these.
      */
     @Test
     void aTotalHeldStillBesideOtherTermsAtNoughtLeavesTheRestEitherWay() {
         String inputs = "gross: Amount, ns: List<Amount>, net: Amount, tax: Amount";
         String closed = "data Amount = Decimal invariant value >= 0.0m";
         String at = atThe("<=", closed, inputs, CREDITED);
-        assertEquals(Map.of("List.sum(ns[*])", NOT_SHOWN, "gross", NOT_SHOWN, "net", NOT_SHOWN,
-                        "tax", NOT_SHOWN), left(inputs, closed, CREDITED, at));
+        assertEquals(Map.of("List.sum(ns[*])", RELATES, "gross", RELATES, "net", RELATES,
+                        "tax", RELATES), left(inputs, closed, CREDITED, at));
         assertEquals(NOT_SHOWN,
                 left(inputs, "data Amount = Decimal invariant value > 0.0m", CREDITED, at)
                         .get("gross"));

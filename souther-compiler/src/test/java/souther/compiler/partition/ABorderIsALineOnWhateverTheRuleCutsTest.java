@@ -485,11 +485,13 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
 
         assertTrue(rows.contains("D(0m), D(2.25m)"),
                 "the point where the form comes to nine:\n" + rows);
-        assertTrue(rows.contains("D(0m), D(2m)"),
-                "a pair inside it, which is what stands for the side the rows leave open:\n"
-                        + rows);
         assertTrue(rows.contains("D(100m), D(0m)"),
                 "and a pair past it, on the other side:\n" + rows);
+        // Each of the two is left on both sides of the line at every value from nought to where
+        // it parts, by the other put beside it: the sum has room whatever the two are put at, so
+        // a pair inside the form adds a row to the side the nought pair already stands for.
+        assertTrue(rows.contains("4 rows to fill what nothing covers"), rows);
+        assertFalse(rows.contains("D(0m), D(2m)"), rows);
     }
 
     /**

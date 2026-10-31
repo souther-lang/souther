@@ -1997,7 +1997,29 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 return new DecimalOperation.Formed(
                         new LinkedHashMap<Object, ExactRatio>(form.coefs()), form.constant());
             }
-            return null;
+            NumericTerm total = bare.type() == Type.DECIMAL ? aPlainTotal(form) : null;
+            return total == null ? null : new DecimalOperation.Total(total);
+        }
+
+        /** The term {@code form} is, where it is the total of the decimals a container holds or
+         *  of one path inside each element, added as they are; null where it is anything else.
+         *  The scale of such a total is that of the elements, which a row writes at the places of
+         *  the total: a total of products has the sum of the scales of their factors, which
+         *  {@link DecimalOperation.Total} does not bound. */
+        private static NumericTerm aPlainTotal(LinearForm<NumericTerm> form) {
+            if (form.coefs().size() != 1 || !form.constant().isZero()) {
+                return null;
+            }
+            Map.Entry<NumericTerm, ExactRatio> only = form.coefs().entrySet().iterator().next();
+            boolean added = ExactRatio.ONE.equals(only.getValue()) && switch (only.getKey()) {
+                case NumericTerm.TakenOf taken ->
+                        taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
+                case NumericTerm.TakenOver over ->
+                        over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
+                                && over.source() instanceof RunSource.ProjectedOccurrences;
+                default -> false;
+            };
+            return added ? only.getKey() : null;
         }
 
         /** That {@code form} is the number a row holds at a place of the input, read as it is. */

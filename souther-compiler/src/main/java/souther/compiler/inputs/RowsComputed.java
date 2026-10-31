@@ -90,6 +90,16 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
         return greatest == null && !mayStopARow();
     }
 
+    /**
+     * Whether the only operations that can stop a row are of decimals and each has room at every
+     * number a row is built at ({@link DecimalOperation#everyOperationHasRoomAtEveryNumber}). A
+     * number a row is not built at is none of the rows, so no row that is built is stopped.
+     */
+    boolean stopsNoRowThatIsBuilt() {
+        return tellsEveryOperation() && operations.sums().isEmpty() && worksOutDecimals()
+                && DecimalOperation.everyOperationHasRoomAtEveryNumber(operations.decimals());
+    }
+
     /** Whether the rows of the relation work out an operation of decimals. */
     boolean worksOutDecimals() {
         return !operations.decimals().isEmpty();
@@ -108,9 +118,11 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
     /**
      * Whether a run of the term {@code asked} with no end on a side is asked at the edge of what
      * is built ({@link DecimalPoints#edgeOfWhatIsBuilt}) and the rows there stand for the numbers
-     * between: every operation that can stop a row is an operation of decimals, and none of them
-     * reads the term, so the room of one turns on the scales of the numbers a row is built from
-     * and not on which number of the run is asked of.
+     * between: every operation that can stop a row is an operation of decimals, and each that
+     * reads the term reads another with it and has room at every number
+     * ({@link DecimalOperation#everyOperationReadingItHasRoomAtEveryNumber}), so the room of one
+     * turns on the scales of the numbers a row is built from and not on which number of the run
+     * is asked of.
      *
      * <p>The numbers a row is built from are written at most as many places before and after the
      * point as {@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT}, and the partner is stood beside
@@ -124,8 +136,8 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
     boolean aRunWithNoEndIsAskedAtTheEdgeOfWhatIsBuilt(Object asked) {
         return greatest == null && tellsEveryOperation() && operations.sums().isEmpty()
                 && worksOutDecimals()
-                && DecimalOperation.readsOf(operations.decimals()).stream()
-                        .noneMatch(reads -> reads.contains(asked));
+                && DecimalOperation.everyOperationReadingItHasRoomAtEveryNumber(
+                        operations.decimals(), asked);
     }
 
     /**
