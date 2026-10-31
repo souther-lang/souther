@@ -311,14 +311,15 @@ public final class GuardThresholds {
                             // within its type is one too, on an application some row is shown
                             // not to be kept from: one made on rows the way rules out works
                             // nothing out. Where those rows cannot be put on the way, the
-                            // application is taken as made.
+                            // application is taken as made. That is asked of what a run works
+                            // out, and not of what a row of a line gets past.
                             boolean aRunStops = !(arrived instanceof ComparisonAssessment
                                     .AnswersNowhere)
                                     && ((each.stopsWhere().isPresent()
                                     && ComparisonAssessment.someRowArrives(
                                             wayToACase.apply(each.stopsWhere().get()), arrivals))
                                     || each.worksOutOnEach().map(applications -> applications
-                                            .stream().anyMatch(one -> one.working()
+                                            .stream().anyMatch(one -> one.stops()
                                                     .aRunMayStopOverABoundValue()
                                                     && (one.reached() instanceof Proposition
                                                             .Always(boolean holds) && holds
@@ -328,9 +329,11 @@ public final class GuardThresholds {
                                                             || ComparisonAssessment.someRowArrives(
                                                                     wayToACase.apply(one.reached()),
                                                                     arrivals))))
-                                            .orElseGet(() -> arrived.relationsRead().stream()
-                                                    .anyMatch(UndividedByARelation
-                                                            ::aRunMayStopOverABoundValue)));
+                                            .orElseGet(() -> each.stopsIn()
+                                                    .map(StopEvidence::aRunMayStopOverABoundValue)
+                                                    .orElseGet(() -> arrived.relationsRead()
+                                                            .stream().anyMatch(UndividedByARelation
+                                                                    ::aRunMayStopOverABoundValue))));
                             // And the values at which every run getting to it stops in what it
                             // works out, asked of the way before a row is narrowed to getting
                             // past that: a row that got past holds none of them.

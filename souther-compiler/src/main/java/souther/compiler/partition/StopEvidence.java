@@ -44,6 +44,17 @@ record StopEvidence(UndividedByARelation.Working operations) {
     }
 
     /**
+     * Whether a run working this out may stop in an operation over a bound value
+     * ({@link UndividedByARelation.Working#aRunMayStopOverABoundValue}). That is said of an
+     * operation told, whether or not every one is: one told is one a run works out. Which rows it
+     * stops is a separate question, and not being able to say that every run on some rows stops
+     * ({@link #everyRunStopsIn}) leaves this standing.
+     */
+    boolean aRunMayStopOverABoundValue() {
+        return operations.aRunMayStopOverABoundValue();
+    }
+
+    /**
      * Where every run getting here stops in what it works out, over {@code regions}, where it may
      * also work out {@code alsoWorkedOut} first ({@link UndividedByARelation#everyRunStopsIn}).
      */

@@ -322,6 +322,16 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
                 over.formatted("Int.floorMod(y + n, 7) >= 1")).size());
     }
 
+    /** A remainder of a place moved by a number is read as the place's own, and a run works out
+     *  the moved value all the same: it stops every run where that is past the type, against a
+     *  number or another value. */
+    @Test
+    void thePlaceARemainderIsOfMovedByANumberStopsEveryRunPastItsType() {
+        List<String> past = List.of("x + 1 where x " + GREATEST + "..");
+        assertEquals(past, everyRunStops("Int", "x", "", "Int.floorMod(x + 1, 7) == 0"));
+        assertEquals(past, everyRunStops("Int", "x", "", "Int.floorMod(x + 1, 7) == y"));
+    }
+
     /** A remainder worked out on one arm only is worked out by no run taking the other: the sum
      *  under it stops no row of every run. */
     @Test
@@ -337,6 +347,53 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
         assertEquals(List.of(), mayStop("Small", "Small(x)",
                 "guard x >= 0 && z >= 0 && z <= 10 else No { n = 0 }",
                 "Int.floorMod(x - z, 7) >= 1"));
+    }
+
+    /**
+     * A remainder of a sum over an element of a list of every whole number between two stops a
+     * run as the sum alone does. The remainder comes round every seventh element, and what it
+     * states is read on the first seven ({@code TheWholeNumbersAListStartsWith}); the sum does not come round, and an element past them takes it past the type where none of
+     * them does: {@code x} seven short of the end, and {@code y} seven.
+     */
+    @Test
+    void theSumARemainderIsOfOverAWholeNumberInTurnStopsARunAsTheSumAloneDoes() {
+        String over = "List.isEmpty(List.filter(n -> %s, List.rangeInclusive(0, y)))";
+        List<JsonNode> ofTheSum = mayStop("Int", "x", "", over.formatted("x + n >= 1"));
+        assertEquals(1, ofTheSum.size(), ofTheSum::toString);
+        assertEquals(1, mayStop("Int", "x", "",
+                over.formatted("Int.floorMod(x + n, 7) == 0")).size());
+        assertEquals(everyRunStops("Int", "x", "", over.formatted("x + n >= 1")),
+                everyRunStops("Int", "x", "", over.formatted("Int.floorMod(x + n, 7) == 0")));
+    }
+
+    /** The sum the remainder is of is worked out in the order it is written: {@code x + n} is
+     *  past the type before one is added to it, as it is without the remainder. */
+    @Test
+    void aSumUnderTheSumARemainderOverAWholeNumberInTurnIsOfStopsARunFirst() {
+        String over = "List.isEmpty(List.filter(n -> %s, List.rangeInclusive(0, y)))";
+        assertEquals(1, mayStop("Int", "x", "",
+                over.formatted("Int.floorMod((x + n) + 1, 7) == 0")).size());
+        assertEquals(everyRunStops("Int", "x", "", over.formatted("(x + n) + 1 >= 1")),
+                everyRunStops("Int", "x", "",
+                        over.formatted("Int.floorMod((x + n) + 1, 7) == 0")));
+    }
+
+    /** No element on any row the ways leave, or none written, and the remainder is worked out
+     *  on no run; over numbers that keep short of the ends, it stops none, and over numbers that
+     *  do not, it may stop one. */
+    @Test
+    void theSumARemainderOverAWholeNumberInTurnIsOfStopsNoRunThatDoesNotWorkItOutPastItsType() {
+        assertEquals(List.of(), mayStop("Int", "x", "guard y < 0 else No { n = 0 }",
+                "List.isEmpty(List.filter(n -> Int.floorMod(x + n, 7) == 0,"
+                        + " List.rangeInclusive(0, y)))"));
+        String between = "List.isEmpty(List.filter(n -> Int.floorMod(x + z + n, 7) == 0,"
+                + " List.rangeInclusive(1, %s)))";
+        assertEquals(1, mayStop("Int", "x", "", between.formatted("1")).size());
+        assertEquals(List.of(), mayStop("Int", "x", "", between.formatted("0")));
+        String upTo = "List.isEmpty(List.filter(n -> Int.floorMod(n + %s, 7) == 0,"
+                + " List.rangeInclusive(0, List.length(x))))";
+        assertEquals(1, mayStop("List<Int>", "x", "", upTo.formatted(GREATEST)).size());
+        assertEquals(List.of(), mayStop("List<Int>", "x", "", upTo.formatted("5")));
     }
 
     /** The findings that a rule of {@code f} is one a run may stop in. */

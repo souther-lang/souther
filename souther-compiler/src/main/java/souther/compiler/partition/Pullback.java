@@ -1739,6 +1739,10 @@ final class Pullback {
         /** The expressions the rule read as the form of one operand of theirs, each with that
          *  operand ({@link AffineReading.WhatTheAnalysisAnswersFor#readByTheFormOf}). */
         private final Map<Core, Core> readByTheFormOf = new IdentityHashMap<>();
+        /** The remainders the rule read without saying their rows are made where the dividend is
+         *  worked out, each with its dividend
+         *  ({@link AffineReading.WhatTheAnalysisAnswersFor#dividendBesideTheRows}). */
+        private final Map<Core, Core> dividendBesideTheRows = new IdentityHashMap<>();
         /** What each relation read under an arm of a choice works out, off the comparison read
          *  with the choice standing as that arm ({@link Pullback#tellWhatItWorksOut}). */
         private Map<Relation, UndividedByARelation.Working> relations;
@@ -1853,6 +1857,7 @@ final class Pullback {
         return stopped.worksOut(new AffineReading.WhatTheAnalysisAnswersFor(
                 readAgain == null ? _ -> false : readAgain,
                 held -> theRule.readByTheFormOf.get(Core.withoutStanding(held)),
+                held -> theRule.dividendBesideTheRows.get(Core.withoutStanding(held)),
                 this::boundValueOf));
     }
 
@@ -11331,6 +11336,10 @@ final class Pullback {
         if (shifted == null || !isAPositionsOwnRemainder(shifted.remainder(), shifted.at())) {
             return null;
         }
+        // A run works out the value moved, which the place's remainder is not: where it stops
+        // in that is read off the call as it is written, and is nothing a row gets past.
+        trial().dividendBesideTheRows.put(Core.withoutStanding(shifted.moved()),
+                shifted.moved().args().getFirst());
         return switch (shifted) {
             case RemainderOfAShiftedValue.Read.AgainstANumber<InputReads> number ->
                     theStatementStands(number.statement(), number.remainder(), at, fixed,
@@ -11581,7 +11590,8 @@ final class Pullback {
      * UndividedByARelation.IntOperand.OfABinding#isOne}): the element of a list of every whole
      * number between two, and where an element stands in a walk. The form is not read by its
      * rows as one of the input's numbers is, so nothing says its rows are made where it is worked
-     * out, and the run working it out is read as it was.
+     * out. A run works it out all the same, and where it stops in that is read off the dividend
+     * as it is written ({@link AffineReading.WhatTheAnalysisAnswersFor#dividendBesideTheRows}).
      */
     private Quantity.RemainderOfADividend remainderOverABoundValue(
             RemainderOfAShiftedValue.OfADivision<InputReads> division) {
@@ -11598,6 +11608,8 @@ final class Pullback {
                 return null;
             }
         }
+        trial().dividendBesideTheRows.put(Core.withoutStanding(division.call()),
+                division.dividend());
         return new Quantity.RemainderOfADividend(division.call().operation(),
                 new LinearForm<>(ExactRatio.of(constantOf(form).mod(division.divisor())),
                         form.coefs()), division.divisor());
