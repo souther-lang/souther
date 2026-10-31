@@ -712,14 +712,18 @@ final class Pullback {
      *                   read off, where a law of what the call answers counts them. A reader that
      *                   has to know which expression a count is the size of asks this, and finds
      *                   none for a count read any other way, rather than looking for one
+     * @param stops      what a run getting to the comparison works out, for where a run stops in
+     *                   it: read off the reading {@code working} is, and not what a row of a line
+     *                   gets past ({@link StopEvidence})
      */
     record OnTheInput(Pulled stated, Supplier<AffineReading.OfAComparison> arithmetic,
                       Supplier<UndividedByARelation.Working> working,
                       Function<Relation, UndividedByARelation.Working> workingOfRelation,
-                      Map<Quantity.HowManyMeet, Core> readOff) {
+                      Map<Quantity.HowManyMeet, Core> readOff, Supplier<StopEvidence> stops) {
 
         OnTheInput {
             readOff = Map.copyOf(readOff);
+            Objects.requireNonNull(stops, "what a run works out, or that it is not known");
         }
     }
 
@@ -732,9 +736,11 @@ final class Pullback {
                 reading.rulesFor(comparison, null, false, reads, arithmetic));
         Pulled stated = reading.pulled(reading.underTheEntriesLookedUp(chosen, comparison, reads));
         Trial theRule = reading.triedAndConcluded.get(chosen);
-        return new OnTheInput(stated, arithmetic,
-                new Once<>(() -> reading.workingOf(theRule, arithmetic)),
-                theRule == null ? _ -> null : theRule::workingOf, reading.readOff);
+        Once<AffineReading.WorkedOut> worksOut =
+                new Once<>(() -> reading.worksOut(theRule, arithmetic));
+        return new OnTheInput(stated, arithmetic, () -> worksOut.get().toGetPast(),
+                theRule == null ? _ -> null : theRule::workingOf, reading.readOff,
+                () -> worksOut.get().stops());
     }
 
     /**
@@ -1826,15 +1832,25 @@ final class Pullback {
      */
     private UndividedByARelation.Working workingOf(
             Trial theRule, Supplier<AffineReading.OfAComparison> arithmetic) {
+        return worksOut(theRule, arithmetic).toGetPast();
+    }
+
+    /**
+     * The same, with what a run getting to the comparison works out, off the one reading of its
+     * arithmetic: what a rule says a row gets past is what it says a run works out, and a reading
+     * that stopped tells the two apart ({@link AffineReading.WorkedOut}).
+     */
+    private AffineReading.WorkedOut worksOut(
+            Trial theRule, Supplier<AffineReading.OfAComparison> arithmetic) {
         if (theRule != null && theRule.working != null) {
-            return theRule.working;
+            return AffineReading.WorkedOut.ofWhatIsToldOf(theRule.working);
         }
         AffineReading.OfAComparison read = arithmetic.get();
         if (theRule == null || !(read instanceof AffineReading.OfAComparison.Stopped stopped)) {
-            return AffineReading.OfAComparison.workingOf(read);
+            return AffineReading.OfAComparison.worksOut(read);
         }
         Predicate<Core> readAgain = theRule.answersFor;
-        return stopped.apart(new AffineReading.WhatTheAnalysisAnswersFor(
+        return stopped.worksOut(new AffineReading.WhatTheAnalysisAnswersFor(
                 readAgain == null ? _ -> false : readAgain,
                 held -> theRule.readByTheFormOf.get(Core.withoutStanding(held)),
                 this::boundValueOf));

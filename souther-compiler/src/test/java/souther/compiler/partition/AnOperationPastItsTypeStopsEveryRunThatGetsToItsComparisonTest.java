@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
@@ -19,6 +20,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -277,6 +279,64 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
         String comparison = "List.any(b -> b, List.mapIndexed((i, _) -> i + 1 == y, x))";
         assertEquals(List.of(), everyRunStops("List<Int>", "x", "", comparison));
         assertEquals(List.of(), mayStop("List<Int>", "x", "", comparison));
+    }
+
+    /**
+     * The sum a remainder is of is worked out before anything is divided, and stops every run
+     * where it is past the type, as the sum alone does. And the lines its witness draws stay: a
+     * {@code z} keeps {@code x + z} within its type at every remainder, so the remainder takes
+     * each of them and the number held against it is parted at the two ends — the sum stopping
+     * some runs is no part of that.
+     */
+    @Test
+    void theSumARemainderIsOfStopsEveryRunPastItBesideTheLinesItsWitnessDraws() {
+        String comparison = "y == Int.floorMod(x + z, 11)";
+        assertEquals(List.of("x + z where x + z " + plus(GREATEST, 1) + "..",
+                        "x + z where x + z .." + plus(LEAST, -1)),
+                everyRunStops("Int", "x", "", comparison));
+        List<String> onY = Adequacy.readingsOf(measured(MODEL.formatted("Int", "x", "",
+                comparison)).db(), "demo").get("f").stream()
+                .filter(line -> line.left().equals("y")).map(BorderAssessment::value).toList();
+        assertTrue(onY.containsAll(List.of("-1", "11")), onY::toString);
+    }
+
+    /** A remainder of a difference held against a number stops every run where the difference
+     *  is past the type, at either end. */
+    @Test
+    void theDifferenceARemainderIsOfStopsEveryRunPastIt() {
+        assertEquals(List.of("x - z where x - z " + plus(GREATEST, 1) + "..",
+                        "x - z where x - z .." + plus(LEAST, -1)),
+                everyRunStops("Int", "x", "", "Int.floorMod(x - z, 7) >= 1"));
+    }
+
+    /** A remainder of a sum over an element of a list of the input stops a run on the element
+     *  that takes the sum past the type, as the sum alone does. */
+    @Test
+    void theSumARemainderIsOfOverAnElementStopsARun() {
+        String over = "List.isEmpty(List.filter(n -> %s, x))";
+        List<String> ofTheSum = everyRunStops("List<Int>", "x", "", over.formatted("y + n >= 1"));
+        assertFalse(ofTheSum.isEmpty(), "the sum alone stops every run past it");
+        assertEquals(ofTheSum, everyRunStops("List<Int>", "x", "",
+                over.formatted("Int.floorMod(y + n, 7) >= 1")));
+        assertEquals(1, mayStop("List<Int>", "x", "",
+                over.formatted("Int.floorMod(y + n, 7) >= 1")).size());
+    }
+
+    /** A remainder worked out on one arm only is worked out by no run taking the other: the sum
+     *  under it stops no row of every run. */
+    @Test
+    void theSumARemainderOnOneArmIsOfStopsNoRunThatTakesTheOther() {
+        assertEquals(List.of(), everyRunStops("Int", "x", "",
+                "(if y > 0 then Int.floorMod(x + z, 7) else 1) >= 1"));
+    }
+
+    /** Numbers the ways keep well short of the ends never take the sum past its type, and
+     *  nothing is said of it. */
+    @Test
+    void theSumARemainderIsOfKeptWithinItsTypeStopsNoRun() {
+        assertEquals(List.of(), mayStop("Small", "Small(x)",
+                "guard x >= 0 && z >= 0 && z <= 10 else No { n = 0 }",
+                "Int.floorMod(x - z, 7) >= 1"));
     }
 
     /** The findings that a rule of {@code f} is one a run may stop in. */

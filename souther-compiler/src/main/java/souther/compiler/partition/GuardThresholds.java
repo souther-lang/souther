@@ -340,7 +340,8 @@ public final class GuardThresholds {
                             List<EveryRunStops> stops =
                                     arrived instanceof ComparisonAssessment.AnswersNowhere
                                             ? List.<EveryRunStops>of()
-                                            : everyRunStops(arrived, each.worksOutOnEach(), read,
+                                            : everyRunStops(arrived, each.worksOutOnEach(),
+                                                    each.stopsIn(), read,
                                                     before, each.statedAsACondition().isPresent(),
                                                     decides -> regionsOf(Reachability.of(
                                                             new WayToTheBorder(each.wayToACase(
@@ -1038,7 +1039,8 @@ public final class GuardThresholds {
     /**
      * Where every run getting to {@code arrived} stops in what it works out, over the rows the
      * ways to it leave before a row is narrowed to getting past ({@code before}): each relation it
-     * was read as, where it is read once.
+     * was read as, where it is read once, and what a run getting to it works out ({@code stopsIn}),
+     * which holds the sums a witness answers for that no relation's rows are asked to get past.
      *
      * <p>Inside a closure, of what each application works out ({@code onEach}) and not of the
      * lines: a line that decides on no row an application is made on is no line, and the
@@ -1051,12 +1053,13 @@ public final class GuardThresholds {
      */
     private static List<EveryRunStops> everyRunStops(
             ComparisonAssessment arrived, Optional<List<Cutting.OnAnApplication>> onEach,
-            InputReading read, List<SearchRegion> before, boolean casesPutOnTheWay,
-            Function<Proposition, List<SearchRegion>> beforeACase) {
+            Optional<StopEvidence> stopsIn, InputReading read, List<SearchRegion> before,
+            boolean casesPutOnTheWay, Function<Proposition, List<SearchRegion>> beforeACase) {
         Set<EveryRunStops> out = new LinkedHashSet<>();
         if (onEach.isEmpty()) {
             arrived.relationsRead().forEach(relation ->
                     out.addAll(relation.everyRunStopsIn(read, before)));
+            stopsIn.ifPresent(stops -> out.addAll(stops.everyRunStopsIn(read, before, List.of())));
             return List.copyOf(out);
         }
         List<Cutting.OnAnApplication> applications = onEach.get();
@@ -1070,12 +1073,12 @@ public final class GuardThresholds {
             boolean othersTold = true;
             for (int other = 0; other < applications.size(); other++) {
                 if (other != at) {
-                    othersTold &= applications.get(other).working().exact();
-                    others.addAll(applications.get(other).working().operations());
+                    othersTold &= applications.get(other).stops().exact();
+                    others.addAll(applications.get(other).stops().operations().operations());
                 }
             }
             if (othersTold) {
-                out.addAll(UndividedByARelation.everyRunStopsIn(it.working(), read,
+                out.addAll(it.stops().everyRunStopsIn(read,
                         everywhere ? before : beforeACase.apply(it.reached()), others));
             }
         }

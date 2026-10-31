@@ -589,13 +589,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *
      * @param reached where the application is made: a run that does not make it works none of
      *                this out
-     * @param working what the comparison works out on it
+     * @param working what the comparison works out on it, as a row of its lines gets past it
+     * @param stops   what a run making it works out there, for where a run stops in it
      */
-    record OnAnApplication(Proposition reached, UndividedByARelation.Working working) {
+    record OnAnApplication(Proposition reached, UndividedByARelation.Working working,
+                           StopEvidence stops) {
 
         OnAnApplication {
             Objects.requireNonNull(reached, "an application is made somewhere");
             Objects.requireNonNull(working, "and works something out");
+            Objects.requireNonNull(stops, "and a run making it works something out");
         }
     }
 
@@ -618,8 +621,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             if (one.reached() instanceof Proposition.Always(boolean holds) && !holds) {
                 continue;
             }
-            out.add(new OnAnApplication(one.reached(),
-                    workingOf(conditions.comparison(comparison, one.reads(), read))));
+            Pullback.OnTheInput onTheInput = conditions.comparison(comparison, one.reads(), read);
+            out.add(new OnAnApplication(one.reached(), workingOf(onTheInput),
+                    onTheInput.stops().get()));
         }
         return Optional.of(out);
     }
