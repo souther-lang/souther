@@ -193,7 +193,12 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             // walk let go is walked again, to the walk it was.
             Map.entry("souther.compiler.partition.WaysWalked.WAYS_KEPT",
                     "how many ways' walks a reading of a body keeps; past it a way is walked"
-                            + " again, and comes to what it came to")));
+                            + " again, and comes to what it came to"),
+
+            // And how many regions it keeps the narrowing of, likewise.
+            Map.entry("souther.compiler.partition.RegionsGotPast.REGIONS_KEPT",
+                    "how many regions a reading of a body keeps what a run's answers narrowed"
+                            + " them by; past it a region is narrowed again, to what it was")));
 
     /**
      * A number written into a composing class is a budget's, or is one of the above.

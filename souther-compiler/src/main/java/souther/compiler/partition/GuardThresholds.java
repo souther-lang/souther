@@ -218,9 +218,10 @@ public final class GuardThresholds {
         arrives.requireNumbering(plan.identity());
         // Every comparison of the body reads its ways over the conditions the body states, and
         // reads them again for each region and relation it asks about: a way walked once is the
-        // same walk for all of them.
-        return WaysWalked.over(() -> guardsOf(behavior, states, emitted, plan, read, elements,
-                arrives, reaches, witnesses));
+        // same walk for all of them. And the ways of each case are taken past what the run got
+        // past working out, a region many of them share narrowed by the same answers each time.
+        return WaysWalked.over(() -> RegionsGotPast.over(() -> guardsOf(behavior, states,
+                emitted, plan, read, elements, arrives, reaches, witnesses)));
     }
 
     private static Guards guardsOf(String behavior, AnalysisBody states, Core emitted,
