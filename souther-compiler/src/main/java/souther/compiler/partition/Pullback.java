@@ -17,6 +17,7 @@ import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.ConstantComparison;
+import souther.compiler.check.CallArguments;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.ClosureUses;
@@ -121,6 +122,7 @@ import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.PieceOfAnElement;
+import souther.compiler.semantics.ResultRange;
 import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
@@ -1285,8 +1287,8 @@ final class Pullback {
     private void anOperator(Core operator, InputReads reads) {
         LinearForm<Quantity> form = composedAs(operator, reads);
         if (form != null) {
-            operated.tell(operator, form,
-                    new Answers.AsAnOperator(AffineForms.whereItAnswers(operator)));
+            operated.tell(operator,
+                    new Answers.AsAnOperator(form, AffineForms.whereItAnswers(operator)));
         }
     }
 
@@ -1317,19 +1319,58 @@ final class Pullback {
         }
         LinearForm<Quantity> value = composedAs(construct, reads);
         if (value == null) {
-            madeOfARounding(construct, made, reads);
+            if (isHeldToTheTypeByTheLibrary(construct, made, reads)) {
+                operated.tell(construct, new Answers.Anywhere());
+            } else {
+                madeOfARounding(construct, made, reads);
+            }
             return;
         }
         if (ClausesInOrder.at(construct, read.rules()).governsNothing()) {
-            operated.tell(construct, value,
-                    new Answers.AsAnOperator(new WhereAnOperatorAnswers.Everywhere()));
+            operated.tell(construct,
+                    new Answers.AsAnOperator(value, new WhereAnOperatorAnswers.Everywhere()));
             return;
         }
         WhereAnOperatorAnswers.WhereItsExactValueIsHeld where =
                 DeclaredBounds.whereMakingSucceeds(construct, made, read.ruleReading());
         if (where != null) {
-            operated.tell(construct, value, new Answers.AsAnOperator(where));
+            operated.tell(construct, new Answers.AsAnOperator(value, where));
         }
+    }
+
+    /**
+     * Whether {@code construct}, a newtype over a number no form says, is refused by no run: the
+     * clauses of its type leave a run the number is shown to lie in, as the library bounds what
+     * the operation that made it answers ({@link ResultRange}) and as a choice between two values
+     * keeps an end of them ({@link Extreme#boundsOf}). {@code Refund(Decimal.max(0.0m, x))} lies
+     * at nought or above whatever {@code x} is, with no form of {@code x} needed.
+     */
+    private boolean isHeldToTheTypeByTheLibrary(Core.Construct construct, TypeView made,
+                                                InputReads reads) {
+        if (ClausesInOrder.at(construct, read.rules()).governsNothing()) {
+            return true;
+        }
+        NumericDomain.Bounds run = DeclaredBounds.wholeRunOf(made, read.ruleReading());
+        if (run == null) {
+            return false;
+        }
+        Denotation number = reads.standing(construct.values().getFirst().value(),
+                read.rules().symbols(), read.rules().newtypes());
+        if (!(Core.withoutStanding(number.value()) instanceof Core.PreservedCall call)) {
+            return false;
+        }
+        Function<Core, BigDecimal> constant = argument -> {
+            Denotation each = number.at().standing(argument, read.rules().symbols(),
+                    read.rules().newtypes());
+            return switch (Core.withoutStanding(each.value())) {
+                case Core.Decimal written -> written.value();
+                case Core.Int written -> BigDecimal.valueOf(written.value());
+                default -> null;
+            };
+        };
+        return ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(call.operation()),
+                        CallArguments.readAs(call, constant))
+                .meet(Extreme.boundsOf(call, constant)).liesWithin(run);
     }
 
     /**
@@ -1346,8 +1387,8 @@ final class Pullback {
                 instanceof GetsPast.WhereTheTotalFits) {
             LinearForm<Quantity> total = totalOfWrittenOut(call, reads);
             if (total != null) {
-                operated.tell(call, total,
-                        new Answers.AsAnOperator(WhereAnOperatorAnswers.ofATotal(call.type())));
+                operated.tell(call, new Answers.AsAnOperator(total,
+                        WhereAnOperatorAnswers.ofATotal(call.type())));
             }
             return;
         }
@@ -1356,7 +1397,7 @@ final class Pullback {
                 : RoundedToAWholeNumber.whereTheRoundedNumberIsHeld(call.type(),
                         read.rules().declarations());
         if (ends != null) {
-            operated.tell(call, rounding.before(), new Answers.Rounded(rounding.way(), ends));
+            operated.tell(call, new Answers.Rounded(rounding.before(), rounding.way(), ends));
         }
     }
 
@@ -1373,14 +1414,14 @@ final class Pullback {
             return;
         }
         if (ClausesInOrder.at(construct, read.rules()).governsNothing()) {
-            operated.tell(construct, rounding.before(),
-                    new Answers.AsAnOperator(new WhereAnOperatorAnswers.Everywhere()));
+            operated.tell(construct, new Answers.AsAnOperator(rounding.before(),
+                    new WhereAnOperatorAnswers.Everywhere()));
             return;
         }
         WhereAnOperatorAnswers.WhereItsExactValueIsHeld run =
                 DeclaredBounds.whereMakingSucceeds(construct, made, read.ruleReading());
         if (run != null) {
-            operated.tell(construct, rounding.before(), new Answers.Rounded(rounding.way(), run));
+            operated.tell(construct, new Answers.Rounded(rounding.before(), rounding.way(), run));
         }
     }
 
@@ -6614,13 +6655,13 @@ final class Pullback {
             unsaidGroups.add(unsaidAt);
         }
 
-        void tell(Core operation, LinearForm<Quantity> form, Answers where) {
+        void tell(Core operation, Answers where) {
             boolean first = application == null ? nodes.add(operation)
                     : toldOn.computeIfAbsent(operation,
                             _ -> Collections.newSetFromMap(new IdentityHashMap<>()))
                             .add(application);
             if (first) {
-                told.add(new Operated(operation, form, where));
+                told.add(new Operated(operation, where));
             }
         }
 
@@ -6810,26 +6851,39 @@ final class Pullback {
         }
     }
 
-    /** One operator a reading was told of, with the form it came to there and where it answers,
-     *  which the reading that met it says once. */
-    private record Operated(Core operation, LinearForm<Quantity> form, Answers where) {}
+    /** One operator a reading was told of, and where it answers, which the reading that met it
+     *  says once. */
+    private record Operated(Core operation, Answers where) {}
 
     /**
-     * Where an operator a reading was told of answers, over the form it was told with.
+     * Where an operator a reading was told of answers.
      *
-     * <p>Either as the language says an operator does, with the form the number it comes to, or
-     * where a number rounded to a whole one lies in a run, with the form the number before
-     * rounding: a rounding past the ends of an {@code Int}, and the making of a value whose
-     * clauses leave a run, stop a run at the rounded number, which is no form of anything.
+     * <p>Over a form of the number it comes to, as the language says an operator does, or where a
+     * number rounded to a whole one lies in a run, over the form of the number before rounding: a
+     * rounding past the ends of an {@code Int}, and the making of a value whose clauses leave a
+     * run, stop a run at the rounded number, which is no form of anything. Or on every run, with
+     * no form at all, where the number it comes to is held to what it needs by the operation that
+     * made it.
      */
     private sealed interface Answers {
 
-        /** As {@code where} says, of the number the operator comes to. */
-        record AsAnOperator(WhereAnOperatorAnswers where) implements Answers {}
+        /** Where the operator answers is a matter of a form of a number. */
+        sealed interface ByTheFormOfANumber extends Answers {
+            LinearForm<Quantity> form();
+        }
 
-        /** Where the number rounded {@code way} lies in {@code run}. */
-        record Rounded(WholeRounding way, WhereAnOperatorAnswers.WhereItsExactValueIsHeld run)
-                implements Answers {}
+        /** As {@code where} says, of the number the operator comes to, which is {@code form}. */
+        record AsAnOperator(LinearForm<Quantity> form, WhereAnOperatorAnswers where)
+                implements ByTheFormOfANumber {}
+
+        /** Where the number rounded {@code way}, which is {@code form} before it, lies in
+         *  {@code run}. */
+        record Rounded(LinearForm<Quantity> form, WholeRounding way,
+                       WhereAnOperatorAnswers.WhereItsExactValueIsHeld run)
+                implements ByTheFormOfANumber {}
+
+        /** On every run, whatever the inputs are. */
+        record Anywhere() implements Answers {}
     }
 
     /**
@@ -6852,17 +6906,20 @@ final class Pullback {
     private List<Derivation> whereEachOperatorAnswers(Operators operated) {
         List<Derivation> out = new ArrayList<>();
         for (Operated each : operated.told) {
-            LinearForm<Quantity> form = each.form();
-            ConstantComparison held = switch (each.where()) {
-                case Answers.AsAnOperator(WhereAnOperatorAnswers.Everywhere _) ->
+            if (!(each.where() instanceof Answers.ByTheFormOfANumber over)) {
+                continue;
+            }
+            LinearForm<Quantity> form = over.form();
+            ConstantComparison held = switch (over) {
+                case Answers.AsAnOperator(_, WhereAnOperatorAnswers.Everywhere _) ->
                         new ConstantComparison.Settled(true);
-                case Answers.AsAnOperator(
+                case Answers.AsAnOperator(_,
                         WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest)) ->
                         ConstantComparison.both(
                                 new ConstantComparison.Against(Rel.LE, ExactRatio.of(greatest)),
                                 new ConstantComparison.Against(Rel.GE, ExactRatio.of(least)));
                 case Answers.AsAnOperator _ -> null;
-                case Answers.Rounded(var way, var run) ->
+                case Answers.Rounded(_, var way, var run) ->
                         RoundedToAWholeNumber.heldBetween(way, run.least(), run.greatest());
             };
             if (held instanceof ConstantComparison.Settled settled && settled.holds()) {
