@@ -187,7 +187,13 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             // go is worked out again, to the way it was.
             Map.entry("souther.compiler.partition.WaysToACase.CASES_KEPT",
                     "how many cases' ways are kept for the lines asking them; past it a way is"
-                            + " worked out again, and nothing is left unread")));
+                            + " worked out again, and nothing is left unread"),
+
+            // How many walks of ways one reading of a body keeps. No search stops at it either: a
+            // walk let go is walked again, to the walk it was.
+            Map.entry("souther.compiler.partition.WaysWalked.WAYS_KEPT",
+                    "how many ways' walks a reading of a body keeps; past it a way is walked"
+                            + " again, and comes to what it came to")));
 
     /**
      * A number written into a composing class is a budget's, or is one of the above.

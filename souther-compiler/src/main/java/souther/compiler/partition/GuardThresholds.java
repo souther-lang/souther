@@ -216,6 +216,20 @@ public final class GuardThresholds {
         // modules' together — and a reading of another plan answers that nothing is known about
         // every comparison here, which restricts nothing and is what an unread body looks like.
         arrives.requireNumbering(plan.identity());
+        // Every comparison of the body reads its ways over the conditions the body states, and
+        // reads them again for each region and relation it asks about: a way walked once is the
+        // same walk for all of them.
+        return WaysWalked.over(() -> guardsOf(behavior, states, emitted, plan, read, elements,
+                arrives, reaches, witnesses));
+    }
+
+    private static Guards guardsOf(String behavior, AnalysisBody states, Core emitted,
+                                   CoverageSites.Plan plan,
+                                   InputReading read,
+                                   ElementBindings elements,
+                                   PathReachability.Arrivals arrives,
+                                   RuleReachNumbering reaches,
+                                   CountWitnesses.AtComparisons witnesses) {
         InputDomain inputs = read.domain();
         List<LineEvidence> found = new ArrayList<>();
         RulesWithNoLine.Gathered withoutALine = new RulesWithNoLine.Gathered();

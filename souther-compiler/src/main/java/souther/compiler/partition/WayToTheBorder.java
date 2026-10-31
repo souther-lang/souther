@@ -435,6 +435,11 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * it is judged by the same walk, as the one way it is.
      */
     OneOfEach.Walked<OnTheWay, Reachability> along() {
+        return WaysWalked.along(onTheWay, this::walkedAlong);
+    }
+
+    /** {@link #along}, walked. */
+    private OneOfEach.Walked<OnTheWay, Reachability> walkedAlong() {
         // A way with no count on it is walked as it always was, with the walk's own figures.
         if (stated().stream().noneMatch(OnTheWay.Counted.class::isInstance)) {
             return walked(onTheWay, ASKED_OF_A_ROW);
