@@ -7,13 +7,11 @@ import souther.compiler.query.Compilation;
 
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * A type whose invariant is over a chain of values, each naming the one before it twice, is
@@ -21,9 +19,11 @@ import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
  * of the chain. The invariant's clause holds each value as one node in two slots, so a walk that
  * meets a node once per path to it makes 2^N visits for N links.
  *
- * <p>The bound is a hang guard. At this length the walk that follows every path does not finish
- * in any time a test waits; the node count the walk makes is held in
- * {@code ASharedNodeIsVisitedOnceByTheDistinctWalkTest}.
+ * <p>Each test asks that the compile finishes with nothing refused. At this length a walk that
+ * follows every path does not finish in any time a test waits, and a time limit would not stop it,
+ * so the work the walks make is held where it is counted: the nodes {@code Core.forEachDistinctNode}
+ * visits in {@code ASharedNodeIsVisitedOnceByTheDistinctWalkTest}, and that the clause reader walks
+ * through it in {@code AClauseIsReadForItsFieldsByAWalkThatMeetsEachNodeOnceTest}.
  */
 class AnInvariantNamingAChainOfValuesTwiceCompilesInTheTimeOfItsLengthTest {
 
@@ -64,19 +64,16 @@ class AnInvariantNamingAChainOfValuesTwiceCompilesInTheTimeOfItsLengthTest {
 
     @Test
     void theModuleAndAModuleThatIncludesItsTypeCompileAtThirtyLinks() {
-        assertTimeoutPreemptively(Duration.ofSeconds(60), () ->
-                Compiler.compileModules(List.of(INCLUDES_THE_TYPE),
-                        ModulePath.of(Compiler.compile(chainModule()))));
+        Compiler.compileModules(List.of(INCLUDES_THE_TYPE),
+                ModulePath.of(Compiler.compile(chainModule())));
     }
 
     @Test
     void aThirdModuleBuiltAgainstThatOneCompilesAtThirtyLinks() {
-        assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
-            Map<String, ClassFileImage> lib = Compiler.compile(chainModule());
-            Map<String, ClassFileImage> path = new HashMap<>(lib);
-            path.putAll(Compiler.compileModules(List.of(INCLUDES_THE_TYPE), ModulePath.of(lib)));
-            Compiler.compileModules(List.of(BUILDS_AGAINST_THE_WRAPPER), ModulePath.of(path));
-        });
+        Map<String, ClassFileImage> lib = Compiler.compile(chainModule());
+        Map<String, ClassFileImage> path = new HashMap<>(lib);
+        path.putAll(Compiler.compileModules(List.of(INCLUDES_THE_TYPE), ModulePath.of(lib)));
+        Compiler.compileModules(List.of(BUILDS_AGAINST_THE_WRAPPER), ModulePath.of(path));
     }
 
     /** Every reading that follows the compile — what the type's values are, the classes of its
@@ -84,12 +81,9 @@ class AnInvariantNamingAChainOfValuesTwiceCompilesInTheTimeOfItsLengthTest {
      *  than the clause has. */
     @Test
     void everyReadingOfAModuleHoldingTheChainAnswersAtThirtyLinks() {
-        Compilation compilation = assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
-            Compilation one = Compilation.ofSource(chainModule() + BUILDS_THE_TYPE, "Main");
-            one.measure(Adequacy.Asked.fullReport());
-            one.answerEverything();
-            return one;
-        });
+        Compilation compilation = Compilation.ofSource(chainModule() + BUILDS_THE_TYPE, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
 
         assertEquals(List.of(), compilation.errors());
     }

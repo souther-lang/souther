@@ -11,13 +11,11 @@ import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * The fields {@link RecordRules#readFrom} finds in a clause are those it names, whether a value the
@@ -25,8 +23,10 @@ import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
  * one below twice over.
  *
  * <p>Built from the parts rather than a source, so the question is the reading of a clause and
- * nothing that parses or types it. The deep clause is a chain the walk that meets a node once per
- * path to it would not finish: the bound is only the way a test ends, and what is held is the set.
+ * nothing that parses or types it. What is held is the set. That the walk meets a node once is held
+ * by {@code ASharedNodeIsVisitedOnceByTheDistinctWalkTest} and by the architecture test that asks
+ * this reader to walk through it; a clause deep enough to hang the walk that follows every path
+ * would leave the process running after the test had failed, so none is built here.
  */
 class TheFieldsAClauseReadsAreTheSameHoweverItsNodesAreSharedTest {
 
@@ -61,14 +61,11 @@ class TheFieldsAClauseReadsAreTheSameHoweverItsNodesAreSharedTest {
     @Test
     void aDeepSharedClauseReadsTheFieldsAtItsBottomAndNoOthers() {
         Core shared = sum(read(total), new Core.Int(2, Type.INT, POS));
-        for (int i = 0; i < 40; i++) {
+        for (int i = 0; i < 12; i++) {
             shared = sum(shared, shared);
         }
-        Core clause = shared;
 
-        Set<String> read = assertTimeoutPreemptively(Duration.ofSeconds(30), () -> readFrom(clause));
-
-        assertEquals(Set.of("total"), read);
+        assertEquals(Set.of("total"), readFrom(shared));
     }
 
     @Test
