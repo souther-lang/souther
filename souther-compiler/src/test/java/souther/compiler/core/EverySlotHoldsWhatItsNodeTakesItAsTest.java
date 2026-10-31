@@ -4,8 +4,6 @@ import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.types.BinOp;
-import souther.compiler.types.Type;
 import souther.test.ClosedWorldContract;
 
 import org.junit.jupiter.api.Test;
@@ -47,7 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * with type variables each application settles, so what one application takes is said by the call.
  * The trees read here keep the language's operations standing as themselves, so a kernel applied to
  * arguments is met in the body handed on to be emitted, which {@link
- * EveryTreeTheBackendIsHandedIsTypedTest} asks this of.
+ * TheTreesOfAModelTheBackendIsHandedAreTypedTest} asks this of.
  */
 @ClosedWorldContract
 class EverySlotHoldsWhatItsNodeTakesItAsTest {
@@ -58,7 +56,8 @@ class EverySlotHoldsWhatItsNodeTakesItAsTest {
         assertFalse(trees.isEmpty(), "no tree was read, so this holds of nothing");
         List<String> found = new ArrayList<>();
         for (Core tree : trees) {
-            each(tree, node -> found.addAll(disagreements(node)));
+            each(tree, node -> found.addAll(
+                    WhatASlotHoldsAgainstWhatItsNodeTakesItAs.disagreements(node)));
         }
         assertEquals(List.of(), found,
                 "a slot holding a value of a type other than the one its node takes it at, with no"
@@ -111,61 +110,8 @@ class EverySlotHoldsWhatItsNodeTakesItAsTest {
         }
         Core.If bare = new Core.If(widened.cond(), Core.withoutStanding(widened.then()),
                 widened.els(), widened.place(), widened.type(), widened.pos());
-        assertEquals(1, disagreements(bare).size(),
+        assertEquals(1, WhatASlotHoldsAgainstWhatItsNodeTakesItAs.disagreements(bare).size(),
                 "the branch, once it no longer says what it stands as");
-    }
-
-    /** What {@code node} says of a slot's type that the value in the slot does not have. */
-    static List<String> disagreements(Core node) {
-        List<String> out = new ArrayList<>();
-        switch (node) {
-            case Core.If fork -> {
-                expect(out, fork, "then", fork.type(), fork.then());
-                expect(out, fork, "else", fork.type(), fork.els());
-            }
-            case Core.IfConstructed attempt -> {
-                expect(out, attempt, "then", attempt.type(), attempt.then());
-                attempt.els().forEach(arm -> expect(out, attempt, "else", attempt.type(),
-                        arm.body()));
-            }
-            case Core.Match match -> match.cases().forEach(arm ->
-                    expect(out, match, "arm", match.type(), arm.body()));
-            case Core.ListLit list when list.type() instanceof Type.ListOf of ->
-                    list.elements().forEach(each -> expect(out, list, "element", of.element(), each));
-            case Core.LetIn let -> {
-                expect(out, let, "value", let.bindType(), let.value());
-                expect(out, let, "body", let.type(), let.body());
-            }
-            case Core.OptionSome some when some.type() instanceof Type.OptionOf of ->
-                    expect(out, some, "value", of.element(), some.value());
-            case Core.Binary joined when joined.op() == BinOp.CONCAT
-                    && joined.type() instanceof Type.ListOf -> {
-                expect(out, joined, "left", joined.type(), joined.left());
-                expect(out, joined, "right", joined.type(), joined.right());
-            }
-            case Core.Call call when call.settlement()
-                    instanceof Core.CallSettlement.AtKernel(List<Type> takes, _) -> {
-                if (takes.size() != call.args().size()) {
-                    out.add("Call at " + call.pos() + ": `" + call.name() + "` takes "
-                            + takes.size() + " argument(s) and holds " + call.args().size());
-                } else {
-                    for (int i = 0; i < takes.size(); i++) {
-                        expect(out, call, "argument " + (i + 1) + " of `" + call.name() + "`",
-                                takes.get(i), call.args().get(i));
-                    }
-                }
-            }
-            default -> { }
-        }
-        return out;
-    }
-
-    private static void expect(List<String> out, Core node, String slot, Type takes, Core value) {
-        if (value != null && !takes.equals(value.type())) {
-            out.add(node.getClass().getSimpleName() + " at " + node.pos() + ": its " + slot
-                    + " is taken as " + Type.show(takes) + " and holds "
-                    + Type.show(value.type()));
-        }
     }
 
     private static void each(Core e, Consumer<Core> f) {
@@ -184,7 +130,8 @@ class EverySlotHoldsWhatItsNodeTakesItAsTest {
      *
      * <p>Not the body a check hands on to be emitted. That one has been through the rewrite that
      * turns a fold growing a collection into a build ({@link GrowingFold}), which is a pass after
-     * checking and not held here; {@link EveryTreeTheBackendIsHandedIsTypedTest} holds that one.
+     * checking and not held here; {@link TheTreesOfAModelTheBackendIsHandedAreTypedTest} holds
+     * that one.
      */
     private static List<Core> trees() {
         if (trees != null) {

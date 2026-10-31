@@ -1,13 +1,9 @@
 package souther.compiler.report;
 
-import souther.compiler.conformance.RepositoryModels;
+import org.junit.jupiter.api.Test;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.test.ClosedWorldContract;
-import souther.test.ReadsTheRepositorysModels;
-
-import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -22,7 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a scope could not answer is there whether or not its verdict shows it, and narrowing to one
- * never invents an answer the report it was narrowed from does not hold.
+ * never invents an answer the report it was narrowed from does not hold, on two models that each
+ * raise one case of it: a rule the rows refuse beside a declaration that owes a row at a line, and
+ * a value built that its own rule rejects.
  *
  * <p>Three things a report used to answer with one. What the measures came to is the analysis's;
  * which of it settles a word is a ranking over that; what a reader of the verdict is shown is the
@@ -30,52 +28,96 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * things it could not answer are no less there for being outranked.
  *
  * <p>Held over every scope a report can be narrowed to, because the ranking is per scope and a
- * module's gap is not its sibling's. A module whose bodies were never made sits beside one the rows
- * refuse, and read through the compilation's verdict alone it looks like a module short of nothing.
- *
- * <p><b>Over the models this repository carries.</b> Whether a refused scope that still holds
- * something unanswered exists at all is the corpus's answer and not a value a test can build — built
- * by hand, this would say a record can be constructed, which javac already says.
+ * module's gap is not its sibling's.
  */
-@ClosedWorldContract
-@ReadsTheRepositorysModels
-class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
+class AScopeOfAModelStillHoldsWhatItCouldNotAnswerTest {
+
+    /** A limit on a weighted sum of two counts and one on the distance between two hours, each
+     *  behavior taking types of its own: the rows refuse the scope and the declarations owe rows at
+     *  the lines, which a scope narrowed to one behavior does not carry for the other. */
+    private static final String LIMITS = """
+            module limits exposing ( Straws, Bars, Load, Rejected, packBox, Hour, Booked, Clash,
+                                     bookSlot )
+
+            data Straws = Int
+                invariant value >= 0 && value <= 20
+
+            data Bars = Int
+                invariant value >= 0 && value <= 20
+
+            data Load = { grams: Int }
+            data Rejected
+
+            behavior packBox : (straws: Straws, bars: Bars) -> Load | Rejected
+                constructs Load
+
+            let packBox (straws, bars) = {
+                guard 300 * straws.value + 600 * bars.value <= 4800 else Rejected
+                Load { grams = 300 * straws.value + 600 * bars.value }
+            }
+
+            data Hour = Int
+                invariant value >= 0 && value <= 24
+
+            data Booked = { from: Hour, until: Hour }
+            data Clash
+
+            behavior bookSlot : (from: Hour, until: Hour) -> Booked | Clash
+                constructs Booked
+
+            let bookSlot (from, until) = {
+                guard until.value - from.value <= 8 else Clash
+                Booked { from = from, until = until }
+            }
+            """;
+
+    /** A value built that its own rule rejects, which leaves the scope undetermined. */
+    private static final String REJECTS = """
+            module rejects exposing ( Hold, hold )
+
+            data Hold = Int
+                invariant value >= 1 && value <= 300
+
+            behavior hold : (party: Int) -> Hold
+                constructs Hold
+
+            let hold (party) = Hold(0)
+            """;
 
     /**
-     * One repository model's report, beside every report a reader of it can be handed.
+     * One model's report, beside every report a reader of it can be handed.
      *
-     * <p>Kept together, and the corpus walked once for the whole class, because more than one law
-     * here needs the narrowed reports beside the whole one they came from — a debt a narrowed report
-     * shows is compared with the one the whole report shows, and a module name is only a name: two
-     * models naming a module alike would otherwise be held against each other.
+     * <p>Kept together, because more than one law needs the narrowed reports beside the whole one
+     * they came from — a debt a narrowed report shows is compared with the one the whole report
+     * shows, and a module name is only a name: two models naming a module alike would otherwise be
+     * held against each other.
      *
      * @param whole the report every scope beside it was narrowed from
      * @param scopes every scope of it, {@link ReportScopes}'s and not walked here
      */
     private record OfAModel(AdequacyReport whole, List<ReportScopes> scopes) {
 
-        static List<OfAModel> all() {
-            List<OfAModel> out = new ArrayList<>();
-            for (Compilation compilation : RepositoryModels.all()) {
-                AdequacyReport whole = AdequacyReport.of(compilation);
-                out.add(new OfAModel(whole, ReportScopes.of(
-                        String.valueOf(compilation.modules()), whole)));
-            }
-            return List.copyOf(out);
+        static OfAModel of(Compilation compilation) {
+            AdequacyReport whole = AdequacyReport.of(compilation);
+            return new OfAModel(whole, ReportScopes.of(String.valueOf(compilation.modules()),
+                    whole));
         }
     }
 
-    private static final List<OfAModel> MODELS = OfAModel.all();
+    private static List<OfAModel> models() {
+        return List.of(OfAModel.of(compiled(LIMITS)), OfAModel.of(compiled(REJECTS)));
+    }
 
-    /**
-     * Every report a reader of these models can be handed.
-     *
-     * <p>Flattened out of {@link #MODELS}, which is where the corpus is walked. A second walk here
-     * would answer the same {@link ReportScopes}'s and not this class's own population, and the
-     * other law over these is held over the same one so that two enumerations of it do not drift.
-     */
-    private static final List<ReportScopes> SCOPES =
-            MODELS.stream().flatMap(each -> each.scopes().stream()).toList();
+    private static List<ReportScopes> scopesOf(List<OfAModel> models) {
+        return models.stream().flatMap(each -> each.scopes().stream()).toList();
+    }
+
+    private static Compilation compiled(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation;
+    }
 
     /**
      * A scope the rows refuse holds what it could not answer, and shows a reader none of it.
@@ -85,7 +127,7 @@ class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
      */
     @Test
     void aRefusedScopeKeepsItsUncertaintiesAndOffersNone() {
-        List<ReportScopes> refusedAndUnanswered = SCOPES.stream()
+        List<ReportScopes> refusedAndUnanswered = scopesOf(models()).stream()
                 .filter(each -> each.report().adequacy()
                         == AdequacyReport.AdequacyStatus.NOT_SATISFIED)
                 .filter(each -> !each.report().assessment().uncertainties().isEmpty())
@@ -93,7 +135,7 @@ class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
 
         assertFalse(refusedAndUnanswered.isEmpty(), "no model here is refused at a scope that also"
                 + " went without something, which is the case this is a law about");
-        for (ReportScopes each :refusedAndUnanswered) {
+        for (ReportScopes each : refusedAndUnanswered) {
             assertTrue(each.report().whatKeepsTheVerdictOpen().isEmpty(),
                     () -> each.name() + " is refused and offers a reader something that holds its"
                             + " verdict open");
@@ -108,7 +150,7 @@ class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
      */
     @Test
     void anUndeterminedScopeShowsEverythingItCouldNotAnswer() {
-        for (ReportScopes each :SCOPES) {
+        for (ReportScopes each : scopesOf(models())) {
             if (each.report().adequacy() != AdequacyReport.AdequacyStatus.UNDETERMINED) {
                 continue;
             }
@@ -136,7 +178,7 @@ class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
      */
     @Test
     void narrowingInventsNothing() {
-        for (OfAModel model : MODELS) {
+        for (OfAModel model : models()) {
             Set<AdequacyUncertainty> ofTheWhole =
                     new HashSet<>(model.whole().assessment().uncertainties());
             for (ReportScopes scope : model.scopes()) {
@@ -165,7 +207,7 @@ class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
     @Test
     void aDebtANarrowedReportShowsIsTheOneTheWholeReportShows() {
         List<BorderObligationPoint> compared = new ArrayList<>();
-        for (OfAModel model : MODELS) {
+        for (OfAModel model : models()) {
             for (ReportScopes scope : model.scopes()) {
                 for (AdequacyReport.ModuleReport module : scope.report().modules()) {
                     Map<BorderObligationPoint, Adequacy.DeclaredDebt> whole =
@@ -195,7 +237,7 @@ class ARefusedScopeStillHoldsWhatItCouldNotAnswerTest {
     @Test
     void narrowingShowsFewerDebtsThanTheModuleHolds() {
         List<String> narrowed = new ArrayList<>();
-        for (OfAModel model : MODELS) {
+        for (OfAModel model : models()) {
             for (ReportScopes scope : model.scopes()) {
                 for (AdequacyReport.ModuleReport module : scope.report().modules()) {
                     if (debtsOf(module).size()

@@ -1,15 +1,11 @@
 package souther.compiler.core;
 
-import souther.compiler.conformance.RepositoryModels;
+import org.junit.jupiter.api.Test;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
-import souther.test.ClosedWorldContract;
-import souther.test.ReadsTheRepositorysModels;
-
-import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
@@ -23,93 +19,112 @@ import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Every body a check hands on to be emitted is typed the way a checked tree is, after the passes
- * that rewrite it on the way.
+ * that rewrite it on the way, on models that each raise one thing the rule is about: a kernel
+ * handed an argument narrower than it takes, a walk joined to another that changes what it holds,
+ * and a binding an arm makes.
  *
- * <p>Two things are held of it. A slot holds a value of the type its node takes it at, which is
- * what {@link EverySlotHoldsWhatItsNodeTakesItAsTest} holds of the trees checking hands out. And a
- * read of a binding is of the type the binding is in force at, which is what a pass that changes
- * what a binding stands for owes every read of it: the slot rule alone passes a read of the old
- * type standing under a {@link Core.Widen} to the new one.
- *
- * <p>A backend where element types are erased runs such a tree correctly whatever it says, so
- * nothing at run time asks this.
+ * <p>Two things are held of a tree. A slot holds a value of the type its node takes it at
+ * ({@link WhatASlotHoldsAgainstWhatItsNodeTakesItAs}), which is what
+ * {@link EverySlotHoldsWhatItsNodeTakesItAsTest} holds of the trees checking hands out. And a read
+ * of a binding is of the type the binding is in force at, which is what a pass that changes what a
+ * binding stands for owes every read of it.
  */
-@ClosedWorldContract
-@ReadsTheRepositorysModels
-class EveryTreeTheBackendIsHandedIsTypedTest {
+class TheTreesOfAModelTheBackendIsHandedAreTypedTest {
+
+    /** A kernel handed an argument narrower than it takes: the rounding mode is a case of its
+     *  type. */
+    private static final String ROUNDS = """
+            module demo
+            behavior run : (d: Decimal) -> Decimal
+            let run (d) = Decimal.round(2, HALF_UP, d)
+            """;
+
+    /** Two walks in a row, the outer of which builds a list of something other than what the
+     *  inner reads. */
+    private static final String JOINS = """
+            module demo
+            behavior run : (xs: List<Int>) -> List<Bool>
+            let run (xs) = List.map(n -> n > 0, List.filter(n -> n > 1, xs))
+            """;
+
+    /** A binding an arm makes, and a read of it. */
+    private static final String BINDS = """
+            module demo
+            behavior run : (x: Int) -> Int
+            let run (x) = match Int.truncatingDivide(x, 10) with
+                | Int as n -> n + 1
+                | DivisionByZero -> 0
+            """;
+
+    /** A helper that calls itself and a value of the module, which are emitted as methods of their
+     *  own and not into the behavior that calls them. */
+    private static final String DEFINES = """
+            module demo
+            partial let total (n: Int): Int = if n <= 0 then 0 else n + total(n - 1)
+            let limit = List.length([1, 2, 3])
+            behavior run : (n: Int) -> Int
+            let run (n) = total(n) + limit
+            """;
+
+    private static Compilation compiled(String source) {
+        return Compilation.ofSource(source, "Main");
+    }
+
+    private static List<Core> trees() {
+        return treesOf(List.of(compiled(ROUNDS), compiled(JOINS), compiled(BINDS),
+                compiled(DEFINES)));
+    }
+
+    /** And that what a module's check emits as a method of its own is among the trees read, so the
+     *  rules above are asked of the definitions as well as of the behaviors. */
+    @Test
+    void aModelHandsOnTheDefinitionsItsModuleEmits() {
+        Compilation c = compiled(DEFINES);
+        Bodies.ModuleCheck.Of checked = c.db().ask(new Bodies.ModuleCheck("demo")).value();
+        assertFalse(checked.emittedDefinitions().isEmpty(),
+                "the module emits no definition of its own, so none is read");
+        List<Core> read = treesOf(List.of(c));
+        for (var definition : checked.emittedDefinitions().values()) {
+            assertTrue(read.contains(definition.body()),
+                    () -> "a definition the module emits is not among the trees read");
+        }
+        assertEquals(List.of(), slotDisagreements(read));
+        assertEquals(List.of(), readDisagreements(read));
+    }
 
     @Test
     void everySlotHoldsWhatItsNodeTakesItAs() {
-        List<String> found = new ArrayList<>();
-        for (Core tree : trees()) {
-            each(tree, node -> found.addAll(EverySlotHoldsWhatItsNodeTakesItAsTest.disagreements(
-                    node)));
-        }
-        assertEquals(List.of(), found,
+        assertEquals(List.of(), slotDisagreements(trees()),
                 "a slot of a body handed on to be emitted holding a value of a type other than the"
                         + " one its node takes it at");
     }
 
-    /**
-     * And that the bodies read apply kernels to arguments, some of them narrower than what the
-     * application takes, so the slot rule is asked of what a kernel's application takes and of a
-     * Widen among its arguments.
-     */
+    /** And that the body read applies a kernel to an argument narrower than the application takes,
+     *  so the slot rule is asked of a Widen among a kernel's arguments. */
     @Test
-    void theModelsHandOnKernelsAppliedToArgumentsTheyWiden() {
-        int[] applied = {0};
-        int[] widened = {0};
-        for (Core tree : trees()) {
-            each(tree, node -> {
-                if (node instanceof Core.Call call
-                        && call.settlement() instanceof Core.CallSettlement.AtKernel
-                        && !call.args().isEmpty()) {
-                    applied[0]++;
-                    if (call.args().stream().anyMatch(Core.Widen.class::isInstance)) {
-                        widened[0]++;
-                    }
-                }
-            });
-        }
-        assertFalse(applied[0] == 0, "no body the models hand on applies a kernel to an argument");
-        assertFalse(widened[0] == 0,
-                "no body the models hand on hands a kernel an argument narrower than it takes");
+    void aModelHandsOnAKernelAppliedToAnArgumentItWidens() {
+        int[] counts = kernelsAppliedAndWidened(treesOf(List.of(compiled(ROUNDS))));
+        assertFalse(counts[0] == 0, "no body the model hands on applies a kernel to an argument");
+        assertFalse(counts[1] == 0,
+                "no body the model hands on hands a kernel an argument narrower than it takes");
     }
 
     @Test
     void everyReadIsOfTheTypeItsBindingIsInForceAt() {
-        List<String> found = new ArrayList<>();
-        for (Core tree : trees()) {
-            reads(tree, found);
-        }
-        assertEquals(List.of(), found,
+        assertEquals(List.of(), readDisagreements(trees()),
                 "a read of a body handed on to be emitted at a type other than its binding's");
     }
 
-    /**
-     * And that the bodies read hold the walks a join wrote, where the outer step builds a list of
-     * something other than what the walk reads — the join that puts the accumulator at a type the
-     * inner step never had. A step binding its own accumulator to another name is the join's.
-     */
+    /** And that the body read holds the walk a join wrote, where the outer step builds a list of
+     *  something other than what the walk reads. */
     @Test
-    void theCorpusHandsOnJoinedWalksThatChangeWhatTheyHold() {
-        int[] joined = {0};
-        for (Core tree : trees()) {
-            each(tree, node -> {
-                if (node instanceof Core.Call call && call.fn() == Core.Emitted.BUILD_LIST
-                        && Core.withoutStanding(call.args().getFirst()) instanceof Core.Block step
-                        && bindsTheAccumulator(step)
-                        && step.paramTypes().getFirst() instanceof Type.ListOf built
-                        && !built.element().equals(step.paramTypes().get(1))) {
-                    joined[0]++;
-                }
-            });
-        }
-        assertFalse(joined[0] == 0,
-                "no body the models hand on holds a joined walk that changes what it holds");
+    void aModelHandsOnAJoinedWalkThatChangesWhatItHolds() {
+        assertFalse(joinedWalksThatChangeWhatTheyHold(treesOf(List.of(compiled(JOINS)))) == 0,
+                "no body the model hands on holds a joined walk that changes what it holds");
     }
 
     /**
@@ -118,11 +133,7 @@ class EveryTreeTheBackendIsHandedIsTypedTest {
      */
     @Test
     void aJoinedStepBoundAtTheInnerAccumulatorIsADisagreement() {
-        Compilation c = Compilation.ofSource("""
-                module demo
-                behavior run : (xs: List<Int>) -> List<Bool>
-                let run (xs) = List.map(n -> n > 0, List.filter(n -> n > 1, xs))
-                """, "Main");
+        Compilation c = compiled(JOINS);
         Core built = c.db().ask(new Bodies.CheckedBehavior("demo", "run")).value().body();
         Core body = GrowingFold.joins(built, Scopes.resolved(c.db(), "demo").value().theWalk());
         List<Core.Block> steps = new ArrayList<>();
@@ -147,17 +158,12 @@ class EveryTreeTheBackendIsHandedIsTypedTest {
      */
     @Test
     void aReadUnderABindingTheWalkDoesNotEnterIsADisagreement() {
-        Compilation c = Compilation.ofSource("""
-                module demo
-                behavior run : (x: Int) -> Int
-                let run (x) = match Int.truncatingDivide(x, 10) with
-                    | Int as n -> n + 1
-                    | DivisionByZero -> 0
-                """, "Main");
+        Compilation c = compiled(BINDS);
         Core body = c.db().ask(new Bodies.CheckedBehavior("demo", "run")).value().body();
         List<Core.Match> matches = new ArrayList<>();
         each(body, node -> {
-            if (node instanceof Core.Match m && m.cases().stream().anyMatch(a -> a.binder() != null)) {
+            if (node instanceof Core.Match m
+                    && m.cases().stream().anyMatch(a -> a.binder() != null)) {
                 matches.add(m);
             }
         });
@@ -169,6 +175,62 @@ class EveryTreeTheBackendIsHandedIsTypedTest {
         List<String> found = new ArrayList<>();
         reads(arm.body(), new HashMap<>(), held, found);
         assertFalse(found.isEmpty(), "the arm's binding, read with the arm not entered");
+    }
+
+    /** The slots of {@code trees} holding a value of a type other than the one their node takes. */
+    private static List<String> slotDisagreements(List<Core> trees) {
+        List<String> found = new ArrayList<>();
+        for (Core tree : trees) {
+            each(tree, node -> found.addAll(
+                    WhatASlotHoldsAgainstWhatItsNodeTakesItAs.disagreements(node)));
+        }
+        return found;
+    }
+
+    /** How many kernel applications {@code trees} hold, and how many of them hand a kernel an
+     *  argument narrower than it takes. */
+    private static int[] kernelsAppliedAndWidened(List<Core> trees) {
+        int[] counts = {0, 0};
+        for (Core tree : trees) {
+            each(tree, node -> {
+                if (node instanceof Core.Call call
+                        && call.settlement() instanceof Core.CallSettlement.AtKernel
+                        && !call.args().isEmpty()) {
+                    counts[0]++;
+                    if (call.args().stream().anyMatch(Core.Widen.class::isInstance)) {
+                        counts[1]++;
+                    }
+                }
+            });
+        }
+        return counts;
+    }
+
+    /** The reads of {@code trees} at a type other than the one their binding is in force at. */
+    private static List<String> readDisagreements(List<Core> trees) {
+        List<String> found = new ArrayList<>();
+        for (Core tree : trees) {
+            reads(tree, found);
+        }
+        return found;
+    }
+
+    /** How many joined walks {@code trees} hold that change what they hold: the outer step builds
+     *  a list of something other than what the inner step reads. */
+    private static int joinedWalksThatChangeWhatTheyHold(List<Core> trees) {
+        int[] joined = {0};
+        for (Core tree : trees) {
+            each(tree, node -> {
+                if (node instanceof Core.Call call && call.fn() == Core.Emitted.BUILD_LIST
+                        && Core.withoutStanding(call.args().getFirst()) instanceof Core.Block step
+                        && bindsTheAccumulator(step)
+                        && step.paramTypes().getFirst() instanceof Type.ListOf built
+                        && !built.element().equals(step.paramTypes().get(1))) {
+                    joined[0]++;
+                }
+            });
+        }
+        return joined[0];
     }
 
     private static boolean bindsTheAccumulator(Core.Block step) {
@@ -286,26 +348,18 @@ class EveryTreeTheBackendIsHandedIsTypedTest {
         Core.forEachChild(e, child -> each(child, f));
     }
 
-    private static List<Core> trees;
-
     /**
-     * Every body the models this repository carries hand on to be emitted: each behavior's, and
-     * each definition a module's check emits as a method of its own — a helper, a value.
+     * Every body the models of {@code population} hand on to be emitted: each behavior's, and each
+     * definition a module's check emits as a method of its own — a helper, a value.
      *
      * <p>These are the answers of the queries that rewrite a checked body for the backend, and the
      * form the backend emits them in where no run is recorded, which is the same bodies with the
      * walks they hold joined. {@code WhoMayRewriteACheckedBodyForTheBackendTest} in
      * {@code souther-architecture-test} holds those to be the only places a body is rewritten.
-     * Every model and not only the conformance ones, which are written against what the language
-     * declares and have no reason to write two walks in a row: the compilations the JVM already
-     * holds, so the population is asked and not compiled again.
      */
-    private static List<Core> trees() {
-        if (trees != null) {
-            return trees;
-        }
+    private static List<Core> treesOf(List<Compilation> population) {
         List<Core> out = new ArrayList<>();
-        for (Compilation c : RepositoryModels.all()) {
+        for (Compilation c : population) {
             for (String module : c.modules()) {
                 TheWalk walk = Scopes.resolved(c.db(), module).value().theWalk();
                 Bodies.ModuleCheck.Of checkedModule =
@@ -330,7 +384,6 @@ class EveryTreeTheBackendIsHandedIsTypedTest {
                 }
             }
         }
-        trees = List.copyOf(out);
-        return trees;
+        return List.copyOf(out);
     }
 }
