@@ -415,26 +415,45 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     }
 
     /**
-     * Whether {@code entry} is shown to ask nothing of the value at {@code at}: what it asks of a
-     * row turns on no position at {@code at}, under it or around it ({@link #positionsOf}), in
-     * every alternative it leaves a row and every statement it counts. Not shown of a condition
-     * this reading has no words for, which may ask anything.
+     * The positions what {@code entry} asks of a row turns on ({@link #positionsOf}), inside every
+     * alternative it leaves a row and every statement it counts as well.
      */
-    static boolean asksNothingOf(TermPath at, OnTheWay entry) {
-        return switch (entry) {
-            // A narrowing leaving several cases leaves each at the position it narrows.
-            case OnTheWay.TakenIn _, OnTheWay.Narrowed _ -> positionsOf(entry).stream()
-                    .noneMatch(one -> one.isAtOrUnder(at) || at.isAtOrUnder(one));
-            case OnTheWay.OneOf oneOf -> oneOf.alternatives().stream()
-                    .allMatch(way -> asksNothingOf(at, way));
-            case OnTheWay.Counted counted -> asksNothingOf(at, counted.parts());
-            case OnTheWay.Settled _ -> true;
-            case OnTheWay.Declined _ -> false;
-        };
+    static Set<TermPath> positionsInside(OnTheWay entry) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        everyOneInside(entry).forEach(one -> out.addAll(positionsOf(one)));
+        return out;
     }
 
-    private static boolean asksNothingOf(TermPath at, List<OnTheWay> entries) {
-        return entries.stream().allMatch(one -> asksNothingOf(at, one));
+    /**
+     * Whether {@code entry} is shown to ask nothing of the value at {@code at}: what it asks of a
+     * row, inside it as well, turns on no position at {@code at}, under it or around it
+     * ({@link #positionsInside}). Not shown where a condition inside it is one this reading has no
+     * words for, which may ask anything.
+     */
+    static boolean asksNothingOf(TermPath at, OnTheWay entry) {
+        List<OnTheWay> inside = everyOneInside(entry);
+        return inside.stream().noneMatch(OnTheWay.Declined.class::isInstance)
+                && inside.stream().flatMap(one -> positionsOf(one).stream())
+                        .noneMatch(one -> one.isAtOrUnder(at) || at.isAtOrUnder(one));
+    }
+
+    /** {@code entry}, and every condition inside the alternatives it leaves a row and the
+     *  statements it counts, however deep. */
+    private static List<OnTheWay> everyOneInside(OnTheWay entry) {
+        List<OnTheWay> out = new ArrayList<>();
+        gatherInside(entry, out);
+        return out;
+    }
+
+    private static void gatherInside(OnTheWay entry, List<OnTheWay> into) {
+        into.add(entry);
+        if (entry.ofSeveralWays()) {
+            entry.alternatives().forEach(alternative ->
+                    alternative.forEach(one -> gatherInside(one, into)));
+        }
+        if (entry instanceof OnTheWay.Counted counted) {
+            counted.parts().forEach(one -> gatherInside(one, into));
+        }
     }
 
     /** The conditions on this way a row is past one of several ways of

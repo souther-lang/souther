@@ -144,7 +144,7 @@ final class AWayReadForARelation {
                 each.alternatives().forEach(alternative ->
                         alternative.forEach(one -> askedOneByOne(one, asked)));
             } else {
-                asked.add(positionsOf(each));
+                asked.add(WayToTheBorder.positionsInside(each));
             }
         }
         List<OnTheWay> stated = entries.stream().filter(each -> !choices.contains(each)).toList();
@@ -161,7 +161,7 @@ final class AWayReadForARelation {
                 ChoiceRead one = keptWhole.contains(each) ? null : ChoiceRead.of(each, this);
                 if (one != null) {
                     parted.put(each, one);
-                } else if (bearing.addAll(positionsOf(each))) {
+                } else if (bearing.addAll(WayToTheBorder.positionsInside(each))) {
                     again = true;
                     break;
                 }
@@ -169,22 +169,23 @@ final class AWayReadForARelation {
             if (again) {
                 continue;
             }
-            List<ChoiceRead> met = new ArrayList<>();
-            if (!metApart(stated, met)) {
+            if (!metApart(stated, List.of())) {
                 return Optional.empty();
             }
+            List<OnTheWay> lessOf = new ArrayList<>();
+            List<ChoiceRead> less = new ArrayList<>();
             for (OnTheWay each : whole.unsplit()) {
                 ChoiceRead one = parted.get(each);
-                if (one == null || one.whole()) {
-                    continue;
+                if (one != null && !one.whole()) {
+                    lessOf.add(each);
+                    less.add(one);
                 }
-                met.add(one);
-                if (!metApart(stated, met)) {
-                    keptWhole.add(each);
-                    bearing.addAll(positionsOf(each));
-                    again = true;
-                    break;
-                }
+            }
+            int first = firstNotMet(stated, less);
+            if (first >= 0) {
+                keptWhole.add(lessOf.get(first));
+                bearing.addAll(WayToTheBorder.positionsInside(lessOf.get(first)));
+                again = true;
             }
         }
         if (parted.values().stream().allMatch(ChoiceRead::whole)) {
@@ -200,6 +201,36 @@ final class AWayReadForARelation {
             }
         }
         return Optional.ofNullable(walked(rest));
+    }
+
+    /**
+     * The first of {@code less}, in their order on the way, past which what {@code stated} and the
+     * choices up to it ask apart is not shown met — or -1 where all of them together are. What
+     * none of them asks apart is met already.
+     *
+     * <p>Found by halving: where the first so many are met and the first so many more are not,
+     * the one kept is among those between. Which choice is kept whole decides how much the
+     * relation is read as, and nothing about whether what it is read as is so, which is the choices
+     * left being met together, asked again once none is kept. So the halving needs nothing of how
+     * the answer for fewer choices goes with the answer for more, and asks as many times as the
+     * logarithm of the choices: asked one more at a time, every choice before it is asked again
+     * with each, and the walks are as many as the choices and as long as the ones before.
+     */
+    private int firstNotMet(List<OnTheWay> stated, List<ChoiceRead> less) {
+        if (metApart(stated, less)) {
+            return -1;
+        }
+        int met = 0;
+        int notMet = less.size();
+        while (notMet - met > 1) {
+            int half = (met + notMet) >>> 1;
+            if (metApart(stated, less.subList(0, half))) {
+                met = half;
+            } else {
+                notMet = half;
+            }
+        }
+        return notMet - 1;
     }
 
     /**
@@ -243,12 +274,14 @@ final class AWayReadForARelation {
 
     /** What of {@code stated} asks of positions apart from the relation. */
     private List<OnTheWay> apartOf(List<OnTheWay> stated) {
-        return stated.stream().filter(one -> !bearsOn(positionsOf(one), bearing)).toList();
+        return stated.stream()
+                .filter(one -> !bearsOn(WayToTheBorder.positionsInside(one), bearing)).toList();
     }
 
     /** What of {@code stated} asks of positions bearing on the relation. */
     private List<OnTheWay> bearingOf(List<OnTheWay> stated) {
-        return stated.stream().filter(one -> bearsOn(positionsOf(one), bearing)).toList();
+        return stated.stream()
+                .filter(one -> bearsOn(WayToTheBorder.positionsInside(one), bearing)).toList();
     }
 
     /**
@@ -258,12 +291,13 @@ final class AWayReadForARelation {
     private List<Part> partsApart(List<OnTheWay> together, List<ChoiceRead> each) {
         List<Part> out = new ArrayList<>();
         for (OnTheWay one : together) {
-            joined(out, positionsOf(one)).conditions.add(one);
+            joined(out, WayToTheBorder.positionsInside(one)).conditions.add(one);
         }
         for (ChoiceRead choice : each) {
             for (int alternative = 0; alternative < choice.apart().size(); alternative++) {
                 for (OnTheWay one : choice.apart().get(alternative)) {
-                    joined(out, positionsOf(one)).asked(choice, alternative, one);
+                    joined(out, WayToTheBorder.positionsInside(one))
+                            .asked(choice, alternative, one);
                 }
             }
         }
@@ -390,22 +424,8 @@ final class AWayReadForARelation {
             several.alternatives().forEach(alternative ->
                     alternative.forEach(one -> askedOneByOne(one, into)));
         } else {
-            into.add(positionsOf(entry));
+            into.add(WayToTheBorder.positionsInside(entry));
         }
-    }
-
-    /** The positions {@code entry} asks of, inside its alternatives and its statements as
-     *  well. */
-    private static Set<TermPath> positionsOf(OnTheWay entry) {
-        Set<TermPath> out = new LinkedHashSet<>(WayToTheBorder.positionsOf(entry));
-        if (entry.ofSeveralWays()) {
-            entry.alternatives().forEach(alternative ->
-                    alternative.forEach(one -> out.addAll(positionsOf(one))));
-        }
-        if (entry instanceof OnTheWay.Counted counted) {
-            counted.parts().forEach(one -> out.addAll(positionsOf(one)));
-        }
-        return out;
     }
 
     /**
@@ -449,7 +469,8 @@ final class AWayReadForARelation {
                         inside.standingFor().ifPresent(on::add);
                         off.addAll(inside.toMeet());
                     } else {
-                        (reading.bearsOn(positionsOf(each), reading.bearing) ? on : off).add(each);
+                        (reading.bearsOn(WayToTheBorder.positionsInside(each), reading.bearing)
+                                ? on : off).add(each);
                     }
                 }
                 bearing.add(on);

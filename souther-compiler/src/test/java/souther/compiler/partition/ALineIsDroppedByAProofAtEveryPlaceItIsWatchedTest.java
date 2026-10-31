@@ -130,14 +130,13 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
      * condition of its own on the way, settled, which asks nothing of a row and is no other case's.
      */
     private static WaysToACase waysTo(Function<Proposition, Reachability> wayTo) {
-        List<Proposition> put = new ArrayList<>();
-        return new WaysToACase(List.of(), decides -> {
-            if (!put.contains(decides)) {
-                put.add(decides);
-            }
-            return List.of(settled(put.indexOf(decides)));
-        }, onTheWay -> wayTo.apply(put.get(
-                ((OnTheWay.Settled) onTheWay.getFirst()).condition().ordinal())));
+        Map<Proposition, List<OnTheWay>> put = new LinkedHashMap<>();
+        Map<List<OnTheWay>, Proposition> putBy = new LinkedHashMap<>();
+        return new WaysToACase(List.of(), decides -> put.computeIfAbsent(decides, _ -> {
+            List<OnTheWay> its = List.of(settled(put.size()));
+            putBy.put(its, decides);
+            return its;
+        }), onTheWay -> wayTo.apply(putBy.get(onTheWay)));
     }
 
     /** The condition numbered {@code ordinal}, settled the way the walk went. */
@@ -764,6 +763,11 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     void casesThatDifferOnlyInATruthNothingElseTurnsOnAreOneQuestion() {
         assertEquals(List.of(List.of(settled(0))),
                 questionsOf(List.of(), List.of(settled(0)), truth(T, true), truth(T, false)));
+        assertEquals(List.of(List.of(settled(0))),
+                questionsOf(List.of(), List.of(settled(0)),
+                        truth(R.element(), true), truth(R.element(), false)),
+                "and so do two that differ only in a truth of an element: truths are put"
+                        + " together by their positions alone");
     }
 
     /**
@@ -783,9 +787,6 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         assertEquals(2, questionsOf(List.of(), List.of(truth(R.then("t"), true)),
                         truth(R, true), truth(R, false)).size(),
                 "asked under it by the case");
-        assertEquals(2, questionsOf(List.of(), List.of(),
-                        truth(R.element(), true), truth(R.element(), false)).size(),
-                "asked of an element, which is there only where the container holds one");
         assertEquals(2, questionsOf(List.of(OnTheWay.OneOf.of(OCCURRENCE, WHERE,
                         List.of(List.of(truth(T, true)), List.of(settled(0))), Optional.empty())),
                         List.of(), held, failing).size(),

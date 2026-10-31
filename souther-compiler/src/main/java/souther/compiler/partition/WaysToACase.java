@@ -137,13 +137,13 @@ final class WaysToACase {
 
     /**
      * Whether everything on the way and in {@code putOn} but the entry at {@code alone} is shown to
-     * ask nothing of the value at {@code of} — and that value is no element's, which is there only
-     * where its container holds one.
+     * ask nothing of the value at {@code of}.
+     *
+     * <p>Whether the value is an element's is nothing here: truths are put together by their
+     * positions and no other way ({@link TruthsAsked#of}), and no region or requirement holds one,
+     * so one inside a container closes nothing a truth outside one would not.
      */
     private boolean aloneIn(TermPath of, List<OnTheWay> putOn, int alone) {
-        if (of.insideAContainer()) {
-            return false;
-        }
         for (int at = 0; at < putOn.size(); at++) {
             if (at != alone && !WayToTheBorder.asksNothingOf(of, putOn.get(at))) {
                 return false;
