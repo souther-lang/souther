@@ -162,8 +162,10 @@ public final class ExactDecimals {
     /**
      * How many zeros {@code digits} ends in, or {@code most} where it ends in more.
      *
-     * <p>Found by halving, because taking them off one at a time divides the whole number once for
-     * each, which is work that grows with the square of its size. Divisible by {@code 10^z} holds for
+     * <p>Found by doubling and then halving, because taking them off one at a time divides the whole
+     * number once for each, which is work that grows with the square of its size, and halving the
+     * whole range from the start builds a power of ten as large as the range however few zeros there
+     * are. Doubling builds none larger than twice the count. Divisible by {@code 10^z} holds for
      * every {@code z} up to the count and for none past it, and a number of n bits has fewer than
      * n / 3 zeros, so that bounds the answer whatever {@code most} says.
      */
@@ -173,6 +175,14 @@ public final class ExactDecimals {
             return 0;
         }
         long lower = 1;
+        for (long step = 2; lower < upper; step *= 2) {
+            long at = Math.min(step, upper);
+            if (digits.remainder(BigInteger.TEN.pow((int) at)).signum() != 0) {
+                upper = at - 1;
+                break;
+            }
+            lower = at;
+        }
         while (lower < upper) {
             long middle = (lower + upper + 1) / 2;
             if (digits.remainder(BigInteger.TEN.pow((int) middle)).signum() == 0) {

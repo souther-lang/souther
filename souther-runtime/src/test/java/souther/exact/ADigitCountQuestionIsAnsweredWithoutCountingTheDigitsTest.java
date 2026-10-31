@@ -77,7 +77,8 @@ class ADigitCountQuestionIsAnsweredWithoutCountingTheDigitsTest {
     @Test
     void leastDigitsStopsAtTheFloorWhateverNumberOfZerosItMeets() {
         List<String> differ = new ArrayList<>();
-        for (int zeros : new int[] {0, 1, 2, 9, 10, 11, 100, 999, 1000, 1001}) {
+        for (int zeros : new int[] {0, 1, 2, 3, 4, 5, 9, 10, 11, 100, 511, 512, 513,
+                              999, 1000, 1001, 1023, 1024, 1025}) {
             for (long odd : new long[] {1, 7, -7, 25, 3}) {
                 BigInteger unscaled = BigInteger.TEN.pow(zeros).multiply(BigInteger.valueOf(odd));
                 for (int offset : new int[] {0, 1, zeros - 1, zeros, zeros + 1, zeros + 2, 5000}) {
