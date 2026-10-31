@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ElementBindings;
@@ -21,6 +22,7 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.CasesHeldTo;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
@@ -30,6 +32,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
+import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
@@ -37,14 +40,19 @@ import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -680,7 +688,7 @@ class HowLongThePathASearchAnswersIsReadTest {
 
     @Test
     void theApprovalChainOfARoleIsReadAsTheLengthOfTheLineToTheSubmitter() {
-        Compilation compilation = Compilation.ofSource("""
+        String model = """
                 module demo
 
                 data UserId = String
@@ -755,7 +763,8 @@ class HowLongThePathASearchAnswersIsReadTest {
                         -> SubmitterNotInHierarchy { submitter = UserId("u-ghost") }
                     | "ceo" : (acmeOrg, UserId("u-ceo"), SalesManager)
                         -> NoAuthorityAbove { submitter = UserId("u-ceo"), needed = 1, available = 0 }
-                """, "Main");
+                """;
+        Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
@@ -771,16 +780,146 @@ class HowLongThePathASearchAnswersIsReadTest {
         // Rows are offered for the points of every role's border, down to a line of five nodes
         // for the role that needs three above the submitter, each holding the submitter only at
         // its last node.
-        List<String> offered = Adequacy.offeredFor(compilation.db(),
+        List<List<FixtureTemplate>> offeredRows = Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("demo"))
                 .rowsByBehavior().getOrDefault("approvalChainFor", List.of()).stream()
-                .map(row -> String.join(", ",
-                        row.inputs().stream().map(FixtureTemplate::text).toList()))
-                .toList();
+                .map(row -> row.inputs()).toList();
+        List<List<String>> offeredInputs = offeredRows.stream()
+                .map(row -> row.stream().map(FixtureTemplate::text).toList()).toList();
+        List<String> offered = offeredInputs.stream()
+                .map(inputs -> String.join(", ", inputs)).toList();
         assertTrue(offered.stream().anyMatch(row ->
                         row.split("reports = \\[RoleNode", -1).length >= 5
                                 && row.endsWith("Cfo")),
                 () -> "offered " + offered);
+        // Written back as examples the rows are run by the language, and what they reach is read.
+        StringBuilder written = new StringBuilder();
+        int named = 0;
+        for (List<FixtureTemplate> row : offeredRows) {
+            List<String> inputs = row.stream().map(FixtureTemplate::text).toList();
+            String role = inputs.get(2);
+            int needed = switch (role) {
+                case "SalesManager" -> 1;
+                case "RegionalVp" -> 2;
+                case "Cfo" -> 3;
+                default -> throw new AssertionError("a role this model does not have: " + role);
+            };
+            Optional<List<String>> above = holdersAbove(row.get(0).value(), row.get(1).value());
+            String answer;
+            if (above.isEmpty()) {
+                answer = "SubmitterNotInHierarchy { submitter = " + inputs.get(1) + " }";
+            } else if (above.get().size() >= needed) {
+                answer = "ApprovalChain { role = " + role + ", approvers = [ "
+                        + above.get().subList(0, needed).stream()
+                                .map(holder -> "UserId(" + FixtureTemplate.string(holder).text() + ")")
+                                .collect(Collectors.joining(", "))
+                        + " ] }";
+            } else {
+                answer = "NoAuthorityAbove { submitter = " + inputs.get(1) + ", needed = " + needed
+                        + ", available = " + above.get().size() + " }";
+            }
+            written.append("                | \"offered ").append(named++).append("\" : (")
+                    .append(String.join(", ", inputs)).append(") -> ").append(answer)
+                    .append('\n');
+        }
+        Compilation after = measuredModel(model + written);
+        assertEquals(List.of(), after.errors().stream()
+                .map(each -> each.diagnostic().code()).toList());
+        List<BorderAssessment.Point> owed = BorderAssessment.pointsOf(
+                        Adequacy.boundariesOf(after.db(), "demo").get("approvalChainFor"))
+                .stream().filter(point -> point.owed() != null)
+                .filter(point -> roleOfALine(point) != null)
+                .toList();
+        // A row the language ran stands at the ON and OFF point of every role's border, and past
+        // the border of the role that has room for it. More points may come to be met, so these
+        // are a floor.
+        Set<LinePoint> met = owed.stream().filter(point -> point.owed().hasRowWitness())
+                .map(HowLongThePathASearchAnswersIsReadTest::linePointOf)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        assertTrue(met.containsAll(Set.of(
+                        new LinePoint(PointRole.IN, "Cfo", ExactRatio.of(4)),
+                        new LinePoint(PointRole.OFF, "SalesManager", ExactRatio.of(1)),
+                        new LinePoint(PointRole.OFF, "RegionalVp", ExactRatio.of(2)),
+                        new LinePoint(PointRole.OFF, "Cfo", ExactRatio.of(3)),
+                        new LinePoint(PointRole.ON, "SalesManager", ExactRatio.of(2)),
+                        new LinePoint(PointRole.ON, "RegionalVp", ExactRatio.of(3)),
+                        new LinePoint(PointRole.ON, "Cfo", ExactRatio.of(4)))),
+                () -> "met " + met);
+        // Whatever is left owed is the line of no node, which the guard of chainTo keeps out of
+        // this branch. No row is there, and it may come to be proved unreachable, in which case
+        // nothing is left owed.
+        List<PointRole> unmet = owed.stream().filter(point -> !point.owed().hasRowWitness())
+                .map(BorderAssessment.Point::role).toList();
+        assertTrue(unmet.stream().allMatch(role -> role == PointRole.OUT),
+                () -> "left owed " + unmet);
+    }
+
+    /** A point of a line the length of a search draws, by what makes it that one. */
+    private record LinePoint(PointRole role, String roleCase, ExactRatio length) {}
+
+    /** The point by its role, the role of the input its line is decided in and the length it is
+     *  anchored at; null where it is anchored at no length a row can be written at. */
+    private static LinePoint linePointOf(BorderAssessment.Point point) {
+        ExactRatio length = point.owed().criterion().anchor().asANumber();
+        return length == null ? null
+                : new LinePoint(point.role(), roleOfALine(point), length);
+    }
+
+    /**
+     * The name of the one role the line of {@code point} is decided in, or null for a line that
+     * is decided in no case of the input.
+     */
+    private static String roleOfALine(BorderAssessment.Point point) {
+        if (!(point.border().border().origin() instanceof LineOrigin.ComparisonOrigin origin)
+                || origin.part().isEmpty()) {
+            return null;
+        }
+        Set<String> named = new LinkedHashSet<>();
+        CasesHeldTo.of(origin.part().get().decides()).forEach((at, held) -> {
+            if (held instanceof CasesHeldTo.Held.OneOf(var cases)) {
+                cases.leavesOfASum().forEach(leaf ->
+                        named.add(assertInstanceOf(TypeSymbol.AtModule.class, leaf).name()));
+            }
+        });
+        return named.size() == 1 ? named.iterator().next() : null;
+    }
+
+    /**
+     * The holders of the nodes above the first node, met in the order a search reads the tree,
+     * that holds {@code submitter}, the nearest first; nothing where no node holds it.
+     */
+    private static Optional<List<String>> holdersAbove(Hir.Expr tree, Hir.Expr submitter) {
+        return pathTo(tree, textOf(submitter)).map(path ->
+                path.subList(0, path.size() - 1).reversed());
+    }
+
+    /** The holders from {@code node} down to the first node, before its siblings, that holds {@code
+     *  holder}. */
+    private static Optional<List<String>> pathTo(Hir.Expr node, String holder) {
+        Map<String, Hir.Expr> fields = new LinkedHashMap<>();
+        Hir.NewData data = assertInstanceOf(Hir.NewData.class, node);
+        data.inits().forEach(init -> fields.put(String.valueOf(init.written()), init.value()));
+        String here = textOf(fields.get("holder"));
+        if (here.equals(holder)) {
+            return Optional.of(List.of(here));
+        }
+        for (Hir.Expr below : assertInstanceOf(Hir.ListLit.class, fields.get("reports"))
+                .elements()) {
+            Optional<List<String>> found = pathTo(below, holder);
+            if (found.isPresent()) {
+                List<String> path = new ArrayList<>();
+                path.add(here);
+                path.addAll(found.get());
+                return Optional.of(path);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** The string a newtype of one is applied to. */
+    private static String textOf(Hir.Expr newtype) {
+        Hir.Apply apply = assertInstanceOf(Hir.Apply.class, newtype);
+        return assertInstanceOf(Hir.StringLit.class, apply.args().getFirst()).value();
     }
 
     // The proposition and its helpers.
