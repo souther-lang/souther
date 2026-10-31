@@ -34,7 +34,7 @@ enum ReadingRole {
     /** The rule being tried, which a reading must not have said anything into. */
     TRIAL,
 
-    /** The parts met, which stand for the reading only while they are all still met. */
+    /** The parts met, in order, of which a candidate owns those from where it began. */
     LEDGER,
 
     /** The elements asked of, which a reading's footprint says. */

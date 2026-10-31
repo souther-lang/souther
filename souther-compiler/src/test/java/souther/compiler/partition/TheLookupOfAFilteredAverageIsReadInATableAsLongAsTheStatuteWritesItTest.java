@@ -1,4 +1,4 @@
-package souther.compiler;
+package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
@@ -7,9 +7,9 @@ import souther.test.Nightly;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static souther.compiler.TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest.ABOVE_THE_BOUND;
-import static souther.compiler.TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest.atTheMonths;
-import static souther.compiler.TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest.unread;
+import static souther.compiler.partition.TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest.ABOVE_THE_BOUND;
+import static souther.compiler.partition.TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest.atTheMonths;
+import static souther.compiler.partition.TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest.unread;
 
 /**
  * The lookup of a filtered average is read in a table of fifty rows, which is as long as the table

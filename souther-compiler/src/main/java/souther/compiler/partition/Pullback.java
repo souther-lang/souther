@@ -337,7 +337,14 @@ final class Pullback {
      * states are one subject.
      */
     private final DecisionSubjects subjects;
-    private final MetLedger<Met> met = new MetLedger<>();
+    /**
+     * The parts met, in the order they were met. A candidate tried at a choice owns the parts
+     * from where it began, and a choice takes back out the parts of the candidates it does not
+     * keep ({@link RuleChoice}). A part may be met twice, once by the reading that made it and
+     * once by one that took it ({@link SharedReads}); it is one part to whoever reads them
+     * ({@link #pulled}).
+     */
+    private final List<Met> met = new ArrayList<>();
     /** What the candidates for each expression state, concluded once a step ({@link RuleChoice}). */
     private final Conclusion trying = Conclusion.reusing();
     private final Set<DecisionSubject> quantifying = new HashSet<>();
@@ -830,13 +837,17 @@ final class Pullback {
      *
      * <p>A part is a step of {@code stated}: one this concluding reached. A step met by a rule that
      * was not kept is in no derivation concluded here, so whatever was met on the way, the parts
-     * are the derivation's own.
+     * are the derivation's own. A part met twice is one part.
      */
     private Pulled pulled(Derivation stated) {
         Conclusion conclusion = new Conclusion(where);
         Meaning meaning = conclusion.meaningOf(stated);
         List<Leaf> leaves = new ArrayList<>();
+        Set<Met> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Met each : met) {
+            if (!seen.add(each)) {
+                continue;
+            }
             Proposition concluded = conclusion.concludedAt(each.step());
             if (concluded == null) {
                 continue;
@@ -1718,8 +1729,7 @@ final class Pullback {
         /** What the candidate has said so far, which is the same only while it has said no more. */
         @Override
         public Object mark() {
-            return Arrays.asList(working, answersFor, relations == null ? 0 : relations.size(),
-                    readByTheFormOf.size(), restated.size());
+            return ReadingState.snapshotOfFields(this);
         }
 
         /** What the rows of the comparison get past, as the rule worked it out; null where the
@@ -6686,9 +6696,7 @@ final class Pullback {
         /** What has been told so far, which is the same only while nothing more has. */
         @Override
         public Object mark() {
-            return List.of(told.size(), nodes.size(), toldOn.size(), neverApplied.size(),
-                    unsaidGroups.size(), unsaidAt.size(), unsaidElsewhere, obligations.size(),
-                    readsAt.size());
+            return ReadingState.snapshotOfFields(this);
         }
 
         void tell(Core operation, Answers where) {
@@ -8748,7 +8756,7 @@ final class Pullback {
 
         @Override
         public void meetAgain(List<Met> parts) {
-            met.meetAgain(parts);
+            met.addAll(parts);
         }
 
         @Override
@@ -8847,7 +8855,13 @@ final class Pullback {
         return true;
     }
 
-    /** Whether every condition read was read to the end, and some were read. */
+    /**
+     * Whether every condition read was read to the end, and some were read.
+     *
+     * <p>A condition that is not read is the truth of a way the walk does not reach
+     * ({@link #conditionsOf}): the walk reads a truth as soon as it meets it, so which truths it
+     * meets is the walk's and the same for the same truths, whatever was read of them.
+     */
     private boolean readToTheEnd(Derivation[] conditions) {
         boolean some = false;
         for (Derivation each : conditions) {

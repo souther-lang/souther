@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The state of an object that a reading depends on and the state it must leave alone, taken from
@@ -122,13 +123,14 @@ final class ReadingState {
         return !askedMatters || same(then.asked(), now.asked());
     }
 
-    /** What the state a reading must leave alone is, to be compared with it afterwards. */
+    /** What the state a reading must leave alone is, to be compared with it afterwards: the very
+     *  object it is and everything that can be reached through it. */
     List<Object[]> guardsOf(Object owner) {
         List<Object[]> out = new ArrayList<>(guards.length);
         for (Field each : guards) {
             Object value = read(each, owner);
             Object held = value instanceof Deque<?> deque ? deque.peek() : value;
-            out.add(new Object[] {held, witnessOf(held)});
+            out.add(new Object[] {held, snapshotOf(held)});
         }
         return out;
     }
@@ -145,14 +147,114 @@ final class ReadingState {
         return true;
     }
 
-    private static Object witnessOf(Object value) {
+    /**
+     * What {@code value} is and holds, to be compared with what it is and holds later: the
+     * collections and maps down to the objects in them, and each of those object the very one.
+     *
+     * <p>Compared by what is held and not by how much, so that an object put in place of another
+     * under the same key, or added to a list that is held under a key, is a change. Sets and maps
+     * are held without an order, since no order of theirs is a part of what they hold.
+     */
+    static Object snapshotOf(Object value) {
+        return snapshotOf(value, new ArrayList<>());
+    }
+
+    /**
+     * @param inside the collections and maps being looked into, outermost first: one that holds
+     *               itself is looked into once and is, where it comes again, itself
+     */
+    private static Object snapshotOf(Object value, List<Object> inside) {
+        if (value instanceof Collection<?> || value instanceof Map<?, ?>) {
+            for (Object each : inside) {
+                if (each == value) {
+                    return new Same(value);
+                }
+            }
+        }
         return switch (value) {
             case null -> null;
             case Marked marked -> marked.mark();
-            case Collection<?> collection -> collection.size();
-            case Map<?, ?> map -> map.size();
-            default -> null;
+            case Boolean _, Number _, CharSequence _, Enum<?> _ -> value;
+            case Map<?, ?> map -> {
+                inside.add(map);
+                Map<Object, Object> held = new HashMap<>();
+                for (Map.Entry<?, ?> each : map.entrySet()) {
+                    held.put(new Same(each.getKey()), snapshotOf(each.getValue(), inside));
+                }
+                inside.removeLast();
+                yield held;
+            }
+            case Set<?> set -> {
+                inside.add(set);
+                Set<Object> held = new HashSet<>();
+                for (Object each : set) {
+                    held.add(elementOf(each, inside));
+                }
+                inside.removeLast();
+                yield held;
+            }
+            case Collection<?> collection -> {
+                inside.add(collection);
+                List<Object> held = new ArrayList<>(collection.size());
+                for (Object each : collection) {
+                    held.add(elementOf(each, inside));
+                }
+                inside.removeLast();
+                yield held;
+            }
+            default -> new Same(value);
         };
+    }
+
+    /** An element of a collection: what it holds if it is a collection or a map, and otherwise the
+     *  very one. */
+    private static Object elementOf(Object element, List<Object> inside) {
+        return element instanceof Collection<?> || element instanceof Map<?, ?>
+                ? snapshotOf(element, inside) : new Same(element);
+    }
+
+    /**
+     * What {@code owner} is and holds in every one of its fields.
+     *
+     * <p>Every field and not the fields somebody listed: an object that says what it has been told
+     * ({@link Marked}) says it by this, so that a field added to it is part of what it says.
+     */
+    static Object snapshotOfFields(Object owner) {
+        List<Object> held = new ArrayList<>();
+        for (Field each : fieldsOf(owner.getClass())) {
+            held.add(snapshotOf(read(each, owner)));
+        }
+        return held;
+    }
+
+    private static final Map<Class<?>, Field[]> FIELDS = new ConcurrentHashMap<>();
+
+    private static Field[] fieldsOf(Class<?> of) {
+        return FIELDS.computeIfAbsent(of, type -> {
+            List<Field> out = new ArrayList<>();
+            for (Field each : type.getDeclaredFields()) {
+                if (!Modifier.isStatic(each.getModifiers()) && !each.isSynthetic()) {
+                    each.setAccessible(true);
+                    out.add(each);
+                }
+            }
+            out.sort((one, other) -> one.getName().compareTo(other.getName()));
+            return out.toArray(Field[]::new);
+        });
+    }
+
+    /** An object that is the same only as itself, whatever it is equal to. */
+    private record Same(Object of) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Same that && that.of == of;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(of);
+        }
     }
 
     private static Object read(Field field, Object owner) {

@@ -9,6 +9,7 @@ import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.types.Type;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -38,7 +39,7 @@ class AReadingIsKeptToBeTakenAgainOnlyWhereItWouldBeTheSameReadingTest {
         int guard;
         int aggregatesAsked;
         boolean mayShare = true;
-        final MetLedger<String> met = new MetLedger<>();
+        final List<String> met = new ArrayList<>();
         boolean askedAggregatesWhenCompared;
 
         @Override
@@ -84,7 +85,7 @@ class AReadingIsKeptToBeTakenAgainOnlyWhereItWouldBeTheSameReadingTest {
 
         @Override
         public void meetAgain(List<String> parts) {
-            met.meetAgain(parts);
+            met.addAll(parts);
         }
 
         @Override
@@ -162,6 +163,22 @@ class AReadingIsKeptToBeTakenAgainOnlyWhereItWouldBeTheSameReadingTest {
     }
 
     @Test
+    void theReadingTakenMeetsItsPartsAtTheEndOfWhatIsMet() {
+        reads.shared(NODE, READS, "key", () -> {
+            made++;
+            scene.met.add("a part");
+            return "read";
+        }, _ -> true);
+        scene.met.add("a part met after");
+
+        read("key");
+
+        assertEquals(1, made);
+        assertEquals(List.of("a part", "a part met after", "a part"), scene.met,
+                "at the end, which is where whoever takes it is collecting what it meets");
+    }
+
+    @Test
     void thePartsAWithdrawnRuleTookBackAreMetAgainWhereTheReadingIsTaken() {
         reads.shared(NODE, READS, "key", () -> {
             made++;
@@ -174,22 +191,7 @@ class AReadingIsKeptToBeTakenAgainOnlyWhereItWouldBeTheSameReadingTest {
         read("key");
 
         assertEquals(1, made);
-        assertEquals(List.of("a part"), scene.met,
-                "met as reading it would have left them, and no more than once");
-    }
-
-    @Test
-    void thePartsStillMetAreLeftWhereTheyWere() {
-        reads.shared(NODE, READS, "key", () -> {
-            made++;
-            scene.met.add("a part");
-            return "read";
-        }, _ -> true);
-        scene.met.add("a part met after");
-
-        read("key");
-
-        assertEquals(List.of("a part", "a part met after"), scene.met);
+        assertEquals(List.of("a part"), scene.met);
     }
 
     @Test

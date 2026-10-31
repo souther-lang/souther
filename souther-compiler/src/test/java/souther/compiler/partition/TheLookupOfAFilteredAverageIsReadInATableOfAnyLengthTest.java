@@ -1,9 +1,8 @@
-package souther.compiler;
+package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Figure;
-import souther.compiler.partition.UndividedPosition;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;

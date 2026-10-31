@@ -29,10 +29,13 @@ import java.util.function.Supplier;
  *     {@link ElementsMet.Footprint});
  * <li>everything it depends on that is not one of those stands the same (the scene's inputs).
  * </ul>
- * Taking it again meets the parts it met that a rule set aside has since taken back out of what
- * was met, so that the parts of the comparison it is taken in include them. They are the parts of
- * the reading that was made, read where it was made. A reading taken costs what it cost once, and
- * charging a reading that is taken again is left to the caller.
+ * Taking it again meets the parts it met, at the end of what has been met. That is where whoever
+ * takes it is collecting what it meets: a candidate at a choice owns the parts from where it
+ * began, and the choice takes back out the parts of the candidates it does not keep. A part
+ * already met by the reading that made it may stand in the list twice, and is one part to whoever
+ * reads them. They are the parts of the reading that was made, read where it was made. A reading
+ * taken costs what it cost once, and charging a reading that is taken again is left to the
+ * caller.
  *
  * @param <C> the inputs of a reading, as the scene takes them
  * @param <E> what the scene must find unchanged after a reading
