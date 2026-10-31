@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -109,6 +110,37 @@ class AnArithmeticStopIsReportedAtTheCallItStoppedAtTest {
             let f (s) = Done
             """;
 
+    /** One position a product stops and a remainder over a search stops, in either order. */
+    private static final String REASONS = """
+            module probe.reasons
+
+            let viaSearch (n: Int, xs: List<Int>): Int =
+                Option.withDefault(n, List.find(x -> x == n, xs))
+
+            let modOf (n: Int, xs: List<Int>): Int = Int.floorMod(viaSearch(n, xs), 7)
+
+            behavior productFirst : (a: Int, xs: List<Int>) -> Bool
+            let productFirst (a, xs) = List.any(v -> v >= 1, [ a * a, modOf(a, xs) ])
+
+            behavior remainderFirst : (a: Int, xs: List<Int>) -> Bool
+            let remainderFirst (a, xs) = List.any(v -> v >= 1, [ modOf(a, xs), a * a ])
+            """;
+
+    /** The same two reasons at one position of a type, in two parts of one rule. */
+    private static final String TWO_REASONS_ON_A_TYPE = """
+            module probe.inv
+
+            data S = { n: Int, xs: List<Int> }
+                invariant ok = Int.floorMod(Option.withDefault(n,
+                    List.find(x -> x == n, xs)), 7) >= 1
+                    && n * n >= 4
+
+            data Done
+
+            behavior f : (s: S) -> Done
+            let f (s) = Done
+            """;
+
     private static final String DERIVED = "rule_about_a_derived_value";
 
     /** What one compilation said, as the document and as the text. */
@@ -118,6 +150,8 @@ class AnArithmeticStopIsReportedAtTheCallItStoppedAtTest {
     private static Said pairs;
     private static Said onePart;
     private static Said twoParts;
+    private static Said reasons;
+    private static Said reasonsOnAType;
 
     @BeforeAll
     static void compileTheModelsOnce() {
@@ -125,6 +159,8 @@ class AnArithmeticStopIsReportedAtTheCallItStoppedAtTest {
         pairs = said(TWO_REMAINDERS);
         onePart = said(ONE_PART);
         twoParts = said(TWO_PARTS);
+        reasons = said(REASONS);
+        reasonsOnAType = said(TWO_REASONS_ON_A_TYPE);
     }
 
     private static Said said(String source) {
@@ -206,13 +242,66 @@ class AnArithmeticStopIsReportedAtTheCallItStoppedAtTest {
                 placeOf(WEEKDAYS, "Int.floorMod(Date.daysBetween(calendar.aSunday, d), 7)"));
     }
 
+    /** One rule not read at one position: the word it was left with and where it is sent. */
+    private record Entry(String position, String reason, String sentTo) {}
+
+    /** Every rule not read in {@code behavior}, whatever the word, and where each is sent. */
+    private static List<Entry> notRead(Said said, String behavior) {
+        List<Entry> out = new ArrayList<>();
+        for (JsonNode each : said.document().findParents("partition")) {
+            if (!behavior.equals(each.get("name").asString())) {
+                continue;
+            }
+            for (JsonNode entry : each.get("partition").get("notRead")) {
+                JsonNode at = entry.get("sentTo");
+                out.add(new Entry(entry.get("position").asString(),
+                        entry.get("reason").asString(),
+                        at == null ? null : at.get("line").asInt() + ":" + at.get("column").asInt()));
+            }
+        }
+        return out;
+    }
+
     /**
-     * Where the date is a position and the weekday is read to the end, nothing stopped the
-     * arithmetic, and no rule is sent to a call.
+     * Where the date is a position the weekday is read as a remainder, to the end: the reading did
+     * not stop, so what is said is the remainder's own word and no rule is sent to a call. Held
+     * for the word and not for the absence of one, since a stop under another word would pass a
+     * check that asked only about the derived-value word.
      */
     @Test
-    void aDateThatIsAPositionStopsNothingAndIsSentNowhere() {
-        assertEquals(Map.of(), sentTo(weekdays, "daysAdded"));
+    void aDateThatIsAPositionIsReadAsARemainderAndIsSentToNoCall() {
+        List<Entry> said = notRead(weekdays, "daysAdded");
+
+        assertFalse(said.isEmpty(), "the remainder is reported, or this checks nothing");
+        said.forEach(each -> {
+            assertEquals("rule_about_a_remainder", each.reason(), () -> "" + each);
+            assertEquals(null, each.sentTo(), () -> "" + each);
+        });
+    }
+
+    /**
+     * One position stopped for two reasons by two applications of a closure, in either order: the
+     * position is left with the reason of the first, and with the call that stopped it for that
+     * reason. The product has no call an author wrote; the remainder has, and the position is not
+     * sent to it for the product.
+     */
+    @Test
+    void aPlaceStoppedForTwoReasonsIsSentOnlyToTheCallOfTheOneItIsLeftWith() {
+        String call = placeOf(REASONS, "Int.floorMod(viaSearch(n, xs), 7)");
+
+        List<Entry> productFirst = notRead(reasons, "productFirst").stream()
+                .filter(each -> each.position().equals("a")).toList();
+        List<Entry> remainderFirst = notRead(reasons, "remainderFirst").stream()
+                .filter(each -> each.position().equals("a")).toList();
+
+        assertEquals(true, productFirst.contains(new Entry("a", "non_affine_product", null)),
+                productFirst.toString());
+        assertEquals(List.of(), productFirst.stream()
+                .filter(each -> each.reason().equals("non_affine_product")
+                        && each.sentTo() != null).toList(),
+                "a product is no call, so its place is sent to the rule");
+        assertEquals(true, remainderFirst.contains(new Entry("a", DERIVED, call)),
+                remainderFirst.toString());
     }
 
     /**
@@ -265,6 +354,39 @@ class AnArithmeticStopIsReportedAtTheCallItStoppedAtTest {
         assertFalse(lines.isEmpty(), "the model stops the reading, or this checks nothing");
         lines.forEach(line -> assertEquals(true, line.endsWith(", at " + call),
                 () -> "the text names the call: " + line));
+    }
+
+    /**
+     * One position of a type stopped for two reasons by two parts of one rule: each reason is sent
+     * to its own call, in the rules not read and in both kinds of open question — the remainder
+     * to the remainder, and the product, which has no call an author wrote, to the rule.
+     */
+    @Test
+    void eachReasonOnATypeIsSentToItsOwnCallAndToNoOther() {
+        String remainder = placeOf(TWO_REASONS_ON_A_TYPE, "= ", "Int.floorMod(");
+        List<Entry> entries = new ArrayList<>();
+        for (JsonNode behavior : reasonsOnAType.document().findParents("partition")) {
+            for (JsonNode entry : behavior.get("partition").get("notRead")) {
+                entries.add(entryOf(entry.get("position").asString(), entry));
+            }
+            for (JsonNode question : behavior.get("partition").get("unanswered")) {
+                for (JsonNode stopped : question.get("stopped")) {
+                    entries.add(entryOf("", stopped));
+                }
+            }
+        }
+
+        assertEquals(Set.of(DERIVED, "non_affine_product"),
+                entries.stream().map(Entry::reason).collect(Collectors.toSet()));
+        entries.forEach(each -> assertEquals(
+                each.reason().equals(DERIVED) ? remainder : null, each.sentTo(),
+                () -> "a reason is sent to the call that stopped it and to no other: " + each));
+    }
+
+    private static Entry entryOf(String position, JsonNode entry) {
+        JsonNode at = entry.get("sentTo");
+        return new Entry(position, entry.get("reason").asString(),
+                at == null ? null : at.get("line").asInt() + ":" + at.get("column").asInt());
     }
 
     /**

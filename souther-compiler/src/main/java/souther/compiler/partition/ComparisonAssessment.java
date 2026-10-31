@@ -2021,7 +2021,7 @@ sealed interface ComparisonAssessment {
             // left at. Worked out again from the comparison afterwards, one whose carrier stopped
             // the reading came back as a rule that relates two positions — a sentence saying no
             // measure is short of anything, over a model missing a border.
-            case Unread unread -> unread.places().at().entrySet().stream()
+            case Unread unread -> unread.places().decided().entrySet().stream()
                     .map(each -> new LeftAt(each.getKey(), each.getValue().reason(),
                             each.getValue().sentTo()))
                     .toList();

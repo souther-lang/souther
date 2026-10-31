@@ -13,39 +13,47 @@ import java.util.SequencedMap;
 import java.util.SequencedSet;
 
 /**
- * Where a reading stopped: each place it left the rule at, what stopped the reading there, and the
- * expressions its author wrote that it stopped at.
+ * Where a reading stopped: each stop it made, which left a rule at one place, for one reason, at
+ * one expression its author wrote or at none.
  *
- * <p>One value for the three, because they are one fact about a place. Held as a map of reasons
- * beside a set of expressions, the two agree only while a single stop made them, and the first
- * time several readings of one comparison are put together a place is sent to an expression that
- * stopped a different place. Here the only way to put two together is {@link #and}, which says
- * what is kept of each.
+ * <p>The stops are held whole and are never combined. A place, a reason and a call are one fact,
+ * and the three are not independent: a call belongs to the reason it stopped for, at the place it
+ * stopped. Combined by component — a reason kept, the calls of both readings gathered under it —
+ * a call arrived at a place or a reason it did not belong to, and it did so in each way a
+ * combination can be written. So putting readings together ({@link #and}) only gathers their
+ * stops, and everything a reader asks is selected from them by the one policy below.
  *
- * @param at the places, in the order they were met
+ * <p><b>The policy.</b> A place is left with the reason of the first stop that met it, as a map
+ * keeps the first of what is put at a key. It is sent to the calls of every stop at it for that
+ * same reason ({@link BlockReason#factOf}, which leaves out the figures a reason was met at), and
+ * to none of the calls that stopped it for another. A stop at no call an author wrote sends a
+ * reader to the rule, and adds nothing to the calls.
+ *
+ * @param stops the stops, each once, in the order they were met
  */
-record PlacesStopped(SequencedMap<FilingCoordinate, Stop> at) {
+record PlacesStopped(SequencedSet<Stop> stops) {
 
     /** Nothing stopped anywhere. */
-    static final PlacesStopped NOWHERE = new PlacesStopped(new LinkedHashMap<>());
+    static final PlacesStopped NOWHERE = new PlacesStopped(new LinkedHashSet<>());
 
     /**
-     * What stopped the reading at one place.
+     * One stop: a place the rule was left at, what stopped the reading there, and where a reader
+     * goes about it.
      *
-     * @param reason what stopped it, in this compiler's own terms
-     * @param sentTo the expressions the author wrote that the arithmetic stopped at on the way to
-     *               leaving the rule here; empty where the reading stopped at none of them
+     * @param sentTo the expression its author wrote that the arithmetic stopped at, or
+     *               {@link RuleSite#theRuleItself()} where it stopped at none
      */
-    record Stop(BlockReason.RuleReadingStopped reason, SequencedSet<RuleSite> sentTo) {
+    record Stop(FilingCoordinate place, BlockReason.RuleReadingStopped reason, RuleSite sentTo) {
 
         Stop {
+            Objects.requireNonNull(place, "a rule is left somewhere");
             Objects.requireNonNull(reason, "a place is left for a reason");
-            sentTo = RuleSite.held(sentTo);
+            Objects.requireNonNull(sentTo, "a stop is sent somewhere");
         }
     }
 
     PlacesStopped {
-        at = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(at));
+        stops = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(stops));
     }
 
     /** These places and their reasons, stopped at no expression an author wrote. */
@@ -53,38 +61,27 @@ record PlacesStopped(SequencedMap<FilingCoordinate, Stop> at) {
         return of(reasons, RuleSite.NO_SITES);
     }
 
-    /** These places and their reasons, all left by the one stop at {@code sentTo}. */
+    /**
+     * These places and their reasons, all left by the one stop at {@code sentTo} — at none where
+     * that is empty.
+     */
     static PlacesStopped of(SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> reasons,
                             SequencedSet<RuleSite> sentTo) {
-        SequencedMap<FilingCoordinate, Stop> out = new LinkedHashMap<>();
-        reasons.forEach((place, reason) -> out.put(place, new Stop(reason, sentTo)));
+        SequencedSet<Stop> out = new LinkedHashSet<>();
+        reasons.forEach((place, reason) -> {
+            if (sentTo.isEmpty()) {
+                out.add(new Stop(place, reason, RuleSite.theRuleItself()));
+            }
+            sentTo.forEach(site -> out.add(new Stop(place, reason, site)));
+        });
         return new PlacesStopped(out);
     }
 
     boolean isEmpty() {
-        return at.isEmpty();
+        return stops.isEmpty();
     }
 
-    /** What stopped the reading at each place, without the expressions. */
-    SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> reasons() {
-        SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out = new LinkedHashMap<>();
-        at.forEach((place, stop) -> out.put(place, stop.reason()));
-        return out;
-    }
-
-    /** The expressions the reading stopped at to leave the rule at {@code place}. */
-    SequencedSet<RuleSite> sentTo(FilingCoordinate place) {
-        Stop stop = at.get(place);
-        return stop == null ? RuleSite.NO_SITES : stop.sentTo();
-    }
-
-    /**
-     * Two readings of one comparison put together: a place keeps the reason of the one that met it
-     * first, and every expression either stopped at to leave it there.
-     *
-     * <p>The expressions of a place only, and never of a place beside it. Two applications of one
-     * closure that stop at different calls at different places leave each place with its own call.
-     */
+    /** Two readings of one comparison put together: the stops of both, in the order met. */
     PlacesStopped and(PlacesStopped other) {
         if (other.isEmpty()) {
             return this;
@@ -92,13 +89,59 @@ record PlacesStopped(SequencedMap<FilingCoordinate, Stop> at) {
         if (isEmpty()) {
             return other;
         }
-        SequencedMap<FilingCoordinate, Stop> out = new LinkedHashMap<>(at);
-        other.at.forEach((place, stop) -> out.merge(place, stop, (kept, also) -> {
-            SequencedSet<RuleSite> both = new LinkedHashSet<>(kept.sentTo());
-            both.addAll(also.sentTo());
-            return new Stop(kept.reason(), both);
-        }));
-        return new PlacesStopped(out);
+        SequencedSet<Stop> both = new LinkedHashSet<>(stops);
+        both.addAll(other.stops);
+        return new PlacesStopped(both);
+    }
+
+    /** Every place a stop left the rule at, in the order they were met. */
+    SequencedSet<FilingCoordinate> places() {
+        SequencedSet<FilingCoordinate> out = new LinkedHashSet<>();
+        stops.forEach(stop -> out.add(stop.place()));
+        return out;
+    }
+
+    /**
+     * What a place is left with.
+     *
+     * @param reason the reason of the first stop that met the place
+     * @param sentTo the calls an author wrote that the arithmetic stopped at to leave the rule
+     *               here for that reason; empty where it stopped at none, and a reader is sent to
+     *               the rule
+     */
+    record Decided(BlockReason.RuleReadingStopped reason, SequencedSet<RuleSite> sentTo) {}
+
+    /**
+     * What each place is left with, by the policy above, in one pass over the stops.
+     */
+    SequencedMap<FilingCoordinate, Decided> decided() {
+        SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> reasons = reasons();
+        Map<FilingCoordinate, Object> words = new LinkedHashMap<>();
+        reasons.forEach((place, reason) -> words.put(place, BlockReason.factOf(reason)));
+        Map<FilingCoordinate, SequencedSet<RuleSite>> calls = new LinkedHashMap<>();
+        for (Stop stop : stops) {
+            if (!(stop.sentTo() instanceof RuleSite.TheRuleItself)
+                    && words.get(stop.place()).equals(BlockReason.factOf(stop.reason()))) {
+                calls.computeIfAbsent(stop.place(), _ -> new LinkedHashSet<>()).add(stop.sentTo());
+            }
+        }
+        SequencedMap<FilingCoordinate, Decided> out = new LinkedHashMap<>();
+        reasons.forEach((place, reason) -> out.put(place,
+                new Decided(reason, RuleSite.held(calls.getOrDefault(place, RuleSite.NO_SITES)))));
+        return out;
+    }
+
+    /** What each place is left with: the reason of the first stop that met it. */
+    SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> reasons() {
+        SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out = new LinkedHashMap<>();
+        stops.forEach(stop -> out.putIfAbsent(stop.place(), stop.reason()));
+        return out;
+    }
+
+    /** The calls {@code place} is sent to, as {@link Decided} says; none for a place no stop met. */
+    SequencedSet<RuleSite> sentTo(FilingCoordinate place) {
+        Decided decided = decided().get(place);
+        return decided == null ? RuleSite.NO_SITES : decided.sentTo();
     }
 
     /**
@@ -108,9 +151,13 @@ record PlacesStopped(SequencedMap<FilingCoordinate, Stop> at) {
      * the rule: an expression another place was stopped by says nothing of why this one was filed.
      */
     PlacesStopped alsoFiledAt(Map<FilingCoordinate, BlockReason.RuleReadingStopped> more) {
-        SequencedMap<FilingCoordinate, Stop> out = new LinkedHashMap<>(at);
-        more.forEach((place, reason) ->
-                out.putIfAbsent(place, new Stop(reason, RuleSite.NO_SITES)));
+        SequencedSet<FilingCoordinate> known = places();
+        SequencedSet<Stop> out = new LinkedHashSet<>(stops);
+        more.forEach((place, reason) -> {
+            if (!known.contains(place)) {
+                out.add(new Stop(place, reason, RuleSite.theRuleItself()));
+            }
+        });
         return new PlacesStopped(out);
     }
 }
