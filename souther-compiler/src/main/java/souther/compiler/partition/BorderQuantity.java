@@ -536,10 +536,11 @@ public sealed interface BorderQuantity
             implements LinearQuantity {
 
         /** Walked by what each term is called, which is what a form's own equality cannot see, and
-         *  which the form is held in. */
+         *  which the form is held in. Read where the form holds them, since they are walked at
+         *  every row read at the form. */
         @Override
         public List<NumericTerm> terms() {
-            return List.copyOf(form.coefs().keySet());
+            return InTheOrderGiven.keys(form.coefs());
         }
 
         @Override

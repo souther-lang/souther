@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.TermOrders;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -41,8 +42,10 @@ final class QuantityReading {
                     + " reading of one answers for at least one");
         }
         // No order kept, because nothing reads these in any order. What a reader wants is the entry
-        // for the orders it holds, and the one place an order is wanted is a message.
-        this.answers = Map.copyOf(answers);
+        // for the orders it holds, and the one place an order is wanted is a message. Held as it
+        // is handed over, by the one reading that makes it and keeps nothing of it: a reading is
+        // made for every row asked at a quantity, and a copy would hash every term again.
+        this.answers = Collections.unmodifiableMap(answers);
     }
 
     /**

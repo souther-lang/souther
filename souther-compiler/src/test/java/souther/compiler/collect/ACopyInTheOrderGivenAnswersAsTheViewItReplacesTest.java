@@ -72,6 +72,27 @@ class ACopyInTheOrderGivenAnswersAsTheViewItReplacesTest {
         }
     }
 
+    /** The keys of a copy as a list are its keys in its order, as the view's keys listed are, and
+     *  the list refuses every change; so are those of a map this did not make. */
+    @Test
+    void theKeysOfACopyAreListedInItsOrder() {
+        for (int size : SIZES) {
+            List<Object> expected = new ArrayList<>(given(size).keySet());
+            List<Object> keys = InTheOrderGiven.keys(InTheOrderGiven.map(given(size)));
+            assertEquals(expected, keys, "the keys of " + size);
+            assertEquals(expected.hashCode(), keys.hashCode());
+            for (int at = 0; at < size; at++) {
+                assertEquals(expected.get(at), keys.get(at));
+            }
+            assertThrows(IndexOutOfBoundsException.class, () -> keys.get(size));
+            assertThrows(UnsupportedOperationException.class, () -> keys.add("k"));
+        }
+        Map<String, Integer> plain = new LinkedHashMap<>();
+        plain.put("b", 1);
+        plain.put("a", 2);
+        assertEquals(List.of("b", "a"), InTheOrderGiven.keys(plain));
+    }
+
     @Test
     void aMapIsNotEqualToOneMissingANullValuedKey() {
         Map<Object, Object> nulls = new LinkedHashMap<>();

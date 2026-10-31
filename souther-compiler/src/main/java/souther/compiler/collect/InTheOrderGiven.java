@@ -1,13 +1,17 @@
 package souther.compiler.collect;
 
 import java.util.AbstractCollection;
+import java.util.AbstractList;
 import java.util.AbstractMap;
 import java.util.AbstractSet;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.RandomAccess;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -165,6 +169,11 @@ public final class InTheOrderGiven {
         }
 
         @Override
+        List<K> keysInOrder() {
+            return new KeysOf<>(entries);
+        }
+
+        @Override
         public int size() {
             return hashes.length;
         }
@@ -310,8 +319,43 @@ public final class InTheOrderGiven {
         }
     }
 
+    /**
+     * The keys of {@code map} in its order, as a list. Of a copy made here, the keys where they
+     * are held, read in place and not copied: a form's terms are walked as a list every time a
+     * row is read at it, and a copy of them each time is as many arrays as rows.
+     */
+    public static <K> List<K> keys(Map<K, ?> map) {
+        return map instanceof Refusing<K, ?> held ? held.keysInOrder()
+                : List.copyOf(map.keySet());
+    }
+
+    /** The keys of a {@link HeldMap}'s entries, every other one of them, read where they are. */
+    private static final class KeysOf<K> extends AbstractList<K> implements RandomAccess {
+
+        private final Object[] entries;
+
+        KeysOf(Object[] entries) {
+            this.entries = entries;
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public K get(int at) {
+            Objects.checkIndex(at, size());
+            return (K) entries[at * 2];
+        }
+
+        @Override
+        public int size() {
+            return entries.length / 2;
+        }
+    }
+
     /** A map every change to which is refused, whether or not it would have changed it. */
     private abstract static class Refusing<K, V> extends AbstractMap<K, V> {
+
+        /** The keys in the order given, read where they are held. */
+        abstract List<K> keysInOrder();
 
         @Override
         public V put(K key, V value) {
@@ -393,6 +437,11 @@ public final class InTheOrderGiven {
         OneEntry(K key, V value) {
             this.key = key;
             this.value = value;
+        }
+
+        @Override
+        List<K> keysInOrder() {
+            return Collections.singletonList(key);
         }
 
         @Override

@@ -8,6 +8,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -124,7 +125,7 @@ public sealed interface LinearQuantity extends BorderQuantity
      * did.
      */
     default QuantityReading read(Observation observation) {
-        Map<TermOrders, WhatATermRead> answers = new LinkedHashMap<>();
+        Map<TermOrders, WhatATermRead> answers = new HashMap<>();
         for (NumericTerm term : terms()) {
             TermOrders orders = ordersOf(term);
             WhatATermRead read = WhatATermRead.ofTerm(orders, observation);
