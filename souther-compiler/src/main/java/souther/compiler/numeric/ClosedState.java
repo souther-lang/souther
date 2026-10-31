@@ -38,6 +38,13 @@ import java.util.function.Function;
  * {@link FormReach}'s to say; what reaches that query besides is whatever the rounds have already
  * put in the ends, so nothing here is a count of how many rules a proof may come from.
  *
+ * <p><b>A hole is a rule that becomes a bound.</b> {@code f /= v} beside what puts {@code f} on one
+ * side of {@code v} is a half-space about {@code f}, and it is kept as one ({@link #sided}): read as
+ * a premise by every query about a form, and, where it bounds the difference of two positions,
+ * closed with the differences. Which side a hole falls on is settled to the end in the round that
+ * reads it ({@link AffineReduction}) and not left to the rounds, which exist for the ends that
+ * need not settle at all.
+ *
  * <p>What "against what the closure leaves" means is {@link FormReach}, which says what it reads
  * and how much of it one query may take. A chain of rules composes here, through the ends a round
  * hands the next one.
@@ -234,6 +241,7 @@ public final class ClosedState<A> {
         }
         boolean everyBoundWasComposed = differences.everyHopWasComposed();
         Set<AffineConstraint.HalfSpace<A>> sided = Set.of();
+        Set<AffineConstraint.HalfSpace<A>> folded = Set.of();
         for (int round = 0; round < ROUNDS; round++) {
             // The reading is made afresh from the box this round starts in, and every rule is read
             // against that one. A reading that carried the box along as the rules narrowed it would
@@ -241,7 +249,7 @@ public final class ClosedState<A> {
             // the order deciding the result — the thing the rounds exist to be rid of. The holes
             // the last round sided are read with the rules for the same reason the box is: they are
             // that round's finding, taken whole at the start of this one.
-            FormReach<A> reading = FormReach.over(withThe(sided, constraints), box, differences, order);
+            FormReach<A> reading = FormReach.over(constraints, sided, box, differences, order);
             if (theRulesLeaveAFormNothing(reading, constraints)) {
                 return empty(differences);
             }
@@ -251,8 +259,22 @@ public final class ClosedState<A> {
             }
             AffineReduction.Reduction.Tightened<A> tightened =
                     (AffineReduction.Reduction.Tightened<A>) found;
-            Carried<A> carried = throughDifferences(
-                    box.meeting(tightened.atLeast(), tightened.atMost()), differences, positions);
+            Box<A> met = box.meeting(tightened.atLeast(), tightened.atMost());
+            // A hole that came to a bound on a difference is a rule of that shape from here on, and
+            // a path of differences runs through it as through any other. Folded in where the
+            // closure is made, so that which rules are of the shape is still decided in one place.
+            Set<AffineConstraint.HalfSpace<A>> between = relatingTwoPositions(tightened.sided(), order);
+            if (!between.equals(folded)) {
+                differences = DifferenceBounds.over(withThe(constraints, between), order);
+                if (differences.holdsNothing()) {
+                    return empty(differences);
+                }
+                Box<A> held = boxOf(differences, positions);
+                met = met.meeting(held.atLeast(), held.atMost());
+                everyBoundWasComposed &= differences.everyHopWasComposed();
+                folded = between;
+            }
+            Carried<A> carried = throughDifferences(met, differences, positions);
             everyBoundWasComposed &= carried.everyBoundWasComposed();
             Box<A> next = carried.box();
             if (!next.holdsAValue()) {
@@ -267,14 +289,23 @@ public final class ClosedState<A> {
         return settled(box, differences, sided, Status.BUDGET_EXHAUSTED, everyBoundWasComposed);
     }
 
-    /** {@code constraints} with the half-spaces the holes came to beside them. */
-    private static <A> List<AffineConstraint<A>> withThe(Set<AffineConstraint.HalfSpace<A>> sided,
-                                                         List<AffineConstraint<A>> constraints) {
-        if (sided.isEmpty()) {
-            return constraints;
+    /** The half-spaces among {@code sided} that bound the difference of two positions. */
+    private static <A> Set<AffineConstraint.HalfSpace<A>> relatingTwoPositions(
+            Set<AffineConstraint.HalfSpace<A>> sided, CanonicalOrder<A> order) {
+        Set<AffineConstraint.HalfSpace<A>> out = new LinkedHashSet<>();
+        for (AffineConstraint.HalfSpace<A> each : sided) {
+            if (DifferenceBounds.relatesTwoPositions(each, order)) {
+                out.add(each);
+            }
         }
+        return out;
+    }
+
+    /** {@code constraints} with {@code more} beside them, as the difference bounds are made over. */
+    private static <A> List<AffineConstraint<A>> withThe(List<AffineConstraint<A>> constraints,
+                                                         Set<AffineConstraint.HalfSpace<A>> more) {
         List<AffineConstraint<A>> out = new ArrayList<>(constraints);
-        out.addAll(sided);
+        out.addAll(more);
         return out;
     }
 

@@ -208,6 +208,18 @@ public final class DifferenceBounds<A> {
     }
 
     /**
+     * Whether {@code half} is a bound on the difference of two positions: the shape a path of
+     * differences runs along, and so the one a closure has something to compose it with.
+     *
+     * <p>A bound on one position is an edge too, and is not asked about here: it reaches the ends a
+     * round carries along the differences, and holds nothing a path could pass through.
+     */
+    static <A> boolean relatesTwoPositions(AffineConstraint.HalfSpace<A> half,
+                                           CanonicalOrder<A> order) {
+        return edgeOf(half.form(), half.bound(), order) instanceof Edge.Between<A>;
+    }
+
+    /**
      * The edge one half-space is, or null where it is not of this shape.
      *
      * <p>Which two positions the difference is between is read off the weight at each and not off

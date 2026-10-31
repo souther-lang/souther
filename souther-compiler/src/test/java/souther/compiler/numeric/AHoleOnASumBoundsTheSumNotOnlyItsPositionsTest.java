@@ -118,6 +118,44 @@ class AHoleOnASumBoundsTheSumNotOnlyItsPositionsTest {
         assertFalse(d.entails(sumMinus(47), Rel.LE), "a + b = 48 is admitted");
     }
 
+    /**
+     * A run of holes longer than the rounds the box is given to settle in. Which side a hole falls
+     * on never changes once it is decided and there are only as many holes as were said, so the run
+     * is finished however long it is.
+     */
+    @Test
+    void aRunOfHolesLongerThanTheRoundsIsSettledToItsEnd() {
+        NumericDomain<String> d = assumed(start(), sumMinus(50), Rel.LE, Granularity.DISCRETE);
+        int holes = ClosedState.ROUNDS * 2;
+        for (int at = 50; at > 50 - holes; at--) {
+            d = assumed(d, sumMinus(at), Rel.NE, Granularity.DISCRETE);
+        }
+
+        assertTrue(d.entails(sumMinus(50 - holes), Rel.LE));
+        assertFalse(d.entails(sumMinus(49 - holes), Rel.LE), "a + b = " + (50 - holes) + " is admitted");
+    }
+
+    /**
+     * Holes on two differences, each beside a bound, give the same chain as the two strict
+     * comparisons written in their place.
+     */
+    @Test
+    void holesOnTwoDifferencesComposeAsTheStrictComparisonsDo() {
+        LinearForm<String> ab = SmallForm.small(atom(A)).minus(atom(B)).minus(num(3)).form();
+        LinearForm<String> bc = SmallForm.small(atom(B)).minus(atom("c")).minus(num(3)).form();
+        LinearForm<String> ac = SmallForm.small(atom(A)).minus(atom("c")).minus(num(4)).form();
+        Map<String, NumberSpace> whole = new LinkedHashMap<>();
+        for (String each : List.of(A, B, "c")) {
+            whole.put(each, NumberSpace.spacedOnly(Granularity.DISCRETE));
+        }
+        NumericDomain<String> holes = start().assume(ab, Rel.LE, whole).assume(ab, Rel.NE, whole)
+                .assume(bc, Rel.LE, whole).assume(bc, Rel.NE, whole);
+        NumericDomain<String> strict = start().assume(ab, Rel.LT, whole).assume(bc, Rel.LT, whole);
+
+        assertTrue(strict.entails(ac, Rel.LE));
+        assertEquals(strict.entails(ac, Rel.LE), holes.entails(ac, Rel.LE));
+    }
+
     @Test
     void whatIsSaidFirstDoesNotDecideWhatTheSumIsLeft() {
         NumericDomain<String> boundFirst = assumed(assumed(assumed(start(),
@@ -176,6 +214,95 @@ class AHoleOnASumBoundsTheSumNotOnlyItsPositionsTest {
                 }
             }
         }
+    }
+
+    /**
+     * Holes on sums and on differences, a run of them on one sum, every position bounded: whatever
+     * the state hands back — the box, the half-spaces, the closed differences — holds at every point
+     * the rules admit.
+     */
+    @Test
+    void whatAStateWithHolesHandsBackHoldsAtEveryPointTheRulesAdmit() {
+        Map<String, ExactRatio> ab = Map.of(A, ExactRatio.ONE, B, ExactRatio.of(-1));
+        Map<String, ExactRatio> bc = Map.of(B, ExactRatio.ONE, "c", ExactRatio.of(-1));
+        Map<String, ExactRatio> ac = Map.of(A, ExactRatio.ONE, "c", ExactRatio.ONE);
+        List<AffineConstraint<String>> rules = new java.util.ArrayList<>(List.of(
+                half(ab, 3), hole(ab, 3), half(bc, 3), hole(bc, 3),
+                half(Map.of("c", ExactRatio.ONE), 5), half(Map.of("c", ExactRatio.of(-1)), 0),
+                half(ac, 10)));
+        for (long at = 10; at >= 5; at--) {
+            rules.add(hole(ac, at));
+        }
+        Function<String, Granularity> whole = _ -> Granularity.DISCRETE;
+        ClosedState<String> closed = ClosedState.of(rules, whole, CanonicalOrder.asTheyAreSpelled());
+        assertFalse(closed.holdsNothing());
+
+        for (long a = -12; a <= 16; a++) {
+            for (long b = -12; b <= 16; b++) {
+                for (long c = -2; c <= 7; c++) {
+                    Map<String, Long> at = Map.of(A, a, B, b, "c", c);
+                    if (!admits(rules, at)) {
+                        continue;
+                    }
+                    for (String each : List.of(A, B, "c")) {
+                        ExactCut low = closed.box().leastOf(each);
+                        ExactCut high = closed.box().mostOf(each);
+                        assertTrue(low == null || below(low, at.get(each), true),
+                                each + " = " + at.get(each) + " is under " + low);
+                        assertTrue(high == null || below(high, at.get(each), false),
+                                each + " = " + at.get(each) + " is over " + high);
+                    }
+                    for (AffineConstraint.HalfSpace<String> each : closed.sided()) {
+                        assertTrue(satisfies(each, at), at + " does not satisfy " + each);
+                    }
+                    for (DifferenceBounds.Apart<String> each : closed.differences().relations()) {
+                        long gap = at.get(each.above()) - at.get(each.below());
+                        assertTrue(below(each.by(), gap, false),
+                                at + " is further apart than " + each);
+                    }
+                }
+            }
+        }
+        // And it is not vacuous: the run of holes has taken the sum below what the bound alone
+        // leaves, and the differences are tighter than the holes' own bounds.
+        assertFalse(closed.sided().isEmpty());
+    }
+
+    /** Whether {@code value} is on the inner side of {@code cut}: at or above it for a lower end,
+     *  at or below it for an upper. */
+    private static boolean below(ExactCut cut, long value, boolean lowerEnd) {
+        int order = ExactRatio.of(value).compareTo(cut.at());
+        int towards = lowerEnd ? order : -order;
+        return towards > 0 || (towards == 0 && cut.inclusive());
+    }
+
+    private static boolean satisfies(AffineConstraint.HalfSpace<String> half, Map<String, Long> at) {
+        ExactRatio weighed = ExactRatio.ZERO;
+        for (Map.Entry<String, ExactRatio> each : half.form().coefs().entrySet()) {
+            weighed = weighed.plus(each.getValue().times(ExactRatio.of(at.get(each.getKey())))
+                    .orNull()).orNull();
+        }
+        int against = weighed.compareTo(half.bound().at());
+        return against < 0 || (against == 0 && half.bound().inclusive());
+    }
+
+    private static boolean admits(List<AffineConstraint<String>> rules, Map<String, Long> at) {
+        for (AffineConstraint<String> each : rules) {
+            ExactRatio weighed = ExactRatio.ZERO;
+            for (Map.Entry<String, ExactRatio> term : each.form().coefs().entrySet()) {
+                weighed = weighed.plus(term.getValue().times(ExactRatio.of(at.get(term.getKey())))
+                        .orNull()).orNull();
+            }
+            boolean holds = switch (each) {
+                case AffineConstraint.HalfSpace<String> half -> satisfies(half, at);
+                case AffineConstraint.Equality<String> equal -> weighed.compareTo(equal.at()) == 0;
+                case AffineConstraint.Disequality<String> hole -> weighed.compareTo(hole.at()) != 0;
+            };
+            if (!holds) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static AffineConstraint<String> half(Map<String, ExactRatio> coefs, long bound) {

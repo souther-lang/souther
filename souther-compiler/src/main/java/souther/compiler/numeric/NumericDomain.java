@@ -982,9 +982,7 @@ public final class NumericDomain<A> {
         FormReach<A> had = reach;
         if (had == null) {
             ClosedState<A> state = closed();
-            List<AffineConstraint<A>> premises = new ArrayList<>(rules());
-            premises.addAll(state.sided());
-            had = FormReach.over(premises, state.box(), state.differences(), order,
+            had = FormReach.over(rules(), state.sided(), state.box(), state.differences(), order,
                     closedStates.walksIn(order));
             reach = had;
         }
