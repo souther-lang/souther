@@ -156,6 +156,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
+import java.util.SequencedSet;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
@@ -1290,11 +1291,12 @@ final class Pullback {
     }
 
     /** The form {@code e} is composed as, or null where the arithmetic composes it as none
-     *  ({@link #quantities(Core, Consumer)}). */
+     *  ({@link #quantities(Core, Consumer)}) — or as more than one, which is no one account of
+     *  where it answers. */
     private LinearForm<Quantity> composedAs(Core e, InputReads reads) {
-        List<LinearForm<Quantity>> composed = new ArrayList<>(1);
+        SequencedSet<LinearForm<Quantity>> composed = new LinkedHashSet<>();
         AffineForms.outcome(e, reads, quantities(e, composed::add));
-        return composed.isEmpty() ? null : composed.getLast();
+        return composed.size() == 1 ? composed.getFirst() : null;
     }
 
     /**
@@ -1326,34 +1328,35 @@ final class Pullback {
         WhereAnOperatorAnswers.WhereItsExactValueIsHeld where =
                 DeclaredBounds.whereMakingSucceeds(construct, made, read.ruleReading());
         if (where != null) {
-            operated.tellOverTheInput(construct, value, new Answers.AsAnOperator(where));
+            operated.tell(construct, value, new Answers.AsAnOperator(where));
         }
     }
 
     /**
-     * {@code call}, an operation of the library answering an {@code Int}, told as the one
-     * operation it is where what stops a run at it is a number the arithmetic composes: a total of
-     * a list written out, which the library holds to the type only once it is added up
-     * ({@link GetsPast.WhereTheTotalFits}), and a number rounded to a whole one, held to the type
-     * once it is rounded. The operations of what it is handed are told by the walk into its parts.
+     * {@code call}, an operation of the library, told as the one operation it is where what stops
+     * a run at it is a number the arithmetic composes: a total of a list written out, which the
+     * library adds up exactly and holds to its type as a sum is held
+     * ({@link GetsPast.WhereTheTotalFits}), and a number rounded to a whole one, held to the ends
+     * of what the rounding answers
+     * ({@link RoundedToAWholeNumber#whereTheRoundedNumberIsHeld}). The operations of what it is
+     * handed are told by the walk into its parts.
      */
     private void oneOperationOfTheLibrary(Core.PreservedCall call, InputReads reads) {
-        if (!Type.INT.equals(call.type())) {
-            return;
-        }
         if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
                 instanceof GetsPast.WhereTheTotalFits) {
             LinearForm<Quantity> total = totalOfWrittenOut(call, reads);
             if (total != null) {
-                operated.tellOverTheInput(call, total,
-                        new Answers.AsAnOperator(WhereAnOperatorAnswers.WHAT_AN_INT_HOLDS));
+                operated.tell(call, total,
+                        new Answers.AsAnOperator(WhereAnOperatorAnswers.ofATotal(call.type())));
             }
             return;
         }
         Rounding rounding = roundingOf(call, reads);
-        if (rounding != null) {
-            operated.tellOverTheInput(call, rounding.before(),
-                    new Answers.Rounded(rounding.way(), WhereAnOperatorAnswers.WHAT_AN_INT_HOLDS));
+        WhereAnOperatorAnswers.WhereItsExactValueIsHeld ends = rounding == null ? null
+                : RoundedToAWholeNumber.whereTheRoundedNumberIsHeld(call.type(),
+                        read.rules().declarations());
+        if (ends != null) {
+            operated.tell(call, rounding.before(), new Answers.Rounded(rounding.way(), ends));
         }
     }
 
@@ -1377,8 +1380,7 @@ final class Pullback {
         WhereAnOperatorAnswers.WhereItsExactValueIsHeld run =
                 DeclaredBounds.whereMakingSucceeds(construct, made, read.ruleReading());
         if (run != null) {
-            operated.tellOverTheInput(construct, rounding.before(),
-                    new Answers.Rounded(rounding.way(), run));
+            operated.tell(construct, rounding.before(), new Answers.Rounded(rounding.way(), run));
         }
     }
 
@@ -6623,18 +6625,6 @@ final class Pullback {
         }
 
         /**
-         * {@code operation} told as {@link #tell} does where {@code form} is over a number of the
-         * input, and left untold where it is a number the same on every run: a total or a
-         * rounding of numbers written out is past what it answers on every run or on none, which
-         * no line on the input says, and what may stop a run at it is asked of its owner.
-         */
-        void tellOverTheInput(Core operation, LinearForm<Quantity> form, Answers where) {
-            if (!form.coefs().isEmpty()) {
-                tell(operation, form, where);
-            }
-        }
-
-        /**
          * That {@code each}, the applications of one closure, were read, telling what is in
          * {@link #told} from {@code from} on: a node of its body told of on every one of them is
          * told of on the application around them, or wherever a run works it out where there is
@@ -6848,9 +6838,13 @@ final class Pullback {
      * {@code Int} holds. A run working a side out stops at the first that does not, and the
      * comparison comes out no way there.
      *
-     * <p>Only what is said over these numbers. A form with no number of the input in it answers
-     * wherever it answers at all, and an operator whose region is not said is left where nothing
-     * here says it.
+     * <p>Only what is said over these numbers. An operator whose region is not said is left where
+     * nothing here says it.
+     *
+     * <p>A form with no number of the input in it is one number on every run, so the operator
+     * answers on every run or on none: nothing is said of it where the number is one it answers
+     * at, and where it is not, a run stops at it on what no place holds — a total of numbers
+     * written out past the ends of an {@code Int} is past them on every run.
      *
      * <p>A rounding held to a run answers where the number before rounding stands as the way of
      * rounding puts the ends of the run ({@link RoundedToAWholeNumber#heldBetween}).
@@ -6871,12 +6865,18 @@ final class Pullback {
                 case Answers.Rounded(var way, var run) ->
                         RoundedToAWholeNumber.heldBetween(way, run.least(), run.greatest());
             };
-            // A count is read with how it was read, which an operator's form does not carry, so a
-            // form naming one says nothing of where the operator answers here.
-            if (form.coefs().isEmpty()
-                    || (held instanceof ConstantComparison.Settled settled && settled.holds())) {
+            if (held instanceof ConstantComparison.Settled settled && settled.holds()) {
                 continue;
             }
+            if (held != null && form.coefs().isEmpty()) {
+                if (!held.holdsOf(form.constant())) {
+                    operated.beginGroup();
+                    operated.leaveUnsaidOverUnreadOperands();
+                }
+                continue;
+            }
+            // A count is read with how it was read, which an operator's form does not carry, so a
+            // form naming one says nothing of where the operator answers here.
             Derivation answers = held == null || form.coefs().keySet().stream().anyMatch(quantity ->
                     quantity instanceof Quantity.HowManyMeet
                             || quantity instanceof Quantity.HowManyDifferentMeet)

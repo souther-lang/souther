@@ -158,9 +158,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.LibraryEndings.Reading.everyNumberStaysAnInt",
                     "asks WhereAnOperatorAnswers where the addition a walk of the library counts"
                             + " by answers"),
-            new Held("souther.compiler.check.ContainerSizesUnderAWitness.anIntSumAnswersAt",
-                    "asks WhereAnOperatorAnswers where the addition a total of Ints is worked"
-                            + " out by answers"),
             new Held("souther.compiler.check.WhatARunMayEndFor"
                     + ".completionApartFromTheClosuresWrittenAtIt",
                     "hands an operator the analysis reads to AbortSites, which answers where it"
@@ -168,6 +165,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.semantics.WhereAnOperatorAnswers.ofAnOperator",
                     "on which operands an operator answers a value, which the operator and the"
                             + " types it answers and takes alone say"),
+            new Held("souther.compiler.semantics.WhereAnOperatorAnswers.ofATotal",
+                    "names the addition a total the library adds up exactly is held to its type"
+                            + " as, for every reader of where such a total answers"),
             new Held("souther.compiler.check.PathCompletion.whereItAnswers",
                     "hands the operator to WhereAnOperatorAnswers, which says on which operands it"
                             + " answers a value, once for every question asked of the evaluation"),
@@ -480,9 +480,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.inputs.DecimalOperation.workedOut",
                     "works the operator out on the numbers a row has, by the rule the run time"
                             + " works it out by"),
-            new Held("souther.compiler.partition.AffineReading.1.tellAnIntTotal",
-                    "asks the addition's own account where a total worked out exactly answers,"
-                            + " since the library holds only that total to the type"),
             new Held("souther.compiler.partition.NumbersOnTheWayToATotal.noMoreThanItAnswers",
                     "asks whether every operation a closure applied to each element works out is"
                             + " an addition or a product by a written number, whose numbers then"

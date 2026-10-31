@@ -109,6 +109,8 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
                 + " [ window.second.pay.base.value,"
                 + " if window.second.days > 0 then window.first.pay.base.value else 0 ])) * 0 ]",
                 COUNT));
+        out.put("pastOnEveryRun", List.of(
+                "[ 0 * window.first.pay.base.value + 9223372036854775807 + 1 ]", COUNT));
         out.put("summedKept", List.of("[ List.sum(List.map(m -> Yen(0 - m.pay.base.value).value,"
                 + " List.filter(m -> m.days >= 17, [ window.first ]))) ]", COUNT));
         out.put("neverApplied", List.of("List.map(m -> Yen(m.days - window.first.pay.base.value),"
@@ -273,6 +275,20 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
     void aBodyAddedUpOnEveryApplicationIsToldOnEach() {
         assertEquals(THE_BASE_IS_NOUGHT, previous("summedBoth"));
         assertEquals(List.of(), notReachedAtEveryValue("summedBoth"));
+    }
+
+    /**
+     * A sum that comes to the same number on every run answers on every run or on none: the
+     * greatest {@code Int} and one is past it whatever the base is, so every run stops there and
+     * no row arrives at the comparison.
+     */
+    @Test
+    void anOperatorPastItsEndsOnEveryRunStopsEveryRun() {
+        assertEquals(List.of("previous", "window.first.pay.base", "window.first.pay.extra"),
+                judged("pastOnEveryRun").notRead().stream()
+                        .filter(each -> each.reason()
+                                == UndividedPosition.Reason.NOTHING_ARRIVES_AT_THE_RULES_LINE)
+                        .map(PartitionEvidence.NotRead::at).sorted().distinct().toList());
     }
 
     /**

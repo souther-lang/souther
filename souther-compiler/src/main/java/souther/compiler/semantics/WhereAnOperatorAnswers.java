@@ -88,6 +88,16 @@ public sealed interface WhereAnOperatorAnswers {
     }
 
     /**
+     * Where a total of numbers of the type {@code answer} answers, that a library operation adds up
+     * exactly and holds to the type only once it has: where the exact total is a number a sum of
+     * that type answers, however far a total on the way strays. An {@code Int} total answers where
+     * it is one an {@code Int} holds.
+     */
+    static WhereAnOperatorAnswers ofATotal(Type answer) {
+        return ofAnOperator(BinOp.ADD, answer, List.of(answer, answer));
+    }
+
+    /**
      * Where a negation answering {@code answer} answers: an {@code Int} has no negation of the least
      * of them, and a {@code Decimal} or a {@code Rational} only changes its sign.
      */

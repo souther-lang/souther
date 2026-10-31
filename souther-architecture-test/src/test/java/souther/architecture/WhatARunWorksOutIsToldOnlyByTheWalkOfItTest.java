@@ -60,8 +60,7 @@ class WhatARunWorksOutIsToldOnlyByTheWalkOfItTest {
                 for (var element : method.code().orElseThrow()) {
                     if (element instanceof InvokeInstruction call
                             && call.owner().asInternalName().equals(OPERATORS)
-                            && (call.name().equalsString("tell")
-                                    || call.name().equalsString("tellOverTheInput"))) {
+                            && call.name().equalsString("tell")) {
                         found.add(lambdas.enclosing(AMethod.of(owner, method)));
                     }
                 }

@@ -725,8 +725,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              */
             private void tellAnIntTotal(Core node, LinearForm<NumericTerm> total,
                                         List<Integer> after) {
-                WhereAnOperatorAnswers where = WhereAnOperatorAnswers.ofAnOperator(BinOp.ADD,
-                        Type.INT, List.of(Type.INT, Type.INT));
+                WhereAnOperatorAnswers where = WhereAnOperatorAnswers.ofATotal(Type.INT);
                 if (heldAside(where, total)) {
                     return;
                 }
