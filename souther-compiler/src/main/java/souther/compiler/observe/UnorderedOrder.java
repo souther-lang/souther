@@ -38,6 +38,10 @@ public final class UnorderedOrder {
      */
     public static <T> List<T> of(List<T> parts, Function<T, Place> placeOf,
                                  Function<T, String> textOf) {
+        // Fewer than two parts have no order to settle, and nothing is asked about them.
+        if (parts.size() < 2) {
+            return List.copyOf(parts);
+        }
         List<Keyed<T>> keyed = new ArrayList<>(parts.size());
         boolean byValue = true;
         for (T each : parts) {

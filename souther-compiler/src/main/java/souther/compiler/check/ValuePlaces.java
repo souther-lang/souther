@@ -7,7 +7,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
-import java.util.Set;
 
 /**
  * Where a value standing at one position sits on the order of its number, for whatever writes a
@@ -22,62 +21,92 @@ import java.util.Set;
  *
  * <p>Only a number and a name over one have a place. Every other type answers null for every value,
  * and the order of such a collection stays the order of its text.
+ *
+ * <p>What the position is is read when the first value is asked about, so a collection with nothing
+ * to put in order never costs the walk of the names. One of these is made for one collection and
+ * read by one thread.
  */
 public final class ValuePlaces {
 
-    private static final ValuePlaces NONE = new ValuePlaces(List.of(), null);
+    private final Type type;
+    private final NewtypeInners inners;
+    private final Symbols symbols;
+    private final DeclarationKinds kinds;
+    private final SumCases sums;
 
-    private final List<TypeSymbol> worn;
-    private final Carrier carrier;
+    /** What the position places its values by, read on first use; null until then. */
+    private Reading reading;
 
-    private ValuePlaces(List<TypeSymbol> worn, Carrier carrier) {
-        this.worn = worn;
-        this.carrier = carrier;
+    private record Reading(List<TypeSymbol> worn, Carrier carrier) {
+
+        static final Reading NOTHING = new Reading(List.of(), null);
     }
 
-    /** What a position of {@code type} places its values by, or nothing where it places none. */
+    private ValuePlaces(Type type, NewtypeInners inners, Symbols symbols, DeclarationKinds kinds,
+                        SumCases sums) {
+        this.type = type;
+        this.inners = inners;
+        this.symbols = symbols;
+        this.kinds = kinds;
+        this.sums = sums;
+    }
+
+    /** What a position of {@code type}, null where nothing declares it, places its values by. */
     public static ValuePlaces of(Type type, NewtypeInners inners, Symbols symbols,
                                  DeclarationKinds kinds, SumCases sums) {
+        return new ValuePlaces(type, inners, symbols, kinds, sums);
+    }
+
+    private Reading reading() {
+        if (reading == null) {
+            reading = read();
+        }
+        return reading;
+    }
+
+    private Reading read() {
         if (type == null) {
-            return NONE;
+            return Reading.NOTHING;
         }
         TypeView view = TypeView.of(type, inners, symbols, kinds, sums);
         Carrier carrier = view.shape() instanceof Shape.Scalar scalar
                 ? Carrier.ofPrimitive(scalar.prim())
                 : null;
         return carrier instanceof Carrier.Whole || carrier instanceof Carrier.Dense
-                ? new ValuePlaces(view.wrappers(), carrier)
-                : NONE;
+                ? new Reading(view.wrappers(), carrier)
+                : Reading.NOTHING;
     }
 
     /** Where an observed value sits, or null where it is not a value of this position's order. */
     public Place of(ObservedValue value) {
-        if (carrier == null) {
+        Reading at = reading();
+        if (at.carrier() == null) {
             return null;
         }
-        ObservedValue inside = ObservedValue.wearing(worn, value);
-        return inside == null ? null : carrier.placeOf(inside);
+        ObservedValue inside = ObservedValue.wearing(at.worn(), value);
+        return inside == null ? null : at.carrier().placeOf(inside);
     }
 
     /**
      * Where a stated value sits, or null where it is not a value of this position's order.
      *
      * <p>A name is taken off only where the position wears it and the text built that name over
-     * exactly one part, so a record that happens to hold a {@code value} field is not a name over
-     * its number.
+     * exactly one part, which is what a newtype is. A record that happens to be built under another
+     * name, or with more parts, is not a name over its number.
      */
     public Place of(Asserted value) {
-        if (carrier == null) {
+        Reading at = reading();
+        if (at.carrier() == null) {
             return null;
         }
-        Asserted at = value;
-        for (TypeSymbol name : worn) {
-            if (!(at instanceof Asserted.Built built) || !name.equals(built.type())
-                    || !built.fields().keySet().equals(Set.of("value"))) {
+        Asserted inside = value;
+        for (TypeSymbol name : at.worn()) {
+            if (!(inside instanceof Asserted.Built built) || !name.equals(built.type())
+                    || built.fields().size() != 1) {
                 return null;
             }
-            at = built.fields().get("value");
+            inside = built.fields().values().iterator().next();
         }
-        return at instanceof Asserted.Value(ObservedValue bare) ? carrier.placeOf(bare) : null;
+        return inside instanceof Asserted.Value(ObservedValue bare) ? at.carrier().placeOf(bare) : null;
     }
 }

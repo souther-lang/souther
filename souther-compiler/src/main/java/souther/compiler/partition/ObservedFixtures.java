@@ -371,23 +371,23 @@ final class ObservedFixtures {
      * {@link UnorderedOrder} writes them: by the place of {@code observed}, the value each was
      * written from, at a position of {@code type}, and by text where that position places nothing.
      *
-     * <p>The place is asked of {@link ValuePlaces}, of the observed value and never of its text. A
-     * collection of fewer than two parts has no order to settle, and does not ask what the type is.
+     * <p>The place is asked of {@link ValuePlaces}, of the observed value and never of its text.
      */
     private static List<FixtureTemplate> inUnorderedOrder(List<ObservedValue> observed,
                                                           List<FixtureTemplate> written,
                                                           Type type, RuleReadingSource source) {
-        if (written.size() < 2) {
-            return written;
-        }
         ValuePlaces places = ValuePlaces.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
-        List<Integer> positions = new ArrayList<>();
+        List<WrittenFrom> parts = new ArrayList<>(written.size());
         for (int at = 0; at < written.size(); at++) {
-            positions.add(at);
+            parts.add(new WrittenFrom(observed.get(at), written.get(at)));
         }
-        return UnorderedOrder.of(positions, at -> places.of(observed.get(at)),
-                at -> written.get(at).text()).stream().map(written::get).toList();
+        return UnorderedOrder.of(parts, part -> places.of(part.observed()),
+                part -> part.template().text()).stream().map(WrittenFrom::template).toList();
+    }
+
+    /** A part of a collection, beside the value it was written from. */
+    private record WrittenFrom(ObservedValue observed, FixtureTemplate template) {
     }
 
     /** A map as its entries, in the order of its keys' values where they are numbers, and of their

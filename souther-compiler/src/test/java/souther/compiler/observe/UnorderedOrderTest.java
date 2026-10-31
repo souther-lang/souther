@@ -68,6 +68,22 @@ class UnorderedOrderTest {
         assertEquals(List.of("10", "2"), parts);
     }
 
+    /** Nothing is asked about a collection that has no order to settle, so a reader that costs
+     *  something to answer is never made to. */
+    @Test
+    void nothingIsAskedAboutFewerThanTwoParts() {
+        Function<String, Place> neverAsked = part -> {
+            throw new AssertionError("asked where " + part + " sits");
+        };
+
+        assertEquals(List.of(), UnorderedOrder.of(List.<String>of(), neverAsked, part -> {
+            throw new AssertionError("asked how " + part + " is written");
+        }));
+        assertEquals(List.of("10"), UnorderedOrder.of(List.of("10"), neverAsked, part -> {
+            throw new AssertionError("asked how " + part + " is written");
+        }));
+    }
+
     @Test
     void eachPartIsWrittenOnce() {
         List<String> asked = new ArrayList<>();

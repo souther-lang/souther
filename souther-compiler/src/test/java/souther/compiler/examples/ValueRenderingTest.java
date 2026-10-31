@@ -73,8 +73,9 @@ class ValueRenderingTest {
         assertEquals("[ (2, \"b\"), (10, \"j\") ]", rendering().show(answered, position));
         assertEquals("Map.fromList([ (2, \"b\"), (10, \"j\") ])",
                 rendering().show(stated, position));
-        // Said at no position, the row states nothing of its type and its text orders it.
-        assertEquals("Map.fromList([ (10, \"j\"), (2, \"b\") ])", rendering().show(stated));
+        // Where nothing declares the position the row states nothing of its type, and its text
+        // orders it.
+        assertEquals("Map.fromList([ (10, \"j\"), (2, \"b\") ])", rendering().show(stated, null));
     }
 
     @Test
@@ -83,7 +84,7 @@ class ValueRenderingTest {
                 new Asserted.Value(n(10)), new Asserted.Value(n(-3)), new Asserted.Value(n(2))));
 
         assertEquals("Set.fromList([ -3, 2, 10 ])", rendering().show(stated, Type.set(Type.INT)));
-        assertEquals("Set.fromList([ -3, 10, 2 ])", rendering().show(stated));
+        assertEquals("Set.fromList([ -3, 10, 2 ])", rendering().show(stated, null));
         assertEquals("Set.fromList([ -3, 10, 2 ])",
                 rendering().show(stated, Type.set(Type.STRING)));
     }

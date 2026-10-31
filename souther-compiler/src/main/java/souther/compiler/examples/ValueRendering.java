@@ -35,14 +35,10 @@ final class ValueRendering {
         this.neutral = neutral;
     }
 
-    /** What a row stated, written the way a fixture writes one. A list is its own order; what it
-     *  states no order for is written in the one this settles on, as the answer beside it is. */
-    String show(Asserted a) {
-        return show(a, null);
-    }
-
     /**
-     * What a row stated at {@code position}, written the way the answer beside it is.
+     * What a row stated at {@code position}, written the way a fixture writes one and the way the
+     * answer beside it is. A list is its own order; what it states no order for is written in the
+     * one this settles on.
      *
      * <p>The position is what says where a number sits, so a set or a map the row wrote is put in
      * the order of its values by the same rule the answer is ({@link UnorderedOrder}), and the two
@@ -72,9 +68,9 @@ final class ValueRendering {
                 Type element = elementOf(position);
                 boolean set = elements.stated() == Asserted.Container.SET;
                 // A set states no order, so what it is written in is decided here.
+                ValuePlaces places = neutral.placesAt(element);
                 List<String> out = set
-                        ? inOrder(elements.elements(), placesAt(element, elements.elements().size())::of,
-                                e -> show(e, element))
+                        ? inOrder(elements.elements(), e -> places.of(e), e -> show(e, element))
                         : elements.elements().stream().map(e -> show(e, element)).toList();
                 String written = written(out);
                 // A row that said which collection it wrote is shown saying it, so a mismatch between
@@ -84,7 +80,7 @@ final class ValueRendering {
             case Asserted.Entries entries -> {
                 Type key = keyOf(position);
                 Type value = valueOf(position);
-                ValuePlaces places = placesAt(key, entries.entries().size());
+                ValuePlaces places = neutral.placesAt(key);
                 String written = written(inOrder(entries.entries(), e -> places.of(e.key()),
                         e -> pair(e, key, value)));
                 yield entries.stated() ? "Map.fromList(" + written + ")" : written;
@@ -110,11 +106,6 @@ final class ValueRendering {
         }
         return UnorderedOrder.of(written, it -> placeOf.apply(it.getKey()), Map.Entry::getValue)
                 .stream().map(Map.Entry::getValue).toList();
-    }
-
-    /** Where the values at {@code type} sit, asked only of a collection with an order to settle. */
-    private ValuePlaces placesAt(Type type, int parts) {
-        return neutral.placesAt(parts < 2 ? null : type);
     }
 
     private static Type keyOf(Type position) {
@@ -242,7 +233,7 @@ final class ValueRendering {
      */
     private String unordered(Alignment.Unordered set, Type position) {
         Type element = elementOf(position);
-        ValuePlaces places = placesAt(element, set.written().size() + set.rest().size());
+        ValuePlaces places = neutral.placesAt(element);
         List<String> out = new ArrayList<>();
         for (Alignment.Stood each : UnorderedOrder.of(set.written(),
                 it -> places.of(it.element()), it -> show(it.stated(), element))) {
@@ -256,7 +247,7 @@ final class ValueRendering {
     private String entries(Alignment.Entries entries, Type position) {
         Type key = keyOf(position);
         Type value = valueOf(position);
-        ValuePlaces places = placesAt(key, entries.written().size() + entries.rest().size());
+        ValuePlaces places = neutral.placesAt(key);
         List<String> out = new ArrayList<>();
         for (Alignment.Placed each : UnorderedOrder.of(entries.written(),
                 it -> places.of(it.entry().key()), it -> pair(it.stated(), key, value))) {
@@ -314,15 +305,16 @@ final class ValueRendering {
             case ObservedValue.Mapping m -> {
                 Type key = keyOf(position);
                 Type value = valueOf(position);
-                ValuePlaces places = placesAt(key, m.entries().size());
+                ValuePlaces places = neutral.placesAt(key);
                 yield written(inOrder(m.entries(), each -> places.of(each.key()),
                         each -> "(" + canonical(each.key(), key) + ", "
                                 + canonical(each.value(), value) + ")"));
             }
             case ObservedValue.Sequence s -> {
                 Type element = elementOf(position);
+                ValuePlaces places = neutral.placesAt(element);
                 yield written(open instanceof Type.SetOf
-                        ? inOrder(s.elements(), placesAt(element, s.elements().size())::of,
+                        ? inOrder(s.elements(), each -> places.of(each),
                                 each -> canonical(each, element))
                         : s.elements().stream().map(each -> canonical(each, element)).toList());
             }
@@ -451,8 +443,9 @@ final class ValueRendering {
             switch (step) {
                 case PathElement.Field(String name) -> out.append('.').append(name);
                 case PathElement.Index(int at) -> out.append('[').append(at).append(']');
+                // A key is found by what it is, and no position declares the one it stands at.
                 case PathElement.Key(Asserted key) ->
-                        out.append('[').append(show(key)).append(']');
+                        out.append('[').append(show(key, null)).append(']');
             }
         }
         return out.toString();
