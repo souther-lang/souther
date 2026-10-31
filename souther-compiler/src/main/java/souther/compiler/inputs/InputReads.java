@@ -2033,6 +2033,15 @@ public final class InputReads {
         };
     }
 
+    /**
+     * This reading, with {@code element} standing for the element the application of a closure
+     * over {@code list} that stands at {@code index} of it is handed, where the elements are
+     * code points of a string ({@link InputNumber#codePointsWalked}).
+     */
+    public InputReads handingTheCodePointAt(BindingId element, Denotation list, long index) {
+        return picking(element, new PickedAtAnIndex(list, index, true));
+    }
+
     /** This reading, with {@code name} standing for the element an index picks of a list as
      *  well as for whatever else it stands for. */
     private InputReads picking(BindingId name, PickedAtAnIndex element) {
@@ -2051,11 +2060,28 @@ public final class InputReads {
      * @param list  the list, read where the lookup stands
      * @param index the index written down
      */
-    public record PickedAtAnIndex(Denotation list, long index) {
+    public record PickedAtAnIndex(Denotation list, long index, boolean handedByAnApplication) {
 
         public PickedAtAnIndex {
             Objects.requireNonNull(list, "an element of some list");
         }
+
+        /** The element an arm opening a lookup of {@code list} at {@code index} bound. */
+        public PickedAtAnIndex(Denotation list, long index) {
+            this(list, index, false);
+        }
+    }
+
+    /**
+     * Whether this reading is of one application of a closure over the code points of a string:
+     * some name stands for the element that application is handed
+     * ({@link #handingTheCodePointAt}). What a choice in that application comes to is a question
+     * of that application's values, which a reading of a condition forks on by arm and this one
+     * does not.
+     */
+    public boolean isInsideAnApplicationOverCodePoints() {
+        return applied.picked().values().stream()
+                .anyMatch(PickedAtAnIndex::handedByAnApplication);
     }
 
     /**

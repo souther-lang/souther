@@ -88,18 +88,14 @@ class ACodePointHeldAgainstARemainderOfTheOthersIsReadAtItsIndexTest {
 
     /**
      * The check digit is read as the code point at its index against the remainder, and its
-     * lines are drawn. That a run gets through the weighed sum is not shown: the closure is
-     * applied once per code point, and its operations are not listed one by one, so the code
-     * points are left as related to a value not shown to reach every value of theirs. That is
-     * not that the run stops, which with code points of digits it never does.
+     * lines are drawn. The closure is read once per code point, at the place the code point
+     * stands at in the reversed list and with the position it is handed, so that a run gets
+     * through the weighed sum is shown.
      */
     @Test
     void theCheckIsReadAsTheCodePointAtItsIndexAgainstTheRemainder() {
         String report = report(measured(MODEL));
-        assertTrue(report.lines().filter(line -> line.contains("not read:")).allMatch(line ->
-                        line.contains("not shown to reach every value")
-                                && line.contains("String.codePoints(number))`")),
-                report);
+        assertFalse(report.contains("not read:"), report);
         assertTrue(report.contains("List.get(11, String.codePoints(number)): = 48"), report);
         assertTrue(report.contains(") + List.get(11, String.codePoints(number)): = 59"), report);
     }
@@ -181,9 +177,7 @@ class ACodePointHeldAgainstARemainderOfTheOthersIsReadAtItsIndexTest {
      * Where the format ties the code point held against the remainder to the one the remainder
      * turns on — the last two digits are one digit twice, and the first is weighed by the divisor
      * — the remainder is not every remainder at each value of the code point, and the rule is not
-     * read as relating two values apart. With the digits free it is not either, for another
-     * reason: that a run gets through the weighed sum is not shown, since the closure applied to
-     * each code point is not read one application at a time.
+     * read as relating two values apart. With the digits free it is.
      */
     @Test
     void aCodePointTheFormatTiesToTheTotalIsNotTakenApartFromIt() {
@@ -193,9 +187,155 @@ class ACodePointHeldAgainstARemainderOfTheOthersIsReadAtItsIndexTest {
         assertFalse(report(measured(tied)).contains(apart), () -> report(measured(tied)));
         assertTrue(report(measured(tied)).contains("not shown to reach every value"),
                 () -> report(measured(tied)));
-        assertFalse(report(measured(free)).contains(apart), () -> report(measured(free)));
-        assertTrue(report(measured(free)).contains("not shown to reach every value"),
-                () -> report(measured(free)));
+        assertTrue(report(measured(free)).contains(apart), () -> report(measured(free)));
+    }
+
+    /**
+     * Which code point the closure is handed at each place is read off the string's length, so
+     * where the format leaves the length open the applications are not written out and the rule
+     * is not read.
+     */
+    @Test
+    void aStringWhoseLengthTheFormatLeavesOpenIsNotWrittenOutCodePointByCodePoint() {
+        String open = report(measured(pair("[0-9]{3,5}")));
+        assertTrue(open.contains("not read:"), open);
+        assertFalse(open.contains("it relates the value here to another value rather than"
+                + " dividing"), open);
+    }
+
+    private static final String OVERFLOWS = "9223372036854775807";
+
+    /** A block answering {@code value} that first multiplies a number of the input past what an
+     *  {@code Int} holds, and never reads the product. */
+    private static String afterAnOverflow(String value) {
+        return "{ let unused = String.length(p.value) * " + OVERFLOWS + "\n " + value + " }";
+    }
+
+    /** A block answering {@code value} that first works out a sum of two written numbers. */
+    private static String afterASafeSum(String value) {
+        return "{ let unused = 1 + 1\n " + value + " }";
+    }
+
+    /**
+     * The least rule that holds a code point of a three-digit string against the remainder a
+     * total over the first two leaves: the list, the closure, the map and the divisor are each a
+     * hole to put what the case is about in. With nothing put in, the first digit, weighed by the
+     * divisor, is apart from the remainder.
+     */
+    private static String tiny(String codes, String closure, String map, String divisor) {
+        return """
+                module p
+                data Pair = String
+                    invariant String.matches("[0-9]{3}", value)
+                behavior pick : (p: Pair) -> Int
+                let digitValue (c: Int): Int =
+                    match List.get(0, String.codePoints("0")) with
+                        | Some zero -> c - zero
+                        | None -> unreachable "a one-character string has a first code point"
+                let pick (p) = {
+                    let codes = %s
+                    let weighed = %s
+                    let r = Int.floorMod(List.sum(weighed), %s)
+                    match List.get(2, codes) with
+                        | Some c -> if c + r == 55 then 1 else 0
+                        | None -> unreachable "three digits"
+                }
+                """.formatted(codes, map.formatted(closure), divisor);
+    }
+
+    private static final String CODES = "String.codePoints(p.value)";
+    private static final String CLOSURE = "(i, c) -> (if i == 0 then 7 else 1) * digitValue(c)";
+    private static final String MAP = "List.mapIndexed(%s, List.take(2, codes))";
+    private static final String DIVISOR = "7";
+    private static final String APART =
+            "it relates the value here to another value rather than dividing";
+
+    /** Whether the rule is read so that the first digit is shown apart from the remainder. */
+    private static boolean readsApart(String codes, String closure, String map, String divisor) {
+        return report(measured(tiny(codes, closure, map, divisor))).contains(APART);
+    }
+
+    /** The control every case below departs from in one place. */
+    @Test
+    void theLeastRuleOverTheCodePointsOfAStringIsRead() {
+        assertTrue(readsApart(CODES, CLOSURE, MAP, DIVISOR));
+    }
+
+    /**
+     * What a name, a block or a divisor stands for is a value, and what is worked out to reach
+     * it is worked out all the same: the list the closure is applied over, the map a name stands
+     * for and the divisor each multiply past what an {@code Int} holds beside the value they
+     * come to, and the run ends there. Where what they work out ends no run, the rule is read
+     * as it is with the value written in place.
+     */
+    @Test
+    void whatIsWorkedOutToReachAValueIsWorkedOutToo() {
+        assertFalse(readsApart(afterAnOverflow(CODES), CLOSURE, MAP, DIVISOR), "the list");
+        assertFalse(readsApart(CODES, CLOSURE, afterAnOverflow(MAP), DIVISOR), "the map");
+        assertFalse(readsApart(CODES, CLOSURE, MAP, afterAnOverflow(DIVISOR)), "the divisor");
+        assertTrue(readsApart(afterASafeSum(CODES), CLOSURE, afterASafeSum(MAP),
+                afterASafeSum(DIVISOR)));
+    }
+
+    /**
+     * That a library call answers whatever it is handed is the call's own, and not its arguments':
+     * a count that multiplies past what an {@code Int} holds ends the run, whatever the call then
+     * does with the two it comes to.
+     */
+    @Test
+    void aCallThatAnswersWhateverItIsHandedStillWorksOutItsArguments() {
+        assertTrue(readsApart(CODES, CLOSURE,
+                "List.mapIndexed(%s, List.take(" + afterASafeSum("2") + ", codes))", DIVISOR));
+        assertFalse(readsApart(CODES, CLOSURE,
+                "List.mapIndexed(%s, List.take(" + afterAnOverflow("2") + ", codes))", DIVISOR));
+    }
+
+    /** A closure over code points inside another is read at the arm its match takes too. */
+    @Test
+    void aClosureOverCodePointsInsideAnotherIsRead() {
+        String nested = "(i, c) -> (if i == 0 then 7 else 1) * (digitValue(c) + List.sum("
+                + "List.mapIndexed((j, d) -> 0 * digitValue(d), List.take(1, codes))))";
+        assertTrue(readsApart(CODES, nested, MAP, DIVISOR));
+    }
+
+    /**
+     * A remainder is worked out through the number it divides only where the divisor is a
+     * positive number written down: by one the run takes from its input, or one that is not
+     * positive, working it out may end the run on its own.
+     */
+    @Test
+    void aRemainderByADivisorThatIsNoPositiveConstantIsNotWorkedOutThroughItsDividend() {
+        for (String divisor : List.of("0 - 7", "List.length(codes)")) {
+            assertFalse(readsApart(CODES, CLOSURE, MAP, divisor), divisor);
+        }
+    }
+
+    private static String closureMatching(String zeros, String taken) {
+        return """
+                (i, c) -> (if i == 0 then 7 else 1) * (%s)""".formatted("""
+                { let zeros = %s
+                  match List.get(0, zeros) with
+                      | Some zero -> %s
+                      | None -> unreachable "a one-character string has a first code point" }"""
+                .formatted(zeros, taken));
+    }
+
+    /**
+     * A match in the closure is read at the arm a lookup in a list written down takes, and what
+     * is worked out to build that list, and the arm taken, end no run; the arm not taken is not
+     * asked. A lookup that finds nothing takes neither arm.
+     */
+    @Test
+    void aMatchIsReadAtItsArmOnlyWhereWhatDecidesItAndTheArmTakenEndNoRun() {
+        String plain = "String.codePoints(\"0\")";
+        assertTrue(readsApart(CODES, closureMatching(plain, "c - zero"), MAP, DIVISOR));
+        for (String unsafe : List.of(
+                closureMatching("{ let unused = c * " + OVERFLOWS + "\n " + plain + " }",
+                        "c - zero"),
+                closureMatching(plain, "c * " + OVERFLOWS + " - zero"),
+                closureMatching(plain, "c - zero").replace("List.get(0,", "List.get(1,"))) {
+            assertFalse(readsApart(CODES, unsafe, MAP, DIVISOR), unsafe);
+        }
     }
 
     /**
@@ -211,12 +351,9 @@ class ACodePointHeldAgainstARemainderOfTheOthersIsReadAtItsIndexTest {
         String nfc = report(measured(pair("[0-9][0-5][0-9]bb|[0-9]6[0-9]a\\\\x{301}")));
         assertFalse(nfc.contains(apart), nfc);
         assertTrue(nfc.contains("not shown to reach every value"), nfc);
-        // Read as written, no value is refused, but that a run gets through the weighed sum is not
-        // shown, the closure applied to each code point not being read one application at a time:
-        // the code point is not taken apart here either.
+        // Read as written, no value is refused, and the same format shows every remainder.
         String written = report(measured(pair("[0-9][0-5][0-9]bb|[0-9]6[0-9]ab")));
-        assertFalse(written.contains(apart), written);
-        assertTrue(written.contains("not shown to reach every value"), written);
+        assertTrue(written.contains(apart), written);
         // A dot above after a digit joins nothing, so the string is a value whose third code point
         // is the dot, and the remainder beside it five alone: whatever the code point is is asked
         // of every value, the ones read as written or not.
