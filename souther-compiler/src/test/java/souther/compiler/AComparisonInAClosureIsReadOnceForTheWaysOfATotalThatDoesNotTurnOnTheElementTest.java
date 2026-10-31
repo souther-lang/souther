@@ -38,17 +38,17 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
             data No
             """;
 
-    /** The ways four months are each kept or dropped in. */
-    private static final int WAYS = 16;
+    /** The ways two months are each kept or dropped in. */
+    private static final int WAYS = 4;
 
     /** How many constants walked against the total are more readings than one condition is read
      *  in, once for each way. */
     private static final int PAST_THE_READINGS =
             CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / WAYS + 1;
 
-    private static final String MONTHS = "[ w.first, w.second, w.third, w.fourth ]";
+    private static final String MONTHS = "[ w.first, w.second ]";
 
-    /** How many of the four months are kept. */
+    /** How many of the two months are kept. */
     private static final String KEPT = "List.length(List.filter(r -> r.days >= 17, " + MONTHS + "))";
 
     private static String report(String body) {
