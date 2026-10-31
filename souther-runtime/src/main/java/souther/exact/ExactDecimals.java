@@ -52,6 +52,10 @@ public final class ExactDecimals {
      * Whether {@code d}'s plain notation is at most {@link #MAX_SPELT_OUT_DIGITS} digits, cheaply —
      * without building the notation to measure it.
      *
+     * <p>The same answer as comparing {@link #plainNotationLength} with the limit, reached by asking
+     * {@link #hasAtMostDigits} what that length asks of the digit count: the sign and the point, and
+     * the zeros the scale stands for, are taken off the limit first.
+     *
      * <p>For a caller with no exponent notation to fall back to: a grammar that writes a number only
      * in plain notation has nothing {@link #spelledBounded} can hand it past this count, and has to
      * answer with an amount's absence instead of the amount. {@link #spelledBounded} is this same
@@ -89,9 +93,7 @@ public final class ExactDecimals {
         if (limit < 1) {
             return false;
         }
-        // Past what any decimal holds every one has at most that many, and the bit counts below are
-        // multiples of a limit that stays within a long.
-        if (limit >= MOST_DIGITS_ANY_DECIMAL_HOLDS) {
+        if (everyDecimalHasAtMost(limit)) {
             return true;
         }
         BigInteger unscaled = d.unscaledValue();
@@ -104,7 +106,18 @@ public final class ExactDecimals {
         return unscaled.abs().compareTo(BigInteger.TEN.pow(Math.toIntExact(limit))) < 0;
     }
 
-    /** Whether the bit length of {@code unscaled} alone shows it has at most {@code limit} digits. */
+    /**
+     * Whether a limit is past what any decimal has in digits. Asked before the bit counts, which
+     * are multiples of the limit and stay within a long only for a limit below it.
+     */
+    private static boolean everyDecimalHasAtMost(long limit) {
+        return limit >= MOST_DIGITS_ANY_DECIMAL_HOLDS;
+    }
+
+    /**
+     * Whether the bit length of {@code unscaled} alone shows it has at most {@code limit} digits,
+     * for a limit that {@link #everyDecimalHasAtMost} has not already settled.
+     */
     private static boolean bitsSayAtMostDigits(BigInteger unscaled, long limit) {
         long bits = unscaled.bitLength();
         // the least negative number of n bits has a magnitude of n + 1
@@ -138,7 +151,7 @@ public final class ExactDecimals {
         // Fewer zeros than digits, so the scale cannot fall out. Room past what any decimal has in
         // digits settles it without reading the digits; a value the room is not past by its bits
         // takes off the zeros it has, up to the room.
-        if (room >= MOST_DIGITS_ANY_DECIMAL_HOLDS || bitsSayAtMostDigits(d.unscaledValue(), room)) {
+        if (everyDecimalHasAtMost(room) || bitsSayAtMostDigits(d.unscaledValue(), room)) {
             return d.stripTrailingZeros();
         }
         BigInteger digits = d.unscaledValue();
