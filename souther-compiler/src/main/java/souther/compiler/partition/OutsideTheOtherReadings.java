@@ -29,6 +29,10 @@ import java.util.function.UnaryOperator;
  * out. Every row at the class is inside what this leaves, and some row that is not may be too, so
  * an empty result is a proof and a non-empty one is not.
  *
+ * <p>Not a form weighing no term either: it states nothing to take in, and a region refuses to be
+ * asked. The terms are those of other readings of one comparison, so they are positions of the same
+ * input as the region's, which is what a region requires of every term it is given.
+ *
  * <p>Not over an element or a key. A case is asked of a row under each choice of the element it is
  * about, and a region holds one position for all the elements, so denying the case there would
  * leave out a row whose chosen element is in the class while another element is in the case.
@@ -79,8 +83,9 @@ final class OutsideTheOtherReadings {
         return switch (compared.relation()) {
             case Relation.Affine(LinearForm<Quantity> form, Rel _) -> {
                 LinearForm<NumericTerm> against = WhatTheDeclarationsLeave.ofTheInput(form);
-                if (against == null || against.coefs().keySet().stream()
-                        .anyMatch(OutsideTheOtherReadings::insideAContainer)) {
+                if (against == null || against.coefs().isEmpty()
+                        || against.coefs().keySet().stream()
+                                .anyMatch(OutsideTheOtherReadings::insideAContainer)) {
                     yield region;
                 }
                 yield switch (region.assuming(against, met)) {
