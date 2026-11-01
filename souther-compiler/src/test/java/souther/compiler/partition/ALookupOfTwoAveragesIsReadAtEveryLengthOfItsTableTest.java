@@ -15,19 +15,16 @@ import java.util.TreeMap;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A lookup whose reading runs out of the readings of one condition says the figure that stopped
- * it, at every month the rule over it is left unread, and never that the rule is about a derived
- * value.
+ * A lookup of two averages is read at every length of its table or at none: whether a month is
+ * left unread does not follow where the readings of one condition ran out.
  *
- * <p>The lookup compares each row with two averages of months two filters keep. Each average is
- * read once; the ways the two filters keep their months multiply at every row, so what each row
- * costs is its own however the averages are shared, and a table of a few rows is more than one
- * condition may read.
- *
- * <p>Which lengths run out is the reading's, and known: the test says where they are so that a
- * change to them is seen, and asks what is said where a length is given up.
+ * <p>The lookup compares each row with two averages of months two filters keep. The ways the two
+ * filters keep their months multiply at every row, so the condition that compares a row with an
+ * average runs out of the readings of one condition at every length. What a fork over it is left
+ * stating is not read off what was got to before that ({@link WhatAForkTests.PartsRead}): the
+ * comparison that states it says what stopped it, and a fork of the lookup states nothing more.
  */
-class TheReportOfALookupGivenUpNamesTheFigureThatStoppedItTest {
+class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
 
     private static String source(int rows) {
         StringBuilder table = new StringBuilder("let table: List<Row> = [\n");
@@ -95,34 +92,22 @@ class TheReportOfALookupGivenUpNamesTheFigureThatStoppedItTest {
     }
 
     /**
-     * Which lengths of the table run out is a known limit, and these are where it is.
+     * The lengths between the three rows that were read and the six that were, which the
+     * comparison of a row with an average runs out of the readings of one condition at, leave no
+     * month unread either.
      *
-     * <p>Near what one condition may read, whether a length is read depends on how much each
-     * reading is charged and in what order, and it is not monotone in the length: three rows get
-     * through, four and five are given up, six get through. A change to how readings are charged
-     * moves these, and is meant to move this test with it; it is written so that the movement is
-     * seen, and not so that the lengths stay. The two given up are asked, and the two that get
-     * through are left out for what a length of this table costs to read.
-     *
-     * <p>Where a length is given up, each month is left unread at the figure that stopped it, and
-     * never as a rule about a derived value.
+     * <p>Where the parts a fork over the comparison turns on were taken from what the stopped
+     * reading got to, four and five rows left the three months of one average unread, and three
+     * and six did not.
      */
     @Test
-    void whereTheLengthsOfTheTableRunOutIsAKnownLimitAndTheFigureIsSaid() {
-        Map<Integer, Integer> monthsUnread = new TreeMap<>();
+    void noLengthOfTheTableLeavesAMonthUnreadThatAnotherLengthDoesNot() {
+        Map<Integer, List<Unread>> monthsUnread = new TreeMap<>();
         for (int rows : new int[] {4, 5}) {
-            List<Unread> left = atTheMonths(rows);
-            monthsUnread.put(rows, left.size());
-            for (Unread each : left) {
-                assertEquals(UndividedPosition.Reason.RULE_MEANING_NOT_READ, each.reason(),
-                        rows + " rows at " + each.at());
-                assertEquals(List.of(new Figure.Budget(
-                                CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION)),
-                        each.figures(), rows + " rows at " + each.at());
-            }
+            monthsUnread.put(rows, atTheMonths(rows));
         }
 
-        assertEquals(Map.of(4, 3, 5, 3), monthsUnread,
-                "rows given up, with how many of the three months are left unread");
+        assertEquals(Map.of(4, List.of(), 5, List.of()), monthsUnread,
+                "the months left unread, by the rows of the table");
     }
 }
