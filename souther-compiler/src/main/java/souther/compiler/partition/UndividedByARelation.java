@@ -4570,7 +4570,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         ClauseMeaning.Stated stated = leavingRoomAroundTheLine(rule, asked, read,
                                 inWholeSteps);
                         if (stated != null) {
-                            nodes.add(rule);
+                            // The proof is of the clause, so every rule it was written as is put
+                            // aside, and not only the ones that read near the place.
+                            for (ClauseMeaning.Parts.One each : stated.parts().leaves()) {
+                                nodes.add(new TiedOnTheWay.Rule(rule.at(), rule.worn(),
+                                        rule.clause(), each.id()));
+                            }
                             refs.computeIfAbsent(rule.at().head(), _ -> new LinkedHashSet<>())
                                     .add(new RuleRef.Invariant(stated.ref()));
                             parts.computeIfAbsent(rule.at().head(), _ -> new LinkedHashSet<>())
@@ -6337,11 +6342,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /**
          * One rule of the value at {@code at}, as a node every place it may relate is tied to.
          *
+         * <p>A rule the author joined with {@code &&} is a node of its own: two numbers a clause
+         * bounds each alone are not related by the clause, and they are by a rule that reads both.
+         *
          * @param worn   the name or declaration the rule is of
          * @param clause which of its clauses, or {@code -1} for a rule not read, which may relate
          *               anything under {@code at}
+         * @param part   which rule of the clause the author wrote, or null for a rule not read
          */
-        private record Rule(TermPath at, TypeSymbol worn, int clause) {}
+        private record Rule(TermPath at, TypeSymbol worn, int clause,
+                            PartId<RuleRef.Invariant> part) {}
 
         private final Map<Object, Object> parent = new HashMap<>();
 
@@ -7860,7 +7870,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 each -> PublishedRules.governing(each, read.rules().published()));
         if (!rules.everyRuleReached()) {
             if (nodes != null) {
-                nodes.unread(new TiedOnTheWay.Rule(here, worn, -1));
+                nodes.unread(new TiedOnTheWay.Rule(here, worn, -1, null));
             }
             return Named.UNSEEN;
         }
@@ -7871,22 +7881,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 if (nodes == null) {
                     return Named.UNSEEN;
                 }
-                nodes.unread(new TiedOnTheWay.Rule(here, worn, -1));
+                nodes.unread(new TiedOnTheWay.Rule(here, worn, -1, null));
                 out = Named.UNSEEN;
                 continue;
             }
-            for (ClauseRead reading : stated.reads()) {
-                Named says = namedBy(reading, here, place, rest, read, apart);
-                out = out.and(says);
-                if (says != Named.NOT && nodes != null) {
-                    TiedOnTheWay.Rule rule = new TiedOnTheWay.Rule(here, worn, clause);
-                    nodes.ties().add(rule);
-                    if (readsThePlace(reading, here, place, read)) {
-                        nodes.reads().add(rule);
+            for (ClauseMeaning.Parts.One part : stated.parts().leaves()) {
+                for (ClauseRead reading : part.reads()) {
+                    Named says = namedBy(reading, here, place, rest, read, apart);
+                    out = out.and(says);
+                    if (says != Named.NOT && nodes != null) {
+                        TiedOnTheWay.Rule rule =
+                                new TiedOnTheWay.Rule(here, worn, clause, part.id());
+                        nodes.ties().add(rule);
+                        if (readsThePlace(reading, here, place, read)) {
+                            nodes.reads().add(rule);
+                        }
                     }
-                }
-                if (out == Named.UNSEEN && nodes == null) {
-                    return out;
+                    if (out == Named.UNSEEN && nodes == null) {
+                        return out;
+                    }
                 }
             }
         }

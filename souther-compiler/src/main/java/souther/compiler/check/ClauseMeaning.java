@@ -113,12 +113,35 @@ public sealed interface ClauseMeaning permits ClauseMeaning.Stated, ClauseMeanin
          * ({@code ClauseHelpers.AuthoredPart#idFor}), which is the one place that may put a number
          * beside a rule; carried as a number here, every reader that wanted the name would be
          * putting one beside whichever rule it happened to be holding.
+         *
+         * <p>The places it reads are said with it, because which rules hold two numbers beside each
+         * other is a question about the rules an author joined and not about the clause they were
+         * joined into: {@code a >= 0 && b >= 0} reads two places in one clause and relates neither
+         * to the other. A part that is itself a choice, or a comparison of several numbers, is one
+         * part and reads all of them.
+         *
+         * @param id which rule of which clause this is
+         * @param reads the places of the declaration's value this rule reads, and what it reads at
+         *     each
          */
-        record One(PartId<RuleRef.Invariant> id) implements Parts {
+        record One(PartId<RuleRef.Invariant> id, Set<ClauseRead> reads) implements Parts {
 
             public One {
                 Objects.requireNonNull(id, "a rule an author wrote is some part of a clause");
+                reads = Set.copyOf(reads);
             }
+        }
+
+        /** Each rule the clause was written as, in the order it was written. */
+        default List<One> leaves() {
+            return switch (this) {
+                case One it -> List.of(it);
+                case Both it -> {
+                    List<One> out = new ArrayList<>(it.left().leaves());
+                    out.addAll(it.right().leaves());
+                    yield List.copyOf(out);
+                }
+            };
         }
 
         /** The name of every rule the clause was written as, in the order it was written. */

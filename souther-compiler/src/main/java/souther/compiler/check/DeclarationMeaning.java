@@ -150,7 +150,9 @@ public sealed interface DeclarationMeaning {
                         TermMeaning.of(typed.value()),
                         reading.fieldsRead(typed.value(), named),
                         reading.reads(typed.value(), named),
-                        each.shape().asWritten(new RuleRef.Invariant(clause)),
+                        each.shape().asWritten(new RuleRef.Invariant(clause),
+                                ClauseExpr.of(typed.value(), true),
+                                part -> reading.reads(part, named)),
                         reading.affineMeaning(typed.value(), named));
                 case TypedClause.Stopped _ -> new ClauseMeaning.Stopped(clause);
             });

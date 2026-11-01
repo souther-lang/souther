@@ -114,4 +114,27 @@ class ADayCountABoundOfItsRecordBoundsAloneDoesNotKeepTheLookupUnreadTest {
     void daysHeldBesideThePayTheAverageIsOfAreNotGivenAValueApartFromIt() {
         assertFalse(withDaysAnInt(BESIDE_THE_PAY).unanswered().isEmpty());
     }
+
+    @Test
+    void rulesJoinedInOneClauseAreReadAsTheyAreOnSeparateLines() {
+        String oneClause = PAY + """
+                data Pay = { a: Yen, days: Int }
+                    invariant a.value <= 1000000000000 && days >= 0 && days <= 31
+                """ + REST;
+
+        PartitionEvidence joined = partitionOf(oneClause);
+
+        assertEquals(List.of(), joined.unanswered());
+        assertEquals(withDaysAnInt(BOUNDED_ALONE).notRead(), joined.notRead());
+    }
+
+    @Test
+    void daysHeldBesideThePayByARuleJoinedInOneClauseAreNotGivenAValueApartFromIt() {
+        String oneClause = PAY + """
+                data Pay = { a: Yen, days: Int }
+                    invariant a.value <= 1000000000000 && days >= 0 && days <= a.value
+                """ + REST;
+
+        assertFalse(partitionOf(oneClause).unanswered().isEmpty());
+    }
 }

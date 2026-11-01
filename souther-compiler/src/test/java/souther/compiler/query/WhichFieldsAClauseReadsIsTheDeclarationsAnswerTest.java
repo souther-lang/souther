@@ -258,6 +258,29 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                 clausesSay(c, ClauseMeaning.Stated::reads));
     }
 
+    /** The places a clause reads are the places its rules read, each rule saying its own. */
+    @Test
+    void eachRuleOfAClauseSaysWhichPlacesItReads() {
+        Compilation c = started("""
+                module shop.prices exposing ( Range )
+
+                data Range = { low: Int, high: Int, cap: Int }
+                    invariant low >= 0 && low <= high && cap >= 0 && (cap >= 8 || high >= 8)
+                """);
+        PublishedDeclarationResult said = c.db().ask(new Shapes.MeaningOf(RANGE)).value();
+        DeclarationMeaning meaning = assertInstanceOf(PublishedDeclarationResult.Found.class, said,
+                "the declaration under test is published").said();
+        ClauseMeaning.Stated clause = (ClauseMeaning.Stated) ((DeclarationMeaning.Product) meaning)
+                .clauses().getFirst();
+
+        assertEquals(List.of(Set.of(values("low")), Set.of(values("low"), values("high")),
+                        Set.of(values("cap")), Set.of(values("cap"), values("high"))),
+                clause.parts().leaves().stream().map(ClauseMeaning.Parts.One::reads).toList());
+        Set<ClauseRead> together = new HashSet<>();
+        clause.parts().leaves().forEach(part -> together.addAll(part.reads()));
+        assertEquals(clause.reads(), together);
+    }
+
     private static ClauseRead values(String... steps) {
         return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.ITS_VALUES,
                 RuleKey.THE_VALUE);
