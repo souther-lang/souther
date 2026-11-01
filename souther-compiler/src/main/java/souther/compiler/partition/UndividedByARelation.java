@@ -4801,20 +4801,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (applied.isEmpty()) {
                 return null;
             }
-            List<TakenConstraint> remaining = new ArrayList<>(applied.get());
             List<OnAWay> gone = new ArrayList<>(written);
             for (OnAWay each : stated) {
                 gone.remove(each);
             }
+            List<TakenConstraint> relations = new ArrayList<>();
             for (OnAWay each : gone) {
                 if (each.relation() != null) {
-                    remaining.remove(each.relation());
+                    relations.add(each.relation());
                 } else if (each.whatStands() || each.elementsOf() != null) {
                     return null;
                 }
             }
-            remaining.removeIf(met::contains);
-            return TakenConstraint.narrowedBy(remaining, read.quantities().region());
+            return TakenConstraint.narrowedByAllBut(applied.get(), relations, met,
+                    read.quantities().region());
         }
     }
 
