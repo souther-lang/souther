@@ -2,14 +2,19 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleCitation;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a reading could not read of a condition is owed only where the condition is evaluated. A
@@ -135,7 +140,81 @@ class AStopNoRowReachesIsNotReportedAsNotReadTest {
         for (String condition : List.of(STOP, OPAQUE)) {
             String both = "if " + condition + " then (" + turnedAway(condition) + ") else " + NO;
             assertEquals(entriesOf(plain(condition)), entriesOf(both), condition);
-            assertEquals(1, citedRulesOf(both), condition);
+        }
+    }
+
+    /**
+     * Which rule stays is the one a run reaches. Two rules with the same position and the same
+     * reason are told apart by the rule cited: the same text with the first test written so that
+     * a run does reach the second rule cites both, and the text with the run turned away cites
+     * only the one a run reaches, which is among them.
+     */
+    @Test
+    void theRuleThatStaysIsOneOfTheTwoARunReaches() {
+        String turnedAway = "if t == Eom then " + NO + " else if t == Eom && " + STOP + " then "
+                + YES + " else (" + plain(STOP) + ")";
+        String reachable = turnedAway.replace("if t == Eom then", "if t == Net15 then");
+        Set<RuleCitation> both = citedBy(reachable);
+        Set<RuleCitation> stays = citedBy(turnedAway);
+        assertEquals(2, both.size(), "the control owes both rules");
+        assertEquals(1, stays.size());
+        assertTrue(both.containsAll(stays));
+    }
+
+    /**
+     * And where the two stand at different positions, the positions say it: the reached rule's
+     * are all that remain, in whichever order the two are written.
+     */
+    @Test
+    void theRuleThatStaysIsTheOneARunReachesWhateverItIsAbout() {
+        for (List<String> pair : List.of(List.of(OPAQUE, STOP), List.of(STOP, OPAQUE))) {
+            String reachedFirst = "if " + pair.get(0) + " then (" + turnedAway(pair.get(1))
+                    + ") else " + NO;
+            String reachedLast = "if t == Eom then " + NO + " else if t == Eom && " + pair.get(1)
+                    + " then " + YES + " else (" + plain(pair.get(0)) + ")";
+            assertEquals(entriesOf(plain(pair.get(0))), entriesOf(reachedFirst), pair.toString());
+            assertEquals(entriesOf(plain(pair.get(0))), entriesOf(reachedLast), pair.toString());
+        }
+    }
+
+    /** A condition behind a test inside a closure is behind it as much as one outside. */
+    @Test
+    void aPartBehindATestInsideAClosureOwesNothing() {
+        assertNothingOwed(turnedAway("List.any(n -> t == Eom && " + OPAQUE + ", [1])"));
+        assertNothingOwed(turnedAway("List.any(n -> t == Eom && " + STOP + ", [1])"));
+    }
+
+    /**
+     * A test written inside a closure is a statement about each application of it, and a fork's
+     * part is asked only of the way every application shares. So the part behind such a test is
+     * owed what it is owed alone — the question is kept where the proof is not made — while a
+     * stopped comparison there is read on each application and owes nothing.
+     *
+     * <p>This pins the boundary and not a wish: a fork part inside a closure that only the
+     * closure's own test turns away is not shown unevaluated, which is the safe side.
+     */
+    @Test
+    void aTestInsideAClosureTurnsAwayAComparisonButKeepsAForksQuestion() {
+        String turnedAwayByTheClosure = "if t == Eom then " + NO + " else if List.any(n -> t == Eom"
+                + " && %s, [1]) then " + YES + " else " + NO;
+        assertNothingOwed(turnedAwayByTheClosure.formatted(STOP));
+        List<String> alone = entriesOf(plain("List.any(n -> t == Eom && " + OPAQUE + ", [1])"));
+        assertFalse(alone.isEmpty());
+        assertEquals(alone, entriesOf(turnedAwayByTheClosure.formatted(OPAQUE)));
+    }
+
+    /** The right of an {@code ||} is evaluated where its left came out false, and only there. */
+    @Test
+    void thePartAfterAnOrIsOwedOnlyWhereTheLeftCanComeOutFalse() {
+        for (String condition : List.of(OPAQUE, STOP)) {
+            assertNothingOwed("if t == Eom then (if t == Eom || " + condition + " then " + YES
+                    + " else " + NO + ") else " + NO);
+            List<String> alone = entriesOf(plain(condition));
+            assertFalse(alone.isEmpty(), condition);
+            assertEquals(alone, entriesOf("if t == Eom || " + condition + " then " + YES
+                    + " else " + NO), condition);
+            assertEquals(alone, entriesOf("if t == Eom then " + NO + " else if t == Eom || "
+                    + condition + " then " + YES + " else " + NO), condition);
         }
     }
 
@@ -155,9 +234,11 @@ class AStopNoRowReachesIsNotReportedAsNotReadTest {
                 .sorted().toList();
     }
 
-    private static long citedRulesOf(String body) {
+    /** The rules the entries are filed under, as the model names them. */
+    private static Set<RuleCitation> citedBy(String body) {
         return evidenceOf(body).notRead().stream()
-                .flatMap(each -> each.cited().stream()).distinct().count();
+                .flatMap(each -> each.cited().stream())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     private static PartitionEvidence evidenceOf(String body) {

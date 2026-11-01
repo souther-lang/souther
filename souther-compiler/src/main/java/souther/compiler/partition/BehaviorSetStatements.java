@@ -760,11 +760,9 @@ public final class BehaviorSetStatements {
                 // A part the conditions before it keep from being evaluated is owed nothing: the
                 // fork is reached where it is not, and a question about what it would have said of
                 // a row has no row to be about.
-                if (!atom.mayBeEvaluated(reading)) {
-                    continue;
-                }
                 List<Denotation> parts = ComparisonReadings.leftUnread(atom, read).stream()
                         .filter(part -> !dependencies.part(part.value(), part.at()))
+                        .filter(part -> each.mayEvaluate(part.value(), reading))
                         .toList();
                 if (!parts.isEmpty()) {
                     unread.add(new Unread(atom.at(), parts, atom.stoppedFor()));
