@@ -48,9 +48,15 @@ import java.util.function.Function;
  * them rendering alike are not one position ({@link souther.compiler.check.Term}) — so an order
  * taken off the renderings would weigh one of such a pair twice and the other never.
  */
-public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
+public final class CanonicalForm<A> {
 
-    public CanonicalForm {
+    private final Map<A, ExactRatio> coefs;
+
+    /** Worked out on the first question and kept; zero until then, and a form whose hash is zero
+     *  works it out again, which is no wrong answer. */
+    private int hash;
+
+    public CanonicalForm(Map<A, ExactRatio> coefs) {
         if (coefs == null || coefs.isEmpty()) {
             throw new IllegalArgumentException("a form names at least one position");
         }
@@ -71,7 +77,33 @@ public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
         // Held in no order at all, which is what this says it is. Every walk of these positions
         // asks for one ({@link #entriesIn}) and nothing takes them as they come, which is a rule
         // rather than a habit — AFormIsWalkedThroughTheOrderItsPositionsDecideTest.
-        coefs = Map.copyOf(coefs);
+        this.coefs = Map.copyOf(coefs);
+    }
+
+    public Map<A, ExactRatio> coefs() {
+        return coefs;
+    }
+
+    /**
+     * Forms that weigh the same positions the same are one form. The hash is asked first, since a
+     * rule is compared with every rule read before it and almost all of them are another form: it is
+     * held, and settles those without reading the positions of either.
+     */
+    @Override
+    public boolean equals(Object other) {
+        return this == other
+                || (other instanceof CanonicalForm<?> it && hashCode() == it.hashCode()
+                        && coefs.equals(it.coefs));
+    }
+
+    @Override
+    public int hashCode() {
+        int held = hash;
+        if (held == 0) {
+            held = coefs.hashCode();
+            hash = held;
+        }
+        return held;
     }
 
     /**
