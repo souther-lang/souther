@@ -28,6 +28,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.OrderedAffineBoundary;
+import souther.compiler.partition.OutsideTheOtherReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.CoverageSites;
@@ -2213,7 +2214,12 @@ final class Coverages {
             @Override
             public SearchOutcomes search(Criterion criterion, String label,
                                          Optional<Boolean> answeredAs) {
-                return looked(criterion, label, UnaryOperator.identity(),
+                // A row at a class is in no case another reading decides in, so the region it is
+                // looked for in is outside each of them, and a class they cover has no row.
+                UnaryOperator<SearchRegion> narrowing = answeredAs.isPresent()
+                        ? OutsideTheOtherReadings.of(otherReadings.cases())
+                        : UnaryOperator.identity();
+                return looked(criterion, label, narrowing,
                         answeredAs.map(holds -> toRows.forAClass(holds, otherReadings))
                                 .orElse(toRows)).outcomes();
             }

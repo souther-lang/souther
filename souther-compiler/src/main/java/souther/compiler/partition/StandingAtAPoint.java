@@ -387,6 +387,20 @@ public final class StandingAtAPoint {
             return new OtherReadings(making);
         }
 
+        /**
+         * Where each of these readings decides, as the propositions {@link #askedOfRows} asks of a
+         * row: a row at one of them is a row of that reading and at no class of this one.
+         */
+        public List<Proposition> cases() {
+            return making.get().stream()
+                    .map(each -> each.border().origin())
+                    .filter(LineOrigin.ComparisonOrigin.class::isInstance)
+                    .map(LineOrigin.ComparisonOrigin.class::cast)
+                    .flatMap(each -> each.part().stream())
+                    .map(WhereAPartDecides::decides)
+                    .toList();
+        }
+
         private List<WhereAPartDecides.AskedOfRows> askedOfRows() {
             if (asked == null) {
                 asked = making.get().stream()
