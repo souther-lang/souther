@@ -5005,11 +5005,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * How many elements of one container {@code sides} are read off together, each being a
      * number of the element a walk's step is handed, or of the elements before it for what the
-     * walk kept: the element the step is handed, and one before it where a side kept an end.
-     * Every number of the handed element is that element's, however many sides there are.
+     * walk kept.
+     *
+     * <p>A side that kept an end is the elements before the one its step is handed, so a walk
+     * reads two: that one, and one before it. The other sides are numbers of the element the
+     * step is handed, which the region holds as one number wherever a walk hands it, so they
+     * add none. Sides that kept an end may belong to different walks, each handed its own
+     * element, so each is counted apart.
      */
     private static int elementsReadOff(List<Side> sides) {
-        return sides.stream().anyMatch(side -> side.kept() != null) ? 2 : 1;
+        long walks = sides.stream().filter(side -> side.kept() != null).count();
+        return walks == 0 ? 1 : (int) (2 * walks);
     }
 
     /**
@@ -5026,6 +5032,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>Every such statement of the container is counted, whether or not it is about a term: an
      * element meeting one that is not still has to be there, and meets it beside the others.
+     * Each statement is given an element of its own, which is enough and not necessary: one
+     * element may meet several, and the count then asks for more elements than a row needs. A
+     * way refused for that is not shown to be unreachable; it is one this does not prove.
      *
      * @param elementsRead how many of the container's elements the terms are read off together
      */
@@ -5134,7 +5143,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                InputReading read) {
         Source source = sourceOf(number, read);
         TermOrders orders = read.quantities().ordersOf(number);
-        if (source == null || orders == null || (!alone && source.named())
+        if (source == null || orders == null || orders.answered() == null
+                || (!alone && source.named())
                 || namedDownTo(number.subjectPath(), deepest, read, null) != Named.NOT) {
             return false;
         }
@@ -7484,6 +7494,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * a run the arithmetic shows it fills ({@link SearchRegion#wholeRunOf}), each whole number of
      * the run, or every value of a run of more than one on an order with no step. One where
      * nothing of that is shown.
+     *
+     * <p>What is counted is values of the place, and what is wanted is whole elements. The two
+     * agree where the values are what the rules leave the place: the set the rules there give is
+     * complete ({@link AdmissibleSet.Completeness.Complete}), or the run is one the region shows
+     * the place fills ({@link SearchRegion#wholeRunOf}). Each such value is then taken by some
+     * whole element. They do not say that values of two places are taken together, which is why
+     * several keys are counted only where no rule relates them ({@link #keysRelated}).
      */
     private static int differingAt(TermPath key, Position at, InputReading read, int wanted) {
         AdmissibleSet admitted = at.admitted();
@@ -7515,18 +7532,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (orders.answered().spacingBetweenValues() != Granularity.DISCRETE) {
             return run.holdsAValue() && !onePoint(run) ? wanted : 1;
         }
-        if (run.min() == null || run.max() == null
-                || !(run.min().at() instanceof Count least) || !(run.max().at() instanceof Count most)
-                || !(least.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger>(BigInteger low))
-                || !(most.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger high))) {
-            return run.holdsAValue() ? wanted : 1;
-        }
-        BigInteger from = run.min().inclusive() || !least.exactly().isWhole() ? low
-                : low.add(BigInteger.ONE);
-        BigInteger to = run.max().inclusive() || !most.exactly().isWhole() ? high
-                : high.subtract(BigInteger.ONE);
-        BigInteger many = to.subtract(from).add(BigInteger.ONE);
-        return many.signum() <= 0 ? 1 : many.min(BigInteger.valueOf(wanted)).intValue();
+        BigInteger many = WholeNumberRuns.between(run.min(), run.max()).count();
+        return many == null ? wanted
+                : many.signum() <= 0 ? 1 : many.min(BigInteger.valueOf(wanted)).intValue();
     }
 
     /** Whether {@code run} holds one value and no other: both ends at it, held. */
@@ -7535,10 +7543,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 && run.max().inclusive() && run.min().at().equals(run.max().at());
     }
 
-    /** Whether a value of {@code type} with no rule on it is one of values without end: a whole
+    /** Whether the values of {@code type}, as far as its rules leave them, have no end: a whole
      *  number, a decimal, a ratio or a string. */
     private static boolean withoutEnd(Type type, InputReading read) {
-        return TypeOps.base(type, read.rules().inners()) instanceof Type.Prim prim
+        RuleReadingSource rules = read.rules();
+        return TypeView.shapeOf(type, rules.inners(), rules.symbols(), rules.kinds(), rules.sums())
+                instanceof Shape.Scalar(Type.Prim prim)
                 && (prim == Type.Prim.INT || prim == Type.Prim.STRING
                         || prim == Type.Prim.DECIMAL || prim == Type.Prim.RATIONAL);
     }
@@ -7565,10 +7575,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return (int) Math.min(counted, Integer.MAX_VALUE);
         }
         boolean unwritten = !(TypeOps.outermost(each, rules.inners()) instanceof TypeOps.Unwrapped);
-        return unwritten && TypeView.shapeOf(each, rules.inners(), rules.symbols(), rules.kinds(),
-                rules.sums()) instanceof Shape.Scalar(Type.Prim prim)
-                && (prim == Type.Prim.INT || prim == Type.Prim.STRING
-                        || prim == Type.Prim.DECIMAL || prim == Type.Prim.RATIONAL) ? -1 : 1;
+        return unwritten && withoutEnd(each, read) ? -1 : 1;
     }
 
     /**

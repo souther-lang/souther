@@ -417,6 +417,11 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
         assertFalse(both.contains(NOT_SHOWN_TO_REACH), both);
         assertTrue(both.contains("no IN point is owed at lines[*].discount = 0 (comparison@17:"),
                 both);
+        // The comparison inside the walk draws its line at the seed and nowhere else, so no
+        // point of it is owed a row, as of the walk used once. The lists with the greatest
+        // discount in another element are therefore written as rows below, and not owed.
+        assertTrue(both.lines().noneMatch(line -> line.contains("whether a row is at")
+                && line.contains("(comparison@17:")), both);
         assertFalse(both.contains("not composed against: a condition that is neither a comparison"
                 + " nor a combination of them"), both);
         String toTheRoles = report(usedTwice("0.10m", "Rate(0.0m)"));
@@ -483,7 +488,7 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
                                                         * listPrice.value
                                                         * (1.0m - discount.value))) == 0
                         """, ""))) {
-            String report = report(lines);
+            String report = readingReport(lines);
             assertFalse(report.contains(NOT_SHOWN_TO_REACH), () -> lines + "\n" + report);
         }
     }
@@ -523,7 +528,7 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
                             invariant value >= 1 && value <= 2
                         data Line = { product: Product, discount: Rate }
                         """, "invariant List.allDistinctBy(.product, value)"))) {
-            String report = report(lines);
+            String report = readingReport(lines);
             String again = theWalkAgain(lines);
             assertTrue(report.lines().anyMatch(line -> line.contains(NOT_SHOWN_TO_REACH)
                     && line.contains(again)), () -> again + "\n" + lines + "\n" + report);
@@ -546,11 +551,11 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
                     if List.fold((w, l) -> %s, 0, lines) <= 3 then Within else Needs
                 """;
         String apart = "invariant List.allDistinctBy(.product, value)";
-        String tied = report(keyed.formatted("product", apart, GREATER));
+        String tied = readingReport(keyed.formatted("product", apart, GREATER));
         assertTrue(aComparisonIsNotShown(tied), tied);
-        String apartAlone = report(keyed.formatted("5", apart, GREATER));
+        String apartAlone = readingReport(keyed.formatted("5", apart, GREATER));
         assertFalse(aComparisonIsNotShown(apartAlone), apartAlone);
-        String tiedAlone = report(keyed.formatted("product", "", GREATER));
+        String tiedAlone = readingReport(keyed.formatted("product", "", GREATER));
         assertFalse(aComparisonIsNotShown(tiedAlone), tiedAlone);
     }
 
@@ -650,10 +655,11 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     }
 
     /**
-     * Every statement some element meets is an element of its own, whether it is about the
+     * Every statement some element meets is given an element of its own, whether it is about the
      * discount or about another number of the line: the elements the walk is handed and kept an
-     * end of, and one for each statement. Four are held at four, and at three the way is
-     * not shown to be taken beside them.
+     * end of, and one for each statement. That is enough to write the way beside them and is not
+     * necessary, since one element may meet both statements. So at four the way is read, and at
+     * three it is not shown to be taken beside them, which does not say that it is not.
      */
     @Test
     void anElementIsCountedForEachStatementSomeElementMeets() {
@@ -688,10 +694,10 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
                     then Within
                     else Needs { worst = worstOf(lines) }
                 """;
-        String four = report(model.formatted(4));
+        String four = readingReport(model.formatted(4));
         assertFalse(four.lines().anyMatch(line -> line.contains(NOT_SHOWN_TO_REACH)
                 && line.contains("worstOf@")), four);
-        String three = report(model.formatted(3));
+        String three = readingReport(model.formatted(3));
         assertTrue(three.lines().anyMatch(line -> line.contains(NOT_SHOWN_TO_REACH)
                 && line.contains("worstOf@")), three);
     }
@@ -949,6 +955,22 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
 
     private static String report(String model) {
         return reportOf(compiled(model));
+    }
+
+    /**
+     * What the report says of the reading alone, with no row measured and no value composed at a
+     * line. Whether a comparison is read is the model's own, derived at every level, and a test
+     * that asks nothing of the rows leaves out the search that writes them, which is the greater
+     * part of what a model with several lists to fill costs.
+     */
+    private static String readingReport(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                        .map(each -> each.diagnostic().code().toString()).toList(),
+                () -> "the source compiles: " + model);
+        return reportOf(compilation);
     }
 
     private static String reportOf(Compilation compilation) {
