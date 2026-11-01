@@ -1625,12 +1625,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 WhatNamesStandFor.in(atom.at(), read))) {
             case WhatAForkTests.PartsRead.Complete(var parts) ->
                     new Atom(atom, unowned(parts, read, here), stoppedFor);
-            // A comparison states the atom, and its own reading was stopped at a figure: it is the
-            // comparison's to say so, at every place it names, which are all the places a part of
-            // the atom names. What the answer turns on is not read off a proposition the figure
-            // cut, whose parts depend on where it was cut.
+            // A comparison states the atom, and its own reading was stopped at a figure: the
+            // comparison reader says so, at the places the comparison names. The fork is offered
+            // no part, because the parts of a proposition the figure cut depend on where it was
+            // cut, and so would what the fork says.
             case WhatAForkTests.PartsRead.Incomplete _ when whole != null ->
-                    new Atom(atom, List.of(), stoppedFor);
+                    new Atom(atom, List.of(), List.of());
             // Nothing states the atom, so there is no reader to leave it to, and which of its
             // parts nobody answers for is what the figure took away. The atom is left whole to
             // the fork, with what stopped its answer.
