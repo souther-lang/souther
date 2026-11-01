@@ -220,8 +220,8 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      * ({@link #keptBy}, {@link #kept}), so that the tables hold a bounded number of bytes and not only
      * a bounded number of entries — at most a few megabytes a table with every slot full of numbers
      * that wide. Two operands far apart in scale can have a sum of any number of digits, and that sum
-     * is worked out at every ask. An answer that is not a value is not kept either: that the host had
-     * no room is a fact about the run that asked, and not about the operands.
+     * is worked out at every ask. Of the answers that are no value, only the one that says there is
+     * none is kept ({@link #kept}).
      */
     private static final HeldByPair<ExactRatio, ExactRatio, ExactAnswer<ExactRatio>> SUMS =
             new HeldByPair<>(11);
@@ -248,8 +248,20 @@ public final class ExactRatio implements Comparable<ExactRatio> {
         return ratio.parts.inLongs() || ratio.parts.widestBits() <= LARGEST_KEPT_BITS;
     }
 
-    private static boolean kept(ExactAnswer<ExactRatio> answer) {
-        return answer instanceof ExactAnswer.Held<ExactRatio> held && keptBy(held.value());
+    /**
+     * Whether an answer is one the tables keep: one that is a function of the operands alone, and of
+     * a size to keep. A value is, where it is no wider than the operands may be. That a value has no
+     * representation is a fact about the number, so it is too. That the host had no room for it is a
+     * fact about the run that asked, which another run with more room answers, so it is never kept.
+     */
+    static boolean kept(ExactAnswer<ExactRatio> answer) {
+        return switch (answer) {
+            case ExactAnswer.Held<ExactRatio> held -> keptBy(held.value());
+            case ExactAnswer.Unheld<ExactRatio> unheld -> switch (unheld.why()) {
+                case NO_REPRESENTATION_EXISTS -> true;
+                case MORE_ROOM_COULD_ANSWER -> false;
+            };
+        };
     }
 
     /**

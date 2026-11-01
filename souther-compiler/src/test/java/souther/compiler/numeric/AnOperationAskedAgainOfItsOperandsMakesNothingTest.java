@@ -1,20 +1,22 @@
 package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
+import souther.exact.ExactFailures;
 import souther.test.Allocated;
 
 import java.math.BigInteger;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An operation asked again of the operands it was asked of hands out the answer it gave, and makes
  * nothing for it: not the answer, not the ratio, not the parts. So does an order. What is kept is
- * only what is no wider than a bound and is a value, so an answer past the bound or none is worked
- * out again.
+ * only what the operands alone decide and is no wider than a bound, so an answer past the bound, or
+ * one that says the run had no room, is worked out again.
  */
 class AnOperationAskedAgainOfItsOperandsMakesNothingTest {
 
@@ -177,14 +179,26 @@ class AnOperationAskedAgainOfItsOperandsMakesNothingTest {
                 "a sum of a thousand digits is not kept");
     }
 
-    /** An answer that is no value is not kept: that the host had no room is a fact about the run that
-     *  asked, and the answer is asked again. */
+    /** That a product has no representation is a fact about the operands, and asked again makes
+     *  nothing either. */
     @Test
-    void anAnswerThatIsNoValueIsAskedAgain() {
+    void anAnswerThatHasNoRepresentationAskedAgainMakesNothing() {
         ExactRatio huge = ExactRatio.tenTo(Long.MAX_VALUE);
         assertEquals(ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS), huge.times(huge));
-        assertTrue(allocatedAskingAgainEqual(() -> huge.times(huge)) >= ASKS,
-                "an answer that is no value is not kept");
+        makesNothing("a product with no representation", () -> huge.times(huge));
+    }
+
+    /** What is kept is what is a function of the operands and of a size to keep. That the host had
+     *  no room is a fact about the run that asked, which a run with more room answers, and no sum or
+     *  product this compiler asks reaches it — so it is asked of the rule itself. */
+    @Test
+    void whatIsKeptIsWhatTheOperandsAloneDecide() {
+        assertTrue(ExactRatio.kept(ExactAnswer.held(THIRD)));
+        assertTrue(ExactRatio.kept(ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS)));
+        assertFalse(ExactRatio.kept(ExactAnswer.unheld(UnheldNumber.of(ExactFailures.room()))),
+                "a run short of room is not an answer for the operands");
+        assertFalse(ExactRatio.kept(ExactAnswer.held(ExactRatio.ONE.plus(ExactRatio.tenTo(-1_000)).orNull())),
+                "a value past the size kept");
     }
 
     private static long allocatedAskingAgainEqual(Supplier<Object> asking) {
