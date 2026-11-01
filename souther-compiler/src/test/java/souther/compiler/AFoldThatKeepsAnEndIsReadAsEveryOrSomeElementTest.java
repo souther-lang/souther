@@ -466,6 +466,8 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     void anElementMeetingTheWayIsWrittenBesideTheOnesTheEndWasKeptOf() {
         for (String lines : List.of(
                 worstAboveATenth(LINE, "invariant List.length(value) >= 1"),
+                worstAboveATenth(LINE, "invariant List.length(value) >= 1"
+                        + " && List.length(value) <= 3"),
                 worstAboveATenth(LINE_WITH_A_PRODUCT, "invariant List.allDistinctBy(.product, value)"),
                 worstAboveATenth("""
                         data Product = Licence | Support | Training | Hosting
@@ -501,6 +503,7 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     void noElementIsWrittenBesideThemWhereNoneIsShownToMeetTheWay() {
         for (String lines : List.of(
                 worstAboveATenth(LINE, "invariant List.length(value) <= 2"),
+                worstAboveATenth(LINE_WITH_THREE_BITS_OF_WHICH_ONE_IS_SET, THREE_KEYS_APART),
                 worstAboveATenth("""
                         data Product = Licence | Support
                         data Line = { product: Product, discount: Rate }
@@ -570,6 +573,140 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     }
 
     private static final String LINE = "data Line = { discount: Rate }\n";
+
+    /**
+     * The lists the proof rests on are lists: rows whose elements are the ones the proof writes
+     * beside the elements the walk is handed — one holding the greatest discount before the
+     * element a discount is compared with, and one after it — run against the model's rules and
+     * its answer. A row the rules refuse, or the answer does not follow, is an error of the
+     * compilation.
+     */
+    @Test
+    void theListsTheProofRestsOnAreListsTheModelTakes() {
+        String twice = usedTwice("0.10m", "worstOf(lines)") + """
+
+                example approval
+                    | "the greatest last" :
+                        ([ Line { discount = Rate(0.05m) }, Line { discount = Rate(0.2m) } ])
+                        -> Needs { role = Manager, worst = Rate(0.2m) }
+                    | "the greatest first" :
+                        ([ Line { discount = Rate(0.2m) }, Line { discount = Rate(0.05m) } ])
+                        -> Needs { role = Manager, worst = Rate(0.2m) }
+                    | "none above a tenth" : ([ Line { discount = Rate(0.05m) } ]) -> Within
+                """;
+        assertEquals(List.of(), errorsOf(twice));
+        // And the rows are run: an answer other than the model's is refused.
+        assertFalse(errorsOf(twice.replace("worst = Rate(0.2m) }\n    | \"the greatest first\"",
+                "worst = Rate(0.05m) }\n    | \"the greatest first\"")).isEmpty());
+        String three = worstAboveATenth(LINE, "invariant List.length(value) >= 1"
+                + " && List.length(value) <= 3") + """
+
+                example approval
+                    | "three, the greatest in the middle" :
+                        (Lines([ Line { discount = Rate(0.2m) }, Line { discount = Rate(0.3m) },
+                                 Line { discount = Rate(0.05m) } ]))
+                        -> Needs { worst = Rate(0.3m) }
+                """;
+        assertEquals(List.of(), errorsOf(three));
+        String apart = worstAboveATenth(LINE_WITH_A_PRODUCT,
+                "invariant List.allDistinctBy(.product, value)") + """
+
+                example approval
+                    | "three products, the greatest first" :
+                        (Lines([ Line { product = "A", discount = Rate(0.3m) },
+                                 Line { product = "B", discount = Rate(0.05m) },
+                                 Line { product = "C", discount = Rate(0.2m) } ]))
+                        -> Needs { worst = Rate(0.3m) }
+                """;
+        assertEquals(List.of(), errorsOf(apart));
+    }
+
+    /**
+     * And the list the proof must not count is no list: of three bits of which exactly one is set
+     * no two elements differ at all three, though each bit takes two values.
+     */
+    @Test
+    void noListOfTwoElementsIsApartAtThreeBitsOfWhichOneIsSet() {
+        String model = worstAboveATenth(LINE_WITH_THREE_BITS_OF_WHICH_ONE_IS_SET,
+                THREE_KEYS_APART);
+        String first = "Line { a = 1, b = 0, c = 0, discount = Rate(0.2m) }";
+        String second = "Line { a = 0, b = 1, c = 0, discount = Rate(0.05m) }";
+        String row = """
+
+                example approval
+                    | "the elements" : (Lines([ %s ])) -> Needs { worst = Rate(0.2m) }
+                """;
+        assertEquals(List.of(), errorsOf(model + row.formatted(first)));
+        // The fixture cannot be built: the second element repeats a bit of the first.
+        assertEquals(List.of("E1903"), errorsOf(model + row.formatted(first + ", " + second)));
+    }
+
+    private static List<String> errorsOf(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation.errors().stream().map(each -> each.diagnostic().code().toString())
+                .toList();
+    }
+
+    /**
+     * Every statement some element meets is an element of its own, whether it is about the
+     * discount or about another number of the line: the elements the walk is handed and kept an
+     * end of, and one for each statement. Four are held at four, and at three the way is
+     * not shown to be taken beside them.
+     */
+    @Test
+    void anElementIsCountedForEachStatementSomeElementMeets() {
+        String model = """
+                module example.quoting
+
+                data Rate = Decimal
+                    invariant value >= 0.0m && value <= 0.5m
+
+                data Line = { quantity: Int, discount: Rate }
+                    invariant quantity >= 0 && quantity <= 5
+
+                data Lines = List<Line>
+                    invariant List.length(value) >= 1 && List.length(value) <= %d
+
+                data Within
+                data Needs = { worst: Rate }
+
+                behavior approval : (lines: Lines) -> Within | Needs
+                    constructs Needs, Rate
+
+                let worstOf (Lines(lines)): Rate =
+                    List.fold((w, l) -> if Decimal.compare(l.discount.value, w.value) > 0
+                                        then l.discount else w,
+                              Rate(0.0m), lines)
+
+                let someAreBig (Lines(lines)): Bool = List.any(l -> l.quantity > 2, lines)
+
+                let approval (lines) =
+                    if Decimal.compare(worstOf(lines).value, 0.10m) <= 0
+                            || Bool.not(someAreBig(lines))
+                    then Within
+                    else Needs { worst = worstOf(lines) }
+                """;
+        String four = report(model.formatted(4));
+        assertFalse(four.lines().anyMatch(line -> line.contains(NOT_SHOWN_TO_REACH)
+                && line.contains("worstOf@")), four);
+        String three = report(model.formatted(3));
+        assertTrue(three.lines().anyMatch(line -> line.contains(NOT_SHOWN_TO_REACH)
+                && line.contains("worstOf@")), three);
+    }
+
+    /** Each of three bits takes two values, and no two elements differ at all three. */
+    private static final String LINE_WITH_THREE_BITS_OF_WHICH_ONE_IS_SET = """
+            data Line = { a: Int, b: Int, c: Int, discount: Rate }
+                invariant a >= 0 && a <= 1 && b >= 0 && b <= 1 && c >= 0 && c <= 1
+                invariant a + b + c == 1
+            """;
+
+    private static final String THREE_KEYS_APART = """
+            invariant List.allDistinctBy(.a, value)
+                invariant List.allDistinctBy(.b, value)
+                invariant List.allDistinctBy(.c, value)""";
 
     private static final String LINE_WITH_A_PRODUCT =
             "data Line = { product: String, discount: Rate }\n";

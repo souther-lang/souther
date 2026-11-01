@@ -1338,32 +1338,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * pair, whether it was worked out and what it came to: each term asked of is asked beside
      * every other, and the terms are those of the one relation.
      *
-     * @param region the rows the way lets through, which hold the container a statement other
-     *               elements meet is about ({@link #metByOtherElements})
+     * @param conditions what the way states that ties anything: {@link WayRead#tying}
      */
     private WhatARelationLeavesUndivided.Independence apartOnTheWay(List<OnAWay> conditions,
                                                                    List<Source> sources,
                                                                    InputReading read,
-                                                                   Set<Object> ignoring,
-                                                                   SearchRegion region) {
+                                                                   Set<Object> ignoring) {
         TiedOnTheWay tied = TiedOnTheWay.of(conditions, read, ignoring);
-        // A statement other elements meet ties none of the sides, where each is a number of
-        // elements a further element leaves as they were, and the container holds the elements
-        // of every side beside those others.
-        List<NumericTerm.FromOnePosition> readOff = new ArrayList<>();
-        int elementsRead = 0;
-        for (Side each : sides) {
-            readOff.add(each.readOff());
-            elementsRead += elementsReadOff(each);
-        }
-        List<OnAWay> tying = new ArrayList<>(conditions);
-        if (!readOff.contains(null)) {
-            tying.removeAll(metByOtherElements(readOff, elementsRead, conditions, conditions,
-                    region, read));
-        }
         List<Set<Object>> tiedTo = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
-            tiedTo.add(tiedTo(i, tied, tying, sources, read, ignoring));
+            tiedTo.add(tiedTo(i, tied, conditions, sources, read, ignoring));
         }
         int count = sides.size();
         BitSet worked = new BitSet(count * count);
@@ -1398,7 +1382,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 sources, carriers, entire.along(), entire.declared(), entire.conditions(), null,
                 entire.stating(), true, entire.narrowing(), false);
         WhatARelationLeavesUndivided.Independence independent =
-                apartOnTheWay(entire.conditions(), sources, read, Set.of(), entire.along());
+                apartOnTheWay(entire.tying(), sources, read, Set.of());
         WhatARelationLeavesUndivided.Operations operations = operationsOverTheSides(read,
                 entire.conditions(), true, totalsWrittenByOneElement(terms));
         Map<NumericTerm, EachWayItComesOut> out = new LinkedHashMap<>();
@@ -2289,7 +2273,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // the pair is asked whether the way ties them as well as whether the declarations do.
         Set<Object> roomy = room.rules();
         WhatARelationLeavesUndivided.Independence onTheWay =
-                apartOnTheWay(beside.conditions(), sources, read, roomy, beside.along());
+                apartOnTheWay(beside.tying(), sources, read, roomy);
         // A code point of the string the remainder's form is of stands apart from the form where
         // the format shows the form leaves every remainder whatever that code point is, and the
         // way states nothing of it that holds a string back: then all the way ties the two by is
@@ -4491,12 +4475,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param left      what the way states, the parts of a date it leaves alone marked
      * @param stating   what the way states of each side
      * @param narrowing what the run narrows
+     * @param others    the statements other elements meet, which say nothing of the sides
      */
     private record WayRead(SearchRegion along, SearchRegion declared, LeftToTheCalendar left,
-                           List<List<OnAWay>> stating, List<TakenConstraint> narrowing) {
+                           List<List<OnAWay>> stating, List<TakenConstraint> narrowing,
+                           OthersMeet others) {
 
         List<OnAWay> conditions() {
             return left.conditions();
+        }
+
+        /** What the way states that can tie one side to another: all of it but what other
+         *  elements meet. */
+        List<OnAWay> tying() {
+            if (others.ofAllSides().isEmpty()) {
+                return left.conditions();
+            }
+            List<OnAWay> out = new ArrayList<>(left.conditions());
+            out.removeAll(others.ofAllSides());
+            return out;
         }
     }
 
@@ -4518,9 +4515,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         SearchRegion declared = answered.leaving(read.quantities().region());
         SearchRegion along = offItsLine ? declared : rest != null ? rest : region;
         LeftToTheCalendar left = leavingPartsAlone(stated, read);
+        OthersMeet others = heldWhole ? othersMeet(left.conditions(), along, read)
+                : OthersMeet.NONE;
         return new WayRead(along, declared, left,
-                stating(sources, left.conditions(), heldWhole, read, along),
-                answered.narrowing());
+                stating(sources, left.conditions(), heldWhole, read, others),
+                answered.narrowing(), others);
     }
 
     /**
@@ -4937,15 +4936,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * What the way states of each side, asked once and read by both readings.
      *
-     * <p>Without a statement that some element of a container meets something, where an element
-     * the side is not read off can be the one that does ({@link #metByAnotherElement}): the
-     * number of one element, and the end a walk kept of the elements before the one its step is
-     * handed, which are the elements before and that one.
-     *
-     * @param region the rows the way lets through
+     * <p>Without the statements that some element of a container meets something where an
+     * element the side is not read off can be the one that does ({@link OthersMeet}).
      */
     private List<List<OnAWay>> stating(List<Source> sources, List<OnAWay> conditions,
-                                       boolean heldWhole, InputReading read, SearchRegion region) {
+                                       boolean heldWhole, InputReading read, OthersMeet others) {
         List<List<OnAWay>> out = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
@@ -4962,26 +4957,66 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         ? statingAnythingOfItsParameter(term, conditions, read)
                         : statingAnythingOf(term, conditions));
             }
-            if (each.readOff() != null) {
-                stated.removeAll(metByOtherElements(List.of(each.readOff()), elementsReadOff(each),
-                        List.copyOf(stated), conditions, region, read));
-            }
+            stated.removeAll(others.ofSide(i));
             out.add(List.copyOf(stated));
         }
         return out;
     }
 
-    /** How many elements of a container {@code side} is read off together: the one a number is
-     *  of, or the one a walk's step is handed and an element before it, for what it kept. */
-    private static int elementsReadOff(Side side) {
-        return side.kept() != null ? 2 : 1;
+    /**
+     * The statements of a way that elements other than the ones the sides are read off can meet,
+     * which say nothing of the sides: worked out once for a way, and read by what the way states
+     * of each side ({@link #stating}) and by what ties the sides to one another
+     * ({@link #apartOnTheWay}), so that the two never take a statement out on different grounds.
+     *
+     * @param ofEachSide the statements that say nothing of that side's number, none for a side
+     *                   that is read off no number of an element
+     * @param ofAllSides the statements that say nothing of any side, where every side is read
+     *                   off a number of an element, and none otherwise: what ties two sides is
+     *                   not a statement meant for one
+     */
+    private record OthersMeet(List<Set<OnAWay>> ofEachSide, Set<OnAWay> ofAllSides) {
+
+        static final OthersMeet NONE = new OthersMeet(List.of(), Set.of());
+
+        Set<OnAWay> ofSide(int at) {
+            return at < ofEachSide.size() ? ofEachSide.get(at) : Set.of();
+        }
+    }
+
+    private OthersMeet othersMeet(List<OnAWay> conditions, SearchRegion region,
+                                  InputReading read) {
+        if (conditions.stream().noneMatch(each -> each.bySome() != null)) {
+            return OthersMeet.NONE;
+        }
+        List<Set<OnAWay>> ofEachSide = new ArrayList<>();
+        List<NumericTerm.FromOnePosition> numbers = new ArrayList<>();
+        for (Side each : sides) {
+            NumericTerm.FromOnePosition number = each.readOff();
+            numbers.add(number);
+            ofEachSide.add(number == null ? Set.of() : metByOtherElements(List.of(number),
+                    elementsReadOff(List.of(each)), conditions, region, read));
+        }
+        Set<OnAWay> ofAllSides = numbers.contains(null) ? Set.of()
+                : metByOtherElements(numbers, elementsReadOff(sides), conditions, region, read);
+        return new OthersMeet(ofEachSide, ofAllSides);
     }
 
     /**
-     * Those of {@code candidates} that state some element of a container meets something, where
-     * each of {@code terms} is a number of an element of that container and other elements can be
-     * the ones that meet them ({@link #metByAnotherElement}) — every such statement of a
-     * container, or none of them.
+     * How many elements of one container {@code sides} are read off together, each being a
+     * number of the element a walk's step is handed, or of the elements before it for what the
+     * walk kept: the element the step is handed, and one before it where a side kept an end.
+     * Every number of the handed element is that element's, however many sides there are.
+     */
+    private static int elementsReadOff(List<Side> sides) {
+        return sides.stream().anyMatch(side -> side.kept() != null) ? 2 : 1;
+    }
+
+    /**
+     * The statements of {@code conditions} that some element of a container meets, where each of
+     * {@code terms} is a number of an element of that container and other elements can be the
+     * ones that meet them ({@link #metByAnotherElement}) — every such statement of a container,
+     * or none of them.
      *
      * <p>A row holding the elements {@code terms} are read off at any values, with an element
      * meeting each such statement after them, meets them all and leaves each term where it was:
@@ -4989,15 +5024,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * element after them is neither. So the statements say nothing of the terms where the
      * container is held at as many as that, which a rule of the container may keep it from.
      *
-     * @param elementsRead how many of the container's elements the terms are read off together,
-     *                     or more
+     * <p>Every such statement of the container is counted, whether or not it is about a term: an
+     * element meeting one that is not still has to be there, and meets it beside the others.
+     *
+     * @param elementsRead how many of the container's elements the terms are read off together
      */
     private static Set<OnAWay> metByOtherElements(List<NumericTerm.FromOnePosition> terms,
-                                                  int elementsRead, List<OnAWay> candidates,
-                                                  List<OnAWay> conditions, SearchRegion region,
-                                                  InputReading read) {
+                                                  int elementsRead, List<OnAWay> conditions,
+                                                  SearchRegion region, InputReading read) {
         Map<TermPath, List<OnAWay>> met = new LinkedHashMap<>();
-        for (OnAWay each : candidates) {
+        for (OnAWay each : conditions) {
             if (each.bySome() != null && terms.stream().allMatch(term -> term.placesReadOff()
                     .stream().allMatch(place -> place.isAtOrUnder(each.elementsOf().element())))) {
                 met.computeIfAbsent(each.elementsOf(), _ -> new ArrayList<>()).add(each);
@@ -5006,10 +5042,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Set<OnAWay> out = new LinkedHashSet<>();
         for (Map.Entry<TermPath, List<OnAWay>> container : met.entrySet()) {
             List<OnAWay> some = container.getValue();
+            int needed = elementsRead + some.size();
             NumericDomain.Bounds held = howManyAreHeld(container.getKey(), read, region, false,
-                    elementsRead + some.size());
+                    needed);
             if (held != null && held.meet(new NumericDomain.Bounds(
-                    Endpoint.inclusive(Count.of(elementsRead + some.size())), null)).holdsAValue()
+                    Endpoint.inclusive(Count.of(needed)), null)).holdsAValue()
                     && some.stream().allMatch(each ->
                             metByAnotherElement(each, conditions, region, read))) {
                 out.addAll(some);
@@ -7355,8 +7392,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * values that differ as the place it ends at is shown to take, and the fewest of those. One
      * where a run is not shown that, since a list of one element is apart at every run.
      *
-     * <p>Each value a place takes is taken by some element, so elements at values that differ
-     * there are a row. Which values the element's other places take beside them is another
+     * <p>Each key takes the values the rules leave it as a place, and each of them is taken by
+     * some whole element; where there are several keys, they have to be unrelated to one another
+     * ({@link #keysRelated}). Which values the element's other places take beside them is another
      * question ({@link #keptApartBeside}). A run the rules keep apart at the element itself is
      * not counted here.
      */
@@ -7374,7 +7412,29 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             out = Math.min(out, differingAt(key, keyAt, read, wanted));
         }
-        return Math.max(out, 1);
+        return keysRelated(keys, read) ? 1 : Math.max(out, 1);
+    }
+
+    /**
+     * Whether a rule relates two of {@code keys}, or one sits in another.
+     *
+     * <p>Elements apart at one key need only the values that key takes, each of which is taken
+     * by a whole element. Apart at several, a value of each key is chosen for each element, and
+     * that is a row only where no rule holds one key beside another: the fewest values any one
+     * key takes is then how many elements are apart at all of them. Where a rule relates them it
+     * is fewer, and the values each takes do not say how many. Three bits of which exactly one
+     * is set take two values each, and no two elements differ at all three.
+     */
+    private static boolean keysRelated(List<TermPath> keys, InputReading read) {
+        for (int one = 0; one < keys.size(); one++) {
+            for (int other = one + 1; other < keys.size(); other++) {
+                if (overlap(keys.get(one), keys.get(other))
+                        || tiedByARule(keys.get(one), keys.get(other), read)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
