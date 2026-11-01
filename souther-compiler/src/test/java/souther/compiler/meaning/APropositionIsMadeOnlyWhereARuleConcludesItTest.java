@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.WhatWasCompiled;
 
+import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -52,6 +53,27 @@ class APropositionIsMadeOnlyWhereARuleConcludesItTest {
                 WhatWasCompiled.callersOf(MeaningsOfABody.Meaning.class, "<init>"),
                 "a meaning made elsewhere can pair a proposition with a derivation it is not the"
                         + " conclusion of");
+    }
+
+    /**
+     * A conjunction, a disjunction and a statement read where an operation answers are made only
+     * by joining what they hold, which is what lets a reader that changes none of their parts hand
+     * one back as it is ({@link WhereEachLineDecides#with}): made anywhere else, one could hold
+     * its parts unjoined, and making it again would give another.
+     */
+    @Test
+    void whatJoinsPartsIsMadeOnlyByItsJoining() {
+        for (Class<?> joined : List.of(Proposition.All.class, Proposition.Any.class,
+                Proposition.WhereItAnswers.class)) {
+            Set<String> elsewhere = new TreeSet<>(WhatWasCompiled.callersOf(joined, "<init>"));
+            assertTrue(elsewhere.remove(Proposition.class.getName()),
+                    "the joining makes " + joined.getSimpleName()
+                            + ", and the census sees nobody making one");
+            // Its own constructors, one handing the other what the record holds.
+            elsewhere.remove(joined.getName());
+            assertEquals(Set.of(), elsewhere,
+                    joined.getSimpleName() + " made elsewhere than by its joining");
+        }
     }
 
     /** And the rules do build them, so the census above counted something. */

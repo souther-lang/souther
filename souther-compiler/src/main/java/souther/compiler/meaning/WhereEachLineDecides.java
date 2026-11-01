@@ -1308,7 +1308,7 @@ public final class WhereEachLineDecides {
     }
 
     /** Whether {@code leaf} is {@code part}, held or denied. */
-    private static boolean standsAs(Proposition leaf, Proposition part) {
+    static boolean standsAs(Proposition leaf, Proposition part) {
         return leaf.getClass() == part.getClass() && held(leaf).spelling().equals(part.spelling());
     }
 
@@ -1823,8 +1823,13 @@ public final class WhereEachLineDecides {
      * <p>Inside a quantifier too, where the part is not about the element it chose: there it is
      * the same thing of the same row. Where it may be about that element it is said of another
      * element, which the part does not move.
+     *
+     * <p>A part of the statement the part does not stand in is handed back as it is, which is
+     * what making it again of the same parts would give: a conjunction, a disjunction and a
+     * statement read where an operation answers are each made only by joining what they hold
+     * ({@link Proposition#all}, {@link Proposition#any}, {@link Proposition#whereItAnswers}).
      */
-    private static Proposition with(Proposition stated, Proposition part, boolean holds) {
+    static Proposition with(Proposition stated, Proposition part, boolean holds) {
         return new ComingOut(part, holds, new IdentityHashMap<>()).with(stated);
     }
 
