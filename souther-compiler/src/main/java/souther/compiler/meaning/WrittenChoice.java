@@ -47,21 +47,31 @@ public record WrittenChoice(SourceConstructOrigin origin, List<ExpansionLineage.
      * <p>Told by what the document publishes a choice by (the construct and the sites between),
      * so two choices it tells apart are two here. A call the caller handed in is no part of a
      * choice ({@link #of}), so a supplied site here is a mistake and not an order.
+     *
+     * <p>By the site and not by what was expanded there, because a site the source wrote expands
+     * one thing: a call is of one function, a name stands for one block. Two steps at one site that
+     * expand different things would break that, and are refused rather than put together.
      */
     public static Comparator<WrittenChoice> inASteadyOrder() {
-        Comparator<ExpansionSite> sites = (one, other) -> ExpansionSite.inASteadyOrder()
-                .compare(direct(one), direct(other));
         return Comparator.comparing(WrittenChoice::origin, SourceConstructOrigin.inASteadyOrder())
-                .thenComparing(choice -> choice.within().stream().map(ExpansionLineage.Step::at)
-                        .toList(), (one, other) -> {
-                            for (int at = 0; at < Math.min(one.size(), other.size()); at++) {
-                                int order = sites.compare(one.get(at), other.get(at));
-                                if (order != 0) {
-                                    return order;
-                                }
-                            }
-                            return Integer.compare(one.size(), other.size());
-                        });
+                .thenComparing(WrittenChoice::within, WrittenChoice::inTheOrderCalled);
+    }
+
+    private static int inTheOrderCalled(List<ExpansionLineage.Step> one,
+                                        List<ExpansionLineage.Step> other) {
+        for (int at = 0; at < Math.min(one.size(), other.size()); at++) {
+            int order = ExpansionSite.inASteadyOrder()
+                    .compare(direct(one.get(at).at()), direct(other.get(at).at()));
+            if (order != 0) {
+                return order;
+            }
+            if (!one.get(at).expanded().equals(other.get(at).expanded())) {
+                throw new IllegalStateException("one site the source wrote expands one thing, and"
+                        + " this expands " + one.get(at).expanded() + " and "
+                        + other.get(at).expanded() + ": " + one.get(at).at());
+            }
+        }
+        return Integer.compare(one.size(), other.size());
     }
 
     private static ExpansionSite.Direct direct(ExpansionSite site) {

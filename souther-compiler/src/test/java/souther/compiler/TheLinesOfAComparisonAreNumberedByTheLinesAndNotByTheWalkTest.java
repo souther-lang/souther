@@ -2,7 +2,9 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleRef;
 import souther.compiler.partition.AuthoredLine;
+import souther.compiler.partition.LineOrigin;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.BorderObligationPointAssessment;
@@ -117,15 +119,15 @@ class TheLinesOfAComparisonAreNumberedByTheLinesAndNotByTheWalkTest {
     @Test
     void theOrderOfTheLinesOfAComparisonIsTotalAndAntisymmetric() {
         for (String source : List.of(CLAMPED, MANY_ARMS)) {
-            Map<String, List<AuthoredLine>> linesOf = new LinkedHashMap<>();
+            Map<RuleRef.Comparison, List<AuthoredLine>> linesOf = new LinkedHashMap<>();
             readingsOf(source).values().forEach(readings -> readings.forEach(reading -> {
-                if (reading.border().origin() instanceof
-                        souther.compiler.partition.LineOrigin.ComparisonOrigin comparison) {
-                    linesOf.computeIfAbsent(comparison.rule().toString(), _ -> new ArrayList<>())
+                if (reading.border().origin() instanceof LineOrigin.ComparisonOrigin comparison) {
+                    linesOf.computeIfAbsent(comparison.rule(), _ -> new ArrayList<>())
                             .add(reading.border().origin().authoredLine());
                 }
             }));
-            linesOf.forEach((comparison, lines) -> {
+            linesOf.forEach((rule, lines) -> {
+                String comparison = rule.toString();
                 List<AuthoredLine> distinct = lines.stream().distinct().toList();
                 for (AuthoredLine one : distinct) {
                     for (AuthoredLine other : distinct) {

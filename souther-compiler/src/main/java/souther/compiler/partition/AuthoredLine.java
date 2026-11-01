@@ -128,10 +128,19 @@ public record AuthoredLine(WhichLine which, LineFacts facts,
         };
     }
 
-    /** Which way the value a line wrote belongs, or nothing where the rule orders nothing. */
+    /**
+     * Which way the value a line wrote belongs: nothing where the rule orders nothing, then below,
+     * then above. Spelled out, so that the order of the lines is a statement of this and does not
+     * move with the order the words of an enumeration are declared in.
+     */
     private static int sideOf(LineFacts facts) {
-        return facts.claim() instanceof ComparisonClaim.Cut cut
-                ? 1 + cut.valueBelongs().ordinal() : 0;
+        return switch (facts.claim()) {
+            case ComparisonClaim.Singled _ -> 0;
+            case ComparisonClaim.Cut cut -> switch (cut.valueBelongs()) {
+                case BELOW -> 1;
+                case ABOVE -> 2;
+            };
+        };
     }
 
     /**
