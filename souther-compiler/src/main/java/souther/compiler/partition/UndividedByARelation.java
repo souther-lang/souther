@@ -4782,7 +4782,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * by taking that one out of the list. Whatever else the list holds stays, whatever the
      * statements left say of it: the order of a value a case is held out of, the container held
      * to an element. The cases a way requires are not in the list, which holds what was taken
-     * into the region and not what the way requires ({@link Requirements}).
+     * into the region and not what the way requires ({@link Requirements}). Nor is what a run
+     * got past working out when that left no input: the region did not take it in either.
      *
      * <p>Package-private for the test that asks it what a region leaves once statements are
      * taken away, which no reading of a model asks apart from the rest of the way.
