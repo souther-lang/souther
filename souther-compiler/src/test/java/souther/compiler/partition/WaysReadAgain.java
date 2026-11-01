@@ -4,6 +4,8 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
@@ -36,6 +38,9 @@ final class WaysReadAgain {
     /** An element of the list {@code xs}, which two conditions on a way may each ask of a
      *  different element. */
     static final TermPath AN_ELEMENT = TermPath.of("xs").element();
+
+    /** A number the relation does not read. */
+    static final TermPath Z = TermPath.of("z");
 
     /** How many {@code Bool}s the met choices ask of, each asked by several. */
     private static final int TRUTHS = 16;
@@ -70,11 +75,71 @@ final class WaysReadAgain {
 
     /** {@code way} read again for the relation, its choices the conditions of several ways on it. */
     static AWayReadForARelation.ReadAgain readAgain(List<OnTheWay> way) {
+        return readAgain(way, NOTHING_DECLARED);
+    }
+
+    /** The same where a rule of the declarations ties {@code tied} to {@code x}. */
+    static AWayReadForARelation.ReadAgain readAgainTying(List<OnTheWay> way, TermPath tied) {
+        return readAgain(way, new AWayReadForARelation.Declarations() {
+            @Override
+            public boolean tie(TermPath one, TermPath other) {
+                return NOTHING_DECLARED.tie(one, other)
+                        || (one.equals(X) && other.equals(tied))
+                        || (one.equals(tied) && other.equals(X));
+            }
+
+            @Override
+            public boolean nameNothingAt(TermPath at) {
+                return !at.equals(tied) && !at.equals(X);
+            }
+
+            @Override
+            public NumericDomain.Bounds leaveEveryValueBetween(NumericTerm term) {
+                return null;
+            }
+
+            @Override
+            public boolean leaveAValueOf(TypeSymbol leaf) {
+                return true;
+            }
+        });
+    }
+
+    /** The same where the declarations leave {@code z} every value from nought to a hundred. */
+    static AWayReadForARelation.ReadAgain readAgainLeavingZ(List<OnTheWay> way) {
+        return readAgain(way, new AWayReadForARelation.Declarations() {
+            @Override
+            public boolean tie(TermPath one, TermPath other) {
+                return NOTHING_DECLARED.tie(one, other);
+            }
+
+            @Override
+            public boolean nameNothingAt(TermPath at) {
+                return true;
+            }
+
+            @Override
+            public NumericDomain.Bounds leaveEveryValueBetween(NumericTerm term) {
+                return term.equals(new NumericTerm.ValueOf(Z))
+                        ? new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+                                Endpoint.inclusive(Count.of(100)))
+                        : null;
+            }
+
+            @Override
+            public boolean leaveAValueOf(TypeSymbol leaf) {
+                return true;
+            }
+        });
+    }
+
+    private static AWayReadForARelation.ReadAgain readAgain(
+            List<OnTheWay> way, AWayReadForARelation.Declarations declarations) {
         return AWayReadForARelation.of(new Reachability.Ways.Whole(
                         way.stream().filter(OnTheWay::splitsTheWay).toList(),
                         CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG, List.of(),
                         new Reachability.ReadFrom(new WayToTheBorder(way), REGION)),
-                Set.of(X, Y, AN_ELEMENT), NOTHING_DECLARED);
+                Set.of(X, Y, AN_ELEMENT), declarations);
     }
 
     /** {@code count} choices of two truths each, every truth asked to hold, numbered from
@@ -138,6 +203,11 @@ final class WaysReadAgain {
                 new LinearForm<>(ExactRatio.of(-threshold), weights), rel)));
     }
 
+    /** {@code weight * z rel threshold}, asked of the number the relation does not read. */
+    static OnTheWay z(long weight, Rel rel, long threshold) {
+        return number(Z, weight, rel, threshold);
+    }
+
     /** {@code weight * xs[*] rel threshold}, asked of an element the relation reads. */
     static OnTheWay anElement(long weight, Rel rel, long threshold) {
         return number(AN_ELEMENT, weight, rel, threshold);
@@ -171,8 +241,8 @@ final class WaysReadAgain {
         Compilation compilation = Compilation.ofSource("""
                 module m
                 data Yes
-                behavior f : (x: Int, y: Int, xs: List<Int>) -> Yes
-                let f (x, y, xs) = Yes
+                behavior f : (x: Int, y: Int, xs: List<Int>, z: Int) -> Yes
+                let f (x, y, xs, z) = Yes
                 """, "Main");
         return compilation.db().ask(new Adequacy.Inputs("m")).value().get("f")
                 .reading(RuleReadings.of(compilation, "m")).quantities().region();

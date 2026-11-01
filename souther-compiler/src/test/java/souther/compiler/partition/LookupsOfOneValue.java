@@ -33,7 +33,7 @@ final class LookupsOfOneValue {
                 invariant e.value <= 1000000000000
             data Window = { first: Pay, second: Pay, third: Pay }
             data Row = { grade: Int, lowerBound: Yen }
-            data Decision = { grade: Int }
+            %s
             let table: List<Row> = [
             %s ]
             let totalOf (p: Pay): Yen = p.a + p.b + p.c + p.d + p.e
@@ -48,10 +48,10 @@ final class LookupsOfOneValue {
             data NotRequired = { reasons: List<Int> }
                 invariant List.length(reasons) >= 1
             let blockers (current: Decision, w: Window, computed: Int): List<Int> =
-                [ 2 | Int.abs(computed - current.grade) < 2 ]
+                [ 2 | Int.abs(computed - %s) < 2 ]
 
             behavior f : (current: Decision, w: Window) -> Decision | NotRequired
-                constructs Decision, Row, Yen%s
+                constructs Decision, Row, Yen%s%s
             let f (current, w) = {
                 let average = averageOf(monthsOf(w))
                 %s
@@ -69,11 +69,11 @@ final class LookupsOfOneValue {
                 let computed = gradeRowFor(average).grade
                     if NotRequired { reasons = blockers(current, w, computed) } as unchanged
                     then unchanged
-                    else Decision { grade = gradeRowFor(average).grade }""", ", NotRequired"),
+                    else Decision { grade = GRADE }""", ", NotRequired"),
 
         /** The lookup with nothing before it. */
         NOT_TESTED("""
-                Decision { grade = gradeRowFor(average).grade }""", "");
+                Decision { grade = GRADE }""", "");
 
         private final String text;
         private final String alsoConstructs;
@@ -84,19 +84,60 @@ final class LookupsOfOneValue {
         }
     }
 
+    /** What the grade of a decision is: any whole number, or one of so many grades. */
+    enum Grade {
+
+        /** Any whole number. */
+        UNBOUNDED("data Decision = { grade: Int }", "current.grade", "%s", ""),
+
+        /** One grade for each row of the table, as a grade of social insurance is: a grade two
+         *  or more from any one row's is one of them, where there are five or more, and none is
+         *  two or more from every row's. */
+        ONE_FOR_EACH_ROW("""
+                data Grade = Int
+                    invariant value >= 1 && value <= ROWS
+                data Decision = { grade: Grade }""", "current.grade.value", "Grade(%s)", ", Grade"),
+
+        /** One of three grades: no grade is two or more from the middle row's. */
+        ONE_OF_THREE("""
+                data Grade = Int
+                    invariant value >= 1 && value <= 3
+                data Decision = { grade: Grade }""", "current.grade.value", "Grade(%s)", ", Grade");
+
+        private final String declared;
+        private final String readOfTheCurrent;
+        private final String built;
+        private final String alsoConstructs;
+
+        Grade(String declared, String readOfTheCurrent, String built, String alsoConstructs) {
+            this.declared = declared;
+            this.readOfTheCurrent = readOfTheCurrent;
+            this.built = built;
+            this.alsoConstructs = alsoConstructs;
+        }
+    }
+
     private static final Pattern A_POINT_OF_THE_LOOKUP =
             Pattern.compile("read as f/.*: = (\\S+) in gradeRowFor");
 
     private LookupsOfOneValue() {}
 
     /** The model with {@code body} after the average, over a table of {@code rows} grades a
-     *  thousand apart. */
+     *  thousand apart, a decision's grade any whole number. */
     static String model(Body body, int rows) {
+        return model(body, Grade.UNBOUNDED, rows);
+    }
+
+    /** The same, a decision's grade what {@code grade} says. */
+    static String model(Body body, Grade grade, int rows) {
         String table = IntStream.range(0, rows)
                 .mapToObj(each -> "    Row { grade = %d, lowerBound = Yen(%d) }"
                         .formatted(each + 1, each * 1000))
                 .collect(Collectors.joining(",\n"));
-        return SOURCE.formatted(table, body.alsoConstructs, body.text);
+        return SOURCE.formatted(grade.declared.replace("ROWS", String.valueOf(rows)), table,
+                grade.readOfTheCurrent,
+                body.alsoConstructs, grade.alsoConstructs,
+                body.text.replace("GRADE", grade.built.formatted("gradeRowFor(average).grade")));
     }
 
     /** The values of the average the lookup's borders are at, as the report of {@code source}

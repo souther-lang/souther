@@ -29,4 +29,29 @@ class ChoicesThatPartitionOneValueAreCountedByTheWaysThatHoldTogetherTest {
         assertFalse(withNothingBefore.isEmpty(), "the lookup has borders to compare");
         assertEquals(withNothingBefore, LookupsOfOneValue.bordersOfTheLookup(model));
     }
+
+    /**
+     * The same where the grade compared with is one of a grade for each row: what each row asks
+     * of it is a grade two or more from the row's, which some grade is for every row, and no
+     * grade is for every row at once, nor for every row above or below the one taken. So each row
+     * is met by a grade of its own and by no one grade.
+     */
+    @Test
+    void aLookupAfterAnIfOverAGradeForEachRowIsRead() {
+        assertEquals(List.of(), LookupsOfOneValue.unread(LookupsOfOneValue.model(
+                LookupsOfOneValue.Body.TESTED_AGAIN, LookupsOfOneValue.Grade.ONE_FOR_EACH_ROW,
+                5)));
+    }
+
+    /**
+     * Control: where the grade is one of three, no grade is two or more from the middle row's,
+     * so no row past the {@code if} has the average in the middle row's run, and the lookup after
+     * it is not read as reaching every value.
+     */
+    @Test
+    void aLookupAfterAnIfNoGradeGetsPastForSomeRowIsNotRead() {
+        assertFalse(LookupsOfOneValue.unread(LookupsOfOneValue.model(
+                LookupsOfOneValue.Body.TESTED_AGAIN, LookupsOfOneValue.Grade.ONE_OF_THREE, 3))
+                .isEmpty());
+    }
 }

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
@@ -72,6 +73,18 @@ class AWayReadAgainAsksOnlyTheWaysOfItsChoicesThatHoldTogetherTest {
         return oneOf(at, runs);
     }
 
+    /** A choice parting a number at each of {@link #LINES}, asking apart of each run that the
+     *  truth {@code c} holds where the run is numbered evenly and not where it is not. */
+    private static OnTheWay partingAskingOneTruth(int at, Bound number) {
+        List<List<OnTheWay>> runs = new ArrayList<>();
+        for (int run = 0; run <= LINES; run++) {
+            List<OnTheWay> asked = new ArrayList<>(theRun(run, number, LINES));
+            asked.add(truth("c", run % 2 == 0));
+            runs.add(asked);
+        }
+        return oneOf(at, runs);
+    }
+
     /** The lines either side of the run numbered {@code run} of those {@code lines} lines leave. */
     private static List<OnTheWay> theRun(int run, Bound number, int lines) {
         List<OnTheWay> out = new ArrayList<>();
@@ -102,6 +115,22 @@ class AWayReadAgainAsksOnlyTheWaysOfItsChoicesThatHoldTogetherTest {
                 () -> "the ways were not more than a way is looked along with: "
                         + again.stoppedAt());
         assertTrue(again.as().isPresent(), "and the way is read as less for the relation");
+    }
+
+    /**
+     * Two choices parting {@code x} by so many lines that every run of one taken in beside every
+     * run of the other is more than a way's choices are looked at with: each run is taken in
+     * beside the runs of its own line alone, so the looking stops short of that figure.
+     */
+    @Test
+    void choicesPartingOneNumberByManyLinesAreLookedAtLineByLine() {
+        int lines = CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT.maximum() / 20;
+        AWayReadForARelation.ReadAgain again = WaysReadAgain.readAgain(List.of(
+                parting(1, WaysReadAgain::x, lines), parting(2, WaysReadAgain::x, lines)));
+
+        assertFalse(again.stoppedAt().contains(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT),
+                () -> "the alternatives looked at were fewer than the figure: "
+                        + again.stoppedAt());
     }
 
     /** The same where the lines are written only inside a choice in each alternative. */
@@ -144,12 +173,17 @@ class AWayReadAgainAsksOnlyTheWaysOfItsChoicesThatHoldTogetherTest {
         assertTrue(again.as().isPresent(), "and the way is read as less for the relation");
     }
 
-    /** Control: parting {@code x} and {@code y}, every run of one holds with every run of the
-     *  other, and the ways are the product, past what a way is looked along with. */
+    /**
+     * Control: parting {@code x} and {@code y}, every run of one holds with every run of the
+     * other, and the ways are the product. Each asks apart of the one truth {@code c}, held at
+     * the even runs and not at the odd, which only a walk answers: the ways looked along are more
+     * than a way is.
+     */
     @Test
     void choicesPartingTwoNumbersAreAskedAlongTheProductOfTheirRuns() {
-        AWayReadForARelation.ReadAgain again = WaysReadAgain.readAgain(
-                List.of(parting(1, WaysReadAgain::x), parting(2, WaysReadAgain::y)));
+        AWayReadForARelation.ReadAgain again = WaysReadAgain.readAgain(List.of(
+                partingAskingOneTruth(1, WaysReadAgain::x),
+                partingAskingOneTruth(2, WaysReadAgain::y)));
 
         assertTrue(again.as().isEmpty(), () -> "nothing is read as less: " + again.as());
         assertTrue(again.stoppedAt().contains(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG),
@@ -208,6 +242,62 @@ class AWayReadAgainAsksOnlyTheWaysOfItsChoicesThatHoldTogetherTest {
                         List.of(x(1, Rel.LT, 10), truth("u", true))))));
 
         assertTrue(again.as().isPresent(), () -> "read as less: " + again.stoppedAt());
+    }
+
+    /**
+     * Under {@code !t} and {@code (0 <= x < 20 && t || 0 <= x < 10 && u || 10 <= x < 20 && v)},
+     * no value meets the first alternative apart, and no one way met holds every {@code x} it
+     * leaves: the two others do between them, each with a value of its own.
+     */
+    @Test
+    void aWayNoValueMeetsApartIsReadWhereTheWaysMetHoldItsValuesBetweenThem() {
+        AWayReadForARelation.ReadAgain again = WaysReadAgain.readAgain(List.of(
+                truth("t", false),
+                oneOf(1, List.of(
+                        List.of(x(1, Rel.GE, 0), x(1, Rel.LT, 20), truth("t", true)),
+                        List.of(x(1, Rel.GE, 0), x(1, Rel.LT, 10), truth("u", true)),
+                        List.of(x(1, Rel.GE, 10), x(1, Rel.LT, 20), truth("v", true))))));
+
+        assertTrue(again.as().isPresent(), () -> "read as less: " + again.stoppedAt());
+    }
+
+    /**
+     * Under {@code (x <= 0 && z <= 10 || x > 0 && z >= 20)} each alternative is met by a value of
+     * {@code z} of its own where the declarations leave {@code z} every value from nought to a
+     * hundred, its bounds given values with no walk: read as less. Where they are not shown to
+     * leave it any, no value is shown, and nothing is read as less.
+     */
+    @Test
+    void aWayOfBoundsIsMetOnlyByAValueTheDeclarationsLeave() {
+        List<OnTheWay> way = List.of(oneOf(1, List.of(
+                List.of(x(1, Rel.LE, 0), WaysReadAgain.z(1, Rel.LE, 10)),
+                List.of(x(1, Rel.GT, 0), WaysReadAgain.z(1, Rel.GE, 20)))));
+
+        AWayReadForARelation.ReadAgain left = WaysReadAgain.readAgainLeavingZ(way);
+        AWayReadForARelation.ReadAgain notLeft = WaysReadAgain.readAgain(way);
+
+        assertTrue(left.as().isPresent(), () -> "left values, read as less: " + left.stoppedAt());
+        assertEquals(Optional.empty(), notLeft.as(), "left none, read as it is");
+    }
+
+    /**
+     * Under {@code (x <= 0 && t || x > 0 && !t)}, read as less where nothing ties {@code t} to
+     * {@code x}: each alternative is met by a value of its own, and between them they leave
+     * {@code x} every value. Where a rule ties the two, which {@code t} a row holds turns on its
+     * {@code x}, the truths bear on the relation, and nothing is read as less.
+     */
+    @Test
+    void aWayIsReadAsLessOnlyWhereWhatItAsksApartIsTiedToNothingTheRelationReads() {
+        List<OnTheWay> way = List.of(oneOf(1, List.of(
+                List.of(x(1, Rel.LE, 0), truth("t", true)),
+                List.of(x(1, Rel.GT, 0), truth("t", false)))));
+
+        AWayReadForARelation.ReadAgain apart = WaysReadAgain.readAgain(way);
+        AWayReadForARelation.ReadAgain tied =
+                WaysReadAgain.readAgainTying(way, TermPath.of("t"));
+
+        assertTrue(apart.as().isPresent(), () -> "apart, read as less: " + apart.stoppedAt());
+        assertEquals(Optional.empty(), tied.as(), "tied, read as it is");
     }
 
     /**

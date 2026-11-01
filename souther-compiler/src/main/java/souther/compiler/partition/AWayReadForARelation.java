@@ -306,12 +306,53 @@ final class AWayReadForARelation {
         }
         List<OnTheWay> together = new ArrayList<>(apartOf(stated));
         read.stream().filter(ChoiceRead::leftOut).forEach(one -> together.addAll(one.toMeet()));
+        WaysFound found = new WaysFound(bearingOf(stated), each);
         for (Part part : partsApart(together, each)) {
-            if (!part.met(stated)) {
+            if (!part.met(stated, found)) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * The ways of some of the choices asked apart that may hold together, found once for each
+     * list of them and asked of by every part they are in
+     * ({@link AWayReadForARelation#heldTogether}). Which ways
+     * hold together turns on what the choices and the way ask of the relation, which is the same
+     * in every part, and not on what a part asks apart.
+     */
+    private final class WaysFound {
+
+        private final List<OnTheWay> bearingTaken;
+        private final Map<ChoiceRead, Integer> numbered = new IdentityHashMap<>();
+        private final Map<List<Integer>, List<TakenTogether>> found = new HashMap<>();
+        private final FormsRead forms = new FormsRead();
+
+        WaysFound(List<OnTheWay> bearingTaken, List<ChoiceRead> asked) {
+            this.bearingTaken = bearingTaken;
+            for (ChoiceRead each : asked) {
+                numbered.put(each, numbered.size());
+            }
+        }
+
+        FormsRead forms() {
+            return forms;
+        }
+
+        /** The ways of {@code choices} that may hold together, or null where finding them
+         *  stopped at a figure. */
+        List<TakenTogether> of(List<ChoiceRead> choices) {
+            List<Integer> key = choices.stream().map(numbered::get).toList();
+            List<TakenTogether> ways = found.get(key);
+            if (ways == null) {
+                ways = heldTogether(choices, bearingTaken, forms);
+                if (ways != null) {
+                    found.put(key, ways);
+                }
+            }
+            return ways;
+        }
     }
 
     /** What of {@code stated} asks of positions apart from the relation. */
@@ -336,10 +377,9 @@ final class AWayReadForARelation {
             joined(out, WayToTheBorder.positionsInside(one)).conditions.add(one);
         }
         for (ChoiceRead choice : each) {
-            for (int alternative = 0; alternative < choice.apart().size(); alternative++) {
-                for (OnTheWay one : choice.apart().get(alternative)) {
-                    joined(out, WayToTheBorder.positionsInside(one))
-                            .asked(choice, alternative, one);
+            for (int leaf = 0; leaf < choice.leaves().size(); leaf++) {
+                for (OnTheWay one : choice.leaves().get(leaf).apart()) {
+                    joined(out, WayToTheBorder.positionsInside(one)).asked(choice, leaf, one);
                 }
             }
         }
@@ -362,31 +402,31 @@ final class AWayReadForARelation {
     }
 
     /** Conditions apart from the relation that may ask of a value together, with what each
-     *  alternative of a choice asks among them. */
+     *  leaf of a choice asks among them ({@link ChoiceRead.Leaf}). */
     private final class Part {
 
         private final Set<TermPath> positions = new LinkedHashSet<>();
         private final List<OnTheWay> conditions = new ArrayList<>();
-        private final Map<ChoiceRead, Map<Integer, List<OnTheWay>>> alternatives =
+        private final Map<ChoiceRead, Map<Integer, List<OnTheWay>>> leaves =
                 new IdentityHashMap<>();
 
         /** The choices here in the order they came, which is the order their ways are asked in:
          *  with the walks counted, which way is asked first decides where they run out. */
         private final List<ChoiceRead> inOrder = new ArrayList<>();
 
-        void asked(ChoiceRead choice, int alternative, OnTheWay condition) {
-            alternatives.computeIfAbsent(choice, _ -> {
+        void asked(ChoiceRead choice, int leaf, OnTheWay condition) {
+            leaves.computeIfAbsent(choice, _ -> {
                 inOrder.add(choice);
                 return new LinkedHashMap<>();
-            }).computeIfAbsent(alternative, _ -> new ArrayList<>()).add(condition);
+            }).computeIfAbsent(leaf, _ -> new ArrayList<>()).add(condition);
         }
 
         void take(Part other) {
             positions.addAll(other.positions);
             conditions.addAll(other.conditions);
             for (ChoiceRead choice : other.inOrder) {
-                other.alternatives.get(choice).forEach((alternative, those) ->
-                        those.forEach(one -> asked(choice, alternative, one)));
+                other.leaves.get(choice).forEach((leaf, those) ->
+                        those.forEach(one -> asked(choice, leaf, one)));
             }
         }
 
@@ -407,28 +447,60 @@ final class AWayReadForARelation {
          * its own: the values it leaves the relation's places may be none a row past the choices
          * holds them at ({@link #insideWhatIsMet}).
          *
-         * <p>Only the ways that may hold together are asked, and they are what a way is looked
-         * along with ({@link #heldTogether}).
+         * <p>The ways are those of the choices' leaves, a row past a choice inside an alternative
+         * being along one alternative of it ({@link ChoiceRead.Leaf}), and only those that may
+         * hold together are asked ({@link AWayReadForARelation#heldTogether}). So no one value has
+         * to meet what every
+         * leaf asks, and the leaves' values of the relation's places a way met leaves are each
+         * met by a value of their own: each value of them is a row with that way's value apart
+         * beside it, the positions apart being tied to none of those of the relation.
+         *
+         * <p>A way is looked along where it is asked by a walk, and as many are looked along as a
+         * way is; past that, nothing is shown. A way met by a value its numbers are given without
+         * a walk is not looked along ({@link #metByItsNumbersAlone}).
          */
-        boolean met(List<OnTheWay> stated) {
+        boolean met(List<OnTheWay> stated, WaysFound found) {
             List<OnTheWay> bearingTaken = bearingOf(stated);
-            FormsRead forms = new FormsRead();
-            List<TakenTogether> ways = heldTogether(bearingTaken, forms);
+            FormsRead forms = found.forms();
+            List<TakenTogether> ways = found.of(inOrder);
             if (ways == null) {
                 return false;
             }
+            int lookedAlong = 0;
             List<Set<OnTheWay>> met = new ArrayList<>();
             List<Set<OnTheWay>> notMet = new ArrayList<>();
+            List<Set<OnTheWay>> notMetUnlooked = new ArrayList<>();
             for (TakenTogether way : ways) {
                 List<OnTheWay> apart = new ArrayList<>(conditions);
                 Set<OnTheWay> chosen = new LinkedHashSet<>();
                 for (int at = 0; at < inOrder.size(); at++) {
                     ChoiceRead choice = inOrder.get(at);
-                    int alternative = way.alternatives().get(at);
-                    apart.addAll(alternatives.get(choice).getOrDefault(alternative, List.of()));
-                    chosen.addAll(choice.bearing().get(alternative));
+                    int leaf = way.leaves().get(at);
+                    apart.addAll(leaves.get(choice).getOrDefault(leaf, List.of()));
+                    chosen.addAll(choice.leaves().get(leaf).bearing());
                 }
-                (aValueMeets(apart) ? met : notMet).add(chosen);
+                switch (metByItsNumbersAlone(apart)) {
+                    case MET -> met.add(chosen);
+                    case NOT_MET -> notMetUnlooked.add(chosen);
+                    case NOT_ASKED -> {
+                        if (lookedAlong >= CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum()) {
+                            stoppedAt.add(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
+                            return false;
+                        }
+                        lookedAlong++;
+                        (aValueMeets(apart) ? met : notMet).add(chosen);
+                    }
+                }
+            }
+            for (Set<OnTheWay> chosen : notMetUnlooked) {
+                if (!insideWhatIsMet(chosen, met, forms)) {
+                    if (lookedAlong >= CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum()) {
+                        stoppedAt.add(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
+                        return false;
+                    }
+                    lookedAlong++;
+                    notMet.add(chosen);
+                }
             }
             for (Set<OnTheWay> chosen : notMet) {
                 if (insideWhatIsMet(chosen, met, forms)) {
@@ -480,72 +552,194 @@ final class AWayReadForARelation {
             }
             return left.runs().meet(leftByMet).sameValuesAs(left.runs());
         }
-
-        /**
-         * The ways of taking an alternative of each choice here that may hold together, in the
-         * order the choices came and their alternatives in each — or null where they are more
-         * than a way is looked along with, or this has taken in as many alternatives as a way's
-         * choices are looked at with, which is then a figure this was stopped at.
-         *
-         * <p>A way no value of whose forms lies in the runs what it asks bearing on the relation
-         * leaves them, beside what the way states of the relation, is one no row takes, which is
-         * the second half of what {@link #met} accepts, and a way narrower than it is one no row
-         * takes either. So such a way is met and not counted, nor is any way it is part of.
-         * Choices that each part one number by the same lines — two lookups of one value in one
-         * table — hold together only where they agree on the part, and are counted as that many
-         * ways and not as the product of their sizes, whether the lines are written in an
-         * alternative or in a choice nested in it. Choices of numbers apart from one another hold
-         * together in every way, and are counted as the product.
-         *
-         * <p>What is read of a way is what it leaves at most ({@link FormsLeft}), so it shows no
-         * more ways closed than are. The figures are the ones the walk of a way finds its open
-         * ways by ({@link OneOfEach}): every alternative taken in beside a way of the choices
-         * before it is one looked at, counted over the whole reading again, and only the ways
-         * left once every choice is taken are the ways looked along. So the ways of the choices
-         * taken so far may be more than are looked along, where the choices after them close all
-         * but a few.
-         */
-        private List<TakenTogether> heldTogether(List<OnTheWay> bearingTaken, FormsRead forms) {
-            List<TakenTogether> ways = List.of(new TakenTogether(List.of(),
-                    forms.of(bearingTaken)));
-            for (ChoiceRead choice : inOrder) {
-                List<TakenTogether> wider = new ArrayList<>();
-                for (TakenTogether way : ways) {
-                    for (int alternative = 0; alternative < choice.bearing().size();
-                         alternative++) {
-                        if (lookedAt >= CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT.maximum()) {
-                            stoppedAt.add(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT);
-                            return null;
-                        }
-                        lookedAt++;
-                        FormsLeft left = way.left().meet(
-                                forms.of(choice.bearing().get(alternative)));
-                        if (left.holdsNothing()) {
-                            continue;
-                        }
-                        List<Integer> taken = new ArrayList<>(way.alternatives());
-                        taken.add(alternative);
-                        wider.add(new TakenTogether(taken, left));
-                    }
-                }
-                ways = wider;
-            }
-            if (ways.size() > CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum()) {
-                stoppedAt.add(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
-                return null;
-            }
-            return ways;
-        }
     }
 
     /**
-     * One way of taking an alternative of each of some choices together, and what it leaves the
-     * forms bearing on the relation.
+     * The ways of taking a leaf of each of {@code choices} that may hold together, in the order
+     * the choices came and their leaves in each — or null where this has taken in as many leaves
+     * as a way's choices are looked at with, which is then a figure this was stopped at.
      *
-     * @param alternatives the alternative taken of each choice, in their order
-     * @param left         what the way leaves the forms, at most
+     * <p>A way no value of whose forms lies in the runs what it asks bearing on the relation
+     * leaves them, beside what the way states of the relation, is one no row takes, which is the
+     * second half of what {@link Part#met} accepts, and a way narrower than it is one no row takes
+     * either. So such a way is met and not counted, nor is any way it is part of.
+     * Choices that each part one number by the same lines — two lookups of one value in one table
+     * — hold together only where they agree on the part, and are counted as that many ways and
+     * not as the product of their sizes, whether the lines are written in an alternative or in a
+     * choice nested in it. Choices of numbers apart from one another hold together in every way,
+     * and are counted as the product.
+     *
+     * <p>What is read of a way is what it leaves at most ({@link FormsLeft}), so it shows no more
+     * ways closed than are. A leaf is taken in beside a way only where the runs they leave the
+     * one form they are looked up by meet ({@link LeavesByOneForm}), so leaves parting a value by
+     * a table's lines are taken in beside the ways of their own line and not beside every way,
+     * and the ways of two such choices are found in as many steps as they have lines. Every leaf
+     * taken in is one looked at, as the walk of a way counts the alternatives it takes in to find
+     * its open ways ({@link OneOfEach}), and counted over the whole reading again. How many of
+     * the ways found are looked along is {@link Part#met}'s to count.
      */
-    private record TakenTogether(List<Integer> alternatives, FormsLeft left) {}
+    private List<TakenTogether> heldTogether(List<ChoiceRead> choices,
+                                             List<OnTheWay> bearingTaken, FormsRead forms) {
+        List<TakenTogether> ways = List.of(new TakenTogether(List.of(), forms.of(bearingTaken)));
+        for (ChoiceRead choice : choices) {
+            List<FormsLeft> leftByLeaves = choice.leaves().stream()
+                    .map(leaf -> forms.of(leaf.bearing())).toList();
+            LeavesByOneForm byForm = LeavesByOneForm.of(leftByLeaves);
+            List<TakenTogether> wider = new ArrayList<>();
+            for (TakenTogether way : ways) {
+                for (int leaf : byForm.meeting(way.left())) {
+                    if (lookedAt >= CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT.maximum()) {
+                        stoppedAt.add(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT);
+                        return null;
+                    }
+                    lookedAt++;
+                    FormsLeft left = way.left().meet(leftByLeaves.get(leaf));
+                    if (left.holdsNothing()) {
+                        continue;
+                    }
+                    List<Integer> taken = new ArrayList<>(way.leaves());
+                    taken.add(leaf);
+                    wider.add(new TakenTogether(taken, left));
+                }
+            }
+            ways = wider;
+        }
+        return ways;
+    }
+
+    /**
+     * One way of taking a leaf of each of some choices together, and what it leaves the forms
+     * bearing on the relation.
+     *
+     * @param leaves the leaf taken of each choice, in their order ({@link ChoiceRead#leaves})
+     * @param left   what the way leaves the forms, at most
+     */
+    private record TakenTogether(List<Integer> leaves, FormsLeft left) {}
+
+    /**
+     * The leaves of a choice, looked up by the runs they leave the one form most of them bound,
+     * so that the leaves a way may hold together with are found without taking in every leaf.
+     *
+     * <p>A leaf whose runs of the form lie apart from a way's holds together with it in no row:
+     * the way leaves the form at most its runs and the leaf at most its own. It is passed over. A
+     * leaf bounding no such form, and every leaf beside a way bounding none, may hold together,
+     * and is found. A leaf leaving some form nothing is no way at all and is never found. The
+     * leaves found are in their order on the choice.
+     *
+     * <p>Looked up by the ends around each leaf's runs, lowest lower end first, with the loosest
+     * upper end of every leaf up to each: the leaves whose runs start before a way's end are the
+     * first so many, and of those the ones reaching past where the way starts are found by going
+     * back from the last until no leaf before reaches it.
+     */
+    private static final class LeavesByOneForm {
+
+        private final CanonicalForm<NumericTerm> form;
+        private final List<Integer> every = new ArrayList<>();
+        private final List<Integer> free = new ArrayList<>();
+        private final List<Integer> byLowerEnd = new ArrayList<>();
+        private final List<OrderedInterval> around = new ArrayList<>();
+        private final List<Endpoint> reachedUpTo = new ArrayList<>();
+
+        private LeavesByOneForm(CanonicalForm<NumericTerm> form) {
+            this.form = form;
+        }
+
+        static LeavesByOneForm of(List<FormsLeft> leaves) {
+            Map<CanonicalForm<NumericTerm>, Integer> bounding = new LinkedHashMap<>();
+            for (FormsLeft each : leaves) {
+                if (!each.holdsNothing()) {
+                    each.runs().keySet().forEach(form -> bounding.merge(form, 1, Integer::sum));
+                }
+            }
+            CanonicalForm<NumericTerm> most = null;
+            for (Map.Entry<CanonicalForm<NumericTerm>, Integer> each : bounding.entrySet()) {
+                if (most == null || each.getValue() > bounding.get(most)) {
+                    most = each.getKey();
+                }
+            }
+            LeavesByOneForm out = new LeavesByOneForm(most);
+            List<Integer> bounded = new ArrayList<>();
+            for (int leaf = 0; leaf < leaves.size(); leaf++) {
+                FormsLeft each = leaves.get(leaf);
+                if (each.holdsNothing()) {
+                    continue;
+                }
+                out.every.add(leaf);
+                (most != null && each.runs().containsKey(most) ? bounded : out.free).add(leaf);
+            }
+            List<OrderedInterval> hulls = new ArrayList<>();
+            for (int leaf : bounded) {
+                hulls.add(leaves.get(leaf).runs().get(most).hull());
+            }
+            List<Integer> order = new ArrayList<>();
+            for (int at = 0; at < bounded.size(); at++) {
+                order.add(at);
+            }
+            order.sort((one, other) -> byLowerEnd(hulls.get(one).low(), hulls.get(other).low()));
+            Endpoint reached = null;
+            for (int at : order) {
+                OrderedInterval hull = hulls.get(at);
+                reached = out.byLowerEnd.isEmpty() ? hull.high() : loosest(reached, hull.high());
+                out.byLowerEnd.add(bounded.get(at));
+                out.around.add(hull);
+                out.reachedUpTo.add(reached);
+            }
+            return out;
+        }
+
+        /** The leaves that may hold together with a way leaving the forms {@code left}, in their
+         *  order on the choice. */
+        List<Integer> meeting(FormsLeft left) {
+            if (left.holdsNothing()) {
+                return List.of();
+            }
+            OrderedRuns its = form == null ? null : left.runs().get(form);
+            if (its == null) {
+                return every;
+            }
+            OrderedInterval way = its.hull();
+            int before = 0;
+            int after = around.size();
+            while (before < after) {
+                int half = (before + after) >>> 1;
+                if (Endpoint.someValueLiesBetween(around.get(half).low(), way.high())) {
+                    before = half + 1;
+                } else {
+                    after = half;
+                }
+            }
+            List<Integer> found = new ArrayList<>(free);
+            for (int at = before - 1; at >= 0
+                    && Endpoint.someValueLiesBetween(way.low(), reachedUpTo.get(at)); at--) {
+                OrderedInterval leaf = around.get(at);
+                if (Endpoint.someValueLiesBetween(Endpoint.lower(leaf.low(), way.low()),
+                        Endpoint.upper(leaf.high(), way.high()))) {
+                    found.add(byLowerEnd.get(at));
+                }
+            }
+            found.sort(Integer::compare);
+            return found;
+        }
+
+        /** Lowest first, no end lowest of all ({@link Endpoint#lower}). */
+        private static int byLowerEnd(Endpoint one, Endpoint other) {
+            if (one == null || other == null) {
+                return one == null ? (other == null ? 0 : -1) : 1;
+            }
+            if (one.sameAs(other)) {
+                return 0;
+            }
+            return Endpoint.lower(one, other) == one ? 1 : -1;
+        }
+
+        /** The looser of two upper ends, no end loosest of all ({@link Endpoint#upper}). */
+        private static Endpoint loosest(Endpoint one, Endpoint other) {
+            if (one == null || other == null) {
+                return null;
+            }
+            return Endpoint.upper(one, other) == one ? other : one;
+        }
+    }
 
     /**
      * The runs each form of the input's numbers lies in along a way, as far as conditions bounding
@@ -755,6 +949,51 @@ final class AWayReadForARelation {
                 && metBySomeValue(each));
     }
 
+    /** What giving the numbers of a way values came to, with no walk of it taken. */
+    private enum ByItsNumbers {
+
+        /** A value meeting what the way asks was shown. */
+        MET,
+
+        /** None was shown, which is not that none is. */
+        NOT_MET,
+
+        /** The way asks something not of its numbers, so this was not asked; a walk is. */
+        NOT_ASKED
+    }
+
+    /**
+     * Whether some value is shown to meet {@code onTheWay} without walking it: asked only where
+     * every condition on it is a bound on the input's numbers that a walk would take into its
+     * region, each at one value outside every container ({@link WayToTheBorder#ofOnePosition}).
+     *
+     * <p>Along such a way a row is asked the bounds and nothing else: no choice to split at, no
+     * case required and nothing declined. The proof of a way is then of those bounds alone
+     * ({@link #metBySomeValue(List, Requirements, SearchRegion)}), and it holds whatever region
+     * the values are looked for in, so they are looked for in what the declarations leave with
+     * the bounds taken in. A truth, a case, a choice or anything not read is not such a bound,
+     * and the way is walked.
+     */
+    private ByItsNumbers metByItsNumbersAlone(List<OnTheWay> onTheWay) {
+        List<OnTheWay.TakenIn> bounded = new ArrayList<>();
+        List<TakenConstraint> constraints = new ArrayList<>();
+        for (OnTheWay each : onTheWay) {
+            if (!(each instanceof OnTheWay.TakenIn taken
+                    && taken.demand() instanceof RowDemand.Relational(TakenConstraint.Affine affine)
+                    && WayToTheBorder.ofOnePosition(each))) {
+                return ByItsNumbers.NOT_ASKED;
+            }
+            bounded.add(taken);
+            constraints.add(affine);
+        }
+        SearchRegion region = TakenConstraint.narrowedBy(constraints, whole.from().declarations());
+        if (TakenConstraint.nothingIsLeftFor(constraints, region)) {
+            return ByItsNumbers.NOT_MET;
+        }
+        return metBySomeValue(bounded, Requirements.NONE, region)
+                ? ByItsNumbers.MET : ByItsNumbers.NOT_MET;
+    }
+
     /** Adds to {@code into} what each condition {@code entry} asks of, one by one inside the
      *  alternatives of a choice, which are parted where they stand ({@link ChoiceRead}). */
     private static void askedOneByOne(OnTheWay entry, List<Set<TermPath>> into) {
@@ -784,29 +1023,80 @@ final class AWayReadForARelation {
      * value in a table, whose rows' lines leave the value nowhere out
      * ({@link AWayReadForARelation#leavesEveryValueDeclared}).
      *
+     * <p>What is asked apart of each way a row takes past it is asked of its {@link Leaf leaves}:
+     * an alternative with a choice inside it is one way for each alternative of that choice, and
+     * each asks apart what that alternative asks beside what the alternative around it does. A
+     * row past a lookup of a value in a table is along one row of the table, and what it asks of
+     * the grade compared with is what that row asks, and not what every row asks at once.
+     *
      * @param bearing          what each alternative asks that bears on the relation, in their
-     *                         order
-     * @param apart            what each asks apart from that
+     *                         order, with a choice inside it as what that choice comes to
+     * @param apart            what each asks apart from that, with a choice inside it as what
+     *                         that choice is to meet at once ({@link #toMeet})
+     * @param leaves           the ways a row takes past it, each with what it asks bearing on
+     *                         the relation and apart from it
      * @param leavesEveryValue whether the parts in {@code bearing} between them are shown to
      *                         leave every value the declarations leave
      */
     record ChoiceRead(OnTheWay choice, List<List<OnTheWay>> bearing,
-                      List<List<OnTheWay>> apart, boolean leavesEveryValue) {
+                      List<List<OnTheWay>> apart, List<Leaf> leaves, boolean leavesEveryValue) {
+
+        /**
+         * One way a row takes past a choice: an alternative, and an alternative of each choice
+         * inside it.
+         *
+         * @param bearing what it asks that bears on the relation
+         * @param apart   what it asks apart from that
+         */
+        record Leaf(List<OnTheWay> bearing, List<OnTheWay> apart) {
+
+            Leaf {
+                bearing = List.copyOf(bearing);
+                apart = List.copyOf(apart);
+            }
+
+            /** This, asking {@code each} as well, on the side {@code bears} says. */
+            Leaf with(OnTheWay each, boolean bears) {
+                List<OnTheWay> on = new ArrayList<>(bearing);
+                List<OnTheWay> off = new ArrayList<>(apart);
+                (bears ? on : off).add(each);
+                return new Leaf(on, off);
+            }
+
+            /** This, asking what {@code other} does as well. */
+            Leaf and(Leaf other) {
+                List<OnTheWay> on = new ArrayList<>(bearing);
+                on.addAll(other.bearing);
+                List<OnTheWay> off = new ArrayList<>(apart);
+                off.addAll(other.apart);
+                return new Leaf(on, off);
+            }
+        }
 
         /**
          * {@code choice} parted by the positions {@code reading} has bearing on the relation — or
          * null where it is not read so: a count, whose ways are its statements' and no
          * alternatives, or a choice of cases some of which bear and some not.
+         *
+         * <p>Its leaves are as many as the ways of the choices inside its alternatives, up to as
+         * many alternatives as a way's choices are looked at with: past that, each alternative is
+         * one leaf asking apart what its choices are to meet at once, which is more than any of
+         * their ways asks and so shows no more met than is, and the figure is one the reading
+         * again stopped at.
          */
         static ChoiceRead of(OnTheWay choice, AWayReadForARelation reading) {
             if (!choice.ofSeveralWays()) {
                 return null;
             }
+            int most = CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT.maximum();
             List<List<OnTheWay>> bearing = new ArrayList<>();
             List<List<OnTheWay>> apart = new ArrayList<>();
+            List<Leaf> leaves = new ArrayList<>();
+            boolean opened = true;
             for (List<OnTheWay> alternative : choice.alternatives()) {
                 List<OnTheWay> on = new ArrayList<>();
                 List<OnTheWay> off = new ArrayList<>();
+                List<Leaf> ways = List.of(new Leaf(List.of(), List.of()));
                 for (OnTheWay each : alternative) {
                     // A choice inside an alternative is parted as one on the way is, and what it
                     // comes to for the relation is part of what the alternative does.
@@ -814,15 +1104,36 @@ final class AWayReadForARelation {
                     if (inside != null) {
                         inside.standingFor().ifPresent(on::add);
                         off.addAll(inside.toMeet());
+                        List<Leaf> wider = new ArrayList<>();
+                        for (Leaf way : ways) {
+                            for (Leaf in : inside.leaves()) {
+                                if (opened && leaves.size() + wider.size() < most) {
+                                    wider.add(way.and(in));
+                                } else {
+                                    opened = false;
+                                }
+                            }
+                        }
+                        ways = wider;
                     } else {
-                        (reading.bearsOn(WayToTheBorder.positionsInside(each), reading.bearing)
-                                ? on : off).add(each);
+                        boolean bears = reading.bearsOn(WayToTheBorder.positionsInside(each),
+                                reading.bearing);
+                        (bears ? on : off).add(each);
+                        ways = ways.stream().map(way -> way.with(each, bears)).toList();
                     }
                 }
                 bearing.add(on);
                 apart.add(off);
+                leaves.addAll(ways);
             }
-            ChoiceRead out = new ChoiceRead(choice, bearing, apart,
+            if (!opened) {
+                reading.stoppedAt.add(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT);
+                leaves.clear();
+                for (int each = 0; each < bearing.size(); each++) {
+                    leaves.add(new Leaf(bearing.get(each), apart.get(each)));
+                }
+            }
+            ChoiceRead out = new ChoiceRead(choice, bearing, apart, leaves,
                     reading.leavesEveryValueDeclared(bearing));
             return out.whole() || out.leftOut() || choice instanceof OnTheWay.OneOf ? out : null;
         }
@@ -942,11 +1253,21 @@ final class AWayReadForARelation {
      * shows nothing.
      */
     private boolean metBySomeValue(Reachability.Reaching way) {
-        if (!way.declined().isEmpty()) {
-            return false;
-        }
+        return way.declined().isEmpty()
+                && metBySomeValue(way.boundedOnTheWay(), way.requirements(), way.region());
+    }
+
+    /**
+     * Whether some value is shown to meet {@code bounded}, what a way asks of a row, beside
+     * {@code required} and the declarations, values being looked for over {@code region}: the
+     * proof {@link #metBySomeValue(Reachability.Reaching)} makes of a way, and the one it makes
+     * of a way no walk was taken for ({@link #metByItsNumbersAlone}). The region is where values
+     * are looked for and not what they are shown by, so a wider one shows no more.
+     */
+    private boolean metBySomeValue(List<OnTheWay.TakenIn> bounded, Requirements required,
+                                   SearchRegion region) {
         List<TakenConstraint.Affine> numbers = new ArrayList<>();
-        for (OnTheWay.TakenIn taken : way.boundedOnTheWay()) {
+        for (OnTheWay.TakenIn taken : bounded) {
             if (bearsOn(taken.demand().positions(), bearing)) {
                 continue;
             }
@@ -971,7 +1292,6 @@ final class AWayReadForARelation {
                 }
             }
         }
-        Requirements required = way.requirements();
         for (NameReach.Crossing each : required.crossings()) {
             if (!bearsOn(Set.of(each.at(), each.to()), bearing)) {
                 return false;
@@ -989,7 +1309,7 @@ final class AWayReadForARelation {
                 return false;
             }
         }
-        WholeValuesMeeting.Witness witness = WholeValuesMeeting.of(numbers, way.region(),
+        WholeValuesMeeting.Witness witness = WholeValuesMeeting.of(numbers, region,
                 declarations::leaveEveryValueBetween,
                 CompositionBudget.PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH.maximum() - pairs);
         pairs += witness.pairsCombined();
