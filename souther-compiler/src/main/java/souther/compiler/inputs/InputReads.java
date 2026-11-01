@@ -2283,6 +2283,11 @@ public final class InputReads {
             public Made {
                 Objects.requireNonNull(expression, "a container made is made of something");
             }
+
+            @Override
+            public int hashCode() {
+                return Core.hashWithoutWalking(expression);
+            }
         }
 
         /** One a dependency answered, told from another by the evaluation that answered it and

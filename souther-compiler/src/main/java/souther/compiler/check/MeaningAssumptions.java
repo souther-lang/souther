@@ -16,7 +16,6 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumberSpace;
@@ -24,7 +23,6 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedIntervals;
-import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.numeric.WholeNumberRuns;
@@ -685,7 +683,7 @@ final class MeaningAssumptions {
         FactSubject place = at == null ? null : placeOf(at);
         Type type = place == null ? null : places.typeAt().apply(at);
         Carrier carrier = type == null ? null : Carrier.ofValue(type, terms.declarations());
-        OrderedInterval range = rangeOf(holds ? ordered.proposition()
+        OrderedInterval range = OrderedInterval.leftBy(holds ? ordered.proposition()
                 : ordered.proposition().denied(), ordered.at());
         if (carrier == null || range == null) {
             outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER);
@@ -693,19 +691,6 @@ final class MeaningAssumptions {
         }
         known = known.bounding(OrderedIntervals.at(place, range), Map.of(place, carrier));
         taken = true;
-    }
-
-    /** What {@code rel} against {@code at} leaves a value on the order, or null where it leaves a
-     *  hole rather than a range. */
-    private static OrderedInterval rangeOf(Rel rel, Place at) {
-        return switch (rel) {
-            case GE -> new OrderedInterval(Endpoint.inclusive(at), null);
-            case GT -> new OrderedInterval(Endpoint.exclusive(at), null);
-            case LE -> new OrderedInterval(null, Endpoint.inclusive(at));
-            case LT -> new OrderedInterval(null, Endpoint.exclusive(at));
-            case EQ -> new OrderedInterval(Endpoint.inclusive(at), Endpoint.inclusive(at));
-            case NE -> null;
-        };
     }
 
     /**

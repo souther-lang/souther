@@ -501,7 +501,15 @@ public record TermPath(String head, List<Step> steps) {
         if (!head.equals(other.head) || steps.size() < other.steps.size()) {
             return false;
         }
-        return steps.subList(0, other.steps.size()).equals(other.steps);
+        // Each step against its own, by position: a prefix taken as a list and compared would make
+        // a view and two iterators for every question, and this is asked of every pair of places a
+        // search sets side by side.
+        for (int at = 0; at < other.steps.size(); at++) {
+            if (!steps.get(at).equals(other.steps.get(at))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

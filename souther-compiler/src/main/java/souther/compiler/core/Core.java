@@ -21,12 +21,18 @@ import souther.compiler.diag.SourcePos;
 import net.unit8.notation199x.pattern.PatternMeaning;
 
 import java.math.BigDecimal;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * The Core IR (ADR-0021): a checked executable expression, which is what every backend emits from.
@@ -58,6 +64,15 @@ import java.util.Optional;
 public sealed interface Core {
 
     SourcePos pos();
+
+    /**
+     * A hash of {@code e} that does not walk it: what kind of node it is and where it stands. Equal
+     * nodes agree on both, so it is a hash for a key that holds a node, which asks it for every
+     * lookup, where the hash a record writes for itself walks the tree under the node each time.
+     */
+    static int hashWithoutWalking(Core e) {
+        return 31 * e.getClass().getName().hashCode() + e.pos().hashCode();
+    }
 
     /** The type the checker decided for this expression. */
     Type type();
@@ -2306,6 +2321,32 @@ public sealed interface Core {
             f.accept(child);
             return child;
         });
+    }
+
+    /**
+     * Applies {@code visit} once to each node reachable from {@code root}, {@code root} included,
+     * in no particular order.
+     *
+     * <p>Nodes are told apart by identity. A value named twice is one node held in two slots, so
+     * the expression is a graph, and a walk through {@link #forEachChild} that recurses meets a
+     * node once per path to it: twice as many for each level that names the one below it twice.
+     * This one is for a question whose answer does not depend on how many times a node is met —
+     * the set of names read, the set of sites reached. A question about where a node stands, how
+     * often it occurs, or what it is reached under needs the walk that keeps that, and asks
+     * {@link #forEachChild} itself. The record of nodes seen lasts one call, so two calls over the
+     * same node each see all of it.
+     */
+    static void forEachDistinctNode(Core root, Consumer<Core> visit) {
+        Set<Core> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        Deque<Core> pending = new ArrayDeque<>();
+        pending.push(root);
+        while (!pending.isEmpty()) {
+            Core node = pending.pop();
+            if (seen.add(node)) {
+                visit.accept(node);
+                forEachChild(node, pending::push);
+            }
+        }
     }
 
 }

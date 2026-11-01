@@ -66,8 +66,6 @@ import souther.compiler.inputs.ElementKey;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.ElementsMet;
-import souther.compiler.inputs.HandedAnswers;
-import souther.compiler.inputs.Watched;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -341,6 +339,13 @@ final class Pullback {
      * states are one subject.
      */
     private final DecisionSubjects subjects;
+    /**
+     * The parts met, in the order they were met. A candidate tried at a choice owns the parts
+     * from where it began, and a choice takes back out the parts of the candidates it does not
+     * keep ({@link RuleChoice}). A part may be met twice, once by the reading that made it and
+     * once by one that took it ({@link SharedReads}); it is one part to whoever reads them
+     * ({@link #pulled}).
+     */
     private final List<Met> met = new ArrayList<>();
     /** What the candidates for each expression state, concluded once a step ({@link RuleChoice}). */
     private final Conclusion trying = Conclusion.reusing();
@@ -469,6 +474,7 @@ final class Pullback {
     /** What the total {@code call}, or the container it is, standing at {@code at} comes to in the
      *  way of keeping being read, or null where no way is being read for it. */
     private LinearForm<Quantity> aggregateInACase(Core call, InputReads at) {
+        aggregatesAsked++;
         Core node = Core.withoutStanding(call);
         for (AnAggregateInACase each : aggregatesInACase) {
             if (each.call() == node && each.at().standsInTheNamesOf(at)) {
@@ -871,13 +877,17 @@ final class Pullback {
      *
      * <p>A part is a step of {@code stated}: one this concluding reached. A step met by a rule that
      * was not kept is in no derivation concluded here, so whatever was met on the way, the parts
-     * are the derivation's own.
+     * are the derivation's own. A part met twice is one part.
      */
     private Pulled pulled(Derivation stated) {
         Conclusion conclusion = new Conclusion(where);
         Meaning meaning = conclusion.meaningOf(stated);
         List<Leaf> leaves = new ArrayList<>();
+        Set<Met> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Met each : met) {
+            if (!seen.add(each)) {
+                continue;
+            }
             Proposition concluded = conclusion.concludedAt(each.step());
             if (concluded == null) {
                 continue;
@@ -1754,7 +1764,13 @@ final class Pullback {
      * What one candidate, a rule being tried at a comparison, says of the rows of what it
      * concludes where that is more than the reading of the comparison says.
      */
-    private static final class Trial {
+    private static final class Trial implements ReadingState.Marked {
+
+        /** What the candidate has said so far, which is the same only while it has said no more. */
+        @Override
+        public Object mark() {
+            return ReadingState.snapshotOfFields(this);
+        }
 
         /** What the rows of the comparison get past, as the rule worked it out; null where the
          *  rule worked out none. */
@@ -5311,6 +5327,46 @@ final class Pullback {
         }
 
         /**
+         * {@code law} read on each of {@code applications} of the closure it names.
+         *
+         * <p>What a law says of the applications is the same at every reading of the comparison
+         * that differs only in what the applications on the way to it handed to names it does not
+         * ask after, as a sum is ({@link Pullback#sumOfWrittenOut}). Such a reading is taken again
+         * and costs no reading; the first one is charged for what it made.
+         */
+        private WrittenOutRead onEachApplication(List<InputReads.Applications.Made> applications,
+                                                 LawProposition<DeclaredArgument> law) {
+            if (application != null) {
+                return onEachApplicationAfresh(applications, law);
+            }
+            return sharedApplications.shared(e, reads,
+                    new ApplicationsKey(law, applications, elements),
+                    () -> onEachApplicationAfresh(applications, law),
+                    read -> read instanceof WrittenOutRead.Each(List<Derivation> each)
+                            && each.stream().allMatch(Pullback.this::readToTheEnd));
+        }
+
+        private WrittenOutRead onEachApplicationAfresh(
+                List<InputReads.Applications.Made> applications,
+                LawProposition<DeclaredArgument> law) {
+            WhyUnread past = made(applications.size());
+            if (past != null) {
+                return new WrittenOutRead.Stops(past);
+            }
+            List<Derivation> ofEach = new ArrayList<>();
+            InputReads outer = application;
+            try {
+                for (InputReads.Applications.Made one : applications) {
+                    application = one.reads();
+                    ofEach.add(whereItIsKept(of(law), one.keptWhere()));
+                }
+            } finally {
+                application = outer;
+            }
+            return new WrittenOutRead.Each(ofEach);
+        }
+
+        /**
          * {@code law} read of each of {@code occurrences}, the elements of the container
          * {@code container}: of the value itself where the law names the element, of what the
          * closure states on the application that hands it that value where the law names what the
@@ -5326,13 +5382,13 @@ final class Pullback {
                 return new WrittenOutRead.Each(List.of());
             }
             DeclaredArgument named = closureIn(law);
-            List<Derivation> ofEach = new ArrayList<>();
             if (named == null) {
                 WhyUnread past = occurrences.size() > READINGS.maximum()
                         ? new WhyUnread.MoreReadingsThanAreMade() : made(occurrences.size());
                 if (past != null) {
                     return new WrittenOutRead.Stops(past);
                 }
+                List<Derivation> ofEach = new ArrayList<>();
                 for (ReadMeaning.Occurrence occurrence : occurrences) {
                     Denotation value = occurrence.value();
                     elements.put(container, new ElementAt.AValue(value.value(), value.at()));
@@ -5370,20 +5426,7 @@ final class Pullback {
                             new WhyUnread.MoreElementsThanAreWrittenOut());
                 }
             }
-            WhyUnread past = made(applications.size());
-            if (past != null) {
-                return new WrittenOutRead.Stops(past);
-            }
-            InputReads outer = application;
-            try {
-                for (InputReads.Applications.Made one : applications) {
-                    application = one.reads();
-                    ofEach.add(whereItIsKept(of(law), one.keptWhere()));
-                }
-            } finally {
-                application = outer;
-            }
-            return new WrittenOutRead.Each(ofEach);
+            return onEachApplication(applications, law);
         }
 
         /**
@@ -6892,7 +6935,7 @@ final class Pullback {
      * operator on each application, worked out over what that application is handed, so the node
      * alone would keep only the first.
      */
-    private static final class Operators {
+    private static final class Operators implements ReadingState.Marked {
         private final List<Operated> told = new ArrayList<>();
         /** The nodes told of wherever a run works them out: on every application of the closures
          *  around them, where there are any. */
@@ -6914,6 +6957,12 @@ final class Pullback {
 
         Operators() {
             unsaidGroups.add(unsaidAt);
+        }
+
+        /** What has been told so far, which is the same only while nothing more has. */
+        @Override
+        public Object mark() {
+            return ReadingState.snapshotOfFields(this);
         }
 
         void tell(Core operation, Answers where) {
@@ -8534,6 +8583,7 @@ final class Pullback {
     private Derivation keepingOf(Inside.ATotalByKeeping total, InputReads reads, Denotation at,
                                  boolean fixed,
                                  Function<UnaryOperator<InputReads>, Derivation> again) {
+        aggregatesKept++;
         Derivation once = total.counted()
                 ? (keptReading == null ? null : countInTheReading(total, again))
                 : (keptReading == null && truthsDecided.isEmpty()
@@ -8627,15 +8677,30 @@ final class Pullback {
         // several, one for each application of a closure, what each is asked for is its cases, and
         // the readings are held to them.
         Denotation splitting = new Denotation(total.call(), total.at());
-        long made = 1L + ways.truthCount() + forms.size();
-        WhyUnread past = readingsASplitIsOneOf(reads, splitting) > 1
+        // The conditions of the truths are the aggregate's and not this comparison's: a comparison
+        // of the same elements read in the same names is given those already read, and is charged
+        // for its own reading only.
+        Derivation[] conditions = new Derivation[ways.truthCount()];
+        TruthsKey truths = new TruthsKey(truthsOf(ways));
+        SharedReads.Found<Met, Derivation[]> shared = ways.truthCount() == 0 ? null
+                : sharedConditions.find(total.call(), reads, truths);
+        long made = shared != null ? 1L : 1L + ways.truthCount() + forms.size();
+        WhyUnread past = shared != null
+                ? splitInto(reads, limit -> Math.min(limit, made), splitting)
+                : readingsASplitIsOneOf(reads, splitting) > 1
                 ? splitInto(reads, limit -> ways.work(decided, limit, true), splitting)
                 : splitInto(reads, limit -> Math.min(limit, made), splitting);
         if (past != null) {
             return partOf(at, new Derivation.Stopped(past, fixed));
         }
-        Derivation[] conditions = new Derivation[ways.truthCount()];
-        conditionsOf(ways, decided, conditions);
+        if (shared != null) {
+            System.arraycopy(sharedConditions.take(shared), 0, conditions, 0, conditions.length);
+        } else if (conditions.length > 0) {
+            sharedConditions.read(total.call(), reads, truths, () -> {
+                conditionsOf(ways, decided, conditions);
+                return conditions.clone();
+            }, this::readToTheEnd);
+        }
         Map<Integer, Derivation> deciding = new HashMap<>();
         Map<Integer, ConstructOccurrence> madeAt = new HashMap<>();
         for (int truth = 0; truth < conditions.length; truth++) {
@@ -8900,20 +8965,206 @@ final class Pullback {
     }
 
     /**
-     * What a reading of a sum came to, with what it asked of the comparison it was read in: the
-     * reading it was read at, the values handed to names on the way to it that it asked after, and
-     * the elements it asked of and the names it left standing for them. Another reading of the same
-     * node that holds the same but for what was handed, hands the answers this was given, and finds
-     * the elements as these were, comes to the same sum and leaves the same names.
+     * The state of a reading that readings kept to be taken again depend on and leave alone, by the
+     * roles the fields of this class are given ({@link ReadingRoles}).
      */
-    private record SumRead(InputReads at, int hash, HandedAnswers asked,
-                           ElementsMet.Footprint footprint, SearchRegion onTheWay,
-                           Map<BindingId, LinearForm<Quantity>> sized,
-                           Map<BindingId, LinearForm<Quantity>> carried,
-                           List<AnAggregateInACase> aggregates, boolean askingWhere,
-                           LinearForm<Quantity> form) {}
+    private static final ReadingState READING_STATE =
+            new ReadingState(Pullback.class, ReadingRoles.OF_A_PULLBACK);
 
-    private final Map<Core, List<SumRead>> sumsRead = new IdentityHashMap<>();
+    /** What a reading must leave as it found it: the state its fields say so of, and whether it
+     *  read another aggregate. */
+    private record Guards(List<Object[]> fields, int aggregatesKept) {}
+
+    /** The readings kept and taken against this reader's state. */
+    private final class TheScene implements SharedReads.Scene<ReadingState.Inputs, Guards, Met> {
+
+        @Override
+        public boolean mayShare() {
+            return !InputReads.watching() && !elementsMet.crowded()
+                    && READING_STATE.holdsNothing(Pullback.this);
+        }
+
+        @Override
+        public ReadingState.Inputs inputs() {
+            return READING_STATE.inputsOf(Pullback.this);
+        }
+
+        @Override
+        public boolean sameInputs(ReadingState.Inputs then, ReadingState.Inputs now,
+                                  boolean askedAggregates) {
+            return READING_STATE.sameInputs(then, now, askedAggregates);
+        }
+
+        @Override
+        public Guards guards() {
+            return new Guards(READING_STATE.guardsOf(Pullback.this), aggregatesKept);
+        }
+
+        @Override
+        public boolean sameGuards(Guards then, Guards now) {
+            return then.aggregatesKept() == now.aggregatesKept()
+                    && READING_STATE.sameGuards(then.fields(), now.fields());
+        }
+
+        @Override
+        public ElementsMet elementsMet() {
+            return elementsMet;
+        }
+
+        @Override
+        public int metCount() {
+            return met.size();
+        }
+
+        @Override
+        public List<Met> metSince(int from) {
+            return met.subList(from, met.size());
+        }
+
+        @Override
+        public void meetAgain(List<Met> parts) {
+            met.addAll(parts);
+        }
+
+        @Override
+        public int aggregatesAsked() {
+            return aggregatesAsked;
+        }
+    }
+
+    /** The sums of containers the body wrote out, kept ({@link #sumOfWrittenOut}). */
+    private final SharedReads<ReadingState.Inputs, Guards, Met, LinearForm<Quantity>> sharedSums =
+            new SharedReads<>(new TheScene());
+
+    /** What a law says on each application of a closure, kept ({@link ALawRead#onEachApplication}). */
+    private final SharedReads<ReadingState.Inputs, Guards, Met, WrittenOutRead>
+            sharedApplications = new SharedReads<>(new TheScene());
+
+    /** What the truths that keep an aggregate's elements state, kept ({@link #keptOnceFor}). */
+    private final SharedReads<ReadingState.Inputs, Guards, Met, Derivation[]> sharedConditions =
+            new SharedReads<>(new TheScene());
+
+    /** Whether {@code derivation} was read to the end, with no part of it that stopped. */
+    private boolean readToTheEnd(Derivation derivation) {
+        return !Proposition.leavesSomethingUnread(trying.of(derivation));
+    }
+
+    /** What a law says on {@code applications}, and what else the reading of it turns on. */
+    private static final class ApplicationsKey {
+
+        private final LawProposition<DeclaredArgument> law;
+        private final List<InputReads.Applications.Made> applications;
+        private final Map<DeclaredArgument, ElementAt> elements;
+
+        ApplicationsKey(LawProposition<DeclaredArgument> law,
+                        List<InputReads.Applications.Made> applications,
+                        Map<DeclaredArgument, ElementAt> elements) {
+            this.law = law;
+            this.applications = List.copyOf(applications);
+            this.elements = Map.copyOf(elements);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof ApplicationsKey that && law.equals(that.law)
+                    && elements.equals(that.elements)
+                    && sameApplications(applications, that.applications);
+        }
+
+        @Override
+        public int hashCode() {
+            return law.hashCode();
+        }
+    }
+
+    /** The truths that keep the elements of an aggregate, each but for what was handed to the names
+     *  it is read in. */
+    private static final class TruthsKey {
+
+        private final List<Denotation> truths;
+
+        TruthsKey(List<Denotation> truths) {
+            this.truths = truths;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof TruthsKey that && sameTruths(truths, that.truths);
+        }
+
+        @Override
+        public int hashCode() {
+            return truths.size();
+        }
+    }
+
+    /** The truths {@code ways} are decided by, in the order they are met. */
+    private static List<Denotation> truthsOf(WaysOfKeeping ways) {
+        List<Denotation> truths = new ArrayList<>(ways.truthCount());
+        for (int i = 0; i < ways.truthCount(); i++) {
+            truths.add(ways.truth(i));
+        }
+        return truths;
+    }
+
+    /** Whether {@code now} are the truths {@code then} were, each but for what was handed to the
+     *  names it is read in. */
+    private static boolean sameTruths(List<Denotation> then, List<Denotation> now) {
+        if (then.size() != now.size()) {
+            return false;
+        }
+        for (int i = 0; i < then.size(); i++) {
+            if (!then.get(i).value().equals(now.get(i).value())
+                    || !then.get(i).at().sameButForWhatIsHanded(now.get(i).at())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether every condition read was read to the end, and some were read.
+     *
+     * <p>A condition that is not read is the truth of a way the walk does not reach
+     * ({@link #conditionsOf}): the walk reads a truth as soon as it meets it, so which truths it
+     * meets is the walk's and the same for the same truths, whatever was read of them.
+     */
+    private boolean readToTheEnd(Derivation[] conditions) {
+        boolean some = false;
+        for (Derivation each : conditions) {
+            if (each != null) {
+                some = true;
+                if (!readToTheEnd(each)) {
+                    return false;
+                }
+            }
+        }
+        return some;
+    }
+
+    /** How many aggregates have been read through {@link #keepingOf}, which a reading that
+     *  reads none of them is not one of the ones that counted. */
+    private int aggregatesKept;
+
+    /** How many times the aggregates of the way being read were asked after
+     *  ({@link #aggregateInACase}), which a reading that asked none of them does not stand in. */
+    private int aggregatesAsked;
+
+    /** Whether {@code now} are the applications {@code then} were, each but for what was handed
+     *  to the names it is read in. */
+    private static boolean sameApplications(List<InputReads.Applications.Made> then,
+                                            List<InputReads.Applications.Made> now) {
+        if (then.size() != now.size()) {
+            return false;
+        }
+        for (int i = 0; i < then.size(); i++) {
+            if (!then.get(i).reads().sameButForWhatIsHanded(now.get(i).reads())
+                    || !then.get(i).keptWhere().equals(now.get(i).keptWhere())) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     /**
      * What {@code added}, a container the body wrote out, adds up to ({@link #totalOfWrittenOut}).
@@ -8925,48 +9176,8 @@ final class Pullback {
      * the comparison stands as it did for the elements that one asked of. It costs no reading.
      */
     private LinearForm<Quantity> sumOfWrittenOut(Core added, InputReads at) {
-        if (InputReads.watching() || elementsMet.crowded()) {
-            return sumOfWrittenOutAfresh(added, at);
-        }
-        List<SumRead> before = sumsRead.computeIfAbsent(added, _ -> new ArrayList<>());
-        int hash = at.hashButForWhatIsHanded();
-        for (SumRead each : before) {
-            if (each.hash() == hash && each.onTheWay() == onTheWay
-                    && each.askingWhere() == askingWhereAStepAnswers
-                    && each.sized().equals(sizedSoFar) && each.carried().equals(carriedSoFar)
-                    && sameAggregates(each.aggregates()) && elementsMet.agrees(each.footprint())
-                    && at.handsAsAsked(each.asked()) && at.sameButForWhatIsHanded(each.at())) {
-                elementsMet.takes(each.footprint());
-                return each.form();
-            }
-        }
-        Map<BindingId, LinearForm<Quantity>> sized = Map.copyOf(sizedSoFar);
-        Map<BindingId, LinearForm<Quantity>> carried = Map.copyOf(carriedSoFar);
-        List<AnAggregateInACase> aggregates = List.copyOf(aggregatesInACase);
-        SearchRegion region = onTheWay;
-        boolean askingWhere = askingWhereAStepAnswers;
-        ElementsMet.Noting noting = elementsMet.noting();
-        Watched<LinearForm<Quantity>> read = at.watchingWhatIsHanded(
-                () -> sumOfWrittenOutAfresh(added, at));
-        ElementsMet.Footprint footprint = noting.ended(elementsMet);
-        if (read.result() != null && read.asked().toldApart() && footprint != null) {
-            before.add(new SumRead(at, hash, read.asked(), footprint, region, sized, carried,
-                    aggregates, askingWhere, read.result()));
-        }
-        return read.result();
-    }
-
-    /** Whether the aggregates being read are the ones {@code then}, each the same one. */
-    private boolean sameAggregates(List<AnAggregateInACase> then) {
-        if (then.size() != aggregatesInACase.size()) {
-            return false;
-        }
-        for (int i = 0; i < then.size(); i++) {
-            if (then.get(i) != aggregatesInACase.get(i)) {
-                return false;
-            }
-        }
-        return true;
+        return sharedSums.shared(added, at, null, () -> sumOfWrittenOutAfresh(added, at),
+                _ -> true);
     }
 
     private LinearForm<Quantity> sumOfWrittenOutAfresh(Core added, InputReads at) {

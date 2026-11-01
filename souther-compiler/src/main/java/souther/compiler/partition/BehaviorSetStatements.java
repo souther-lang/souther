@@ -19,6 +19,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.Allowance;
@@ -687,7 +688,7 @@ public final class BehaviorSetStatements {
                                 && other.states(part)))
                         .toList();
                 if (!parts.isEmpty()) {
-                    left.add(new Unread(was.atom(), parts));
+                    left.add(new Unread(was.atom(), parts, was.stoppedFor()));
                 }
             }
             if (left.isEmpty()) {
@@ -704,7 +705,7 @@ public final class BehaviorSetStatements {
 
     /** One part of a condition that no reader answers for, and the parts of what it decides that
      *  the reading was left with — each read where it is written. */
-    private record Unread(Denotation atom, List<Denotation> parts) {}
+    private record Unread(Denotation atom, List<Denotation> parts, List<WhyUnread> stoppedFor) {}
 
     /** One fork that states a rule of its own, before any of its parts is asked whether another
      *  one's rule is what it states. */
@@ -760,7 +761,7 @@ public final class BehaviorSetStatements {
                         .filter(part -> !dependencies.part(part.value(), part.at()))
                         .toList();
                 if (!parts.isEmpty()) {
-                    unread.add(new Unread(atom.at(), parts));
+                    unread.add(new Unread(atom.at(), parts, atom.stoppedFor()));
                 }
             }
             if (unread.isEmpty()) {
@@ -834,14 +835,32 @@ public final class BehaviorSetStatements {
             }
             GuardThresholds.Names names = GuardThresholds.namesIn(part.value(), part.at(),
                     symbols, newtypes, answering);
-            BlockReason.RuleReadingStopped why =
-                    UnreadComparison.notAboutOwnValues(names.origin());
+            BlockReason.RuleReadingStopped stopped = stoppedAt(each.stoppedFor());
+            BlockReason.RuleReadingStopped why = stopped != null ? stopped
+                    : UnreadComparison.notAboutOwnValues(names.origin());
             names.met().keySet().forEach(at -> filed.putIfAbsent(FilingCoordinate.at(at), why));
             }
         }
         return filed.isEmpty() ? null : new ForkOfItsOwn(new RuleCitation.Written(
                 new RuleRef.Fork(behavior, fork.occurrence().origin()),
                 reaches.anchorOf(fork.occurrence().origin(), fork.at())), filed);
+    }
+
+    /**
+     * What a reading of the comparison a part is the whole of stopped at, where it stopped at a
+     * figure or a step of its own — or null where it did not stop, or stopped at a part each place
+     * words for itself, which a reader is told by what the value is made of.
+     *
+     * <p>Said as the comparison says it ({@link Cutting#whatStopsSay}), so that a fork over a part
+     * a reading gave up is told the figure that stopped it and not that the rule is about a
+     * derived value, which is true of it whether or not the reading was made.
+     */
+    private static BlockReason.RuleReadingStopped stoppedAt(List<WhyUnread> stops) {
+        if (stops.isEmpty()) {
+            return null;
+        }
+        BlockReason.WhatItStatesIsNoLine said = Cutting.whatStopsSay(stops);
+        return said != null && Cutting.saysMoreThanAPartNotRead(said) ? said : null;
     }
 
     /** Whether {@code part} names a position of the input, however the reading gets there. */

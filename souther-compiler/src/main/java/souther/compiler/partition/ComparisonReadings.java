@@ -32,6 +32,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.meaning.WrittenLines;
 import souther.compiler.types.ValueName;
 import souther.compiler.semantics.ConditionJoin;
@@ -227,11 +228,16 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * @param unanswered empty where this reading answers for the whole of it: a comparison it read,
      *                   or a position of the input — a fork on such a part tests the values standing
      *                   there and its arms are their classes, so the question is the position's
+     * @param stoppedFor why the comparison this part is the whole of was not read to the end,
+     *                   where it was not: the stops of the parts of its statement nothing read.
+     *                   Empty where the reading of it never stopped, and then the parts left are
+     *                   left for what they are made of
      */
-    record Atom(Denotation at, List<Denotation> unanswered) {
+    record Atom(Denotation at, List<Denotation> unanswered, List<WhyUnread> stoppedFor) {
 
         Atom {
             unanswered = List.copyOf(unanswered);
+            stoppedFor = List.copyOf(stoppedFor);
         }
     }
 
@@ -926,7 +932,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     for (Denotation part : ConditionSkeleton.atoms(iff.cond(),
                             WhatNamesStandFor.in(reads, in.read()))) {
                         Denotation atom = part.at().denotes(part.value(), symbols, in.newtypes());
-                        atoms.add(new Atom(atom, statedElsewhere(atom, in.read(), in.stated())));
+                        atoms.add(statedElsewhere(atom, in.read(), in.stated()));
                     }
                     forks.add(new ForkMet(in.context().of(iff.occurrence()), iff.cond(),
                             Citation.of(iff.pos()),
@@ -1634,16 +1640,23 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * {@code xs} holds something, and the comparison draws both. A statement with a part nobody
      * read leaves that part where it was read off, as any other part is.
      */
-    private static List<Denotation> statedElsewhere(Denotation atom, InputReading read,
-                                                    StatedHere here) {
+    private static Atom statedElsewhere(Denotation atom, InputReading read, StatedHere here) {
         StatedAt whole = statedAt(atom.value(), () -> WhatNamesStandFor.in(atom.at(), read), here);
-        if (whole != null && switch (whole.statement()) {
-            case Stated.AnApplication _ -> true;
-            case Stated.AComparison(var comparison) -> !Proposition.leavesSomethingUnread(
-                    WhatConditionsState.of(read).comparison(comparison, atom.at(), read)
-                            .stated().proposition());
-        }) {
-            return List.of();
+        List<WhyUnread> stoppedFor = List.of();
+        if (whole != null) {
+            switch (whole.statement()) {
+                case Stated.AnApplication _ -> {
+                    return new Atom(atom, List.of(), List.of());
+                }
+                case Stated.AComparison(var comparison) -> {
+                    Proposition stated = WhatConditionsState.of(read)
+                            .comparison(comparison, atom.at(), read).stated().proposition();
+                    if (!Proposition.leavesSomethingUnread(stated)) {
+                        return new Atom(atom, List.of(), List.of());
+                    }
+                    stoppedFor = Proposition.stopsIn(stated);
+                }
+            }
         }
         List<Denotation> left = new ArrayList<>();
         for (Denotation part : WhatAForkTests.partsOfTheAnswer(atom.value(),
@@ -1655,7 +1668,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 left.add(part);
             }
         }
-        return left;
+        return new Atom(atom, left, stoppedFor);
     }
 
     /** The parts of what {@code atom} decides that none of the three readers answers for, which is

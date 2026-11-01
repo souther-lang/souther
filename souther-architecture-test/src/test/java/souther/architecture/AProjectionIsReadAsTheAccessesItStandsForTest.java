@@ -46,8 +46,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * </ul>
  *
  * <p>The population is every method that goes down a tree through the walks the language keeps
- * ({@code Core.forEachChild}, {@code ScopeStep.forEachChild}, {@code Core.mapAll},
- * {@code Core.mapChildren}) or by hand through a field access's target. A method the table does not
+ * ({@code Core.forEachChild}, {@code Core.forEachDistinctNode}, {@code ScopeStep.forEachChild},
+ * {@code Core.mapAll}, {@code Core.mapChildren}) or by hand through a field access's target. A method the table does not
  * name is red, and so is a row naming a method that no longer is one. A row of the second kind is
  * red where the method does not ask through {@code Core.subexpressionsAt}; one of the third where it
  * does not ask through {@code Terms.heldAt}, or names every subexpression besides; one of the fourth
@@ -225,7 +225,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
 
     /** Whether calling {@code name} of {@code owner} is going down a tree. */
     private static boolean goesDown(String owner, String name) {
-        return (owner.equals(CORE) && Set.of("forEachChild", "mapAll", "mapChildren").contains(name))
+        return (owner.equals(CORE)
+                && Set.of("forEachChild", "forEachDistinctNode", "mapAll", "mapChildren")
+                        .contains(name))
                 || (owner.equals(SCOPE_STEP) && name.equals("forEachChild"))
                 || (owner.equals(CORE + "$FieldAccess") && name.equals("target"));
     }
@@ -466,7 +468,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "codegen/BodyGen", "walksInside", "(" + core + ")Z",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "check/RecordRules", "readFrom",
-                "(" + core + "Ljava/util/Map;Ljava/util/Set;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
+                "(" + core + "Ljava/util/Map;Ljava/util/Set;)V", Reading.STRUCTURE,
+                "collects which fields a clause reads, a set: a projection hands over its base as"
+                        + " its one child, where the read of a field is met");
         row(out, c + "core/BlockReaches", "walk", "(" + core + "Ljava/util/Set;L" + c
                 + "core/BlockReaches$Accumulator;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/Evaluated", "inOrder", "(" + core + ")Ljava/util/List;",

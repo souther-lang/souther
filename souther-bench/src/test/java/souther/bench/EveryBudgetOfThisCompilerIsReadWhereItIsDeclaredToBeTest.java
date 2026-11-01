@@ -262,16 +262,32 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // come to less once the walks are spent. Each figure reached is handed back with what
             // the way was read again as, and where the relation is then shown nothing of the way
             // it says it stopped at them.
+            Map.entry("souther.compiler.partition.AWayReadForARelation#heldTogether("
+                            + "Ljava/util/List;Ljava/util/List;"
+                            + "Lsouther/compiler/partition/AWayReadForARelation$FormsRead;)"
+                            + "Ljava/util/List;",
+                    "keeps a choice as it stands past the leaves looked at to find the ways that"
+                            + " may hold together, and hands the figure to what the relation says"
+                            + " it stopped at"),
             Map.entry("souther.compiler.partition.AWayReadForARelation$Part#met("
-                            + "Ljava/util/List;)Z",
-                    "keeps a choice as it stands past the ways looked along, and hands the figure"
-                            + " to what the relation says it stopped at"),
+                            + "Ljava/util/List;"
+                            + "Lsouther/compiler/partition/AWayReadForARelation$WaysFound;)Z",
+                    "keeps a choice as it stands past the ways walked to show them met, and"
+                            + " hands the figure to what the relation says it stopped at"),
+            Map.entry("souther.compiler.partition.AWayReadForARelation$ChoiceRead#of("
+                            + "Lsouther/compiler/partition/OnTheWay;"
+                            + "Lsouther/compiler/partition/AWayReadForARelation;)"
+                            + "Lsouther/compiler/partition/AWayReadForARelation$ChoiceRead;",
+                    "past the leaves a choice is opened into, asks of each alternative what its"
+                            + " choices are to meet at once, and hands the figure to what the"
+                            + " relation says it stopped at"),
             Map.entry("souther.compiler.partition.AWayReadForARelation#walked("
                             + "Ljava/util/List;)Lsouther/compiler/partition/Reachability;",
                     "stops walking a way read again at the walks it is read again with, and hands"
                             + " the figure to what the relation says it stopped at"),
             Map.entry("souther.compiler.partition.AWayReadForARelation#metBySomeValue("
-                            + "Lsouther/compiler/partition/Reachability$Reaching;)Z",
+                            + "Ljava/util/List;Lsouther/compiler/inputs/Requirements;"
+                            + "Lsouther/compiler/inputs/SearchRegion;)Z",
                     "allows the elimination what is left of the pairs a way is read again with,"
                             + " and hands the figure to what the relation says it stopped at where"
                             + " the elimination stopped there and no value was shown"),
