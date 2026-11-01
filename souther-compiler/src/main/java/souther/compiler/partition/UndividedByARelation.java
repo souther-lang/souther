@@ -1327,6 +1327,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * Whether two sides stand apart along a way stating {@code conditions}: neither the
      * declarations nor any of those ties the one to the other, the rules in {@code ignoring} left
      * out ({@link #rulesLeavingRoomAroundTheLine}).
+     *
+     * <p>Each pair worked out once. A reader asks which terms are free of every other for each
+     * term it reads and each relation it is asked, so the same pair is asked as many times as
+     * there are terms and relations, and the answer is the same each time. Held as two bits a
+     * pair, whether it was worked out and what it came to: each term asked of is asked beside
+     * every other, and the terms are those of the one relation.
      */
     private WhatARelationLeavesUndivided.Independence apartOnTheWay(List<OnAWay> conditions,
                                                                    List<Source> sources,
@@ -1337,8 +1343,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (int i = 0; i < sides.size(); i++) {
             tiedTo.add(tiedTo(i, tied, conditions, sources, read, ignoring));
         }
-        return (one, other) -> apartByTheDeclarations(one, other, sources, read, ignoring)
-                && Collections.disjoint(tiedTo.get(one), tiedTo.get(other));
+        int count = sides.size();
+        BitSet worked = new BitSet(count * count);
+        BitSet apart = new BitSet(count * count);
+        return (one, other) -> {
+            int pair = one * count + other;
+            if (!worked.get(pair)) {
+                apart.set(pair, apartByTheDeclarations(one, other, sources, read, ignoring)
+                        && Collections.disjoint(tiedTo.get(one), tiedTo.get(other)));
+                worked.set(pair);
+            }
+            return apart.get(pair);
+        };
     }
 
     /** {@link #comingOutAlong} over the rows of the one way {@code way}. */

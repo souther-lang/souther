@@ -54,6 +54,15 @@ public final class OrderedRuns {
         return new OrderedRuns(List.of(), null);
     }
 
+    /** What {@code rel} against {@code at} leaves a value on the order: one run, or the two either
+     *  side of the place a disequality leaves out. */
+    public static OrderedRuns leftBy(Rel rel, Place at) {
+        return rel == Rel.NE
+                ? of(List.of(OrderedInterval.leftBy(Rel.LT, at),
+                        OrderedInterval.leftBy(Rel.GT, at)))
+                : of(OrderedInterval.leftBy(rel, at));
+    }
+
     /** The values of one interval, which is one run, or none where it holds nothing. */
     public static OrderedRuns of(OrderedInterval run) {
         return run.holdsNothing() ? new OrderedRuns(List.of(), run)
@@ -183,6 +192,22 @@ public final class OrderedRuns {
                 : meet(of(new OrderedInterval(bounds.min(), bounds.max())));
         return met.runs.stream()
                 .map(run -> new NumericDomain.Bounds(run.low(), run.high())).toList();
+    }
+
+    /**
+     * Whether this and {@code other} hold the same values, asked of each run's values rather than
+     * of how its ends were written ({@link OrderedInterval#sameValuesAs}).
+     */
+    public boolean sameValuesAs(OrderedRuns other) {
+        if (runs.size() != other.runs.size()) {
+            return false;
+        }
+        for (int each = 0; each < runs.size(); each++) {
+            if (!runs.get(each).sameValuesAs(other.runs.get(each))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
