@@ -56,7 +56,7 @@ final class ACaseAskedAtSomeElement {
     private final Turn turn;
     private final BigInteger every;
     /** Whether the case comes out alike on every value of a turn
-     *  ({@link OnOneElement#comesOutAlikeEvery}), so that the first the list holds answers. */
+     *  ({@link OnOneElement#comesOutAlikeApart}), so that the first the list holds answers. */
     private final boolean onceATurn;
     private final String behavior;
     private final Quantities quantities;
@@ -91,8 +91,7 @@ final class ACaseAskedAtSomeElement {
         this.element = element;
         this.turn = turnIn(stated, element);
         this.every = turn == null ? BigInteger.ONE : turn.every();
-        this.onceATurn = OnOneElement.comesOutAlikeEvery(stated, element)
-                .filter(every::equals).isPresent();
+        this.onceATurn = OnOneElement.comesOutAlikeApart(stated, element, every);
         this.behavior = behavior;
         this.quantities = quantities;
         this.read = read;

@@ -288,14 +288,15 @@ public final class OnOneElement {
     }
 
     /**
-     * How many elements apart {@code stated} comes out the same, beside its list holding the
-     * element ({@link #heldByItsList}) — or nothing where, apart from that, it is no statement that
-     * comes round ({@link TheElementComesRound#in}). A row asked it at some element is then
-     * answered by the first value the list holds of each turn: every later one of the turn the
-     * list holds comes out as that one.
+     * Whether {@code stated} comes out the same on any two elements its list holds that are
+     * {@code apart} from one another: beside its list holding the element ({@link #heldByItsList}),
+     * which every element the list holds meets, it is a statement that comes round
+     * ({@link TheElementComesRound#in}) in a number of elements {@code apart} is a multiple of.
+     * A row asked it at some element of a class {@code apart} wide is then answered by the first
+     * value of the class the list holds. False wherever that is not shown.
      */
-    public static Optional<BigInteger> comesOutAlikeEvery(Proposition stated,
-                                                          Quantity.OfABinding element) {
+    public static boolean comesOutAlikeApart(Proposition stated, Quantity.OfABinding element,
+                                             BigInteger apart) {
         List<Proposition> held = heldByItsList(element);
         List<Proposition> rest = new ArrayList<>();
         conjunctsOf(stated).forEach(each -> {
@@ -305,7 +306,8 @@ public final class OnOneElement {
         });
         return TheElementComesRound.in(Proposition.all(rest))
                 .filter(round -> round.element().equals(element))
-                .map(TheElementComesRound::every);
+                .filter(round -> apart.mod(round.every()).signum() == 0)
+                .isPresent();
     }
 
     private static List<Proposition> conjunctsOf(Proposition stated) {

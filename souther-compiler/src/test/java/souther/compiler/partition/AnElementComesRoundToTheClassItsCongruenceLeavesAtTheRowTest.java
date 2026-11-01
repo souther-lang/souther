@@ -105,10 +105,43 @@ class AnElementComesRoundToTheClassItsCongruenceLeavesAtTheRowTest {
                 "the walk stops before the list's end, with no element tried meeting the case");
     }
 
+    /**
+     * Where the class the element comes round to is two wide and the rest of the case comes
+     * round in four, the first value of the class is no answer for the next one: the case is
+     * asked at each.
+     */
+    @Test
+    void aCaseComingRoundInMoreThanItsClassIsAskedAtEachValueOfTheClass() {
+        ACaseAskedAtSomeElement asked = askedBeside(2, 0, 4, remainderLeaves(1, 2, 4, 0));
+        assertEquals(AStatementAtARow.Answer.FAILS, asked.at(row(0, 1)),
+                "nought, the one even element up to one, leaves two by four");
+        assertEquals(AStatementAtARow.Answer.HOLDS, asked.at(row(0, 2)),
+                "two, the next even element, leaves nought");
+    }
+
+    /**
+     * Where the rest of the case comes round in a number the class's width is a multiple of,
+     * the first value of the class answers for all of it, however many values the list holds.
+     */
+    @Test
+    void aCaseComingRoundWithinItsClassIsAnsweredByTheClassesFirstValue() {
+        ACaseAskedAtSomeElement asked = askedBeside(1, 0, 4, remainderLeaves(1, 1, 2, 0));
+        assertEquals(AStatementAtARow.Answer.FAILS, asked.at(row(0, 1_000_000_000)),
+                "every element leaving nought by four leaves one more odd");
+    }
+
     /** {@code floorMod(weight·n + a + constant, divisor) == 0 && n >= least}, asked at some
      *  element. */
     private static ACaseAskedAtSomeElement asked(int weight, int constant, int divisor,
                                                  int least) {
+        return askedBeside(weight, constant, divisor, compared(new LinearForm<>(
+                ExactRatio.of(-least), Map.of(READ.element(), ExactRatio.ONE)), Rel.GE));
+    }
+
+    /** {@code floorMod(weight·n + a + constant, divisor) == 0 && beside}, asked at some
+     *  element. */
+    private static ACaseAskedAtSomeElement askedBeside(int weight, int constant, int divisor,
+                                                       Proposition beside) {
         Map<Quantity, ExactRatio> dividend = new LinkedHashMap<>();
         dividend.put(READ.element(), ExactRatio.of(weight));
         dividend.put(READ.a(), ExactRatio.ONE);
@@ -117,10 +150,19 @@ class AnElementComesRoundToTheClassItsCongruenceLeavesAtTheRowTest {
         Proposition stated = Proposition.all(List.of(
                 compared(new LinearForm<>(ExactRatio.ZERO, Map.of(remainder, ExactRatio.ONE)),
                         Rel.EQ),
-                compared(new LinearForm<>(ExactRatio.of(-least),
-                        Map.of(READ.element(), ExactRatio.ONE)), Rel.GE)));
+                beside));
         return ACaseAskedAtSomeElement.of(stated, "m", READ.reading().quantities(),
                 new ConcurrentHashMap<>()).orElseThrow();
+    }
+
+    /** {@code floorMod(weight·n + constant, divisor) == left}. */
+    private static Proposition remainderLeaves(int weight, int constant, int divisor, int left) {
+        Quantity remainder = new Quantity.RemainderOfADividend(READ.remainder().operation(),
+                new LinearForm<>(ExactRatio.of(constant),
+                        Map.of(READ.element(), ExactRatio.of(weight))),
+                BigInteger.valueOf(divisor));
+        return compared(new LinearForm<>(ExactRatio.of(-left), Map.of(remainder, ExactRatio.ONE)),
+                Rel.EQ);
     }
 
     private static Proposition compared(LinearForm<Quantity> form, Rel rel) {
