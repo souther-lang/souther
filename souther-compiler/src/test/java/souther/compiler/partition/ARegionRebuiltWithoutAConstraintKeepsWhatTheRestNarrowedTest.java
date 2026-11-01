@@ -18,6 +18,8 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.partition.UndividedByARelation.OnAWay;
+import souther.compiler.partition.UndividedByARelation.Rebuilding;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -26,9 +28,12 @@ import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -177,5 +182,88 @@ class ARegionRebuiltWithoutAConstraintKeepsWhatTheRestNarrowedTest {
         assertRuns(TakenConstraint.narrowedByAllBut(twice, List.of(),
                 List.of(SUM_WITHIN_THE_LINE), declarations()), run(0, 50), run(1, 12),
                 "every one of them is out");
+    }
+
+    private static OnAWay statingThat(TakenConstraint relation) {
+        return new OnAWay(Set.of(TermPath.of("p").then("a")), false, relation, null);
+    }
+
+    /** A case an arm opens: what stands at a value, with no relation. */
+    private static final OnAWay THE_CASE = new OnAWay(Set.of(TermPath.of("p")), true, null, null);
+
+    /** What some element of a container meets: nothing a region carries as a relation. */
+    private static final OnAWay SOME_ELEMENT = new OnAWay(Set.of(TermPath.of("p").then("items")),
+            false, null, TermPath.of("p").then("items"));
+
+    private static final OnAWay THE_SUM = statingThat(SUM_WITHIN_THE_LINE);
+    private static final OnAWay THE_FLOOR = statingThat(B_AT_LEAST_ONE);
+
+    private static Rebuilding rebuilding(List<TakenConstraint> applied, List<OnAWay> written,
+                                         List<TakenConstraint.Affine> met) {
+        return new Rebuilding(Optional.of(applied), written, met);
+    }
+
+    /**
+     * The case an arm opens stays among the statements and the sum is taken away: the region is
+     * the declarations less the sum, and the floor of {@code b} stays.
+     */
+    @Test
+    void aCaseLeftAmongTheStatementsDoesNotKeepTheSumTakenAwayInTheRegion() {
+        SearchRegion within = rebuilding(BOTH, List.of(THE_CASE, THE_FLOOR, THE_SUM), List.of())
+                .without(List.of(THE_CASE, THE_FLOOR), declarations());
+
+        assertRuns(within, run(0, 50), run(1, 12), "the sum is out, the case and the floor stay");
+    }
+
+    @Test
+    void statementsTakenAwayOfNothingLeaveTheRegionTheListMakes() {
+        List<OnAWay> written = List.of(THE_CASE, THE_FLOOR, THE_SUM);
+
+        assertRuns(rebuilding(BOTH, written, List.of()).without(written, declarations()),
+                run(0, 49), run(1, 12), "nothing is taken away");
+    }
+
+    /** A statement a row at the line meets stays among the statements and leaves the list. */
+    @Test
+    void aStatementMetByARowAtTheLineComesOutOfTheListWhereverItIs() {
+        List<OnAWay> written = List.of(THE_FLOOR, THE_SUM);
+
+        assertRuns(rebuilding(BOTH, written, List.of(SUM_WITHIN_THE_LINE))
+                .without(written, declarations()), run(0, 50), run(1, 12), "the sum is met");
+    }
+
+    /** Of two statements alike one is taken away, and the other keeps its place in the list. */
+    @Test
+    void ofTwoStatementsAlikeOneTakenAwayLeavesTheOther() {
+        SearchRegion within = rebuilding(List.of(B_AT_LEAST_ONE, SUM_WITHIN_THE_LINE,
+                SUM_WITHIN_THE_LINE), List.of(THE_SUM, THE_SUM), List.of())
+                .without(List.of(THE_SUM), declarations());
+
+        assertRuns(within, run(0, 49), run(1, 12), "the sum is still in the list once");
+    }
+
+    /**
+     * A case or an element asked of a container narrowed the region by what a statement does not
+     * carry, so taking it away is not told; a statement that narrows nothing is taken away and
+     * the region is the one the list makes.
+     */
+    @Test
+    void aStatementTheRegionTookInBySomethingItDoesNotCarryCannotBeTakenAway() {
+        List<OnAWay> written = List.of(THE_CASE, SOME_ELEMENT, THE_SUM);
+
+        assertNull(rebuilding(BOTH, written, List.of())
+                .without(List.of(SOME_ELEMENT, THE_SUM), declarations()), "the case");
+        assertNull(rebuilding(BOTH, written, List.of())
+                .without(List.of(THE_CASE, THE_SUM), declarations()), "the element");
+        OnAWay saysNothing = new OnAWay(Set.of(), false, null, null);
+        assertRuns(rebuilding(BOTH, List.of(saysNothing, THE_SUM), List.of())
+                .without(List.of(THE_SUM), declarations()), run(0, 49), run(1, 12),
+                "a statement of nothing the region took in");
+    }
+
+    @Test
+    void aRegionMadeSomeOtherWayCannotBeRebuilt() {
+        assertNull(new Rebuilding(Optional.empty(), List.of(THE_SUM), List.of())
+                .without(List.of(), declarations()));
     }
 }

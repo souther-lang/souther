@@ -2407,8 +2407,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   every year alike, the months and days where it states years and the dates
      *                   have years that hold it together with the rest of the way
      */
-    private record OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
-                          TermPath elementsOf, PartsLeftAlone leavesAlone) {
+    record OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
+                  TermPath elementsOf, PartsLeftAlone leavesAlone) {
 
         /** The parts of a date a statement of the other parts says nothing of. */
         enum PartsLeftAlone { NONE, YEARS, MONTHS_AND_DAYS }
@@ -4779,9 +4779,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>A region is the declarations with the constraints the way took into it, in order
      * ({@link Reachability.Reaching#narrowedBy}), and a statement that took one in is taken away
-     * by taking that one out of the list. What else narrowed it — the cases a value is held out
-     * of, a container held to an element — is in the list and stays, whatever the statements
-     * left say of it.
+     * by taking that one out of the list. Whatever else the list holds stays, whatever the
+     * statements left say of it: the order of a value a case is held out of, the container held
+     * to an element. The cases a way requires are not in the list, which holds what was taken
+     * into the region and not what the way requires ({@link Requirements}).
+     *
+     * <p>Package-private for the test that asks it what a region leaves once statements are
+     * taken away, which no reading of a model asks apart from the rest of the way.
      *
      * @param applied what the declarations were narrowed by to make the region, or empty where it
      *                was made some other way
@@ -4789,15 +4793,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param met     the forms of statements a row at the line meets, which come out of the list
      *                wherever they are in it
      */
-    private record Rebuilding(Optional<List<TakenConstraint>> applied, List<OnAWay> written,
-                              List<TakenConstraint.Affine> met) {
+    record Rebuilding(Optional<List<TakenConstraint>> applied, List<OnAWay> written,
+                      List<TakenConstraint.Affine> met) {
 
         /**
-         * The region of the declarations with {@code stated} left of the way, or null where it
-         * cannot be told: the region was made some other way, or a statement taken away
-         * narrowed it by something it does not carry.
+         * {@code declarations} with the list again, less what the statements of {@code written}
+         * that are not among {@code stated} took in — or null where that cannot be told: the
+         * region was made some other way, or a statement taken away is a case or an element
+         * asked of a container, which narrowed it by something it does not carry.
          */
-        SearchRegion without(List<OnAWay> stated, InputReading read) {
+        SearchRegion without(List<OnAWay> stated, SearchRegion declarations) {
             if (applied.isEmpty()) {
                 return null;
             }
@@ -4813,8 +4818,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     return null;
                 }
             }
-            return TakenConstraint.narrowedByAllBut(applied.get(), relations, met,
-                    read.quantities().region());
+            return TakenConstraint.narrowedByAllBut(applied.get(), relations, met, declarations);
         }
     }
 
@@ -4849,7 +4853,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // the one the rest of them leave, where the rest can be taken in again.
         SearchRegion rest = null;
         if (rebuilding != null) {
-            rest = rebuilding.without(stated, read);
+            rest = rebuilding.without(stated, read.quantities().region());
             if (rest == null) {
                 rest = narrowedBy(stated, read);
                 // And the run is what it got past working out as much without the statement:
