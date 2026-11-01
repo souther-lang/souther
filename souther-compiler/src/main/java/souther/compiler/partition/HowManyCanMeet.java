@@ -100,15 +100,31 @@ final class HowManyCanMeet {
      * not taken to be one they leave none.
      */
     private static long mostHeld(TermPath container, Type type, InputReading read) {
-        RuleReadingSource source = read.rules();
-        ValueName.Stdlib size = NumericMeasures.takenOf(type, source.inners());
-        NumericTerm.TakenOf held = size == null ? null : NumericTerm.TakenOf.howManyHeldAt(size,
-                container, type, source.inners(), source.symbols());
+        NumericTerm.TakenOf held = sizeOf(container, type, read);
         NumericDomain.Bounds runs = held == null ? null : read.quantities().runsBetween(held);
         int most = runs == null ? Integer.MAX_VALUE : CountDomain.mostFrom(runs.max());
         // Below none is a size no container has, which is the rules leaving the input nothing and
         // is said where that is asked; it is no end for a count.
         return most == Integer.MAX_VALUE || most < 0 ? Long.MAX_VALUE : most;
+    }
+
+    /** The number that is how many the container at {@code container} holds, or null where its
+     *  type has no such number. */
+    private static NumericTerm.TakenOf sizeOf(TermPath container, Type type, InputReading read) {
+        RuleReadingSource source = read.rules();
+        ValueName.Stdlib size = NumericMeasures.takenOf(type, source.inners());
+        return size == null ? null : NumericTerm.TakenOf.howManyHeldAt(size, container, type,
+                source.inners(), source.symbols());
+    }
+
+    /**
+     * Whether {@code term} is how many the container {@code counted} counts the elements of
+     * holds: the number a count of some of its elements is never more than.
+     */
+    static boolean isTheSizeOfTheContainer(CountedElements counted, NumericTerm term,
+                                           InputReading read) {
+        Position at = read.domain().at(counted.container());
+        return at != null && term.equals(sizeOf(counted.container(), at.type(), read));
     }
 
     /**

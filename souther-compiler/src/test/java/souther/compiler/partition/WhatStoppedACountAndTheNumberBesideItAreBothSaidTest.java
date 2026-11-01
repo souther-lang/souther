@@ -94,7 +94,7 @@ class WhatStoppedACountAndTheNumberBesideItAreBothSaidTest {
         Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
         on.put(limit, TermOrdersFixtures.itself(limit, Carrier.WHOLE));
         return new BorderQuantity.HowMany(counted, new LinearForm<>(ExactRatio.ZERO, added), on,
-                Optional.empty());
+                Optional.empty(), false);
     }
 
     private static TermPath pathIn(InputDomain input, String spelled) {

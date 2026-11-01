@@ -770,6 +770,7 @@ public sealed interface BorderQuantity
         private final LinearForm<NumericTerm> against;
         private final Map<NumericTerm, TermOrders> on;
         private final Optional<Count> most;
+        private final boolean netOfItsContainer;
 
         /**
          * The count of what {@code counted} counts.
@@ -778,7 +779,7 @@ public sealed interface BorderQuantity
          * @param most    the most the count comes to, where something says ({@link HowManyCanMeet})
          */
         HowMany(CountedElements counted, Optional<Count> most) {
-            this(counted, new LinearForm<>(ExactRatio.ZERO, Map.of()), Map.of(), most);
+            this(counted, new LinearForm<>(ExactRatio.ZERO, Map.of()), Map.of(), most, false);
         }
 
         /**
@@ -800,9 +801,20 @@ public sealed interface BorderQuantity
          * @param on      the orders each of its numbers is read and written on
          * @param most    the most the count comes to, where something says and nothing is added
          *                to it ({@link HowManyCanMeet})
+         * @param netOfItsContainer whether {@code against} is the size of the counted container
+         *                weighed by minus one and nothing else. The count is of elements the
+         *                container holds, so it is never more than that size and the difference
+         *                is never above nought.
          */
         HowMany(CountedElements counted, LinearForm<NumericTerm> against,
-                Map<NumericTerm, TermOrders> on, Optional<Count> most) {
+                Map<NumericTerm, TermOrders> on, Optional<Count> most,
+                boolean netOfItsContainer) {
+            if (netOfItsContainer && (against.coefs().size() != 1
+                    || !against.coefs().values().iterator().next()
+                            .equals(ExactRatio.ONE.negated()))) {
+                throw new IllegalArgumentException("what is taken from the count is the"
+                        + " container's size once over: " + against);
+            }
             if (most.isPresent() && !against.coefs().isEmpty()) {
                 throw new IllegalArgumentException("a most is of the count alone, and this one has"
                         + " a form added to it: " + against);
@@ -830,6 +842,7 @@ public sealed interface BorderQuantity
             this.against = against;
             this.on = Map.copyOf(on);
             this.most = most;
+            this.netOfItsContainer = netOfItsContainer;
         }
 
         /** The count and the form beside it, held against {@code level} as {@code relation}:
@@ -854,6 +867,9 @@ public sealed interface BorderQuantity
          * for each count it reads ({@link HowManyCanMeet#of}).
          */
         NumericDomain.Bounds runs() {
+            if (netOfItsContainer) {
+                return new NumericDomain.Bounds(null, Endpoint.inclusive(Count.of(0)));
+            }
             if (!against.coefs().isEmpty()) {
                 return NumericDomain.Bounds.OPEN;
             }

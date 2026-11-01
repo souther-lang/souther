@@ -1176,8 +1176,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         ComparisonClaim claim = ComparisonClaim.stating(
                 holds ? affine.proposition() : affine.proposition().denied());
+        boolean netOfItsContainer = added.size() == 1
+                && added.entrySet().iterator().next().getValue().equals(ExactRatio.ONE.negated())
+                && HowManyCanMeet.isTheSizeOfTheContainer(counted,
+                        added.keySet().iterator().next(), read);
         BorderQuantity.HowMany of = new BorderQuantity.HowMany(counted,
-                new LinearForm<>(ExactRatio.ZERO, added), on, Optional.empty());
+                new LinearForm<>(ExactRatio.ZERO, added), on, Optional.empty(),
+                netOfItsContainer);
         Cutting drawn = made(of, new Level.OfTheQuantity(scaled.constant().negated()),
                 scale.signum() < 0 ? claim.turned() : claim, read.quantities());
         return drawn == null ? null : cutsOrRefused(drawn);
