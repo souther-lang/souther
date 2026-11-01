@@ -143,7 +143,12 @@ final class LookupsOfOneValue {
     /** The values of the average the lookup's borders are at, as the report of {@code source}
      *  says them. */
     static List<String> bordersOfTheLookup(String source) {
-        return report(source).stream()
+        return bordersIn(report(source));
+    }
+
+    /** The same, as {@code report} says them. */
+    static List<String> bordersIn(List<String> report) {
+        return report.stream()
                 .map(A_POINT_OF_THE_LOOKUP::matcher)
                 .filter(Matcher::find)
                 .map(found -> found.group(1))
@@ -164,6 +169,11 @@ final class LookupsOfOneValue {
 
     /** The lines of the report of {@code source} saying something is not read. */
     static List<String> unread(String source) {
-        return report(source).stream().filter(line -> line.contains("not read:")).toList();
+        return unreadIn(report(source));
+    }
+
+    /** The same, of {@code report}. */
+    static List<String> unreadIn(List<String> report) {
+        return report.stream().filter(line -> line.contains("not read:")).toList();
     }
 }
