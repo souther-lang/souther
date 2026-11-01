@@ -169,6 +169,53 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
     }
 
     /**
+     * Enumerated: a limit on a sum beside holes and bounds written at random, and every whole
+     * number of a run shown of {@code a} or {@code b} has a value of the other that holds all the
+     * rules. The holes outside the boxes are among the states, so a run shown through them is
+     * asked of the points and not of the example above.
+     */
+    @Test
+    void aRunShownBesideHolesIsOneEveryValueOfWhichTheOtherCompletes() {
+        Random random = new Random(2944);
+        int shownBesideAHole = 0;
+        for (int s = 0; s < STATES; s++) {
+            List<Written> rules = new ArrayList<>(List.of(new Written(
+                    coefsOf("a", 1 + random.nextInt(3), "b", 1 + random.nextInt(3)),
+                    -random.nextInt(16), Rel.LE)));
+            for (int r = random.nextInt(3); r >= 0; r--) {
+                String atom = random.nextBoolean() ? "a" : "b";
+                Rel rel = List.of(Rel.NE, Rel.NE, Rel.GE, Rel.LE).get(random.nextInt(4));
+                rules.add(new Written(Map.of(atom, 1L), -random.nextInt(HIGH + 3) + 1L, rel));
+            }
+            NumericDomain<String> domain = told(domainOf(rules), endless("a", "b", "c"));
+            for (String atom : List.of("a", "b")) {
+                NumericDomain.Bounds run = domain.wholeRunOf(atom);
+                if (run == null) {
+                    continue;
+                }
+                if (rules.stream().anyMatch(each -> each.rel() == Rel.NE)) {
+                    shownBesideAHole++;
+                }
+                for (int value = LOW; value <= HIGH; value++) {
+                    if (!run.meet(run(value, value)).holdsAValue()) {
+                        continue;
+                    }
+                    int taken = value;
+                    String other = atom.equals("a") ? "b" : "a";
+                    boolean completes = false;
+                    for (int rest = LOW; rest <= HIGH && !completes; rest++) {
+                        Map<String, Integer> point = Map.of(atom, taken, other, rest);
+                        completes = rules.stream().allMatch(each -> holdsAt(each, point));
+                    }
+                    assertTrue(completes, () -> atom + " = " + taken + " in " + run
+                            + " has no completion under " + rules);
+                }
+            }
+        }
+        assertTrue(shownBesideAHole > 0, "no run was shown beside a hole, so none was asked");
+    }
+
+    /**
      * Over two decimals kept above nought, {@code a + b < 1} leaves each the whole open run from
      * nought to one: for any {@code a} below one, a {@code b} between nought and what {@code a}
      * leaves exists. A least end that is left out is not a value the atom takes, and the proof
