@@ -228,6 +228,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -3945,7 +3946,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private void undivided(StringBuilder out, BehaviorReport behavior,
                                   SourceRendering rendering, SourceId declaredIn,
                                   PublishedRuleHandle.WhereARuleIs places, WhereAPartIs parts) {
-        WentWithout wentWithout = WentWithout.of(behavior);
+        WentWithout wentWithout = new WentWithout(behavior);
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.APositionNoLineDivides(var position)) {
                 // What was found and not what was missed. This line is written from
@@ -4070,38 +4071,50 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * only when every copy it is about is one the comparison was read at, so a condition that
      * several comparisons put on the way does not carry the reason of one of them to another.
      */
-    private record WentWithout(Map<ModelOccurrence, Set<Detail>> byCopy) {
+    private static final class WentWithout {
 
+        /** Compared by identity: one is made per gap met, and a gap is a deep value to hash. */
         private record Detail(ConditionGap gap, ModelOccurrences copies) { }
 
-        static WentWithout of(BehaviorReport behavior) {
-            Map<ModelOccurrence, Set<Detail>> byCopy = new HashMap<>();
-            for (SettledAcross rule : behavior.ruleSettlements().values()) {
-                for (SettledAt came : rule.places()) {
-                    for (ConditionGap gap : came.leftOut()) {
-                        ModelOccurrences copies = came.at().saidOnTheWay().of(gap);
-                        Detail detail = new Detail(gap, copies);
-                        for (ModelOccurrence copy : copies) {
-                            byCopy.computeIfAbsent(copy, _ -> new LinkedHashSet<>()).add(detail);
+        private final BehaviorReport behavior;
+        private Map<ModelOccurrence, List<Detail>> byCopy;
+
+        /** Built on the first ask, which a behavior with no rule about a derived value never makes. */
+        WentWithout(BehaviorReport behavior) {
+            this.behavior = behavior;
+        }
+
+        private Map<ModelOccurrence, List<Detail>> byCopy() {
+            if (byCopy == null) {
+                byCopy = new HashMap<>();
+                for (SettledAcross rule : behavior.ruleSettlements().values()) {
+                    for (SettledAt came : rule.places()) {
+                        for (ConditionGap gap : came.leftOut()) {
+                            ModelOccurrences copies = came.at().saidOnTheWay().of(gap);
+                            Detail detail = new Detail(gap, copies);
+                            for (ModelOccurrence copy : copies) {
+                                byCopy.computeIfAbsent(copy, _ -> new ArrayList<>()).add(detail);
+                            }
                         }
                     }
                 }
             }
-            return new WentWithout(byCopy);
+            return byCopy;
         }
 
         /** The gaps about nothing but copies of {@code readAt}, each once, in the order met. */
         List<ConditionGap> at(ModelOccurrences readAt) {
             Set<ModelOccurrence> read = new HashSet<>(readAt.inOrder());
-            Set<Detail> about = new LinkedHashSet<>();
+            Set<Detail> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+            List<ConditionGap> about = new ArrayList<>();
             for (ModelOccurrence copy : readAt) {
-                for (Detail each : byCopy.getOrDefault(copy, Set.of())) {
-                    if (read.containsAll(each.copies().inOrder())) {
-                        about.add(each);
+                for (Detail each : byCopy().getOrDefault(copy, List.of())) {
+                    if (read.containsAll(each.copies().inOrder()) && seen.add(each)) {
+                        about.add(each.gap());
                     }
                 }
             }
-            return about.stream().map(Detail::gap).toList();
+            return about;
         }
     }
 
