@@ -377,6 +377,7 @@ public final class StandingAtAPoint {
 
         private final Supplier<List<MeasuredInput.BorderReading>> making;
         private List<WhereAPartDecides.AskedOfRows> asked;
+        private List<Proposition> cases;
 
         private OtherReadings(Supplier<List<MeasuredInput.BorderReading>> making) {
             this.making = making;
@@ -392,13 +393,16 @@ public final class StandingAtAPoint {
          * row: a row at one of them is a row of that reading and at no class of this one.
          */
         public List<Proposition> cases() {
-            return making.get().stream()
-                    .map(each -> each.border().origin())
-                    .filter(LineOrigin.ComparisonOrigin.class::isInstance)
-                    .map(LineOrigin.ComparisonOrigin.class::cast)
-                    .flatMap(each -> each.part().stream())
-                    .map(WhereAPartDecides::decides)
-                    .toList();
+            if (cases == null) {
+                cases = making.get().stream()
+                        .map(each -> each.border().origin())
+                        .filter(LineOrigin.ComparisonOrigin.class::isInstance)
+                        .map(LineOrigin.ComparisonOrigin.class::cast)
+                        .flatMap(each -> each.part().stream())
+                        .map(WhereAPartDecides::decides)
+                        .toList();
+            }
+            return cases;
         }
 
         private List<WhereAPartDecides.AskedOfRows> askedOfRows() {
