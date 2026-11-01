@@ -1791,6 +1791,11 @@ final class ReadQuantities implements Quantities {
     public NumericDomain.FormProjection projectionOf(NumericTerm term,
                                                      Collection<? extends NumericTerm> alongside) {
         LinearForm<NumericTerm> form = LinearForm.atom(term);
+        // Nothing beside is the question the other face puts, and its answer is kept there: one
+        // question is worked out in one place.
+        if (alongside.isEmpty()) {
+            return projectionOf(form, true);
+        }
         ProjectionAsked question = new ProjectionAsked(form, true, Set.copyOf(alongside));
         NumericDomain.FormProjection had = projections.get(question);
         if (had != null) {
