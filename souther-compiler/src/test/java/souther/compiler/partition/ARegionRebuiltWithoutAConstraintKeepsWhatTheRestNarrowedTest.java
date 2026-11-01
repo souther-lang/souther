@@ -28,6 +28,7 @@ import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -258,5 +259,14 @@ class ARegionRebuiltWithoutAConstraintKeepsWhatTheRestNarrowedTest {
         assertRuns(rebuilding(BOTH, List.of(saysNothing, THE_SUM), List.of())
                 .without(List.of(THE_SUM), declarations()), run(0, 49), run(1, 12),
                 "a statement of nothing the region took in");
+    }
+
+    @Test
+    void aRegionMadeSomeOtherWayHasNothingToBeRebuiltFrom() {
+        assertThrows(IllegalStateException.class,
+                () -> Rebuilding.of(Optional.empty(), List.of(THE_SUM), List.of()));
+        assertRuns(Rebuilding.of(Optional.of(BOTH), List.of(THE_SUM), List.of())
+                .without(List.of(), declarations()), run(0, 50), run(1, 12),
+                "a region made by the list, less the sum");
     }
 }

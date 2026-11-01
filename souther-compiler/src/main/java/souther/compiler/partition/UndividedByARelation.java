@@ -2544,7 +2544,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // The way as it states itself, which every reading but the terms' own is made of.
         WayRead entire = wayRead(unfree, past,
                 unfree.size() != written.size()
-                        ? new Rebuilding(narrowingToRebuildFrom(applied), written, List.of()) : null,
+                        ? Rebuilding.of(applied, written, List.of()) : null,
                 region, offItsLine, read, sources, heldWhole);
         // A statement a row beside this relation's line meets leaves the sides as they stand to
         // one another there, whatever the others hold. Each term is read without it, and no
@@ -2558,8 +2558,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         WayRead beside = met.isEmpty() ? entire : wayRead(
                 unfree.stream().filter(each -> each.affine() == null
                         || !met.contains(each.affine())).toList(),
-                past.without(met), new Rebuilding(narrowingToRebuildFrom(applied), written, met),
-                region, offItsLine,
+                past.without(met), Rebuilding.of(applied, written, met), region, offItsLine,
                 read, sources, heldWhole);
         SearchRegion along = entire.along();
         SearchRegion declared = entire.declared();
@@ -4750,18 +4749,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return List.of(first, second);
     }
 
-    /**
-     * What a way's region was narrowed by, for the rebuild that takes statements of it away: a
-     * way read by a relation carries the list, and a region made some other way has nothing to
-     * be rebuilt from.
-     */
-    private static List<TakenConstraint> narrowingToRebuildFrom(
-            Optional<List<TakenConstraint>> applied) {
-        return applied.orElseThrow(() -> new IllegalStateException(
-                "a way read by a relation that has statements taken away carries the constraints "
-                + "its region was narrowed by"));
-    }
-
     /** Whether {@code run} holds two values or more: some value, and its ends not one value. */
     private static boolean takesTwoValues(NumericDomain.Bounds run) {
         return run != null && run.holdsAValue() && run.holdsOneWholeNumber() == null
@@ -4791,6 +4778,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     record Rebuilding(List<TakenConstraint> applied, List<OnAWay> written,
                       List<TakenConstraint.Affine> met) {
+
+        /**
+         * The rebuild of a way whose region was narrowed by {@code applied}. A way read by a
+         * relation carries the list, and a region made some other way has nothing to be rebuilt
+         * from, so a statement is not taken away of it.
+         */
+        static Rebuilding of(Optional<List<TakenConstraint>> applied, List<OnAWay> written,
+                             List<TakenConstraint.Affine> met) {
+            return new Rebuilding(applied.orElseThrow(() -> new IllegalStateException(
+                    "a way with a statement taken away carries the constraints its region was "
+                    + "narrowed by")), written, met);
+        }
 
         /**
          * {@code declarations} with the list again, less what the statements of {@code written}
