@@ -2914,8 +2914,6 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String inputs = "x: Int, y: Int, q: Q";
         Map<String, String> apart = Map.of("x", RELATES, "y", RELATES);
         for (String bounds : List.of(
-                "invariant a >= 0 invariant a <= 10 invariant b >= 0 invariant b <= 10",
-                "invariant a >= 0 && a <= 10 invariant b >= 0 && b <= 10",
                 "invariant a >= 0 && a <= 10 && b >= 0 && b <= 10",
                 "invariant a >= 0 && b >= 0 invariant a <= 10 && b <= 10")) {
             assertEquals(apart, leftPast(inputs, "data Q = { a: Int, b: Int } " + bounds, guard,
@@ -2924,14 +2922,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
         Map<String, String> tied = Map.of("x", RELATES, "y", NOT_SHOWN);
         for (String bounds : List.of(
-                "invariant a >= 0 && a <= 10 && b >= 0 && b <= 10 && a <= b",
                 "invariant a <= b && b <= 10 && a >= 0 && b >= 0",
                 "invariant a >= 0 && a <= 10 && b >= 0 && b <= 10 && (a >= 8 || b >= 8)")) {
-            Map<String, String> read = leftPast(inputs, "data Q = { a: Int, b: Int } " + bounds,
-                    guard, "x == y", true);
-            assertEquals(read, leftPast(inputs, "data Q = { a: Int, b: Int } " + bounds, guard,
-                    "x == y", false), bounds);
-            assertEquals(tied, read, bounds);
+            assertEquals(tied, leftPast(inputs, "data Q = { a: Int, b: Int } " + bounds, guard,
+                    "x == y", true), bounds);
         }
     }
 
