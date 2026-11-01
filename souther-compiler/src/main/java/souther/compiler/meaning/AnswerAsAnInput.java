@@ -504,7 +504,7 @@ public final class AnswerAsAnInput {
             return null;
         }
         answers.add(answer.answered());
-        return new DecisionSubject.AnInput(new TermPath(head, answer.steps()));
+        return new DecisionSubject.AnInput(TermPath.of(head, answer.steps()));
     }
 
     /** {@code of} at the input standing for the answer, or null where it is no place of an
@@ -595,11 +595,11 @@ public final class AnswerAsAnInput {
             case DecisionAtom.OfAnAnswer(DecisionSubject.AnAnswer at) -> {
                 answers.add(at.answered());
                 yield new DecisionAtom.OfTheInput(
-                        new NumericTerm.ValueOf(new TermPath(head, at.steps())));
+                        new NumericTerm.ValueOf(TermPath.of(head, at.steps())));
             }
             case DecisionAtom.TakenOfAnAnswer taken -> {
                 answers.add(taken.of().answered());
-                TermPath place = new TermPath(head, taken.of().steps());
+                TermPath place = TermPath.of(head, taken.of().steps());
                 NumericTerm term = hasNoReadingToTakeTheNumberBy() ? new NumericTerm.ValueOf(place)
                         : NumericTerm.TakenOf.asItStands(taken.operation(), place,
                                 taken.arguments(), taken.at(), inners, symbols);
@@ -607,7 +607,7 @@ public final class AnswerAsAnInput {
             }
             case DecisionAtom.ComputedOverAnAnswer computed -> {
                 answers.add(computed.list().answered());
-                TermPath place = new TermPath(head, computed.list().steps());
+                TermPath place = TermPath.of(head, computed.list().steps());
                 NumericTerm term = hasNoReadingToTakeTheNumberBy() ? new NumericTerm.ValueOf(place)
                         : InputNumber.overWhatWasComputedByPosition(computed.operation(), place,
                                 computed.computation(), computed.each(), computed.direction(),

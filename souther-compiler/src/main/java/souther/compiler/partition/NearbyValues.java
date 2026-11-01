@@ -132,7 +132,7 @@ final class NearbyValues {
         // The walk every candidate here is made by, so what counts as a position of the value is
         // decided in one place.
         Iterator<ObservedValue> walked = of(value, type, reading,
-                new TermPath(within.head(), List.of()), List.of(), new Leaves() {
+                TermPath.of(within.head()), List.of(), new Leaves() {
 
                     @Override
                     public Iterator<ObservedValue> beside(Type.Prim prim, ObservedValue leaf,
@@ -248,7 +248,7 @@ final class NearbyValues {
             ObservedValue value, Type type, RuleReadingContext reading, InputsRowsRanWith ranWith,
             Function<Type, Iterator<ObservedValue>> stoodFor, Lists which, Put where,
             TermPath within) {
-        TermPath root = within == null ? null : new TermPath(within.head(), List.of());
+        TermPath root = within == null ? null : TermPath.of(within.head());
         return of(value, type, reading, root, List.of(), new Leaves() {
 
             @Override
@@ -575,7 +575,7 @@ final class NearbyValues {
                 plain.add(step);
             }
         }
-        return new TermPath(position.head(), plain).equals(at);
+        return TermPath.of(position.head(), plain).equals(at);
     }
 
     private static Iterator<ObservedValue> of(ObservedValue value, Type type,

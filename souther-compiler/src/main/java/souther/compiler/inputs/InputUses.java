@@ -110,7 +110,7 @@ public record InputUses(List<TermPath> decided, List<TermPath> whole, boolean kn
         if (path.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Refine)) {
             return path;
         }
-        return new TermPath(path.head(), path.steps().stream()
+        return TermPath.of(path.head(), path.steps().stream()
                 .filter(step -> !(step instanceof TermPath.Step.Refine)).toList());
     }
 
