@@ -80,9 +80,12 @@ class ADerivedValueInThePartitionPointsAtWhyItsDerivationWasNotProjectedTest {
         return out;
     }
 
-    /** The pointers under each "not read" line that says {@code said}, one list per line. */
-    private static List<List<Search>> pointedAt(List<String> lines, String said) {
-        List<List<Search>> out = new ArrayList<>();
+    /** A "not read" line, and the pointers written under it. */
+    private record Pointed(String line, List<Search> under) { }
+
+    /** Each "not read" line that says {@code said}, with the pointers under it. */
+    private static List<Pointed> pointedAt(List<String> lines, String said) {
+        List<Pointed> out = new ArrayList<>();
         for (int at = 0; at < lines.size(); at++) {
             if (!lines.get(at).contains("not read: ") || !lines.get(at).contains(said)) {
                 continue;
@@ -95,7 +98,7 @@ class ADerivedValueInThePartitionPointsAtWhyItsDerivationWasNotProjectedTest {
                 }
                 under.add(new Search(pointer.group(1), pointer.group(2)));
             }
-            out.add(under);
+            out.add(new Pointed(lines.get(at), under));
         }
         return out;
     }
@@ -104,12 +107,13 @@ class ADerivedValueInThePartitionPointsAtWhyItsDerivationWasNotProjectedTest {
      *  and in the order it shows them. */
     private static void everyPointerIsAnswered(List<String> lines) {
         List<Search> shown = shown(lines);
-        for (List<Search> under : pointedAt(lines, "")) {
+        for (Pointed each : pointedAt(lines, "")) {
             int after = -1;
-            for (Search pointer : under) {
+            for (Search pointer : each.under()) {
                 int at = shown.indexOf(pointer);
                 assertTrue(at >= 0, pointer + " is not shown by the decision section: " + shown);
-                assertTrue(at > after, "out of the order the decision section shows: " + under);
+                assertTrue(at > after,
+                        "out of the order the decision section shows: " + each.under());
                 after = at;
             }
         }
@@ -119,13 +123,13 @@ class ADerivedValueInThePartitionPointsAtWhyItsDerivationWasNotProjectedTest {
     @Test
     void aDerivedValueIsToldWhichSearchWentWithoutItsDerivation() {
         List<String> lines = report("if late(c, d) then Yes { n = 1 } else No { n = 0 }");
-        List<List<Search>> pointed = pointedAt(lines, DERIVED);
+        List<Pointed> pointed = pointedAt(lines, DERIVED);
         assertEquals(2, pointed.size(), lines::toString);
-        for (List<Search> under : pointed) {
-            assertEquals(1, under.size(), lines::toString);
-            assertTrue(under.getFirst().rule().contains("does not hold"), under::toString);
-            assertTrue(under.getFirst().left().contains("a date moved by months"),
-                    under::toString);
+        for (Pointed each : pointed) {
+            assertEquals(1, each.under().size(), lines::toString);
+            Search search = each.under().getFirst();
+            assertTrue(search.rule().contains("does not hold"), search::toString);
+            assertTrue(search.left().contains("a date moved by months"), search::toString);
         }
         everyPointerIsAnswered(lines);
     }
@@ -138,8 +142,8 @@ class ADerivedValueInThePartitionPointsAtWhyItsDerivationWasNotProjectedTest {
                 + " else No { n = 0 }) else Maybe { n = 2 }");
         List<Search> shown = shown(lines);
         assertEquals(2, shown.size(), lines::toString);
-        for (List<Search> under : pointedAt(lines, DERIVED)) {
-            assertEquals(shown, under, lines::toString);
+        for (Pointed each : pointedAt(lines, DERIVED)) {
+            assertEquals(shown, each.under(), lines::toString);
         }
         everyPointerIsAnswered(lines);
     }
@@ -152,28 +156,33 @@ class ADerivedValueInThePartitionPointsAtWhyItsDerivationWasNotProjectedTest {
                 + " then Yes { n = 1 } else No { n = 0 }");
         assertEquals(List.of(), shown(lines), lines::toString);
         assertFalse(pointedAt(lines, DERIVED).isEmpty(), lines::toString);
-        pointedAt(lines, "").forEach(under -> assertEquals(List.of(), under, lines::toString));
+        pointedAt(lines, "").forEach(each ->
+                assertEquals(List.of(), each.under(), lines::toString));
     }
 
     /** A derived value beside it is told its own reason and not the other's. */
     @Test
     void aDerivedValueBesideItIsNotToldTheReasonOfTheOther() {
-        List<String> lines = report("if late(c, d) && Int.floorMod(Date.daysBetween(c, d), 7)"
-                + " + Date.daysBetween(c, d) >= 3 then Yes { n = 1 } else No { n = 0 }");
-        List<Boolean> ofTheHelper = new ArrayList<>();
-        for (int at = 0; at < lines.size(); at++) {
-            if (lines.get(at).contains("not read: ") && lines.get(at).contains(DERIVED)) {
-                boolean helper = lines.get(at).contains("late@");
-                for (List<Search> under : pointedAt(List.of(lines.get(at), lines.get(at + 1)),
-                        DERIVED)) {
-                    for (Search each : under) {
-                        assertEquals(helper, each.left().contains("Date.addMonths"), each::toString);
-                    }
-                }
-                ofTheHelper.add(helper);
-            }
+        List<String> lines = report("if late(c, d) then (if Int.floorMod(Date.daysBetween(c, d),"
+                + " 7) + Date.daysBetween(c, d) >= 3 then Yes { n = 1 } else No { n = 0 })"
+                + " else Maybe { n = 2 }");
+        List<Pointed> pointed = pointedAt(lines, DERIVED);
+        List<Pointed> ofTheHelper = pointed.stream()
+                .filter(each -> each.line().contains("late@")).toList();
+        List<Pointed> ofTheOther = pointed.stream()
+                .filter(each -> !each.line().contains("late@")).toList();
+        assertFalse(ofTheHelper.isEmpty() || ofTheOther.isEmpty(), lines::toString);
+        for (Pointed each : ofTheHelper) {
+            each.under().forEach(search ->
+                    assertTrue(search.left().contains("Date.addMonths"), search::toString));
         }
-        assertTrue(ofTheHelper.contains(true) && ofTheHelper.contains(false), lines::toString);
+        for (Pointed each : ofTheHelper) {
+            assertFalse(each.under().isEmpty(), lines::toString);
+        }
+        // Its own rules are ones the decision section settles, so it has nothing to point at.
+        for (Pointed each : ofTheOther) {
+            assertEquals(List.of(), each.under(), lines::toString);
+        }
         everyPointerIsAnswered(lines);
     }
 }

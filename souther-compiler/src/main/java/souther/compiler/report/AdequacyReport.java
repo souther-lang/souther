@@ -4050,7 +4050,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static List<SettledAt> unsettledShown(BehaviorReport behavior) {
         DecisionEvidence decision = behavior.evidence().decision();
-        if (decision == null || !decision.derivation().isEmpty() || decision.rules().isEmpty()) {
+        if (!rulesAreTold(decision)) {
             return List.of();
         }
         List<SettledAt> shown = new ArrayList<>();
@@ -4061,6 +4061,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
         }
         return shown;
+    }
+
+    /**
+     * Whether the decision section says anything of the rules: a reading that stopped comes back
+     * with none of them, and a body that decides nothing has none to say.
+     *
+     * <p>The one definition, which the section's own ending and every pointer to it ask, so that
+     * a pointer is made exactly where the section it points to is written.
+     */
+    private static boolean rulesAreTold(DecisionEvidence decision) {
+        return decision != null && decision.derivation().isEmpty() && !decision.rules().isEmpty();
     }
 
     /**
@@ -4705,7 +4716,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + " be written down)\n");
             return;
         }
-        if (decision.rules().isEmpty()) {
+        if (!rulesAreTold(decision)) {
             return;
         }
         // Absent where nothing was read, which is not a count of none: a build that ran no row did
