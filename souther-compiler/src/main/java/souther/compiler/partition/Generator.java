@@ -5247,14 +5247,13 @@ public final class Generator {
                                                FixtureReferences references) {
         FixtureReferenceOrigin occurrence = references.next();
         FixtureTemplate byName = FixtureTemplate.named(reachedAs, occurrence);
-        if (check.build(p, byName) instanceof CandidateCheck.Built.Value(var value)) {
-            Optional<FixtureTemplate> writtenOut = SeedFixtures.written(value,
-                    subject.types().get(p), subject.ruleReading());
-            if (writtenOut.isPresent()) {
-                return FixtureTemplate.named(reachedAs, occurrence, writtenOut.get().text());
-            }
-        }
-        return byName;
+        Optional<String> meaning = references.meaning(p, byName.text(), () ->
+                check.build(p, byName) instanceof CandidateCheck.Built.Value(var value)
+                        ? SeedFixtures.written(value, subject.types().get(p), subject.ruleReading())
+                                .map(FixtureTemplate::text)
+                        : Optional.empty());
+        return meaning.isPresent()
+                ? FixtureTemplate.named(reachedAs, occurrence, meaning.get()) : byName;
     }
 
     /**
