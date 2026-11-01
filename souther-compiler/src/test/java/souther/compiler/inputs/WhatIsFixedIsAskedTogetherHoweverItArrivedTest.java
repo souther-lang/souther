@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -350,6 +351,41 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
             assertEquals(Endpoint.inclusive(count(8)), fixed.runsBetween(term).max(),
                     term + " is held at most at eight in the fixed reading too");
         }
+    }
+
+    /**
+     * A reading asked where a term runs a second time answers out of what it worked out the first
+     * time, whatever order the terms beside it arrive in — and the answer is the one a reading that
+     * never asked works out.
+     *
+     * <p>Kept per reading, so a reading made from it by fixing more is answered by what it holds.
+     */
+    @Test
+    void aQuestionAskedTwiceOfOneReadingPutsNothingOnTheSecondTime() {
+        Read read = read(FOUR, "take");
+        ReadQuantities region = (ReadQuantities) read.inputs().quantities(read.rules());
+        NumericTerm a = FOUR_TERMS.get(0);
+        NumericTerm b = FOUR_TERMS.get(1);
+        NumericTerm c = FOUR_TERMS.get(2);
+        NumericTerm d = FOUR_TERMS.get(3);
+        ReadQuantities fixed = region.fixing(Map.of(a, count(1)));
+        NumericDomain.FormProjection first = fixed.projectionOf(b, List.of(c, d));
+
+        long before = ReadQuantities.stepsPutOn();
+        NumericDomain.FormProjection again = fixed.projectionOf(b, List.of(d, c, d));
+
+        assertEquals(0, ReadQuantities.stepsPutOn() - before);
+        assertEquals(first, again);
+        assertEquals(first, region.fixing(Map.of(a, count(1))).projectionOf(b, List.of(c, d)),
+                "a reading that never asked works out the same");
+        Map<NumericTerm, Place> more = new LinkedHashMap<>();
+        more.put(c, count(30));
+        more.put(d, count(0));
+        NumericDomain.FormProjection.Within narrowed = assertInstanceOf(
+                NumericDomain.FormProjection.Within.class,
+                fixed.fixing(more).projectionOf(b, List.of(c, d)));
+        assertEquals(Endpoint.inclusive(count(9)), narrowed.bounds().max(),
+                "a reading fixing more is answered by what it holds");
     }
 
     private static ReadQuantities taken(ReadQuantities.Taking taking) {

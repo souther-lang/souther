@@ -213,6 +213,30 @@ final class ReadQuantities implements Quantities {
      *  the reading it is asked of: what it answers is this reading's alone, fixings included. */
     private final Map<NumericTerm, Optional<NumericDomain.Bounds>> wholeRuns =
             new ConcurrentHashMap<>();
+    /**
+     * Where each form this reading has been asked about runs ({@link #runsIn}), by the question,
+     * worked out once for the reading it is asked of: fixings and what was taken in are in the
+     * answer, so a refinement is another value with nothing kept.
+     *
+     * <p>Kept at {@link #runsIn} and not at the faces above it, because every face reaches it —
+     * the declarations', the region's, a term asked with others beside it, and the fold that asks
+     * how many a container holds under a context it has reached.
+     *
+     * <p>Not {@code computeIfAbsent}: working out a projection asks other questions of this
+     * reading, which would update the map from inside its own update. Two threads that raced work
+     * out the same answer from the same value.
+     */
+    private final Map<ProjectionAsked, NumericDomain.FormProjection> projections =
+            new ConcurrentHashMap<>();
+
+    /**
+     * One question {@link #runsIn} answers: everything its answer turns on besides this value.
+     *
+     * <p>{@code alongside} as a set, because that is what the answer reads it as — each term is put
+     * on the rules once, in the order the terms are written down, whatever order it arrived in.
+     */
+    private record ProjectionAsked(StructuralContext under, LinearForm<NumericTerm> form,
+                                   boolean andTheDeclared, Set<NumericTerm> alongside) {}
 
     /**
      * The term this reading fixed one more of than the reading it was made from, with what that
@@ -1719,35 +1743,19 @@ final class ReadQuantities implements Quantities {
         return carrier == null ? null : carrier.space();
     }
 
-    /**
-     * Where each form this reading has been asked about runs ({@link #runsBetween}). Kept because
-     * the readings of one comparison ask the same operations of the same places over and over,
-     * and what the declarations leave a form does not turn on which reading asks.
-     *
-     * <p>Not {@code computeIfAbsent}: working out a projection asks other questions of this
-     * reading, which would update the map from inside its own update.
-     */
-    private final Map<LinearForm<NumericTerm>, NumericDomain.Bounds> runsOfForms =
-            new ConcurrentHashMap<>();
-
     @Override
     public NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form) {
         if (form.coefs().isEmpty()) {
             return null;
         }
-        NumericDomain.Bounds had = runsOfForms.get(form);
-        if (had == null) {
-            // What the declarations were read to prove. Where they admit no value there are no
-            // lines owed, which a range cannot say, so a reader drawing lines asks
-            // projectionOfTheDeclarations; a caller looking for somewhere to put a value asks the
-            // region face. Both keep the difference ({@link #projectionOf}).
-            had = switch (projectionOf(form, false, List.of())) {
-                case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) -> bounds;
-                case NumericDomain.FormProjection.NothingIsLeft _ -> NumericDomain.Bounds.OPEN;
-            };
-            runsOfForms.put(form, had);
-        }
-        return had;
+        // What the declarations were read to prove. Where they admit no value there are no lines
+        // owed, which a range cannot say, so a reader drawing lines asks
+        // projectionOfTheDeclarations; a caller looking for somewhere to put a value asks the
+        // region face. Both keep the difference ({@link #projectionOf}).
+        return switch (projectionOf(form, false, List.of())) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) -> bounds;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> NumericDomain.Bounds.OPEN;
+        };
     }
 
     @Override
@@ -1893,6 +1901,21 @@ final class ReadQuantities implements Quantities {
                                                 LinearForm<NumericTerm> form,
                                                 boolean andTheDeclared,
                                                 List<NumericTerm> alongside) {
+        ProjectionAsked asked =
+                new ProjectionAsked(under, form, andTheDeclared, Set.copyOf(alongside));
+        NumericDomain.FormProjection had = projections.get(asked);
+        if (had == null) {
+            had = projectedIn(under, form, andTheDeclared, alongside);
+            projections.put(asked, had);
+        }
+        return had;
+    }
+
+    /** {@link #runsIn}, worked out. */
+    private NumericDomain.FormProjection projectedIn(StructuralContext under,
+                                                     LinearForm<NumericTerm> form,
+                                                     boolean andTheDeclared,
+                                                     List<NumericTerm> alongside) {
         ConstraintState<InputAtom> rules = effectiveConstraints(under);
         // Walked by the terms: what each one brings in is taken onto the state the one before it
         // left, and a form says which terms it weighs without saying which was written first.
