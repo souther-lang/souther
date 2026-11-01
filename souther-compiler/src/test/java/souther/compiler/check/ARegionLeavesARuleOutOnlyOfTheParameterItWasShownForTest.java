@@ -109,7 +109,8 @@ class ARegionLeavesARuleOutOnlyOfTheParameterItWasShownForTest {
 
         SearchRegion without = region.withoutTheRelationOf(
                 Map.of("x", partsOfTheRule(compilation, "Band")));
-        assertNull(region.wholeRunOf(a), "the original region does not answer the run as whole");
+        assertEquals(runOf(region, a), region.wholeRunOf(a),
+                "with the relation in force every a still has a b, the lowest sum being past 100");
         assertEquals(runOf(region, a), without.wholeRunOf(a),
                 "the region without the relation answers the run it kept as whole");
         assertEquals(runOf(region, a), runOf(without, a),

@@ -1288,7 +1288,8 @@ public final class NumericDomain<A> {
                 return leavesAValueInside(atoms) ? Shown.PROVEN : Shown.NOTHING;
             }
             Map<A, Bounds> runs = runsInsideTheirOrders(atoms);
-            if (runs != null && limitsOnSumsHoldAtTheLowCorner(atoms, runs, rules)) {
+            if (runs != null && limitsOnSumsHoldAtTheLowCorner(atoms, runs,
+                    rulesTheBoxesDoNotHold(rules, runs))) {
                 return Shown.AT_THE_LOW_CORNER;
             }
             if ((runs != null && aPointOfTheBoxHolds(atoms, runs, rules))
@@ -1431,6 +1432,72 @@ public final class NumericDomain<A> {
             }
         }
         return true;
+    }
+
+    /**
+     * The {@code rules} some point of the boxes {@code runs} does not hold: the only ones a
+     * witness drawn from the boxes has to be checked against.
+     *
+     * <p>Written once here and not in the corner's proof, which reads a shape — a limit on a sum —
+     * and has no place for a rule that is another shape because of how it was written.
+     */
+    private static <A> List<AffineConstraint<A>> rulesTheBoxesDoNotHold(
+            List<AffineConstraint<A>> rules, Map<A, Bounds> runs) {
+        return rules.stream().filter(rule -> !holdsThroughoutTheBoxes(rule, runs)).toList();
+    }
+
+    /**
+     * Whether every point of the boxes {@code runs} holds {@code rule}: a sum the boxes keep
+     * under its bound, a sum they hold to one value, or a value the sum never takes.
+     *
+     * <p>Asked of the boxes alone and not of the closure of the rules: a difference such as
+     * {@code x > y} holds {@code x /= y} while the boxes of {@code x} and {@code y} still meet at
+     * a point where they are equal, and the corner's witnesses are drawn from the boxes.
+     */
+    private static <A> boolean holdsThroughoutTheBoxes(AffineConstraint<A> rule,
+                                                       Map<A, Bounds> runs) {
+        Reach reach = Reach.of(rule.form().coefs(), ExactRatio.ZERO, atom -> {
+            Bounds run = runs.get(atom);
+            return run == null ? Reach.ANYWHERE
+                    : Reach.between(cutOf(run.min()), cutOf(run.max()));
+        });
+        ExactCut least = reach.least();
+        ExactCut most = reach.most();
+        return switch (rule) {
+            case AffineConstraint.HalfSpace<A> half -> liesAbove(most, half.bound().at())
+                    || (most != null && most.at().equals(half.bound().at())
+                            && half.bound().inclusive());
+            case AffineConstraint.Equality<A> at -> least != null && most != null
+                    && least.inclusive() && most.inclusive()
+                    && least.at().equals(at.at()) && most.at().equals(at.at());
+            case AffineConstraint.Disequality<A> hole ->
+                    liesBelow(least, hole.at()) || liesAbove(most, hole.at());
+        };
+    }
+
+    /** Whether {@code value} is below {@code least}, which it is at the end itself only where the
+     *  end is not taken. */
+    private static boolean liesBelow(ExactCut least, ExactRatio value) {
+        if (least == null) {
+            return false;
+        }
+        int order = value.compareTo(least.at());
+        return order < 0 || (order == 0 && !least.inclusive());
+    }
+
+    /** Whether {@code value} is above {@code most}, which it is at the end itself only where the
+     *  end is not taken. */
+    private static boolean liesAbove(ExactCut most, ExactRatio value) {
+        if (most == null) {
+            return false;
+        }
+        int order = value.compareTo(most.at());
+        return order > 0 || (order == 0 && !most.inclusive());
+    }
+
+    private static ExactCut cutOf(Endpoint end) {
+        return end != null && end.at() instanceof Count count
+                ? new ExactCut(count.exactly(), end.inclusive()) : null;
     }
 
     private static <A> long weighedAtoms(AffineConstraint.HalfSpace<A> half) {
