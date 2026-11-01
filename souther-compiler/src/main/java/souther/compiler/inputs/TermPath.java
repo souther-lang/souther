@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.RandomAccess;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * A parameter-rooted location: a parameter, and the steps taken from it.
@@ -147,7 +148,7 @@ public record TermPath(String head, List<Step> steps) {
         // A path is rooted somewhere. Rooted at nothing it is a place with no parameter to be a
         // place of, and every answer that carries one says a position was reached.
         Objects.requireNonNull(head, "a path is rooted at a parameter");
-        steps = steps instanceof Steps own && own.head.equals(head) && !own.interned
+        steps = steps instanceof Steps own && own.head.equals(head) && own.id == 0
                 ? steps : Steps.plain(head, List.copyOf(steps));
     }
 
@@ -190,11 +191,13 @@ public record TermPath(String head, List<Step> steps) {
          *  by the constructor. */
         private final TermPath parent;
 
-        /** Whether these are the steps of the one path of their head that derivations return.
-         *  What is derived from a path is kept beside this type ({@link #CHILDREN}) and not in it:
-         *  a path is carried by a great many answers, and a path that held the paths made from it
-         *  would hold itself through them. */
-        private boolean interned;
+        /** What the table of derived paths calls the path these are the steps of, or nought where
+         *  that is not the one path of its head that derivations return. A number and not a
+         *  reference, so that what the table files a path under keeps no path alive. What is
+         *  derived from a path is kept beside this type ({@link #FILED}) and not in it: a path is
+         *  carried by a great many answers, and a path that held the paths made from it would
+         *  hold itself through them. */
+        private long id;
 
         /** How a path under one head spells these, kept for the last head asked: a path is spelled
          *  to be put in an order or into a message far more often than it is made, and one value
@@ -213,13 +216,13 @@ public record TermPath(String head, List<Step> steps) {
             return new Steps(head, of, null);
         }
 
-        /** The path made with these steps, which is the one derivations return; said before it is
-         *  handed to anybody, since the constructor does not share the steps of an interned
-         *  path with a path of its own. */
-        static TermPath internedPath(String head, List<Step> of, TermPath parent) {
+        /** The path made with these steps, which is the one derivations return once it is filed;
+         *  numbered before it is handed to anybody, since the constructor does not share the steps
+         *  of a numbered path with a path of its own. */
+        static TermPath numberedPath(String head, List<Step> of, TermPath parent) {
             Steps made = new Steps(head, of, parent);
             TermPath path = new TermPath(head, made);
-            made.interned = true;
+            made.id = NUMBERS.incrementAndGet();
             return path;
         }
 
@@ -288,40 +291,102 @@ public record TermPath(String head, List<Step> steps) {
         }
     }
 
-    /**
-     * The roots, by parameter name, held weakly: a root lives while a path under it is held, and
-     * the paths derived from it live as long as it does, so a session that outlives a compile
-     * keeps none of the paths of a compile nothing holds any more.
-     */
-    private static final ConcurrentHashMap<String, WeakReference<TermPath>> ROOTS =
-            new ConcurrentHashMap<>();
-
     private static final Step ELEMENT = new Step.Element();
     private static final Step KEY = new Step.Key();
+
+    /** The numbers paths are filed under; nought is no path, and stands for the place roots are
+     *  filed from. */
+    private static final AtomicLong NUMBERS = new AtomicLong();
+
+    /**
+     * Every path derivations return, by the place it is filed at: the number of the path it is one
+     * step further than and that step, or, for a root, no path and the field named by its
+     * parameter. A process shares this across every compile it makes, so it lets go of whatever
+     * nothing else holds.
+     *
+     * <p>Its keys are numbers and steps and name no path, which is what lets a path go: a key that
+     * held the parent would keep it, and everything above it, for as long as the entry stayed,
+     * and the entry stays until it is swept. A path made from another holds that one itself, so a
+     * parent is filed for as long as a path made from it is, and a number is never given twice.
+     * What is swept is the entry of a path that was collected, and it is swept at every ask, since
+     * the ask that finds nothing to sweep costs a read.
+     */
+    private static final ConcurrentHashMap<Place, Filed> FILED = new ConcurrentHashMap<>();
+    private static final ReferenceQueue<TermPath> COLLECTED = new ReferenceQueue<>();
+
+    /** Where a path is filed. Compared in the code and not through a record's own, which goes
+     *  through a method handle: this is asked at every derivation of a path. */
+    private record Place(long under, Step step) {
+
+        @Override
+        public int hashCode() {
+            return 31 * Long.hashCode(under) + step.hashCode();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Place place && place.under == under && place.step.equals(step);
+        }
+    }
+
+    /** A path filed, weakly, with the place to take the entry out of by. */
+    private static final class Filed extends WeakReference<TermPath> {
+
+        private final Place place;
+
+        Filed(TermPath path, Place place) {
+            super(path, COLLECTED);
+            this.place = place;
+        }
+    }
+
+    /** How many places are filed, which is what a test asks to know that the entries of paths
+     *  nothing holds are gone as well. */
+    static int placesFiled() {
+        sweep();
+        return FILED.size();
+    }
+
+    /** Takes out the entries of the paths that were collected; an entry that has been filed again
+     *  since is not the one taken out. */
+    private static void sweep() {
+        for (Reference<? extends TermPath> gone = COLLECTED.poll(); gone != null;
+             gone = COLLECTED.poll()) {
+            FILED.remove(((Filed) gone).place, gone);
+        }
+    }
+
+    /** The path filed at {@code place}, or null where none is held. */
+    private static TermPath filedAt(Place place) {
+        sweep();
+        Filed held = FILED.get(place);
+        return held == null ? null : held.get();
+    }
+
+    /** {@code made} filed at {@code place}, or the path another thread filed there first. */
+    private static TermPath filing(Place place, TermPath made) {
+        Filed mine = new Filed(made, place);
+        while (true) {
+            Filed held = FILED.putIfAbsent(place, mine);
+            if (held == null) {
+                return made;
+            }
+            TermPath had = held.get();
+            if (had != null) {
+                return had;
+            }
+            if (FILED.replace(place, held, mine)) {
+                return made;
+            }
+        }
+    }
 
     /** The path of the parameter itself, which is the same instance for as long as one is held. */
     public static TermPath of(String head) {
         Objects.requireNonNull(head, "a path is rooted at a parameter");
-        WeakReference<TermPath> held = ROOTS.get(head);
-        TermPath root = held == null ? null : held.get();
-        if (root != null) {
-            return root;
-        }
-        TermPath fresh = Steps.internedPath(head, List.of(), null);
-        WeakReference<TermPath> mine = new WeakReference<>(fresh);
-        while (true) {
-            held = ROOTS.putIfAbsent(head, mine);
-            if (held == null) {
-                return fresh;
-            }
-            root = held.get();
-            if (root != null) {
-                return root;
-            }
-            if (ROOTS.replace(head, held, mine)) {
-                return fresh;
-            }
-        }
+        Place place = new Place(0, new Step.Field(head));
+        TermPath root = filedAt(place);
+        return root != null ? root : filing(place, Steps.numberedPath(head, List.of(), null));
     }
 
     /**
@@ -334,74 +399,24 @@ public record TermPath(String head, List<Step> steps) {
 
     /** The one path equal to this, which is this one where it was derived. */
     private TermPath canonical() {
-        return held().interned ? this : of(head, steps);
+        return held().id != 0 ? this : of(head, steps);
     }
 
     private Steps held() {
         return (Steps) steps;
     }
 
-    /**
-     * The paths derived from another by one step, by the path and the step: weak, so that a path
-     * nothing holds goes and takes its entry with it. The key holds the parent, which a path made
-     * from it holds as well, so a parent is there for as long as any path made from it is.
-     */
-    private static final ConcurrentHashMap<ChildKey, ChildRef> CHILDREN = new ConcurrentHashMap<>();
-    private static final ReferenceQueue<TermPath> GONE = new ReferenceQueue<>();
-
-    private record ChildKey(TermPath parent, Step step) {
-
-        @Override
-        public int hashCode() {
-            return 31 * System.identityHashCode(parent) + step.hashCode();
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            return other instanceof ChildKey that && that.parent == parent
-                    && that.step.equals(step);
-        }
-    }
-
-    private static final class ChildRef extends WeakReference<TermPath> {
-
-        private final ChildKey key;
-
-        ChildRef(TermPath child, ChildKey key) {
-            super(child, GONE);
-            this.key = key;
-        }
-    }
-
-    /** The path one step further than this interned one, made the first time it is asked. */
+    /** The path one step further than this filed one, made the first time it is asked. */
     private TermPath within(Step step) {
-        ChildKey key = new ChildKey(this, step);
-        ChildRef held = CHILDREN.get(key);
-        TermPath had = held == null ? null : held.get();
+        Place place = new Place(held().id, step);
+        TermPath had = filedAt(place);
         if (had != null) {
             return had;
-        }
-        for (Reference<? extends TermPath> gone = GONE.poll(); gone != null; gone = GONE.poll()) {
-            CHILDREN.remove(((ChildRef) gone).key, gone);
         }
         List<Step> longer = new ArrayList<>(steps.size() + 1);
         longer.addAll(steps);
         longer.add(step);
-        TermPath fresh = Steps.internedPath(head, List.copyOf(longer), this);
-        ChildRef mine = new ChildRef(fresh, key);
-        while (true) {
-            held = CHILDREN.putIfAbsent(key, mine);
-            if (held == null) {
-                return fresh;
-            }
-            had = held.get();
-            if (had != null) {
-                return had;
-            }
-            if (CHILDREN.replace(key, held, mine)) {
-                return fresh;
-            }
-        }
+        return filing(place, Steps.numberedPath(head, List.copyOf(longer), this));
     }
 
     /** This canonical path taken on by each of {@code more}. */
