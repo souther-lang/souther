@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -1824,27 +1825,72 @@ public final class WhereEachLineDecides {
      * element, which the part does not move.
      */
     private static Proposition with(Proposition stated, Proposition part, boolean holds) {
-        return switch (stated) {
-            case Proposition.All all -> Proposition.all(all.parts().stream()
-                    .map(each -> with(each, part, holds)).toList());
-            case Proposition.Any any -> Proposition.any(any.parts().stream()
-                    .map(each -> with(each, part, holds)).toList());
-            case Proposition.WhereItAnswers where -> Proposition.whereItAnswers(
-                    with(where.answers(), part, holds), with(where.states(), part, holds));
-            case Proposition.SoManyHold counted ->
-                    counted.mapped(each -> with(each, part, holds));
-            case Proposition.OfTheWays ways -> with(ways.written(), part, holds);
-            case Proposition leaf when standsAs(leaf, part) ->
-                    new Proposition.Always(leaf.spelling().equals(part.spelling()) == holds);
-            case Proposition.Some some when !part.mayTurnOnAnElementOf(some.container()) ->
-                    new Proposition.Some(some.container(), with(some.ofTheElement(), part, holds),
-                            some.holds());
-            case Proposition.Some _, Proposition.Always _, Proposition.Compared _,
-                 Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
-                 Proposition.InTheStrings _, Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _,
-                 Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
-                 Proposition.OnAnApplication _ -> stated;
-        };
+        return new ComingOut(part, holds, new IdentityHashMap<>()).with(stated);
+    }
+
+    /**
+     * One part come out one way, put through a statement.
+     *
+     * @param came what each part met so far came to: a part a statement holds in several places
+     *             is put through once, and one the part does not stand in is itself, so that
+     *             what holds it is not built again
+     */
+    private record ComingOut(Proposition part, boolean holds, Map<Proposition, Proposition> came) {
+
+        Proposition with(Proposition stated) {
+            Proposition had = came.get(stated);
+            if (had == null) {
+                had = withOnce(stated);
+                came.put(stated, had);
+            }
+            return had;
+        }
+
+        private Proposition withOnce(Proposition stated) {
+            return switch (stated) {
+                case Proposition.All all -> {
+                    List<Proposition> each = with(all.parts());
+                    yield each == all.parts() ? stated : Proposition.all(each);
+                }
+                case Proposition.Any any -> {
+                    List<Proposition> each = with(any.parts());
+                    yield each == any.parts() ? stated : Proposition.any(each);
+                }
+                case Proposition.WhereItAnswers where -> {
+                    Proposition answers = with(where.answers());
+                    Proposition states = with(where.states());
+                    yield answers == where.answers() && states == where.states() ? stated
+                            : Proposition.whereItAnswers(answers, states);
+                }
+                case Proposition.SoManyHold counted -> counted.mapped(this::with);
+                case Proposition.OfTheWays ways -> with(ways.written());
+                case Proposition leaf when standsAs(leaf, part) ->
+                        new Proposition.Always(leaf.spelling().equals(part.spelling()) == holds);
+                case Proposition.Some some when !part.mayTurnOnAnElementOf(some.container()) -> {
+                    Proposition met = with(some.ofTheElement());
+                    yield met == some.ofTheElement() ? stated
+                            : new Proposition.Some(some.container(), met, some.holds());
+                }
+                case Proposition.Some _, Proposition.Always _, Proposition.Compared _,
+                     Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
+                     Proposition.InTheStrings _, Proposition.SameValue _,
+                     Proposition.StringInside _, Proposition.LastToHold _,
+                     Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.OnAnApplication _ -> stated;
+            };
+        }
+
+        /** Each of {@code parts} put through, the same parts where none changed. */
+        private List<Proposition> with(List<Proposition> parts) {
+            List<Proposition> out = new ArrayList<>(parts.size());
+            boolean changed = false;
+            for (Proposition each : parts) {
+                Proposition one = with(each);
+                changed |= one != each;
+                out.add(one);
+            }
+            return changed ? out : parts;
+        }
     }
 
     /**
