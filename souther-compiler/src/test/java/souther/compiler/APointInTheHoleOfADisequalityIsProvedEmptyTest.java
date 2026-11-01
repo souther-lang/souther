@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.partition.PointRole;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderObligationPointAssessment;
@@ -91,34 +92,78 @@ class APointInTheHoleOfADisequalityIsProvedEmptyTest {
                 | (0) -> false
             """;
 
+    private static final String DATES = """
+            module m
+
+            behavior f : (d: Date) -> Int
+
+            let f (d) = if d == Date("2024-03-01") then 3 else (if d >= Date("2024-03-01") then 1 else 2)
+
+            example f
+                | (Date("2024-03-01")) -> 3
+                | (Date("2024-02-29")) -> 2
+                | (Date("2024-03-02")) -> 1
+                | (Date("2020-01-01")) -> 2
+                | (Date("2030-01-01")) -> 1
+            """;
+
+    private static final String DECIMALS = """
+            module m
+
+            behavior f : (x: Decimal) -> Int
+
+            let f (x) = if x == 50.0m then 3 else (if x >= 50.0m then 1 else 2)
+
+            example f
+                | (50.0m) -> 3
+                | (49.0m) -> 2
+                | (51.0m) -> 1
+                | (0.0m) -> 2
+                | (60.0m) -> 1
+            """;
+
+    /** A carrier whose places count in days: the number the region holds is the count of the date. */
+    @Test
+    void theOnPointOfADateThresholdTakenFromTheEqualityIsOneNoRowCanStandAt() {
+        assertEquals(List.of("ON Refuted", "OFF Met", "OUT Met"),
+                pointsOf(DATES, "f", ComparisonClaim.Cut.class));
+    }
+
+    /** A carrier with no next value: the point in the hole is refuted and none is invented beside it. */
+    @Test
+    void theOnPointOfADecimalThresholdTakenFromTheEqualityIsOneNoRowCanStandAt() {
+        assertEquals(List.of("ON Refuted", "OUT Met"),
+                pointsOf(DECIMALS, "f", ComparisonClaim.Cut.class));
+    }
+
     @Test
     void theOnPointOfAThresholdTakenFromTheEqualityIsOneNoRowCanStandAt() {
         assertEquals(List.of("ON Refuted", "OFF Met", "OUT Met"),
-                pointsOf(THRESHOLD_AFTER_THE_EQUALITY, "f", "Cut"),
+                pointsOf(THRESHOLD_AFTER_THE_EQUALITY, "f", ComparisonClaim.Cut.class),
                 "the threshold's ON point is the value the equality took, and its other points are"
                         + " rows");
         assertEquals(List.of("ON Met", "OFF Met", "OFF Met", "OUT Met", "OUT Met"),
-                pointsOf(THRESHOLD_AFTER_THE_EQUALITY, "f", "Singled"),
+                pointsOf(THRESHOLD_AFTER_THE_EQUALITY, "f", ComparisonClaim.Singled.class),
                 "the equality's own points are untouched");
     }
 
     @Test
     void theOnPointOfAThresholdTakenFromTheEqualityFromBelowIsOneNoRowCanStandAt() {
         assertEquals(List.of("ON Refuted", "OFF Met", "OUT Met"),
-                pointsOf(BELOW_THE_EQUALITY, "f", "Cut"));
+                pointsOf(BELOW_THE_EQUALITY, "f", ComparisonClaim.Cut.class));
     }
 
     @Test
     void aPointTheHoleLeavesIsNotRefutedAndOneInItIs() {
         assertEquals(List.of("ON Met", "OFF Refuted", "IN Met"),
-                pointsOf(THRESHOLD_BESIDE_THE_HOLE, "f", "Cut"),
+                pointsOf(THRESHOLD_BESIDE_THE_HOLE, "f", ComparisonClaim.Cut.class),
                 "51 is a value the else branch takes and 50 is the value it does not");
     }
 
     @Test
     void theOffPointOfALineReadThroughACalleeIsOneNoRowCanStandAtWhileItsGapIsStillOwed() {
         assertEquals(List.of("ON Unmet", "OFF Refuted", "IN Unmet"),
-                pointsOf(THROUGH_A_CALLEE, "full", "Cut"),
+                pointsOf(THROUGH_A_CALLEE, "full", ComparisonClaim.Cut.class),
                 "the first arm of clamp draws the line; 50 is outside the case it decides in, and"
                         + " 51 and the values past it are a gap no row fills");
     }
@@ -127,7 +172,8 @@ class APointInTheHoleOfADisequalityIsProvedEmptyTest {
      * The points of the one line of {@code behavior} whose claim is a {@code claim}, each as its
      * role and what became of the obligation.
      */
-    private static List<String> pointsOf(String model, String behavior, String claim) {
+    private static List<String> pointsOf(String model, String behavior,
+                                         Class<? extends ComparisonClaim> claim) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -141,7 +187,7 @@ class APointInTheHoleOfADisequalityIsProvedEmptyTest {
                 continue;
             }
             for (BorderObligationPointAssessment point : each.account()) {
-                if (point.point().line().line().facts().toString().contains("claim=" + claim + "[")) {
+                if (claim.isInstance(point.point().line().line().facts().claim())) {
                     PointRole role = point.point().role();
                     out.add(role + " "
                             + point.item().disposition().getClass().getSimpleName());
