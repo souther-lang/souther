@@ -296,12 +296,6 @@ public sealed interface AnotherLineTheRowsAllow {
             return new Stands(left, input);
         }
 
-        /** Whether the line is left at one value rather than on a side of a threshold, which is
-         *  where a row that rules it out is looked for at the line as well as beside it. */
-        public boolean atOneValue() {
-            return left instanceof AtOneValue;
-        }
-
         /**
          * Whether a row whose positions read as {@code values} leaves no threshold on this line
          * standing beside the rows already read, with {@code drawn} the model's own line — or why
