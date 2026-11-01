@@ -8,7 +8,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 /**
@@ -79,11 +78,6 @@ final class FormReach<A> {
     /** Every half-space of every rule, stated once for the round, and which of them name each
      *  position — see {@link #premises}. Null until the first form of two or more positions asks. */
     private Premises<A> premises;
-
-    /** For a rule a form is asked without, the places of the premises that are it ({@link
-     *  #placesOf}): a rule is asked without once for every position it weighs and for both ends of
-     *  each, and which premises are it is the same answer every time. */
-    private final Map<AffineConstraint<A>, BitSet> placesOfRule = new ConcurrentHashMap<>();
 
     /**
      * How many premises this has merged into a form, and how many it has held against the ends, for
@@ -319,9 +313,8 @@ final class FormReach<A> {
         int weighs = weighed(coefs);
         boolean residualsAreRangedOnly = weighs >= 2;
         int unbounded = residualsAreRangedOnly ? unboundedIn(coefs) : 0;
-        BitSet theRuleAskedWithout = placesOf(without);
         for (Premise<A> each : premises().each()) {
-            if (theRuleAskedWithout != null && theRuleAskedWithout.get(each.place())) {
+            if (each.rule().equals(without)) {
                 continue;
             }
             AffineConstraint.HalfSpace<A> premise = each.half();
@@ -446,26 +439,6 @@ final class FormReach<A> {
             }
         }
         return out;
-    }
-
-    /**
-     * The places of the premises whose rule equals {@code rule} as a value, or null for no rule.
-     * Worked out against {@link #premises} the first time {@code rule} is asked about and kept for
-     * the round, so a premise is compared with a rule once and not at every form asked without it.
-     */
-    private BitSet placesOf(AffineConstraint<A> rule) {
-        if (rule == null) {
-            return null;
-        }
-        return placesOfRule.computeIfAbsent(rule, asked -> {
-            BitSet out = new BitSet();
-            for (Premise<A> each : premises().each()) {
-                if (each.rule().equals(asked)) {
-                    out.set(each.place());
-                }
-            }
-            return out;
-        });
     }
 
     /**
