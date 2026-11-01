@@ -291,6 +291,8 @@ class TheStateOfAReadingIsTakenFromTheRolesOfItsFieldsTest {
     @Test
     void anInputHeldByIdentityIsTheSameOnlyForTheSameObject() {
         class AnOwnerOfACase {
+            /** Read by the state through its role, and by nothing here but a test that sets it. */
+            @SuppressWarnings("UnusedVariable")
             ACase reading = new ACase("when");
         }
         ReadingState watching = new ReadingState(AnOwnerOfACase.class,
