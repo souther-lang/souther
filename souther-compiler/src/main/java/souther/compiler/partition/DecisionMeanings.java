@@ -287,7 +287,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
                  Proposition.SomeReachable _, Proposition.Unread _, Proposition.OnAnApplication _,
                  Proposition.SoManyHold _, Proposition.WhereItAnswers _,
                  Proposition.OfTheWays _ ->
-                    DecisionCondition.AStatement.of(stated, denying.apply(stated), held);
+                    DecisionCondition.AStatement.of(denying.apply(stated), held);
         };
     }
 

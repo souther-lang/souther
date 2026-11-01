@@ -197,16 +197,25 @@ public sealed interface DecisionCondition {
         }
 
         /**
-         * {@code stated} coming out {@code held}, as the answer to the one column it and its
-         * denial are.
+         * A statement coming out {@code held}, as the answer to the one column it and its denial
+         * are, asked by its denial.
          *
-         * @param denied what holds exactly where {@code stated} does not — handed in, so that the
-         *               two ways one condition comes out name the column with one value
+         * <p>Named by the denial and the statement it denies back to, and not by the statement
+         * itself: joining is no normal form, and two statements saying the same, spelled two
+         * ways, can have one denial, which denies back to one of them. Each denial is kept both
+         * ways ({@code SharedPropositions#denied}), so the statement a denial denies back to
+         * denies to that denial again; the two make one another, and whichever of a statement,
+         * its denial and what that denies back to is met, the column is the one of the two that
+         * spells first.
+         *
+         * @param denied what holds exactly where the statement does not — the reading's own, so
+         *               that the two ways one condition comes out name the column with one value
          */
-        static DecidedCondition.Held of(Proposition stated, Proposition denied, boolean held) {
-            return denied.spelling().compareTo(stated.spelling()) < 0
+        static DecidedCondition.Held of(Proposition denied, boolean held) {
+            Proposition back = denied.denied();
+            return denied.spelling().compareTo(back.spelling()) < 0
                     ? new DecidedCondition.Held(new AStatement(denied), !held)
-                    : new DecidedCondition.Held(new AStatement(stated), held);
+                    : new DecidedCondition.Held(new AStatement(back), held);
         }
     }
 
