@@ -64,6 +64,7 @@ import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.SequencedSet;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -644,6 +645,27 @@ sealed interface ComparisonAssessment {
     }
 
     /**
+     * A reading that stopped, at a comparison the ways before it leave no row to reach.
+     *
+     * <p>Owes nothing, where {@link Unread} owes a question at each place it stopped at: the
+     * question was about what the comparison would say of a row, and no row is evaluated here. Only
+     * a proof lands here — the way to the comparison, without what a run gets past it, shown to hold
+     * no row at any place the rule is watched at. A way the declarations and conditions on it
+     * cannot settle leaves the reading {@link Unread}, so a reading that grows weaker gets its
+     * question back.
+     *
+     * <p>Asked of the way to the comparison and not of the way past it ({@code getsPast}): a run
+     * that stops in the comparison has not got past it, and is still a run that reached it.
+     */
+    record NothingArrivesAtItsStop(List<FilingCoordinate> filedAt)
+            implements ComparisonAssessment {
+
+        public NothingArrivesAtItsStop {
+            filedAt = List.copyOf(filedAt);
+        }
+    }
+
+    /**
      * Read in full, a relation to another value as a part of a statement of several — and no row
      * takes the way to any case where it decides.
      *
@@ -852,7 +874,8 @@ sealed interface ComparisonAssessment {
                 case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _,
                      CutsNothing _, AnswersNowhere _, AgainstAnotherValue _, OutsideTheDomain _,
                      NothingArrivesAtItsLine _, TurnsNothing _, NoFeasibleInput _, Unread _,
-                     NothingArrivesAtItsRelation _, RelationTurnsNothing _, Several _ -> List.of();
+                     NothingArrivesAtItsRelation _, NothingArrivesAtItsStop _,
+                     RelationTurnsNothing _, Several _ -> List.of();
             };
             List<ExactCut> out = new ArrayList<>();
             for (AtAPosition each : drawn) {
@@ -946,7 +969,7 @@ sealed interface ComparisonAssessment {
                          CutsNothing _, AnswersNowhere _, AgainstAnotherValue _,
                          OutsideTheDomain _, NothingArrivesAtItsLine _, TurnsNothing _,
                          NoFeasibleInput _, Unread _, NothingArrivesAtItsRelation _,
-                         RelationTurnsNothing _, Several _ -> false;
+                         NothingArrivesAtItsStop _, RelationTurnsNothing _, Several _ -> false;
                 };
             }
 
@@ -1015,7 +1038,8 @@ sealed interface ComparisonAssessment {
                                 WhereAReadingStopped.ELSEWHERE);
                 case AgainstAnotherValue _, AnswerDependent _, OnADependencysAnswer _,
                      StatesNoRelation _, NoInput _, CutsNothing _, AnswersNowhere _,
-                     NothingArrivesAtItsRelation _, RelationTurnsNothing _ -> null;
+                     NothingArrivesAtItsRelation _, NothingArrivesAtItsStop _,
+                     RelationTurnsNothing _ -> null;
                 case Several _ -> throw new IllegalStateException(
                         "a line of a statement is what one line comes to: " + line);
             };
@@ -1423,9 +1447,39 @@ sealed interface ComparisonAssessment {
      * not settle as much as of one a row takes.
      */
     static boolean someRowArrives(Reachability way, List<ComparisonArrival> arrivals) {
-        return waysArrivedBy(way, arrivals).stream().anyMatch(reaching ->
-                reaching.holdingEveryRow().stream()
-                        .anyMatch(region -> region.emptiness().isEmpty()));
+        return waysArrivedBy(way, arrivals).stream().anyMatch(Reachability::leavesARow);
+    }
+
+    /**
+     * {@code read} with each stop of it that no row reaches said so: the reading that stopped, or
+     * the lines of a statement of several that did.
+     *
+     * <p>Every other reading is returned as it is. A stop is dropped only on a proof that no row
+     * reaches the comparison, and the reading of a comparison no one proved anything about is as
+     * owing as it was. What proves it is the caller's: the way to the comparison, and not the way
+     * past it, together with whatever else the place says arrives there — which a clause, standing
+     * in no body, has none of, and which {@link #someRowArrives} reads an empty account of as
+     * nothing arriving.
+     *
+     * @param reached whether some row may reach the comparison. Asked only of a reading that
+     *                stopped
+     */
+    static ComparisonAssessment whereItsStopIsReached(ComparisonAssessment read,
+                                                      BooleanSupplier reached) {
+        if (!(read instanceof Unread || read instanceof Several) || reached.getAsBoolean()) {
+            return read;
+        }
+        return switch (read) {
+            case Unread unread -> new NothingArrivesAtItsStop(
+                    List.copyOf(unread.why().keySet()));
+            case Several several -> new Several(several.parts().stream()
+                    .map(part -> part.line() instanceof Unread unread
+                            ? new Several.Part(part.id(), new NothingArrivesAtItsStop(
+                                    List.copyOf(unread.why().keySet())), List.of())
+                            : part)
+                    .toList());
+            default -> read;
+        };
     }
 
     /** How far the rows arriving at a line get: none to it, to it, or to both sides of it. */
@@ -1603,7 +1657,8 @@ sealed interface ComparisonAssessment {
             case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _,
                  CutsNothing _, AnswersNowhere _, AgainstAnotherValue _, OutsideTheDomain _,
                  NothingArrivesAtItsLine _, TurnsNothing _, NoFeasibleInput _, Unread _,
-                 NothingArrivesAtItsRelation _, RelationTurnsNothing _, Several _ -> Map.of();
+                 NothingArrivesAtItsRelation _, NothingArrivesAtItsStop _,
+                 RelationTurnsNothing _, Several _ -> Map.of();
         };
     }
 
@@ -1780,7 +1835,8 @@ sealed interface ComparisonAssessment {
             case NoFeasibleInput none -> none.cutting();
             case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _,
                  CutsNothing _, AnswersNowhere _, Unread _, AgainstAnotherValue _, Several _,
-                 NothingArrivesAtItsRelation _, RelationTurnsNothing _ ->
+                 NothingArrivesAtItsRelation _, NothingArrivesAtItsStop _,
+                 RelationTurnsNothing _ ->
                     throw new IllegalArgumentException(
                          "a reading that drew no line is about none: " + line);
         };
@@ -2086,6 +2142,7 @@ sealed interface ComparisonAssessment {
             case CutsNothing cuts -> cuts.filedAt();
             case AnswersNowhere nowhere -> nowhere.filedAt();
             case NothingArrivesAtItsRelation unarrived -> unarrived.filedAt();
+            case NothingArrivesAtItsStop unarrived -> unarrived.filedAt();
             case RelationTurnsNothing turns -> turns.filedAt();
             case AgainstAnotherValue against -> against.filedAt();
             // Where each of its lines is filed, each place once: one rule, and its lines are what
@@ -2121,7 +2178,8 @@ sealed interface ComparisonAssessment {
             case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _,
                  NoInput _, CutsNothing _, AnswersNowhere _, OutsideTheDomain _,
                  NothingArrivesAtItsLine _, TurnsNothing _, NothingArrivesAtItsRelation _,
-                 RelationTurnsNothing _, NoFeasibleInput _, Unread _ -> List.of();
+                 NothingArrivesAtItsStop _, RelationTurnsNothing _, NoFeasibleInput _,
+                 Unread _ -> List.of();
         };
     }
 
@@ -2191,7 +2249,8 @@ sealed interface ComparisonAssessment {
                     sameAtEachPlace(new BlockReason.ComparisonRelationNothingArrivesAt());
             // A relation the statement turns on in no case a row is in tells no values apart and
             // owes no rows, and has no line to name a reason for: it leaves its places nothing.
-            case RelationTurnsNothing _ -> List.of();
+            // Nor does a stop no row reaches: nothing is evaluated there for a place to be short of.
+            case RelationTurnsNothing _, NothingArrivesAtItsStop _ -> List.of();
             // What each of its lines leaves, each in its own words — and, of what a line read to
             // the end leaves, nothing at a position another of its lines divides, since the rule
             // divides it. A line whose reading stopped is said wherever it is: it may divide the
@@ -2431,7 +2490,8 @@ sealed interface ComparisonAssessment {
             case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _,
                  CutsNothing _, AnswersNowhere _, AgainstAnotherValue _, OutsideTheDomain _,
                  TurnsNothing _, NothingArrivesAtItsLine _, NoFeasibleInput _, Unread _,
-                 NothingArrivesAtItsRelation _, RelationTurnsNothing _ -> false;
+                 NothingArrivesAtItsRelation _, NothingArrivesAtItsStop _,
+                 RelationTurnsNothing _ -> false;
         };
     }
 

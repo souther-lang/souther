@@ -125,6 +125,10 @@ public final class EnsuresThresholds {
         Drawn drawn = new Drawn(stated.behavior().name(), new ArrayList<>(), new ArrayList<>(),
                 new ArrayList<>(), new RulesWithNoLine.Gathered());
         for (StatedContract.StatedRule rule : stated.rules()) {
+            // What the statements of this rule before the next have to have held for a run to
+            // evaluate it. Asked only of what a statement owes for being read; the lines are the
+            // relation's and do not turn on the order it is written in.
+            WayThroughAClause way = new WayThroughAClause(stated.behavior().name(), read);
             for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
                 // A conjunct this compiler could not type is one it has not read. Nothing is
                 // concluded from it either way: it draws no line here, and that it drew none is not
@@ -141,7 +145,7 @@ public final class EnsuresThresholds {
                         case ClauseStatements.Statement.Compares it ->
                                 compared(it, rule, said.id(), read,
                                         souther.compiler.coverage.Arrivals.inTheTree(
-                                                conjunct.stated().orNull()), drawn);
+                                                conjunct.stated().orNull()), way, drawn);
                         // A form no reader of clauses reads. Which positions it is about is still
                         // said, because a position left out of every answer is reported as one the
                         // model draws no line through — and the model says otherwise in the rule
@@ -151,13 +155,14 @@ public final class EnsuresThresholds {
                         case ClauseStatements.Statement.NotRead it ->
                                 notRead(it, rule, read,
                                         souther.compiler.coverage.Arrivals.inTheTree(
-                                                conjunct.stated().orNull()), drawn);
+                                                conjunct.stated().orNull()), way, drawn);
                         // Read by the reader that publishes what a rule tells apart
                         // ({@link BehaviorSetStatements}), and a finding here would be this reader
                         // saying it could not read a rule that was read.
                         case ClauseStatements.Statement.TellsStringsApart _ -> { }
                         case ClauseStatements.Statement.StatesNeither _ -> { }
                     }
+                    way.held(said.statement());
                 }
             }
         }
@@ -184,7 +189,13 @@ public final class EnsuresThresholds {
     private static void notRead(ClauseStatements.Statement.NotRead it,
                                 StatedContract.StatedRule rule,
                                 InputReading read,
-                                souther.compiler.coverage.Arrivals answering, Drawn out) {
+                                souther.compiler.coverage.Arrivals answering,
+                                WayThroughAClause way, Drawn out) {
+        // Owed only where a run evaluates it: a statement the statements before it keep a run from
+        // is read by no run, and what it would have said of a row has no row to be about.
+        if (!way.mayReachTheNext()) {
+            return;
+        }
         reportRuleWithoutLine(rule.ref(), it.stated(), rule.value(),
                 ComparisonAssessment.leftAtEachOf(
                         GuardThresholds.mentionedIn(it.stated(), it.reads(), read.symbols(),
@@ -208,7 +219,8 @@ public final class EnsuresThresholds {
     private static void compared(ClauseStatements.Statement.Compares it,
                                  StatedContract.StatedRule rule, ClauseStatementId said,
                                  InputReading read,
-                                 souther.compiler.coverage.Arrivals answering, Drawn out) {
+                                 souther.compiler.coverage.Arrivals answering,
+                                 WayThroughAClause way, Drawn out) {
         Core e = it.stated();
         InputReads reads = it.reads();
         Comparison comparison = it.comparison();
@@ -235,8 +247,12 @@ public final class EnsuresThresholds {
         // What the positions this names are left with, where the reading of lines drew none. Asked
         // of the assessment and not worked out per arm here: the same table stood in the guard
         // reader, and a case added to an assessment had to be answered in both.
+        // And what a reading that stopped owes only where a run may evaluate it. The lines below
+        // are the relation's and are drawn from `assessed` whatever the order the clause is
+        // written in.
         reportRuleWithoutLine(rule.ref(), e, rule.value(),
-                assessed.whatEachPlaceIsLeftWith(), out.noLine());
+                ComparisonAssessment.whereItsStopIsReached(assessed, way::mayReachTheNext)
+                        .whatEachPlaceIsLeftWith(), out.noLine());
         // And the geometry. Read the same way a guard reads it ({@link ComparisonGeometry}); only
         // where a line's origin comes from is this reader's own — a clause's is which conjunct
         // stated it, not a place a run met.
