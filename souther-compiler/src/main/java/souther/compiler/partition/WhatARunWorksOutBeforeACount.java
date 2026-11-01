@@ -264,6 +264,9 @@ final class WhatARunWorksOutBeforeACount {
                         if (step.expression() == child) {
                             break;
                         }
+                        if (aFunctionValue(step.expression())) {
+                            continue;
+                        }
                         if (!onlyWhatAlwaysRuns || step instanceof Evaluated.Step.Always) {
                             out.add(step.expression());
                         }
@@ -330,6 +333,9 @@ final class WhatARunWorksOutBeforeACount {
                         if (step.expression() == child) {
                             break;
                         }
+                        if (aFunctionValue(step.expression())) {
+                            continue;
+                        }
                         if (step instanceof Evaluated.Step.Always) {
                             out.add(step.expression());
                         }
@@ -353,6 +359,16 @@ final class WhatARunWorksOutBeforeACount {
 
     /** A closure on the way to a comparison, and the call it is handed to. */
     record Applying(Core call, Core.Block closure) {}
+
+    /**
+     * Whether {@code e} is a closure written as an argument. Evaluating that position makes the
+     * function and runs nothing of its body, which runs when the call applies it, after every
+     * argument written beside it: so it is no part of what a run works out on the way to a
+     * comparison in one of those arguments ({@link Evaluated}).
+     */
+    private static boolean aFunctionValue(Core e) {
+        return Core.withoutStanding(e) instanceof Core.Block;
+    }
 
     /** The nodes from {@code e} down to {@code node}, both included, by identity — or null where
      *  {@code node} is not under {@code e}. */
