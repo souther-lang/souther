@@ -359,8 +359,10 @@ final class WhatARunWorksOutBeforeACount {
 
     /**
      * Files {@code e} as worked out on the way to a comparison, unless it is a function value.
-     * Every expression a run is said to work out before the comparison comes through here, so
-     * what a closure written on the way is taken for is said once.
+     * What a node evaluates before the part the way goes down through, and the value of a
+     * {@code let} the way goes into the body of, come through here, so what a closure written
+     * there is taken for is said once. The call a closure is handed to, and the arguments beside
+     * the closure, are filed whole where the way enters the closure.
      *
      * <p>Evaluating a closure makes the function and runs nothing of its body. The body runs
      * where a call applies the function, and a call handed the closure beside the argument the
