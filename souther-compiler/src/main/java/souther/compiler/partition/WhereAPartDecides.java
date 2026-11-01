@@ -4,15 +4,23 @@ import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.CasesHeldTo;
+import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Relation;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 /**
@@ -33,12 +41,34 @@ import java.util.stream.Collectors;
  *                crossing it turns the statement round. Over the relations the statement holds,
  *                every one of them a relation over the input's own numbers — so a row's values say
  *                whether it holds
+ * @param besideOtherLines whether the statement draws other lines on the input space, so a point
+ *                named by its values may be a point of any of them and the relations of the case
+ *                are what tells this line's apart ({@link #said})
  */
-public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
+public record WhereAPartDecides(PlaceOfALine part, Proposition decides,
+                                boolean besideOtherLines) {
 
     public WhereAPartDecides {
         Objects.requireNonNull(part, "a line of a statement is one of its lines");
         Objects.requireNonNull(decides, "a line decides somewhere, or nowhere");
+    }
+
+    /** A line that is alone in its statement, or read where that is not known. */
+    public WhereAPartDecides(PlaceOfALine part, Proposition decides) {
+        this(part, decides, false);
+    }
+
+    /** The line and where it decides. Whether other lines are beside it is how it is said and not
+     *  which reading it is, so a reading is found by the same key whichever way it was made. */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof WhereAPartDecides that && part.equals(that.part)
+                && decides.equals(that.decides);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(part, decides);
     }
 
     /**
@@ -50,23 +80,141 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
      * about which a row of theirs is at: {@code month.value <= minimum(term)} asks for a month above
      * 12 where {@code term} is {@code OneYear} and for one above 24 where it is {@code TwoYear}.
      *
-     * <p>The cases of values the line decides in, and nothing else of where it decides: which case
-     * a value is, whether it holds a value, which truth it is. Those are what a row is written in
-     * and what the values of the point do not say. The relations beside them are said by the
-     * values a search composes against; written out here as well, a reader is shown how the
-     * statement was taken apart — a part read once held and once failing where one of them is
-     * enough — and not anything a row has to do.
+     * <p>The cases of values the line decides in: which case a value is, whether it holds a value,
+     * which truth it is. Where the statement has other readings beside this one, the relations
+     * the case holds of the quantity the point is at too, since the values of the point do not say
+     * which of two lines drawn on one quantity in different cases a point is on. Written as the
+     * statement states them and in its structure: {@code and} and {@code or} as they join the
+     * parts, with parentheses where one is inside the other. A relation over other numbers, or a
+     * line alone in its statement, is said by the values a search composes against; written out
+     * as well, a reader is shown how the statement was taken apart — a part read once held and
+     * once failing where one of them is enough — and not anything a row has to do.
      *
      * <p>What every row in the case is, read through the whole of it ({@link CasesHeldTo}): a case
      * said as one of several things is where each of them holds, and what they all hold a value
-     * to is what the case does.
+     * to is what the case does. Parts that state no relation are said that way together.
      *
      * <p>Less what the positions already say. A line at a field of one case of a value decides
      * where the value is that case, and the position it is read at is named through that case.
      */
     public String said(List<TermPath> readAt) {
+        return besideOtherLines ? said(decides, readAt) : casesSaid(decides, readAt);
+    }
+
+    private static String said(Proposition stated, List<TermPath> readAt) {
+        if (!statesARelation(stated)) {
+            return casesSaid(stated, readAt);
+        }
+        return switch (stated) {
+            case Proposition.Compared compared -> onlyAtThePoint(compared, readAt)
+                    ? relationSaid(compared) : null;
+            case Proposition.OfTheWays ways -> said(ways.written(), readAt);
+            case Proposition.WhereItAnswers where ->
+                    allSaid(List.of(where.answers(), where.states()), readAt);
+            case Proposition.All all -> allSaid(all.parts(), readAt);
+            case Proposition.Any any -> {
+                List<String> ways = new ArrayList<>();
+                for (Proposition way : any.parts()) {
+                    String said = said(way, readAt);
+                    if (said == null) {
+                        yield null;
+                    }
+                    ways.add(parenthesizedIfJoined(way, said));
+                }
+                yield String.join(" or ", ways);
+            }
+            default -> casesSaid(stated, readAt);
+        };
+    }
+
+    /** What each part says, joined by {@code and}: a part that says nothing leaves the rest. */
+    private static String allSaid(List<Proposition> parts, List<TermPath> readAt) {
         List<String> said = new ArrayList<>();
-        CasesHeldTo.of(decides).forEach((at, held) -> {
+        for (Proposition part : parts) {
+            String partSaid = said(part, readAt);
+            if (partSaid != null) {
+                said.add(parenthesizedIfJoined(part, partSaid));
+            }
+        }
+        return said.isEmpty() ? null : String.join(" and ", said);
+    }
+
+    /**
+     * Whether {@code compared} is over the one quantity the point is at and nothing else. A
+     * relation over other numbers is not what tells two lines on this quantity apart, and said
+     * beside them it shows how the statement was taken apart.
+     */
+    private static boolean onlyAtThePoint(Proposition.Compared compared, List<TermPath> readAt) {
+        if (readAt.size() != 1) {
+            return false;
+        }
+        Set<Quantity> atoms = switch (compared.relation()) {
+            case Relation.Affine affine -> affine.form().coefs().keySet();
+            case Relation.Ordered ordered -> Set.of(ordered.term());
+        };
+        return atoms.stream().allMatch(atom -> atom instanceof DecisionAtom.OfTheInput input
+                && input.term().subjectPath().equals(readAt.getFirst()));
+    }
+
+    private static String parenthesizedIfJoined(Proposition part, String said) {
+        return part instanceof Proposition.All || part instanceof Proposition.Any
+                ? "(" + said + ")" : said;
+    }
+
+    /** Whether a relation between numbers is somewhere in what {@code stated} is made of. */
+    private static boolean statesARelation(Proposition stated) {
+        return stated instanceof Proposition.Compared
+                || (isMadeOfParts(stated)
+                && stated.partsHeld().stream().anyMatch(WhereAPartDecides::statesARelation));
+    }
+
+    /** Whether the parts of {@code stated} are the statement and not what it counts. */
+    private static boolean isMadeOfParts(Proposition stated) {
+        return stated instanceof Proposition.All || stated instanceof Proposition.Any
+                || stated instanceof Proposition.WhereItAnswers
+                || stated instanceof Proposition.OfTheWays;
+    }
+
+    /** The relation as the statement states it: {@code form rel 0} or its denial, with the
+     *  constant moved to the right. */
+    private static String relationSaid(Proposition.Compared compared) {
+        return switch (compared.relation()) {
+            case Relation.Affine affine -> {
+                Rel states = compared.holds() ? affine.proposition()
+                        : affine.proposition().denied();
+                yield sumSaid(affine.form()) + " " + states.written() + " "
+                        + affine.form().constant().negated().spelled();
+            }
+            case Relation.Ordered ordered -> {
+                Rel states = compared.holds() ? ordered.proposition()
+                        : ordered.proposition().denied();
+                yield ordered.term().spelled() + " " + states.written() + " "
+                        + ordered.at().spelled();
+            }
+        };
+    }
+
+    /** The terms of {@code form}, without its constant, in the order the atoms are spelled. */
+    private static String sumSaid(LinearForm<Quantity> form) {
+        Map<String, ExactRatio> byName = new TreeMap<>();
+        form.coefs().forEach((atom, weight) -> byName.put(atom.spelled(), weight));
+        StringBuilder out = new StringBuilder();
+        byName.forEach((name, weight) -> {
+            boolean first = out.isEmpty();
+            ExactRatio size = weight.signum() < 0 ? weight.negated() : weight;
+            String term = size.equals(ExactRatio.ONE) ? name : size.spelled() + " * " + name;
+            if (first) {
+                out.append(weight.signum() < 0 ? "-" : "").append(term);
+            } else {
+                out.append(weight.signum() < 0 ? " - " : " + ").append(term);
+            }
+        });
+        return out.toString();
+    }
+
+    private static String casesSaid(Proposition stated, List<TermPath> readAt) {
+        List<String> said = new ArrayList<>();
+        CasesHeldTo.of(stated).forEach((at, held) -> {
             switch (held) {
                 case CasesHeldTo.Held.OneOf(var cases) -> {
                     if (readAt.stream().noneMatch(each -> each.isAtOrUnder(at.refine(cases)))) {

@@ -456,7 +456,7 @@ public final class GuardThresholds {
     /** Each reading of each line of {@code assessed}, where it is a statement of several. */
     private static List<WhereAPartDecides> readingsOf(ComparisonAssessment assessed) {
         return assessed instanceof ComparisonAssessment.Several several
-                ? several.parts().stream().flatMap(part -> part.readings().stream()).toList()
+                ? several.readings()
                 : List.of();
     }
 
