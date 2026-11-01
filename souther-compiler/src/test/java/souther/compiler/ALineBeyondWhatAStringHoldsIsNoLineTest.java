@@ -8,6 +8,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.query.WhereTheReadingsDiffer;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.LinkedHashMap;
@@ -440,7 +441,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
         return Adequacy.searchedBoundariesOf(compilation.db(), "m").values().stream()
                 .flatMap(each -> BorderAssessment.pointsOf(each).stream())
                 .filter(point -> point.owed() != null)
-                .filter(point -> String.valueOf(point.asked()).contains(fragment))
+                .filter(point -> String.valueOf(point.asked(WhereTheReadingsDiffer.NONE)).contains(fragment))
                 .filter(point -> point.owed().writabilityEvidence()
                         .has(ItemAssessment.WritabilityEvidence.Ground.IT_IS_PROVED))
                 .count();

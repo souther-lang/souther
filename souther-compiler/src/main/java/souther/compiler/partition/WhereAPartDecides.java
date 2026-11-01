@@ -55,7 +55,10 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
      * and what the values of the point do not say. The relations beside them are said by the
      * values a search composes against; written out here as well, a reader is shown how the
      * statement was taken apart — a part read once held and once failing where one of them is
-     * enough — and not anything a row has to do.
+     * enough — and not anything a row has to do. Two lines of a comparison that this leaves
+     * saying the same words under different points are told apart by their place among them, and
+     * not by these cases ({@code WhereTheReadingsDiffer}): how a statement is taken apart into
+     * cases differs between two spellings of one line.
      *
      * <p>What every row in the case is, read through the whole of it ({@link CasesHeldTo}): a case
      * said as one of several things is where each of them holds, and what they all hold a value

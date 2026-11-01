@@ -2,6 +2,8 @@ package souther.compiler.types;
 
 import souther.compiler.SettledAnswer;
 
+import java.util.Comparator;
+
 /**
  * Where a copy of a body was made, said in words the source settles.
  *
@@ -37,6 +39,27 @@ public sealed interface ExpansionSite
      * application by, and what keeps that naming from asking the same question again.
      */
     sealed interface Direct extends ExpansionSite permits Written, Named { }
+
+    /**
+     * The sites the source wrote in the order a reader that has nothing else to go on puts them
+     * in: the calls before the names, then by where each was counted.
+     *
+     * <p>Total over {@link Direct} and not over a supplied site, which is the caller's and is no
+     * part of a line of a comparison ({@link Supplied}). Told by the same things the document
+     * publishes a site by, so two sites it tells apart are two here.
+     */
+    static Comparator<Direct> inASteadyOrder() {
+        return (one, other) -> switch (one) {
+            case Written(var origin) -> other instanceof Written(var also)
+                    ? SourceConstructOrigin.inASteadyOrder().compare(origin, also) : -1;
+            case Named(var origin) -> other instanceof Named(var also)
+                    ? Comparator.comparing(SourceReferenceOrigin::owner,
+                            WrittenOwner.inASteadyOrder())
+                            .thenComparingInt(SourceReferenceOrigin::ordinal)
+                            .compare(origin, also)
+                    : 1;
+        };
+    }
 
     /** A call the author wrote. */
     record Written(SourceConstructOrigin origin) implements Direct {

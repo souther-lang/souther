@@ -20,6 +20,7 @@ import souther.compiler.query.Measure;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.WeakeningSet;
+import souther.compiler.query.WhereTheReadingsDiffer;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
@@ -471,7 +472,8 @@ class AMeasureWithNoNumberSaysWhyTest {
         for (BorderAssessment.Point line : lines) {
             assertEquals(ItemAssessment.Coverage.NotAsked.NO_ROWS,
                     line.item().weakeningSource(line.border().border()).why(),
-                    line.border().origin().saidWithoutAPlace() + " at " + line.asked());
+                    line.border().origin().saidWithoutAPlace() + " at "
+                            + line.asked(WhereTheReadingsDiffer.NONE));
         }
     }
 
@@ -569,10 +571,12 @@ class AMeasureWithNoNumberSaysWhyTest {
             }
             assertNotEquals(ItemAssessment.Coverage.NotAsked.NO_ROWS,
                     line.item().weakeningSource(line.border().border()).why(),
-                    line.border().origin().saidWithoutAPlace() + " at " + line.asked());
+                    line.border().origin().saidWithoutAPlace() + " at "
+                            + line.asked(WhereTheReadingsDiffer.NONE));
             assertEquals(MeasurementStatus.PARTIAL,
                     AdequacyReport.statusOf(line.item().weakeningSource(line.border().border())),
-                    line.border().origin().saidWithoutAPlace() + " at " + line.asked());
+                    line.border().origin().saidWithoutAPlace() + " at "
+                            + line.asked(WhereTheReadingsDiffer.NONE));
         }
     }
 
