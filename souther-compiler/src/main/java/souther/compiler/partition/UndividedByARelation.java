@@ -8761,7 +8761,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<TermPath.Step> steps = path.steps();
         Named out = Named.NOT;
         for (int length = from; length <= deepest && length < steps.size(); length++) {
-            TermPath here = new TermPath(path.head(), steps.subList(0, length));
+            TermPath here = path.prefix(length);
             Position around = read.domain().at(here.position());
             // Where the rules leave no value of it, nothing stands beside the rest of it either.
             if (around == null || around.nothingExists()) {
@@ -8947,7 +8947,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         List<TermPath.Step> container = new ArrayList<>(here.steps());
         container.addAll(rest.subList(0, fields));
-        return mayHoldSome(new TermPath(here.head(), container), read) ? Named.NOT : Named.UNSEEN;
+        return mayHoldSome(TermPath.of(here.head(), container), read) ? Named.NOT : Named.UNSEEN;
     }
 
     /**
@@ -8978,7 +8978,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         List<TermPath.Step> container = new ArrayList<>(here.steps());
         container.addAll(rest.subList(0, fields));
-        TermPath at = new TermPath(here.head(), container);
+        TermPath at = TermPath.of(here.head(), container);
         Position held = read.domain().at(at.position());
         boolean standsWhereAMemberDoes = held != null && switch (held.view().shape()) {
             case Shape.Mapping _ -> rest.get(fields) instanceof TermPath.Step.Key;

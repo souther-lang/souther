@@ -437,8 +437,7 @@ public sealed interface RowDemand {
     /** The key of the entry {@code element} is the value of, and then {@code value}. */
     private static Set<TermPath> keyAndValue(TermPath element, TermPath value) {
         Set<TermPath> out = new LinkedHashSet<>();
-        List<TermPath.Step> steps = element.steps();
-        out.add(new TermPath(element.head(), steps.subList(0, steps.size() - 1)).key());
+        out.add(element.prefix(element.steps().size() - 1).key());
         out.add(value);
         return Collections.unmodifiableSet(out);
     }
