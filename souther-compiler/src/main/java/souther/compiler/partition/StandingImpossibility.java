@@ -99,13 +99,14 @@ final class StandingImpossibility {
      * — asked to take the run in as the constraints it comes to, its own algebra finds the
      * contradiction with the hole.
      *
-     * <p>False where the run is not one the region can take in, which proves nothing. A run on a
-     * carrier is written in places and not numbers, and a bound of a form the exact arithmetic
-     * cannot hold is a bound nobody wrote down.
+     * <p>False where the run is not one the region can take in, which proves nothing. A run on an
+     * order with no numbers is written in places and not numbers, and a bound of a form the exact
+     * arithmetic cannot hold is a bound nobody wrote down. A run on an order that counts is taken in
+     * at the number its places count to, which is the number the region holds the coordinate in.
      */
     private static boolean theRegionHoldsNothingIn(
             SearchRegion region, Asked asked, LevelInterval part) {
-        if (asked.on() != null) {
+        if (asked.on() != null && !asked.on().counts()) {
             return false;
         }
         SearchRegion narrowed = region;
@@ -123,7 +124,8 @@ final class StandingImpossibility {
     /** The region with {@code quantity rel end} taken in, or null where it could not be. */
     private static SearchRegion narrowedTo(
             SearchRegion region, LinearForm<NumericTerm> quantity, Bound end, Rel rel) {
-        if (!(end.at().written() instanceof Level.OfTheQuantity(ExactRatio written))) {
+        ExactRatio written = end.at().written().asANumber();
+        if (written == null) {
             return null;
         }
         // The cut is where per * quantity reaches what was written, so what is asked is
