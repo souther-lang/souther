@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhyUnread;
 
 import java.util.List;
 
@@ -45,19 +46,24 @@ final class WhatAForkTests {
         /** The proposition was read to the end, so these are all the parts the answer turns on. */
         record Complete(List<Denotation> parts) implements PartsRead {}
 
-        /** The proposition was stopped in at a figure, and says nothing of which parts there are.
-         *  The parts it got to are kept for a reader that holds no owner for the answer and has no
-         *  better evidence, which takes what it finds as found and concludes nothing of the rest. */
-        record Incomplete(List<Denotation> reached) implements PartsRead {}
+        /** The proposition was stopped in at a figure, for these, and says nothing of which parts
+         *  there are: the parts it got to are not offered. */
+        record Incomplete(List<WhyUnread> stoppedFor) implements PartsRead {
+
+            public Incomplete {
+                stoppedFor = List.copyOf(stoppedFor);
+            }
+        }
     }
 
     /** What was read of the parts the truth of {@code atom} turns on. */
     static PartsRead partsRead(Core atom, WhatNamesStandFor names) {
         Pullback.Pulled truth =
                 WhatConditionsState.of(names.read()).truth(atom, names.reads(), names.read());
-        List<Denotation> parts = truth.turnsOn().stream().map(Pullback.Leaf::from).toList();
-        boolean stoppedAtAFigure = Proposition.stopsIn(truth.proposition()).stream()
-                .anyMatch(why -> why.figure().isPresent());
-        return stoppedAtAFigure ? new PartsRead.Incomplete(parts) : new PartsRead.Complete(parts);
+        List<WhyUnread> stops = Proposition.stopsIn(truth.proposition());
+        return stops.stream().anyMatch(why -> why.figure().isPresent())
+                ? new PartsRead.Incomplete(stops)
+                : new PartsRead.Complete(
+                        truth.turnsOn().stream().map(Pullback.Leaf::from).toList());
     }
 }

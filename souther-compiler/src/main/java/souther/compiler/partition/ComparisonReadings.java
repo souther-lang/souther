@@ -1631,10 +1631,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // cut, whose parts depend on where it was cut.
             case WhatAForkTests.PartsRead.Incomplete _ when whole != null ->
                     new Atom(atom, List.of(), stoppedFor);
-            // Nothing states the atom, so there is no reader to leave it to. What the reading got
-            // to is all there is to go by, and a part it found is taken as found.
-            case WhatAForkTests.PartsRead.Incomplete(var reached) ->
-                    new Atom(atom, unowned(reached, read, here), stoppedFor);
+            // Nothing states the atom, so there is no reader to leave it to, and which of its
+            // parts nobody answers for is what the figure took away. The atom is left whole to
+            // the fork, with what stopped its answer.
+            case WhatAForkTests.PartsRead.Incomplete(var stops) ->
+                    new Atom(atom, List.of(atom), stops);
         };
     }
 
