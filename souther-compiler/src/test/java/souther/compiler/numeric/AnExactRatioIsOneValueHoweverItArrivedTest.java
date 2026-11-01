@@ -9,6 +9,7 @@ import java.math.RoundingMode;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -69,6 +70,31 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
         assertEquals(ExactRatio.of(300), ExactRatio.of(new BigDecimal("3E+2")),
                 "a negative scale is a whole number written as a multiple of ten");
         assertEquals(ratio(-7, 100), ExactRatio.of(new BigDecimal("-0.07")));
+    }
+
+    @Test
+    void aDecimalAskedAgainOrAfterOthersFillTheSlotsIsTheSameValue() {
+        BigDecimal asked = new BigDecimal("0.125");
+        ExactRatio first = ExactRatio.of(asked);
+        assertSame(first, ExactRatio.of(new BigDecimal("0.125")),
+                "the same decimal in a new object is the ratio made before");
+        assertEquals(first, ExactRatio.of(new BigDecimal("0.1250")),
+                "a spelling with another scale is the same value, kept or not");
+        // far more decimals than slots, so most slots are overwritten and some decimals collide
+        for (int n = -20_000; n <= 20_000; n++) {
+            BigDecimal decimal = BigDecimal.valueOf(n, 3);
+            assertEquals(ratio(n, 1000), ExactRatio.of(decimal), decimal.toString());
+        }
+        assertEquals(first, ExactRatio.of(asked));
+    }
+
+    @Test
+    void aDecimalTooLongToKeepIsConvertedAllTheSame() {
+        BigDecimal tooLong = new BigDecimal("1." + "0".repeat(60) + "5");
+        BigInteger denominator = BigInteger.TEN.pow(61);
+        assertEquals(ExactRatio.of(denominator.add(BigInteger.valueOf(5)), denominator),
+                ExactRatio.of(tooLong));
+        assertEquals(ExactRatio.of(tooLong), ExactRatio.of(tooLong));
     }
 
     @Test

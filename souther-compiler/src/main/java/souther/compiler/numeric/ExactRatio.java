@@ -139,8 +139,36 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      * digits as it has, and this holds the value it was given without spelling them.
      */
     public static ExactRatio of(BigDecimal at) {
-        return shared(ExactArithmetic.canonical(at));
+        if (at.precision() > LARGEST_DECIMAL_KEPT) {
+            return shared(ExactArithmetic.canonical(at));
+        }
+        int hash = at.hashCode();
+        int slot = (hash ^ (hash >>> 16)) & (DECIMALS.length - 1);
+        DecimalRatio known = DECIMALS[slot];
+        if (known != null && known.decimal().equals(at)) {
+            return known.ratio();
+        }
+        ExactRatio made = shared(ExactArithmetic.canonical(at));
+        DECIMALS[slot] = new DecimalRatio(at, made);
+        return made;
     }
+
+    /** A decimal and the ratio it is, which is a function of the decimal's scale and unscaled value
+     *  alone, and so is the ratio for every decimal {@code equals} to it. */
+    private record DecimalRatio(BigDecimal decimal, ExactRatio ratio) {}
+
+    /** Digits above which a decimal is converted and not kept, so that the slots hold a bounded
+     *  number of bytes and not only a bounded number of entries. */
+    private static final int LARGEST_DECIMAL_KEPT = 40;
+
+    /**
+     * The ratios of the decimals asked last, each in the slot its hash falls in. A compile asks for
+     * the same few decimals over and over, and each ask would otherwise build the exact parts and
+     * put them in canonical form again. Held strongly, since the pair is held by nothing else; it
+     * refers to numbers only. Written and read without a lock as {@link HeldOnce} is: the pair is
+     * immutable, and two threads filling one slot leave one of their pairs in it.
+     */
+    private static final DecimalRatio[] DECIMALS = new DecimalRatio[1 << 12];
 
     /**
      * Ten to {@code power}, which is two to it and five to it: held as the two exponents, and never
