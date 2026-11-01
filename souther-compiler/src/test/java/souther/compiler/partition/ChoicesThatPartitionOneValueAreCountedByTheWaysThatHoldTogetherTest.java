@@ -21,13 +21,14 @@ class ChoicesThatPartitionOneValueAreCountedByTheWaysThatHoldTogetherTest {
 
     @Test
     void aLookupAfterAnIfLookingTheSameValueUpIsReadAsItIsWithNothingBeforeIt() {
-        String model = LookupsOfOneValue.model(LookupsOfOneValue.Body.TESTED_AGAIN, 3);
+        List<String> report = LookupsOfOneValue.report(
+                LookupsOfOneValue.model(LookupsOfOneValue.Body.TESTED_AGAIN, 3));
         List<String> withNothingBefore = LookupsOfOneValue.bordersOfTheLookup(
                 LookupsOfOneValue.model(LookupsOfOneValue.Body.NOT_TESTED, 3));
 
-        assertEquals(List.of(), LookupsOfOneValue.unread(model));
+        assertEquals(List.of(), LookupsOfOneValue.unreadIn(report));
         assertFalse(withNothingBefore.isEmpty(), "the lookup has borders to compare");
-        assertEquals(withNothingBefore, LookupsOfOneValue.bordersOfTheLookup(model));
+        assertEquals(withNothingBefore, LookupsOfOneValue.bordersIn(report));
     }
 
     /**
