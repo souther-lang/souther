@@ -199,6 +199,15 @@ public final class ExactParts {
         return Long.SIZE - Long.numberOfLeadingZeros(whole < 0 ? ~whole : whole);
     }
 
+    /** How many bits the wider of the two whole numbers takes, as {@link BigInteger#bitLength} counts
+     *  them — which is what a caller bounding the bytes these hold asks, and asked without making a
+     *  {@code BigInteger} of a number held as a long. */
+    public int widestBits() {
+        int above = wideNumerator != null ? wideNumerator.bitLength() : bitLengthOf(numerator);
+        int below = wideDenominator != null ? wideDenominator.bitLength() : bitLengthOf(denominator);
+        return Math.max(above, below);
+    }
+
     /** These parts with the sign turned, which canonical parts are again. */
     public ExactParts negated() {
         if (wideNumerator == null && numerator != Long.MIN_VALUE) {

@@ -1,6 +1,7 @@
 package souther.compiler.collect;
 
 import org.junit.jupiter.api.Test;
+import souther.test.Allocated;
 
 import java.lang.ref.WeakReference;
 
@@ -8,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A value made again while an equal one is held is handed out as the one held, a value is never
@@ -63,6 +65,43 @@ class AValueMadeAgainIsTheOneHeldTest {
         assertNull(watched.get(), "the table still holds a value nothing else does");
         Hashed again = new Hashed("gone", 3);
         assertSame(again, held.held(again), "made again, it is the one held from now on");
+    }
+
+    /** A value found by its key is the one held, and an ask that finds it makes nothing. */
+    @Test
+    void aValueFoundByItsKeyIsTheOneHeldAndNothingIsMade() {
+        HeldOnce<Hashed> held = new HeldOnce<>(4);
+        Hashed first = held.held(new Hashed("a", 7));
+        Hashed[] asks = new Hashed[ASKS];
+        for (int i = 0; i < ASKS; i++) {
+            asks[i] = new Hashed("a", 7);
+        }
+        Runnable asking = () -> {
+            for (Hashed ask : asks) {
+                assertSame(first, held.held(ask, value -> value, AValueMadeAgainIsTheOneHeldTest::unmade));
+            }
+        };
+        asking.run();
+        long allocated = Allocated.byWhichMayBeNothing(asking);
+        assertTrue(allocated < ASKS, "a value found by its key allocates nothing per ask, and "
+                + allocated + " bytes were allocated for " + ASKS + " asks");
+    }
+
+    @Test
+    void aKeyOfAnotherValueInTheSlotIsMadeAndHeldFromNowOn() {
+        HeldOnce<Hashed> held = new HeldOnce<>(4);
+        Hashed a = held.held(new Hashed("a", 7));
+        Hashed b = held.held(new Hashed("b", 7), value -> value, key -> new Hashed(key.name(), 7));
+
+        assertEquals("b", b.name(), "same hash, another key");
+        assertNotSame(a, b);
+        assertSame(b, held.held(new Hashed("b", 7)), "the slot holds what was made last in it");
+    }
+
+    private static final int ASKS = 2_000;
+
+    private static Hashed unmade(Hashed key) {
+        throw new AssertionError("made " + key + ", which was held");
     }
 
     @Test
