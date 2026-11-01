@@ -401,6 +401,251 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
         assertFalse(report.contains(MADE_FROM_IT), report);
     }
 
+    /**
+     * The worst discount used twice: once to choose who approves, as a list of roles a helper
+     * answers, and again in what the approval needs, on the way only a worst discount above a
+     * tenth takes. That way states that some discount is above a tenth, which an element after
+     * the ones the step is handed and kept an end of can be, so it leaves those as they were and
+     * the comparison inside the second walk is read as the first is.
+     *
+     * <p>Beside the same with one of the two uses written out: the walk only on the way to the
+     * roles, and the walk only where nothing of the list is stated on the way.
+     */
+    @Test
+    void theComparisonInsideASecondWalkIsReadOnTheWayTheFirstOneDecides() {
+        String both = report(usedTwice("0.10m", "worstOf(lines)"));
+        assertFalse(both.contains(NOT_SHOWN_TO_REACH), both);
+        assertTrue(both.contains("no IN point is owed at lines[*].discount = 0 (comparison@17:"),
+                both);
+        assertFalse(both.contains("not composed against: a condition that is neither a comparison"
+                + " nor a combination of them"), both);
+        String toTheRoles = report(usedTwice("0.10m", "Rate(0.0m)"));
+        assertFalse(toTheRoles.contains(NOT_SHOWN_TO_REACH), toTheRoles);
+        String alone = report("""
+                module example.quoting
+
+                data Rate = Decimal
+                    invariant value >= 0.0m && value <= 0.5m
+
+                data Line = { discount: Rate }
+
+                data Needs = { worst: Rate }
+
+                behavior approval : (lines: List<Line>) -> Needs
+                    constructs Needs, Rate
+
+                let worstOf (lines: List<Line>): Rate =
+                    List.fold((w, l) -> if Decimal.compare(l.discount.value, w.value) > 0
+                                        then l.discount else w,
+                              Rate(0.0m), lines)
+
+                let approval (lines) = Needs { worst = worstOf(lines) }
+                """);
+        assertFalse(alone.contains(NOT_SHOWN_TO_REACH), alone);
+    }
+
+    /**
+     * Past every discount a rate takes, no list has a worst discount above the threshold, and the
+     * second walk is on a way no row takes: said so, and not read.
+     */
+    @Test
+    void aSecondWalkOnAWayNoRowTakesIsNotRead() {
+        String past = report(usedTwice("0.60m", "worstOf(lines)"));
+        assertFalse(past.contains(NOT_SHOWN_TO_REACH), past);
+        assertTrue(past.contains("relates the value here to another value, and no row that arrives"
+                + " at it takes the way to the comparison"), past);
+    }
+
+    /**
+     * A list wearing a name is a list, with the elements a rule of it keeps apart as many as the
+     * field they are kept apart at takes values, and an element whose own rule defines one field
+     * from the others leaves those as free as they were: each is a list an element meeting the way
+     * can be written beside.
+     */
+    @Test
+    void anElementMeetingTheWayIsWrittenBesideTheOnesTheEndWasKeptOf() {
+        for (String lines : List.of(
+                worstAboveATenth(LINE, "invariant List.length(value) >= 1"),
+                worstAboveATenth(LINE_WITH_A_PRODUCT, "invariant List.allDistinctBy(.product, value)"),
+                worstAboveATenth("""
+                        data Product = Licence | Support | Training | Hosting
+                        data Line = { product: Product, discount: Rate }
+                        """, "invariant List.allDistinctBy(.product, value)"),
+                worstAboveATenth("""
+                        data Amount = Decimal
+                            invariant value >= 0.0m
+                        data Line = { quantity: Int, listPrice: Amount, discount: Rate, net: Amount }
+                            invariant quantity >= 1
+                            invariant Decimal.compare(net.value,
+                                          Decimal.round(2, HALF_UP, Decimal.fromInt(quantity)
+                                                        * listPrice.value
+                                                        * (1.0m - discount.value))) == 0
+                        """, ""))) {
+            String report = report(lines);
+            assertFalse(report.contains(NOT_SHOWN_TO_REACH), () -> lines + "\n" + report);
+        }
+    }
+
+    /**
+     * Not where no such element can be written: a list of two at most, which the elements the end
+     * was kept of fill, and elements kept apart at a field of two values — cases, strings of a
+     * pattern, strings written out, whole numbers. Each has a pair of discounts no list on the
+     * way holds side by side.
+     *
+     * <p>Nor, along any way, where the elements are kept apart at a field a rule of the element
+     * holds the discount beside: two discounts of five need two products of five, which no list
+     * holds. Kept apart at a field nothing holds the discount beside, or held beside one nothing
+     * keeps apart, the same list is read.
+     */
+    @Test
+    void noElementIsWrittenBesideThemWhereNoneIsShownToMeetTheWay() {
+        for (String lines : List.of(
+                worstAboveATenth(LINE, "invariant List.length(value) <= 2"),
+                worstAboveATenth("""
+                        data Product = Licence | Support
+                        data Line = { product: Product, discount: Rate }
+                        """, "invariant List.allDistinctBy(.product, value)"),
+                worstAboveATenth("""
+                        data Product = String
+                            invariant String.matches("[AB]", value)
+                        data Line = { product: Product, discount: Rate }
+                        """, "invariant List.allDistinctBy(.product, value)"),
+                worstAboveATenth("""
+                        data Product = String
+                            invariant value == "A" || value == "B"
+                        data Line = { product: Product, discount: Rate }
+                        """, "invariant List.allDistinctBy(.product, value)"),
+                worstAboveATenth("""
+                        data Product = Int
+                            invariant value >= 1 && value <= 2
+                        data Line = { product: Product, discount: Rate }
+                        """, "invariant List.allDistinctBy(.product, value)"))) {
+            String report = report(lines);
+            String again = theWalkAgain(lines);
+            assertTrue(report.lines().anyMatch(line -> line.contains(NOT_SHOWN_TO_REACH)
+                    && line.contains(again)), () -> again + "\n" + lines + "\n" + report);
+        }
+        String keyed = """
+                module example.quoting
+
+                data Line = { product: Int, discount: Int }
+                    invariant product >= 1 && product <= 5 && discount >= 0 && discount <= %s
+
+                data Lines = List<Line>
+                    %s
+
+                data Within
+                data Needs
+
+                behavior approval : (lines: Lines) -> Within | Needs
+
+                let approval (Lines(lines)) =
+                    if List.fold((w, l) -> %s, 0, lines) <= 3 then Within else Needs
+                """;
+        String apart = "invariant List.allDistinctBy(.product, value)";
+        String tied = report(keyed.formatted("product", apart, GREATER));
+        assertTrue(aComparisonIsNotShown(tied), tied);
+        String apartAlone = report(keyed.formatted("5", apart, GREATER));
+        assertFalse(aComparisonIsNotShown(apartAlone), apartAlone);
+        String tiedAlone = report(keyed.formatted("product", "", GREATER));
+        assertFalse(aComparisonIsNotShown(tiedAlone), tiedAlone);
+    }
+
+    /** Whether {@code report} says a comparison, and not a rule, relates a value to another not
+     *  shown to reach every value. */
+    private static boolean aComparisonIsNotShown(String report) {
+        return report.lines().anyMatch(line -> line.contains(NOT_SHOWN_TO_REACH)
+                && line.contains("comparison@"));
+    }
+
+    /** Where the walk is called again in what the approval needs, as a report names the call. */
+    private static String theWalkAgain(String model) {
+        List<String> lines = model.lines().toList();
+        for (int at = 0; at < lines.size(); at++) {
+            if (lines.get(at).contains("worst = worstOf(lines) }")) {
+                return "worstOf@" + (at + 1) + ":";
+            }
+        }
+        throw new IllegalArgumentException("the model calls the walk again: " + model);
+    }
+
+    private static final String LINE = "data Line = { discount: Rate }\n";
+
+    private static final String LINE_WITH_A_PRODUCT =
+            "data Line = { product: String, discount: Rate }\n";
+
+    /**
+     * The reproduction: the worst discount chooses the roles a helper answers, and the second walk
+     * is on the way some role was chosen, which the threshold decides.
+     *
+     * @param worst what the approval needs is built with
+     */
+    private static String usedTwice(String threshold, String worst) {
+        return """
+                module example.quoting
+
+                data Rate = Decimal
+                    invariant value >= 0.0m && value <= 0.5m
+
+                data Line = { discount: Rate }
+
+                data Role = Manager | Cfo
+
+                data Within
+                data Needs = { role: Role, worst: Rate }
+
+                behavior approval : (lines: List<Line>) -> Within | Needs
+                    constructs Needs, Rate
+
+                let worstOf (lines: List<Line>): Rate =
+                    List.fold((w, l) -> if Decimal.compare(l.discount.value, w.value) > 0
+                                        then l.discount else w,
+                              Rate(0.0m), lines)
+
+                let rolesFor (lines: List<Line>): List<Role> = {
+                    let w = worstOf(lines)
+                    if Decimal.compare(w.value, %s) <= 0 then [ ]
+                    else if Decimal.compare(w.value, 0.20m) <= 0 then [ Manager ]
+                    else [ Cfo ]
+                }
+
+                let approval (lines) =
+                    match List.get(0, rolesFor(lines)) with
+                        | None      -> Within
+                        | Some role -> Needs { role = role, worst = %s }
+                """.formatted(threshold, worst);
+    }
+
+    /** The worst discount of lines written as {@code line} and a list of them wearing a name with
+     *  {@code ofTheList}, walked again where it is above a tenth. */
+    private static String worstAboveATenth(String line, String ofTheList) {
+        return """
+                module example.quoting
+
+                data Rate = Decimal
+                    invariant value >= 0.0m && value <= 0.5m
+
+                %s
+                data Lines = List<Line>
+                    %s
+
+                data Within
+                data Needs = { worst: Rate }
+
+                behavior approval : (lines: Lines) -> Within | Needs
+                    constructs Needs, Rate
+
+                let worstOf (Lines(lines)): Rate =
+                    List.fold((w, l) -> if Decimal.compare(l.discount.value, w.value) > 0
+                                        then l.discount else w,
+                              Rate(0.0m), lines)
+
+                let approval (lines) =
+                    if Decimal.compare(worstOf(lines).value, 0.10m) <= 0 then Within
+                    else Needs { worst = worstOf(lines) }
+                """.formatted(line, ofTheList);
+    }
+
     /** Inside a conjunction, the comparison of the end is read as it is alone. */
     @Test
     void theEndComparedInsideAConjunctionIsReadAsItIsAlone() {

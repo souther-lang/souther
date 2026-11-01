@@ -17,6 +17,7 @@ import souther.compiler.check.PartId;
 import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.check.PublishedRules;
 import souther.compiler.check.RuleKey;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.Shape;
@@ -67,6 +68,8 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.Figure;
@@ -90,6 +93,7 @@ import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.StoppedReading;
 import souther.compiler.values.TextExtents;
 import souther.compiler.values.UnreadReason;
+import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
 import net.unit8.notation199x.pattern.CodePoints;
@@ -1333,15 +1337,33 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * there are terms and relations, and the answer is the same each time. Held as two bits a
      * pair, whether it was worked out and what it came to: each term asked of is asked beside
      * every other, and the terms are those of the one relation.
+     *
+     * @param region the rows the way lets through, which hold the container a statement other
+     *               elements meet is about ({@link #metByOtherElements})
      */
     private WhatARelationLeavesUndivided.Independence apartOnTheWay(List<OnAWay> conditions,
                                                                    List<Source> sources,
                                                                    InputReading read,
-                                                                   Set<Object> ignoring) {
+                                                                   Set<Object> ignoring,
+                                                                   SearchRegion region) {
         TiedOnTheWay tied = TiedOnTheWay.of(conditions, read, ignoring);
+        // A statement other elements meet ties none of the sides, where each is a number of
+        // elements a further element leaves as they were, and the container holds the elements
+        // of every side beside those others.
+        List<NumericTerm.FromOnePosition> readOff = new ArrayList<>();
+        int elementsRead = 0;
+        for (Side each : sides) {
+            readOff.add(each.readOff());
+            elementsRead += elementsReadOff(each);
+        }
+        List<OnAWay> tying = new ArrayList<>(conditions);
+        if (!readOff.contains(null)) {
+            tying.removeAll(metByOtherElements(readOff, elementsRead, conditions, conditions,
+                    region, read));
+        }
         List<Set<Object>> tiedTo = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
-            tiedTo.add(tiedTo(i, tied, conditions, sources, read, ignoring));
+            tiedTo.add(tiedTo(i, tied, tying, sources, read, ignoring));
         }
         int count = sides.size();
         BitSet worked = new BitSet(count * count);
@@ -1376,7 +1398,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 sources, carriers, entire.along(), entire.declared(), entire.conditions(), null,
                 entire.stating(), true, entire.narrowing(), false);
         WhatARelationLeavesUndivided.Independence independent =
-                apartOnTheWay(entire.conditions(), sources, read, Set.of());
+                apartOnTheWay(entire.conditions(), sources, read, Set.of(), entire.along());
         WhatARelationLeavesUndivided.Operations operations = operationsOverTheSides(read,
                 entire.conditions(), true, totalsWrittenByOneElement(terms));
         Map<NumericTerm, EachWayItComesOut> out = new LinkedHashMap<>();
@@ -2055,7 +2077,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             && form.coefs().keySet().iterator().next()
                             instanceof NumericTerm.TakenOf count
                             && count.takenAs() instanceof TakenAs.HowManyItHolds,
-                    relation, elementsAsked(taken.demand())));
+                    relation, elementsAsked(taken.demand()),
+                    taken.demand() instanceof RowDemand.Exists some ? some.ofAnElement() : null,
+                    OnAWay.PartsLeftAlone.NONE));
         });
         way.requirements().refinements().keySet()
                 .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
@@ -2090,24 +2114,27 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   anything else
      * @param elementsOf the container it asks what some or every element of meets, or null where
      *                   it asks nothing of the elements of one
+     * @param bySome     what it asks some element of {@code elementsOf} to meet, where it asks
+     *                   that of some element and not of every one — or null
      * @param leavesAlone which parts of the dates it names it says nothing of: the years where it
      *                   states months and days and some month and day it lets through stands in
      *                   every year alike, the months and days where it states years and the dates
      *                   have years that hold it together with the rest of the way
      */
     private record OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
-                          TermPath elementsOf, PartsLeftAlone leavesAlone) {
+                          TermPath elementsOf, RowDemand.AnElementMeets bySome,
+                          PartsLeftAlone leavesAlone) {
 
         /** The parts of a date a statement of the other parts says nothing of. */
         enum PartsLeftAlone { NONE, YEARS, MONTHS_AND_DAYS }
 
         OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                TermPath elementsOf) {
-            this(positions, whatStands, relation, elementsOf, PartsLeftAlone.NONE);
+            this(positions, whatStands, relation, elementsOf, null, PartsLeftAlone.NONE);
         }
 
         OnAWay leavingAlone(PartsLeftAlone parts) {
-            return new OnAWay(positions, whatStands, relation, elementsOf, parts);
+            return new OnAWay(positions, whatStands, relation, elementsOf, bySome, parts);
         }
 
         /** Whether this says nothing of {@code term} because it is a part of a date this leaves
@@ -2262,7 +2289,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // the pair is asked whether the way ties them as well as whether the declarations do.
         Set<Object> roomy = room.rules();
         WhatARelationLeavesUndivided.Independence onTheWay =
-                apartOnTheWay(beside.conditions(), sources, read, roomy);
+                apartOnTheWay(beside.conditions(), sources, read, roomy, beside.along());
         // A code point of the string the remainder's form is of stands apart from the form where
         // the format shows the form leaves every remainder whatever that code point is, and the
         // way states nothing of it that holds a string back: then all the way ties the two by is
@@ -4492,7 +4519,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         SearchRegion along = offItsLine ? declared : rest != null ? rest : region;
         LeftToTheCalendar left = leavingPartsAlone(stated, read);
         return new WayRead(along, declared, left,
-                stating(sources, left.conditions(), heldWhole, read), answered.narrowing());
+                stating(sources, left.conditions(), heldWhole, read, along),
+                answered.narrowing());
     }
 
     /**
@@ -4906,9 +4934,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return new WhatARelationLeavesUndivided.Ends(leastOf(carrier), greatestOf(carrier));
     }
 
-    /** What the way states of each side, asked once and read by both readings. */
+    /**
+     * What the way states of each side, asked once and read by both readings.
+     *
+     * <p>Without a statement that some element of a container meets something, where an element
+     * the side is not read off can be the one that does ({@link #metByAnotherElement}): the
+     * number of one element, and the end a walk kept of the elements before the one its step is
+     * handed, which are the elements before and that one.
+     *
+     * @param region the rows the way lets through
+     */
     private List<List<OnAWay>> stating(List<Source> sources, List<OnAWay> conditions,
-                                       boolean heldWhole, InputReading read) {
+                                       boolean heldWhole, InputReading read, SearchRegion region) {
         List<List<OnAWay>> out = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
@@ -4925,9 +4962,152 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         ? statingAnythingOfItsParameter(term, conditions, read)
                         : statingAnythingOf(term, conditions));
             }
+            if (each.readOff() != null) {
+                stated.removeAll(metByOtherElements(List.of(each.readOff()), elementsReadOff(each),
+                        List.copyOf(stated), conditions, region, read));
+            }
             out.add(List.copyOf(stated));
         }
         return out;
+    }
+
+    /** How many elements of a container {@code side} is read off together: the one a number is
+     *  of, or the one a walk's step is handed and an element before it, for what it kept. */
+    private static int elementsReadOff(Side side) {
+        return side.kept() != null ? 2 : 1;
+    }
+
+    /**
+     * Those of {@code candidates} that state some element of a container meets something, where
+     * each of {@code terms} is a number of an element of that container and other elements can be
+     * the ones that meet them ({@link #metByAnotherElement}) — every such statement of a
+     * container, or none of them.
+     *
+     * <p>A row holding the elements {@code terms} are read off at any values, with an element
+     * meeting each such statement after them, meets them all and leaves each term where it was:
+     * what a walk hands its step and what it kept before are the elements up to it, and an
+     * element after them is neither. So the statements say nothing of the terms where the
+     * container is held at as many as that, which a rule of the container may keep it from.
+     *
+     * @param elementsRead how many of the container's elements the terms are read off together,
+     *                     or more
+     */
+    private static Set<OnAWay> metByOtherElements(List<NumericTerm.FromOnePosition> terms,
+                                                  int elementsRead, List<OnAWay> candidates,
+                                                  List<OnAWay> conditions, SearchRegion region,
+                                                  InputReading read) {
+        Map<TermPath, List<OnAWay>> met = new LinkedHashMap<>();
+        for (OnAWay each : candidates) {
+            if (each.bySome() != null && terms.stream().allMatch(term -> term.placesReadOff()
+                    .stream().allMatch(place -> place.isAtOrUnder(each.elementsOf().element())))) {
+                met.computeIfAbsent(each.elementsOf(), _ -> new ArrayList<>()).add(each);
+            }
+        }
+        Set<OnAWay> out = new LinkedHashSet<>();
+        for (Map.Entry<TermPath, List<OnAWay>> container : met.entrySet()) {
+            List<OnAWay> some = container.getValue();
+            NumericDomain.Bounds held = howManyAreHeld(container.getKey(), read, region, false,
+                    elementsRead + some.size());
+            if (held != null && held.meet(new NumericDomain.Bounds(
+                    Endpoint.inclusive(Count.of(elementsRead + some.size())), null)).holdsAValue()
+                    && some.stream().allMatch(each ->
+                            metByAnotherElement(each, conditions, region, read))) {
+                out.addAll(some);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether an element of the container {@code statement} asks some element of can be written
+     * to meet what it asks, apart from every other element: one way of meeting it asks only ends
+     * on numbers of that element, no rule of the container or of a value around it reads those
+     * numbers, and a value of each is shown inside its ends. An element's own rules hold it to
+     * nothing outside it.
+     *
+     * <p>And only where nothing else on the way asks anything of the container's elements: what
+     * every element meets is met by the one written beside the others as well, which is not asked
+     * here.
+     */
+    private static boolean metByAnotherElement(OnAWay statement, List<OnAWay> conditions,
+                                               SearchRegion region, InputReading read) {
+        TermPath container = statement.elementsOf();
+        for (OnAWay other : conditions) {
+            if (container.equals(other.elementsOf()) && other.bySome() == null) {
+                return false;
+            }
+        }
+        // A rule keeping the elements apart reads them, and is met by an element apart from the
+        // others, which is what how many the container is held at asks, where the numbers the
+        // element meets the statement by are held beside none of the places it is apart at.
+        int deepest = container.steps().size();
+        KeptApart apart = new KeptApart();
+        if (namedDownTo(container.element(), deepest, read, null, apart) != Named.NOT) {
+            return false;
+        }
+        for (List<RowDemand.OfAnElement> way : statement.bySome().ways()) {
+            Map<NumericTerm.FromOnePosition, NumericDomain.Bounds> ends = endsAsked(way, container);
+            if (ends != null && ends.entrySet().stream().allMatch(each ->
+                    aValueIsShownInside(each.getKey(), each.getValue(), ends.size() == 1,
+                            deepest, region, read)
+                    && (!apart.found || !keptApartBeside(container,
+                            each.getKey().subjectPath(), read)))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * What {@code way}, a way of meeting a statement about an element of {@code container}, asks
+     * of each number of that element, as the ends it places on it — or null where it asks
+     * anything else: a relation over two numbers, an equality to another position, a number of
+     * anything but the element.
+     */
+    private static Map<NumericTerm.FromOnePosition, NumericDomain.Bounds> endsAsked(
+            List<RowDemand.OfAnElement> way, TermPath container) {
+        Map<NumericTerm.FromOnePosition, NumericDomain.Bounds> out = new LinkedHashMap<>();
+        for (RowDemand.OfAnElement each : way) {
+            if (!(each instanceof RowDemand.Relational(TakenConstraint.Affine stated))
+                    || stated.form().coefs().size() != 1
+                    || !(stated.form().coefs().keySet().iterator().next()
+                            instanceof NumericTerm.FromOnePosition number)
+                    || !number.placesReadOff().stream()
+                            .allMatch(place -> place.isAtOrUnder(container.element()))) {
+                return null;
+            }
+            NumericDomain.Bounds bounds = boundsStatedOf(stated);
+            if (bounds == null) {
+                return null;
+            }
+            out.merge(number, bounds, NumericDomain.Bounds::meet);
+        }
+        return out;
+    }
+
+    /**
+     * Whether some value of {@code number}, a number of an element, is shown inside {@code ends}
+     * on the rows {@code region} holds, with no rule of the container {@code deepest} steps down
+     * reading it. Where it is not {@code alone} among the numbers asked of the element, no rule of
+     * the element may read it either, since such a rule may hold it beside the others.
+     */
+    private static boolean aValueIsShownInside(NumericTerm.FromOnePosition number,
+                                               NumericDomain.Bounds ends, boolean alone,
+                                               int deepest, SearchRegion region,
+                                               InputReading read) {
+        Source source = sourceOf(number, read);
+        TermOrders orders = read.quantities().ordersOf(number);
+        if (source == null || orders == null || (!alone && source.named())
+                || namedDownTo(number.subjectPath(), deepest, read, null) != Named.NOT) {
+            return false;
+        }
+        NumericDomain.Bounds shown = realized(number, source, region, Way.NARROWED);
+        if (shown == null) {
+            return false;
+        }
+        NumericDomain.Bounds inside = shown.meet(ends);
+        return orders.answered().somethingInside(inside.min(), inside.max(), Towards.ABOVE,
+                UsualPlace.NONE) != null;
     }
 
     /**
@@ -7122,6 +7302,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     static NumericDomain.Bounds howManyAreHeld(TermPath container, InputReading read,
                                                SearchRegion region, boolean anElementShown) {
+        return howManyAreHeld(container, read, region, anElementShown, 1);
+    }
+
+    /**
+     * The same, where the elements of a list a rule keeps apart are taken as far as
+     * {@code wanted} of them, or as many as the rule leaves to be written together where that is
+     * fewer ({@link #writtenApart}).
+     */
+    static NumericDomain.Bounds howManyAreHeld(TermPath container, InputReading read,
+                                               SearchRegion region, boolean anElementShown,
+                                               int wanted) {
         RuleReadingSource rules = read.rules();
         Type type = read.domain().typeAt(container, rules);
         List<TermPath> entry = read.domain().entryOf(container, rules);
@@ -7143,7 +7334,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 aValueIsShownToExist(read.domain().typeAt(part, rules), read))) {
             most = 0;
         } else if (apart.found) {
-            most = 1;
+            most = writtenApart(container, read, wanted);
         } else if (!read.domain().holdsAnElementOverAgain(container, rules)) {
             // A set holds a value once, and a map a key: as many as the type has that differ.
             most = differingShown(type, read);
@@ -7156,6 +7347,140 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NumericDomain.Bounds upTo = run.meet(new NumericDomain.Bounds(null,
                 Endpoint.inclusive(Count.of(most))));
         return upTo.holdsAValue() ? upTo : null;
+    }
+
+    /**
+     * How many elements of the list {@code container} a row is shown to write together where a
+     * rule keeps them apart at runs of their fields, up to {@code wanted}: for each run, as many
+     * values that differ as the place it ends at is shown to take, and the fewest of those. One
+     * where a run is not shown that, since a list of one element is apart at every run.
+     *
+     * <p>Each value a place takes is taken by some element, so elements at values that differ
+     * there are a row. Which values the element's other places take beside them is another
+     * question ({@link #keptApartBeside}). A run the rules keep apart at the element itself is
+     * not counted here.
+     */
+    private static int writtenApart(TermPath container, InputReading read, int wanted) {
+        List<TermPath> keys = keptApartAt(container, read);
+        if (wanted <= 1 || keys == null || keys.isEmpty()) {
+            return 1;
+        }
+        int out = wanted;
+        for (TermPath key : keys) {
+            Position keyAt = key.equals(container.element()) ? null
+                    : read.domain().at(key.position());
+            if (keyAt == null) {
+                return 1;
+            }
+            out = Math.min(out, differingAt(key, keyAt, read, wanted));
+        }
+        return Math.max(out, 1);
+    }
+
+    /**
+     * Whether a rule keeping the elements of {@code container} apart keeps them apart at a place
+     * a rule of the declarations holds {@code place} beside, or at {@code place} itself or a value
+     * around it — or keeps them apart at runs this cannot name. Where it does, which values
+     * {@code place} takes on one element turns on which the others take there.
+     */
+    private static boolean keptApartBeside(TermPath container, TermPath place,
+                                           InputReading read) {
+        List<TermPath> keys = keptApartAt(container, read);
+        if (keys == null || keys.isEmpty()) {
+            return true;
+        }
+        for (TermPath key : keys) {
+            if (overlap(key, place) || tiedByARule(key, place, read)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The places the rules keep the elements of {@code container} apart at, each the end of a
+     *  run of fields from the element, or null where the container is no position here. */
+    private static List<TermPath> keptApartAt(TermPath container, InputReading read) {
+        Position at = read.domain().at(container.position());
+        Type root = read.domain().typeAt(TermPath.of(container.head()), read.rules());
+        if (at == null || root == null) {
+            return null;
+        }
+        RuleReadingContext reading = read.ruleReading();
+        List<TermPath> out = new ArrayList<>();
+        for (List<String> run : ElementsKeptApart.at(at.view(),
+                ElementsKeptApart.heldUnder(root, container.ruleKey(), reading), reading)) {
+            out.add(container.element().then(run));
+        }
+        return out;
+    }
+
+    /**
+     * How many values that differ the place {@code key}, standing at {@code at}, is shown to take,
+     * up to {@code wanted}.
+     *
+     * <p>Where the rules there were read whole, what they leave it: each value written down, each
+     * value of its type but the ones left out, each whole number of its runs, each string a
+     * pattern's machine gives up before it runs past what it may build. Where they leave a number
+     * a run the arithmetic shows it fills ({@link SearchRegion#wholeRunOf}), each whole number of
+     * the run, or every value of a run of more than one on an order with no step. One where
+     * nothing of that is shown.
+     */
+    private static int differingAt(TermPath key, Position at, InputReading read, int wanted) {
+        AdmissibleSet admitted = at.admitted();
+        if (admitted.completeness() instanceof AdmissibleSet.Completeness.Complete) {
+            int counted = switch (admitted.approximation()) {
+                case ValueSet.Finite(Set<Value> values) -> Math.min(values.size(), wanted);
+                case ValueSet.Cofinite(Set<Value> excluded) -> {
+                    long every = ValueUniverse.howManyDiffer(at.type(), read.ruleReading());
+                    yield every >= 0 ? (int) Math.max(0, Math.min(every - excluded.size(), wanted))
+                            : withoutEnd(at.type(), read)
+                            && endsOf(at.boundsFor(new NumericTerm.ValueOf(key)), false) == null
+                            ? wanted : 0;
+                }
+                case ValueSet.WholeRuns(WholeNumberRuns numbers) -> numbers.count() == null
+                        ? wanted : numbers.count().min(BigInteger.valueOf(wanted)).intValue();
+                case ValueSet.Matching(Language _) -> Partitions
+                        .admittedStrings(at.type(), read.ruleReading(), wanted).size();
+            };
+            if (counted > 0) {
+                return counted;
+            }
+        }
+        NumericTerm.ValueOf number = new NumericTerm.ValueOf(key);
+        NumericDomain.Bounds run = read.quantities().region().wholeRunOf(number);
+        TermOrders orders = read.quantities().ordersOf(number);
+        if (run == null || orders == null || orders.answered() == null) {
+            return 1;
+        }
+        if (orders.answered().spacingBetweenValues() != Granularity.DISCRETE) {
+            return run.holdsAValue() && !onePoint(run) ? wanted : 1;
+        }
+        if (run.min() == null || run.max() == null
+                || !(run.min().at() instanceof Count least) || !(run.max().at() instanceof Count most)
+                || !(least.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger>(BigInteger low))
+                || !(most.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger high))) {
+            return run.holdsAValue() ? wanted : 1;
+        }
+        BigInteger from = run.min().inclusive() || !least.exactly().isWhole() ? low
+                : low.add(BigInteger.ONE);
+        BigInteger to = run.max().inclusive() || !most.exactly().isWhole() ? high
+                : high.subtract(BigInteger.ONE);
+        BigInteger many = to.subtract(from).add(BigInteger.ONE);
+        return many.signum() <= 0 ? 1 : many.min(BigInteger.valueOf(wanted)).intValue();
+    }
+
+    /** Whether {@code run} holds one value and no other: both ends at it, held. */
+    private static boolean onePoint(NumericDomain.Bounds run) {
+        return run.min() != null && run.max() != null && run.min().inclusive()
+                && run.max().inclusive() && run.min().at().equals(run.max().at());
+    }
+
+    /** Whether a value of {@code type} with no rule on it is one of values without end: a whole
+     *  number, a decimal, a ratio or a string. */
+    private static boolean withoutEnd(Type type, InputReading read) {
+        return TypeOps.base(type, read.rules().inners()) instanceof Type.Prim prim
+                && (prim == Type.Prim.INT || prim == Type.Prim.STRING
+                        || prim == Type.Prim.DECIMAL || prim == Type.Prim.RATIONAL);
     }
 
     /**
@@ -7405,11 +7730,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         boolean seedNamed = kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)
                 && (sourceOf(from, read) == null || sourceOf(from, read).named());
         // A rule keeping elements apart by some field relates them to one another whichever field
-        // the number is, so it is asked at the elements and not at the number.
+        // the number is, so it is asked at the elements and not at the number. Not where two
+        // elements are written apart ({@link #writtenApart}) at fields no rule holds the number
+        // beside ({@link #keptApartBeside}): which values those take says nothing of the number.
+        // Not where the walk files under a key of the elements, which the rule keeps apart.
         int deepest = kept.container().steps().size();
+        KeptApart apart = new KeptApart();
+        Named ofTheElements = namedDownTo(kept.container().element(), deepest, read, null, apart);
         return new Source(each.takes(), each.onlyItsEnds(), seedNamed
                 || namedDownTo(kept.ofEach().subjectPath(), deepest, read, null) != Named.NOT
-                || namedDownTo(kept.container().element(), deepest, read, null) == Named.UNSEEN);
+                || ofTheElements == Named.UNSEEN
+                || (apart.found && (kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheKey
+                        || writtenApart(kept.container(), read, 2) < 2
+                        || keptApartBeside(kept.container(), kept.ofEach().subjectPath(), read))));
     }
 
     /**
@@ -7837,9 +8170,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static Named namedDownTo(TermPath path, int deepest, InputReading read,
                                      Nodes nodes, KeptApart apart) {
+        return namedDownTo(path, 0, deepest, read, nodes, apart);
+    }
+
+    /** The same, of the values {@code path} sits in from {@code from} steps down the parameter to
+     *  {@code deepest}: the rules of the values above those are not asked. */
+    private static Named namedDownTo(TermPath path, int from, int deepest, InputReading read,
+                                     Nodes nodes, KeptApart apart) {
         List<TermPath.Step> steps = path.steps();
         Named out = Named.NOT;
-        for (int length = 0; length <= deepest && length < steps.size(); length++) {
+        for (int length = from; length <= deepest && length < steps.size(); length++) {
             TermPath here = new TermPath(path.head(), steps.subList(0, length));
             Position around = read.domain().at(here.position());
             // Where the rules leave no value of it, nothing stands beside the rest of it either.

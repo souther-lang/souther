@@ -13,6 +13,8 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -104,6 +106,40 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
         assertTrue(certified(quote("value >= 0.0m"), "q.total"));
     }
 
+    /**
+     * Nor are the places the net is made of: the definition leaves each as free as it was, so
+     * every value its own rules leave it stands in a line, with the net at what they come to.
+     */
+    @Test
+    void thePlacesTheNetIsMadeOfStandWhereTheirOwnRulesLeaveThem() {
+        for (String place : List.of("quantity", "listPrice", "discount")) {
+            assertTrue(certified(quote("value >= 0.0m"), "q.lines[*]." + place), place);
+        }
+    }
+
+    /**
+     * The net is not: its values are what the others come to, and with a quantity of two at most
+     * and a price of ten at most no net comes past twenty, which the net's own rule leaves.
+     */
+    @Test
+    void theNetIsWhatTheOthersComeToAndNotWhatItsOwnRuleLeaves() {
+        String bounded = quote("value >= 0.0m")
+                .replace("invariant value >= 1\n", "invariant value >= 1 && value <= 2\n")
+                .replace("data UnitPrice = Decimal\n    invariant value >= 0.0m",
+                        "data UnitPrice = Decimal\n    invariant value >= 0.0m && value <= 10.0m");
+
+        assertTrue(bounded.contains("value <= 2") && bounded.contains("value <= 10.0m"), bounded);
+        assertTrue(certified(bounded, "q.lines[*].discount"));
+        assertFalse(certified(bounded, "q.lines[*].net"));
+    }
+
+    /** A net the definition can come to past its end restricts the places it is made of, which
+     *  then stand where the definition leaves them, not where their own rules do. */
+    @Test
+    void aNetPastItsEndRestrictsThePlacesItIsMadeOf() {
+        assertFalse(certified(quote("value >= 0.0m && value <= 1.0m"), "q.lines[*].discount"));
+    }
+
     /** A rule that says more than the definition, and that no price meets, is not the definition:
      *  no line is shown. */
     @Test
@@ -116,6 +152,7 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
                 """);
 
         assertFalse(lineHoldsAValue(source));
+        assertFalse(certified(source, "q.lines[*].discount"));
     }
 
     private static final String NET = """
