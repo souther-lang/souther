@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
@@ -22,12 +23,17 @@ import java.util.function.UnaryOperator;
  * realizer proves it as it proves every other region empty. Where the cases of several readings
  * together cover the class, none of them need do so alone.
  *
- * <p>Only what a region can carry is taken in. A case or a part of one that is not a conjunction of
- * comparisons over the input's numbers, or that the region refuses, is left out, which leaves the
- * region wider than the rows that are at the class and never narrower: the absence of a proof is
- * not a proof that none is there.
+ * <p>An upper bound of that region and not the set difference itself. Only what a region can carry
+ * is taken in: a case or a part of one that is not a conjunction of comparisons over the input's
+ * numbers, that the region refuses, or that is over an element or a key of a container is left
+ * out. Every row at the class is inside what this leaves, and some row that is not may be too, so
+ * an empty result is a proof and a non-empty one is not.
+ *
+ * <p>Not over an element or a key. A case is asked of a row under each choice of the element it is
+ * about, and a region holds one position for all the elements, so denying the case there would
+ * leave out a row whose chosen element is in the class while another element is in the case.
  */
-public final class OutsideTheOtherReadings {
+final class OutsideTheOtherReadings {
 
     private OutsideTheOtherReadings() {
     }
@@ -37,7 +43,7 @@ public final class OutsideTheOtherReadings {
      *
      * @param cases where each other reading of the comparison decides
      */
-    public static UnaryOperator<SearchRegion> of(List<Proposition> cases) {
+    static UnaryOperator<SearchRegion> of(List<Proposition> cases) {
         return region -> {
             SearchRegion within = region;
             for (Proposition decides : cases) {
@@ -73,7 +79,8 @@ public final class OutsideTheOtherReadings {
         return switch (compared.relation()) {
             case Relation.Affine(LinearForm<Quantity> form, Rel _) -> {
                 LinearForm<NumericTerm> against = WhatTheDeclarationsLeave.ofTheInput(form);
-                if (against == null) {
+                if (against == null || against.coefs().keySet().stream()
+                        .anyMatch(OutsideTheOtherReadings::insideAContainer)) {
                     yield region;
                 }
                 yield switch (region.assuming(against, met)) {
@@ -82,10 +89,16 @@ public final class OutsideTheOtherReadings {
                 };
             }
             case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm.FromOnePosition term),
-                                  var at, Rel _) -> (TakenConstraint.Ordered.isABound(met)
-                    ? new TakenConstraint.Ordered(term, at, met)
-                    : new TakenConstraint.AwayFrom(term, at)).narrowing(region);
+                                  var at, Rel _) -> insideAContainer(term) ? region
+                    : (TakenConstraint.Ordered.isABound(met)
+                            ? new TakenConstraint.Ordered(term, at, met)
+                            : new TakenConstraint.AwayFrom(term, at)).narrowing(region);
             case Relation.Ordered _ -> region;
         };
+    }
+
+    private static boolean insideAContainer(NumericTerm term) {
+        return term.subjectPath().steps().stream().anyMatch(step ->
+                step instanceof TermPath.Step.Element || step instanceof TermPath.Step.Key);
     }
 }

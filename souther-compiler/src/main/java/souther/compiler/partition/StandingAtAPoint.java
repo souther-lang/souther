@@ -5,6 +5,7 @@ import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.SeenComparison;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
@@ -376,8 +377,8 @@ public final class StandingAtAPoint {
     public static final class OtherReadings {
 
         private final Supplier<List<MeasuredInput.BorderReading>> making;
+        private List<Deciding> deciding;
         private List<WhereAPartDecides.AskedOfRows> asked;
-        private List<Proposition> cases;
 
         private OtherReadings(Supplier<List<MeasuredInput.BorderReading>> making) {
             this.making = making;
@@ -389,29 +390,48 @@ public final class StandingAtAPoint {
         }
 
         /**
-         * Where each of these readings decides, as the propositions {@link #askedOfRows} asks of a
-         * row: a row at one of them is a row of that reading and at no class of this one.
+         * The region {@code within} leaves outside every one of these readings' cases: where a row
+         * at a class of this line can be.
+         *
+         * <p>Taken from the same cases {@link #askedOfRows} asks of a row, so that what a search
+         * leaves out and what a row is refused for are one set.
          */
-        public List<Proposition> cases() {
-            if (cases == null) {
-                cases = making.get().stream()
-                        .map(each -> each.border().origin())
-                        .filter(LineOrigin.ComparisonOrigin.class::isInstance)
-                        .map(LineOrigin.ComparisonOrigin.class::cast)
-                        .flatMap(each -> each.part().stream())
-                        .map(WhereAPartDecides::decides)
-                        .toList();
+        public SearchRegion outsideTheCases(SearchRegion within) {
+            return OutsideTheOtherReadings.of(
+                    deciding().stream().map(each -> each.part().decides()).toList())
+                    .apply(within);
+        }
+
+        private List<Deciding> deciding() {
+            if (deciding == null) {
+                deciding = making.get().stream()
+                        .flatMap(each -> decidingIn(each).stream()).toList();
             }
-            return cases;
+            return deciding;
         }
 
         private List<WhereAPartDecides.AskedOfRows> askedOfRows() {
             if (asked == null) {
-                asked = making.get().stream()
-                        .flatMap(each -> whereItDecides(each).stream()).toList();
+                asked = deciding().stream().map(Deciding::askedOfRows).toList();
             }
             return asked;
         }
+    }
+
+    /** Where one reading of a comparison decides, and the reading it is a part of. */
+    private record Deciding(WhereAPartDecides part, MeasuredInput.BorderReading line) {
+
+        WhereAPartDecides.AskedOfRows askedOfRows() {
+            return part.askedOfRows(line.quantity().behavior(), line.subject());
+        }
+    }
+
+    /** Where the line {@code line} reads decides, or empty where the line is a whole comparison's
+     *  or no comparison's. */
+    private static Optional<Deciding> decidingIn(MeasuredInput.BorderReading line) {
+        return line.border().origin() instanceof LineOrigin.ComparisonOrigin comparison
+                ? comparison.part().map(part -> new Deciding(part, line))
+                : Optional.empty();
     }
 
     /**
@@ -783,10 +803,7 @@ public final class StandingAtAPoint {
      */
     private static Optional<WhereAPartDecides.AskedOfRows> whereItDecides(
             MeasuredInput.BorderReading line) {
-        return line.border().origin() instanceof LineOrigin.ComparisonOrigin comparison
-                ? comparison.part().map(part -> part.askedOfRows(line.quantity().behavior(),
-                        line.subject()))
-                : Optional.empty();
+        return decidingIn(line).map(Deciding::askedOfRows);
     }
 
     /**
