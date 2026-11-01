@@ -757,7 +757,7 @@ public final class InputDomain {
      * whose order is the row's, and not a set or a map, whose order is the type's.
      */
     public boolean holdsItsElementsInTheOrderWritten(TermPath path, RuleReadingSource source) {
-        return typeAt(path, source) instanceof Type.ListOf;
+        return isAList(path, source);
     }
 
     /**
@@ -765,14 +765,27 @@ public final class InputDomain {
      * or the keys of a map, each of which holds a value once.
      */
     public boolean holdsAnElementOverAgain(TermPath path, RuleReadingSource source) {
-        return typeAt(path, source) instanceof Type.ListOf;
+        return isAList(path, source);
     }
 
     /** What one entry of the container at {@code path} holds: its element, and the key a map
      *  files it under. */
     public List<TermPath> entryOf(TermPath path, RuleReadingSource source) {
-        return typeAt(path, source) instanceof Type.MapOf
+        return shapeAt(path, source) instanceof Shape.Mapping
                 ? List.of(path.element(), path.key()) : List.of(path.element());
+    }
+
+    /** Whether what stands at {@code path} is a list, under whatever names it wears. */
+    private boolean isAList(TermPath path, RuleReadingSource source) {
+        return shapeAt(path, source) instanceof Shape.Sequence(Shape.Sequence.Kind kind, var _)
+                && kind == Shape.Sequence.Kind.LIST;
+    }
+
+    /** The shape of what stands at {@code path}, or null where nothing is read there. */
+    private Shape shapeAt(TermPath path, RuleReadingSource source) {
+        Type type = typeAt(path, source);
+        return type == null ? null : TypeView.shapeOf(type, source.inners(), source.symbols(),
+                source.kinds(), source.sums());
     }
 
     /**
