@@ -1,5 +1,6 @@
 package souther.compiler.numeric;
 
+import souther.compiler.collect.HeldByKey;
 import souther.compiler.collect.HeldOnce;
 import souther.exact.ExactArithmetic;
 import souther.exact.ExactDecimals;
@@ -14,7 +15,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
-import java.util.concurrent.atomic.AtomicReferenceArray;
 
 /**
  * An exact ratio of two whole numbers, which is what the constraint algebra reasons in.
@@ -123,6 +123,13 @@ public final class ExactRatio implements Comparable<ExactRatio> {
     }
 
     public static ExactRatio of(BigInteger whole) {
+        if (whole.bitLength() > LARGEST_KEPT_BITS) {
+            return madeOf(whole);
+        }
+        return WHOLES.get(whole, ExactRatio::madeOf);
+    }
+
+    private static ExactRatio madeOf(BigInteger whole) {
         return shared(ExactArithmetic.canonical(whole, BigInteger.ONE, 0, 0));
     }
 
@@ -140,48 +147,34 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      * digits as it has, and this holds the value it was given without spelling them.
      */
     public static ExactRatio of(BigDecimal at) {
-        if (at.precision() > LARGEST_DECIMAL_KEPT) {
-            return shared(ExactArithmetic.canonical(at));
+        if (at.precision() > LARGEST_KEPT_DIGITS) {
+            return madeOf(at);
         }
-        int hash = at.hashCode();
-        int slot = (hash ^ (hash >>> 16)) & (DECIMALS.length() - 1);
-        DecimalRatio known = DECIMALS.get(slot);
-        if (known != null && known.isWrittenAs(at)) {
-            return known.ratio();
-        }
-        ExactRatio made = shared(ExactArithmetic.canonical(at));
-        DECIMALS.set(slot, new DecimalRatio(at, made));
-        return made;
+        return DECIMALS.get(at, ExactRatio::madeOf);
+    }
+
+    private static ExactRatio madeOf(BigDecimal at) {
+        return shared(ExactArithmetic.canonical(at));
     }
 
     /**
-     * A decimal and the ratio it is. The ratio is a function of the decimal's scale and unscaled
-     * value, so it is the ratio of every decimal written with that scale and that value; two
-     * decimals of one value written with different scales are two entries, and both hold the one
-     * ratio.
+     * The numbers above which a decimal or a whole number is converted and not kept, so that the
+     * tables hold a bounded number of bytes and not only a bounded number of entries: at most a few
+     * megabytes with every slot full of numbers this long. The numbers a compile asks for are bounds
+     * and coefficients a person wrote, and are far below them.
      */
-    private record DecimalRatio(BigDecimal decimal, ExactRatio ratio) {
-        /** Whether {@code other} has this decimal's scale and unscaled value. */
-        boolean isWrittenAs(BigDecimal other) {
-            return decimal.scale() == other.scale() && decimal.compareTo(other) == 0;
-        }
-    }
-
-    /** Digits above which a decimal is converted and not kept, so that the slots hold a bounded
-     *  number of bytes and not only a bounded number of entries. The decimals a compile asks for
-     *  are far below it: they are bounds and coefficients a person wrote. */
-    private static final int LARGEST_DECIMAL_KEPT = 40;
+    private static final int LARGEST_KEPT_DIGITS = 100;
+    private static final int LARGEST_KEPT_BITS = 332;
 
     /**
-     * The ratios of the decimals asked last, each in the slot its hash falls in. A compile asks for
-     * the same few decimals over and over, and each ask would otherwise build the exact parts and
-     * put them in canonical form again. Held strongly, since the pair is held by nothing else; it
-     * refers to numbers only. Written and read without a lock: a pair is published whole through
-     * the array, and two threads filling one slot leave one of their pairs in it, which only means
-     * the ratio of that decimal is made again by the next ask that finds the other.
+     * The ratios of the decimals and of the whole numbers asked last. A compile asks for the same
+     * few of each over and over, in every form that holds them, and each ask would otherwise build
+     * the exact parts and put them in canonical form again. A decimal is a key by its scale and its
+     * unscaled value, which is what the ratio is a function of: two decimals of one value written
+     * with different scales are two keys and have the one ratio.
      */
-    private static final AtomicReferenceArray<DecimalRatio> DECIMALS =
-            new AtomicReferenceArray<>(1 << 12);
+    private static final HeldByKey<BigDecimal, ExactRatio> DECIMALS = new HeldByKey<>(11);
+    private static final HeldByKey<BigInteger, ExactRatio> WHOLES = new HeldByKey<>(11);
 
     /**
      * Ten to {@code power}, which is two to it and five to it: held as the two exponents, and never

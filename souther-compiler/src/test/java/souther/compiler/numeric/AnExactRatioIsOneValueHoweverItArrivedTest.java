@@ -90,29 +90,75 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
         assertEquals(first, ExactRatio.of(asked));
     }
 
-    @Test
-    void aDecimalAskedAgainIsNotConvertedAgain() {
-        BigDecimal[] asks = new BigDecimal[2_000];
-        for (int i = 0; i < asks.length; i++) {
-            asks[i] = new BigDecimal("12345.6789");
-        }
-        ExactRatio kept = ExactRatio.of(asks[0]);
+    private static final int ASKS = 2_000;
+
+    /** The bytes this thread allocates while {@code asking} runs the second time, the first having
+     *  paid for whatever the code allocates once, in loading and linking it. */
+    private static long allocatedBy(Runnable asking) {
+        asking.run();
         ThreadMXBean threads = (ThreadMXBean) ManagementFactory.getThreadMXBean();
         long thread = Thread.currentThread().threadId();
         long before = threads.getThreadAllocatedBytes(thread);
-        for (BigDecimal ask : asks) {
-            assertSame(kept, ExactRatio.of(ask));
+        asking.run();
+        return threads.getThreadAllocatedBytes(thread) - before;
+    }
+
+    @Test
+    void aDecimalAskedAgainIsNotConvertedAgain() {
+        BigDecimal[] asks = new BigDecimal[ASKS];
+        for (int i = 0; i < ASKS; i++) {
+            asks[i] = new BigDecimal("12345.6789");
         }
-        long allocated = threads.getThreadAllocatedBytes(thread) - before;
-        assertTrue(allocated < asks.length,
+        ExactRatio kept = ExactRatio.of(asks[0]);
+        long allocated = allocatedBy(() -> {
+            for (BigDecimal ask : asks) {
+                assertSame(kept, ExactRatio.of(ask));
+            }
+        });
+        assertTrue(allocated < ASKS,
                 "a ratio found by its decimal allocates nothing per ask, and " + allocated
-                        + " bytes were allocated for " + asks.length + " asks");
+                        + " bytes were allocated for " + ASKS + " asks");
+    }
+
+    @Test
+    void twoDecimalsOfOneHashAskedInTurnAreNotConvertedAgain() {
+        // the pair a compile asks for in turn, which fall in one set of the table
+        BigDecimal zero = BigDecimal.valueOf(0);
+        BigDecimal least = BigDecimal.valueOf(Long.MIN_VALUE);
+        ExactRatio keptZero = ExactRatio.of(zero);
+        ExactRatio keptLeast = ExactRatio.of(least);
+        long allocated = allocatedBy(() -> {
+            for (int i = 0; i < ASKS; i++) {
+                assertSame(keptZero, ExactRatio.of(zero));
+                assertSame(keptLeast, ExactRatio.of(least));
+            }
+        });
+        assertTrue(allocated < ASKS,
+                "two decimals that hash alike keep their ratios, and " + allocated
+                        + " bytes were allocated for " + 2 * ASKS + " asks");
+    }
+
+    @Test
+    void aWholeNumberAskedAgainIsNotConvertedAgain() {
+        BigInteger[] asks = new BigInteger[ASKS];
+        for (int i = 0; i < ASKS; i++) {
+            asks[i] = new BigInteger("123456789012345678901234567890");
+        }
+        ExactRatio kept = ExactRatio.of(asks[0]);
+        long allocated = allocatedBy(() -> {
+            for (BigInteger ask : asks) {
+                assertSame(kept, ExactRatio.of(ask));
+            }
+        });
+        assertTrue(allocated < ASKS,
+                "a ratio found by its whole number allocates nothing per ask, and " + allocated
+                        + " bytes were allocated for " + ASKS + " asks");
     }
 
     @Test
     void aDecimalTooLongToKeepIsConvertedAllTheSame() {
-        BigDecimal tooLong = new BigDecimal("1." + "0".repeat(60) + "5");
-        BigInteger denominator = BigInteger.TEN.pow(61);
+        BigDecimal tooLong = new BigDecimal("1." + "0".repeat(120) + "5");
+        BigInteger denominator = BigInteger.TEN.pow(121);
         assertEquals(ExactRatio.of(denominator.add(BigInteger.valueOf(5)), denominator),
                 ExactRatio.of(tooLong));
         assertEquals(ExactRatio.of(tooLong), ExactRatio.of(tooLong));
