@@ -462,8 +462,30 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * else. What that field says is the surface's to write.
      */
     public PublishedRuleHandle handle(PublishedRuleHandle.WhereARuleIs places) {
+        return handleOf(List.of(this), places);
+    }
+
+    /**
+     * How a document sends a reader to the rule that drew the line of {@code assessments}, which
+     * are every assessment of one point.
+     *
+     * <p>Chosen once over what every one of them cites. A handle chosen per assessment and then
+     * picked among would be whichever assessment was met first, and a point read by two behaviors
+     * would be sent to by a different handle depending on which was walked first.
+     */
+    public static PublishedRuleHandle handleOf(List<BorderObligationPointAssessment> assessments,
+                                               PublishedRuleHandle.WhereARuleIs places) {
+        BorderObligationPoint point = assessments.getFirst().point();
+        java.util.Set<souther.compiler.check.RuleCitation> cited = new java.util.LinkedHashSet<>();
+        for (BorderObligationPointAssessment each : assessments) {
+            if (!each.point().equals(point)) {
+                throw new IllegalStateException("assessments of two points are not one point's: "
+                        + point + " and " + each.point());
+            }
+            cited.addAll(each.ruleCitations());
+        }
         return PublishedRuleHandle.of(
-                PublicationOrders.handleFor(ruleCitations(), places)
+                PublicationOrders.handleFor(cited, places)
                         .orElseThrow(() -> new IllegalStateException("a line a reader is sent to is"
                                 + " one some reading said how to find: " + point)),
                 places);

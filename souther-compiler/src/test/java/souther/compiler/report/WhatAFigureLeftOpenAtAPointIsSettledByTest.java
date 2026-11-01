@@ -7,6 +7,8 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
+import java.util.HashSet;
+import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -69,7 +71,7 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
                   what keeps it open
                     stopped at a figure of this compiler     1
                     stopped at no figure                     0
-                      comparison@0:null (in the region, above) — the search stopped at how many \
+                      comparison@0:null in h (in the region, above) — the search stopped at how many \
                 values a point is tried with (VALUES_A_POINT_IS_TRIED_WITH, 8), which no option \
                 sets: a row there, or a rule that leaves no value there, would settle it; \
                 nothing shows one is needed
@@ -105,9 +107,55 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
         compilation.answerEverything();
         String human = human(AdequacyReport.of(compilation));
 
+        List<String> points = pointsOfComparisons(human);
+        assertEquals(2, points.size(), human);
+        assertEquals(1, points.stream().filter(each -> each.contains(" in h ")).count(), human);
+        assertEquals(1, points.stream().filter(each -> each.contains(" in g ")).count(), human);
+        assertEquals(2, new HashSet<>(points).size(), human);
+    }
+
+    /**
+     * A helper's comparison read through two behaviors is one comparison, so it is one line, and
+     * the behavior it names is the one that wrote it.
+     */
+    @Test
+    void aComparisonOfAHelperTwoBehaviorsReadIsOneLineNamingTheHelper() {
+        Compilation compilation = Compilation.ofSource("""
+                module probe.sizes
+
+                behavior c : (s: Set<Decimal>) -> Int
+                let c (s) = if Set.size(s) == 3 then 1 else 0
+
+                behavior a : (s: Set<Decimal>) -> Int
+                let a (s) = c(s)
+
+                behavior b : (s: Set<Decimal>) -> Int
+                let b (s) = c(s)
+
+                example c
+                    | "none"  : ([]) -> 0
+                %s%s%s%s
+                example a
+                    | "none"  : ([]) -> 0
+                example b
+                    | "none"  : ([]) -> 0
+                """.formatted(row("one", 1, 0), row("two", 2, 0), row("three", 3, 1),
+                row("four", 4, 0)), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String human = human(AdequacyReport.of(compilation));
+
+        List<String> points = pointsOfComparisons(human);
+        assertEquals(1, points.size(), human);
+        assertTrue(points.getFirst().contains(" in c "), human);
+    }
+
+    /** The lines under {@code what keeps it open} that name a point of a comparison in a body. */
+    private static List<String> pointsOfComparisons(String human) {
+        assertTrue(human.contains("what keeps it open"), human);
         String open = human.substring(human.indexOf("what keeps it open"));
         assertFalse(open.contains("the comparison"), human);
-        assertTrue(open.contains("comparison@"), human);
+        return open.lines().filter(each -> each.contains("comparison@")).toList();
     }
 
     /** And a row written there settles it. */

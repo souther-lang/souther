@@ -2809,20 +2809,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private Map<BorderObligationPoint, PublishedRuleHandle> handlesOfWrittenPoints(
             PublishedRuleHandle.WhereARuleIs places, Set<BorderObligationPoint> wanted) {
-        Map<BorderObligationPoint, PublishedRuleHandle> out = new LinkedHashMap<>();
+        Map<BorderObligationPoint, List<BorderObligationPointAssessment>> assessed =
+                new LinkedHashMap<>();
         for (ModuleReport module : modules) {
             for (BehaviorReport behavior : module.behaviors()) {
                 if (behavior.partition() == null) {
                     continue;
                 }
                 for (BorderObligationPointAssessment point : behavior.account()) {
-                    if (wanted.contains(point.point()) && !out.containsKey(point.point())
+                    if (wanted.contains(point.point())
                             && point.point().line().provenance() instanceof RuleRef.Written) {
-                        out.put(point.point(), point.handle(places));
+                        assessed.computeIfAbsent(point.point(), _ -> new ArrayList<>()).add(point);
                     }
                 }
             }
         }
+        Map<BorderObligationPoint, PublishedRuleHandle> out = new LinkedHashMap<>();
+        assessed.forEach((point, each) ->
+                out.put(point, BorderObligationPointAssessment.handleOf(each, places)));
         return out;
     }
 
@@ -10464,9 +10468,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // of its points apart is the line and where on it the point is.
             case Subject.AtAPoint it -> {
                 PublishedRuleHandle handle = writtenPoints.get(it.point());
-                String rule = handle == null
-                        ? it.point().line().saidWithoutAPlace()
-                        : it.point().line().line().said(RuleHandleProse.said(handle, rendering, null));
+                String rule = it.point().line().saidWithoutAPlace();
+                if (handle != null) {
+                    // This list runs across every behavior, which the border section of one does
+                    // not, so a handle that is a place alone gets the behavior that wrote the
+                    // comparison after it. A handle for code out of sight names what reaches it.
+                    String where = RuleHandleProse.said(handle, rendering, null);
+                    if (handle instanceof PublishedRuleHandle.Written
+                            && it.point().line().provenance() instanceof RuleRef.Written written) {
+                        where += " in " + written.behavior();
+                    }
+                    rule = it.point().line().line().said(where);
+                }
                 yield rule
                         + it.point().line().at().map(at -> " = " + at).orElse("")
                         + placeOn(it.point().point());
