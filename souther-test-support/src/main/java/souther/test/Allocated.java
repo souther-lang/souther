@@ -45,9 +45,9 @@ public final class Allocated {
         long calibrationStart = counter.getCurrentThreadAllocatedBytes();
         calibration = new byte[CALIBRATION_BYTES];
         long counted = counter.getCurrentThreadAllocatedBytes() - calibrationStart;
-        if (counted < CALIBRATION_BYTES) {
+        if (counted < calibration.length) {
             throw new AssertionError("the allocation counter reported " + counted + " bytes for an array of "
-                    + CALIBRATION_BYTES + ", so it is not counting");
+                    + calibration.length + ", so it is not counting");
         }
         long before = counter.getCurrentThreadAllocatedBytes();
         work.run();

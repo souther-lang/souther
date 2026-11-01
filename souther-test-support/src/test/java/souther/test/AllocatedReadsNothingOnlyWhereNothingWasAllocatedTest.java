@@ -2,6 +2,8 @@ package souther.test;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -12,11 +14,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AllocatedReadsNothingOnlyWhereNothingWasAllocatedTest {
 
-    private static volatile Object sink;
+    private static final AtomicReference<Object> SINK = new AtomicReference<>();
 
     @Test
     void workThatAllocatesReadsAsAtLeastWhatItAllocated() {
-        long allocated = Allocated.byWhichMayBeNothing(() -> sink = new byte[100_000]);
+        long allocated = Allocated.byWhichMayBeNothing(() -> SINK.set(new byte[100_000]));
         assertTrue(allocated >= 100_000, "an array of 100000 bytes was read as " + allocated);
     }
 
