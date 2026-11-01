@@ -169,6 +169,27 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
     }
 
     /**
+     * A rule every point of the boxes holds says nothing at the low corner, however it is written:
+     * {@code a = 0} beside a limit on {@code a + b + c} reads as {@code a >= 0} with
+     * {@code a <= 0} does.
+     */
+    @Test
+    void aRuleTheBoxesHoldThroughoutLeavesALimitOnASumItsRunsHoweverItIsWritten() {
+        Written limit = new Written(Map.of("a", 1L, "b", 1L, "c", 1L), -5, Rel.LE);
+        List<List<Written>> writings = List.of(
+                List.of(limit, over("a", 1, Rel.EQ)),
+                List.of(over("a", 1, Rel.EQ), limit),
+                List.of(limit, over("a", 1, Rel.GE), over("a", 1, Rel.LE)));
+        for (List<Written> rules : writings) {
+            NumericDomain<String> domain = told(domainOf(rules), endless("a", "b", "c"));
+            assertEquals(run(LOW, 5), domain.wholeRunOf("b"), rules::toString);
+            assertEquals(run(LOW, 5), domain.wholeRunOf("c"), rules::toString);
+        }
+        NumericDomain<String> held = told(domainOf(writings.getFirst()), endless("a", "b", "c"));
+        assertEquals(run(LOW, LOW), held.wholeRunOf("a"));
+    }
+
+    /**
      * Enumerated: a limit on a sum beside holes and bounds written at random, and every whole
      * number of a run shown of {@code a} or {@code b} has a value of the other that holds all the
      * rules. The holes outside the boxes are among the states, so a run shown through them is

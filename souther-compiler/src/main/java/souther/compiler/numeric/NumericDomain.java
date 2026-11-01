@@ -1404,10 +1404,7 @@ public final class NumericDomain<A> {
             }
         }
         for (AffineConstraint<A> rule : rules) {
-            if (rule instanceof AffineConstraint.Disequality<A> hole) {
-                if (!holeLiesOutsideTheBoxes(hole, runs)) {
-                    return false;
-                }
+            if (holdsThroughoutTheBoxes(rule, runs)) {
                 continue;
             }
             if (!(rule instanceof AffineConstraint.HalfSpace<A> half)) {
@@ -1440,23 +1437,31 @@ public final class NumericDomain<A> {
     }
 
     /**
-     * Whether every point of the boxes {@code runs} holds {@code hole}, so that the hole leaves
-     * the low corner, and what the limits on sums read from it, as they were.
+     * Whether every point of the boxes {@code runs} holds {@code rule}, so that the rule leaves
+     * the low corner, and what the limits on sums read from it, as they were: a value the boxes
+     * hold one sum to, or a value the sum never takes. A half-space is read by the corner itself.
      *
      * <p>Asked of the boxes alone and not of the closure of the rules: a difference such as
      * {@code x > y} holds {@code x /= y} while the boxes of {@code x} and {@code y} still meet at
      * a point where they are equal, and the corner's witnesses are drawn from the boxes.
      */
-    private static <A> boolean holeLiesOutsideTheBoxes(AffineConstraint.Disequality<A> hole,
+    private static <A> boolean holdsThroughoutTheBoxes(AffineConstraint<A> rule,
                                                        Map<A, Bounds> runs) {
-        Reach reach = Reach.of(hole.form().coefs(), ExactRatio.ZERO, atom -> {
+        Reach reach = Reach.of(rule.form().coefs(), ExactRatio.ZERO, atom -> {
             Bounds run = runs.get(atom);
             return run == null ? Reach.ANYWHERE
                     : Reach.between(cutOf(run.min()), cutOf(run.max()));
         });
         ExactCut least = reach.least();
         ExactCut most = reach.most();
-        return liesBelow(least, hole.at()) || liesAbove(most, hole.at());
+        return switch (rule) {
+            case AffineConstraint.HalfSpace<A> _ -> false;
+            case AffineConstraint.Equality<A> at -> least != null && most != null
+                    && least.inclusive() && most.inclusive()
+                    && least.at().equals(at.at()) && most.at().equals(at.at());
+            case AffineConstraint.Disequality<A> hole ->
+                    liesBelow(least, hole.at()) || liesAbove(most, hole.at());
+        };
     }
 
     /** Whether {@code value} is below {@code least}, which it is at the end itself only where the
