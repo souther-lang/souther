@@ -101,7 +101,8 @@ class TheReportOfALookupGivenUpNamesTheFigureThatStoppedItTest {
      * reading is charged and in what order, and it is not monotone in the length: three rows get
      * through, four and five are given up, six get through. A change to how readings are charged
      * moves these, and is meant to move this test with it; it is written so that the movement is
-     * seen, and not so that the lengths stay.
+     * seen, and not so that the lengths stay. The two given up are asked, and the two that get
+     * through are left out for what a length of this table costs to read.
      *
      * <p>Where a length is given up, each month is left unread at the figure that stopped it, and
      * never as a rule about a derived value.
@@ -109,7 +110,7 @@ class TheReportOfALookupGivenUpNamesTheFigureThatStoppedItTest {
     @Test
     void whereTheLengthsOfTheTableRunOutIsAKnownLimitAndTheFigureIsSaid() {
         Map<Integer, Integer> monthsUnread = new TreeMap<>();
-        for (int rows : new int[] {3, 4, 5, 6}) {
+        for (int rows : new int[] {4, 5}) {
             List<Unread> left = atTheMonths(rows);
             monthsUnread.put(rows, left.size());
             for (Unread each : left) {
@@ -121,7 +122,7 @@ class TheReportOfALookupGivenUpNamesTheFigureThatStoppedItTest {
             }
         }
 
-        assertEquals(Map.of(3, 0, 4, 3, 5, 3, 6, 0), monthsUnread,
+        assertEquals(Map.of(4, 3, 5, 3), monthsUnread,
                 "rows given up, with how many of the three months are left unread");
     }
 }

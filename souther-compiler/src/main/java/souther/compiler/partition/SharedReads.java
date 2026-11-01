@@ -120,15 +120,19 @@ final class SharedReads<C, E, M, R> {
         C now = null;
         ElementsMet elements = scene.elementsMet();
         for (Held<C, M, R> one : before) {
-            if (one.hash() != hash || !Objects.equals(one.key(), key)) {
+            if (one.hash() != hash) {
                 continue;
             }
             if (now == null) {
                 now = scene.inputs();
             }
+            // The key last: it is the dear comparison, a structural one of the program's own
+            // nodes, and the state of the reader tells most of the readings kept at a node apart
+            // before it is asked.
             if (scene.sameInputs(one.inputs(), now, one.askedAggregates())
                     && elements.agrees(one.footprint()) && reads.handsAsAsked(one.asked())
-                    && reads.sameButForWhatIsHanded(one.at())) {
+                    && reads.sameButForWhatIsHanded(one.at())
+                    && Objects.equals(one.key(), key)) {
                 return new Found<>(one.result(), one.footprint(), one.met());
             }
         }
