@@ -3,10 +3,12 @@ package souther.compiler.partition;
 import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.OnOneElement;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -15,6 +17,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 
 import java.math.BigInteger;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +34,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Every value from the list's start to its end at the row, up to
  * {@link ElementsWrittenOut#MOST_WALKED} of them, and of a turn the case holds the element to come
  * round to only the values of that turn — the first alone where the case comes out alike on all
- * of them. A list holding more, with no value tried holding it, is one this could not tell of:
+ * of them. Which values those are is worked out from the row, as the class of whole numbers the
+ * turn's congruence leaves ({@link Congruences#solving}), and not found by trying values: a
+ * divisor is no bound of how many values a walk to the first of them would ask. A list holding
+ * more, with no value tried holding it, is one this could not tell of:
  * the values left are not values it fails at. One value the case could not be told at is said
  * the same way, unless another holds it. The element is the same one wherever the case weighs it,
  * so a row holding it is one on which every part of the case is read at one element.
@@ -44,9 +50,10 @@ final class ACaseAskedAtSomeElement {
 
     private final Proposition stated;
     private final Quantity.OfABinding element;
-    /** The part holding the element to come round to one value in turns of {@link #every}
-     *  ({@link #turnIn}), or null where none does and every value is one of a turn. */
-    private final Proposition.Compared turn;
+    /** The congruence holding the element to come round to one value in turns of
+     *  {@link #every} ({@link #turnIn}), or null where none does and every value is one of a
+     *  turn. */
+    private final Turn turn;
     private final BigInteger every;
     /** Whether the case comes out alike on every value of a turn
      *  ({@link OnOneElement#comesOutAlikeEvery}), so that the first the list holds answers. */
@@ -58,8 +65,23 @@ final class ACaseAskedAtSomeElement {
     /** The case with the element at each value tried so far, read to be put to rows, or nothing
      *  where the element cannot be put there: one whichever row asks it. */
     private final Map<BigInteger, Optional<AStatementAtARow>> atValue = new ConcurrentHashMap<>();
-    /** The same of {@link #turn}. */
-    private final Map<BigInteger, Optional<AStatementAtARow>> atTurn = new ConcurrentHashMap<>();
+
+    /**
+     * A part of the case saying what a division by {@code divisor} leaves of
+     * {@code weight·element + rest} is nought: the element comes round to the values of one class
+     * the row's numbers in {@code rest} decide.
+     *
+     * @param weight  what the element is weighed by in the dividend, a whole number
+     * @param rest    the rest of the dividend, over the input's numbers alone
+     * @param divisor the divisor
+     */
+    private record Turn(BigInteger weight, LinearForm<NumericTerm> rest, BigInteger divisor) {
+
+        /** How far apart the values the element comes round to are. */
+        BigInteger every() {
+            return divisor.divide(weight.gcd(divisor));
+        }
+    }
 
     private ACaseAskedAtSomeElement(Proposition stated, Quantity.OfABinding element,
                                     String behavior, Quantities quantities,
@@ -68,9 +90,7 @@ final class ACaseAskedAtSomeElement {
         this.stated = stated;
         this.element = element;
         this.turn = turnIn(stated, element);
-        this.every = turn == null ? BigInteger.ONE
-                : ((Quantity.RemainderOfADividend) ((Relation.Affine) turn.relation()).form()
-                        .coefs().keySet().iterator().next()).divisor();
+        this.every = turn == null ? BigInteger.ONE : turn.every();
         this.onceATurn = OnOneElement.comesOutAlikeEvery(stated, element)
                 .filter(every::equals).isPresent();
         this.behavior = behavior;
@@ -89,16 +109,17 @@ final class ACaseAskedAtSomeElement {
     }
 
     /**
-     * The part of {@code stated} holding {@code element} to come round to one value, every other
-     * part beside it ({@link OnOneElement#comesRoundTo}): a remainder the element is weighed in
-     * once, said to leave nothing — or null where it holds no such part.
+     * The part of {@code stated} holding {@code element} to come round to one class, every other
+     * part beside it ({@link OnOneElement#comesRoundTo}): a remainder of a dividend weighing the
+     * element by a whole number and otherwise only the input's numbers, by whole numbers, said to
+     * leave nothing — or null where it holds no such part.
      */
-    private static Proposition.Compared turnIn(Proposition stated, Quantity.OfABinding element) {
+    private static Turn turnIn(Proposition stated, Quantity.OfABinding element) {
         List<Proposition> each = stated instanceof Proposition.All all ? all.parts()
                 : List.of(stated);
         for (Proposition part : each) {
             if (part instanceof Proposition.All) {
-                Proposition.Compared inside = turnIn(part, element);
+                Turn inside = turnIn(part, element);
                 if (inside != null) {
                     return inside;
                 }
@@ -111,11 +132,41 @@ final class ACaseAskedAtSomeElement {
                     && affine.form().coefs().keySet().iterator().next()
                             instanceof Quantity.RemainderOfADividend remainder
                     && remainder.dividend().coefs().get(element) instanceof ExactRatio weight
-                    && weight.abs().equals(ExactRatio.ONE)) {
-                return compared;
+                    && whole(weight) != null) {
+                LinearForm<NumericTerm> rest = theRestOf(remainder.dividend(), element);
+                if (rest != null) {
+                    return new Turn(whole(weight), rest, remainder.divisor());
+                }
             }
         }
         return null;
+    }
+
+    /** {@code dividend} without {@code element}, over the input's numbers by whole numbers — or
+     *  null where it weighs anything else, or anything by a part of one. */
+    private static LinearForm<NumericTerm> theRestOf(LinearForm<Quantity> dividend,
+                                                     Quantity.OfABinding element) {
+        if (whole(dividend.constant()) == null) {
+            return null;
+        }
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        for (Map.Entry<Quantity, ExactRatio> each : dividend.coefs().entrySet()) {
+            if (each.getKey().equals(element)) {
+                continue;
+            }
+            if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))
+                    || whole(each.getValue()) == null) {
+                return null;
+            }
+            coefs.put(term, each.getValue());
+        }
+        return new LinearForm<>(dividend.constant(), coefs);
+    }
+
+    /** {@code ratio} as a whole number, or null where it is none. */
+    private static BigInteger whole(ExactRatio ratio) {
+        return ratio.isWhole() && ratio.floor() instanceof ExactAnswer.Held<BigInteger>(var held)
+                ? held : null;
     }
 
     /** Whether the case holds at {@code row} with the element at some value the row's list
@@ -129,28 +180,20 @@ final class ACaseAskedAtSomeElement {
         if (from == null || to == null) {
             return new AStatementAtARow.Answer.CouldNotTell(why);
         }
-        // Where the case holds the element to come round to one value in turns of a divisor,
-        // only the values it comes round to are tried: the first of them is among as many values
-        // from the start as the divisor, and each next is a turn past it.
-        BigInteger start = null;
-        for (BigInteger value = from; start == null && value.compareTo(to) <= 0
-                && value.compareTo(from.add(every)) < 0; value = value.add(BigInteger.ONE)) {
-            AStatementAtARow there = turn == null ? null : putAt(atTurn, turn, value);
-            AStatementAtARow.Answer turned = turn == null ? AStatementAtARow.Answer.HOLDS
-                    : there == null ? new AStatementAtARow.Answer.CouldNotTell(Set.of(
-                            ReadingGap.of(UnheldNumber.NO_REPRESENTATION_EXISTS)))
-                    : there.at(row);
-            switch (turned) {
-                case AStatementAtARow.Answer.Holds _ -> start = value;
-                case AStatementAtARow.Answer.Fails _ -> { }
-                case AStatementAtARow.Answer.CouldNotTell(var stopped) -> {
-                    why.addAll(stopped);
-                    return new AStatementAtARow.Answer.CouldNotTell(why);
-                }
+        // Where the case holds the element to come round to one class, only its values are
+        // tried: the first at or past the start, and each next a turn past it. No value of the
+        // class is one no value meets the case at.
+        BigInteger start = from;
+        if (turn != null) {
+            BigInteger rest = valueAt(turn.rest(), row, why);
+            if (rest == null) {
+                return new AStatementAtARow.Answer.CouldNotTell(why);
             }
-        }
-        if (start == null) {
-            return AStatementAtARow.Answer.FAILS;
+            Congruences round = Congruences.solving(turn.weight(), rest, turn.divisor());
+            if (round == null) {
+                return AStatementAtARow.Answer.FAILS;
+            }
+            start = round.leastAtOrAbove(from);
         }
         int tried = 0;
         for (BigInteger value = start; value.compareTo(to) <= 0; value = value.add(every)) {

@@ -21,6 +21,27 @@ public record Congruences(BigInteger residue, BigInteger modulus) {
         residue = residue.mod(modulus);
     }
 
+    /**
+     * The numbers {@code x} at which {@code weight·x + constant} leaves nothing by {@code modulus},
+     * or null where none does: a class modulo the modulus over what it shares with the weight,
+     * where that shared part divides the constant.
+     */
+    public static Congruences solving(BigInteger weight, BigInteger constant, BigInteger modulus) {
+        if (modulus.signum() <= 0) {
+            throw new IllegalArgumentException("a class is of a divisor above nought: " + modulus);
+        }
+        BigInteger shared = weight.gcd(modulus);
+        if (constant.mod(shared).signum() != 0) {
+            return null;
+        }
+        BigInteger reduced = modulus.divide(shared);
+        if (reduced.equals(BigInteger.ONE)) {
+            return new Congruences(BigInteger.ZERO, BigInteger.ONE);
+        }
+        return new Congruences(constant.divide(shared).negate()
+                .multiply(weight.divide(shared).modInverse(reduced)), reduced);
+    }
+
     /** The numbers both classes hold, or null where there are none. */
     public Congruences meet(Congruences other) {
         BigInteger gcd = modulus.gcd(other.modulus);
