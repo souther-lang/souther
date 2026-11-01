@@ -77,6 +77,17 @@ class EveryFieldOfAPullbackSaysWhatAReadingKeptToBeTakenAgainDoesWithItTest {
                 fieldsWith(ReadingRole.MEMO));
     }
 
+    /**
+     * What the reader looks up by identity is compared by identity, and the state of a search in
+     * progress is a place nothing is kept or taken. Both are said by the table and read off it, and
+     * these are the fields that say so.
+     */
+    @Test
+    void theFieldsLookedUpByIdentityAndTheStateOfASearchAreNamedHere() {
+        assertEquals(Set.of("sideAsWritten", "onTheWay"), fieldsWith(ReadingRole.IDENTITY));
+        assertEquals(Set.of("recursed", "recursing", "sizedBelow"), fieldsWith(ReadingRole.ABSENT));
+    }
+
     @Test
     void everyRoleIsGivenToSomeField() {
         Set<ReadingRole> given = EnumSet.noneOf(ReadingRole.class);

@@ -1,9 +1,9 @@
 package souther.compiler.partition;
 
-import souther.compiler.core.Core;
-
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -48,11 +48,15 @@ final class ReadingState {
     private final Field asked;
     private final Field[] guards;
     private final Field[] flags;
+    private final Field[] identities;
+    private final Field[] absent;
 
     ReadingState(Class<?> owner, Map<String, ReadingRole> roles) {
         List<Field> inputFields = new ArrayList<>();
         List<Field> guardFields = new ArrayList<>();
         List<Field> flagFields = new ArrayList<>();
+        List<Field> identityFields = new ArrayList<>();
+        List<Field> absentFields = new ArrayList<>();
         Field askedField = null;
         Field[] declared = owner.getDeclaredFields();
         Arrays.sort(declared, (one, other) -> one.getName().compareTo(other.getName()));
@@ -66,8 +70,20 @@ final class ReadingState {
                         + each.getName() + " has no role in a reading kept to be taken again");
             }
             each.setAccessible(true);
+            if (IdentityHashMap.class.isAssignableFrom(each.getType()) && role != ReadingRole.ABSENT
+                    && role != ReadingRole.FIXED && role != ReadingRole.MEMO) {
+                throw new IllegalStateException("the field " + owner.getSimpleName() + "."
+                        + each.getName() + " is held by identity, whose values change inside "
+                        + "without a trace: it can be " + ReadingRole.ABSENT + ", and nothing "
+                        + "that is compared or left alone");
+            }
             switch (role) {
                 case INPUT -> inputFields.add(each);
+                case IDENTITY -> {
+                    inputFields.add(each);
+                    identityFields.add(each);
+                }
+                case ABSENT -> absentFields.add(each);
                 case FLAG -> {
                     inputFields.add(each);
                     flagFields.add(each);
@@ -89,7 +105,28 @@ final class ReadingState {
         this.inputs = inputFields.toArray(Field[]::new);
         this.flags = flagFields.toArray(Field[]::new);
         this.guards = guardFields.toArray(Field[]::new);
+        this.identities = identityFields.toArray(Field[]::new);
+        this.absent = absentFields.toArray(Field[]::new);
         this.asked = askedField;
+    }
+
+    /**
+     * Whether everything the roles call {@link ReadingRole#ABSENT} holds nothing in {@code owner}.
+     */
+    boolean holdsNothing(Object owner) {
+        for (Field each : absent) {
+            Object value = read(each, owner);
+            boolean empty = switch (value) {
+                case null -> true;
+                case Collection<?> collection -> collection.isEmpty();
+                case Map<?, ?> map -> map.isEmpty();
+                default -> false;
+            };
+            if (!empty) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** The inputs of {@code owner} as they stand. */
@@ -97,14 +134,15 @@ final class ReadingState {
         List<Object> values = new ArrayList<>(inputs.length);
         for (Field each : inputs) {
             Object value = read(each, owner);
-            values.add(isFlag(each) ? Boolean.valueOf(value != null) : copyOf(value));
+            values.add(isAmong(flags, each) ? Boolean.valueOf(value != null)
+                    : isAmong(identities, each) ? new Same(value) : copyOf(value));
         }
         return new Inputs(Collections.unmodifiableList(values),
-                asked == null ? null : copyOf(read(asked, owner)));
+                asked == null ? null : snapshotOf(read(asked, owner)));
     }
 
-    private boolean isFlag(Field field) {
-        for (Field each : flags) {
+    private static boolean isAmong(Field[] fields, Field field) {
+        for (Field each : fields) {
             if (each == field) {
                 return true;
             }
@@ -116,11 +154,11 @@ final class ReadingState {
      *  the reading {@code then} was of asked after them. */
     boolean sameInputs(Inputs then, Inputs now, boolean askedMatters) {
         for (int at = 0; at < inputs.length; at++) {
-            if (!same(then.values().get(at), now.values().get(at))) {
+            if (!Objects.equals(then.values().get(at), now.values().get(at))) {
                 return false;
             }
         }
-        return !askedMatters || same(then.asked(), now.asked());
+        return !askedMatters || Objects.equals(then.asked(), now.asked());
     }
 
     /** What the state a reading must leave alone is, to be compared with it afterwards: the very
@@ -243,8 +281,58 @@ final class ReadingState {
         });
     }
 
+    /**
+     * Whether the objects the state holds are looked into for a collection that can change inside
+     * them.
+     *
+     * <p>What is compared by what it holds, or as the very object, is the same while it is not
+     * changed in place; a collection in a record that is added to is a change that comparison
+     * never sees. A test turns this on and reads a population of models: a record that holds a
+     * collection which is not immutable fails where the state is taken.
+     */
+    static volatile boolean auditing = false;
+
+    /** What the audit found: the record and component of each collection that can change. */
+    static final Set<String> FOUND = ConcurrentHashMap.newKeySet();
+
+    /** The collections the state holds that can change, in {@code held} and the records in it. */
+    private static void audit(Object held, Set<Object> seen) {
+        if (held == null || !held.getClass().isRecord() || !seen.add(held)) {
+            return;
+        }
+        for (RecordComponent each : held.getClass().getRecordComponents()) {
+            Object value;
+            try {
+                Method accessor = each.getAccessor();
+                accessor.setAccessible(true);
+                value = accessor.invoke(held);
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(each.getName(), e);
+            }
+            if ((value instanceof Collection<?> || value instanceof Map<?, ?>)
+                    && !immutable(value)) {
+                FOUND.add(held.getClass().getName() + "." + each.getName() + " is a "
+                        + value.getClass().getName());
+            }
+            audit(value, seen);
+        }
+    }
+
+    private static boolean immutable(Object collection) {
+        String name = collection.getClass().getName();
+        return name.startsWith("java.util.ImmutableCollections$")
+                || name.startsWith("java.util.Collections$Empty")
+                || name.startsWith("java.util.Collections$Singleton");
+    }
+
     /** An object that is the same only as itself, whatever it is equal to. */
     private record Same(Object of) {
+
+        Same {
+            if (auditing) {
+                audit(of, Collections.newSetFromMap(new IdentityHashMap<>()));
+            }
+        }
 
         @Override
         public boolean equals(Object other) {
@@ -268,9 +356,11 @@ final class ReadingState {
     /** A copy of {@code value} that a later change to it does not reach, where it is something
      *  that is changed. */
     private static Object copyOf(Object value) {
+        if (auditing) {
+            auditEach(value);
+        }
         return switch (value) {
             case null -> null;
-            case IdentityHashMap<?, ?> map -> new Identities(map);
             case Set<?> set -> set.isEmpty() ? Set.of() : new HashSet<>(set);
             case Map<?, ?> map -> map.isEmpty() ? Map.of() : new HashMap<>(map);
             case Collection<?> collection ->
@@ -279,51 +369,17 @@ final class ReadingState {
         };
     }
 
-    /** Two of these held the same, a node of the core only where it is the same node. */
-    private static boolean same(Object then, Object now) {
-        if (then == now) {
-            return true;
-        }
-        if (then == null || now == null || then instanceof Core) {
-            return false;
-        }
-        return then.equals(now);
-    }
-
-    /** The entries of a map kept by identity, which are the same only where they are the same
-     *  entries. */
-    private record Identities(Object[] entries) {
-
-        Identities(IdentityHashMap<?, ?> map) {
-            this(flatten(map));
-        }
-
-        private static Object[] flatten(IdentityHashMap<?, ?> map) {
-            Object[] out = new Object[map.size() * 2];
-            int at = 0;
-            for (Map.Entry<?, ?> each : map.entrySet()) {
-                out[at++] = each.getKey();
-                out[at++] = each.getValue();
-            }
-            return out;
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            if (!(other instanceof Identities that) || that.entries.length != entries.length) {
-                return false;
-            }
-            for (int at = 0; at < entries.length; at++) {
-                if (entries[at] != that.entries[at]) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        @Override
-        public int hashCode() {
-            return entries.length;
+    /** {@link #audit} of {@code value} and of what is in it, where it is a collection or a map. */
+    private static void auditEach(Object value) {
+        Set<Object> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        switch (value) {
+            case Map<?, ?> map -> map.forEach((key, each) -> {
+                audit(key, seen);
+                audit(each, seen);
+            });
+            case Collection<?> collection -> collection.forEach(each -> audit(each, seen));
+            case null -> { }
+            default -> audit(value, seen);
         }
     }
 }

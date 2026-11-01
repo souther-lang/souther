@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -244,6 +245,86 @@ class TheStateOfAReadingIsTakenFromTheRolesOfItsFieldsTest {
         owner.counts.get("count").add("a place it was met");
 
         assertFalse(watching.sameGuards(before, watching.guardsOf(owner)));
+    }
+
+    /** An object that gathers what it reaches, in place, while a search is read. */
+    private static final class AGatherer {
+        final Set<String> through = new HashSet<>();
+    }
+
+    /** Searches in progress, each held under the call it answers, as the reader holds them. */
+    private static final class AnOwnerOfSearches {
+        final IdentityHashMap<Object, AGatherer> searching = new IdentityHashMap<>();
+    }
+
+    @Test
+    void aFieldHeldByIdentityCannotBeComparedOrLeftAloneForItsValuesChangeInside() {
+        for (ReadingRole role : List.of(ReadingRole.INPUT, ReadingRole.IDENTITY,
+                ReadingRole.GUARDED, ReadingRole.WRITTEN, ReadingRole.ASKED, ReadingRole.FLAG)) {
+            IllegalStateException refused = assertThrows(IllegalStateException.class,
+                    () -> new ReadingState(AnOwnerOfSearches.class, Map.of("searching", role)),
+                    role.name());
+
+            assertTrue(refused.getMessage().contains("held by identity"), refused.getMessage());
+        }
+    }
+
+    @Test
+    void aSearchInProgressIsNoPlaceToKeepOrTakeAReadingAndAnEmptyOneIs() {
+        ReadingState watching = new ReadingState(AnOwnerOfSearches.class,
+                Map.of("searching", ReadingRole.ABSENT));
+        AnOwnerOfSearches owner = new AnOwnerOfSearches();
+        assertTrue(watching.holdsNothing(owner));
+
+        AGatherer gatherer = new AGatherer();
+        owner.searching.put(new Object(), gatherer);
+        assertFalse(watching.holdsNothing(owner));
+
+        gatherer.through.add("a field it went below");
+        owner.searching.clear();
+        assertTrue(watching.holdsNothing(owner));
+    }
+
+    /** The case the reader is reading, which it looks up by the very node. */
+    private record ACase(String name) {}
+
+    @Test
+    void anInputHeldByIdentityIsTheSameOnlyForTheSameObject() {
+        class AnOwnerOfACase {
+            ACase reading = new ACase("when");
+        }
+        ReadingState watching = new ReadingState(AnOwnerOfACase.class,
+                Map.of("reading", ReadingRole.IDENTITY));
+        AnOwnerOfACase owner = new AnOwnerOfACase();
+        ReadingState.Inputs before = watching.inputsOf(owner);
+
+        assertTrue(watching.sameInputs(before, watching.inputsOf(owner), false));
+
+        owner.reading = new ACase("when");
+
+        assertFalse(watching.sameInputs(before, watching.inputsOf(owner), false),
+                "equal as values, and not the object the reading looked up");
+    }
+
+    /** What a record of the aggregates in the way being read is, equal to another of its kind. */
+    private record AnAggregate(String call, int form) {}
+
+    @Test
+    void theAggregatesBeingReadAreTheSameOnlyWhereTheyAreTheVeryOnes() {
+        class AnOwnerOfAggregates {
+            final List<AnAggregate> aggregates = new ArrayList<>();
+        }
+        ReadingState watching = new ReadingState(AnOwnerOfAggregates.class,
+                Map.of("aggregates", ReadingRole.ASKED));
+        AnOwnerOfAggregates owner = new AnOwnerOfAggregates();
+        owner.aggregates.add(new AnAggregate("List.length(payable)", 1));
+        ReadingState.Inputs before = watching.inputsOf(owner);
+
+        owner.aggregates.clear();
+        owner.aggregates.add(new AnAggregate("List.length(payable)", 1));
+
+        assertFalse(watching.sameInputs(before, watching.inputsOf(owner), true),
+                "equal as values, and not the aggregate the reading asked after");
     }
 
     @Test

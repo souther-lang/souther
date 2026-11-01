@@ -8714,7 +8714,8 @@ final class Pullback {
 
         @Override
         public boolean mayShare() {
-            return !InputReads.watching() && !elementsMet.crowded();
+            return !InputReads.watching() && !elementsMet.crowded()
+                    && READING_STATE.holdsNothing(Pullback.this);
         }
 
         @Override

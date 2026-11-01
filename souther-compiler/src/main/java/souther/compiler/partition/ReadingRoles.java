@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import java.util.Map;
 
+import static souther.compiler.partition.ReadingRole.ABSENT;
 import static souther.compiler.partition.ReadingRole.ACCRUES;
 import static souther.compiler.partition.ReadingRole.ASKED;
 import static souther.compiler.partition.ReadingRole.BUDGET;
@@ -11,6 +12,7 @@ import static souther.compiler.partition.ReadingRole.FIXED;
 import static souther.compiler.partition.ReadingRole.FLAG;
 import static souther.compiler.partition.ReadingRole.FOOTPRINT;
 import static souther.compiler.partition.ReadingRole.GUARDED;
+import static souther.compiler.partition.ReadingRole.IDENTITY;
 import static souther.compiler.partition.ReadingRole.INPUT;
 import static souther.compiler.partition.ReadingRole.LEDGER;
 import static souther.compiler.partition.ReadingRole.MEMO;
@@ -43,15 +45,18 @@ final class ReadingRoles {
             Map.entry("restatingAQuotient", INPUT),
             Map.entry("beforeTheFork", INPUT),
             Map.entry("inTheListsOfAFlattening", INPUT),
-            Map.entry("sideAsWritten", INPUT),
             Map.entry("sizedInACase", INPUT),
             Map.entry("carried", INPUT),
-            Map.entry("recursed", INPUT),
-            Map.entry("recursing", INPUT),
-            Map.entry("sizedBelow", INPUT),
             Map.entry("sizedSoFar", INPUT),
             Map.entry("carriedSoFar", INPUT),
-            Map.entry("onTheWay", INPUT),
+            // Looked up by identity, and so the same only for the same object.
+            Map.entry("sideAsWritten", IDENTITY),
+            Map.entry("onTheWay", IDENTITY),
+            // The state of a search whose body is being read. A reading made inside it adds to
+            // what the search reaches, and a reading taken there would not.
+            Map.entry("recursed", ABSENT),
+            Map.entry("recursing", ABSENT),
+            Map.entry("sizedBelow", ABSENT),
             Map.entry("askingWhereAStepAnswers", INPUT),
             Map.entry("truthsDecided", INPUT),
             // Which part answers for a quantity is asked after by the reading of a count.

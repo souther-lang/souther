@@ -13,14 +13,35 @@ enum ReadingRole {
     /** The same at every reading of one Pullback. */
     FIXED,
 
-    /** What a reading may ask after. A reading is taken again only where this holds the same. */
+    /**
+     * What a reading may ask after, compared by what it holds. A reading is taken again only where
+     * this holds the same.
+     *
+     * <p>What is held is compared with {@link Object#equals}, so the objects in it do not change
+     * in place: a collection in one that is added to is a change nobody sees. A field held by
+     * identity ({@link java.util.IdentityHashMap}) is refused here, since its values are compared
+     * by identity and may change inside.
+     */
     INPUT,
+
+    /** What a reading may ask after, compared as the very object and never as an equal one: the
+     *  lookups of the reader are made by identity, so a reading is the same only for the same
+     *  object. */
+    IDENTITY,
+
+    /**
+     * What a reading is made while nothing is in, and taken while nothing is in: the state of a
+     * search whose body is being read, which the reading adds to what it reaches. A reading taken
+     * would not add it, and a reading made would leave it half of what it is, so a search in
+     * progress is no place to keep or to take one.
+     */
+    ABSENT,
 
     /** What a reading may ask after only whether there is one. */
     FLAG,
 
     /** What a reading may ask after, and is compared only for a reading that did: the aggregates
-     *  of the way being read. */
+     *  of the way being read, each compared as the very aggregate. */
     ASKED,
 
     /** An input that a reading must also leave as it found it, because what it would have added

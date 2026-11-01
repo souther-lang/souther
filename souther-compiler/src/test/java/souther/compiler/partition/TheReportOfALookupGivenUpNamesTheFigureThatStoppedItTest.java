@@ -9,9 +9,10 @@ import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A lookup whose reading runs out of the readings of one condition says the figure that stopped
@@ -23,9 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * costs is its own however the averages are shared, and a table of a few rows is more than one
  * condition may read.
  *
- * <p>Which length runs out is the reading's and not this test's to say. It takes the first length
- * of a few that leaves a month unread and asks what is said there, and that there is one, so that
- * it asks nothing only if the reading ever gets through them all.
+ * <p>Which lengths run out is the reading's, and known: the test says where they are so that a
+ * change to them is seen, and asks what is said where a length is given up.
  */
 class TheReportOfALookupGivenUpNamesTheFigureThatStoppedItTest {
 
@@ -94,20 +94,34 @@ class TheReportOfALookupGivenUpNamesTheFigureThatStoppedItTest {
         return out;
     }
 
+    /**
+     * Which lengths of the table run out is a known limit, and these are where it is.
+     *
+     * <p>Near what one condition may read, whether a length is read depends on how much each
+     * reading is charged and in what order, and it is not monotone in the length: three rows get
+     * through, four and five are given up, six get through. A change to how readings are charged
+     * moves these, and is meant to move this test with it; it is written so that the movement is
+     * seen, and not so that the lengths stay.
+     *
+     * <p>Where a length is given up, each month is left unread at the figure that stopped it, and
+     * never as a rule about a derived value.
+     */
     @Test
-    void aMonthLeftUnreadNamesTheFigureAndNeverADerivedValue() {
-        List<Unread> left = List.of();
-        int rows = 2;
-        while (left.isEmpty() && rows < 8) {
-            left = atTheMonths(++rows);
+    void whereTheLengthsOfTheTableRunOutIsAKnownLimitAndTheFigureIsSaid() {
+        Map<Integer, Integer> monthsUnread = new TreeMap<>();
+        for (int rows : new int[] {3, 4, 5, 6}) {
+            List<Unread> left = atTheMonths(rows);
+            monthsUnread.put(rows, left.size());
+            for (Unread each : left) {
+                assertEquals(UndividedPosition.Reason.RULE_MEANING_NOT_READ, each.reason(),
+                        rows + " rows at " + each.at());
+                assertEquals(List.of(new Figure.Budget(
+                                CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION)),
+                        each.figures(), rows + " rows at " + each.at());
+            }
         }
-        assertTrue(!left.isEmpty(), "some length of the table is more than one condition may read");
-        for (Unread each : left) {
-            assertEquals(UndividedPosition.Reason.RULE_MEANING_NOT_READ, each.reason(),
-                    rows + " rows at " + each.at());
-            assertEquals(List.of(new Figure.Budget(
-                            CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION)),
-                    each.figures(), rows + " rows at " + each.at());
-        }
+
+        assertEquals(Map.of(3, 0, 4, 3, 5, 3, 6, 0), monthsUnread,
+                "rows given up, with how many of the three months are left unread");
     }
 }
