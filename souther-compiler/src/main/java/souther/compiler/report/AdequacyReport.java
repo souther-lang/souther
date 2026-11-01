@@ -3945,6 +3945,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private void undivided(StringBuilder out, BehaviorReport behavior,
                                   SourceRendering rendering, SourceId declaredIn,
                                   PublishedRuleHandle.WhereARuleIs places, WhereAPartIs parts) {
+        WentWithout wentWithout = WentWithout.of(behavior);
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.APositionNoLineDivides(var position)) {
                 // What was found and not what was missed. This line is written from
@@ -3983,6 +3984,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         inCopies(it.finding().readAt(), behavior.conditionPlaces().copies(),
                                 rendering, declaredIn),
                         sentTo(it.finding().sentTo(), parts, rendering, declaredIn)));
+                decisionWentWithout(out, it.reason(), it.finding().readAt(), wentWithout);
             }
             if (f.about() instanceof About.ARuleNothingClassified(var it)) {
                 out.append(String.format("      %s not read: %s — %s%s, about `%s`%s%s%n",
@@ -3991,6 +3993,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         inCopies(it.finding().readAt(), behavior.conditionPlaces().copies(),
                                 rendering, declaredIn),
                         sentTo(it.sentTo(), parts, rendering, declaredIn)));
+                decisionWentWithout(out, it.reason(), it.finding().readAt(), wentWithout);
             }
         }
         // And a rule that a run may stop in. Whatever else is said of the rule, and whatever line it
@@ -4031,6 +4034,75 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         unaccounted(out, behavior, rendering, declaredIn,
                 asked -> asked.holdsOpen(CoverageObligation.Measure.PARTITION), places,
                 behavior.partPlace());
+    }
+
+    /**
+     * What the decision's searches went without about a rule that is about a derived value, said
+     * under the line that classifies the rule.
+     *
+     * <p>The partition says why the rule is no line over the position and the decision says which
+     * reading of the derived value stopped. Neither is the other's cause, so the line keeps its
+     * classification and this adds the second fact where the first is read.
+     */
+    private static void decisionWentWithout(StringBuilder out, UndividedPosition.Reason reason,
+                                            ModelOccurrences readAt, WentWithout wentWithout) {
+        // Only this word names a derivation, so a reason added beside it has no derivation to
+        // point at until it is given one here.
+        boolean aboutADerivedValue = switch (reason) {
+            case RULE_ABOUT_A_DERIVED_VALUE -> true;
+            default -> false;
+        };
+        if (!aboutADerivedValue) {
+            return;
+        }
+        Set<String> said = new LinkedHashSet<>();
+        wentWithout.at(readAt).forEach(gap -> said.add(whyLeftOut(gap)));
+        said.forEach(sentence -> out.append(String.format("          · the decision, at the"
+                + " same comparison: not composed against: %s%n", sentence)));
+    }
+
+    /**
+     * What each search of a behavior's rules went without, by the copies of the model's code it is
+     * about.
+     *
+     * <p>Joined on the copies and not on a condition's number: the two readings number their
+     * conditions apart, and the copies are what both of them name. A gap is told of a comparison
+     * only when every copy it is about is one the comparison was read at, so a condition that
+     * several comparisons put on the way does not carry the reason of one of them to another.
+     */
+    private record WentWithout(Map<ModelOccurrence, Set<Detail>> byCopy) {
+
+        private record Detail(ConditionGap gap, ModelOccurrences copies) { }
+
+        static WentWithout of(BehaviorReport behavior) {
+            Map<ModelOccurrence, Set<Detail>> byCopy = new HashMap<>();
+            for (SettledAcross rule : behavior.ruleSettlements().values()) {
+                for (SettledAt came : rule.places()) {
+                    for (ConditionGap gap : came.leftOut()) {
+                        ModelOccurrences copies = came.at().saidOnTheWay().of(gap);
+                        Detail detail = new Detail(gap, copies);
+                        for (ModelOccurrence copy : copies) {
+                            byCopy.computeIfAbsent(copy, _ -> new LinkedHashSet<>()).add(detail);
+                        }
+                    }
+                }
+            }
+            return new WentWithout(byCopy);
+        }
+
+        /** The gaps about nothing but copies of {@code readAt}, each once, in the order met. */
+        List<ConditionGap> at(ModelOccurrences readAt) {
+            Set<ModelOccurrence> read = new HashSet<>(readAt.inOrder());
+            Set<Detail> about = new LinkedHashSet<>();
+            for (ModelOccurrence copy : readAt) {
+                for (Detail each : byCopy.getOrDefault(copy, Set.of())) {
+                    if (read.containsAll(each.copies().inOrder())) {
+                        about.add(each);
+                    }
+                }
+            }
+            return about.stream().map(Detail::gap).toList();
+        }
     }
 
     /**
