@@ -4,6 +4,10 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.WhatWasCompiled;
 
+import java.lang.classfile.ClassModel;
+import java.lang.classfile.MethodModel;
+import java.lang.classfile.instruction.InvokeInstruction;
+import java.lang.classfile.instruction.NewObjectInstruction;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -69,11 +73,36 @@ class APropositionIsMadeOnlyWhereARuleConcludesItTest {
             assertTrue(elsewhere.remove(Proposition.class.getName()),
                     "the joining makes " + joined.getSimpleName()
                             + ", and the census sees nobody making one");
-            // Its own constructors, one handing the other what the record holds.
+            // Its own constructors, one handing the other what the record holds, and no other
+            // method of it: the census above is of classes, so that much is asked of its code.
             elsewhere.remove(joined.getName());
             assertEquals(Set.of(), elsewhere,
                     joined.getSimpleName() + " made elsewhere than by its joining");
+            assertEquals(Set.of(), methodsMaking(joined),
+                    joined.getSimpleName() + " made by a method of its own");
         }
+    }
+
+    /** The methods of {@code made} other than its constructors whose code makes one of it. */
+    private static Set<String> methodsMaking(Class<?> made) {
+        ClassModel model = WhatWasCompiled.compiled().find(made.getName()).orElseThrow();
+        String self = model.thisClass().asInternalName();
+        Set<String> out = new TreeSet<>();
+        for (MethodModel method : model.methods()) {
+            if ("<init>".equals(method.methodName().stringValue())) {
+                continue;
+            }
+            method.code().ifPresent(code -> code.forEach(element -> {
+                if ((element instanceof NewObjectInstruction created
+                        && created.className().asInternalName().equals(self))
+                        || (element instanceof InvokeInstruction invoked
+                        && invoked.name().stringValue().equals("<init>")
+                        && invoked.owner().asInternalName().equals(self))) {
+                    out.add(method.methodName().stringValue());
+                }
+            }));
+        }
+        return out;
     }
 
     /** And the rules do build them, so the census above counted something. */
