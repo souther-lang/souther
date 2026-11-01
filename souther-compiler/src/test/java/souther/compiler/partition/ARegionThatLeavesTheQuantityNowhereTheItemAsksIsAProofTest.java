@@ -35,6 +35,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -449,6 +450,76 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
                 new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));
         assertFalse(realize(none, holdingNothing) instanceof Realization.Impossible,
                 "a container holding nothing has none of its elements above the limit");
+    }
+
+    /**
+     * The proof is made once for a region and a standing, whichever way it is asked for first.
+     *
+     * <p>A class a line cuts is asked whether the region leaves it no value before a row is looked
+     * for there, and the look for the row asks the same of the same region. The first answer
+     * carries no proof, so unless the realizer reads it back the second asks the region again —
+     * and a region narrowed to answer it is a new one each time, with nothing computed on it.
+     */
+    @Test
+    void theProofAskedForAClassIsReadBackWhenARowIsLookedForThere() {
+        SearchRegion within = yIsNoMoreThanX();
+        Standing standing = pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)));
+        LevelRealizer realizer = new LevelRealizer();
+        assertTrue(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(standing), within));
+        assertInstanceOf(Realization.Impossible.class, realizer.realize(standing, within,
+                NothingTheDeclarationsRefuse.at(pathOf("x"), pathOf("y"))));
+        assertEquals(1, realizer.proofsMade(), "one region and one standing, asked twice");
+    }
+
+    /** The same standing is built again for each asker, so it is told apart by what it says. */
+    @Test
+    void aStandingBuiltAgainIsTheSameQuestion() {
+        SearchRegion within = yIsNoMoreThanX();
+        LevelRealizer realizer = new LevelRealizer();
+        realizer.leavesNoValue(new PointSearchGoal.ByConstraints(
+                pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)))), within);
+        realizer.leavesNoValue(new PointSearchGoal.ByConstraints(
+                pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)))), within);
+        assertEquals(1, realizer.proofsMade());
+    }
+
+    /**
+     * An answer that settled nothing is kept as well.
+     *
+     * <p>Where the region and the item meet the proof comes back {@code false}, which is the
+     * question not being settled and not a row being writable. Asked again it is not settled any
+     * more than it was.
+     */
+    @Test
+    void anAnswerThatSettledNothingIsNotWorkedOutAgain() {
+        SearchRegion within = yIsNoMoreThanX();
+        Standing standing = pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));
+        LevelRealizer realizer = new LevelRealizer();
+        assertFalse(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(standing), within));
+        assertFalse(realizer.realize(standing, within,
+                NothingTheDeclarationsRefuse.at(pathOf("x"), pathOf("y")))
+                instanceof Realization.Impossible);
+        assertEquals(1, realizer.proofsMade());
+    }
+
+    /**
+     * What is read back is the answer of that region and that standing and no other.
+     *
+     * <p>A region narrowed from the first is another region, and another standing on the same
+     * region is another question: neither is answered by the proof the realizer already holds.
+     */
+    @Test
+    void anotherRegionOrAnotherStandingIsAnotherProof() {
+        Standing one = pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)));
+        Standing nought = pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));
+        SearchRegion within = yIsNoMoreThanX();
+        LevelRealizer realizer = new LevelRealizer();
+        assertTrue(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(one), within));
+        assertFalse(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(nought), within),
+                "the same region answers the other level differently");
+        assertTrue(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(one), yIsNoMoreThanX()),
+                "and a region made again is asked again");
+        assertEquals(3, realizer.proofsMade());
     }
 
     /** The item's line, as far as a row for it is concerned. */

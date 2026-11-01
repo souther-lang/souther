@@ -1501,10 +1501,10 @@ final class Coverages {
      * <p>False where nothing reaches the line, or where the quantity is one only a run works out
      * and no proof is made of it.
      */
-    private static boolean classLiesOutsideTheCase(BorderQuantity quantity, Criterion criterion,
-                                                   Reachability reaching) {
+    private static boolean classLiesOutsideTheCase(LevelRealizer realizer, BorderQuantity quantity,
+                                                   Criterion criterion, Reachability reaching) {
         return reaching instanceof Reachability.Reaching able
-                && new LevelRealizer().leavesNoValue(
+                && realizer.leavesNoValue(
                         quantity.searchGoalAt(criterion).alongTheWay(able), able.region());
     }
 
@@ -2061,8 +2061,8 @@ final class Coverages {
 
             @Override
             public boolean classLiesOutsideTheCase(Criterion criterion) {
-                return Coverages.classLiesOutsideTheCase(line.quantity(), criterion,
-                        Reachability.of(way, declarations));
+                return Coverages.classLiesOutsideTheCase(new LevelRealizer(), line.quantity(),
+                        criterion, Reachability.of(way, declarations));
             }
 
             @Override
@@ -2206,7 +2206,7 @@ final class Coverages {
 
             @Override
             public boolean classLiesOutsideTheCase(Criterion criterion) {
-                return Coverages.classLiesOutsideTheCase(quantity, criterion, reaching);
+                return Coverages.classLiesOutsideTheCase(realizer, quantity, criterion, reaching);
             }
 
             @Override

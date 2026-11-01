@@ -31,7 +31,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +65,24 @@ import java.util.function.Supplier;
 public final class LevelRealizer {
 
     /**
+     * What {@link StandingImpossibility} answered, by the region and by the standing it was asked
+     * of.
+     *
+     * <p>A proof is a function of the two and nothing else, so what is kept here is the answer to a
+     * question and not a memory of the search: asked again, the proof comes back as it did, and
+     * nothing a search offered or tried is held. A region is told apart by identity because narrowing
+     * one makes another, and the answers of the first say nothing of it. A standing is told apart by
+     * what it says, since the same one is built again for each asker. {@code false} is kept too: it
+     * is the answer that the question did not settle, and asking again would not settle it.
+     *
+     * <p>Held as long as this realizer is, which is what bounds it: one made for a search holds the
+     * regions that search asked about and lets go of them with it.
+     */
+    private final Map<SearchRegion, Map<Standing, Boolean>> proofs = new IdentityHashMap<>();
+
+    private int proofsMade;
+
+    /**
      * Where the positions have to stand for a row to be at this item, or why this found nowhere.
      *
      * <p>The region is handed in per item and is no part of this. Where a row may be written depends
@@ -92,7 +112,29 @@ public final class LevelRealizer {
             return true;
         }
         return goal instanceof PointSearchGoal.ByConstraints(Standing constraint)
-                && StandingImpossibility.provesImpossible(within, constraint);
+                && provesImpossible(within, constraint);
+    }
+
+    /**
+     * Whether the region leaves the standing's quantity no value the item asks for, worked out the
+     * first time this realizer is asked and read back after.
+     */
+    private boolean provesImpossible(SearchRegion within, Standing standing) {
+        Map<Standing, Boolean> ofTheRegion = proofs.computeIfAbsent(within, _ -> new HashMap<>());
+        Boolean had = ofTheRegion.get(standing);
+        if (had != null) {
+            return had;
+        }
+        boolean proved = StandingImpossibility.provesImpossible(within, standing);
+        proofsMade++;
+        ofTheRegion.put(standing, proved);
+        return proved;
+    }
+
+    /** How many proofs this realizer has worked out rather than read back, for a test that holds a
+     *  question to being asked once. */
+    int proofsMade() {
+        return proofsMade;
     }
 
     /**
@@ -148,7 +190,7 @@ public final class LevelRealizer {
         // they come to between them runs nowhere — or runs somewhere, and nowhere the item asks
         // for, which is what the rules on the way to a border and the border itself say between
         // them. Neither is readable off the positions one at a time.
-        if (StandingImpossibility.provesImpossible(within, standing)) {
+        if (provesImpossible(within, standing)) {
             return new Realization.Impossible();
         }
         for (NumericTerm term : termsOf(standing)) {
