@@ -238,9 +238,10 @@ public final class ExactRatio implements Comparable<ExactRatio> {
     }
 
     /** Whether a ratio is of a size the tables keep: neither of its two numbers wider than a whole
-     *  number {@link #WHOLES} keeps. */
+     *  number {@link #WHOLES} keeps. Asked of every operand, and nearly every one is held in longs,
+     *  which answers without counting bits. */
     private static boolean keptBy(ExactRatio ratio) {
-        return ratio.parts.widestBits() <= LARGEST_KEPT_BITS;
+        return ratio.parts.inLongs() || ratio.parts.widestBits() <= LARGEST_KEPT_BITS;
     }
 
     private static boolean kept(ExactAnswer<ExactRatio> answer) {

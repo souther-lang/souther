@@ -3,6 +3,7 @@ package souther.compiler.meaning;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.TermPath;
+import souther.test.Allocated;
 import souther.test.OnItsOwnStack;
 
 import java.util.ArrayList;
@@ -12,6 +13,7 @@ import java.util.Random;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A spelling put together from pieces is the text those pieces write, to everything that tells two
@@ -183,5 +185,27 @@ class ASpellingIsItsTextWithoutWritingItOutTest {
                     + beside.spelledOut() + "]", nested.spelledOut());
         }
         assertEquals(List.of(), copied);
+    }
+
+    private static final int ASKS = 2_000;
+
+    /** A text spelled again while its spelling is held is that spelling, found by the text, and
+     *  finding it makes nothing. */
+    @Test
+    void aTextSpelledAgainIsTheSpellingHeldAndMakesNothing() {
+        String[] asks = new String[ASKS];
+        for (int i = 0; i < ASKS; i++) {
+            asks[i] = new StringBuilder("the name of a place").toString();
+        }
+        Spelling held = Spelling.of(asks[0]);
+        Runnable asking = () -> {
+            for (String ask : asks) {
+                assertSame(held, Spelling.of(ask));
+            }
+        };
+        asking.run();
+        long allocated = Allocated.byWhichMayBeNothing(asking);
+        assertTrue(allocated < ASKS, "a spelling found by its text allocates nothing per ask, and "
+                + allocated + " bytes were allocated for " + ASKS + " asks");
     }
 }
