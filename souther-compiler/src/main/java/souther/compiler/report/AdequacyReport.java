@@ -2797,6 +2797,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * How a reader is sent to each point whose rule the author wrote and did not name: the handle
+     * the border section of the behavior writes for it, chosen the one way
+     * {@link BorderObligationPointAssessment#handle} chooses it.
+     *
+     * <p>A point of a comparison in a body is told apart from the others by the behavior and the
+     * place of its comparison, and the line the point is on says neither.
+     *
+     * <p>Only for the points asked for: choosing a handle weighs every reading's citation of the
+     * point, and a model has far more points than the few that hold a verdict open.
+     */
+    private Map<BorderObligationPoint, PublishedRuleHandle> handlesOfWrittenPoints(
+            PublishedRuleHandle.WhereARuleIs places, Set<BorderObligationPoint> wanted) {
+        Map<BorderObligationPoint, List<BorderObligationPointAssessment>> assessed =
+                new LinkedHashMap<>();
+        for (BorderObligationPointAssessment point : everyAssessedPoint()) {
+            if (wanted.contains(point.point())
+                    && point.point().line().provenance() instanceof RuleRef.Written) {
+                assessed.computeIfAbsent(point.point(), _ -> new ArrayList<>()).add(point);
+            }
+        }
+        Map<BorderObligationPoint, PublishedRuleHandle> out = new LinkedHashMap<>();
+        assessed.forEach((point, each) ->
+                out.put(point, BorderObligationPointAssessment.handleOf(each, places)));
+        return out;
+    }
+
+    /**
      * Where each point a behavior is owed was read: every copy any reading of its line was made in.
      *
      * <p>Every reading, which is what an entry open on all of them is about. A showing that
@@ -2804,20 +2831,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private Map<BorderObligationPoint, ModelOccurrences> whereEachPointIsRead() {
         Map<BorderObligationPoint, ModelOccurrences.Gathering> gathering = new LinkedHashMap<>();
-        for (ModuleReport module : modules) {
-            for (BehaviorReport behavior : module.behaviors()) {
-                if (behavior.partition() == null) {
-                    continue;
-                }
-                for (BorderObligationPointAssessment point : behavior.account()) {
-                    ModelOccurrences.Gathering readAt = gathering.computeIfAbsent(point.point(),
-                            each -> new ModelOccurrences.Gathering());
-                    point.readingsSaid().forEach(said -> readAt.add(said.readAt()));
-                }
-            }
+        for (BorderObligationPointAssessment point : everyAssessedPoint()) {
+            ModelOccurrences.Gathering readAt = gathering.computeIfAbsent(point.point(),
+                    each -> new ModelOccurrences.Gathering());
+            point.readingsSaid().forEach(said -> readAt.add(said.readAt()));
         }
         Map<BorderObligationPoint, ModelOccurrences> out = new LinkedHashMap<>();
         gathering.forEach((point, readAt) -> out.put(point, readAt.gathered()));
+        return out;
+    }
+
+    /**
+     * Every point any behavior of this report is owed, in the order the behaviors are written.
+     *
+     * <p>A point of a module's declaration is owed to the declaration and not to a behavior, so it
+     * is not here ({@link Adequacy.DeclaredDebt}).
+     */
+    private List<BorderObligationPointAssessment> everyAssessedPoint() {
+        List<BorderObligationPointAssessment> out = new ArrayList<>();
+        for (ModuleReport module : modules) {
+            for (BehaviorReport behavior : module.behaviors()) {
+                if (behavior.partition() != null) {
+                    out.addAll(behavior.account());
+                }
+            }
+        }
         return out;
     }
 
@@ -3143,6 +3181,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             Map<ModelOccurrence, CopyShown> copies = everyCopyShown();
             Map<BorderObligationPoint, ModelOccurrences> pointsReadAt = whereEachPointIsRead();
             Map<Subject.OfAReplacement, String> rewrites = everyUndecidedRewriteSaid(rendering);
+            List<AdequacyUncertainty> opened = whatKeepsTheVerdictOpenInOrder(rendering, places);
+            Set<BorderObligationPoint> openedPoints = new HashSet<>();
+            for (AdequacyUncertainty each : opened) {
+                if (each.subject() instanceof Subject.AtAPoint it) {
+                    openedPoints.add(it.point());
+                }
+            }
+            Map<BorderObligationPoint, PublishedRuleHandle> writtenPoints =
+                    handlesOfWrittenPoints(places, openedPoints);
             out.append("  what keeps it open\n");
             out.append(String.format("    stopped at a figure of this compiler   %3d%n",
                     open.atAFigure()));
@@ -3155,7 +3202,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             //
             // In the order the document writes them in. The facts are a set, so the order they
             // come in is no order at all, and the page and the document list them alike.
-            for (AdequacyUncertainty each : whatKeepsTheVerdictOpenInOrder(rendering, places)) {
+            for (AdequacyUncertainty each : opened) {
                 // What it is about and what to do with it, and not the word the document writes
                 // for the kind: those are for a consumer keyed on this report, and a person reading
                 // a line is owed a sentence. What kind of thing it is comes out in what is said to
@@ -3165,7 +3212,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // helper read alike at two calls is one fact, and two facts at one rule and one
                 // position read alike but for the calls.
                 out.append(String.format("      %s%s — %s%n",
-                        said(each.subject(), rendering, places, rewrites),
+                        said(each.subject(), rendering, places, rewrites, writtenPoints),
                         inCopies(readAt(each, pointsReadAt), copies, rendering, null),
                         next(each, rendering)));
             }
@@ -10386,7 +10433,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static String said(Subject subject, SourceRendering rendering,
                                PublishedRuleHandle.WhereARuleIs places,
-                               Map<Subject.OfAReplacement, String> rewrites) {
+                               Map<Subject.OfAReplacement, String> rewrites,
+                               Map<BorderObligationPoint, PublishedRuleHandle> writtenPoints) {
         return switch (subject) {
             case Subject.OfAModule it -> "module " + it.module();
             case Subject.OfABehavior it -> it.behavior();
@@ -10422,9 +10470,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // shape this whole array was written to stop repeating.
             // A comparison a body wrote is at whatever value a call put it at, and what tells two
             // of its points apart is the line and where on it the point is.
-            case Subject.AtAPoint it -> it.point().line().saidWithoutAPlace()
-                    + it.point().line().at().map(at -> " = " + at).orElse("")
-                    + placeOn(it.point().point());
+            case Subject.AtAPoint it -> {
+                String rule = switch (it.point().line().provenance()) {
+                    case RuleRef.Named _ -> it.point().line().saidWithoutAPlace();
+                    case RuleRef.Written _ -> {
+                        PublishedRuleHandle handle = writtenPoints.get(it.point());
+                        if (handle == null) {
+                            throw new IllegalStateException("a point of a rule nobody named is"
+                                    + " sent to by where the rule is, and no assessment of this"
+                                    + " one said where: " + it.point());
+                        }
+                        yield it.point().line().saidAfter(
+                                RuleHandleProse.said(handle, rendering, null));
+                    }
+                };
+                yield rule
+                        + it.point().line().at().map(at -> " = " + at).orElse("")
+                        + placeOn(it.point().point());
+            }
             case Subject.AtAFork it -> "a fork of " + it.fork().module();
             case Subject.AtAnArm it -> "an arm of " + it.arm().writtenIn().definition();
             case Subject.OfAMeasure it ->
