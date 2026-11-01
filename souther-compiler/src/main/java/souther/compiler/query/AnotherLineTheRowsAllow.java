@@ -1450,16 +1450,12 @@ public sealed interface AnotherLineTheRowsAllow {
                             return false;
                         }
                     }
-                    // Which case a value turned out to be. A step moves numbers and a narrowing is
-                    // about a position being one of its cases, so a step that moves no number of
-                    // that position leaves it as the row had it; one that does is past what this
-                    // reads. Where the position is an enumeration's, its number is the case's place
-                    // on the order, and the narrowing is the places it leaves out: a step moving it
-                    // still arrives where the place it moves to is none of those.
-                    case OnTheWay.Narrowed(var _, var position, var _, var onItsOrder) -> {
-                        if (moved.stream().anyMatch(term -> term.subjectPath().equals(position))) {
-                            return false;
-                        }
+                    // Which case a value turned out to be. A step moves numbers, and moving the
+                    // payload of the case an arm opened keeps the value that case. Where the
+                    // position is an enumeration's, its number is the case's place on the order,
+                    // and the narrowing is the places it leaves out: a step moving it still
+                    // arrives where the place it moves to is none of those.
+                    case OnTheWay.Narrowed(var _, var _, var _, var onItsOrder) -> {
                         for (TakenConstraint.AwayFrom hole : onItsOrder) {
                             if (Collections.disjoint(hole.terms(), moved)) {
                                 continue;
