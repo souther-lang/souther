@@ -28,6 +28,8 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
     private static final int LOW = 0;
     private static final int HIGH = 7;
     private static final int STATES = 2000;
+    private static final List<Rel> EVERY_REL =
+            List.of(Rel.GE, Rel.GT, Rel.LE, Rel.LT, Rel.EQ, Rel.NE);
 
     /** {@code Σ coefs·position + constant  rel  0}, as a rule is written before it is read. */
     private record Written(Map<String, Long> coefs, long constant, Rel rel) {}
@@ -277,7 +279,7 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
             if (rectangle == null) {
                 continue;
             }
-            Rel rel = Rel.values()[random.nextInt(Rel.values().length)];
+            Rel rel = EVERY_REL.get(random.nextInt(EVERY_REL.size()));
             Written redundant = new Written(coefsOf("a", random.nextInt(7) - 3L,
                     "b", random.nextInt(7) - 3L), random.nextInt(21) - 10L, rel);
             if (redundant.coefs().values().stream().allMatch(weight -> weight == 0)
@@ -293,7 +295,7 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
                         () -> atom + " under " + system + " with " + redundant);
             }
         }
-        for (Rel rel : Rel.values()) {
+        for (Rel rel : EVERY_REL) {
             assertTrue(asked.getOrDefault(rel, 0) > 0, "no redundant " + rel + " was asked");
         }
     }
