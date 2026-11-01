@@ -13,10 +13,8 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
+import souther.test.Allocated;
 
-import com.sun.management.ThreadMXBean;
-
-import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -410,13 +408,17 @@ class NearbyValuesTest {
             elements.add(whole(i));
         }
         InputsRowsRanWith ranWith = ranWithManyInts(400);
-        ThreadMXBean threads = (ThreadMXBean) ManagementFactory.getThreadMXBean();
-        long before = threads.getCurrentThreadAllocatedBytes();
+        List<Iterator<ObservedValue>> nears = new ArrayList<>();
+        List<ObservedValue.Sequence> firsts = new ArrayList<>();
 
-        Iterator<ObservedValue> near = NearbyValues.withAnElementChanged(
-                new ObservedValue.Sequence(elements), Type.list(Type.INT), READING, ranWith);
-        ObservedValue.Sequence first = (ObservedValue.Sequence) near.next();
-        long allocated = threads.getCurrentThreadAllocatedBytes() - before;
+        long allocated = Allocated.by(() -> {
+            Iterator<ObservedValue> made = NearbyValues.withAnElementChanged(
+                    new ObservedValue.Sequence(elements), Type.list(Type.INT), READING, ranWith);
+            nears.add(made);
+            firsts.add((ObservedValue.Sequence) made.next());
+        });
+        Iterator<ObservedValue> near = nears.get(0);
+        ObservedValue.Sequence first = firsts.get(0);
 
         assertEquals(whole(1000), first.elements().get(0));
         assertEquals(400, first.elements().size());

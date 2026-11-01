@@ -54,7 +54,12 @@ class WhoMayCarryTheNumberOfAStatementIsWrittenDownTest {
                             + " behavior's is. Two of them and not one, because the number means"
                             + " which statement of the part its own reading arrived at: the readings"
                             + " are separate and a number issued by either would be a place in the"
-                            + " other's list"));
+                            + " other's list"),
+            new Licence("souther.compiler.partition.UndividedByARelation.TiedOnTheWay.Rule.clause",
+                    "which of the clauses a declaration publishes the rule is of, as a place in"
+                            + " that list. The part's name says which rule of a clause it is and"
+                            + " not where the clause stands among the published ones, which is what"
+                            + " the rule is looked up by"));
 
     private static final List<Licence> MAY_MAKE = List.of(
             new Licence("souther.compiler.partition.ClauseStatements.of",

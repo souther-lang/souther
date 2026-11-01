@@ -213,6 +213,32 @@ final class ReadQuantities implements Quantities {
      *  the reading it is asked of: what it answers is this reading's alone, fixings included. */
     private final Map<NumericTerm, Optional<NumericDomain.Bounds>> wholeRuns =
             new ConcurrentHashMap<>();
+    /**
+     * Where each form this reading has been asked about runs ({@link #projectionOf}), by the
+     * question, worked out once for the reading it is asked of: fixings and what was taken in are
+     * in the answer, so a refinement is another value with nothing kept.
+     *
+     * <p>Kept above the context the question is answered in and not under it. That context is a
+     * function of this value and of the form's terms, so it adds nothing to the key, and a question
+     * answered before is answered without working it out again — the region's face and the
+     * declarations' ask the same forms of one reading over and over.
+     *
+     * <p>Not {@code computeIfAbsent}: working out a projection asks other questions of this
+     * reading, which would update the map from inside its own update. Two threads that raced work
+     * out the same answer from the same value.
+     */
+    private final Map<ProjectionAsked, NumericDomain.FormProjection> projections =
+            new ConcurrentHashMap<>();
+
+    /**
+     * One question {@link #projectionOf} answers: everything its answer turns on besides this
+     * value.
+     *
+     * <p>{@code alongside} as a set, because that is what the answer reads it as — each term is put
+     * on the rules once, in the order the terms are written down, whatever order it arrived in.
+     */
+    private record ProjectionAsked(LinearForm<NumericTerm> form, boolean andTheDeclared,
+                                   Set<NumericTerm> alongside) {}
 
     /**
      * The term this reading fixed one more of than the reading it was made from, with what that
@@ -1719,40 +1745,24 @@ final class ReadQuantities implements Quantities {
         return carrier == null ? null : carrier.space();
     }
 
-    /**
-     * Where each form this reading has been asked about runs ({@link #runsBetween}). Kept because
-     * the readings of one comparison ask the same operations of the same places over and over,
-     * and what the declarations leave a form does not turn on which reading asks.
-     *
-     * <p>Not {@code computeIfAbsent}: working out a projection asks other questions of this
-     * reading, which would update the map from inside its own update.
-     */
-    private final Map<LinearForm<NumericTerm>, NumericDomain.Bounds> runsOfForms =
-            new ConcurrentHashMap<>();
-
     @Override
     public NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form) {
         if (form.coefs().isEmpty()) {
             return null;
         }
-        NumericDomain.Bounds had = runsOfForms.get(form);
-        if (had == null) {
-            // What the declarations were read to prove. Where they admit no value there are no
-            // lines owed, which a range cannot say, so a reader drawing lines asks
-            // projectionOfTheDeclarations; a caller looking for somewhere to put a value asks the
-            // region face. Both keep the difference ({@link #projectionOf}).
-            had = switch (projectionOf(form, false, List.of())) {
-                case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) -> bounds;
-                case NumericDomain.FormProjection.NothingIsLeft _ -> NumericDomain.Bounds.OPEN;
-            };
-            runsOfForms.put(form, had);
-        }
-        return had;
+        // What the declarations were read to prove. Where they admit no value there are no lines
+        // owed, which a range cannot say, so a reader drawing lines asks
+        // projectionOfTheDeclarations; a caller looking for somewhere to put a value asks the
+        // region face. Both keep the difference ({@link #projectionOf}).
+        return switch (projectionOf(form, false)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) -> bounds;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> NumericDomain.Bounds.OPEN;
+        };
     }
 
     @Override
     public NumericDomain.FormProjection projectionOfTheDeclarations(NumericTerm term) {
-        return projectionOf(LinearForm.atom(term), false, List.of());
+        return projectionOf(LinearForm.atom(term), false);
     }
 
     /**
@@ -1762,7 +1772,7 @@ final class ReadQuantities implements Quantities {
      * about a form.
      */
     public NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form) {
-        return projectionOf(form, true, List.of());
+        return projectionOf(form, true);
     }
 
     /**
@@ -1780,26 +1790,49 @@ final class ReadQuantities implements Quantities {
      */
     public NumericDomain.FormProjection projectionOf(NumericTerm term,
                                                      Collection<? extends NumericTerm> alongside) {
+        LinearForm<NumericTerm> form = LinearForm.atom(term);
+        // Nothing beside is the question the other face puts, and its answer is kept there: one
+        // question is worked out in one place.
+        if (alongside.isEmpty()) {
+            return projectionOf(form, true);
+        }
+        ProjectionAsked question = new ProjectionAsked(form, true, Set.copyOf(alongside));
+        NumericDomain.FormProjection had = projections.get(question);
+        if (had != null) {
+            return had;
+        }
         held(term);
         alongside.forEach(this::held);
         List<NumericTerm> asked = new ArrayList<>(alongside.size() + 1);
         asked.add(term);
         asked.addAll(alongside);
-        if (asking(asked) instanceof StructuralContext.Merge.Together(StructuralContext under)) {
-            return runsIn(under, LinearForm.atom(term), true, List.copyOf(alongside));
-        }
-        return projectionOf(LinearForm.atom(term), true, List.of());
+        had = asking(asked) instanceof StructuralContext.Merge.Together(StructuralContext under)
+                ? runsIn(under, form, true, List.copyOf(alongside))
+                : projectionOf(form, true);
+        projections.put(question, had);
+        return had;
     }
 
     /** The same, where the class the declarations hold a value to is or is not what its ends are
-     *  held to ({@link #classFixedAt}), and {@code alongside} are terms taken in beside the form's
-     *  own. */
+     *  held to ({@link #classFixedAt}). */
     private NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form,
-                                                      boolean andTheDeclared,
-                                                      List<NumericTerm> alongside) {
+                                                      boolean andTheDeclared) {
         if (form.coefs().isEmpty()) {
             return null;
         }
+        ProjectionAsked question = new ProjectionAsked(form, andTheDeclared, Set.of());
+        NumericDomain.FormProjection had = projections.get(question);
+        if (had != null) {
+            return had;
+        }
+        had = projectedOut(form, andTheDeclared);
+        projections.put(question, had);
+        return had;
+    }
+
+    /** {@link #projectionOf}, worked out. */
+    private NumericDomain.FormProjection projectedOut(LinearForm<NumericTerm> form,
+                                                      boolean andTheDeclared) {
         form.coefs().keySet().forEach(this::held);
         // Projected out of the rules, which is one question with one answer. The rules of every
         // parameter are said together and what each number is on its own is said onto them, so what
@@ -1809,11 +1842,9 @@ final class ReadQuantities implements Quantities {
         // Under the context this question is asked in, which is what says which of those rules are
         // about the row being asked about at all. Where no one value has these numbers together
         // with what was taken in, no row gives the form a value, and it runs nowhere.
-        Collection<NumericTerm> asked = new ArrayList<>(form.coefs().keySet());
-        asked.addAll(alongside);
-        return switch (asking(asked)) {
+        return switch (asking(form.coefs().keySet())) {
             case StructuralContext.Merge.Together(StructuralContext under) ->
-                    runsIn(under, form, andTheDeclared, alongside);
+                    runsIn(under, form, andTheDeclared, List.of());
             case StructuralContext.Merge.Disagreeing _ ->
                     new NumericDomain.FormProjection.NothingIsLeft();
         };

@@ -44,8 +44,7 @@ public final class HeldOnce<T> {
     /** The value equal to {@code made} that is held here, or {@code made}, held from now on. */
     @SuppressWarnings("unchecked")
     public T held(T made) {
-        int hash = made.hashCode();
-        int slot = (hash ^ (hash >>> 16)) & (slots.length - 1);
+        int slot = slotOf(made.hashCode(), slots.length);
         WeakReference<?> at = slots[slot];
         Object there = at == null ? null : at.get();
         if (there != null && there.equals(made)) {
@@ -53,5 +52,11 @@ public final class HeldOnce<T> {
         }
         slots[slot] = new WeakReference<>(made);
         return made;
+    }
+
+    /** The slot a hash falls in among {@code count}, a power of two: the high half of the hash is
+     *  mixed into the low half, which is all a power of two reads. */
+    static int slotOf(int hash, int count) {
+        return (hash ^ (hash >>> 16)) & (count - 1);
     }
 }

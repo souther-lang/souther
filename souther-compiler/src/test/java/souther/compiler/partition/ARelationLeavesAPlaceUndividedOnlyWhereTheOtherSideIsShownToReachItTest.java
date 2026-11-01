@@ -2903,6 +2903,33 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * The rules of a record are told apart by what each reads and not by how many clauses they are
+     * written in: the same bounds on {@code q.a} and {@code q.b} come to the same whether they are
+     * four clauses, two, or one joined with {@code &&}. A rule that reads both numbers ties them
+     * however it is joined, whether it compares them or is a choice between them.
+     */
+    @Test
+    void rulesJoinedInOneClauseAreToldApartByWhatEachReads() {
+        String guard = "(q.a >= 8 && q.b <= 2 || x >= 5)";
+        String inputs = "x: Int, y: Int, q: Q";
+        Map<String, String> apart = Map.of("x", RELATES, "y", RELATES);
+        for (String bounds : List.of(
+                "invariant a >= 0 && a <= 10 && b >= 0 && b <= 10",
+                "invariant a >= 0 && b >= 0 invariant a <= 10 && b <= 10")) {
+            assertEquals(apart, leftPast(inputs, "data Q = { a: Int, b: Int } " + bounds, guard,
+                    "x == y", true), bounds);
+        }
+
+        Map<String, String> tied = Map.of("x", RELATES, "y", NOT_SHOWN);
+        for (String bounds : List.of(
+                "invariant a <= b && b <= 10 && a >= 0 && b >= 0",
+                "invariant a >= 0 && a <= 10 && b >= 0 && b <= 10 && (a >= 8 || b >= 8)")) {
+            assertEquals(tied, leftPast(inputs, "data Q = { a: Int, b: Int } " + bounds, guard,
+                    "x == y", true), bounds);
+        }
+    }
+
+    /**
      * A choice naming what the relation reads and what it does not comes to the first, where a
      * value is shown to meet the second: past {@code !(x >= 70 && a && !d)}, {@code a} false
      * lets every {@code x} through, so {@code y} reaches every value as {@code x} does. Where no
