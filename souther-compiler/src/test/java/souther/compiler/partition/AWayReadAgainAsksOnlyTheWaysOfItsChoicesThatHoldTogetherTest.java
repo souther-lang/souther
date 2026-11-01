@@ -281,6 +281,26 @@ class AWayReadAgainAsksOnlyTheWaysOfItsChoicesThatHoldTogetherTest {
     }
 
     /**
+     * Under {@code (x <= 0 && z >= 80 && w <= 20 || x > 0)}, the first alternative is met by a
+     * value of {@code z} and of {@code w} where the declarations leave each every value from
+     * nought to a hundred: read as less. Where a rule holds the two beside each other, a value
+     * given to each apart is not always a row's, and nothing is read as less.
+     */
+    @Test
+    void numbersARuleHoldsBesideEachOtherAreNotGivenValuesApart() {
+        List<OnTheWay> way = List.of(oneOf(1, List.of(
+                List.of(x(1, Rel.LE, 0), WaysReadAgain.z(1, Rel.GE, 80),
+                        WaysReadAgain.w(1, Rel.LE, 20)),
+                List.of(x(1, Rel.GT, 0)))));
+
+        AWayReadForARelation.ReadAgain apart = WaysReadAgain.readAgainLeavingZAndW(way, false);
+        AWayReadForARelation.ReadAgain beside = WaysReadAgain.readAgainLeavingZAndW(way, true);
+
+        assertTrue(apart.as().isPresent(), () -> "apart, read as less: " + apart.stoppedAt());
+        assertEquals(Optional.empty(), beside.as(), "held beside each other, read as it is");
+    }
+
+    /**
      * Under {@code (x <= 0 && t || x > 0 && !t)}, read as less where nothing ties {@code t} to
      * {@code x}: each alternative is met by a value of its own, and between them they leave
      * {@code x} every value. Where a rule ties the two, which {@code t} a row holds turns on its

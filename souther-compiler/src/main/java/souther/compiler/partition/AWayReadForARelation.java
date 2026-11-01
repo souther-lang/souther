@@ -1311,6 +1311,9 @@ final class AWayReadForARelation {
                 return false;
             }
         }
+        if (heldBesideEachOther(numbers)) {
+            return false;
+        }
         WholeValuesMeeting.Witness witness = WholeValuesMeeting.of(numbers, region,
                 declarations::leaveEveryValueBetween,
                 CompositionBudget.PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH.maximum() - pairs);
@@ -1319,5 +1322,34 @@ final class AWayReadForARelation {
             stoppedAt.add(CompositionBudget.PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH);
         }
         return witness instanceof WholeValuesMeeting.Witness.Found;
+    }
+
+    /**
+     * Whether a rule of the declarations holds two of the positions {@code numbers} are about
+     * beside each other, so that a value given to each apart need not be a row's.
+     *
+     * <p>The ends the declarations leave a number are those of the number alone: each can be
+     * exact while the pairs they allow are fewer than the product of the ends, as
+     * {@code x <= y} leaves both every value from nought to ten and {@code x = 10, y = 0} not a
+     * row. So the ends are used only of numbers no rule ties to another that is given a value.
+     */
+    private boolean heldBesideEachOther(List<TakenConstraint.Affine> numbers) {
+        List<TermPath> given = new ArrayList<>();
+        for (TakenConstraint.Affine each : numbers) {
+            for (NumericTerm term : each.terms()) {
+                if (term instanceof NumericTerm.ValueOf value
+                        && !given.contains(value.subjectPath())) {
+                    given.add(value.subjectPath());
+                }
+            }
+        }
+        for (int one = 0; one < given.size(); one++) {
+            for (int other = one + 1; other < given.size(); other++) {
+                if (declarations.tie(given.get(one), given.get(other))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

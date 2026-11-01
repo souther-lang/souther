@@ -2870,9 +2870,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     @Test
     void aNumberItsRecordBoundsAloneIsGivenAValueApart() {
         String bounded = "data P = { x: Int, z: Int } invariant z >= 0 invariant z <= 31";
-        Map<String, String> free = leftPast("p: P, y: Int", bounded, "true", "p.x == y", false);
-        assertEquals(free, leftPast("p: P, y: Int", bounded, "(p.z >= 17 || p.x >= 5)",
-                "p.x == y", true));
+        assertEquals(Map.of("p.x", RELATES, "y", RELATES),
+                leftPast("p: P, y: Int", bounded, "(p.z >= 17 || p.x >= 5)", "p.x == y", true));
 
         String held = "data Q = { a: Int, b: Int } invariant a >= 0 invariant a <= 10"
                 + " invariant b >= 0 invariant b <= 10 invariant a <= b";
@@ -2884,10 +2883,16 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
         String apart = "data Q = { a: Int, b: Int } invariant a >= 0 invariant a <= 10"
                 + " invariant b >= 0 invariant b <= 10";
-        assertEquals(leftPast("x: Int, y: Int", UNUSED, "true", "x == y", false),
+        assertEquals(Map.of("x", RELATES, "y", RELATES),
                 leftPast("x: Int, y: Int, q: Q", apart, guard, "x == y", true));
 
-        String around = "data Z = { a: Int, b: Int } invariant a >= 0 invariant a <= 10"
+        String worked = "(q.a + q.b == 16 && q.a - q.b == 4 || x >= 5)";
+        Map<String, String> restored = leftPast("x: Int, y: Int, q: Q", held, worked, "x == y",
+                false);
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), restored);
+        assertEquals(restored, leftPast("x: Int, y: Int, q: Q", held, worked, "x == y", true));
+
+        String around = "data Z ={ a: Int, b: Int } invariant a >= 0 invariant a <= 10"
                 + " invariant b >= 0 invariant b <= 10"
                 + " data W = { p: Z, q: Z } invariant p.a <= q.a";
         String across = "(w.p.a >= 8 && w.q.a <= 2 || x >= 5)";
