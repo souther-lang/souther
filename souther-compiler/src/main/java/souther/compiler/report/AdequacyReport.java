@@ -228,6 +228,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -3945,6 +3946,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private void undivided(StringBuilder out, BehaviorReport behavior,
                                   SourceRendering rendering, SourceId declaredIn,
                                   PublishedRuleHandle.WhereARuleIs places, WhereAPartIs parts) {
+        WentWithout wentWithout = new WentWithout(behavior);
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.APositionNoLineDivides(var position)) {
                 // What was found and not what was missed. This line is written from
@@ -3983,6 +3985,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         inCopies(it.finding().readAt(), behavior.conditionPlaces().copies(),
                                 rendering, declaredIn),
                         sentTo(it.finding().sentTo(), parts, rendering, declaredIn)));
+                decisionWentWithout(out, it.finding().readAt(), wentWithout, behavior, rendering,
+                        declaredIn);
             }
             if (f.about() instanceof About.ARuleNothingClassified(var it)) {
                 out.append(String.format("      %s not read: %s — %s%s, about `%s`%s%s%n",
@@ -3991,6 +3995,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         inCopies(it.finding().readAt(), behavior.conditionPlaces().copies(),
                                 rendering, declaredIn),
                         sentTo(it.sentTo(), parts, rendering, declaredIn)));
+                decisionWentWithout(out, it.finding().readAt(), wentWithout, behavior, rendering,
+                        declaredIn);
             }
         }
         // And a rule that a run may stop in. Whatever else is said of the rule, and whatever line it
@@ -4031,6 +4037,174 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         unaccounted(out, behavior, rendering, declaredIn,
                 asked -> asked.holdsOpen(CoverageObligation.Measure.PARTITION), places,
                 behavior.partPlace());
+    }
+
+    /**
+     * The searches the decision section tells a reader about, in the order it tells them: the
+     * places of the rules nothing settled, each as the decision's own reading ordered them.
+     *
+     * <p>The one place that says which searches a page shows. What the decision section prints and
+     * what a line of the partition points at are both read off this, so a page cannot point at a
+     * search it does not show, nor show one in an order the pointer does not follow. Empty where
+     * the section says nothing of the rules: a reading that stopped, or a body with none.
+     */
+    private static List<SettledAt> unsettledShown(BehaviorReport behavior) {
+        DecisionEvidence decision = behavior.evidence().decision();
+        if (!rulesAreTold(decision)) {
+            return List.of();
+        }
+        List<SettledAt> shown = new ArrayList<>();
+        for (DecisionReading.Stated stated : decision.read().stated()) {
+            SettledAcross rule = behavior.ruleSettlements().get(stated.rule());
+            if (rule != null && rule.requirement() instanceof RuleRequirement.Unsettled) {
+                shown.addAll(rule.places());
+            }
+        }
+        return shown;
+    }
+
+    /**
+     * Whether the decision section says anything of the rules: a reading that stopped comes back
+     * with none of them, and a body that decides nothing has none to say.
+     *
+     * <p>The one definition, which the section's own ending and every pointer to it ask, so that
+     * a pointer is made exactly where the section it points to is written.
+     */
+    private static boolean rulesAreTold(DecisionEvidence decision) {
+        return decision != null && decision.derivation().isEmpty() && !decision.rules().isEmpty();
+    }
+
+    /**
+     * What the decision's searches went without at the comparison a line of the partition is
+     * about, said under that line and naming the rule each search was of.
+     *
+     * <p>The partition says why the rule is no line over the position and the decision says which
+     * reading stopped. Neither is the other's cause, so the line keeps its classification and this
+     * adds the second fact where the first is read. Asked of what was read at and not of the
+     * reason the line gives: the word a document promises is coarser than what produced it, and
+     * which analysis has something to say of a comparison is not a question it answers.
+     *
+     * <p>Said in the words of the decision section's own entry, so the sentence a reader is sent
+     * to is the one they find there.
+     */
+    private static void decisionWentWithout(StringBuilder out, ModelOccurrences readAt,
+                                            WentWithout wentWithout, BehaviorReport behavior,
+                                            SourceRendering rendering, SourceId declaredIn) {
+        for (WentWithout.Told told : wentWithout.at(readAt)) {
+            String rule = behavior.readingsOf(told.search().at()).stream()
+                    .map(read -> said(read, declaredIn, rendering))
+                    .collect(Collectors.joining(" and "));
+            // The entry the decision section writes for each gap, which says it of every gap that
+            // reads alike and with every call: what a reader is sent to is that line, not a
+            // narrower sentence of this one's.
+            Map<SaidAlike, String> entries = leftOutBy(told.search(), behavior, rendering,
+                    declaredIn);
+            entriesOf(told.gaps(), entries).forEach(entry -> out.append(String.format(
+                    "          · the decision, at the rule where %s: not composed against: %s%n",
+                    rule, entry)));
+        }
+    }
+
+    /**
+     * The entries of {@code entries} that {@code gaps} are told in, one for each entry and in the
+     * order of the first gap told in it.
+     *
+     * <p>Kept apart by the key the decision section keeps its entries apart by and not by what
+     * they say: two gaps keyed differently are two entries there even when the words come out
+     * alike, because the sentence leaves out part of what they differ in. Counted by their words,
+     * a pointer would tell a reader of one entry where the section writes two.
+     *
+     * <p>Open to this package so that the identity can be asked of keys that read alike.
+     */
+    static List<String> entriesOf(List<ConditionGap> gaps, Map<SaidAlike, String> entries) {
+        Set<SaidAlike> keys = new LinkedHashSet<>();
+        gaps.forEach(gap -> keys.add(SaidAlike.of(gap)));
+        return entriesOf(keys, entries);
+    }
+
+    /** The same, of keys already taken. */
+    static List<String> entriesOf(Set<SaidAlike> keys, Map<SaidAlike, String> entries) {
+        List<String> told = new ArrayList<>();
+        for (SaidAlike key : keys) {
+            told.add(Objects.requireNonNull(entries.get(key),
+                    "an entry is written for every gap a search went without"));
+        }
+        return told;
+    }
+
+    /**
+     * What each search the decision section shows went without, by the copies of the model's code
+     * it is about.
+     *
+     * <p>Joined on the copies and not on a condition's number: the two readings number their
+     * conditions apart, and the copies are what both of them name. A gap is told of a comparison
+     * only when every copy it is about is one the comparison was read at, so a condition that
+     * several comparisons put on the way does not carry the reason of one of them to another.
+     * Kept with the search it came from, which is what tells the rules apart.
+     */
+    private static final class WentWithout {
+
+        /** What one search went without at the comparison asked about. */
+        record Told(SettledAt search, List<ConditionGap> gaps) { }
+
+        /** Compared by identity: one is made per gap met, and a gap is a deep value to hash. */
+        private record Detail(int met, SettledAt search, ConditionGap gap,
+                              ModelOccurrences copies) { }
+
+        private final BehaviorReport behavior;
+        private Map<ModelOccurrence, List<Detail>> byCopy;
+
+        /** Built on the first ask, which a page with no line to point from never makes. */
+        WentWithout(BehaviorReport behavior) {
+            this.behavior = behavior;
+        }
+
+        private Map<ModelOccurrence, List<Detail>> byCopy() {
+            if (byCopy == null) {
+                byCopy = new HashMap<>();
+                int met = 0;
+                for (SettledAt came : unsettledShown(behavior)) {
+                    for (ConditionGap gap : came.leftOut()) {
+                        ModelOccurrences copies = came.at().saidOnTheWay().of(gap);
+                        Detail detail = new Detail(met++, came, gap, copies);
+                        for (ModelOccurrence copy : copies) {
+                            byCopy.computeIfAbsent(copy, _ -> new ArrayList<>()).add(detail);
+                        }
+                    }
+                }
+            }
+            return byCopy;
+        }
+
+        /**
+         * What each search went without that is about nothing but copies of {@code readAt}, in the
+         * order the decision section shows the searches and, within one, the order of its gaps.
+         */
+        List<Told> at(ModelOccurrences readAt) {
+            Set<ModelOccurrence> read = new HashSet<>(readAt.inOrder());
+            Set<Detail> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+            List<Detail> about = new ArrayList<>();
+            for (ModelOccurrence copy : readAt) {
+                for (Detail each : byCopy().getOrDefault(copy, List.of())) {
+                    if (read.containsAll(each.copies().inOrder()) && seen.add(each)) {
+                        about.add(each);
+                    }
+                }
+            }
+            about.sort(Comparator.comparingInt(Detail::met));
+            List<Told> told = new ArrayList<>();
+            List<ConditionGap> gaps = null;
+            SettledAt of = null;
+            for (Detail each : about) {
+                if (each.search() != of) {
+                    of = each.search();
+                    gaps = new ArrayList<>();
+                    told.add(new Told(of, gaps));
+                }
+                gaps.add(each.gap());
+            }
+            return told;
+        }
     }
 
     /**
@@ -4568,7 +4742,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + " be written down)\n");
             return;
         }
-        if (decision.rules().isEmpty()) {
+        if (!rulesAreTold(decision)) {
             return;
         }
         // Absent where nothing was read, which is not a count of none: a build that ran no row did
@@ -4613,24 +4787,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // along its own way — a helper's rule stands once per call of it — and what one search
         // came to and went without is not what another did, nor where an author would write the
         // row for it.
-        for (DecisionReading.Stated stated : decision.read().stated()) {
-            SettledAcross rule = behavior.ruleSettlements().get(stated.rule());
-            if (rule == null || !(rule.requirement() instanceof RuleRequirement.Unsettled)) {
-                continue;
+        for (SettledAt came : unsettledShown(behavior)) {
+            out.append(String.format("      ? nothing could show a row can be written at a"
+                    + " decision rule — %s%n", whatItCameTo(came.settlement(), rendering,
+                            behavior.rulePlace()).text()));
+            // The place the search was made at, which is the one whose conditions it went
+            // without.
+            for (ShownCondition read : behavior.readingsOf(came.at())) {
+                out.append(String.format("          · %s%n", said(read, declaredIn, rendering)));
             }
-            for (SettledAt came : rule.places()) {
-                out.append(String.format("      ? nothing could show a row can be written at a"
-                        + " decision rule — %s%n", whatItCameTo(came.settlement(), rendering,
-                                behavior.rulePlace()).text()));
-                // The place the search was made at, which is the one whose conditions it went
-                // without.
-                for (ShownCondition read : behavior.readingsOf(came.at())) {
-                    out.append(String.format("          · %s%n",
-                            said(read, declaredIn, rendering)));
-                }
-                for (String left : leftOut(came, behavior, rendering, declaredIn)) {
-                    out.append(String.format("          · not composed against: %s%n", left));
-                }
+            for (String left : leftOut(came, behavior, rendering, declaredIn)) {
+                out.append(String.format("          · not composed against: %s%n", left));
             }
         }
         // And the rules the model owes no row, counted rather than listed. There is nothing for a
@@ -4686,8 +4853,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static List<String> leftOut(SettledAt came, BehaviorReport behavior,
                                         SourceRendering rendering, SourceId declaredIn) {
+        return List.copyOf(leftOutBy(came, behavior, rendering, declaredIn).values());
+    }
+
+    /** The same, each entry under the key that made it one. */
+    private static Map<SaidAlike, String> leftOutBy(SettledAt came, BehaviorReport behavior,
+                                                    SourceRendering rendering,
+                                                    SourceId declaredIn) {
         ConditionsShown shown = behavior.conditionPlaces().along(came.at().saidOnTheWay());
-        return saidOnce(came.leftOut(), shown::copiesOf, shown.places(), rendering, declaredIn);
+        return saidOnceBy(came.leftOut(), shown::copiesOf, shown.places(), rendering, declaredIn);
     }
 
     /**
@@ -4703,7 +4877,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * @param anchor   where the condition is written, which is the place a reader is sent
      * @param madeFrom what the sentence about it is made from
      */
-    private record SaidAlike(ConditionReportAnchor anchor, Object madeFrom) {
+    record SaidAlike(ConditionReportAnchor anchor, Object madeFrom) {
 
         static SaidAlike of(ConditionGap gap) {
             return new SaidAlike(gap.anchor(), switch (gap) {
@@ -5541,6 +5715,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                          Function<ConditionGap, List<CopyShown>> copiesOf,
                                          Map<ConditionReportAnchor, Citation> places,
                                          SourceRendering rendering, SourceId declaredIn) {
+        return List.copyOf(saidOnceBy(gaps, copiesOf, places, rendering, declaredIn).values());
+    }
+
+    /** The same, each under the key that made it one: what finds the entry a gap is told in. */
+    private static Map<SaidAlike, String> saidOnceBy(
+            List<ConditionGap> gaps, Function<ConditionGap, List<CopyShown>> copiesOf,
+            Map<ConditionReportAnchor, Citation> places,
+            SourceRendering rendering, SourceId declaredIn) {
         // For each sentence, every place it was asked at, the gap's own first, with the calls of
         // each: one condition consulted at two places is one sentence that sends a reader to both.
         Map<SaidAlike, Map<String, Set<String>>> where = new LinkedHashMap<>();
@@ -5561,7 +5743,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             }
         }
-        List<String> out = new ArrayList<>();
+        Map<SaidAlike, String> out = new LinkedHashMap<>();
         first.forEach((key, gap) -> {
             List<String> said = new ArrayList<>();
             where.get(key).forEach((place, calls) -> {
@@ -5574,7 +5756,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     said.add(place + " " + in);
                 }
             });
-            out.add(whyLeftOut(gap) + (said.isEmpty() ? "" : " (" + String.join(", ", said)
+            out.put(key, whyLeftOut(gap) + (said.isEmpty() ? "" : " (" + String.join(", ", said)
                     + ")"));
         });
         return out;
@@ -6113,7 +6295,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                     SourceId declaredIn,
                                     Predicate<PartitionEvidence.Unanswered> mine,
                                     PublishedRuleHandle.WhereARuleIs places, WhereAPartIs parts) {
-
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.AQuestionNothingAnswered(var asked)
                     && mine.test(asked)) {
