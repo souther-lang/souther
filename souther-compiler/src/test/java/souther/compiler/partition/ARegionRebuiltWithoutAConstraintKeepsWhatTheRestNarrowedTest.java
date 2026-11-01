@@ -28,12 +28,11 @@ import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -200,7 +199,7 @@ class ARegionRebuiltWithoutAConstraintKeepsWhatTheRestNarrowedTest {
 
     private static Rebuilding rebuilding(List<TakenConstraint> applied, List<OnAWay> written,
                                          List<TakenConstraint.Affine> met) {
-        return new Rebuilding(Optional.of(applied), written, met);
+        return new Rebuilding(applied, written, met);
     }
 
     /**
@@ -244,26 +243,20 @@ class ARegionRebuiltWithoutAConstraintKeepsWhatTheRestNarrowedTest {
 
     /**
      * A case or an element asked of a container narrowed the region by what a statement does not
-     * carry, so taking it away is not told; a statement that narrows nothing is taken away and
+     * carry, so taking it away is refused; a statement that narrows nothing is taken away and
      * the region is the one the list makes.
      */
     @Test
     void aStatementTheRegionTookInBySomethingItDoesNotCarryCannotBeTakenAway() {
         List<OnAWay> written = List.of(THE_CASE, SOME_ELEMENT, THE_SUM);
 
-        assertNull(rebuilding(BOTH, written, List.of())
+        assertThrows(IllegalStateException.class, () -> rebuilding(BOTH, written, List.of())
                 .without(List.of(SOME_ELEMENT, THE_SUM), declarations()), "the case");
-        assertNull(rebuilding(BOTH, written, List.of())
+        assertThrows(IllegalStateException.class, () -> rebuilding(BOTH, written, List.of())
                 .without(List.of(THE_CASE, THE_SUM), declarations()), "the element");
         OnAWay saysNothing = new OnAWay(Set.of(), false, null, null);
         assertRuns(rebuilding(BOTH, List.of(saysNothing, THE_SUM), List.of())
                 .without(List.of(THE_SUM), declarations()), run(0, 49), run(1, 12),
                 "a statement of nothing the region took in");
-    }
-
-    @Test
-    void aRegionMadeSomeOtherWayCannotBeRebuilt() {
-        assertNull(new Rebuilding(Optional.empty(), List.of(THE_SUM), List.of())
-                .without(List.of(), declarations()));
     }
 }
