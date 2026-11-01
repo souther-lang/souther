@@ -703,7 +703,7 @@ public final class AnAnswerComposed {
 
     /** The place inside the answer, under the name the subject gives the whole of it. */
     private static TermPath path(String head, List<TermPath.Step> steps) {
-        return new TermPath(head, steps);
+        return TermPath.of(head, steps);
     }
 
     /**

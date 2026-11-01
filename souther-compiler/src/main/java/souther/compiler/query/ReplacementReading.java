@@ -273,7 +273,7 @@ public final class ReplacementReading {
                 // A list read in a helper is a parameter of the helper, which is no location of
                 // this behavior's input.
                 at.over().add(site.body().equals(behavior)
-                        ? site.over().map(names -> new TermPath(names.getFirst(), List.of())
+                        ? site.over().map(names -> TermPath.of(names.getFirst())
                                 .then(names.subList(1, names.size())))
                         : Optional.empty());
             }

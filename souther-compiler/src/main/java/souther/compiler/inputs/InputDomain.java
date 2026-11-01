@@ -1439,14 +1439,13 @@ public final class InputDomain {
         }
         List<TermPath.Step> steps = new ArrayList<>(sum.steps());
         steps.addAll(below);
-        return new TermPath(sum.head(), steps);
+        return TermPath.of(sum.head(), steps);
     }
 
     /** The container an element opened at {@code element} is an element of: the path without the
      *  step into it. */
     private static TermPath containerOf(TermPath element) {
-        return new TermPath(element.head(),
-                element.steps().subList(0, element.steps().size() - 1));
+        return element.prefix(element.steps().size() - 1);
     }
 
     /** One position inside a container: where it is, and what stands there. */

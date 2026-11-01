@@ -40,15 +40,18 @@ import souther.compiler.types.ValueName;
 import souther.compiler.values.ValueSet;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.RandomAccess;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -118,7 +121,7 @@ final class ReadQuantities implements Quantities {
      * declarations from acquiring one. Kept as what was said and not as what it came to: taking in
      * accumulates, and what the whole of it leaves is worked out where everything else is.
      */
-    private final List<Assumed> assumed;
+    private final TakenIn assumed;
     /**
      * The forms among {@link #assumed} that are two positions on an order that counts nothing held
      * against each other, each as the two.
@@ -298,6 +301,61 @@ final class ReadQuantities implements Quantities {
      * the same, and what a rule says about one of those is where on that order it lies. Held apart
      * here rather than converted, since a form is a sum and there is nothing to add.
      */
+    private static final class TakenIn extends AbstractList<Assumed> implements RandomAccess {
+
+        static final TakenIn NOTHING = new TakenIn(List.of(), Set.of());
+
+        private final List<Assumed> inOrder;
+        private final Set<Member> members;
+
+        private TakenIn(List<Assumed> inOrder, Set<Member> members) {
+            this.inOrder = inOrder;
+            this.members = members;
+        }
+
+        /** An entry that says its hash, which is worked out once where it is taken in and never
+         *  again as the set that holds it is copied for the next one. */
+        private record Member(Assumed taken, int hash) {
+
+            @Override
+            public int hashCode() {
+                return hash;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Member member && member.hash == hash
+                        && member.taken.equals(taken);
+            }
+        }
+
+        /** These with {@code taking} last; the order is the order they were taken in. */
+        TakenIn and(Assumed taking) {
+            List<Assumed> longer = new ArrayList<>(inOrder.size() + 1);
+            longer.addAll(inOrder);
+            longer.add(taking);
+            Set<Member> more = new HashSet<>(members);
+            more.add(new Member(taking, taking.hashCode()));
+            return new TakenIn(Collections.unmodifiableList(longer),
+                    Collections.unmodifiableSet(more));
+        }
+
+        @Override
+        public boolean contains(Object o) {
+            return o instanceof Assumed taken && members.contains(new Member(taken, taken.hashCode()));
+        }
+
+        @Override
+        public Assumed get(int at) {
+            return inOrder.get(at);
+        }
+
+        @Override
+        public int size() {
+            return inOrder.size();
+        }
+    }
+
     private sealed interface Assumed {
 
         /** Which of the input's numbers this is about. */
@@ -409,7 +467,7 @@ final class ReadQuantities implements Quantities {
                            Map<TermPath, Position> byPath, List<CasesRead> cases,
                            java.util.function.Function<TermPath, Type> typeAt,
                            Map<NumericTerm, Fixed> fixed,
-                           RuleReadingContext ruleReading, List<Assumed> assumed,
+                           RuleReadingContext ruleReading, TakenIn assumed,
                            List<HeldAgainst> heldAgainst, Contexts contexts,
                            OneMoreFixed oneMoreFixed, OneMoreTaken oneMoreTaken,
                            Map<StructuralContext, ConstraintState<InputAtom>> answered) {
@@ -420,7 +478,7 @@ final class ReadQuantities implements Quantities {
         this.cases = List.copyOf(cases);
         this.ruleReading = ruleReading;
         this.typeAt = typeAt;
-        this.assumed = List.copyOf(assumed);
+        this.assumed = assumed;
         this.heldAgainst = List.copyOf(heldAgainst);
         // In the order the behavior declares its parameters. A proof of emptiness names one of them
         // and a report is a document compared against the one written last time, so an order read
@@ -456,7 +514,7 @@ final class ReadQuantities implements Quantities {
                              java.util.function.Function<TermPath, Type> typeAt,
                              RuleReadingContext ruleReading) {
         return new ReadQuantities(byRoot, new Roots(roots), byPath, cases, typeAt, Map.of(),
-                ruleReading, List.of(), List.of(), new Contexts(), null, null,
+                ruleReading, TakenIn.NOTHING, List.of(), new Contexts(), null, null,
                 new ConcurrentHashMap<>());
     }
 
@@ -471,7 +529,7 @@ final class ReadQuantities implements Quantities {
     private ReadQuantities unrefined() {
         return fixed.isEmpty() && assumed.isEmpty() ? this
                 : new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), ruleReading,
-                        List.of(), List.of(), contexts, null, null, new ConcurrentHashMap<>());
+                        TakenIn.NOTHING, List.of(), contexts, null, null, new ConcurrentHashMap<>());
     }
 
     /**
@@ -1162,8 +1220,7 @@ final class ReadQuantities implements Quantities {
         if (assumed.contains(taking)) {
             return this;
         }
-        List<Assumed> both = new ArrayList<>(assumed);
-        both.add(taking);
+        TakenIn both = assumed.and(taking);
         List<HeldAgainst> pairs = heldAgainst;
         if (heldAgainst(taking) instanceof HeldAgainst pair) {
             pairs = new ArrayList<>(heldAgainst);

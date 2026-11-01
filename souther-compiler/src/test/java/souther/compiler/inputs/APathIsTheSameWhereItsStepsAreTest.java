@@ -9,6 +9,8 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -74,6 +76,57 @@ class APathIsTheSameWhereItsStepsAreTest {
         assertEquals(0, path.steps().hashCode(), "and again");
         assertEquals(new TermPath("request", written), path);
         assertNotEquals(TermPath.of("request").then("other"), path);
+    }
+
+    @Test
+    void aPathDerivedAgainByTheSameStepIsTheSameInstance() {
+        TermPath root = TermPath.of("request");
+
+        assertSame(root, TermPath.of("request"));
+        assertSame(root.then("cost"), root.then("cost"));
+        assertSame(root.element(), root.element());
+        assertSame(root.key(), root.key());
+        assertNotSame(root.element(), root.key());
+        assertSame(root.then("cost").element().then("value"),
+                root.then(List.of("cost")).element().then(List.of("value")));
+    }
+
+    @Test
+    void aPathReachedBySeveralDerivationsIsOneInstance() {
+        TermPath path = TermPath.of("request").then("cost").element().then("value");
+
+        assertSame(path, TermPath.of("request", STEPS));
+        assertSame(path, TermPath.of("other").then("cost").element().then("value")
+                .movedFrom(TermPath.of("other"), TermPath.of("request")));
+        assertSame(path, path.then("deeper").prefix(3));
+        assertSame(path, TermPath.of("request").then(List.of("cost")).element().then("value"));
+        assertSame(path, TermPath.of("x").then("y").under(TermPath.of("request").then("cost")
+                .element()).movedFrom(TermPath.of("request").then("cost").element().then("y"),
+                TermPath.of("request").then("cost").element()).then("value").prefix(3));
+        assertSame(path.prefix(2), path.outermostContainer().element());
+    }
+
+    @Test
+    void aPathMadeByTheConstructorIsEqualToTheOneDerivedAndDerivesFromIt() {
+        TermPath derived = TermPath.of("request").then("cost").element().then("value");
+        TermPath written = new TermPath("request", new ArrayList<>(STEPS));
+
+        assertNotSame(derived, written);
+        assertEquals(derived, written);
+        assertEquals(derived.hashCode(), written.hashCode());
+        assertSame(derived.then("more"), written.then("more"));
+        assertSame(derived.prefix(1), written.prefix(1));
+    }
+
+    @Test
+    void pathsOfDifferentHeadsDoNotShareWhatIsDerived() {
+        TermPath one = TermPath.of("one").then("cost");
+        TermPath other = new TermPath("other", one.steps()).then("price");
+
+        assertEquals("one.cost", one.toString());
+        assertEquals("other.cost.price", other.toString());
+        assertEquals("one.cost.price", one.then("price").toString());
+        assertNotEquals(one, other);
     }
 
     @Test
