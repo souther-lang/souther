@@ -46,6 +46,21 @@ import java.util.stream.Stream;
 public sealed interface Reachability {
 
     /**
+     * Whether some row is not shown to be kept off this way: the way is one a row may take, and
+     * some region that between them hold every row past it is not shown empty.
+     *
+     * <p>The one definition of "may be reached" for a run that needs no row to have been seen
+     * there. No proof that a row arrives — the reading of the way is an inclusion, and a way it
+     * cannot take in leaves the region as wide as the declarations do — so this is true of a way
+     * it could not settle as much as of one a row takes, and false only on a proof that none does.
+     */
+    default boolean leavesARow() {
+        return this instanceof Reaching reaching
+                && reaching.holdingEveryRow().stream()
+                .anyMatch(region -> region.emptiness().isEmpty());
+    }
+
+    /**
      * The way as a composer reads it, or the fact that nothing takes it.
      *
      * @param declarations what the declarations leave, which the way narrows
