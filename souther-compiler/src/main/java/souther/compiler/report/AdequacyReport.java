@@ -4099,11 +4099,37 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // narrower sentence of this one's.
             Map<SaidAlike, String> entries = leftOutBy(told.search(), behavior, rendering,
                     declaredIn);
-            Set<String> left = new LinkedHashSet<>();
-            told.gaps().forEach(gap -> left.add(entries.get(SaidAlike.of(gap))));
-            left.forEach(entry -> out.append(String.format("          · the decision, at the rule"
-                    + " where %s: not composed against: %s%n", rule, entry)));
+            entriesOf(told.gaps(), entries).forEach(entry -> out.append(String.format(
+                    "          · the decision, at the rule where %s: not composed against: %s%n",
+                    rule, entry)));
         }
+    }
+
+    /**
+     * The entries of {@code entries} that {@code gaps} are told in, one for each entry and in the
+     * order of the first gap told in it.
+     *
+     * <p>Kept apart by the key the decision section keeps its entries apart by and not by what
+     * they say: two gaps keyed differently are two entries there even when the words come out
+     * alike, because the sentence leaves out part of what they differ in. Counted by their words,
+     * a pointer would tell a reader of one entry where the section writes two.
+     *
+     * <p>Open to this package so that the identity can be asked of keys that read alike.
+     */
+    static List<String> entriesOf(List<ConditionGap> gaps, Map<SaidAlike, String> entries) {
+        Set<SaidAlike> keys = new LinkedHashSet<>();
+        gaps.forEach(gap -> keys.add(SaidAlike.of(gap)));
+        return entriesOf(keys, entries);
+    }
+
+    /** The same, of keys already taken. */
+    static List<String> entriesOf(Set<SaidAlike> keys, Map<SaidAlike, String> entries) {
+        List<String> told = new ArrayList<>();
+        for (SaidAlike key : keys) {
+            told.add(Objects.requireNonNull(entries.get(key),
+                    "an entry is written for every gap a search went without"));
+        }
+        return told;
     }
 
     /**
@@ -4851,7 +4877,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * @param anchor   where the condition is written, which is the place a reader is sent
      * @param madeFrom what the sentence about it is made from
      */
-    private record SaidAlike(ConditionReportAnchor anchor, Object madeFrom) {
+    record SaidAlike(ConditionReportAnchor anchor, Object madeFrom) {
 
         static SaidAlike of(ConditionGap gap) {
             return new SaidAlike(gap.anchor(), switch (gap) {
