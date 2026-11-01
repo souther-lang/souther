@@ -1400,7 +1400,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * written apart they would agree by having been derived alike — until one of them learned to
      * read a shape of condition the other did not.
      */
-    private static List<OnTheWay> taking(Condition condition, boolean holding,
+    static List<OnTheWay> taking(Condition condition, boolean holding,
                                          souther.compiler.inputs.InputReading read,
                                          List<OnTheWay> assumed, WhatConditionsState conditions,
                                          ConditionNumbering numbering) {

@@ -64,6 +64,7 @@ import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.SequencedSet;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -1451,17 +1452,21 @@ sealed interface ComparisonAssessment {
 
     /**
      * {@code read} with each stop of it that no row reaches said so: the reading that stopped, or
-     * the lines of a statement of several that did, over {@code way} — the way to the comparison,
-     * and not the way past it.
+     * the lines of a statement of several that did.
      *
      * <p>Every other reading is returned as it is. A stop is dropped only on a proof that no row
-     * arrives ({@link #someRowArrives}), and the reading of a comparison no one proved anything
-     * about is as owing as it was.
+     * reaches the comparison, and the reading of a comparison no one proved anything about is as
+     * owing as it was. What proves it is the caller's: the way to the comparison, and not the way
+     * past it, together with whatever else the place says arrives there — which a clause, standing
+     * in no body, has none of, and which {@link #someRowArrives} reads an empty account of as
+     * nothing arriving.
+     *
+     * @param reached whether some row may reach the comparison. Asked only of a reading that
+     *                stopped
      */
-    static ComparisonAssessment whereItsStopIsReached(ComparisonAssessment read, Reachability way,
-                                                      List<ComparisonArrival> arrivals) {
-        if (!(read instanceof Unread || read instanceof Several)
-                || someRowArrives(way, arrivals)) {
+    static ComparisonAssessment whereItsStopIsReached(ComparisonAssessment read,
+                                                      BooleanSupplier reached) {
+        if (!(read instanceof Unread || read instanceof Several) || reached.getAsBoolean()) {
             return read;
         }
         return switch (read) {

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleCitation;
@@ -9,7 +10,9 @@ import souther.compiler.query.PartitionEvidence;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,6 +32,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * that stays cannot stand in for one that went.
  */
 class AStopNoRowReachesIsNotReportedAsNotReadTest {
+
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
 
     private static final String MODEL = """
             module demo
@@ -241,11 +246,20 @@ class AStopNoRowReachesIsNotReportedAsNotReadTest {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
+    /** Each body is measured once, however many of the questions above ask about it. */
     private static PartitionEvidence evidenceOf(String body) {
-        Compilation compilation = Compilation.ofSource(MODEL.formatted(body), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), body);
-        return compilation.db().ask(new Adequacy.Coverage("demo")).value().get("f");
+        return MEASURED.computeIfAbsent(body, written -> {
+            Compilation compilation = Compilation.ofSource(MODEL.formatted(written), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            assertEquals(List.of(), compilation.errors(), written);
+            return compilation;
+        }).db().ask(new Adequacy.Coverage("demo")).value().get("f");
+    }
+
+    /** And given back when the class is done with them: a fork keeps its JVM. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
     }
 }

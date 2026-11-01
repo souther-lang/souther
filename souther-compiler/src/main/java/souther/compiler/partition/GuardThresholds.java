@@ -326,7 +326,8 @@ public final class GuardThresholds {
                                             ComparisonAssessment.narrowedByWhatArrives(
                                                     admitted.read(), toIt, wayToACase, arrivals,
                                                     false, read, each.witnesses()),
-                                            beforeIt, arrivals);
+                                            () -> ComparisonAssessment.someRowArrives(beforeIt,
+                                                    arrivals));
                             // And whether a run that some row takes stops in it, which the line it
                             // draws does not say: a stop the ways before it rule out is no run's.
                             // A comparison every run stops in is already said as that.
