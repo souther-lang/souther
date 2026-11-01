@@ -10432,8 +10432,8 @@ final class Pullback {
         Trial theRule = concluded != null ? concluded : trial();
         Once<StopEvidence> stops = new Once<>(() ->
                 worksOut(theRule, arithmeticOf(stated, there)).stops());
-        for (Meaning.ReadOnAnArm each : Meaning.relationsDownTheArmsOf(read)) {
-            trial().readOnAnArm(each.relation(), stops);
+        for (Relation each : Meaning.relationsReadIn(read)) {
+            trial().readOnAnArm(each, stops);
         }
         return read;
     }

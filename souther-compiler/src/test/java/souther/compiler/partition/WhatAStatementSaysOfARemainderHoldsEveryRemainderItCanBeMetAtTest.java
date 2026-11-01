@@ -203,14 +203,20 @@ class WhatAStatementSaysOfARemainderHoldsEveryRemainderItCanBeMetAtTest {
     }
 
     /** The remainders of {@code d - s + moved} by {@code divisor} at which some pair of numbers
-     *  over three turns of it, and some assignment of the truths, meets {@code stated}. */
+     *  over three turns of it, and some assignment of the truths, meets {@code stated}. A pair
+     *  leaving a remainder already met is not worked out again. */
     private static Set<Long> metAt(Statement stated, int divisor, long moved) {
         Set<Long> out = new TreeSet<>();
         for (long d = 0; d < 3L * divisor; d++) {
             for (long s = 0; s < 3L * divisor; s++) {
+                long left = Math.floorMod(d - s + moved, (long) divisor);
+                if (out.contains(left)) {
+                    continue;
+                }
                 for (int truths = 0; truths < 1 << TRUTHS.size(); truths++) {
                     if (holds(stated.proposition(), d, s, truths)) {
-                        out.add(Math.floorMod(d - s + moved, (long) divisor));
+                        out.add(left);
+                        break;
                     }
                 }
             }
@@ -228,7 +234,7 @@ class WhatAStatementSaysOfARemainderHoldsEveryRemainderItCanBeMetAtTest {
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
                     (((truths >> TRUTHS.indexOf(at.toString())) & 1) == 1) == holds;
             case Proposition.Compared(Relation.Affine affine, boolean holds, var _) -> {
-                BigInteger sum = BigInteger.valueOf(whole(affine.form().constant()));
+                long sum = whole(affine.form().constant());
                 for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
                     Quantity.RemainderOfADividend remainder =
                             (Quantity.RemainderOfADividend) each.getKey();
@@ -241,9 +247,9 @@ class WhatAStatementSaysOfARemainderHoldsEveryRemainderItCanBeMetAtTest {
                     }
                     value += whole(remainder.dividend().constant());
                     long left = Math.floorMod(value, remainder.divisor().longValueExact());
-                    sum = sum.add(BigInteger.valueOf(whole(each.getValue()) * left));
+                    sum += whole(each.getValue()) * left;
                 }
-                yield affine.proposition().holds(sum.signum()) == holds;
+                yield affine.proposition().holds(Long.signum(sum)) == holds;
             }
             default -> throw new AssertionError("no such statement is drawn: " + stated);
         };

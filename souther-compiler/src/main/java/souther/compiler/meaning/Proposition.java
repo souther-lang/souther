@@ -925,8 +925,11 @@ public sealed interface Proposition {
         }
         for (Proposition conjunct : conjuncts) {
             for (Proposition against : disjunctsOf(conjunct)) {
+                if (!anywhere.contains(against.deniedSpelling())) {
+                    continue;
+                }
                 Proposition condition = against.denied();
-                if (!anywhere.contains(condition.spelling()) || !deniedWhereverItFails(condition)) {
+                if (!deniedWhereverItFails(condition)) {
                     continue;
                 }
                 List<Proposition> whereItHolds = new ArrayList<>();

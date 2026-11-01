@@ -461,7 +461,7 @@ class ARemainderOverAnElementOfAListOfWholeNumbersIsReadAsARemainderTest {
                 };
                 assertTrue(there, () -> line.left() + " " + point + ": " + row);
                 if (row.inputs().size() > 1) {
-                    long element = from + Math.floorMod(shift - from, 7);
+                    long element = (long) from + Math.floorMod(shift - from, 7);
                     assertTrue(number(row, 1) >= element, () -> line.left() + " " + point
                             + " holds " + element + ": " + row);
                 }

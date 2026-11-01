@@ -14,6 +14,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.function.Supplier;
 
 /**
  * What each condition of one body states, filed under the construct of the model it is asked at.
@@ -148,9 +149,9 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
          */
         public Proposition whereARunStops() {
             List<Proposition> stops = new ArrayList<>();
-            downTheArms(how, List.of(), (step, down) -> {
+            downTheArms(how, Down.NO_ARM, (step, down) -> {
                 if (step instanceof Derivation.TheRunStopsHere) {
-                    stops.add(Proposition.all(down));
+                    stops.add(down.all());
                 }
             });
             return stops.isEmpty() ? null : Proposition.any(stops);
@@ -172,9 +173,24 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
         /** The same, of {@code how}, a derivation a site's may be made of. */
         public static List<ReadOnAnArm> relationsDownTheArmsOf(Derivation how) {
             List<ReadOnAnArm> out = new ArrayList<>();
-            downTheArms(how, List.of(), (step, down) -> {
+            downTheArms(how, Down.NO_ARM, (step, down) -> {
                 if (step instanceof Derivation.AComparisonRead read) {
-                    out.add(new ReadOnAnArm(read.relation(), Proposition.all(down)));
+                    out.add(new ReadOnAnArm(read.relation(), down.all()));
+                }
+            });
+            return List.copyOf(out);
+        }
+
+        /**
+         * The relations {@link #relationsDownTheArmsOf} has of {@code how}, without where each is
+         * read: for a reader that asks only which relations were read on some arm, so that no
+         * condition of an arm is worked out for it.
+         */
+        public static List<Relation> relationsReadIn(Derivation how) {
+            List<Relation> out = new ArrayList<>();
+            downTheArms(how, Down.NO_ARM, (step, _) -> {
+                if (step instanceof Derivation.AComparisonRead read) {
+                    out.add(read.relation());
                 }
             });
             return List.copyOf(out);
@@ -196,18 +212,18 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
 
         /** Every step of {@code step}, each handed to {@code at} with the conditions of the arms it
          *  is down. */
-        private static void downTheArms(Derivation step, List<Proposition> down,
-                                        BiConsumer<Derivation, List<Proposition>> at) {
+        private static void downTheArms(Derivation step, Down down,
+                                        BiConsumer<Derivation, Down> at) {
             at.accept(step, down);
             if (step instanceof Derivation.TheRunStopsHere) {
                 return;
             }
             if (step instanceof Derivation.IfThenElse(Derivation condition, Derivation then,
                                                       Derivation otherwise)) {
-                Proposition decides = condition.concludes(Optional.empty());
+                Later decides = new Later(() -> condition.concludes(Optional.empty()));
                 downTheArms(condition, down, at);
-                downTheArms(then, with(down, decides), at);
-                downTheArms(otherwise, with(down, decides.denied()), at);
+                downTheArms(then, down.and(decides), at);
+                downTheArms(otherwise, down.and(() -> decides.get().denied()), at);
                 return;
             }
             // An arm is down where it selects the value and, for arms taken in order, no arm
@@ -225,22 +241,73 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
         }
 
         private static void downTheArms(List<Derivation.MatchArms.Arm> arms, boolean inOrder,
-                                        List<Proposition> down,
-                                        BiConsumer<Derivation, List<Proposition>> at) {
-            List<Proposition> before = new ArrayList<>();
+                                        Down down, BiConsumer<Derivation, Down> at) {
+            List<Later> before = new ArrayList<>();
             for (Derivation.MatchArms.Arm arm : arms) {
-                Proposition selects = arm.selects().concludes(Optional.empty());
+                Later selects = new Later(() -> arm.selects().concludes(Optional.empty()));
                 downTheArms(arm.selects(), down, at);
-                Proposition reached = inOrder ? Derivation.taken(before, selects) : selects;
-                downTheArms(arm.states(), with(down, reached), at);
+                List<Later> earlier = List.copyOf(before);
+                Supplier<Proposition> reached = !inOrder ? selects
+                        : () -> Derivation.taken(earlier.stream().map(Later::get).toList(),
+                                selects.get());
+                downTheArms(arm.states(), down.and(reached), at);
                 before.add(selects);
             }
         }
 
-        private static List<Proposition> with(List<Proposition> down, Proposition more) {
-            List<Proposition> out = new ArrayList<>(down);
-            out.add(more);
-            return out;
+        /**
+         * The arms a step is down, outermost first. Where they are taken is worked out only for a
+         * reader that asks, and once for all the steps down the same arms.
+         */
+        private static final class Down {
+
+            static final Down NO_ARM = new Down(null, null);
+
+            private final Down outer;
+            private final Supplier<Proposition> arm;
+            private Proposition all;
+
+            private Down(Down outer, Supplier<Proposition> arm) {
+                this.outer = outer;
+                this.arm = arm;
+            }
+
+            Down and(Supplier<Proposition> taken) {
+                return new Down(this, taken);
+            }
+
+            /** Every arm taken: what holds where a step down them is. */
+            Proposition all() {
+                if (all == null) {
+                    List<Proposition> taken = new ArrayList<>();
+                    for (Down each = this; each.arm != null; each = each.outer) {
+                        taken.add(each.arm.get());
+                    }
+                    Collections.reverse(taken);
+                    all = Proposition.all(taken);
+                }
+                return all;
+            }
+        }
+
+        /** A condition of an arm, worked out the first time it is asked for. */
+        private static final class Later implements Supplier<Proposition> {
+
+            private Supplier<Proposition> work;
+            private Proposition held;
+
+            Later(Supplier<Proposition> work) {
+                this.work = work;
+            }
+
+            @Override
+            public Proposition get() {
+                if (held == null) {
+                    held = work.get();
+                    work = null;
+                }
+                return held;
+            }
         }
 
         @Override
