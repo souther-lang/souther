@@ -139,6 +139,36 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
     }
 
     /**
+     * A value held off a number the boxes already lie past — {@code b /= 0} beside {@code b >= 0},
+     * which sides {@code b} to one or more — leaves a limit on a sum, {@code a + b <= 5}, the runs
+     * it leaves without the hole, whichever was written first. A value held off one inside a box,
+     * or a sum of two atoms whose boxes meet where it holds, is a hole the corner is not read
+     * past.
+     */
+    @Test
+    void aHoleTheBoxesLieOutsideOfLeavesALimitOnASumItsRuns() {
+        Written limit = new Written(coefsOf("a", 1, "b", 1), -5, Rel.LE);
+        Written hole = over("b", 1, Rel.NE);
+        Written sided = new Written(Map.of("b", 1L), -1, Rel.GE);
+        for (List<Written> rules : List.of(List.of(limit, hole), List.of(hole, limit),
+                List.of(limit, sided))) {
+            NumericDomain<String> domain = told(domainOf(rules), endless("a", "b", "c"));
+            assertEquals(run(LOW, 4), domain.wholeRunOf("a"), rules::toString);
+            assertEquals(run(1, 5), domain.wholeRunOf("b"), rules::toString);
+            assertEquals(run(LOW, HIGH), domain.wholeRunOf("c"), rules::toString);
+        }
+
+        NumericDomain<String> inside = told(domainOf(
+                List.of(limit, new Written(Map.of("b", 1L), -3, Rel.NE))), endless("a", "b", "c"));
+        assertNull(inside.wholeRunOf("b"));
+
+        NumericDomain<String> equal = told(domainOf(
+                List.of(limit, new Written(coefsOf("a", 1, "b", -1), 0, Rel.NE))),
+                endless("a", "b", "c"));
+        assertNull(equal.wholeRunOf("b"));
+    }
+
+    /**
      * Over two decimals kept above nought, {@code a + b < 1} leaves each the whole open run from
      * nought to one: for any {@code a} below one, a {@code b} between nought and what {@code a}
      * leaves exists. A least end that is left out is not a value the atom takes, and the proof
