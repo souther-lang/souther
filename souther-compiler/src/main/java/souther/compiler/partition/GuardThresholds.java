@@ -337,14 +337,14 @@ public final class GuardThresholds {
                                     || each.worksOutOnEach().map(applications -> applications
                                             .stream().anyMatch(one -> one.stops()
                                                     .aRunMayStopOverABoundValue()
-                                                    && (one.reached() instanceof Proposition
-                                                            .Always(boolean holds) && holds
+                                                    && ((one.reached() instanceof Proposition
+                                                            .Always(boolean holds) && holds)
                                                             ? ComparisonAssessment.someRowArrives(
                                                                     toIt, arrivals)
-                                                            : each.statedAsACondition().isEmpty()
+                                                            : (each.statedAsACondition().isEmpty()
                                                             || ComparisonAssessment.someRowArrives(
                                                                     wayToACase.apply(one.reached()),
-                                                                    arrivals))))
+                                                                    arrivals)))))
                                             .orElseGet(() -> each.stopsIn()
                                                     .map(StopEvidence::aRunMayStopOverABoundValue)
                                                     .orElseGet(() -> arrived.relationsRead()
