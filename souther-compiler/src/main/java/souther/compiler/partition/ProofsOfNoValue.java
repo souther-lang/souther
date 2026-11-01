@@ -4,6 +4,7 @@ import souther.compiler.inputs.SearchRegion;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * What {@link StandingImpossibility} answered, by the region and by the question it was asked.
@@ -23,7 +24,8 @@ import java.util.Map;
  * settle, and asking again does not settle it.
  *
  * <p>Held for as long as its owner is, which is what bounds it: it holds the regions that were asked
- * about and lets go of them when the owner does.
+ * about and lets go of them when the owner does. Not synchronized: an owner belongs to one search
+ * and is not shared between threads.
  */
 final class ProofsOfNoValue {
 
@@ -47,6 +49,19 @@ final class ProofsOfNoValue {
         }
         boolean proved = StandingImpossibility.provesImpossible(region, asked);
         ofTheRegion.put(asked, proved);
+        Consumer<Worked> told = WORKED;
+        if (told != null) {
+            told.accept(new Worked(this, region, asked));
+        }
         return proved;
     }
+
+    /** A proof worked out for {@code region}, by the owner that did not have it. */
+    record Worked(ProofsOfNoValue by, SearchRegion region, StandingImpossibility.Asked asked) {}
+
+    /** Where a test in this package is told of each proof worked out, and null everywhere else.
+     *  What an owner answers says nothing of how often it was asked, so a search that puts one
+     *  question to two owners and one that puts it to one answer alike, and the proofs worked out
+     *  are the one place the difference is left. */
+    static Consumer<Worked> WORKED;
 }

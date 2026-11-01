@@ -43,8 +43,9 @@ class TheRealizerOfASearchIsMadeWhereItsProofsHaveAnOwnerTest {
      *
      * <p>{@code Coverages#searched} makes one for each border its search looks along, handed to the
      * class check and to the search of that border alike. The class check of a measured point makes
-     * its own, because it builds the region it asks about in the same breath and has no second
-     * asking to share a proof with. {@code Adequacy} asks one question and drops the realizer.
+     * its own: the measuring and the search of a border are two calls of the pipeline and no owner
+     * outlives both, so what it proves is proved again by the search. {@code Adequacy} asks one
+     * question and drops the realizer.
      */
     private static final List<String> MAKERS = List.of(
             "souther/compiler/query/Adequacy$Generated#holding("
@@ -73,10 +74,10 @@ class TheRealizerOfASearchIsMadeWhereItsProofsHaveAnOwnerTest {
     /**
      * And a search makes its realizer for the border and not before the borders.
      *
-     * <p>One made ahead of them would hold the regions of every border to the last, and none of
-     * them is asked about by another: each is made for the border it is searched in. Read as the
-     * realizer being made inside a loop of the method, which is the span between a jump back and
-     * the place it jumps to.
+     * <p>One made ahead of them would hold the regions of every border to the last. Two borders do
+     * reach one region now and then, and each proves what it is asked of it; that is given up so
+     * that a border's regions are let go with it. Read as the realizer being made inside a loop of
+     * the method, which is the span between a jump back and the place it jumps to.
      */
     @Test
     void aSearchMakesItsRealizerInsideTheLoopOverItsBorders() {
