@@ -44,6 +44,7 @@ final class ReadingRoles {
             Map.entry("askedAt", INPUT),
             Map.entry("restatingAQuotient", INPUT),
             Map.entry("beforeTheFork", INPUT),
+            Map.entry("armsOfAComparison", INPUT),
             Map.entry("inTheListsOfAFlattening", INPUT),
             Map.entry("sizedInACase", INPUT),
             Map.entry("carried", INPUT),
