@@ -55,6 +55,9 @@ public final class RemainderOfAShiftedValue {
         /** The call of the same operation over the place itself and the same divisor. */
         Core.PreservedCall remainder();
 
+        /** The call as it is written, over the moved value: the one a run works out. */
+        Core.PreservedCall moved();
+
         /** Where the call was applied, which is where its arguments are read. */
         E at();
 
@@ -63,11 +66,12 @@ public final class RemainderOfAShiftedValue {
          *
          * @param statement what holds of {@code remainder} exactly where the comparison holds
          */
-        record AgainstANumber<E>(Core.PreservedCall remainder, E at, ConstantComparison statement)
-                implements Read<E> {
+        record AgainstANumber<E>(Core.PreservedCall remainder, Core.PreservedCall moved, E at,
+                                 ConstantComparison statement) implements Read<E> {
 
             public AgainstANumber {
                 Objects.requireNonNull(remainder, "a remainder is of something");
+                Objects.requireNonNull(moved, "and is written of a value moved");
                 Objects.requireNonNull(at, "read somewhere");
                 Objects.requireNonNull(statement, "and the comparison states something of it");
             }
@@ -82,11 +86,13 @@ public final class RemainderOfAShiftedValue {
          *                stands
          * @param stretches the stretches, each with what the moved remainder is on it
          */
-        record AgainstAValue<E>(Core.PreservedCall remainder, E at, Rel written, Core other,
-                                List<Stretch> stretches) implements Read<E> {
+        record AgainstAValue<E>(Core.PreservedCall remainder, Core.PreservedCall moved, E at,
+                                Rel written, Core other, List<Stretch> stretches)
+                implements Read<E> {
 
             public AgainstAValue {
                 Objects.requireNonNull(remainder, "a remainder is of something");
+                Objects.requireNonNull(moved, "and is written of a value moved");
                 Objects.requireNonNull(at, "read somewhere");
                 Objects.requireNonNull(written, "stands some way");
                 Objects.requireNonNull(other, "to something");
@@ -150,7 +156,8 @@ public final class RemainderOfAShiftedValue {
                 // language writes.
                 return found.at().equals(at) && stretches.stream()
                         .allMatch(each -> each.by().bitLength() < Long.SIZE)
-                        ? new Read.AgainstAValue<>(remainder, found.at(), found.written(),
+                        ? new Read.AgainstAValue<>(remainder, found.division().call(),
+                                found.at(), found.written(),
                                 found.other(), stretches)
                         : null;
             }
@@ -158,7 +165,8 @@ public final class RemainderOfAShiftedValue {
             if (statement == null) {
                 return null;
             }
-            return new Read.AgainstANumber<>(remainder, found.at(), statement);
+            return new Read.AgainstANumber<>(remainder, found.division().call(), found.at(),
+                    statement);
         }
         return null;
     }

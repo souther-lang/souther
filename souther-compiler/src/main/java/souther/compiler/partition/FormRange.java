@@ -12,6 +12,7 @@ import souther.compiler.numeric.NumericDomain;
 
 import java.math.BigInteger;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * The numbers a form of the input's numbers can come to, from the ends of the places it is over:
@@ -36,11 +37,17 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
      */
     static FormRange of(LinearForm<NumericTerm> form, InputReading read,
                         Map<NumericTerm, FormRange> standIns) {
+        return of(form, term -> standIns.containsKey(term) ? standIns.get(term)
+                : endsOf(term, read));
+    }
+
+    /** The range of {@code form} over atoms each of whose range {@code rangeOf} answers, null
+     *  where that is not known; null where some atom has no range to give. */
+    static <A> FormRange of(LinearForm<A> form, Function<A, FormRange> rangeOf) {
         ExactRatio low = form.constant();
         ExactRatio high = low;
-        for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
-            FormRange ends = standIns.containsKey(each.getKey()) ? standIns.get(each.getKey())
-                    : endsOf(each.getKey(), read);
+        for (Map.Entry<A, ExactRatio> each : form.coefs().entrySet()) {
+            FormRange ends = rangeOf.apply(each.getKey());
             if (ends == null) {
                 return null;
             }

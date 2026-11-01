@@ -13,6 +13,7 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.OnOneElement;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
@@ -36,6 +37,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -114,7 +116,53 @@ final class AStatementAtARow {
      * it says nothing about.
      */
     static boolean askable(Proposition stated) {
-        return askable(stated, false);
+        return askable(stated, false, false);
+    }
+
+    /**
+     * Whether a row can be asked {@code stated} where a case a line decides in is put to rows: at
+     * some element, where it weighs the element of a list of every whole number between two
+     * ({@link ACaseAskedAtSomeElement}), and so where it is a statement a row can be asked with the element
+     * put at a value; as it stands otherwise.
+     */
+    static boolean askableAtSomeElement(Proposition stated) {
+        Optional<Quantity.OfABinding> element = OnOneElement.theElementOf(stated);
+        return element.isEmpty() ? askable(stated)
+                : askableAt(stated, element.get(), new IdentityHashMap<>());
+    }
+
+    /**
+     * Whether {@code stated}, with {@code element} put at a value, is a statement a row can be
+     * asked: asked part by part, each relation with the element put in it alone, since a
+     * relation's form is all the element is weighed in; and a part the statement shares, once
+     * ({@code asked}). The statement with the element put in it is never built. A part the
+     * element would settle to a constant is asked as it is put, whatever it settles to, so a
+     * statement whose other parts no row can be asked is not one either.
+     */
+    private static boolean askableAt(Proposition stated, Quantity.OfABinding element,
+                                     Map<Proposition, Boolean> asked) {
+        Boolean had = asked.get(stated);
+        if (had != null) {
+            return had;
+        }
+        boolean out = switch (stated) {
+            case Proposition.All all ->
+                    all.parts().stream().allMatch(each -> askableAt(each, element, asked));
+            case Proposition.Any any ->
+                    any.parts().stream().allMatch(each -> askableAt(each, element, asked));
+            case Proposition.WhereItAnswers where -> askableAt(where.answers(), element, asked)
+                    && askableAt(where.states(), element, asked);
+            case Proposition.SoManyHold counted -> counted.statements().stream()
+                    .allMatch(each -> askableAt(each, element, asked));
+            case Proposition.OfTheWays ways -> askableAt(ways.written(), element, asked);
+            case Proposition.Some some -> askableAt(some.ofTheElement(), element, asked);
+            case Proposition.Compared compared -> OnOneElement.at(compared, element,
+                    LinearForm.constant(ExactRatio.ZERO)) instanceof Proposition there
+                    && askable(there);
+            default -> askable(stated);
+        };
+        asked.put(stated, out);
+        return out;
     }
 
     /**
@@ -122,11 +170,30 @@ final class AStatementAtARow {
      * one at a time — for a line, or for what else each relates.
      */
     static boolean askableBesideItsRelations(Proposition stated) {
-        return askable(stated, true);
+        return askable(stated, true, false);
     }
 
-    private static boolean askable(Proposition stated, boolean besideItsRelations) {
+    /**
+     * The same of every part of {@code stated} that is neither a relation nor a part nothing read:
+     * for the lines of a statement read beside what it left unread, each of which is still asked
+     * where it decides ({@link #askable}), so that one deciding on what was not read is no line.
+     */
+    static boolean askableBesideItsRelationsAndItsStops(Proposition stated) {
+        return askable(stated, true, true);
+    }
+
+    /**
+     * Whether what keeps a row from being asked {@code stated} is its parts nothing read and
+     * nothing else: with those taken as asked, every part of it is.
+     */
+    static boolean turnsOnWhatWasNotRead(Proposition stated) {
+        return !askable(stated, false, false) && askable(stated, false, true);
+    }
+
+    private static boolean askable(Proposition stated, boolean besideItsRelations,
+                                   boolean besideItsStops) {
         return switch (stated) {
+            case Proposition.Unread _ when besideItsStops -> true;
             case Proposition.Always _ -> true;
             case Proposition.Truth(DecisionSubject.AnInput _, boolean _, Spelling _),
                  Proposition.Present(DecisionSubject.AnInput _, boolean _, Spelling _) -> true;
@@ -138,16 +205,19 @@ final class AStatementAtARow {
             case Proposition.SameValue(DecisionSubject.AnInput _, DecisionSubject.AnInput _,
                                        boolean _, Spelling _) -> true;
             case Proposition.LastToHold _ -> true;
-            case Proposition.All all ->
-                    all.parts().stream().allMatch(each -> askable(each, besideItsRelations));
-            case Proposition.Any any ->
-                    any.parts().stream().allMatch(each -> askable(each, besideItsRelations));
-            case Proposition.WhereItAnswers where -> askable(where.answers(), besideItsRelations)
-                    && askable(where.states(), besideItsRelations);
+            case Proposition.All all -> all.parts().stream()
+                    .allMatch(each -> askable(each, besideItsRelations, besideItsStops));
+            case Proposition.Any any -> any.parts().stream()
+                    .allMatch(each -> askable(each, besideItsRelations, besideItsStops));
+            case Proposition.WhereItAnswers where ->
+                    askable(where.answers(), besideItsRelations, besideItsStops)
+                            && askable(where.states(), besideItsRelations, besideItsStops);
             case Proposition.SoManyHold counted -> counted.statements().stream()
-                    .allMatch(each -> askable(each, besideItsRelations));
-            case Proposition.OfTheWays ways -> askable(ways.written(), besideItsRelations);
-            case Proposition.Some some -> askable(some.ofTheElement(), besideItsRelations);
+                    .allMatch(each -> askable(each, besideItsRelations, besideItsStops));
+            case Proposition.OfTheWays ways ->
+                    askable(ways.written(), besideItsRelations, besideItsStops);
+            case Proposition.Some some ->
+                    askable(some.ofTheElement(), besideItsRelations, besideItsStops);
             case Proposition.Compared compared -> besideItsRelations
                     || switch (compared.relation()) {
                 case Relation.Affine affine ->
@@ -278,7 +348,7 @@ final class AStatementAtARow {
         // A number beside the remainder is apart from the form it is the remainder of, and not
         // merely another number: one read off a place the form reads moves with it.
         for (NumericTerm term : otherNumbersWithTheRemainder(affine.form()).coefs().keySet()) {
-            for (NumericTerm of : remainder.dividend().coefs().keySet()) {
+            for (NumericTerm of : remainder.numbersOfTheInput().keySet()) {
                 if (term.sharesAPlaceWith(of)) {
                     return null;
                 }
@@ -450,7 +520,7 @@ final class AStatementAtARow {
                             into.addAll(remainder.operands());
                         } else if (remainderOfADividendIn(affine)
                                 instanceof Quantity.RemainderOfADividend remainder) {
-                            into.addAll(remainder.dividend().coefs().keySet());
+                            into.addAll(remainder.numbersOfTheInput().keySet());
                             into.addAll(
                                     otherNumbersWithTheRemainder(affine.form()).coefs().keySet());
                         }
@@ -2167,7 +2237,7 @@ final class AStatementAtARow {
                     : Cutting.readAt(behavior, added, quantities);
             if (of == null || (addedNumbers == null && !added.coefs().isEmpty())) {
                 Map<NumericTerm, ExactRatio> every = new LinkedHashMap<>(
-                        remainder.dividend().coefs());
+                        remainder.numbersOfTheInput());
                 every.putAll(added.coefs());
                 return new NoQuantity(new LinearForm<>(ExactRatio.ZERO, every));
             }

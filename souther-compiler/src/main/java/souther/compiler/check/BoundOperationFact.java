@@ -99,6 +99,15 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
                     DeclaredArgument amount, BigDecimal per)
             implements OneAboutAnOperation {}
 
+    /** The operation answers the date {@code months} calendar months on from {@code date}: a date
+     *  stands at twelve times what {@code year} answers of it and what {@code month} answers less
+     *  one, and the move lands in the month the floor remainder {@code remainder} leaves of that
+     *  count plus {@code months} by twelve ({@code numeric.CalendarMonths}). */
+    record MovesADateByMonths(DeclaredOperation operation, DeclaredArgument months,
+                              DeclaredArgument date, DeclaredOperation year,
+                              DeclaredOperation month, DeclaredOperation remainder)
+            implements OneAboutAnOperation {}
+
     /** The operation answers how many whole units, of {@code perUnit} steps each, lie from
      *  {@code from} to {@code to}, truncated toward zero. */
     record CountsWholeUnitsBetween(DeclaredOperation operation, DeclaredArgument from,
@@ -423,6 +432,12 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record BoundsEachElementOfItsResult(DeclaredOperation operation,
                                         ResultBound<DeclaredArgument> bound)
             implements SeveralAboutAnOperation {}
+
+    /** The operation answers every whole number from {@code from} up to {@code to}, each once and
+     *  in that order, and nothing where {@code to} is below {@code from}. */
+    record HoldsEachWholeNumberInTurn(DeclaredOperation operation, DeclaredArgument from,
+                                      DeclaredArgument to)
+            implements OneAboutAnOperation {}
 
     /** What the operation answers holds, where it holds a value, an element of {@code source}. */
     record AnswersAnElementOf(DeclaredOperation operation, DeclaredArgument source)

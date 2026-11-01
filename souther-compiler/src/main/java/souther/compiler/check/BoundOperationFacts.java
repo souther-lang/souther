@@ -321,6 +321,11 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.ShiftsBy.class);
     }
 
+    /** How {@code operation} moves a date by months, or null where it moves none so. */
+    public BoundOperationFact.MovesADateByMonths movesADateByMonths(ValueName operation) {
+        return one(BoundOperationFact.MovesADateByMonths.class, operation);
+    }
+
     /** How {@code operation} counts whole units between its two arguments, or null where it
      *  counts none. */
     public BoundOperationFact.CountsWholeUnitsBetween countsWholeUnitsBetween(
@@ -435,6 +440,19 @@ public final class BoundOperationFacts {
 
     /** The container an element is found among, and the closure it is found by. */
     public record Found(DeclaredArgument source, DeclaredArgument closure) {}
+
+    /**
+     * The arguments {@code operation} answers every whole number between, from the first up — or
+     * null where it says no such thing ({@link BoundOperationFact.HoldsEachWholeNumberInTurn}).
+     */
+    public Between holdsEachWholeNumberInTurn(ValueName operation) {
+        BoundOperationFact.HoldsEachWholeNumberInTurn held =
+                one(BoundOperationFact.HoldsEachWholeNumberInTurn.class, operation);
+        return held == null ? null : new Between(held.from(), held.to());
+    }
+
+    /** The argument the numbers start at and the one they end at. */
+    public record Between(DeclaredArgument from, DeclaredArgument to) {}
 
     /** The operations something holds of the result of. */
     public Set<ValueName> boundsOnTheResult() {

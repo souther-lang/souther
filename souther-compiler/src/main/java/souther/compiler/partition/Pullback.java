@@ -21,6 +21,7 @@ import souther.compiler.check.CallArguments;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.ClosureUses;
+import souther.compiler.check.DateMonthMoves;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
@@ -98,6 +99,7 @@ import souther.compiler.meaning.WhichCase;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.meaning.WrittenOfANode;
 import souther.compiler.meaning.ACarriedValue;
+import souther.compiler.numeric.CalendarMonths;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -391,6 +393,9 @@ final class Pullback {
     private final Map<Derivation, Trial> triedAndConcluded = new IdentityHashMap<>();
     /** What decided the arms being read, outermost first: worked out before any arm is. */
     private final Deque<UndividedByARelation.Working> beforeTheFork = new ArrayDeque<>();
+    /** The comparisons whose arms are being read, innermost first: what a run taking an arm
+     *  works out is read off the innermost ({@link #readOnAnArm}). */
+    private final Deque<StatedComparison> armsOfAComparison = new ArrayDeque<>();
     /**
      * Whether an element being added up over takes an arm, as the statement read of it, with the
      * reading of the arm being taken ({@link #sizedByTheArmsOfAnElement}): what a count of the
@@ -655,6 +660,13 @@ final class Pullback {
         return reading.pulled(reading.observe(optional, AnswerAspect.PRESENCE, reads));
     }
 
+    /** What {@code container} holding something states. */
+    static Pulled ofHoldingSomething(Core container, InputReads reads, InputReading read,
+                                     Optional<ModelOccurrence> where) {
+        Pullback reading = new Pullback(read, where);
+        return reading.pulled(reading.observe(container, AnswerAspect.EMPTINESS, reads));
+    }
+
     /**
      * What a comparison the source wrote states, read as any truth is: a size held where it parts
      * nought from every size above it is whether the container holds anything.
@@ -711,14 +723,22 @@ final class Pullback {
      *                   read off, where a law of what the call answers counts them. A reader that
      *                   has to know which expression a count is the size of asks this, and finds
      *                   none for a count read any other way, rather than looking for one
+     * @param stops      what a run getting to the comparison works out, for where a run stops in
+     *                   it: read off the reading {@code working} is, and not what a row of a line
+     *                   gets past ({@link StopEvidence})
+     * @param onTheArms  what a run taking each arm of a choice the comparison was read through
+     *                   works out there, with where the arm is taken
      */
     record OnTheInput(Pulled stated, Supplier<AffineReading.OfAComparison> arithmetic,
                       Supplier<UndividedByARelation.Working> working,
                       Function<Relation, UndividedByARelation.Working> workingOfRelation,
-                      Map<Quantity.HowManyMeet, Core> readOff) {
+                      Map<Quantity.HowManyMeet, Core> readOff, Supplier<StopEvidence> stops,
+                      Supplier<List<StopEvidence.OnAnArm>> onTheArms) {
 
         OnTheInput {
             readOff = Map.copyOf(readOff);
+            Objects.requireNonNull(stops, "what a run works out, or that it is not known");
+            Objects.requireNonNull(onTheArms, "what runs taking each arm work out, if none");
         }
     }
 
@@ -731,9 +751,29 @@ final class Pullback {
                 reading.rulesFor(comparison, null, false, reads, arithmetic));
         Pulled stated = reading.pulled(reading.underTheEntriesLookedUp(chosen, comparison, reads));
         Trial theRule = reading.triedAndConcluded.get(chosen);
-        return new OnTheInput(stated, arithmetic,
-                new Once<>(() -> workingOf(theRule, arithmetic)),
-                theRule == null ? _ -> null : theRule::workingOf, reading.readOff);
+        Once<AffineReading.WorkedOut> worksOut =
+                new Once<>(() -> reading.worksOut(theRule, arithmetic));
+        return new OnTheInput(stated, arithmetic, () -> worksOut.get().toGetPast(),
+                theRule == null ? _ -> null : theRule::workingOf, reading.readOff,
+                () -> worksOut.get().stops(), new Once<>(() -> onTheArms(stated, theRule)));
+    }
+
+    /**
+     * What a run taking each arm of a choice {@code stated} was read through works out there, with
+     * where the arm is taken: each relation read on an arm, at the arms it is down, with what the
+     * comparison read on that arm works out ({@link #readOnAnArm}).
+     */
+    private static List<StopEvidence.OnAnArm> onTheArms(Pulled stated, Trial theRule) {
+        if (theRule == null) {
+            return List.of();
+        }
+        List<StopEvidence.OnAnArm> out = new ArrayList<>();
+        for (Meaning.ReadOnAnArm each : stated.meaning().relationsDownTheArms()) {
+            for (Supplier<StopEvidence> stops : theRule.onTheArms(each.relation())) {
+                out.add(new StopEvidence.OnAnArm(each.reached(), stops.get()));
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -1742,12 +1782,36 @@ final class Pullback {
         /** The expressions the rule read as the form of one operand of theirs, each with that
          *  operand ({@link AffineReading.WhatTheAnalysisAnswersFor#readByTheFormOf}). */
         private final Map<Core, Core> readByTheFormOf = new IdentityHashMap<>();
+        /** The remainders the rule read without saying their rows are made where the dividend is
+         *  worked out, each with its dividend
+         *  ({@link AffineReading.WhatTheAnalysisAnswersFor#dividendBesideTheRows}). */
+        private final Map<Core, Core> dividendBesideTheRows = new IdentityHashMap<>();
+        /** The months a date at a place lands in moved by months, as the rule read them, each
+         *  with the count of months the move comes to
+         *  ({@link AffineReading.WhatTheAnalysisAnswersFor#landsInAMonth}). */
+        private final Map<Core, UndividedByARelation.IntOperation> landsInAMonth =
+                new IdentityHashMap<>();
         /** What each relation read under an arm of a choice works out, off the comparison read
          *  with the choice standing as that arm ({@link Pullback#tellWhatItWorksOut}). */
         private Map<Relation, UndividedByARelation.Working> relations;
         /** What each comparison the rule read the written one as works out, asked only by a rule
          *  that says the written one works out the same ({@link #worksOutWhatItIsRestatedAs}). */
         private final List<Supplier<UndividedByARelation.Working>> restated = new ArrayList<>();
+
+        /** What a run taking an arm of a choice works out there, by each relation the comparison
+         *  was read as with the choice standing as that arm ({@link Pullback#readOnAnArm}). */
+        private final Map<Relation, List<Supplier<StopEvidence>>> onTheArms =
+                new LinkedHashMap<>();
+
+        void readOnAnArm(Relation relation, Supplier<StopEvidence> stops) {
+            onTheArms.computeIfAbsent(relation, _ -> new ArrayList<>()).add(stops);
+        }
+
+        /** What runs taking the arms {@code relation} was read on work out there; none where it
+         *  was read on no arm. */
+        List<Supplier<StopEvidence>> onTheArms(Relation relation) {
+            return onTheArms.getOrDefault(relation, List.of());
+        }
 
         void tell(Relation relation, UndividedByARelation.Working told) {
             if (relations == null) {
@@ -1770,6 +1834,8 @@ final class Pullback {
             if (kept.relations != null) {
                 kept.relations.forEach(this::tell);
             }
+            kept.onTheArms.forEach((relation, stops) -> stops.forEach(each ->
+                    readOnAnArm(relation, each)));
         }
     }
 
@@ -1830,21 +1896,51 @@ final class Pullback {
     /**
      * What the rows of a comparison read by a candidate work out: what the candidate says, and
      * otherwise what the arithmetic over the input made of the comparison, with the expressions
-     * the candidate answers for held to it.
+     * the candidate answers for held to it, and an expression held aside that this reads as the
+     * value of a name taken for that value.
      */
-    private static UndividedByARelation.Working workingOf(
+    private UndividedByARelation.Working workingOf(
+            Trial theRule, Supplier<AffineReading.OfAComparison> arithmetic) {
+        return worksOut(theRule, arithmetic).toGetPast();
+    }
+
+    /**
+     * The same, with what a run getting to the comparison works out, off the one reading of its
+     * arithmetic: what a rule says a row gets past is what it says a run works out, and a reading
+     * that stopped tells the two apart ({@link AffineReading.WorkedOut}).
+     */
+    private AffineReading.WorkedOut worksOut(
             Trial theRule, Supplier<AffineReading.OfAComparison> arithmetic) {
         if (theRule != null && theRule.working != null) {
-            return theRule.working;
+            return AffineReading.WorkedOut.ofWhatIsToldOf(theRule.working);
         }
         AffineReading.OfAComparison read = arithmetic.get();
         if (theRule == null || !(read instanceof AffineReading.OfAComparison.Stopped stopped)) {
-            return AffineReading.OfAComparison.workingOf(read);
+            return AffineReading.OfAComparison.worksOut(read);
         }
         Predicate<Core> readAgain = theRule.answersFor;
-        return stopped.apart(new AffineReading.WhatTheAnalysisAnswersFor(
+        return stopped.worksOut(new AffineReading.WhatTheAnalysisAnswersFor(
                 readAgain == null ? _ -> false : readAgain,
-                held -> theRule.readByTheFormOf.get(Core.withoutStanding(held))));
+                held -> theRule.readByTheFormOf.get(Core.withoutStanding(held)),
+                held -> theRule.dividendBesideTheRows.get(Core.withoutStanding(held)),
+                this::boundValueOf,
+                held -> theRule.landsInAMonth.get(Core.withoutStanding(held))));
+    }
+
+    /**
+     * The value of a name {@code held}, read in {@code at}, is read as by what this reads a
+     * comparison's numbers as: the one bound value it comes to, weighed by one, where it comes
+     * to that; null otherwise.
+     */
+    private Quantity.OfABinding boundValueOf(Core held, InputReads at) {
+        return AffineForms.outcome(held, at, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                        LinearForm<Quantity> form)
+                && form.constant().isZero() && form.coefs().size() == 1
+                && form.coefs().entrySet().iterator().next() instanceof Map.Entry<Quantity,
+                        ExactRatio> only
+                && only.getValue().equals(ExactRatio.ONE)
+                && only.getKey() instanceof Quantity.OfABinding bound ? bound : null;
     }
 
     /**
@@ -2101,11 +2197,69 @@ final class Pullback {
             Core.Case arm = match.cases().get(i);
             InputReads inside = reads.choosing(Choice.Decides.ofCase(match, arm),
                     read.rules().symbols(), read.rules().newtypes());
+            Derivation found = onTheElementFound(match, arm, reads, inside, states);
             arms.add(new Derivation.MatchArms.Arm(selections.get(i),
-                    states.apply(arm.body(), inside),
+                    found != null ? found : states.apply(arm.body(), inside),
                     ofAnEntry && arm.binding() instanceof Core.ArmBinding.Payload));
         }
         return new Derivation.MatchArms(arms);
+    }
+
+    /**
+     * What {@code arm} states where it opens what an operation found among the elements of a
+     * container written out — the element its closure holds of, applied to each in turn from the
+     * first until one holds — read on each element as the arm taken where that is the one found:
+     * where the closure holds of it and of none before it. Null where {@code arm} binds no such
+     * value, or reading it on each element is past what one condition is read in.
+     *
+     * <p>The value found is the first the closure holds of. The law says it is an element the
+     * closure holds of ({@link BoundOperationFacts#answersAnElementWhereTheClosureHolds}), and
+     * the operation applies the closure no further than the first that holds
+     * ({@link HowAClosureIsApplied#UNTIL_ONE_HOLDS}): of any element after it, nothing was asked.
+     */
+    private Derivation onTheElementFound(Core.Match match, Core.Case arm, InputReads reads,
+                                         InputReads inside,
+                                         BiFunction<Core, InputReads, Derivation> states) {
+        if (!(arm.binding() instanceof Core.ArmBinding.Payload) || arm.binder() == null
+                || !Boolean.TRUE.equals(LawAtACall.presentWhereTaken(arm))) {
+            return null;
+        }
+        Denotation looked = reads.standing(match.scrutinee(), read.rules().symbols(),
+                read.rules().newtypes());
+        if (!(AnOperationApplied.of(Core.withoutStanding(looked.value()))
+                instanceof AnOperationApplied applied)) {
+            return null;
+        }
+        BoundOperationFacts.Found found = DefaultBoundOperationFacts.get()
+                .answersAnElementWhereTheClosureHolds(applied.operation());
+        int at = found == null ? -1 : CallArguments.positionOf(found.closure(),
+                applied.operation());
+        if (at < 0 || at >= applied.args().size()) {
+            return null;
+        }
+        Denotation closure = looked.at().denotes(applied.args().get(at), read.rules().symbols(),
+                read.rules().newtypes());
+        if (closure == null || !(Core.withoutStanding(closure.value()) instanceof Core.Block block)
+                || block.params().size() != 1 || block.params().getFirst() == null
+                || block.params().getFirst().binding() == null
+                || !(applicationsOf(block, closure.at(), read)
+                        instanceof InputReads.Applications.Each(var each, var how))
+                || how != HowAClosureIsApplied.UNTIL_ONE_HOLDS || each.isEmpty()
+                || each.stream().anyMatch(made -> !made.keptWhere().isEmpty())
+                || splitInto(inside, each.size(), looked) != null) {
+            return null;
+        }
+        Core.Binder parameter = block.params().getFirst();
+        Core.Read handed = new Core.Read(parameter.name(), parameter.binding(),
+                block.paramTypes().getFirst(), block.pos());
+        List<Derivation.MatchArms.Arm> onEach = new ArrayList<>();
+        for (InputReads.Applications.Made made : each) {
+            onEach.add(new Derivation.MatchArms.Arm(
+                    observe(block.body(), AnswerAspect.TRUTH, made.reads()),
+                    states.apply(arm.body(), inside.holdingOneItMayHold(arm,
+                            new Denotation(handed, made.reads()), read.rules().newtypes()))));
+        }
+        return new Derivation.MatchArms(onEach);
     }
 
     /**
@@ -3057,6 +3211,43 @@ final class Pullback {
     }
 
     /**
+     * The element {@code name} is, where one operation hands it to its step from a list an
+     * operation made of every whole number between two whose ends are forms of the input's numbers
+     * — or empty where it is not.
+     *
+     * <p>Which list is the library's to say ({@link BoundOperationFacts#holdsEachWholeNumberInTurn}),
+     * and the ends are the arguments it names, read where the call stands. Whether a run gets to
+     * the element is the walk's to say, and nothing here asks it.
+     */
+    private Optional<Quantity.ReadOffABinding> wholeNumberInTurn(Core.Read name, InputReads at) {
+        ClosureUses uses = at.usesOfTheClosureTaking(name.binding());
+        if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1) {
+            return Optional.empty();
+        }
+        ClosureUses.Application applied = uses.applications().getFirst();
+        if (!applied.held().contains(name.binding())) {
+            return Optional.empty();
+        }
+        Denotation container = at.standing(applied.container(), read.rules().symbols(),
+                read.rules().newtypes());
+        if (!(Core.withoutStanding(container.value()) instanceof Core.PreservedCall call)
+                || !(call.declared().operation() instanceof ValueName.Stdlib operation)) {
+            return Optional.empty();
+        }
+        BoundOperationFacts.Between between =
+                DefaultBoundOperationFacts.get().holdsEachWholeNumberInTurn(operation);
+        if (between == null) {
+            return Optional.empty();
+        }
+        LinearForm<NumericTerm> from = AffineReading.formOf(
+                call.args().get(between.from().position()), container.at(), read);
+        LinearForm<NumericTerm> to = AffineReading.formOf(
+                call.args().get(between.to().position()), container.at(), read);
+        return from == null || to == null ? Optional.empty()
+                : Optional.of(new Quantity.AWholeNumberInTurn(from, to));
+    }
+
+    /**
      * The element {@code name} is, where it is the one an index written down picks of a list of
      * the input that no other container holds, read through the fields {@code steps} go into —
      * or empty where it is not, or a step goes anywhere but into a field.
@@ -3938,10 +4129,85 @@ final class Pullback {
         public Derivation same(LawProposition.Same<DeclaredArgument> same) {
             DecisionSubject one = subject(same.one());
             DecisionSubject other = subject(same.other());
-            return one == null || other == null
-                    ? unread(e, reads,
-                            new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE))
-                    : leaf(new Derivation.TheSameValue(same, one, other), e, reads);
+            if (one != null && other != null) {
+                return leaf(new Derivation.TheSameValue(same, one, other), e, reads);
+            }
+            // A value chosen by cases is the same as the other on each of them, as a comparison
+            // the source wrote of it is read ({@link #comparedWhereItsCountsAre}).
+            List<Denotation> values = new ArrayList<>();
+            for (LawSubject<DeclaredArgument> each : List.of(same.one(), same.other())) {
+                if (each instanceof LawSubject.Argument<DeclaredArgument>(DeclaredArgument at)) {
+                    values.add(new Denotation(applied.argument(at), reads));
+                }
+            }
+            Inside inside = aWayIn(values);
+            if (inside != null) {
+                return goingIn(inside, reads, new Denotation(e, reads), fixed(e, reads),
+                        taking -> new ALawRead(this, taking.apply(reads)).same(same));
+            }
+            Derivation.TheSameNumber numbers = sameNumber(same);
+            return numbers != null ? leaf(numbers, e, reads)
+                    : unread(e, reads,
+                            new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE));
+        }
+
+        /**
+         * {@code same}, where both values are numbers of the input on an order, as their
+         * difference being nought — or null where one of them is not, or the two are one number
+         * and the difference names nothing.
+         */
+        private Derivation.TheSameNumber sameNumber(LawProposition.Same<DeclaredArgument> same) {
+            LinearForm<Quantity> one = numberOf(same.one());
+            LinearForm<Quantity> other = numberOf(same.other());
+            if (one == null || other == null
+                    || !(one.minus(other) instanceof ExactAnswer.Held<LinearForm<Quantity>>(
+                            LinearForm<Quantity> difference))
+                    || difference.coefs().isEmpty()) {
+                return null;
+            }
+            return aRelation(Derivation.ComparisonReading.AS_A_CUT, difference,
+                    same.holds() ? Rel.EQ : Rel.NE,
+                    Derivation.AComparisonRead.Facing.NOTHING_WRITTEN)
+                    instanceof Derivation.AComparisonRead compared
+                    ? new Derivation.TheSameNumber(same, one, other, compared) : null;
+        }
+
+        /**
+         * The value {@code subject} names as a form over numbers, each a number of the input read
+         * on an order or one a binding names, as a comparison the source wrote of it reads it — or
+         * null where it is no such form: the element of a container that is no position, a value
+         * whose arithmetic is not read, one on no order, or a constant: a container holding a
+         * constant is no relation of the input's numbers, and is left unread at the container.
+         */
+        private LinearForm<Quantity> numberOf(LawSubject<DeclaredArgument> subject) {
+            LinearForm<Quantity> form = switch (subject) {
+                case LawSubject.Argument<DeclaredArgument>(DeclaredArgument at) ->
+                        formOf(applied.argument(at), reads);
+                case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) ->
+                        switch (elements.get(at)) {
+                            case ElementAt.AtASubject(
+                                    DecisionSubject.AnInput(TermPath container)) ->
+                                    LinearForm.atom(new DecisionAtom.OfTheInput(
+                                            new NumericTerm.ValueOf(container.element())));
+                            case ElementAt.AValue(Core value, InputReads in) -> formOf(value, in);
+                            case null, default -> null;
+                        };
+                default -> null;
+            };
+            return form != null && !form.coefs().isEmpty()
+                    && form.coefs().keySet().stream().allMatch(atom -> switch (atom) {
+                case DecisionAtom.OfTheInput(NumericTerm term) -> readOnAnOrder(term);
+                case Quantity.OfABinding _ -> true;
+                default -> false;
+            }) ? form : null;
+        }
+
+        /** {@code value}, read in {@code in}, as a form over what its arithmetic is read as — or
+         *  null where that is not read. */
+        private LinearForm<Quantity> formOf(Core value, InputReads in) {
+            return value != null && AffineForms.outcome(value, in, quantities())
+                    instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                            LinearForm<Quantity> form) ? form : null;
         }
 
         @Override
@@ -9382,6 +9648,12 @@ final class Pullback {
                 if (remainder != null) {
                     return LinearForm.atom(remainder);
                 }
+                // The month a date moved by months lands in, which is a remainder of the month of
+                // the date moved.
+                LinearForm<Quantity> landedIn = monthAMoveLandsIn(node, at);
+                if (landedIn != null) {
+                    return landedIn;
+                }
                 // What two numbers of the input come to multiplied, where the arithmetic stopped at
                 // the product itself: one number, whichever factor was written first.
                 LinearForm<Quantity> product = productAt(node, at, inside);
@@ -9445,6 +9717,14 @@ final class Pullback {
                     }
                 }
                 return switch (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
+                    // An element no position holds and no reading writes out may still be one of
+                    // every whole number between two, which says where it lies and which values
+                    // it takes.
+                    case ReadMeaning.Element _ when steps.isEmpty() -> wholeNumberInTurn(name, at)
+                            .map(number -> LinearForm.<Quantity>atom(new Quantity.OfABinding(
+                                    name.binding(), steps, node.type(), Optional.empty(),
+                                    Optional.of(number))))
+                            .orElse(null);
                     case ReadMeaning.Element _, ReadMeaning.OneOf _, ReadMeaning.NoneHeld _,
                          ReadMeaning.MoreThanAreWrittenOut _, ReadMeaning.Position _ -> null;
                     // A name given a choice between values holds whichever arm was taken, which
@@ -10108,9 +10388,54 @@ final class Pullback {
      */
     private Derivation throughWhatItStopsAt(StatedComparison stated, Denotation at, boolean fixed,
                                             InputReads reads, Optional<Inside> wayIn) {
-        return wayIn.map(inside -> goingIn(inside, reads, at, fixed,
-                taking -> comparison(stated, at, fixed, taking.apply(reads))))
+        return wayIn.map(inside -> onTheArmsOf(stated, () -> goingIn(inside, reads, at, fixed,
+                taking -> comparison(stated, at, fixed, taking.apply(reads)))))
                 .orElse(null);
+    }
+
+    /**
+     * Where {@code side}, a choice, stands, with {@code arm}, one of the cases it chooses by, taken
+     * for it — as a comparison read through the choice reads that case ({@link #goingIn}); null
+     * where {@code side} is no choice of the language's arms.
+     */
+    private InputReads takenAs(Denotation side, Denotation arm) {
+        Denotation chosen = chosenAt(side);
+        Choice choice = chosen == null ? null : Choice.of(Core.withoutStanding(chosen.value()));
+        return choice == null ? null
+                : side.at().taking(chosen.value(), arm, choice.arms().size());
+    }
+
+    /** {@code reading}, of the arms of choices {@code stated} is read through. */
+    private <T> T onTheArmsOf(StatedComparison stated, Supplier<T> reading) {
+        armsOfAComparison.push(stated);
+        try {
+            return reading.get();
+        } finally {
+            armsOfAComparison.pop();
+        }
+    }
+
+    /**
+     * {@code read}, what the comparison whose arms are being read was read as where a choice
+     * stands as one of its arms ({@code there}), with what a run working the comparison out there
+     * works out kept for each relation it was read as: the comparison the run makes on that arm,
+     * which a run taking another does not ({@link StopEvidence.OnAnArm}). Read off the comparison
+     * as written, with the choice standing as the arm, by the rule that read it — the one this
+     * arm concluded, or the one it is read under. Worked out only when asked.
+     */
+    private Derivation readOnAnArm(Derivation read, InputReads there) {
+        if (read == null || there == null || armsOfAComparison.isEmpty()) {
+            return read;
+        }
+        StatedComparison stated = armsOfAComparison.peek();
+        Trial concluded = triedAndConcluded.get(read);
+        Trial theRule = concluded != null ? concluded : trial();
+        Once<StopEvidence> stops = new Once<>(() ->
+                worksOut(theRule, arithmeticOf(stated, there)).stops());
+        for (Relation each : Meaning.relationsReadIn(read)) {
+            trial().readOnAnArm(each, stops);
+        }
+        return read;
     }
 
     /** A value the arithmetic of a number stopped at, that a reading can go into. */
@@ -10196,7 +10521,8 @@ final class Pullback {
                 yield new Derivation.AComparisonOfAChoice(madeBy(iff, underTheFork(
                         AffineReading.workingOfWhatDecides(iff, choiceAt.at(), read),
                         () -> armsOf(iff, choiceAt.at(), condition, left,
-                                arm -> again.apply(on -> on.taking(choice, arm, 1))))));
+                                arm -> readOnAnArm(again.apply(on -> on.taking(choice, arm, 1)),
+                                        reads.taking(choice, arm, 1))))));
             }
             case Inside.AChoice(Denotation chosen) -> {
                 int arms = Choice.of(Core.withoutStanding(chosen.value())).arms().size();
@@ -10209,7 +10535,8 @@ final class Pullback {
                         AffineReading.workingOfWhatDecides(
                                 Core.withoutStanding(chosen.value()), chosen.at(), read),
                         () -> byItsCases(chosen, at,
-                                arm -> again.apply(on -> on.taking(choice, arm, arms)))));
+                                arm -> readOnAnArm(again.apply(on -> on.taking(choice, arm, arms)),
+                                        reads.taking(choice, arm, arms)))));
             }
             case Inside.ACall(Core call, ValueName.Behavior behavior, Denotation body) ->
                     new Derivation.ABehaviorsBody(behavior,
@@ -11456,6 +11783,10 @@ final class Pullback {
         if (shifted == null || !isAPositionsOwnRemainder(shifted.remainder(), shifted.at())) {
             return null;
         }
+        // A run works out the value moved, which the place's remainder is not: where it stops
+        // in that is read off the call as it is written, and is nothing a row gets past.
+        trial().dividendBesideTheRows.put(Core.withoutStanding(shifted.moved()),
+                shifted.moved().args().getFirst());
         return switch (shifted) {
             case RemainderOfAShiftedValue.Read.AgainstANumber<InputReads> number ->
                     theStatementStands(number.statement(), number.remainder(), at, fixed,
@@ -11684,15 +12015,134 @@ final class Pullback {
         }
         LinearForm<NumericTerm> form = AffineReading.formOf(division.dividend(), division.at(),
                 read);
-        if (form == null || form.coefs().isEmpty() || !isWhole(form)) {
+        if (form == null) {
+            return remainderOverABoundValue(division);
+        }
+        if (form.coefs().isEmpty() || !isWhole(form)) {
             return null;
         }
         // Its rows are made where the form is worked out, each sum on the way a part of it
         // ({@link UndividedByARelation}), and the divisor is a number above nought.
         trial().readByTheFormOf.put(Core.withoutStanding(division.call()), division.dividend());
-        return new Quantity.RemainderOfADividend(division.call().operation(), new LinearForm<>(
-                ExactRatio.of(constantOf(form).mod(division.divisor())), form.coefs()),
-                division.divisor());
+        return Quantity.RemainderOfADividend.ofTheInput(division.call().operation(),
+                new LinearForm<>(ExactRatio.of(constantOf(form).mod(division.divisor())),
+                        form.coefs()), division.divisor());
+    }
+
+    /**
+     * The month a date moved by a number of months written out lands in, where {@code node} takes
+     * the month of such a date — or null where it takes none.
+     *
+     * <p>{@code Date.month(Date.addMonths(k, d))} is what {@code Date.month(d) - 1 + k} leaves by
+     * twelve, plus one, whatever year and day {@code d} has ({@link CalendarMonths#monthLandedIn}):
+     * a remainder of a number of the input, read as a remainder of a form is. So a comparison of
+     * it is a line on the remainder, and a row is a date whose month leaves it.
+     *
+     * <p>Only the month. The year a move lands in turns on the month as well as the year, and the
+     * day on how long the month it lands in is, and neither is read here.
+     *
+     * <p>A run works out the months from year nought to the one the move lands in, and stops past
+     * the calendar's first or last year. Of a date at a place that is a count over its year and
+     * its month, and is told as what working the month out works out
+     * ({@link Trial#landsInAMonth}); of a date moved first, which may stop a run as well, nothing
+     * is told, and the operations told are not every one.
+     */
+    private LinearForm<Quantity> monthAMoveLandsIn(Core node, InputReads at) {
+        if (!(AnOperationApplied.of(Core.withoutStanding(node)) instanceof AnOperationApplied taken)
+                || !(taken.operation() instanceof ValueName.Stdlib measure)
+                || taken.args().size() != 1) {
+            return null;
+        }
+        Symbols symbols = read.rules().symbols();
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        Denotation moved = at.standing(taken.args().getFirst(), symbols, newtypes);
+        DateMonthMoves.Step step = DateMonthMoves.stepOf(moved.value(),
+                each -> moved.at().folded(each, symbols, newtypes));
+        if (step == null || !measure.equals(step.law().month().operation())) {
+            return null;
+        }
+        NumericTerm month = InputNumber.takenOf(measure, step.date(), read.domain(), moved.at(),
+                read.rules());
+        if (month == null) {
+            return null;
+        }
+        UndividedByARelation.IntOperation count = monthsToWhereAMoveLands(step, month, moved.at());
+        if (count != null) {
+            trial().landsInAMonth.put(Core.withoutStanding(node), count);
+        }
+        long movedBy = Math.floorMod(Math.floorMod(step.months(), CalendarMonths.A_YEAR)
+                - CalendarMonths.FIRST, CalendarMonths.A_YEAR);
+        Quantity.RemainderOfADividend left = new Quantity.RemainderOfADividend(
+                step.law().remainder().operation(),
+                new LinearForm<>(ExactRatio.of(movedBy),
+                        Map.of(new DecisionAtom.OfTheInput(month), ExactRatio.ONE)),
+                BigInteger.valueOf(CalendarMonths.A_YEAR));
+        return new LinearForm<>(ExactRatio.of(CalendarMonths.FIRST), Map.of(left, ExactRatio.ONE));
+    }
+
+    /**
+     * The months from year nought to the one {@code step} lands in, as an operation a run stops
+     * at past the calendar: twelve times the year of the date moved, its month, and the months it
+     * is moved by less one, between the first month of the calendar's first year and the last of
+     * its last. Null where the date moved is no date at a place as it stands, which {@code month},
+     * the month of it, says.
+     */
+    private UndividedByARelation.IntOperation monthsToWhereAMoveLands(
+            DateMonthMoves.Step step, NumericTerm month, InputReads at) {
+        if (!(month instanceof NumericTerm.TakenOf ofTheDate)
+                || !ValueTransformation.NONE.equals(ofTheDate.transformation())
+                || !(step.law().year().operation() instanceof ValueName.Stdlib yearOf)) {
+            return null;
+        }
+        NumericTerm year = InputNumber.takenOf(yearOf, step.date(), read.domain(), at,
+                read.rules());
+        if (year == null) {
+            return null;
+        }
+        BigInteger aYear = BigInteger.valueOf(CalendarMonths.A_YEAR);
+        Map<NumericTerm, ExactRatio> weights = new LinkedHashMap<>();
+        weights.put(year, ExactRatio.of(aYear));
+        weights.put(month, ExactRatio.ONE);
+        return UndividedByARelation.IntOperation.overTheInput(
+                new LinearForm<>(ExactRatio.of(BigInteger.valueOf(step.months())
+                        .subtract(BigInteger.valueOf(CalendarMonths.FIRST))), weights),
+                BigInteger.valueOf(Year.MIN_VALUE).multiply(aYear),
+                BigInteger.valueOf(Year.MAX_VALUE).multiply(aYear).add(aYear)
+                        .subtract(BigInteger.ONE),
+                List.of());
+    }
+
+    /**
+     * The remainder {@code division} leaves of a dividend over values read off bindings as well as
+     * the input's numbers — or null where the dividend is no whole form of those.
+     *
+     * <p>Only a value read off a binding that is a number of its own ({@link
+     * UndividedByARelation.IntOperand.OfABinding#isOne}): the element of a list of every whole
+     * number between two, and where an element stands in a walk. The form is not read by its
+     * rows as one of the input's numbers is, so nothing says its rows are made where it is worked
+     * out. A run works it out all the same, and where it stops in that is read off the dividend
+     * as it is written ({@link AffineReading.WhatTheAnalysisAnswersFor#dividendBesideTheRows}).
+     */
+    private Quantity.RemainderOfADividend remainderOverABoundValue(
+            RemainderOfAShiftedValue.OfADivision<InputReads> division) {
+        if (!(AffineForms.outcome(division.dividend(), division.at(), quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                        LinearForm<Quantity> form))
+                || form.coefs().isEmpty() || !isWhole(form)) {
+            return null;
+        }
+        for (Quantity each : form.coefs().keySet()) {
+            if (!(each instanceof DecisionAtom.OfTheInput
+                    || (each instanceof Quantity.OfABinding bound
+                            && UndividedByARelation.IntOperand.OfABinding.isOne(bound)))) {
+                return null;
+            }
+        }
+        trial().dividendBesideTheRows.put(Core.withoutStanding(division.call()),
+                division.dividend());
+        return new Quantity.RemainderOfADividend(division.call().operation(),
+                new LinearForm<>(ExactRatio.of(constantOf(form).mod(division.divisor())),
+                        form.coefs()), division.divisor());
     }
 
     /**
@@ -11817,13 +12267,13 @@ final class Pullback {
     }
 
     /** Whether every number of {@code form}, its constant included, is a whole one. */
-    private static boolean isWhole(LinearForm<NumericTerm> form) {
+    private static <A> boolean isWhole(LinearForm<A> form) {
         return form.constant().isWhole()
                 && form.coefs().values().stream().allMatch(ExactRatio::isWhole);
     }
 
     /** The constant of a form every number of which is whole. */
-    private static BigInteger constantOf(LinearForm<NumericTerm> form) {
+    private static <A> BigInteger constantOf(LinearForm<A> form) {
         return ((ExactAnswer.Held<BigInteger>) form.constant().floor()).value();
     }
 
@@ -11904,8 +12354,8 @@ final class Pullback {
         if (measuredByCases(left) == null && measuredByCases(right) == null) {
             return null;
         }
-        return new Derivation.AComparisonOfAChoice(
-                comparedCase(left, right, stated.claim().statedRelation(), at));
+        return new Derivation.AComparisonOfAChoice(onTheArmsOf(stated, () ->
+                comparedCase(left, right, stated.claim().statedRelation(), at)));
     }
 
     /**
@@ -11938,8 +12388,8 @@ final class Pullback {
         if (past != null) {
             return partOf(at, new Derivation.Stopped(past, false));
         }
-        return new Derivation.AComparisonOfAChoice(
-                comparedCase(left, right, stated.claim().statedRelation(), at));
+        return new Derivation.AComparisonOfAChoice(onTheArmsOf(stated, () ->
+                comparedCase(left, right, stated.claim().statedRelation(), at)));
     }
 
     /**
@@ -12199,12 +12649,14 @@ final class Pullback {
             }
         }
         Derivation byLeft = left.whole() == null ? null : byItsCases(left.whole(), at,
-                side -> comparedCase(ASide.of(side), right, states, at));
+                side -> readOnAnArm(comparedCase(ASide.of(side), right, states, at),
+                        takenAs(left.whole(), side)));
         if (byLeft != null) {
             return byLeft;
         }
         Derivation byRight = right.whole() == null ? null : byItsCases(right.whole(), at,
-                side -> comparedCase(left, ASide.of(side), states, at));
+                side -> readOnAnArm(comparedCase(left, ASide.of(side), states, at),
+                        takenAs(right.whole(), side)));
         if (byRight != null) {
             return byRight;
         }
@@ -12892,10 +13344,48 @@ final class Pullback {
                 if (facts.takenAs(operation) != null && !applied.args().isEmpty()) {
                     yield noNumberOf(operation, applied.args().getFirst(), in);
                 }
-                yield new WhyUnread.NoFormOfWhatItAnswers(operation);
+                // A move by months is stated, and as where it lands in the calendar, which is no
+                // count of days.
+                if (facts.movesADateByMonths(operation) != null) {
+                    yield new WhyUnread.ADateMovedByMonths(operation);
+                }
+                WhyUnread ofTheDividend = whyTheDividendIsNoForm(e, in);
+                yield ofTheDividend != null ? ofTheDividend
+                        : new WhyUnread.NoFormOfWhatItAnswers(operation);
             }
             default -> new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
         };
+    }
+
+    /**
+     * Why {@code e}, a remainder by a written number, is no number here because its dividend is
+     * none — or null where it is no such remainder, or its dividend is a form this reads a
+     * remainder of or one over nothing that stopped.
+     *
+     * <p>A remainder is read of its dividend's form ({@link #remainderAt}), so where the dividend
+     * has none the reason is the dividend's, which is where an author would change it: why its
+     * reading stopped, or why a value the body worked out that it is made of is no number of the
+     * input. The same reason whether the dividend is written in the call or behind a name.
+     */
+    private WhyUnread whyTheDividendIsNoForm(Core e, InputReads in) {
+        RemainderOfAShiftedValue.OfADivision<InputReads> division =
+                RemainderOfAShiftedValue.ofADivision(e, in, sides());
+        if (division == null) {
+            return null;
+        }
+        switch (AffineForms.outcome(division.dividend(), division.at(), quantities())) {
+            case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
+                return noFormOf(stopped);
+            }
+            case AffineForms.Outcome.Composed<Quantity, InputReads>(LinearForm<Quantity> form) -> {
+                for (Quantity each : form.coefs().keySet()) {
+                    if (each instanceof Quantity.OfABinding bound && bound.madeOf().isPresent()) {
+                        return bound.madeOf().get();
+                    }
+                }
+                return null;
+            }
+        }
     }
 
     /**
@@ -12917,7 +13407,11 @@ final class Pullback {
             return new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
         }
         WhyUnread element = whyAnElementOfTheRunIsNoForm(measure, measured, reads);
-        return element != null ? element
+        if (element != null) {
+            return element;
+        }
+        return DefaultBoundOperationFacts.get().movesADateByMonths(madeBy) != null
+                ? new WhyUnread.APartOfADateMovedByMonths(measure, madeBy)
                 : new WhyUnread.ANumberOfWhatAnOperationAnswers(measure, madeBy);
     }
 

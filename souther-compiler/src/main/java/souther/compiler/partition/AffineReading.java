@@ -41,6 +41,7 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TotalsOfOneRun;
 import souther.compiler.inputs.WrittenOutElements;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -68,6 +69,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Stream;
 import java.util.function.Predicate;
@@ -130,10 +132,16 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * to, which says nothing of whether working it out gets there.
          */
         static UndividedByARelation.Working workingOf(OfAComparison read) {
+            return worksOut(read).toGetPast();
+        }
+
+        /** The same, with what a run getting to the comparison works out, off the one reading. */
+        static WorkedOut worksOut(OfAComparison read) {
             return switch (read) {
-                case Cuts cuts -> cuts.working();
-                case Stopped stopped -> stopped.apart(WhatTheAnalysisAnswersFor.NOTHING);
-                case CutsNothing _, NotHeld _ -> UndividedByARelation.Working.UNREAD;
+                case Cuts cuts -> WorkedOut.ofWhatIsToldOf(cuts.working());
+                case Stopped stopped -> stopped.worksOut(WhatTheAnalysisAnswersFor.NOTHING);
+                case CutsNothing _, NotHeld _ ->
+                        WorkedOut.ofWhatIsToldOf(UndividedByARelation.Working.UNREAD);
             };
         }
 
@@ -237,6 +245,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              */
             UndividedByARelation.Working apart(WhatTheAnalysisAnswersFor answersFor) {
                 return beside.apart(answersFor);
+            }
+
+            /** The same, with what a run getting to the comparison works out, off the one reading
+             *  ({@link WhatLiesBesideTheStop#worksOut}). */
+            WorkedOut worksOut(WhatTheAnalysisAnswersFor answersFor) {
+                return beside.worksOut(answersFor);
             }
 
             /**
@@ -575,7 +589,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             private void tell(Core operation, LinearForm<NumericTerm> form,
                               List<LinearForm<NumericTerm>> operands,
                               WhereAnOperatorAnswers where) {
-                if (heldAside(where, form)) {
+                if (heldAside(operation, where, form, told.workedOutOf(operation))) {
                     return;
                 }
                 if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
@@ -726,7 +740,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             private void tellAnIntTotal(Core node, LinearForm<NumericTerm> total,
                                         List<Integer> after) {
                 WhereAnOperatorAnswers where = WhereAnOperatorAnswers.ofATotal(Type.INT);
-                if (heldAside(where, total)) {
+                if (heldAside(node, where, total, after)) {
                     return;
                 }
                 if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
@@ -738,15 +752,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             /**
              * Whether {@code form} is over an expression held aside, and so told of here only as
-             * its owner answers for it ({@link #stopsNoRowOrIsTheOwners}).
+             * its owner answers for it ({@link #stopsNoRowOrIsTheOwners}); {@code node} works it
+             * out after the operations {@code after}.
              */
-            private boolean heldAside(WhereAnOperatorAnswers where, LinearForm<NumericTerm> form) {
+            private boolean heldAside(Core node, WhereAnOperatorAnswers where,
+                                      LinearForm<NumericTerm> form, List<Integer> after) {
                 List<StoppedValues.Held> over = stoppedAt == null ? List.of()
                         : stoppedAt.heldIn(form);
                 if (over.isEmpty()) {
                     return false;
                 }
-                if (!stopsNoRowOrIsTheOwners(where, form, over)) {
+                if (!stopsNoRowOrIsTheOwners(node, where, form, over, after)) {
                     told.exact = false;
                 }
                 return true;
@@ -760,8 +776,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             private void tellHeld(Core node, WhereAnOperatorAnswers.WhereItsExactValueIsHeld held,
                                   LinearForm<NumericTerm> form, List<Integer> after) {
                 UndividedByARelation.IntOperation operation =
-                        new UndividedByARelation.IntOperation(form, held.least(), held.greatest(),
-                                after);
+                        UndividedByARelation.IntOperation.overTheInput(form, held.least(),
+                                held.greatest(), after);
                 if (!FormRange.liesWithin(form, ofTheInput, Map.of(), held.least(), held.greatest())
                         && !told.operations.contains(operation)) {
                     told.add(node, operation);
@@ -829,7 +845,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * reads it by: the form of one operand, which it builds its rows where adding up is
              * worked out. Read apart, the operand composes and nothing is left untold; every
              * other part of {@code node} ends no run. Every operation on the way adds up addends
-             * of its form, or is told as an operation of its own.
+             * of its form, or is told as an operation of its own. The addends' sums are the
+             * witness's to keep within their type, and are no operation a row of a line is asked
+             * to get past; a run works them out all the same, before anything is divided, and
+             * they are kept for where a run stops ({@link WhatWasTold#leftToTheWitness}).
              */
             private boolean addsUpTheFormItIsReadAs(Core node, InputReads at) {
                 Core operand = stoppedAt.readByTheFormOf(node);
@@ -848,11 +867,90 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
                 // An operation that is no addend of the form, a sum with a number it is moved
                 // by, is one the analysis asks of its own rows, so it is told here.
-                if (!apart.operations.stream().allMatch(
-                        each -> WhatLiesBesideTheStop.areAddendsOf(each.form(), form))) {
+                if (!apart.operations.stream().allMatch(each -> each.overTheInput() != null
+                        && WhatLiesBesideTheStop.areAddendsOf(each.overTheInput(), form))) {
                     told.absorb(apart);
+                } else {
+                    told.leftToTheWitness(apart);
                 }
+                stoppedAt.worksOutTheFormItIsReadAs(node);
                 return true;
+            }
+
+            /**
+             * Whether working {@code node} out does no more than work out the dividend of the
+             * remainder the analysis that drew the lines reads it as, where it does not say a row
+             * is made where the dividend is worked out, every other part of it ending no run. The
+             * dividend is read as it is written, a bound value in it held aside, so each operation
+             * on the way is told in the order a run works it out, over that value where it is
+             * over it: {@code (a + n) + 1} is past its type at {@code a + n} before the sum is,
+             * and {@code x + 1} past it where {@code x} is the greatest an {@code Int} holds,
+             * though a remainder of it is one of {@code x}. All of it is told for where a run
+             * stops alone ({@link WhatWasTold#besideTheRows}). A dividend over two bound values,
+             * or with anything else that may stop a run, is not read so.
+             */
+            private boolean worksOutADividendBesideTheRows(Core node, InputReads at) {
+                Core dividend = stoppedAt.dividendBesideTheRows(node);
+                if (dividend == null) {
+                    return false;
+                }
+                boolean[] rest = {true};
+                Core.forEachChild(Core.withoutStanding(node), child -> rest[0] &=
+                        child == dividend || reached.endsNoRun(new Denotation(child, at)));
+                Set<Core> bound = new LinkedHashSet<>();
+                collectBoundValues(dividend, at, bound);
+                if (!rest[0] || bound.size() > 1) {
+                    return false;
+                }
+                WhatWasTold apart = told.apart();
+                StoppedValues byTheValue = bound.isEmpty() ? null
+                        : stoppedAt.heldAt(bound.iterator().next());
+                if (composedBy(dividend, at, reading(ofTheInput, new LinkedHashSet<>(),
+                        met.copied(), apart, byTheValue)) == null
+                        || !apart.partials.isEmpty() || !apart.decimals.isEmpty()) {
+                    return false;
+                }
+                for (SumOverTheStop sum : apart.sumsOverTheStop) {
+                    if (!sum.toldOverItsValue(apart, ofTheInput)) {
+                        return false;
+                    }
+                }
+                if (!apart.exact) {
+                    return false;
+                }
+                told.besideTheRows(apart);
+                stoppedAt.worksOutTheFormItIsReadAs(node);
+                return true;
+            }
+
+            /**
+             * Whether working {@code node} out does no more than move a date at a place by a number
+             * of months written out and take the month it lands in, which the analysis that drew
+             * the lines reads as a remainder of that date's month. A run works out the months from
+             * year nought to the one the move lands in, and stops where that is past the calendar's
+             * first or last year: told as an operation of its own, which a row of a line gets past
+             * and a run stops in, unless the dates the place holds keep it within the calendar.
+             */
+            private boolean worksOutAMoveByMonths(Core node) {
+                UndividedByARelation.IntOperation landed = stoppedAt.landsInAMonth(node);
+                if (landed == null) {
+                    return false;
+                }
+                if (!UndividedByARelation.stopsNoRow(landed, ofTheInput)) {
+                    told.add(node, landed);
+                }
+                stoppedAt.worksOutTheFormItIsReadAs(node);
+                return true;
+            }
+
+            /** The names read under {@code e} whose value is a bound value an operation of whole
+             *  numbers can be over. */
+            private void collectBoundValues(Core e, InputReads at, Set<Core> into) {
+                Core here = Core.withoutStanding(e);
+                if (stoppedAt.boundAs(here, at) != null) {
+                    into.add(here);
+                }
+                Core.forEachChild(here, child -> collectBoundValues(child, at, into));
             }
 
             /** The form {@code e} composes to as {@code by} reads it, or null where it does not. */
@@ -870,12 +968,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * aside is known to come to (none, for one nothing is known of). Or stops one only
              * where the analysis that owns the stopped value answers for it, which is a sum of the
              * addends of the comparison over that value and no other held aside, asked once the
-             * comparison has been read ({@link WhatLiesBesideTheStop#beside}). Anything else
-             * worked out over them is no owner's.
+             * comparison has been read ({@link WhatLiesBesideTheStop#beside}), or is an operation
+             * over a bound value the derivation names, told then as the one it is. {@code node}
+             * works it out after the operations {@code after}. Anything else worked out over them
+             * is no owner's.
              */
-            private boolean stopsNoRowOrIsTheOwners(WhereAnOperatorAnswers where,
+            private boolean stopsNoRowOrIsTheOwners(Core node, WhereAnOperatorAnswers where,
                                                     LinearForm<NumericTerm> form,
-                                                    List<StoppedValues.Held> over) {
+                                                    List<StoppedValues.Held> over,
+                                                    List<Integer> after) {
                 if (where instanceof WhereAnOperatorAnswers.Everywhere) {
                     return true;
                 }
@@ -891,7 +992,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 // stops where a construction's rules refuse the number is not one it answers for.
                 if (held.equals(WhereAnOperatorAnswers.WHAT_AN_INT_HOLDS)
                         && over.size() == 1 && stoppedAt.isAPlainStop(over.get(0))) {
-                    told.sumsOverTheStop.add(form);
+                    told.sumsOverTheStop.add(new SumOverTheStop(node, form, over.get(0),
+                            held.least(), held.greatest(), after));
                     return true;
                 }
                 return false;
@@ -1030,6 +1132,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 // operations are not every one.
                 StoppedValues.Held aside = stoppedAt.holdAside(node);
                 if (aside.firstMeeting()) {
+                    aside.boundIs(stoppedAt.boundAs(node, at));
                     if (!aside.theStop) {
                         if (!worksOutNothingBesideTheStop(node, at)
                                 && !roundingWorkedOut(node, at, aside)) {
@@ -1038,7 +1141,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     } else if (stoppedAt.quotientAwayFromNought()) {
                         operandsOfTheQuotient(node, at);
                     } else if (!theStopIsAnsweredFor(node, at)
-                            && !roundingWorkedOut(node, at, aside)) {
+                            && !roundingWorkedOut(node, at, aside)
+                            && !worksOutADividendBesideTheRows(node, at)
+                            && !worksOutAMoveByMonths(node)) {
                         told.exact = false;
                     }
                     if (aside.aChoice) {
@@ -1111,8 +1216,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (WhereAnOperatorAnswers.ofAnOperator(BinOp.MUL, Type.INT,
                         List.of(Type.INT, Type.INT))
                         instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
-                    told.add(mul, new UndividedByARelation.IntOperation(atom, held.least(),
-                            held.greatest(), told.workedOutOf(mul)));
+                    told.add(mul, UndividedByARelation.IntOperation.overTheInput(atom,
+                            held.least(), held.greatest(), told.workedOutOf(mul)));
                 } else {
                     told.exact = false;
                 }
@@ -1245,37 +1350,70 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return totalOfWhatIsMadeOfTheCodePointsOfAString(call,
                             new Denotation(call.args().get(operand), at), making, at);
                 }
+                // The list written out, whose elements are worked out as it is built — or the
+                // number of elements of one an operation makes that works nothing out to make it
+                // and whose elements the walk writes out, each a number written down.
                 Core.ListLit list = null;
                 InputReads listAt = at;
+                Integer made = null;
                 for (Core argument : making.args()) {
                     if (Core.withoutStanding(argument) instanceof Core.Block) {
                         continue;
                     }
-                    Optional<AffineForms.ListWrittenOut<InputReads>> written = list != null
-                            ? Optional.empty() : AffineForms.listWrittenOutBy(argument, at, this);
-                    if (written.isEmpty()) {
+                    Optional<AffineForms.ListWrittenOut<InputReads>> written =
+                            list != null || made != null ? Optional.empty()
+                                    : AffineForms.listWrittenOutBy(argument, at, this);
+                    if (written.isPresent()) {
+                        list = written.get().list();
+                        listAt = written.get().at();
+                        continue;
+                    }
+                    made = list != null || made != null ? null : madeWorkingNothingOut(argument, at);
+                    if (made == null) {
                         return totalOfWhatIsMadeOfTheCodePointsOfAString(call,
                                 new Denotation(call.args().get(operand), at), making, at);
                     }
-                    list = written.get().list();
-                    listAt = written.get().at();
                 }
-                if (list == null
+                int elements = list != null ? list.elements().size() : made != null ? made : -1;
+                if (elements < 0
                         || !(WrittenOutElements.of(new Denotation(making, at),
                         ruleSource.symbols(), ruleSource.newtypes())
                         instanceof WrittenOutElements.Walked.Each each)
-                        || each.asWritten().size() != list.elements().size()
+                        || each.asWritten().size() != elements
                         || each.asWritten().stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
                     return new Attempt.NotApplicable();
                 }
-                Optional<WhyUnread> declined = told.declinedAtCounting(list.elements().size());
+                Optional<WhyUnread> declined = told.declinedAtCounting(elements);
                 if (declined.isPresent()) {
                     return new Attempt.Declined(declined.get());
                 }
                 int from = told.operations.size();
-                builtFrom(list.elements(), listAt);
+                if (list != null) {
+                    builtFrom(list.elements(), listAt);
+                }
                 return totalOfApplications(call, from, each.asWritten().stream()
                         .map(ReadMeaning.Occurrence::value).toList());
+            }
+
+            /**
+             * How many elements {@code container} holds where the walk writes out every one of
+             * them, each a number written down and there on every run, and making it ends a run
+             * only where the list it answers has no place — a list of every whole number between
+             * two written numbers; null otherwise. The walk writing them all out is a list that
+             * has a place, so making it ends no run; and nothing is built from its elements, so
+             * nothing of them is told.
+             */
+            private Integer madeWorkingNothingOut(Core container, InputReads at) {
+                if (!reached.endsOnlyWhereItsAnswerHasNoPlace(new Denotation(container, at))
+                        || !(WrittenOutElements.of(new Denotation(container, at),
+                        ruleSource.symbols(), ruleSource.newtypes())
+                        instanceof WrittenOutElements.Walked.Each each)
+                        || each.asWritten().stream().anyMatch(one -> !one.keptWhere().isEmpty()
+                                || !(Core.withoutStanding(one.value().value())
+                                        instanceof Core.Int))) {
+                    return null;
+                }
+                return each.asWritten().size();
             }
 
             /**
@@ -1750,6 +1888,41 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
     }
 
+    /**
+     * An operation of whole numbers over the expression a reading stopped at, held aside: the
+     * form, over the atom the expression is held as; where a run stops at it; and the node that
+     * works it out after the operations {@code after}.
+     */
+    private record SumOverTheStop(Core node, LinearForm<NumericTerm> form,
+                                  StoppedValues.Held over, BigInteger least, BigInteger greatest,
+                                  List<Integer> after) {
+
+        /** The same operation over {@code bound}, the value the expression held aside is, and
+         *  the input's numbers. */
+        UndividedByARelation.IntOperation over(UndividedByARelation.IntOperand.OfABinding bound) {
+            return new UndividedByARelation.IntOperation(form.over(atom -> LinearForm.atom(
+                    atom.equals(over.atom) ? bound
+                            : new UndividedByARelation.IntOperand.OfTheInput(atom))),
+                    least, greatest, after);
+        }
+
+        /**
+         * Whether the expression held aside is a bound value, and then this told to {@code told}
+         * as the operation over that value it is, unless no value it takes stops a row. The sizes
+         * of a form's addends say nothing of a value the comparison was not read as.
+         */
+        boolean toldOverItsValue(WhatWasTold told, InputReading ofTheInput) {
+            if (over.bound == null) {
+                return false;
+            }
+            UndividedByARelation.IntOperation operation = over(over.bound);
+            if (!UndividedByARelation.stopsNoRow(operation, ofTheInput)) {
+                told.add(node, operation);
+            }
+            return true;
+        }
+    }
+
     /** What a reading of a comparison was told as it went: the operations of whole numbers, and
      *  whether nothing it read could stop a run without telling. */
     private static final class WhatWasTold {
@@ -1764,9 +1937,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** The forms that are a place of the input read as it is, a number a row is built with. */
         private final Set<LinearForm<NumericTerm>> inputReads =
                 Collections.newSetFromMap(new IdentityHashMap<>());
-        /** The forms of the operations over a stopped value that are told of nowhere, to be asked
-         *  of the form of the comparison. */
-        private final List<LinearForm<NumericTerm>> sumsOverTheStop = new ArrayList<>();
+        /** The operations over a stopped value that are told of nowhere, to be asked of the form
+         *  of the comparison. */
+        private final List<SumOverTheStop> sumsOverTheStop = new ArrayList<>();
         /** The counts of a list whose working out is answered for only where the line the
          *  comparison draws on the count is at a count a list holds, to be asked of the form of
          *  the comparison. */
@@ -1786,6 +1959,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** The totals of a container whose walk's running totals are the only thing left untold
          *  ({@link UndividedByARelation.Working#partials}). */
         private final List<NumericTerm> partials = new ArrayList<>();
+        /** What readings of parts of the comparison tried on their own were told and left to a
+         *  witness, in the order they were read ({@link #leftToTheWitness}). */
+        private final List<WhatWasTold> leftToTheWitness = new ArrayList<>();
+        /** What readings of parts of the comparison tried on their own were told where nothing
+         *  says a row is made, in the order they were read ({@link #besideTheRows}). */
+        private final List<WhatWasTold> besideTheRows = new ArrayList<>();
 
         WhatWasTold() {
             this(new int[1]);
@@ -1856,10 +2035,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         void absorb(WhatWasTold apart) {
             int ofWholeNumbers = operations.size();
             for (int i = 0; i < apart.operations.size(); i++) {
-                UndividedByARelation.IntOperation each = apart.operations.get(i);
-                add(apart.at.get(i), new UndividedByARelation.IntOperation(each.form(),
-                        each.least(), each.greatest(), each.after().stream()
-                        .map(before -> before + ofWholeNumbers).toList()));
+                add(apart.at.get(i), apart.operations.get(i).shifted(ofWholeNumbers));
             }
             int ofDecimals = decimals.size();
             for (DecimalOperation each : apart.decimals) {
@@ -1870,8 +2046,52 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             sumsOverTheStop.addAll(apart.sumsOverTheStop);
             countsOverTheStop.addAll(apart.countsOverTheStop);
             readByATerm.addAll(apart.readByATerm);
+            leftToTheWitness.addAll(apart.leftToTheWitness);
+            besideTheRows.addAll(apart.besideTheRows);
             exact &= apart.exact;
             partials.addAll(apart.partials);
+        }
+
+        /**
+         * That a run works out what {@code apart} was told, and that none of it is told here: the
+         * analysis that drew the lines answers for it with a witness that keeps it within its
+         * type. It is worked out on every run all the same ({@link #everyOperation}).
+         */
+        void leftToTheWitness(WhatWasTold apart) {
+            leftToTheWitness.add(apart);
+        }
+
+        /**
+         * That a run works out what {@code apart} was told, and that nothing says a row of a line
+         * is made where it is: none of it is told here, and what is told here is then not every
+         * operation a row gets past. It is part of where a run stops all the same
+         * ({@link #everyOperation}).
+         */
+        void besideTheRows(WhatWasTold apart) {
+            besideTheRows.add(apart);
+        }
+
+        /**
+         * Every operation a run works out, as {@link #working} tells it with the operations left to
+         * a witness and those told beside the rows after it: those are no part of what a row of a
+         * line gets past, and are part of where a run stops ({@link StopEvidence}). Each group
+         * keeps what its operations were worked out of among themselves; of the rest nothing is
+         * said, so each operation told is taken as one a run may work out first. Every one is
+         * told where nothing else is left untold, whether or not a row is shown to be made.
+         *
+         * @param onEveryRun whether every run getting to the comparison works all of them out
+         */
+        UndividedByARelation.Working everyOperation(boolean onEveryRun) {
+            List<UndividedByARelation.IntOperation> every = new ArrayList<>(operations);
+            List<WhatWasTold> groups = new ArrayList<>(leftToTheWitness);
+            groups.addAll(besideTheRows);
+            for (WhatWasTold group : groups) {
+                UndividedByARelation.Working worked = group.everyOperation(true);
+                int before = every.size();
+                worked.operations().forEach(each -> every.add(each.shifted(before)));
+            }
+            UndividedByARelation.Working out = working(every, exact && partials.isEmpty());
+            return onEveryRun ? out : out.notOnEveryRun();
         }
 
         /**
@@ -2028,8 +2248,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
 
 
+        /** What a row of a line gets past: not every operation where some were told beside the
+         *  rows, since nothing says a row is made where those are worked out. */
         UndividedByARelation.Working working() {
-            return new UndividedByARelation.Working(operations, exact && partials.isEmpty()
+            return working(operations, exact && partials.isEmpty() && besideTheRows.isEmpty());
+        }
+
+        private UndividedByARelation.Working working(
+                List<UndividedByARelation.IntOperation> told, boolean everyOne) {
+            return new UndividedByARelation.Working(told, everyOne
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,
                     true, decimals, exact ? partials : List.of());
@@ -2158,21 +2385,58 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * ({@code readAgain}), which tells what working that value out does; and those it reads as
      * the form of one of their operands ({@code readByTheFormOf} answers that operand), whose rows
      * it builds where that form is worked out, which is all working the operand out does where
-     * every operation on the way adds up addends of the form.
+     * every operation on the way adds up addends of the form. Those it reads as a remainder whose
+     * rows it does not say are made where the dividend is worked out ({@code dividendBesideTheRows}
+     * answers the dividend): a remainder of a dividend over a bound value, and one of a place
+     * moved by a number, read as the place's own. What a run stops at in working the dividend out
+     * is told for where a run stops, and is nothing a row gets past. And
+     * the value it reads an expression held aside as, where that is the value of a name
+     * ({@code boundAs}, null where it is not): an operation over it is one over that value, which
+     * a relation over the value is asked to get past. And those it reads as the month a date at a
+     * place lands in moved by months ({@code landsInAMonth} answers the count of months that
+     * move comes to, which a run stops at past the calendar): working one out works that count
+     * out and nothing else that may stop a run.
      */
     record WhatTheAnalysisAnswersFor(Predicate<Core> readAgain,
-                                     Function<Core, Core> readByTheFormOf) {
+                                     Function<Core, Core> readByTheFormOf,
+                                     Function<Core, Core> dividendBesideTheRows,
+                                     BiFunction<Core, InputReads, Quantity.OfABinding> boundAs,
+                                     Function<Core, UndividedByARelation.IntOperation>
+                                             landsInAMonth) {
 
-        static final WhatTheAnalysisAnswersFor NOTHING =
-                new WhatTheAnalysisAnswersFor(_ -> false, _ -> null);
+        static final WhatTheAnalysisAnswersFor NOTHING = readingAgain(_ -> false);
 
         WhatTheAnalysisAnswersFor {
             Objects.requireNonNull(readAgain);
             Objects.requireNonNull(readByTheFormOf);
+            Objects.requireNonNull(dividendBesideTheRows);
+            Objects.requireNonNull(boundAs);
+            Objects.requireNonNull(landsInAMonth);
         }
 
         static WhatTheAnalysisAnswersFor readingAgain(Predicate<Core> readAgain) {
-            return new WhatTheAnalysisAnswersFor(readAgain, _ -> null);
+            return new WhatTheAnalysisAnswersFor(readAgain, _ -> null, _ -> null, (_, _) -> null,
+                    _ -> null);
+        }
+    }
+
+    /**
+     * What one reading of a comparison tells of what is worked out on the way to its answer, for
+     * the two things that are asked of it.
+     *
+     * @param toGetPast what a row of a line the comparison draws is asked to get past
+     * @param stops     what a run getting to the comparison works out, for where a run stops in it
+     */
+    record WorkedOut(UndividedByARelation.Working toGetPast, StopEvidence stops) {
+
+        WorkedOut {
+            Objects.requireNonNull(toGetPast, "what a row gets past, or that it is not known");
+            Objects.requireNonNull(stops, "what a run works out, or that it is not known");
+        }
+
+        /** Of a reading that leaves nothing to a witness: a run works out what a row gets past. */
+        static WorkedOut ofWhatIsToldOf(UndividedByARelation.Working working) {
+            return new WorkedOut(working, StopEvidence.ofWhatIsToldOf(working));
         }
     }
 
@@ -2195,6 +2459,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final Map<Core, Held> byExpression = new IdentityHashMap<>();
         private final Map<NumericTerm, Held> byAtom = new LinkedHashMap<>();
         private Held theStop;
+        private boolean stopWorksOutItsForm;
 
         StoppedValues(Core stop, boolean quotientAwayFromNought, InputReading read,
                       WhatTheAnalysisAnswersFor answersFor) {
@@ -2212,6 +2477,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             private final boolean theStop;
             private boolean met;
             private FormRange range;
+            /** The bound value the derivation reads the expression as, where an operation of
+             *  whole numbers can be over it; null otherwise. */
+            private UndividedByARelation.IntOperand.OfABinding bound;
 
             Held(NumericTerm atom, Core expression, boolean theStop) {
                 this.atom = atom;
@@ -2230,6 +2498,46 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             void rangeIs(FormRange range) {
                 this.range = range;
             }
+
+            void boundIs(UndividedByARelation.IntOperand.OfABinding bound) {
+                this.bound = bound;
+            }
+        }
+
+        /**
+         * The bound value the analysis that drew the lines reads {@code expression}, read in
+         * {@code at}, as, where the expression is a name read and an operation of whole numbers
+         * can be over its value ({@link UndividedByARelation.IntOperand.OfABinding#isOne}); null
+         * otherwise.
+         */
+        UndividedByARelation.IntOperand.OfABinding boundAs(Core expression, InputReads at) {
+            if (!(Core.withoutStanding(expression) instanceof Core.Read name)) {
+                return null;
+            }
+            Quantity.OfABinding bound = answersFor.boundAs().apply(expression, at);
+            return bound != null && UndividedByARelation.IntOperand.OfABinding.isOne(bound)
+                    ? new UndividedByARelation.IntOperand.OfABinding(bound, name.name()) : null;
+        }
+
+        /** Whether the expression the reading stopped at was met and is a bound value: reading a
+         *  name works nothing out, and ends no run before the operations told. */
+        boolean theStopIsABoundValue() {
+            return theStop != null && theStop.met && theStop.bound != null;
+        }
+
+        /** That working {@code node} out adds up the form of one operand of it and ends a run
+         *  nowhere else ({@link #theStopWorksOutTheFormItIsReadAs}). */
+        void worksOutTheFormItIsReadAs(Core node) {
+            if (stop.equals(node)) {
+                stopWorksOutItsForm = true;
+            }
+        }
+
+        /** Whether working the expression the reading stopped at out is adding up the form of one
+         *  operand of it and nothing else that ends a run: those sums come before what it makes
+         *  of them, so a run getting to it works every one of them out. */
+        boolean theStopWorksOutTheFormItIsReadAs() {
+            return stopWorksOutItsForm;
         }
 
         /** The atom {@code expression} stands for, the same one wherever the same expression is
@@ -2291,6 +2599,25 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             return answersFor.readByTheFormOf().apply(held);
         }
 
+        /** The dividend of the remainder the analysis that drew the lines reads {@code held} as,
+         *  where it does not say a row is made where the dividend is worked out; null where it
+         *  reads it as none such. */
+        Core dividendBesideTheRows(Core held) {
+            return answersFor.dividendBesideTheRows().apply(held);
+        }
+
+        /** The count of months the move by months the analysis that drew the lines reads
+         *  {@code held} as the month of comes to, or null where it reads it as none. */
+        UndividedByARelation.IntOperation landsInAMonth(Core held) {
+            return answersFor.landsInAMonth().apply(held);
+        }
+
+        /** The same reading, holding {@code value} aside as the expression it stopped at: a name
+         *  read whose value is a bound value. */
+        StoppedValues heldAt(Core value) {
+            return new StoppedValues(value, false, read, answersFor);
+        }
+
         /** Whether {@code held} is the stopped expression, and neither a choice nor a quotient by
          *  a value. */
         boolean isAPlainStop(Held held) {
@@ -2331,10 +2658,18 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * row where there are none.
          */
         UndividedByARelation.Working apart(WhatTheAnalysisAnswersFor answersFor) {
-            UndividedByARelation.Working beside =
-                    beside(new StoppedValues(node, false, ofTheInput, answersFor));
-            return beside.operations().isEmpty() && beside.exact()
-                    ? UndividedByARelation.Working.NOTHING : beside;
+            return worksOut(answersFor).toGetPast();
+        }
+
+        /**
+         * The same, with what a run getting to the comparison works out, read off the one reading:
+         * the operations left to a witness as well, which a run works out all the same.
+         */
+        WorkedOut worksOut(WhatTheAnalysisAnswersFor answersFor) {
+            WorkedOut beside = beside(new StoppedValues(node, false, ofTheInput, answersFor));
+            return beside.toGetPast().operations().isEmpty() && beside.toGetPast().exact()
+                    ? new WorkedOut(UndividedByARelation.Working.NOTHING, beside.stops())
+                    : beside;
         }
 
         /** The same for the quotient {@code division}, which the analysis answers for with
@@ -2346,7 +2681,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             collectUnder(node, under);
             return beside(new StoppedValues(division, true, ofTheInput,
                     WhatTheAnalysisAnswersFor.readingAgain(
-                            node -> under.contains(Core.withoutStanding(node)))));
+                            node -> under.contains(Core.withoutStanding(node))))).toGetPast();
         }
 
         private static void collectUnder(Core around, Set<Core> into) {
@@ -2375,7 +2710,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     && line.compareTo(ExactRatio.of(Integer.MAX_VALUE)) < 0;
         }
 
-        private UndividedByARelation.Working beside(StoppedValues stoppedAt) {
+        private WorkedOut beside(StoppedValues stoppedAt) {
             WhatWasTold told = new WhatWasTold();
             AffineForms.Reading<NumericTerm, InputReads> reading = reading(ofTheInput,
                     new LinkedHashSet<>(), new ElementsMet(), told, stoppedAt);
@@ -2391,8 +2726,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
             LinearForm<NumericTerm> whole = sides.size() == 2 ? sides.get(0).minus(sides.get(1))
                     .orNull() : null;
-            for (LinearForm<NumericTerm> sum : told.sumsOverTheStop) {
-                if (!areAddendsOf(sum, whole)) {
+            for (SumOverTheStop sum : told.sumsOverTheStop) {
+                // An operation over a bound value is one over that value, which a relation over
+                // it is asked to get past.
+                if (!sum.toldOverItsValue(told, ofTheInput) && !areAddendsOf(sum.form(), whole)) {
                     told.exact = false;
                 }
             }
@@ -2402,8 +2739,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
             }
             // The stopped expression is worked out too, and a run may stop in it before any
-            // operation told.
-            return told.working().notOnEveryRun();
+            // operation told — unless it is a name read, which works nothing out. Where all it
+            // works out is the form it is read by, those sums are what a run stops in there, and
+            // a run getting to the comparison works every one out; what a row of a line gets past
+            // is still not every one, since the sums left to a witness are not among them.
+            boolean aName = stoppedAt.theStopIsABoundValue();
+            return new WorkedOut(aName ? told.working() : told.working().notOnEveryRun(),
+                    new StopEvidence(told.everyOperation(
+                            aName || stoppedAt.theStopWorksOutTheFormItIsReadAs())));
         }
 
         /**

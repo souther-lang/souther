@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.WholeNumberRuns;
 
@@ -38,6 +40,15 @@ public sealed interface Standing {
      * the way asks nothing such of it.
      */
     default Standing alongTheWay(Reachability.Reaching way) {
+        return this;
+    }
+
+    /**
+     * This, where a row is a witness of the item only inside {@code decides}, the case the line
+     * decides in: what the case says of the item's own quantity narrows where a row is composed.
+     * Never narrower than what every row meeting the case is at.
+     */
+    default Standing inTheCase(TheCaseALineDecidesIn decides) {
         return this;
     }
 
@@ -184,23 +195,94 @@ public sealed interface Standing {
      * leave the form room for. The remainders are the item and the values of the form are how a row
      * gets to one of them, so two rows at one remainder by two values of the form are one item.
      *
-     * @param dividend the form the division is of, with the constant it is moved by
-     * @param on       the order each number of the form stands on
-     * @param levels   the remainders it can leave, which is what the criterion is about
-     * @param divisor  the number it is divided by, above nought
+     * @param dividend   the form the division is of, with the constant it is moved by
+     * @param on         the order each number of the form stands on
+     * @param levels     the remainders it can leave, which is what the criterion is about
+     * @param divisor    the number it is divided by, above nought
+     * @param remainders the remainders a row is composed at: every one, or those a way to the
+     *                   item leaves ({@link #alongTheWay})
      */
     record OfARemainder(LinearForm<NumericTerm> dividend, Map<NumericTerm, Carrier> on,
-                        LevelSpace levels, BigInteger divisor, Criterion where)
-            implements Standing {
+                        LevelSpace levels, BigInteger divisor, WholeNumberRuns remainders,
+                        Criterion where) implements Standing {
 
         public OfARemainder {
             on = Map.copyOf(on);
             if (dividend.coefs().isEmpty() || !on.keySet().equals(dividend.coefs().keySet())
-                    || divisor.signum() <= 0) {
+                    || divisor.signum() <= 0 || remainders == null) {
                 throw new IllegalArgumentException("a remainder is of a form over the numbers it"
                         + " names, each on one order, and by a divisor above nought: " + dividend
                         + " against " + on.keySet() + " by " + divisor);
             }
+        }
+
+        /** At every remainder the divisor leaves. */
+        public OfARemainder(LinearForm<NumericTerm> dividend, Map<NumericTerm, Carrier> on,
+                            LevelSpace levels, BigInteger divisor, Criterion where) {
+            this(dividend, on, levels, divisor, OfARemainderAndAForm.every(divisor), where);
+        }
+
+        /**
+         * At the remainders {@code way} leaves this remainder as well, as
+         * {@link OfARemainderAndAForm#alongTheWay} narrows its own: a row composed at another is one
+         * the way turns away.
+         *
+         * <p>A remainder the way asks of a form that is this one moved by a constant, by the same
+         * divisor, is this remainder moved by the difference of the two constants, turned round the
+         * divisor; what that leaves of the way's remainders is what it leaves of this one. One by
+         * another divisor, or of another form, says nothing of this remainder alone and is left for
+         * the row to be read against.
+         */
+        @Override
+        public Standing alongTheWay(Reachability.Reaching way) {
+            WholeNumberRuns left = remainders;
+            for (OnTheWay.TakenIn cut : way.boundedOnTheWay()) {
+                if (cut.demand() instanceof RowDemand.OnARemainder asked
+                        && asked.dividend().coefs().equals(dividend.coefs())
+                        && asked.remainder().divisor().equals(divisor)
+                        && asked.dividend().constant().isWhole() && dividend.constant().isWhole()) {
+                    BigInteger moved = whole(asked.dividend().constant())
+                            .subtract(whole(dividend.constant()));
+                    left = left.and(turnedBack(asked.leaves(), moved, divisor));
+                }
+            }
+            return left.equals(remainders) ? this
+                    : new OfARemainder(dividend, on, levels, divisor, left, where);
+        }
+
+        /**
+         * At the remainders the case the line decides in may hold at as well
+         * ({@link ResiduesAStatementLeaves}): a row at another is one the line decides nothing
+         * at, which a point of it asks for no row of.
+         */
+        @Override
+        public Standing inTheCase(TheCaseALineDecidesIn decides) {
+            WholeNumberRuns left = remainders.and(decides.remaindersOf(dividend, divisor));
+            return left.equals(remainders) ? this
+                    : new OfARemainder(dividend, on, levels, divisor, left, where);
+        }
+
+        /**
+         * The remainders of this form whose remainder moved by {@code moved} is among {@code runs}:
+         * each run turned back by {@code moved} round {@code divisor}, a run that crosses nought
+         * taken as the two it comes to.
+         */
+        static WholeNumberRuns turnedBack(WholeNumberRuns runs, BigInteger moved,
+                                          BigInteger divisor) {
+            WholeNumberRuns every = OfARemainderAndAForm.every(divisor);
+            WholeNumberRuns out = WholeNumberRuns.NONE;
+            for (WholeNumberRuns.Run run : runs.and(every).runs()) {
+                BigInteger from = run.from().subtract(moved).mod(divisor);
+                BigInteger to = run.to().subtract(moved).mod(divisor);
+                out = out.or(from.compareTo(to) <= 0 ? WholeNumberRuns.one(from, to)
+                        : WholeNumberRuns.one(from, divisor.subtract(BigInteger.ONE))
+                                .or(WholeNumberRuns.one(BigInteger.ZERO, to)));
+            }
+            return out;
+        }
+
+        private static BigInteger whole(ExactRatio ratio) {
+            return ((ExactAnswer.Held<BigInteger>) ratio.floor()).value();
         }
     }
 
@@ -256,7 +338,7 @@ public sealed interface Standing {
             WholeNumberRuns left = remainders;
             for (OnTheWay.TakenIn cut : way.boundedOnTheWay()) {
                 if (cut.demand() instanceof RowDemand.OnARemainder asked
-                        && asked.remainder().dividend().equals(dividend)
+                        && asked.dividend().equals(dividend)
                         && asked.remainder().divisor().equals(divisor)) {
                     left = left.and(asked.leaves());
                 }

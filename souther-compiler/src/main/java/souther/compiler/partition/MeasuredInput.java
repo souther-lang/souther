@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 
@@ -289,6 +290,16 @@ public final class MeasuredInput {
      */
     AStatementAtARow putToRows(Proposition stated, String behavior) {
         return AStatementAtARow.readBy(stated, behavior, quantities, relations);
+    }
+
+    /**
+     * {@code stated}, a case a line decides in, asked of the rows of this input at some element of
+     * a list of every whole number between two it weighs ({@link ACaseAskedAtSomeElement}) — or
+     * nothing where it weighs none.
+     */
+    Optional<ACaseAskedAtSomeElement> putToRowsAtSomeElement(Proposition stated,
+                                                             String behavior) {
+        return ACaseAskedAtSomeElement.of(stated, behavior, quantities, relations);
     }
 
     /**

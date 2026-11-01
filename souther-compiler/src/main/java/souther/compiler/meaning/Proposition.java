@@ -213,8 +213,8 @@ public sealed interface Proposition {
             case Quantity.SumOver(DecisionSubject summed, Quantity each) ->
                     isAnElementOf(summed, container) || mayBeAnElementOf(each, container);
             case Quantity.RemainderOfADividend(var _, var dividend, var _) ->
-                    dividend.coefs().keySet().stream().anyMatch(term -> isAnElementOf(
-                            new DecisionSubject.AnInput(term.subjectPath()), container));
+                    dividend.coefs().keySet().stream()
+                            .anyMatch(each -> mayBeAnElementOf(each, container));
             case Quantity.RemainderByAnInput remainder -> remainder.operands().stream()
                     .anyMatch(term -> isAnElementOf(
                             new DecisionSubject.AnInput(term.subjectPath()), container));
@@ -584,7 +584,7 @@ public sealed interface Proposition {
     /**
      * What {@code states}, read only where {@code answers} holds: where it does not, an operation
      * the statement is read through answers nothing, and the run stops before the statement comes
-     * out either way. Made through {@link #whereItAnswers}.
+     * out either way. Made through {@link #whereItAnswers}, and nowhere else, as {@link All} is.
      *
      * <p>Holds where both do, and its denial is the denial of {@code states} where {@code answers}
      * holds — not the denial of both, which would say that a run which stopped came out the other
@@ -807,7 +807,8 @@ public sealed interface Proposition {
     }
 
     /**
-     * Every part holding. Made through {@link #all}.
+     * Every part holding. Made through {@link #all}, and nowhere else: joining the parts of one
+     * again gives it back, so a reader that changes none of them may hand it back as it is.
      *
      * @param spelling spelled from the parts' own when it is made, whatever is handed in
      */
@@ -852,7 +853,7 @@ public sealed interface Proposition {
     }
 
     /**
-     * Some part holding. Made through {@link #any}.
+     * Some part holding. Made through {@link #any}, and nowhere else, as {@link All} is.
      *
      * @param spelling spelled from the parts' own when it is made, whatever is handed in
      */
@@ -925,8 +926,11 @@ public sealed interface Proposition {
         }
         for (Proposition conjunct : conjuncts) {
             for (Proposition against : disjunctsOf(conjunct)) {
+                if (!anywhere.contains(against.deniedSpelling())) {
+                    continue;
+                }
                 Proposition condition = against.denied();
-                if (!anywhere.contains(condition.spelling()) || !deniedWhereverItFails(condition)) {
+                if (!deniedWhereverItFails(condition)) {
                     continue;
                 }
                 List<Proposition> whereItHolds = new ArrayList<>();

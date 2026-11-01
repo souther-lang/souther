@@ -36,6 +36,7 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.Spelling;
+import souther.compiler.meaning.TheWholeNumbersAListStartsWith;
 import souther.compiler.meaning.WhereARunStops;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhereEachLineDecides;
@@ -541,18 +542,36 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         };
         if (each == null) {
             return readOnce(behavior, comparison, read, reads, answering,
-                    conditions.comparison(comparison, reads, read), writtenIn);
+                    conditions.comparison(comparison, reads, read), false, writtenIn);
         }
         Read drawn = onEachApplication(behavior, comparison, read, reads, each, answering,
                 conditions, writtenIn);
         // Where an application is made, and where a line decides on it, is part of what the line
         // is; said in anything but what a row's own numbers answer, a row could not be asked
-        // whether it is somewhere the line decides, and none of the lines is drawn.
-        return drawn instanceof Read.Several several && several.parts().stream()
-                .anyMatch(part -> !part.cases().stream()
-                        .allMatch(one -> AStatementAtARow.askable(one.condition())))
-                ? severalNotDrawn(comparison, read, reads, answering)
-                : drawn;
+        // whether it is somewhere the line decides, and none of the lines is drawn. Where some
+        // part of what an application states was not read, that part is what stopped the
+        // comparison, and it is said for what stopped it.
+        if (!(drawn instanceof Read.Several several)) {
+            return drawn;
+        }
+        boolean asked = several.parts().stream().allMatch(part -> part.cases().stream()
+                .allMatch(one -> AStatementAtARow.askableAtSomeElement(one.condition())));
+        boolean drawsALine = several.parts().stream()
+                .anyMatch(part -> part.line() instanceof Read.Cuts);
+        PlacesStopped unread = PlacesStopped.NOWHERE;
+        WhereAReadingStopped where = WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT;
+        for (Read.Several.Part part : several.parts()) {
+            if (part.line() instanceof Read.Stopped stopped && stopped.places().reasons().values()
+                    .stream().anyMatch(reason ->
+                            !(reason instanceof BlockReason.SeveralLinesInOneRule))) {
+                unread = unread.and(stopped.places());
+                where = where.and(stopped.where());
+            }
+        }
+        if (!unread.isEmpty() && (!asked || !drawsALine)) {
+            return new Read.Stopped(unread, where);
+        }
+        return asked ? drawn : severalNotDrawn(comparison, read, reads, answering);
     }
 
     /**
@@ -581,6 +600,51 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             conditions.comparison(comparison, reads, read).stated().meaning()));
         }
         return WhereARunStops.across(readings);
+    }
+
+    /**
+     * What a comparison inside a closure works out on one application of it, and where the
+     * application is made.
+     *
+     * @param reached where the application is made: a run that does not make it works none of
+     *                this out
+     * @param working what the comparison works out on it, as a row of its lines gets past it
+     * @param stops   what a run making it works out there, for where a run stops in it
+     */
+    record OnAnApplication(Proposition reached, UndividedByARelation.Working working,
+                           StopEvidence stops) {
+
+        OnAnApplication {
+            Objects.requireNonNull(reached, "an application is made somewhere");
+            Objects.requireNonNull(working, "and works something out");
+            Objects.requireNonNull(stops, "and a run making it works something out");
+        }
+    }
+
+    /**
+     * What the comparison works out on each application a closure is made on, where it stands in
+     * one, as {@link #whereTheRunStops} reads where a run stops: independent of the lines it draws.
+     * A line that decides on no row an application is made on is no line, and what the
+     * application works out is still worked out there. Empty where the comparison stands in no
+     * closure, or the applications are not said, and is read once.
+     */
+    static Optional<List<OnAnApplication>> whatEachApplicationWorksOut(
+            StatedComparison comparison, InputReading read, ClosureApplications applying,
+            WhatConditionsState conditions) {
+        if (!(applying instanceof ClosureApplications.Each(var made))) {
+            return applying instanceof ClosureApplications.None ? Optional.of(List.of())
+                    : Optional.empty();
+        }
+        List<OnAnApplication> out = new ArrayList<>();
+        for (ClosureApplications.Application one : made) {
+            if (one.reached() instanceof Proposition.Always(boolean holds) && !holds) {
+                continue;
+            }
+            Pullback.OnTheInput onTheInput = conditions.comparison(comparison, one.reads(), read);
+            out.add(new OnAnApplication(one.reached(), workingOf(onTheInput),
+                    onTheInput.stops().get()));
+        }
+        return Optional.of(out);
     }
 
     /**
@@ -622,14 +686,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                           List<ClosureApplications.Application> each,
                                           Arrivals answering, WhatConditionsState conditions,
                                           Optional<ExpansionLineage> writtenIn) {
+        // What stopped, in the order the applications are made: a whole application's reading, or
+        // a part of one read beside the lines it drew. Said only where some application stopped
+        // whole, and then with every stop before and after it.
         PlacesStopped stopped = PlacesStopped.NOWHERE;
         WhereAReadingStopped stoppedWhere = WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT;
+        boolean stoppedWhole = false;
         List<FilingCoordinate> settled = new ArrayList<>();
         List<FilingCoordinate> answeringNowhere = new ArrayList<>();
         List<FilingCoordinate> against = new ArrayList<>();
         List<UndividedByARelation> relations = new ArrayList<>();
         Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
         Map<ALineRead, List<UndividedByARelation.Working>> workings = new HashMap<>();
+        Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> relating = new LinkedHashMap<>();
+        boolean relatedOnlySomewhere = false;
         InputReads statingNoRelation = null;
         for (ClosureApplications.Application one : each) {
             if (one.reached() instanceof Proposition.Always(boolean made) && !made) {
@@ -637,10 +707,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
             Pullback.OnTheInput onTheInput = conditions.comparison(comparison, one.reads(), read);
             switch (readOnce(behavior, comparison, read, one.reads(), answering, onTheInput,
-                    writtenIn)) {
+                    one.metOn().levels().isEmpty(), writtenIn)) {
                 case Read.Stopped alone -> {
                     stopped = stopped.and(alone.places());
                     stoppedWhere = stoppedWhere.and(alone.where());
+                    stoppedWhole = true;
                 }
                 case Read.StatesNoRelation _ -> {
                     if (statingNoRelation == null) {
@@ -664,13 +735,28 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         }
                     });
                     relations.addAll(alone.relations());
+                    ALineRead key = new ALineRead(new PlaceOfALine(THE_COMPARISON,
+                            spelled(onTheInput.stated().proposition())), alone);
+                    relating.computeIfAbsent(key, _ -> new ArrayList<>())
+                            .add(WhereAnApplicationIsMade.OnOne.wherever(one.reached()));
+                    workings.computeIfAbsent(key, _ -> new ArrayList<>())
+                            .add(workingOf(onTheInput));
+                    relatedOnlySomewhere |= !(one.reached() instanceof Proposition.Always(
+                            boolean holds) && holds);
                 }
-                case Read.Several several -> several.parts().forEach(part -> {
-                    ALineRead key = new ALineRead(part.id(), part.line());
-                    lines.computeIfAbsent(key, _ -> new ArrayList<>())
-                            .add(new WhereAnApplicationIsMade.OnOne(part.cases(), one.reached()));
-                    workings.computeIfAbsent(key, _ -> new ArrayList<>()).add(part.working());
-                });
+                case Read.Several several -> {
+                    for (Read.Several.Part part : several.parts()) {
+                        if (part.line() instanceof Read.Stopped beside) {
+                            stopped = stopped.and(beside.places());
+                            stoppedWhere = stoppedWhere.and(beside.where());
+                        }
+                        ALineRead key = new ALineRead(part.id(), part.line());
+                        lines.computeIfAbsent(key, _ -> new ArrayList<>()).add(
+                                new WhereAnApplicationIsMade.OnOne(part.cases(), one.reached()));
+                        workings.computeIfAbsent(key, _ -> new ArrayList<>())
+                                .add(part.working());
+                    }
+                }
                 case Read line -> {
                     ALineRead key = new ALineRead(new PlaceOfALine(
                             line instanceof Read.Cuts cuts
@@ -684,13 +770,27 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 }
             }
         }
-        if (!stopped.isEmpty()) {
+        if (stoppedWhole) {
             return new Read.Stopped(stopped, stoppedWhere);
         }
         // Every application's statement is a line or none of them is drawn, and one that relates
-        // the input to another value is no line.
+        // the input to another value is no line. Where only relations are read and some of them
+        // on an application not every run makes, each is read in the case where its application
+        // is made: a row at a line parting the values that settle it is one that makes it. Only
+        // where a row can be asked whether it makes each, and where making it asks nothing of an
+        // element: the values settling a relation are asked again over the rows of each case, and
+        // a case stating something of some element of a container leaves the relation over
+        // another element of it nothing shown. Otherwise the relation is read as one, and a line
+        // parting its values is read wherever a row arrives.
         if (!against.isEmpty()) {
-            return new Read.AgainstAnotherValue(against, relations);
+            List<Read.Several.Part> parts = new ArrayList<>();
+            relating.forEach((relation, readings) -> parts.add(new Read.Several.Part(
+                    relation.id(), relation.read(), WhereAnApplicationIsMade.decidesOn(readings),
+                    UndividedByARelation.Working.together(workings.get(relation)))));
+            return relatedOnlySomewhere && lines.isEmpty() && parts.stream().allMatch(part ->
+                    part.cases().stream().allMatch(one -> AStatementAtARow.askable(
+                            one.condition()) && saysNothingOfAnElement(one.condition())))
+                    ? new Read.Several(parts) : new Read.AgainstAnotherValue(against, relations);
         }
         // A statement of no relation on some application is no line there, and the lines the
         // others draw would be drawn as though the comparison were only them.
@@ -724,6 +824,28 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return parts.getFirst().line();
         }
         return new Read.Several(parts);
+    }
+
+    /**
+     * Whether {@code stated} says nothing of any element of a container: it compares numbers of
+     * the input no container holds, or says a container holds something or nothing, or is made
+     * of such statements. Anything else is taken to say something of one.
+     */
+    private static boolean saysNothingOfAnElement(Proposition stated) {
+        return switch (stated) {
+            case Proposition.Always _ -> true;
+            case Proposition.All(var parts, var _) ->
+                    parts.stream().allMatch(Cutting::saysNothingOfAnElement);
+            case Proposition.Any(var parts, var _) ->
+                    parts.stream().allMatch(Cutting::saysNothingOfAnElement);
+            case Proposition.Some(var _, var ofTheElement, var _, var _) ->
+                    ofTheElement instanceof Proposition.Always(boolean holds) && holds;
+            case Proposition.Compared(Relation.Affine(var form, var _), var _, var _) ->
+                    form.coefs().keySet().stream().allMatch(each ->
+                            each instanceof DecisionAtom.OfTheInput(var term)
+                                    && !term.subjectPath().insideAContainer());
+            default -> false;
+        };
     }
 
     /**
@@ -876,8 +998,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     /**
      * The remainder {@code remainder} is, read at the numbers of its form — or null where it is
-     * read at none: a number of the form whose values are not counted, or a constant that is no
-     * whole number to move the form by.
+     * read at none: a value of the form read off a binding, which is no number of a row's; a
+     * number of the form whose values are not counted; or a constant that is no whole number to
+     * move the form by.
      *
      * <p>The one place a remainder of a form becomes a quantity.
      */
@@ -885,12 +1008,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                                        Quantity.RemainderOfADividend remainder,
                                                        LinearForm<NumericTerm> added,
                                                        Quantities quantities) {
-        if (!(remainder.dividend().constant().floor()
+        LinearForm<NumericTerm> dividend = remainder.overTheInput();
+        if (dividend == null || !(dividend.constant().floor()
                 instanceof ExactAnswer.Held<BigInteger> shift)) {
             return null;
         }
         Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
-        for (NumericTerm term : remainder.dividend().coefs().keySet()) {
+        for (NumericTerm term : dividend.coefs().keySet()) {
             TermOrders orders = quantities.ordersOf(term);
             if (orders == null || orders.answered() == null || !orders.answered().counts()) {
                 return null;
@@ -907,7 +1031,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         return new BorderQuantity.RemainderOfAForm(behavior,
                 new BorderQuantity.OverAForm(behavior,
-                        new LinearForm<>(ExactRatio.ZERO, remainder.dividend().coefs()), on),
+                        new LinearForm<>(ExactRatio.ZERO, dividend.coefs()), on),
                 shift.value(), remainder.divisor(), added, addedOn);
     }
 
@@ -1068,16 +1192,19 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * states {@code p <= g} alone, and that is where both of the author's lines landed.
      *
      * @param onTheInput what the comparison states there, put on the input
+     * @param onEveryElement whether a run that gets to the closure the comparison stands in makes
+     *                       it on every element the closure is handed: no operation around it
+     *                       stops at an answer
      */
     private static Read readOnce(String behavior, StatedComparison comparison,
                                  InputReading read, InputReads reads, Arrivals answering,
-                                 Pullback.OnTheInput onTheInput,
+                                 Pullback.OnTheInput onTheInput, boolean onEveryElement,
                                  Optional<ExpansionLineage> writtenIn) {
         Pullback.TheBound bound = Pullback.boundOf(comparison, read, reads,
                 writtenIn.orElse(null) instanceof ExpansionLineage.Expansion);
         return heldIn(writtenAgainst(
                 readOnceAsDrawn(behavior, comparison, read, reads, answering, onTheInput,
-                        writtenIn),
+                        onEveryElement, writtenIn),
                 bound.written()), bound.heldIn());
     }
 
@@ -1118,14 +1245,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     private static Read readOnceAsDrawn(String behavior, StatedComparison comparison,
                                         InputReading read, InputReads reads, Arrivals answering,
-                                        Pullback.OnTheInput onTheInput,
+                                        Pullback.OnTheInput onTheInput, boolean onEveryElement,
                                         Optional<ExpansionLineage> writtenIn) {
         Pullback.Pulled stated = onTheInput.stated();
         Supplier<Optional<AuthorsLines>> lines =
                 new Pullback.Once<>(() -> writtenIn.map(at -> WrittenLines.of(
                         stated.meaning().how(), at, Optional.empty(),
                         Optional.of(comparison.claim()))));
-        Read drawn = readAsAWhole(behavior, comparison, read, reads, answering, onTheInput, lines);
+        Read drawn = readAsAWhole(behavior, comparison, read, reads, answering, onTheInput,
+                onEveryElement, lines);
         if (writtenIn.isEmpty() || !(stated.proposition() instanceof Proposition.Compared compared)
                 || !(drawn instanceof Read.Cuts || drawn instanceof Read.NoOrderToCountOn
                         || drawn instanceof Read.NumberNoRatioHolds)) {
@@ -1187,9 +1315,27 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     /** What {@code comparison} states read once, in {@code reads}, as the reading drew it. */
     private static Read readAsAWhole(String behavior, StatedComparison comparison,
                                      InputReading read, InputReads reads, Arrivals answering,
-                                     Pullback.OnTheInput onTheInput,
+                                     Pullback.OnTheInput onTheInput, boolean onEveryElement,
                                      Supplier<Optional<AuthorsLines>> lines) {
         Pullback.Pulled stated = onTheInput.stated();
+        // A remainder of a form over a value read off a binding is no number a row's numbers put
+        // anywhere: no line on it and no relation of it to another value. Over the element of a
+        // list of every whole number between two, the comparison is read on the elements the
+        // list starts with; otherwise the arithmetic that stopped at the division says where and
+        // why, as it did before the division was read.
+        if (statesARemainderNoRowPuts(stated.proposition())) {
+            Read atTheFirst = onEveryElement ? atTheWholeNumbersItStartsWith(behavior, comparison,
+                    read, reads, answering, onTheInput) : null;
+            if (atTheFirst != null) {
+                return atTheFirst;
+            }
+            return onTheInput.arithmetic().get()
+                    instanceof AffineReading.OfAComparison.Stopped stopped
+                    ? GuardThresholds.whatEachPlaceIsLeftWith(comparison, stopped, read, reads,
+                            answering)
+                    : noLine(comparison, stated.proposition(), List.of(), Set.of(),
+                            onTheInput.arithmetic(), read, reads, answering);
+        }
         Read line = stated.proposition() instanceof Proposition.Compared(
                 Relation.Affine affine, boolean holds, Spelling _)
                 ? lineOn(behavior, affine, holds, comparison.left(), read, reads) : null;
@@ -1202,7 +1348,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     new Read.AnswersNowhere(settledAt(stated, comparison, read, reads, answering));
             case Proposition.Compared _ when line != null -> line;
             case Proposition.Compared _ when related != null ->
-                    against(related, stated.proposition());
+                    against(related, stated.proposition(), workingOf(onTheInput));
             case Proposition.Some some
                     when valuesItRelates(some) instanceof List<FilingCoordinate> values ->
                     against(values, some);
@@ -1243,10 +1389,116 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     asLines(behavior, comparison, some, onTheInput.arithmetic(),
                             onTheInput.working(), onTheInput.workingOfRelation(), read, reads,
                             answering, lines.get());
+            // And one some part of which nothing read, as the lines it draws beside that part.
+            case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
+                 Proposition.WhereItAnswers _ when holdsARelation(stated.proposition()) ->
+                    besideWhatWasNotRead(behavior, comparison, stated.proposition(),
+                            onTheInput.arithmetic(), onTheInput.working(),
+                            onTheInput.workingOfRelation(), read, reads, answering, lines.get());
             default -> noLine(comparison, stated.proposition(),
                     Proposition.stopsIn(stated.proposition()), Set.of(), onTheInput.arithmetic(),
                     read, reads, answering);
         };
+    }
+
+    /** Whether some part of {@code stated} compares a remainder whose dividend is not a form of
+     *  the input's numbers alone ({@link Quantity.RemainderOfADividend#overTheInput}). */
+    private static boolean statesARemainderNoRowPuts(Proposition stated) {
+        if (stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, Spelling _)
+                && affine.form().coefs().keySet().stream().anyMatch(each ->
+                        each instanceof Quantity.RemainderOfADividend remainder
+                                && remainder.overTheInput() == null)) {
+            return true;
+        }
+        return stated.partsHeld().stream().anyMatch(Cutting::statesARemainderNoRowPuts);
+    }
+
+    /**
+     * What a comparison of remainders over the element of a list of every whole number between two
+     * states, read on the elements the list starts with ({@link TheWholeNumbersAListStartsWith}):
+     * the lines it draws on each, each deciding where the statement turns on it there and the list
+     * holds that element — or null where the statement is no such comparison, or one of those
+     * lines is not drawn.
+     *
+     * <p>On each element every dividend is a form of the input's numbers alone, and a line is the
+     * one a remainder of those draws ({@link #onARemainder}); relations held together there are
+     * read as any statement of several is ({@link #asLines}). A line drawn on several elements is
+     * one line, deciding where it does on any of them. No line is drawn for the element itself on
+     * the input's numbers: which remainder a row's numbers leave turns on which element, and comes
+     * round, so no one place on those numbers parts the rows.
+     *
+     * <p>Only where the run makes the comparison on every element the list holds
+     * ({@code onEveryElement}): an operation stopping at an answer makes it on an element only
+     * where none before it stopped, and a row whose list holds the element is then no row the
+     * comparison was made on there. Past {@link CompositionBudget#READINGS_OF_ONE_CONDITION}
+     * elements the comparison is read on none of them, and says so. What working the dividend out
+     * does to a run is what the comparison worked out on the element, and every line keeps it.
+     */
+    private static Read atTheWholeNumbersItStartsWith(String behavior, StatedComparison comparison,
+                                                      InputReading read, InputReads reads,
+                                                      Arrivals answering,
+                                                      Pullback.OnTheInput onTheInput) {
+        Proposition stated = onTheInput.stated().proposition();
+        return switch (TheWholeNumbersAListStartsWith.of(stated)) {
+            case TheWholeNumbersAListStartsWith.Read.NotOfThatKind _ -> null;
+            case TheWholeNumbersAListStartsWith.Read.PastTheReadings _ ->
+                    noLine(comparison, stated, List.of(WhyUnread.PAST_THE_READINGS), Set.of(),
+                            onTheInput.arithmetic(), read, reads, answering);
+            case TheWholeNumbersAListStartsWith.Read.OnEach(var each) -> {
+                Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> lines =
+                        new LinkedHashMap<>();
+                Map<ALineRead, List<UndividedByARelation.Working>> workings = new HashMap<>();
+                for (TheWholeNumbersAListStartsWith.OnOne one : each) {
+                    List<Read.Several.Part> drawn = onTheElement(behavior, comparison, one,
+                            read, reads, answering, onTheInput);
+                    if (drawn == null) {
+                        yield null;
+                    }
+                    for (Read.Several.Part part : drawn) {
+                        ALineRead key = new ALineRead(part.id(), part.line());
+                        lines.computeIfAbsent(key, _ -> new ArrayList<>()).add(
+                                new WhereAnApplicationIsMade.OnOne(part.cases(), one.holding()));
+                        workings.computeIfAbsent(key, _ -> new ArrayList<>())
+                                .add(part.working());
+                    }
+                }
+                List<Read.Several.Part> parts = new ArrayList<>();
+                lines.forEach((line, readings) -> parts.add(new Read.Several.Part(line.id(),
+                        line.read(), WhereAnApplicationIsMade.decidesOn(readings),
+                        UndividedByARelation.Working.together(workings.get(line)))));
+                yield parts.isEmpty() ? null : new Read.Several(parts);
+            }
+        };
+    }
+
+    /**
+     * The lines what the comparison states on {@code one} element draws, each deciding where it
+     * does on that element — or null where some relation of it is neither a line drawn nor a
+     * relation to another value, as one keeping the element is. One relation is
+     * the line it draws, deciding wherever the element is; several are the lines each draws where
+     * the statement turns on it ({@link #asLines}).
+     */
+    private static List<Read.Several.Part> onTheElement(String behavior,
+                                                        StatedComparison comparison,
+                                                        TheWholeNumbersAListStartsWith.OnOne one,
+                                                        InputReading read, InputReads reads,
+                                                        Arrivals answering,
+                                                        Pullback.OnTheInput onTheInput) {
+        if (one.stated() instanceof Proposition.Compared(Relation.Affine relation, boolean holds,
+                Spelling _)) {
+            Read line = lineOn(behavior, relation, holds, comparison.left(), read, reads);
+            return line == null || !Read.Several.Part.isALine(line) ? null
+                    : List.of(new Read.Several.Part(new PlaceOfALine(THE_COMPARISON,
+                            spelled(one.stated())), line,
+                            List.of(DecidingCase.alone(WhereAnApplicationIsMade.nothingAsked())),
+                            workingOf(onTheInput)));
+        }
+        return asLines(behavior, comparison, one.stated(), onTheInput.arithmetic(),
+                onTheInput.working(), onTheInput.workingOfRelation(), read, reads, answering,
+                Optional.empty()) instanceof Read.Several several
+                && several.parts().stream().allMatch(part -> Read.Several.Part.isALine(part.line())
+                        || part.line() instanceof Read.AgainstAnotherValue)
+                ? several.parts() : null;
     }
 
     /**
@@ -1608,6 +1860,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  WhyUnread.NoWordsFor _, WhyUnread.NotProvedOfItsBody _,
                  WhyUnread.NoFormOfWhatItAnswers _,
                  WhyUnread.ANumberOfWhatAnOperationAnswers _,
+                 WhyUnread.ADateMovedByMonths _, WhyUnread.APartOfADateMovedByMonths _,
                  WhyUnread.CodePointsOfWhatAnOperationAnswers _,
                  WhyUnread.WhatARecursiveHelperAnswers _, WhyUnread.AtNoPosition _,
                  WhyUnread.NoMeasureOfItsSize _, WhyUnread.WhichElementARunStopsAt _ -> true;
@@ -1667,7 +1920,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                 UndividedByARelation.Working own = relation == null ? null
                                         : workingOfRelation.apply(relation);
                                 return own != null ? own : working.get();
-                            })) {
+                            }, false)) {
                         case TheParts.Drawn(Read.Several lines) -> lines;
                         case TheParts.NotDrawn none when none.readToTheEnd() ->
                                 severalNotDrawn(comparison, read, reads, answering);
@@ -1675,6 +1928,47 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                 stated, stops, beyondTheForm, arithmetic, read, reads, answering);
                     };
         };
+    }
+
+    /**
+     * {@code stated}, some part of which nothing read, as the lines its relations draw beside that
+     * part: each where it decides whatever the part nothing read comes to, and the part itself
+     * stopped for what stopped it. A value chosen by cases one of which was not read is a
+     * comparison of the others where they are taken: the line on what one arm answers decides
+     * where that arm is taken, which no other arm, read or not, has a say in.
+     *
+     * <p>Where it decides is read off the whole statement, the parts nothing read in it, so a
+     * line deciding on one of those is asked where no row can be asked, and is no line here; nor
+     * is the statement anything but stopped where no line of it is drawn. What stopped is said as
+     * it is where none of the statement is drawn ({@link #noLine}), which is what keeps the rule
+     * from being read whole.
+     */
+    private static Read besideWhatWasNotRead(String behavior, StatedComparison comparison,
+                                             Proposition stated,
+                                             Supplier<AffineReading.OfAComparison> arithmetic,
+                                             Supplier<UndividedByARelation.Working> working,
+                                             Function<Relation, UndividedByARelation.Working>
+                                                     workingOfRelation,
+                                             InputReading read, InputReads reads,
+                                             Arrivals answering, Optional<AuthorsLines> authors) {
+        Read unread = noLine(comparison, stated, Proposition.stopsIn(stated), Set.of(),
+                arithmetic, read, reads, answering);
+        if (!(unread instanceof Read.Stopped stopped)
+                || !(CountsWrittenOut.outsideElementsOf(stated)
+                        instanceof CountsWrittenOut.Written(Proposition written))
+                || !(several(behavior, comparison.left(), written, read, reads, authors,
+                        relation -> {
+                            UndividedByARelation.Working own = relation == null ? null
+                                    : workingOfRelation.apply(relation);
+                            return own != null ? own : working.get();
+                        }, true) instanceof TheParts.Drawn(Read.Several lines))
+                || lines.parts().stream().noneMatch(part -> part.line() instanceof Read.Cuts)) {
+            return unread;
+        }
+        List<Read.Several.Part> parts = new ArrayList<>(lines.parts());
+        parts.add(new Read.Several.Part(new PlaceOfALine(THE_COMPARISON, spelled(stated)),
+                stopped, List.of()));
+        return new Read.Several(parts);
     }
 
     /**
@@ -1753,7 +2047,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (CountsWrittenOut.outsideElementsOf(stated)
                 instanceof CountsWrittenOut.Written(Proposition written)
                 && several(behavior, application, written, read, reads, Optional.of(authors),
-                        _ -> UndividedByARelation.Working.UNREAD)
+                        _ -> UndividedByARelation.Working.UNREAD, false)
                         instanceof TheParts.Drawn(Read.Several lines)) {
             return lines;
         }
@@ -1784,9 +2078,21 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static Read.AgainstAnotherValue against(List<FilingCoordinate> over,
                                                     Proposition stated) {
+        return against(over, stated, UndividedByARelation.Working.NOTHING);
+    }
+
+    /**
+     * The same, of a comparison that {@code stated} is read off and that works out
+     * {@code working}: the form is the comparison's own, so its rows get past what the comparison
+     * works out, and the relations read off the counts in it are not and are told nothing.
+     */
+    private static Read.AgainstAnotherValue against(List<FilingCoordinate> over,
+                                                    Proposition stated,
+                                                    UndividedByARelation.Working working) {
         List<UndividedByARelation> relations = new ArrayList<>();
         if (stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, Spelling _)) {
-            relations.add(UndividedByARelation.ofAForm(affine.form(), affine.proposition()));
+            relations.add(UndividedByARelation.ofAForm(affine.form(), affine.proposition())
+                    .workingOut(working));
             for (Quantity each : affine.form().coefs().keySet()) {
                 switch (each) {
                     case Quantity.HowManyMeet count -> relations.add(oneValue(count.ofTheElement()));
@@ -2015,10 +2321,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static TheParts several(String behavior, Core written,
                                     Proposition stated, InputReading read, InputReads reads,
                                     Optional<AuthorsLines> authors,
-                                    Function<Relation, UndividedByARelation.Working> working) {
+                                    Function<Relation, UndividedByARelation.Working> working,
+                                    boolean besideWhatStopped) {
         if (!onlyRelations(stated)
-                && !(holdsARelation(stated)
-                        && AStatementAtARow.askableBesideItsRelations(stated))) {
+                && !(holdsARelation(stated) && (besideWhatStopped
+                        ? AStatementAtARow.askableBesideItsRelationsAndItsStops(stated)
+                        : AStatementAtARow.askableBesideItsRelations(stated)))) {
             return TheParts.READ_TO_THE_END;
         }
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
@@ -2047,8 +2355,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 } else if (undrawn == null) {
                     // Where it decides is carried only if a row can be asked to be there.
                     parts.add(new Read.Several.Part(alone, against(against, each.line()),
-                            each.cases().stream().allMatch(
-                                    one -> AStatementAtARow.askable(one.condition()))
+                            each.cases().stream().allMatch(one ->
+                                    AStatementAtARow.askableAtSomeElement(one.condition()))
                                     ? each.cases() : List.of()));
                 }
                 continue;
@@ -2061,23 +2369,39 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // The line is the input's, and where it decides turns on a relation to a value no
             // position holds, which a row cannot be asked of its own values. Rows at it could not
             // be held to where it decides, so it is said not to be drawn, at its own places.
-            if (line instanceof Read.Cuts cuts && !each.cases().stream()
-                    .allMatch(one -> AStatementAtARow.askable(one.condition()))) {
-                parts.add(new Read.Several.Part(alone, new Read.Stopped(ComparisonAssessment
-                        .atEachOf(cuts.cutting().over(), new BlockReason.SeveralLinesInOneRule()),
-                        WhereAReadingStopped.ELSEWHERE), List.of()));
-                continue;
+            List<DecidingCase> cases = each.cases();
+            if (line instanceof Read.Cuts cuts && !cases.stream()
+                    .allMatch(one -> AStatementAtARow.askableAtSomeElement(one.condition()))) {
+                // Beside what was not read, a line is drawn where it decides whatever that comes
+                // to, and is none where it decides only on it: the part that stopped is said for
+                // the comparison, and says it for this line too.
+                if (!besideWhatStopped || !cases.stream().allMatch(one ->
+                        AStatementAtARow.askableAtSomeElement(one.condition())
+                                || AStatementAtARow.turnsOnWhatWasNotRead(one.condition()))) {
+                    parts.add(new Read.Several.Part(alone, new Read.Stopped(ComparisonAssessment
+                            .atEachOf(cuts.cutting().over(),
+                                    new BlockReason.SeveralLinesInOneRule()),
+                            WhereAReadingStopped.ELSEWHERE), List.of()));
+                    continue;
+                }
+                cases = cases.stream()
+                        .filter(one -> AStatementAtARow.askableAtSomeElement(one.condition()))
+                        .toList();
+                if (cases.isEmpty()) {
+                    continue;
+                }
             }
             if (authors.isEmpty()) {
-                parts.add(new Read.Several.Part(alone, line, each.cases(),
+                parts.add(new Read.Several.Part(alone, line, cases,
                         workingOf(working, each.line())));
                 continue;
             }
+            List<DecidingCase> asked = cases;
             authorsLines(authors.get(), each.scales(), WrittenLines.claimOf(each.line()))
                     .forEach((of, mapping) -> parts.add(
                     new Read.Several.Part(new PlaceOfALine(of, each.line().spelling()),
                             authored(line, mapping, each.line()),
-                            WhereEachLineDecides.takenWhere(each.cases(),
+                            WhereEachLineDecides.takenWhere(asked,
                                     authors.get().takenWhere(mapping.line())),
                             workingOf(working, each.line()))));
         }
@@ -2087,6 +2411,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // comparison is filed at.
         if (undrawn != null) {
             return undrawn;
+        }
+        // Beside what was not read, every line may be one deciding only on it, and none is left.
+        if (parts.isEmpty()) {
+            return TheParts.READ_TO_THE_END;
         }
         boolean drawn = parts.stream().anyMatch(part -> part.line() instanceof Read.Cuts);
         boolean allLines = parts.stream().allMatch(part -> Read.Several.Part.isALine(part.line()));

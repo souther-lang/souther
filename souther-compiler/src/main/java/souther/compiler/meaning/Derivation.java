@@ -1139,10 +1139,7 @@ public sealed interface Derivation {
                     case LawProposition.Observed<DeclaredArgument> observed ->
                             read instanceof OnTheSideALawNames(var part, Derivation seen)
                                     && part.equals(law) && observes(observed, seen);
-                    case LawProposition.Same<DeclaredArgument> same ->
-                            read instanceof TheSameValue(var part, var one, var other)
-                                    && part.equals(law) && stands(same.one(), one)
-                                    && stands(same.other(), other);
+                    case LawProposition.Same<DeclaredArgument> same -> isTheSame(same, read);
                     case LawProposition.Inside<DeclaredArgument> inside ->
                             read instanceof TheStringsInside(var part, var inner, var outer)
                                     && part.equals(law) && standsAsAString(inside.inner(), inner)
@@ -1249,6 +1246,27 @@ public sealed interface Derivation {
             }
 
             /**
+             * Whether {@code read} reads {@code law}: as the sameness of the two subjects, or of
+             * the two numbers, it is of the positions the call has them at — or on each of the
+             * cases a value it is of is chosen by, as a comparison is.
+             */
+            private boolean isTheSame(LawProposition.Same<DeclaredArgument> law, Derivation read) {
+                return switch (read) {
+                    case Stopped _ -> true;
+                    case TheSameValue(var part, var one, var other) -> part.equals(law)
+                            && stands(law.one(), one) && stands(law.other(), other);
+                    case TheSameNumber(var part, var one, var other, var _) -> part.equals(law)
+                            && standsAsANumber(law.one(), one)
+                            && standsAsANumber(law.other(), other);
+                    default -> {
+                        List<Derivation> oneOf = read.oneOf();
+                        yield oneOf != null && !oneOf.isEmpty()
+                                && oneOf.stream().allMatch(each -> isTheSame(law, each));
+                    }
+                };
+            }
+
+            /**
              * Whether {@code read} is {@code law}'s comparison, read over the arguments: the law's
              * own comparison, with each of its numbers read of the argument it names, or a step
              * that states what one of the steps under it states — an argument chosen by cases
@@ -1347,6 +1365,15 @@ public sealed interface Derivation {
                 TermPath at = positionOf(subject);
                 return at == null || new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(at))
                         .equals(read);
+            }
+
+            /** Whether {@code read}, the number {@code subject} was read as, is the value at the
+             *  position the call has it at — or a number of the input, where it has it at none. */
+            private boolean standsAsANumber(LawSubject<DeclaredArgument> subject,
+                                            LinearForm<Quantity> read) {
+                TermPath at = positionOf(subject);
+                return at == null || read.equals(LinearForm.atom(
+                        new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(at))));
             }
 
             /** Whether {@code read}, the subject {@code subject} was read as, is the position the
@@ -1502,7 +1529,8 @@ public sealed interface Derivation {
 
     /** A step that reads one part of a law, which it holds. */
     sealed interface ALawPart extends Derivation
-            permits ALawSettles, ALawJoins, OnTheSideALawNames, TheSameValue, TheStringsInside,
+            permits ALawSettles, ALawJoins, OnTheSideALawNames, TheSameValue, TheSameNumber,
+                    TheStringsInside,
                     ALawQuantifies, ALawComparison, ALawJoinsWithoutWhatImpliesAnother, WhereAnOperationKeepsIt {
 
         /** The part of the law this reads. */
@@ -1583,6 +1611,41 @@ public sealed interface Derivation {
         @Override
         public Proposition conclusion(Conclusion numbering) {
             return new Proposition.SameValue(one, other, part.holds());
+        }
+    }
+
+    /**
+     * A part of a law that states two values are one value, or not, read where they are numbers on
+     * an order and one of them stands at no position: as their difference being nought, the
+     * relation a comparison of the two written with {@code ==} states.
+     *
+     * <p>Not a sameness of two subjects. {@code Set.contains(Date.addDays(1, d), s)} asks of some
+     * element of {@code s} that it is a day after {@code d}, and a day after {@code d} is no value
+     * a row writes: it is a number of {@code d}, and a row is asked for it as for any relation of
+     * its numbers.
+     *
+     * @param one        what the law's first value was read as
+     * @param other      what its second was read as
+     * @param difference the first less the second, against nought as the law states it
+     */
+    record TheSameNumber(LawProposition.Same<?> part, LinearForm<Quantity> one,
+                         LinearForm<Quantity> other, AComparisonRead difference)
+            implements ALawPart {
+
+        public TheSameNumber {
+            Objects.requireNonNull(part, "a step reads a part of a law");
+            Objects.requireNonNull(one, "a sameness is of two numbers");
+            Objects.requireNonNull(other, "a sameness is of two numbers");
+            Objects.requireNonNull(difference, "the two read as a relation");
+            if (!difference.counts().isEmpty()) {
+                throw new IllegalArgumentException("a sameness of two numbers counts nothing: "
+                        + difference);
+            }
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return difference.conclusion(numbering);
         }
     }
 

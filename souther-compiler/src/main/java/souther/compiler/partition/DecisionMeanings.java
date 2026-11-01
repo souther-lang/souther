@@ -286,8 +286,14 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
                  Proposition.All _, Proposition.Any _, Proposition.Some _, Proposition.Carried _,
                  Proposition.SomeReachable _, Proposition.Unread _, Proposition.OnAnApplication _,
                  Proposition.SoManyHold _, Proposition.WhereItAnswers _,
-                 Proposition.OfTheWays _ ->
-                    DecisionCondition.AStatement.of(stated, denying.apply(stated), held);
+                 Proposition.OfTheWays _ -> {
+                    Optional<DecidedCondition.Held> named =
+                            DecisionCondition.AStatement.of(denying.apply(stated), held);
+                    yield named.isPresent() ? named.get()
+                            : new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
+                                    met, new WhyNotTaken.MeaningUnread(
+                                            WhyUnread.PAST_THE_READINGS)), held);
+                }
         };
     }
 

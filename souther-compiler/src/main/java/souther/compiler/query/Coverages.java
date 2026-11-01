@@ -2380,7 +2380,8 @@ final class Coverages {
                 // between the point and another value has to say so.
                 //
                 // Nothing is put to the point here, so no value is tried and none is charged for.
-                return new Looked(endedBy(last, realized(criterion, able, region, tried)), first,
+                return new Looked(endedBy(last, realized(criterion, rows, able, region, tried)),
+                        first,
                         Optional.empty());
             }
 
@@ -2388,12 +2389,14 @@ final class Coverages {
              * Where a row at {@code criterion} along {@code able} would stand, or why none is
              * offered: solved for where the quantity says what the input has to be, and looked
              * for by running candidates where only a run works it out ({@link PointSearchGoal}).
+             * Inside the case the line decides in, where a row read back by {@code rows} has to be
+             * in it: a row outside it is read back as one the line decides nothing at.
              */
-            private Realization realized(Criterion criterion,
+            private Realization realized(Criterion criterion, StandingAtAPoint.AtALine rows,
                                          souther.compiler.partition.Reachability.Reaching able,
                                          SearchRegion region, ValuesTried tried) {
-                return realizer.realize(quantity.searchGoalAt(criterion).alongTheWay(able),
-                        region, looking, tried);
+                return realizer.realize(quantity.searchGoalAt(criterion).alongTheWay(able)
+                        .inTheCase(rows.caseItDecidesIn()), region, looking, tried);
             }
 
             /**
@@ -2515,7 +2518,7 @@ final class Coverages {
                     StandingAtAPoint.AtALine rows,
                     souther.compiler.partition.Reachability.Reaching able,
                     SearchRegion region, ValuesTried tried) {
-                Realization answered = realized(criterion, able, region, tried);
+                Realization answered = realized(criterion, rows, able, region, tried);
                 return switch (answered) {
                     case Realization.Found found -> {
                         // Asking nothing of what the dependencies answer. A point of a line is a

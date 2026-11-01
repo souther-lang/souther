@@ -6,13 +6,18 @@ import souther.compiler.inputs.CasesLeft;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Spelling;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -197,16 +202,57 @@ public sealed interface DecisionCondition {
         }
 
         /**
-         * {@code stated} coming out {@code held}, as the answer to the one column it and its
-         * denial are.
+         * A statement coming out {@code held}, as the answer to the one column it and its denial
+         * are, asked by its denial — or nothing where no column is found for it.
          *
-         * @param denied what holds exactly where {@code stated} does not — handed in, so that the
-         *               two ways one condition comes out name the column with one value
+         * <p>Joining is no normal form: the denial of a denial is joined from the denial's parts
+         * and may be spelled another way, and two statements saying the same, spelled two ways,
+         * can have one denial. So the column is named by what denying from the denial on comes
+         * round to — the statements, two of them where one is spelled, that deny to one another —
+         * by the one of those that spells first, and a statement is held as it is by how many
+         * denials it is from that one. A statement, its denial and what that denies back to come
+         * round to the same, and so name one column. What the walk meets is what denying makes
+         * of each statement and nothing kept of earlier ones, so the name is the same however
+         * many statements were denied before.
+         *
+         * <p>One column for statements a denial walks between, and not for every two statements
+         * saying the same: {@code p && (q || !q)} and {@code p} are two columns where no denial
+         * walks from one to the other. Nothing here works out whether two statements are the
+         * same.
+         *
+         * <p>Nothing where the walk, as long as one condition may be read
+         * ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}), comes round to nothing met
+         * before, or comes round to an odd number of statements, which would hold a statement as
+         * its own denial: the condition is no column a row can be said to answer either way.
+         *
+         * @param denied what holds exactly where the statement does not — the reading's own, so
+         *               that the two ways one condition comes out name the column with one value
          */
-        static DecidedCondition.Held of(Proposition stated, Proposition denied, boolean held) {
-            return denied.spelling().compareTo(stated.spelling()) < 0
-                    ? new DecidedCondition.Held(new AStatement(denied), !held)
-                    : new DecidedCondition.Held(new AStatement(stated), held);
+        static Optional<DecidedCondition.Held> of(Proposition denied, boolean held) {
+            List<Proposition> walked = new ArrayList<>();
+            Map<Spelling, Integer> metAt = new HashMap<>();
+            Proposition at = denied;
+            while (!metAt.containsKey(at.spelling())) {
+                if (walked.size() == CompositionBudget.READINGS_OF_ONE_CONDITION.maximum()) {
+                    return Optional.empty();
+                }
+                metAt.put(at.spelling(), walked.size());
+                walked.add(at);
+                at = at.denied();
+            }
+            int round = metAt.get(at.spelling());
+            if ((walked.size() - round) % 2 != 0) {
+                return Optional.empty();
+            }
+            int named = round;
+            for (int each = round + 1; each < walked.size(); each++) {
+                if (walked.get(each).spelling().compareTo(walked.get(named).spelling()) < 0) {
+                    named = each;
+                }
+            }
+            // The first walked is the denial: one denial from the statement, held the other way.
+            return Optional.of(new DecidedCondition.Held(new AStatement(walked.get(named)),
+                    named % 2 == 0 ? !held : held));
         }
     }
 

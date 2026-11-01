@@ -219,11 +219,147 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *              in either order, and an operation worked out of one through a name is not
      *              among these, which says less of the order and nothing false
      */
-    record IntOperation(LinearForm<NumericTerm> form, BigInteger least, BigInteger greatest,
+    record IntOperation(LinearForm<IntOperand> form, BigInteger least, BigInteger greatest,
                         List<Integer> after) {
 
         IntOperation {
             after = List.copyOf(new TreeSet<>(after));
+        }
+
+        /** An operation over numbers of the input alone. */
+        static IntOperation overTheInput(LinearForm<NumericTerm> form, BigInteger least,
+                                         BigInteger greatest, List<Integer> after) {
+            return new IntOperation(form.over(term -> LinearForm.atom(
+                    new IntOperand.OfTheInput(term))), least, greatest, after);
+        }
+
+        /** The form over numbers of the input, where it is over nothing else; null otherwise. */
+        LinearForm<NumericTerm> overTheInput() {
+            return form.over(operand -> operand instanceof IntOperand.OfTheInput(NumericTerm term)
+                    ? LinearForm.atom(term) : null);
+        }
+
+        /**
+         * The form at the least it comes to over the values each bound number takes, or at the
+         * greatest: each bound number put at the end of its values that weighs the form down, or
+         * up. Null where some bound number's end is not a form of the input's numbers.
+         */
+        LinearForm<NumericTerm> atItsEnd(boolean greatestEnd) {
+            Map<IntOperand, ExactRatio> weights = form.coefs();
+            return form.over(operand -> operand.atItsEnd(
+                    (weights.get(operand).signum() > 0) == greatestEnd));
+        }
+
+        /** The same operation, worked out after the operations moved {@code by} on. */
+        IntOperation shifted(int by) {
+            return new IntOperation(form, least, greatest,
+                    after.stream().map(at -> at + by).toList());
+        }
+    }
+
+    /**
+     * A number an operation of whole numbers is over: a number of the input, or the value of a
+     * name read off a container, whose values are what the container holds there.
+     *
+     * <p>A bound number is one only where what the container hands the name says the values it
+     * takes, as two forms of the input's numbers: where an element a walk hands its step stands,
+     * and the element of a list of every whole number between two. Any other value an operation
+     * reads is not told of here, and the operation is not told.
+     */
+    sealed interface IntOperand {
+
+        /** The value at its least, or at its greatest, as a form of the input's numbers; null
+         *  where that is none. */
+        LinearForm<NumericTerm> atItsEnd(boolean greatest);
+
+        /** The numbers it takes, from the ends of its places; null where some place has none. */
+        FormRange range(InputReading read);
+
+        /** A number of the input. */
+        record OfTheInput(NumericTerm term) implements IntOperand {
+
+            public OfTheInput {
+                Objects.requireNonNull(term, "a number of the input");
+            }
+
+            @Override
+            public LinearForm<NumericTerm> atItsEnd(boolean greatest) {
+                return LinearForm.atom(term);
+            }
+
+            @Override
+            public FormRange range(InputReading read) {
+                return FormRange.endsOf(term, read);
+            }
+
+            @Override
+            public String toString() {
+                return term.toString();
+            }
+        }
+
+        /**
+         * The value of a name read off a container, as the reading of the comparison named it:
+         * one name in one environment is one value, and two names are two whatever they take.
+         *
+         * @param name what the name is written as, which is what the operation is written with
+         */
+        record OfABinding(Quantity.OfABinding value, String name) implements IntOperand {
+
+            public OfABinding {
+                if (!isOne(value) || name == null) {
+                    throw new IllegalArgumentException("a bound number an operation is over is"
+                            + " a name read off a container that says where its values lie: "
+                            + value);
+                }
+            }
+
+            /** Whether {@code value} is one: what the container hands the name says the values it
+             *  takes as forms of the input's numbers. */
+            static boolean isOne(Quantity.OfABinding value) {
+                return value.steps().isEmpty() && value.madeOf().isEmpty()
+                        && value.handed().filter(handed ->
+                                handed instanceof Quantity.PositionInTheWalk
+                                        || handed instanceof Quantity.AWholeNumberInTurn)
+                                .isPresent();
+            }
+
+            /** Where an element stands in a walk lies from nought to one below how many the
+             *  container holds; the element of a list of every whole number between two lies
+             *  between its ends. */
+            @Override
+            public LinearForm<NumericTerm> atItsEnd(boolean greatest) {
+                return switch (value.handed().orElseThrow()) {
+                    case Quantity.PositionInTheWalk position -> greatest
+                            ? LinearForm.atomMinusConstant(position.howMany(), ExactRatio.ONE)
+                            : LinearForm.constant(ExactRatio.ZERO);
+                    case Quantity.AWholeNumberInTurn number -> greatest ? number.to()
+                            : number.from();
+                    default -> null;
+                };
+            }
+
+            /** A position also lies below the most elements a container holds. */
+            @Override
+            public FormRange range(InputReading read) {
+                FormRange least = FormRange.of(atItsEnd(false), read);
+                FormRange greatest = FormRange.of(atItsEnd(true), read);
+                if (least == null || greatest == null) {
+                    return null;
+                }
+                ExactRatio most = greatest.greatest();
+                if (value.handed().orElseThrow() instanceof Quantity.PositionInTheWalk) {
+                    ExactRatio held = ExactRatio.of(GetsPast.MOST_ELEMENTS.subtract(
+                            BigInteger.ONE));
+                    most = most.compareTo(held) < 0 ? most : held;
+                }
+                return new FormRange(least.least(), most);
+            }
+
+            @Override
+            public String toString() {
+                return name;
+            }
         }
     }
 
@@ -317,9 +453,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             List<IntOperation> both = new ArrayList<>(earlier.operations);
             for (IntOperation each : operations) {
                 // What an operation is worked out of is told by where it stands among them.
-                both.add(new IntOperation(each.form(), each.least(), each.greatest(),
-                        each.after().stream().map(at -> at + earlier.operations.size())
-                                .toList()));
+                both.add(each.shifted(earlier.operations.size()));
             }
             List<DecimalOperation> bothDecimals = new ArrayList<>(earlier.decimals);
             for (DecimalOperation each : decimals) {
@@ -345,6 +479,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** Whether every operation that can stop a run is told. */
         boolean exact() {
             return told == WhatARelationLeavesUndivided.Told.EVERY;
+        }
+
+        /**
+         * Whether a run working this out may stop in an operation told over a bound value: one is
+         * told only where no value the number takes is shown to keep it within its type, and a run
+         * stops in it at whichever value takes it past. Which rows hand the number such a value no
+         * form of the input's numbers says, and where every run stops says only where every value
+         * does.
+         */
+        boolean aRunMayStopOverABoundValue() {
+            return operations.stream().anyMatch(each -> each.overTheInput() == null);
         }
     }
 
@@ -712,16 +857,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *               that string's position and is at none of its own; null otherwise
      * @param text   the string made of the string at a position by case conversions, which is
      *               made of that position and is at none of its own; null otherwise
+     * @param bound  the value of a name it is, as the reading of the comparison named it, where
+     *               that is what it is; null otherwise. What a container hands the name is
+     *               {@code along}
      */
     record Side(List<FilingCoordinate> madeOf, ExactRatio weight,
                 NumericTerm number, Quantity.ReadAlongAContainer along,
-                PiecesOfAString piece, ConvertedText text) {
+                PiecesOfAString piece, ConvertedText text, Quantity.OfABinding bound) {
 
         Side {
             madeOf = List.copyOf(madeOf);
             if (along != null && (number != null || !madeOf.isEmpty())) {
                 throw new IllegalArgumentException("what is read along a container is at no"
                         + " position: " + along);
+            }
+            if (bound != null && (number != null
+                    || !Objects.equals(along, bound.handed().orElse(null)))) {
+                throw new IllegalArgumentException("a bound value is no number of the input, and"
+                        + " is read along what its container hands it: " + bound);
             }
             if (piece != null && number != null) {
                 throw new IllegalArgumentException("a piece of a string is no number of one"
@@ -733,10 +886,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
 
+        /** A side that is no bound value. */
+        Side(List<FilingCoordinate> madeOf, ExactRatio weight, NumericTerm number,
+             Quantity.ReadAlongAContainer along, PiecesOfAString piece, ConvertedText text) {
+            this(madeOf, weight, number, along, piece, text, null);
+        }
+
         /** A side that is neither a text nor a piece of one. */
         Side(List<FilingCoordinate> madeOf, ExactRatio weight, NumericTerm number,
              Quantity.ReadAlongAContainer along, PiecesOfAString piece) {
             this(madeOf, weight, number, along, piece, null);
+        }
+
+        /**
+         * What the operations of the relation call this side
+         * ({@link WhatARelationLeavesUndivided.Term#key}): the number of the input it is, or the
+         * bound value, which an operation over the same name read in the same comparison is
+         * over. Null where it is neither.
+         */
+        Object key() {
+            return number != null ? number : bound;
         }
 
         /** The end a walk keeping one carried into its step, where this is that; null
@@ -759,6 +928,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** The element an index written down picks, where this is that; null otherwise. */
         Quantity.PickedAtAnIndex picked() {
             return along instanceof Quantity.PickedAtAnIndex picked ? picked : null;
+        }
+
+        /** The element of a list of every whole number between two, where this is that; null
+         *  otherwise. */
+        Quantity.AWholeNumberInTurn inTurn() {
+            return along instanceof Quantity.AWholeNumberInTurn number ? number : null;
         }
 
         /**
@@ -875,6 +1050,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return first;
     }
 
+    /** A number of one place an end of a list of every whole number between two is made of, which
+     *  the elements are counted on as the ends are: the last end's, or the first's where the last
+     *  is written down, or null where both are. */
+    private static NumericTerm.FromOnePosition anEndCountedAs(Quantity.AWholeNumberInTurn number) {
+        for (LinearForm<NumericTerm> end : List.of(number.to(), number.from())) {
+            for (NumericTerm term : end.coefs().keySet()) {
+                if (term instanceof NumericTerm.FromOnePosition place) {
+                    return place;
+                }
+            }
+        }
+        return null;
+    }
+
     /**
      * The order the numbers of {@code each} are counted on — and where it is the end of a key's
      * numbers, the order every place it is taken of stands on, or null where they stand on
@@ -893,6 +1082,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             NumericTerm.FromOnePosition countedAs = each.readOff() != null ? each.readOff()
                     : each.position() != null ? each.position().howMany()
                     : each.picked() != null ? new NumericTerm.ValueOf(each.picked().element())
+                    : each.inTurn() != null ? anEndCountedAs(each.inTurn())
                     : summedAs(each.number());
             // A product of two forms is counted on the order its factors are.
             NumericTerm countedOn = countedAs != null ? countedAs
@@ -940,7 +1130,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         among.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
                         each.getValue(), null, null, null);
                 case Quantity.OfABinding bound -> new Side(List.of(), each.getValue(), null,
-                        bound.handed().orElse(null), null);
+                        bound.handed().orElse(null), null, null, bound);
                 case Quantity.HowManyMeet counted -> new Side(List.of(), each.getValue(), null,
                         counted, null);
                 default -> new Side(List.of(), each.getValue(), null, null, null);
@@ -1047,10 +1237,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** Whether {@code on} is a condition on this remainder: of the same form, moved by the
          *  same number and divided by the same divisor. */
         boolean isAskedBy(RowDemand.OnARemainder on) {
-            Quantity.RemainderOfADividend asked = on.remainder();
-            return asked.divisor().equals(divisor)
-                    && asked.dividend().coefs().equals(dividend.coefs())
-                    && asked.dividend().constant().equals(ExactRatio.of(shift));
+            LinearForm<NumericTerm> asked = on.dividend();
+            return on.remainder().divisor().equals(divisor)
+                    && asked.coefs().equals(dividend.coefs())
+                    && asked.constant().equals(ExactRatio.of(shift));
         }
     }
 
@@ -1089,7 +1279,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // (theWorkingGetsPastAtTheWitness): it is not one a row is not asked of here.
         NumericTerm witness = null;
         boolean witnessAsked = false;
-        Map<NumericTerm, Integer> named = namedSides();
+        Map<Object, Integer> named = namedSides();
         List<WhatARelationLeavesUndivided.IntSum> sums = new ArrayList<>();
         boolean leftOut = false;
         for (IntOperation each : working.operations()) {
@@ -1102,9 +1292,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         && !stopsNoRow(each, read);
                 continue;
             }
-            sums.add(new WhatARelationLeavesUndivided.IntSum(
-                    new LinkedHashMap<Object, ExactRatio>(each.form().coefs()),
-                    each.form().constant(), each.least(), each.greatest()));
+            Map<Object, ExactRatio> weights = new LinkedHashMap<>();
+            each.form().coefs().forEach((operand, weight) -> weights.put(keyOf(operand), weight));
+            sums.add(new WhatARelationLeavesUndivided.IntSum(weights, each.form().constant(),
+                    each.least(), each.greatest()));
         }
         // A decimal operation reads the results of those worked out before it by where they stand
         // among them, so none is left out alone: one over a number that is no side of this
@@ -1158,12 +1349,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return alone;
     }
 
-    /** How many sides each number that is one is: the numbers the sides of this relation are. */
-    private Map<NumericTerm, Integer> namedSides() {
-        Map<NumericTerm, Integer> named = new LinkedHashMap<>();
+    /** How many sides each number that is one is, by the key the side is called
+     *  ({@link Side#key}): the numbers the sides of this relation are. */
+    private Map<Object, Integer> namedSides() {
+        Map<Object, Integer> named = new LinkedHashMap<>();
         for (Side each : sides) {
-            if (each.number() != null) {
-                named.merge(each.number(), 1, Integer::sum);
+            if (each.key() != null) {
+                named.merge(each.key(), 1, Integer::sum);
             }
         }
         // A product of two forms stands at its value by the number alone that carries it standing
@@ -1182,17 +1374,27 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** Whether every number {@code operation} is over is a side of this relation, once — or a
      *  product of numbers that are. */
-    private static boolean isOverTheSides(IntOperation operation, Map<NumericTerm, Integer> named) {
-        return operation.form().coefs().keySet().stream().allMatch(atom ->
-                Integer.valueOf(1).equals(named.get(atom))
-                        || (atom instanceof NumericTerm.ProductOf product
+    private static boolean isOverTheSides(IntOperation operation, Map<Object, Integer> named) {
+        return operation.form().coefs().keySet().stream().allMatch(operand ->
+                Integer.valueOf(1).equals(named.get(keyOf(operand)))
+                        || (operand instanceof IntOperand.OfTheInput(
+                                NumericTerm.ProductOf product)
                         && product.factors().stream().flatMap(form -> form.coefs().keySet().stream())
                         .allMatch(each -> Integer.valueOf(1).equals(named.get(each)))));
     }
 
+    /** What a side over the number {@code operand} is called ({@link Side#key}): a number of the
+     *  input by itself, and a bound number by the value the reading of the comparison named. */
+    private static Object keyOf(IntOperand operand) {
+        return switch (operand) {
+            case IntOperand.OfTheInput(NumericTerm term) -> term;
+            case IntOperand.OfABinding(Quantity.OfABinding value, String _) -> value;
+        };
+    }
+
     /** Whether every number {@code operation} reads from a row is a side of this relation, once. */
     private static boolean overTheSides(DecimalOperation operation,
-                                        Map<NumericTerm, Integer> named) {
+                                        Map<Object, Integer> named) {
         return operation.operands().stream().allMatch(operand -> !(operand
                 instanceof DecimalOperation.Formed formed)
                 || formed.coefs().keySet().stream()
@@ -1202,10 +1404,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * Whether no row stops at {@code operation}: the number it comes to lies from {@code least} to
      * {@code greatest} whatever its places hold, each between the ends of the order its values are
-     * counted on. False where a place has no end to give.
+     * counted on, and a bound number between the ends of its values. False where a place has no
+     * end to give.
      */
-    private static boolean stopsNoRow(IntOperation operation, InputReading read) {
-        FormRange range = FormRange.of(operation.form(), read);
+    static boolean stopsNoRow(IntOperation operation, InputReading read) {
+        Map<IntOperand, FormRange> ranges = new HashMap<>();
+        for (IntOperand each : operation.form().coefs().keySet()) {
+            FormRange range = each.range(read);
+            if (range == null) {
+                return false;
+            }
+            ranges.put(each, range);
+        }
+        FormRange range = FormRange.of(operation.form(), ranges::get);
         return range != null && range.liesWithin(operation.least(), operation.greatest());
     }
 
@@ -1491,23 +1702,47 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                of the rows a run stops at
      */
     List<EveryRunStops> everyRunStopsIn(InputReading read, List<SearchRegion> regions) {
+        return everyRunStopsIn(working, read, regions, List.of());
+    }
+
+    /**
+     * The same of what {@code working} works out, where a run may also work out
+     * {@code alsoWorkedOut} before it, in any order: each of those within its type at every row
+     * said, so that no row is said to stop in one operation where it stops in another first.
+     * Nothing where one of those has an end that is no form of the input's numbers.
+     */
+    static List<EveryRunStops> everyRunStopsIn(Working working, InputReading read,
+                                               List<SearchRegion> regions,
+                                               List<IntOperation> alsoWorkedOut) {
         if (!working.exact() || !working.onEveryRun() || !working.decimals().isEmpty()) {
             return List.of();
+        }
+        List<Bounded> besides = new ArrayList<>();
+        for (IntOperation one : alsoWorkedOut) {
+            if (!withinItsEnds(one, besides)) {
+                return List.of();
+            }
         }
         List<IntOperation> operations = working.operations();
         Set<EveryRunStops> out = new LinkedHashSet<>();
         for (int at = 0; at < operations.size(); at++) {
             IntOperation it = operations.get(at);
-            List<Bounded> before = new ArrayList<>();
+            List<Bounded> before = new ArrayList<>(besides);
             for (int other = 0; other < operations.size(); other++) {
                 IntOperation one = operations.get(other);
-                if (other != at && !one.after().contains(at)) {
-                    before.add(new Bounded(one.form(), one.least(), one.greatest()));
+                if (other != at && !one.after().contains(at) && !withinItsEnds(one, before)) {
+                    before = null;
+                    break;
                 }
             }
+            LinearForm<NumericTerm> atItsLeast = it.atItsEnd(false);
+            LinearForm<NumericTerm> atItsGreatest = it.atItsEnd(true);
+            if (before == null || atItsLeast == null || atItsGreatest == null) {
+                continue;
+            }
             for (Bounded past : List.of(
-                    new Bounded(it.form(), it.greatest().add(BigInteger.ONE), null),
-                    new Bounded(it.form(), null, it.least().subtract(BigInteger.ONE)))) {
+                    new Bounded(atItsLeast, it.greatest().add(BigInteger.ONE), null),
+                    new Bounded(atItsGreatest, null, it.least().subtract(BigInteger.ONE)))) {
                 List<Bounded> rows = new ArrayList<>(before);
                 rows.add(past);
                 List<EveryRunStops.Within> where = rowsWhere(rows, read, regions);
@@ -1517,6 +1752,69 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * Whether a run on a row {@code regions} leave may stop in an operation {@code working}
+     * tells: one over a bound value no value of it is shown to keep within its type, or one over
+     * the input's numbers past one of its ends on some such row. What a run works out before it
+     * is not asked, since a run stopping there stops all the same; nor whether every operation is
+     * told, since one told is one a run works out. False where the regions leave no row.
+     */
+    static boolean aRunMayStopIn(Working working, InputReading read, List<SearchRegion> regions) {
+        if (regions.isEmpty()) {
+            return false;
+        }
+        if (working.aRunMayStopOverABoundValue()) {
+            return true;
+        }
+        for (IntOperation it : working.operations()) {
+            LinearForm<NumericTerm> form = it.overTheInput();
+            if (form != null && (rowsWhere(List.of(new Bounded(form,
+                            it.greatest().add(BigInteger.ONE), null)), read, regions) != null
+                    || rowsWhere(List.of(new Bounded(form, null,
+                            it.least().subtract(BigInteger.ONE))), read, regions) != null)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether {@link #aRunMayStopIn} says no run stops in {@code working} on any region: it
+     *  tells no operation, so whatever regions it is asked over do not need working out. */
+    static boolean noRunMayStopIn(Working working) {
+        return working.operations().isEmpty();
+    }
+
+    /**
+     * Whether a run getting to this relation may stop in an operation the reading told over a
+     * bound value ({@link Working#aRunMayStopOverABoundValue}).
+     */
+    boolean aRunMayStopOverABoundValue() {
+        return working.aRunMayStopOverABoundValue();
+    }
+
+    /**
+     * That {@code operation} lies between its ends, added to {@code into}: over numbers of the
+     * input, its form between them; over a bound number, its form at the least it comes to over
+     * the values that number takes above the least end, and at the greatest below the greatest,
+     * so that it lies between them whichever of the values a run hands it. False where a bound
+     * number's end is no form of the input's numbers, and nothing is added.
+     */
+    private static boolean withinItsEnds(IntOperation operation, List<Bounded> into) {
+        LinearForm<NumericTerm> overTheInput = operation.overTheInput();
+        if (overTheInput != null) {
+            into.add(new Bounded(overTheInput, operation.least(), operation.greatest()));
+            return true;
+        }
+        LinearForm<NumericTerm> least = operation.atItsEnd(false);
+        LinearForm<NumericTerm> greatest = operation.atItsEnd(true);
+        if (least == null || greatest == null) {
+            return false;
+        }
+        into.add(new Bounded(least, operation.least(), null));
+        into.add(new Bounded(greatest, null, operation.greatest()));
+        return true;
     }
 
     /** A form over numbers of the input, constant and all, from {@code least} to
@@ -1693,7 +1991,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** {@code form} as an author would write it: each number weighed, in the order of their
      *  names, and the constant last. */
-    private static String written(LinearForm<NumericTerm> form) {
+    private static <A> String written(LinearForm<A> form) {
         Map<String, ExactRatio> named = new TreeMap<>();
         form.coefs().forEach((term, weight) -> named.put(term.toString(), weight));
         StringBuilder out = new StringBuilder();
@@ -1808,6 +2106,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return Optional.of(out);
     }
 
+    /** The places the numbers a list of every whole number between two starts and ends at are
+     *  read off, each once, in the order the two ends name them. */
+    private static List<TermPath> placesOfItsEnds(Quantity.AWholeNumberInTurn number) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        for (LinearForm<NumericTerm> end : List.of(number.from(), number.to())) {
+            end.coefs().keySet().forEach(term -> out.addAll(term.placesReadOff()));
+        }
+        return List.copyOf(out);
+    }
+
     /**
      * The places of the input what {@code side} comes to is worked out from — its own, and those
      * of what a walk handing it its value walks or starts from — or empty where some of them are no
@@ -1839,6 +2147,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 out.add(picked.container());
                 out.add(picked.element());
             }
+            // No container of the input holds these numbers: the two ends are what a row writes.
+            case Quantity.AWholeNumberInTurn number -> out.addAll(placesOfItsEnds(number));
             case Quantity.HowManyMeet counted -> {
                 Optional<List<TermPath>> read = PositionsAStatementReads.of(counted.ofTheElement());
                 if (read.isEmpty() || !(counted.container() instanceof DecisionSubject.AnInput(
@@ -2018,6 +2328,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     out.add(picked.container());
                     out.add(picked.element());
                 }
+                case Quantity.AWholeNumberInTurn number -> out.addAll(placesOfItsEnds(number));
                 case Quantity.HowManyMeet counted -> {
                     Optional<List<TermPath>> reads =
                             PositionsAStatementReads.of(counted.ofTheElement());
@@ -4964,6 +5275,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         conditions, heldWhole));
                 continue;
             }
+            if (each.inTurn() != null) {
+                terms.add(wholeNumberAlong(each, carriers.get(i), region, read, conditions,
+                        heldWhole));
+                continue;
+            }
             // Where it lies is asked of the number whatever it is a number of: a total over a run
             // lies where what the values it walks guarantee leave it. What it is shown to take is
             // asked of a position's, and of a total only as the totals of one element
@@ -5019,9 +5335,143 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     each.position() != null
                             ? positionsOrderStops(each.position(), carriers.get(i))
                             : whereItStops(carriers.get(i)),
-                    each.number() != null ? each.number() : each.position()));
+                    each.key()));
         }
         return terms;
+    }
+
+    /**
+     * The element of a list of every whole number between two as a term of the relation: it lies
+     * from the least the first end is left at to the most the last end is, and takes every whole
+     * number a row's list holds.
+     *
+     * <p>What it is shown to take is said where the first end is a number written down and the
+     * last a number of one place moved by one, a place every value of whose type the declarations
+     * leave, which no other side of the relation reads and nothing on the way reads but bounds of
+     * it alone. A row then holds the place wherever the run asks between those bounds, and its
+     * list every number from the first end to there: so the element takes every number from the
+     * first end on, as far as the bounds and a list are let hold. A list the run cannot make — one
+     * holding more than {@link GetsPast#MOST_ELEMENTS} — hands its step nothing.
+     *
+     * <p>Whether the walk hands its step every element of the list it makes is not this term's
+     * to say. Where it stops on an answer, the elements past that answer are not handed, and the
+     * way to the relation says so ({@code WhereAnApplicationIsMade}).
+     */
+    private WhatARelationLeavesUndivided.Term<FilingCoordinate> wholeNumberAlong(
+            Side side, Carrier carrier, SearchRegion region, InputReading read,
+            List<OnAWay> conditions, boolean heldWhole) {
+        Quantity.AWholeNumberInTurn number = side.inTurn();
+        NumericDomain.Bounds from = whereAnEndLies(number.from(), region);
+        NumericDomain.Bounds to = whereAnEndLies(number.to(), region);
+        NumericDomain.Bounds holds = new NumericDomain.Bounds(from.min(), to.max());
+        NumericDomain.Bounds taken = heldWhole ? wholeNumbersTaken(side, number, read,
+                region, conditions) : null;
+        NumericDomain.Bounds realizes = taken == null || !taken.meet(holds).holdsAValue() ? null
+                : taken.meet(holds);
+        return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
+                asARelationReadsIt(holds, carrier), asARelationReadsIt(realizes, carrier), null,
+                false, spacingOf(carrier), wholeNumbersStop(from, carrier), side.key());
+    }
+
+    /**
+     * Where the order the elements of a list of every whole number between two are counted on
+     * stops: where their type's does, and at the most the first end may be moved by one less than
+     * a list is let hold, which no list a run makes holds past. The language's end and no line of
+     * a model, as where a position in a walk stops is ({@link #positionsOrderStops}).
+     */
+    private static NumericDomain.Bounds wholeNumbersStop(NumericDomain.Bounds from,
+                                                         Carrier carrier) {
+        BigInteger mostFrom = from.max() == null ? null : from.max().wholeAdmitted(false);
+        NumericDomain.Bounds made = mostFrom == null ? NumericDomain.Bounds.OPEN
+                : new NumericDomain.Bounds(null, Endpoint.inclusive(new Count(new BigDecimal(
+                        mostFrom.add(GetsPast.MOST_ELEMENTS).subtract(BigInteger.ONE)))));
+        NumericDomain.Bounds order = whereItStops(carrier);
+        return order == null ? made : order.meet(made);
+    }
+
+    /** Where an end of a list of every whole number between two lies: at itself where it is a
+     *  number written down, where the region leaves the form otherwise, and anywhere where the
+     *  region says nothing of it. */
+    private static NumericDomain.Bounds whereAnEndLies(LinearForm<NumericTerm> end,
+                                                       SearchRegion region) {
+        if (end.coefs().isEmpty()) {
+            if (!end.constant().isWhole() || !(end.constant().floor()
+                    instanceof ExactAnswer.Held<BigInteger>(BigInteger whole))) {
+                return NumericDomain.Bounds.OPEN;
+            }
+            Endpoint at = Endpoint.inclusive(new Count(new BigDecimal(whole)));
+            return new NumericDomain.Bounds(at, at);
+        }
+        return region.projectionOf(end) instanceof NumericDomain.FormProjection.Within(
+                NumericDomain.Bounds within) ? within : NumericDomain.Bounds.OPEN;
+    }
+
+    /**
+     * The whole numbers the element of {@code number} is shown to take, as {@link
+     * #wholeNumberAlong} says where, over the rows in {@code region} — or null where that is not
+     * shown.
+     */
+    private NumericDomain.Bounds wholeNumbersTaken(Side side, Quantity.AWholeNumberInTurn number,
+                                                   InputReading read, SearchRegion region,
+                                                   List<OnAWay> conditions) {
+        if (!number.from().coefs().isEmpty() || !number.from().constant().isWhole()
+                || number.to().coefs().size() != 1) {
+            return null;
+        }
+        Map.Entry<NumericTerm, ExactRatio> moved = number.to().coefs().entrySet().iterator().next();
+        if (!moved.getValue().equals(ExactRatio.ONE)
+                || !(moved.getKey() instanceof NumericTerm.FromOnePosition place)
+                || !(sourceOf(place, read) instanceof Source source)
+                || !(source.takes() instanceof Takes.Every)) {
+            return null;
+        }
+        List<TermPath> ends = place.placesReadOff();
+        boolean bounded = false;
+        for (OnAWay each : conditions) {
+            if (each.positions().stream().noneMatch(at -> ends.stream()
+                    .anyMatch(end -> overlap(at, end)))) {
+                continue;
+            }
+            // A bound of the last end and of nothing else leaves a row any value between the
+            // bounds there, whatever the rest of the way holds.
+            if (each.affine() == null || !each.affine().terms().equals(Set.of(place))) {
+                return null;
+            }
+            bounded = true;
+        }
+        for (Side other : sides) {
+            if (other == side) {
+                continue;
+            }
+            Optional<List<TermPath>> reads = placesRead(other);
+            if (reads.isEmpty() || reads.get().stream().anyMatch(at -> ends.stream()
+                    .anyMatch(end -> overlap(at, end)))) {
+                return null;
+            }
+        }
+        BigInteger first = number.from().constant().floor() instanceof ExactAnswer.Held<BigInteger>(
+                BigInteger held) ? held : null;
+        if (first == null) {
+            return null;
+        }
+        NumericDomain.Bounds taken = new NumericDomain.Bounds(
+                Endpoint.inclusive(new Count(new BigDecimal(first))),
+                Endpoint.inclusive(new Count(new BigDecimal(
+                        first.add(GetsPast.MOST_ELEMENTS).subtract(BigInteger.ONE)))));
+        if (!bounded) {
+            return taken;
+        }
+        // Each number is taken by a row whose last end is at it or past it, so the numbers are
+        // the first end's up to the most the way leaves the last end — which is where the
+        // element may lie, and the term holds them to it — where the way leaves the last end
+        // somewhere from which the list is one a run makes.
+        if (!(region.projectionOf(number.to()) instanceof NumericDomain.FormProjection.Within(
+                NumericDomain.Bounds last)) || !last.holdsAValue()) {
+            return null;
+        }
+        return last.min() == null
+                || new NumericDomain.Bounds(last.min(), null).meet(taken).holdsAValue()
+                ? taken : null;
     }
 
     /**
@@ -5091,13 +5541,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** Where the positions a walk hands its step lie: below how many the region leaves the
      *  container holding, and open where that is not read. Not ended where the language ends a
-     *  container, which is no distinction a model made. */
+     *  container, which is no distinction a model made: a region whose most is that end, as one
+     *  stating the container holds something leaves it, leaves the positions without a most. */
     private static NumericDomain.Bounds positionsLie(Quantity.PositionInTheWalk position,
                                                      SearchRegion region) {
         NumericDomain.Bounds lie = region.projectionOf(position.howMany())
                 instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds sizes)
-                ? positionsIn(sizes, position.howMany(), false) : null;
+                ? positionsIn(withoutTheLanguagesEnd(sizes, position.howMany()),
+                        position.howMany(), false) : null;
         return lie == null ? NumericDomain.Bounds.OPEN : lie;
+    }
+
+    /** {@code sizes} with no most where its most is no nearer than where the language ends
+     *  {@code size}. */
+    private static NumericDomain.Bounds withoutTheLanguagesEnd(NumericDomain.Bounds sizes,
+                                                               NumericTerm.FromOnePosition size) {
+        Endpoint end = RepresentationBounds.of(size).max();
+        return end != null && sizes.max() != null && end.equals(sizes.meet(
+                RepresentationBounds.of(size)).max())
+                ? new NumericDomain.Bounds(sizes.min(), null) : sizes;
     }
 
     /**
@@ -5261,7 +5723,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (working.told() == WhatARelationLeavesUndivided.Told.SOME) {
             return false;
         }
-        Map<NumericTerm, Integer> named = namedSides();
+        Map<Object, Integer> named = namedSides();
         if (!working.decimals().stream().allMatch(each -> overTheSides(each, named))) {
             return false;
         }
@@ -5279,7 +5741,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                         NumericTerm witness, BigInteger top,
                                         Predicate<IntOperation> apart) {
         for (IntOperation each : operations) {
-            Set<NumericTerm> reads = each.form().coefs().keySet();
+            Set<Object> reads = each.form().coefs().keySet().stream()
+                    .map(UndividedByARelation::keyOf).collect(Collectors.toSet());
             if (reads.isEmpty()) {
                 // An operation that comes to the same number whatever is read: no row's choice
                 // can move it, and the run stops at it or at none.
@@ -5299,7 +5762,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (!ofTheForm.containsAll(reads)) {
                 return false;
             }
-            ExactRatio weight = each.form().coefs().getOrDefault(witness, ExactRatio.ZERO);
+            ExactRatio weight = each.form().coefs().getOrDefault(
+                    new IntOperand.OfTheInput(witness), ExactRatio.ZERO);
             for (BigInteger at : List.of(BigInteger.ZERO, top)) {
                 ExactRatio value = weight.times(ExactRatio.of(at)).orNull() instanceof ExactRatio
                         product ? product.plus(each.form().constant()).orNull() : null;
@@ -5316,7 +5780,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /** Whether {@code operation} is over {@code number} and no other number. */
     private static boolean isOverOnly(IntOperation operation, NumericTerm number) {
         return operation.form().coefs().size() == 1
-                && operation.form().coefs().containsKey(number);
+                && operation.form().coefs().containsKey(new IntOperand.OfTheInput(number));
     }
 
     /** Whether the values of {@code carrier} include every whole number from nought to
@@ -5884,11 +6348,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return sides.get(at).readOff() == null || source == null || source.named();
     }
 
-    /** The places what the declarations and a way say of {@code side} are asked at: its own, or
-     *  the place of the element's number a walk kept an end of and of a seed the input holds. */
+    /** The places what the declarations and a way say of {@code side} are asked at: its own, the
+     *  place of the element's number a walk kept an end of and of a seed the input holds, or the
+     *  numbers the ends of a list of every whole number between two are made of. */
     private static List<FilingCoordinate> placesAsked(Side side) {
         if (side.position() != null) {
             return List.of(FilingCoordinate.of(side.position().howMany()));
+        }
+        if (side.inTurn() != null) {
+            List<FilingCoordinate> out = new ArrayList<>();
+            for (LinearForm<NumericTerm> end : List.of(side.inTurn().from(),
+                    side.inTurn().to())) {
+                end.coefs().keySet().forEach(term -> {
+                    if (term instanceof NumericTerm.FromOnePosition place
+                            && !out.contains(FilingCoordinate.of(place))) {
+                        out.add(FilingCoordinate.of(place));
+                    }
+                });
+            }
+            return out;
         }
         if (side.picked() != null) {
             return List.of(FilingCoordinate.of(new NumericTerm.ValueOf(side.picked().element())));

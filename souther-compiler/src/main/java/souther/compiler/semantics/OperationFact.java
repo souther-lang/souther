@@ -119,6 +119,33 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers the date {@code months} calendar months on from the one at
+     * {@code date}. A date stands at the months from year nought to its own — twelve times what
+     * {@code year} answers of it, and what {@code month} answers less one — and the move lands in
+     * the month that count plus {@code months} stands at: the month is what {@code remainder}, the
+     * library's floor remainder, leaves of it by twelve, plus one.
+     *
+     * <p>Exactly, and not through a measure as a shift is: the year is that count floored by
+     * twelve, the day is the date's own or the last day of the month it lands in where that is
+     * shorter, and where that month is past the calendar the operation stops
+     * ({@code numeric.CalendarMonths}). How many days it moves a date by turns on the date, so
+     * nothing here is a count of days, and two moves are not the move by their sum.
+     */
+    record MovesADateByMonths(ArgumentRef months, ArgumentRef date,
+                              ValueName.Stdlib.Operation year, ValueName.Stdlib.Operation month,
+                              ValueName.Stdlib.Operation remainder)
+            implements OperationFact {
+
+        public MovesADateByMonths {
+            Objects.requireNonNull(months, "a move by months moves by some months");
+            Objects.requireNonNull(date, "and moves a date");
+            Objects.requireNonNull(year, "counted by the year it falls in");
+            Objects.requireNonNull(month, "and the month");
+            Objects.requireNonNull(remainder, "and lands in the month a remainder says");
+        }
+    }
+
+    /**
      * The operation answers how many whole units lie between its two arguments, counting forward
      * from {@code from} to {@code to}, where one unit is {@code perUnit} steps of the order the
      * arguments are counted on.
@@ -227,6 +254,25 @@ public sealed interface OperationFact {
                 throw new IllegalArgumentException("a bound on each element is a line of the"
                         + " operation against an argument it is handed, under no condition: " + bound);
             }
+        }
+    }
+
+    /**
+     * The operation answers every whole number from {@code from} up to {@code to}, each once and in
+     * that order, and nothing where {@code to} is below {@code from}: {@code List.rangeInclusive(3,
+     * k)} holds {@code 3}, then {@code 4}, and so on to {@code k}.
+     *
+     * <p>So the element at position {@code i} is {@code from + i}, for every {@code i} from nought
+     * to {@code to - from}. Which value a walk over the answer hands its step is read off that, and
+     * not off where the element stands: the two are one number only where {@code from} is nought.
+     * That a run makes the list at all is the operation's to say where it stops, and nothing here
+     * says it.
+     */
+    record HoldsEachWholeNumberInTurn(ArgumentRef from, ArgumentRef to) implements OperationFact {
+
+        public HoldsEachWholeNumberInTurn {
+            Objects.requireNonNull(from, "the numbers start somewhere");
+            Objects.requireNonNull(to, "and end somewhere");
         }
     }
 

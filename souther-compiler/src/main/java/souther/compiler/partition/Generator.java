@@ -7913,7 +7913,7 @@ public final class Generator {
     private static NumericWitness.Standing standingOnARemainder(SearchRegion here,
             RowDemand.OnARemainder remainder, Function<NumericTerm, Carrier> on,
             WitnessSearch looking) {
-        LinearForm<NumericTerm> dividend = remainder.remainder().dividend();
+        LinearForm<NumericTerm> dividend = remainder.dividend();
         BigInteger moved = ((ExactAnswer.Held<BigInteger>) dividend.constant().floor()).value();
         BigInteger divisor = remainder.remainder().divisor();
         BigInteger step = BigInteger.ZERO;

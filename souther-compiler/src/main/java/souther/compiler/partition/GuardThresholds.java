@@ -313,37 +313,61 @@ public final class GuardThresholds {
                                     Reachability.gettingPast(Reachability.of(
                                             new WayToTheBorder(each.wayToACase(put)),
                                             read.quantities().region()), each.getsPast()));
+                            Reachability toIt = Reachability.gettingPast(Reachability.of(
+                                    new WayToTheBorder(each.assumed()),
+                                    read.quantities().region()), each.getsPast());
                             ComparisonAssessment arrived =
                                     ComparisonAssessment.narrowedByWhatArrives(admitted.read(),
-                                            Reachability.gettingPast(Reachability.of(
-                                                    new WayToTheBorder(each.assumed()),
-                                                    read.quantities().region()),
-                                                    each.getsPast()),
-                                            wayToACase, arrivals, false, read, each.witnesses());
+                                            toIt, wayToACase, arrivals, false, read,
+                                            each.witnesses());
                             // And whether a run that some row takes stops in it, which the line it
                             // draws does not say: a stop the ways before it rule out is no run's.
                             // A comparison every run stops in is already said as that.
+                            // An operation over a bound value no value of it is shown to keep
+                            // within its type is one too, on an application some row is shown
+                            // not to be kept from: one made on rows the way rules out works
+                            // nothing out. Where those rows cannot be put on the way, the
+                            // application is taken as made. That is asked of what a run works
+                            // out, and not of what a row of a line gets past.
                             boolean aRunStops = !(arrived instanceof ComparisonAssessment
                                     .AnswersNowhere)
-                                    && each.stopsWhere().isPresent()
+                                    && ((each.stopsWhere().isPresent()
                                     && ComparisonAssessment.someRowArrives(
-                                            wayToACase.apply(each.stopsWhere().get()), arrivals);
+                                            wayToACase.apply(each.stopsWhere().get()), arrivals))
+                                    || each.worksOutOnEach().map(applications -> applications
+                                            .stream().anyMatch(one -> one.stops()
+                                                    .aRunMayStopOverABoundValue()
+                                                    && ((one.reached() instanceof Proposition
+                                                            .Always(boolean holds) && holds)
+                                                            ? ComparisonAssessment.someRowArrives(
+                                                                    toIt, arrivals)
+                                                            : (each.statedAsACondition().isEmpty()
+                                                            || ComparisonAssessment.someRowArrives(
+                                                                    wayToACase.apply(one.reached()),
+                                                                    arrivals)))))
+                                            .orElseGet(() -> each.stopsIn()
+                                                    .map(StopEvidence::aRunMayStopOverABoundValue)
+                                                    .orElseGet(() -> arrived.relationsRead()
+                                                            .stream().anyMatch(UndividedByARelation
+                                                                    ::aRunMayStopOverABoundValue)))
+                                    || aRunTakingAnArmMayStop(each, read, arrivals, wayToACase,
+                                            aCase));
                             // And the values at which every run getting to it stops in what it
                             // works out, asked of the way before a row is narrowed to getting
                             // past that: a row that got past holds none of them.
-                            List<SearchRegion> before = Reachability.of(
+                            List<SearchRegion> before = regionsOf(Reachability.of(
                                     new WayToTheBorder(each.assumed()),
-                                    read.quantities().region())
-                                    instanceof Reachability.Reaching way
-                                    ? List.of(way.region()) : List.of();
+                                    read.quantities().region()));
                             List<EveryRunStops> stops =
                                     arrived instanceof ComparisonAssessment.AnswersNowhere
                                             ? List.<EveryRunStops>of()
-                                            : arrived.relationsRead().stream()
-                                                    .flatMap(relation -> relation
-                                                            .everyRunStopsIn(read, before)
-                                                            .stream())
-                                                    .distinct().toList();
+                                            : everyRunStops(arrived, each.worksOutOnEach(),
+                                                    each.stopsIn(), read,
+                                                    before, each.statedAsACondition().isPresent(),
+                                                    decides -> regionsOf(Reachability.of(
+                                                            new WayToTheBorder(each.wayToACase(
+                                                                    aCase.apply(decides))),
+                                                            read.quantities().region())));
                             reached(cuts, stated, each, readingsOf(arrived), aCase);
                             lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
@@ -1031,6 +1055,85 @@ public final class GuardThresholds {
         out.addAll(geometry.evidence());
         between.addAll(geometry.between());
         throughADerivedValue.addAll(geometry.throughADerivedValue());
+    }
+
+    /**
+     * Where every run getting to {@code arrived} stops in what it works out, over the rows the
+     * ways to it leave before a row is narrowed to getting past ({@code before}): each relation it
+     * was read as, where it is read once, and what a run getting to it works out ({@code stopsIn}),
+     * which holds the sums a witness answers for that no relation's rows are asked to get past.
+     *
+     * <p>Inside a closure, of what each application works out ({@code onEach}) and not of the
+     * lines: a line that decides on no row an application is made on is no line, and the
+     * application still works its operations out. Each is asked only over the rows it is made on
+     * ({@code beforeACase}), since a run that does not make it — one that stopped on an answer
+     * before it — works none of it out; and only where what every other application works out is
+     * within its type, since a run may make those first. An application made on some rows is
+     * asked nothing where the rows it is made on cannot be put on the way
+     * ({@code casesPutOnTheWay}).
+     */
+    private static List<EveryRunStops> everyRunStops(
+            ComparisonAssessment arrived, Optional<List<Cutting.OnAnApplication>> onEach,
+            Optional<StopEvidence> stopsIn, InputReading read, List<SearchRegion> before,
+            boolean casesPutOnTheWay, Function<Proposition, List<SearchRegion>> beforeACase) {
+        Set<EveryRunStops> out = new LinkedHashSet<>();
+        if (onEach.isEmpty()) {
+            arrived.relationsRead().forEach(relation ->
+                    out.addAll(relation.everyRunStopsIn(read, before)));
+            stopsIn.ifPresent(stops -> out.addAll(stops.everyRunStopsIn(read, before, List.of())));
+            return List.copyOf(out);
+        }
+        List<Cutting.OnAnApplication> applications = onEach.get();
+        for (int at = 0; at < applications.size(); at++) {
+            Cutting.OnAnApplication it = applications.get(at);
+            boolean everywhere = it.reached() instanceof Proposition.Always(boolean holds) && holds;
+            if (!everywhere && !casesPutOnTheWay) {
+                continue;
+            }
+            List<UndividedByARelation.IntOperation> others = new ArrayList<>();
+            boolean othersTold = true;
+            for (int other = 0; other < applications.size(); other++) {
+                if (other != at) {
+                    othersTold &= applications.get(other).stops().exact();
+                    others.addAll(applications.get(other).stops().operations().operations());
+                }
+            }
+            if (othersTold) {
+                out.addAll(it.stops().everyRunStopsIn(read,
+                        everywhere ? before : beforeACase.apply(it.reached()), others));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * Whether a run taking an arm of a choice {@code each} is read through may stop in what it
+     * works out there ({@link StopEvidence.OnAnArm}): asked over the rows the way to the arm
+     * leaves, the arm's condition put on it, of an arm some row is shown to arrive at. An arm no
+     * row takes works nothing out, and an arm whose condition cannot be put on the way is asked
+     * nothing, since what the rows of the whole way would say is said of runs that do not take it.
+     */
+    private static boolean aRunTakingAnArmMayStop(
+            ComparisonReadings.Reading each, InputReading read, List<ComparisonArrival> arrivals,
+            WaysToACase wayToACase, Function<Proposition, ReachingCuts.Stating> aCase) {
+        if (each.statedAsACondition().isEmpty()) {
+            return false;
+        }
+        for (StopEvidence.OnAnArm arm : each.onTheArms()) {
+            if (!arm.stops().noRunMayStopAnywhere() && ComparisonAssessment.someRowArrives(wayToACase.apply(arm.reached()), arrivals)
+                    && arm.stops().aRunMayStopIn(read, regionsOf(Reachability.of(
+                            new WayToTheBorder(each.wayToACase(aCase.apply(arm.reached()))),
+                            read.quantities().region())))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The region {@code way} leaves, or none where nothing reaches along it. */
+    private static List<SearchRegion> regionsOf(Reachability way) {
+        return way instanceof Reachability.Reaching reaching ? List.of(reaching.region())
+                : List.of();
     }
 
     /**

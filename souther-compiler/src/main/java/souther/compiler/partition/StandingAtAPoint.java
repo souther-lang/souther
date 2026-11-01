@@ -305,6 +305,8 @@ public final class StandingAtAPoint {
         /** For a point of a class the line cuts: what a row has to be for it. Empty for a point
          *  against the line. */
         private final Optional<AsAClass> asAClass;
+        /** Where the line decides, as a point of it is searched inside ({@link #caseItDecidesIn}). */
+        private final Optional<TheCaseALineDecidesIn> caseItDecidesIn;
 
         private AtALine(MeasuredInput.BorderReading line, List<ConditionOutcomeSite> watched,
                         Optional<WhereAPartDecides.AskedOfRows> decides, MetOnARow reached,
@@ -314,6 +316,21 @@ public final class StandingAtAPoint {
             this.decides = decides;
             this.reached = reached;
             this.asAClass = asAClass;
+            this.caseItDecidesIn = decides.isEmpty() ? Optional.empty()
+                    : line.border().origin() instanceof LineOrigin.ComparisonOrigin comparison
+                            ? comparison.part().map(part -> new TheCaseALineDecidesIn(
+                                    part.decides()))
+                            : Optional.empty();
+        }
+
+        /**
+         * What a row read back here has to meet for the line to decide at it, where it has to:
+         * the case of a statement of several the line is one line of. Nothing for a point of a
+         * class, which lies over the whole quantity, nor for a line that is a whole comparison's.
+         * One for this line put to rows, however many values a point of it is searched with.
+         */
+        public Optional<TheCaseALineDecidesIn> caseItDecidesIn() {
+            return caseItDecidesIn;
         }
 
         /**

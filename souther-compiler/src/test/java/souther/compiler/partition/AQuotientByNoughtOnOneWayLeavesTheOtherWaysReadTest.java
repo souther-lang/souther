@@ -152,6 +152,21 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     }
 
     /**
+     * A choice decided by a statement that holds on no row it is made on — {@code a} above nought
+     * leaves {@code a}, not below nought, and a run with {@code a} at or below nought stops in
+     * making it — is read and reported, and the stop is not passed over: the decision is a column
+     * of the decision table, named by it or its denial, whichever spells first, though the denial
+     * of its denial is spelled another way.
+     */
+    @Test
+    void aChoiceDecidedByAStatementThatHoldsOnNoRowIsReportedWithItsStop() {
+        String report = human(MODEL.formatted("",
+                "(if " + QUOTIENT.replace(">= k", "< 0") + " then 1 else 2) >= b"));
+        assertFalse(report.contains("measurement: complete"), report);
+        assertTrue(report.contains(MAY_STOP_A_RUN) || report.contains("not read:"), report);
+    }
+
+    /**
      * A possibility and not a run shown to exist: where the ways before the stop leave it out only
      * by arithmetic this does not read (here {@code a} above nought from {@code a * b > 0} and
      * {@code b > 0}), the stop is not shown to be ruled out and stays said.

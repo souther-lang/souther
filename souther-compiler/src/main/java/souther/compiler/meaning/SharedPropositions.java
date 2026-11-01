@@ -112,6 +112,9 @@ final class SharedPropositions {
      * What holds exactly where {@code stated} does not: the one made the first time it was asked
      * while both are held, or {@code denying}'s, kept from now on.
      *
+     * <p>What is kept is equal to what {@code denying} would make: keeping it saves the making,
+     * and never says anything another making would not.
+     *
      * <p>Made outside the lock, since making it asks for the denial of every part. Two readers
      * asking at once make two equal denials and keep the one {@link #shared} hands both.
      */

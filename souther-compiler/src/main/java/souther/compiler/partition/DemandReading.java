@@ -2234,10 +2234,11 @@ final class DemandReading {
         if (affine.form().coefs().size() != 1
                 || !(affine.form().coefs().keySet().iterator().next()
                         instanceof Quantity.RemainderOfADividend remainder)
-                || !(remainder.dividend().constant().floor() instanceof ExactAnswer.Held<?>)) {
+                || !(remainder.overTheInput() instanceof LinearForm<NumericTerm> dividend)
+                || !(dividend.constant().floor() instanceof ExactAnswer.Held<?>)) {
             return null;
         }
-        for (NumericTerm term : remainder.dividend().coefs().keySet()) {
+        for (NumericTerm term : dividend.coefs().keySet()) {
             TermOrders orders = read.quantities().ordersOf(term);
             if (term.atOnePosition() == null || orders == null || orders.answered() == null
                     || !orders.answered().counts()) {

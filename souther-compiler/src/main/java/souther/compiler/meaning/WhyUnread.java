@@ -82,6 +82,7 @@ public sealed interface WhyUnread {
                  NotArithmetic _, ANumberNotHeld _, NoNumberOnARun _,
                  TwoElementsOfOneContainer _, NoLawFor _, NoWordsFor _, NotProvedOfItsBody _,
                  NoFormOfWhatItAnswers _, ANumberOfWhatAnOperationAnswers _,
+                 ADateMovedByMonths _, APartOfADateMovedByMonths _,
                  CodePointsOfWhatAnOperationAnswers _, AClauseOfAnInvariant _, AnInvariantNotReached _, InACalledBody _,
                  WhatARecursiveHelperAnswers _, SeveralValuesNotGoneInto _,
                  CopiesStateDifferentThings _, NotMetByTheReading _,
@@ -229,6 +230,33 @@ public sealed interface WhyUnread {
         public ANumberOfWhatAnOperationAnswers {
             Objects.requireNonNull(measure, "a number is taken by an operation");
             Objects.requireNonNull(madeBy, "of what an operation answered");
+        }
+    }
+
+    /**
+     * The date {@code operation} answers, a move of a date by months, where nothing here reads it:
+     * what the library states of it is where it lands in the calendar, and how many days that is
+     * from the date it moves turns on the month, so it is no form of that date. It could be read
+     * by the calendar's cases, and those are not projected onto the input here.
+     */
+    record ADateMovedByMonths(ValueName.Stdlib operation) implements WhyUnread {
+
+        public ADateMovedByMonths {
+            Objects.requireNonNull(operation, "a date is moved by an operation");
+        }
+    }
+
+    /**
+     * A number {@code measure} takes of what {@code madeBy}, a move of a date by months, answers,
+     * where this reads no such number: it reads the month a date at a place lands in, and the year
+     * the move lands in turns on the month as well, and the day on how long that month is.
+     */
+    record APartOfADateMovedByMonths(ValueName.Stdlib measure, ValueName.Stdlib madeBy)
+            implements WhyUnread {
+
+        public APartOfADateMovedByMonths {
+            Objects.requireNonNull(measure, "a number is taken by an operation");
+            Objects.requireNonNull(madeBy, "of a date an operation moved");
         }
     }
 

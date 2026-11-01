@@ -185,6 +185,7 @@ final class ProvingTheLibrary implements LibraryProofs {
             case BoundOperationFact.AnswersTheClosureOnWhatItHolds _ -> false;
             case BoundOperationFact.BoundsEachElementOfItsResult _ -> false;
             case BoundOperationFact.AnswersAnElementOf _ -> false;
+            case BoundOperationFact.HoldsEachWholeNumberInTurn _ -> false;
             case BoundOperationFact.AnswersAnElementWhereTheClosureHolds _ -> false;
             case BoundOperationFact.KeepsWhetherItHoldsACodePointOf _ -> false;
             case BoundOperationFact.IsRelated _ -> false;
@@ -193,6 +194,7 @@ final class ProvingTheLibrary implements LibraryProofs {
             case BoundOperationFact.AnswersAFormOfItsArguments _ -> false;
             case BoundOperationFact.StatesTheOrderOfItsArguments _ -> false;
             case BoundOperationFact.ShiftsBy _ -> false;
+            case BoundOperationFact.MovesADateByMonths _ -> false;
             case BoundOperationFact.CountsWholeUnitsBetween _ -> false;
             case BoundOperationFact.CountsTheWholeUnitsOf _ -> false;
             case BoundOperationFact.RoundsToAStep _ -> false;

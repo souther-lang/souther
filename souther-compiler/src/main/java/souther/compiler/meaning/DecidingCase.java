@@ -1,5 +1,7 @@
 package souther.compiler.meaning;
 
+import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
@@ -143,8 +145,24 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
                 : new Cases.EachOf(cases.stream().map(DecidingCase::standsFor).toList());
     }
 
-    /** This case where {@code also} holds as well, standing for each of its cases where it does. */
+    /**
+     * This case where {@code also} holds as well, standing for each of its cases where it does.
+     *
+     * <p>Where this case has a value of the row be one case, {@code also} is read with the value
+     * that case: what it says of the value being another case comes out the way that answers. An
+     * arm of a choice this case is not in has no say in it, read or not.
+     */
     DecidingCase meeting(Proposition also) {
+        for (Proposition part : conjunctsOf(condition)) {
+            if (part instanceof Proposition.InCases(DecisionSubject.AnInput(TermPath at),
+                    CasesLeft cases, boolean held, var _)
+                    && held && cases.atoms().size() == 1
+                    && at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Element
+                            || step instanceof TermPath.Step.Key)) {
+                also = WhereEachLineDecides.assuming(also, new DecisionSubject.AnInput(at),
+                        cases.atoms());
+            }
+        }
         if (also instanceof Proposition.Always(boolean holds) && holds) {
             return this;
         }

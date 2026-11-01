@@ -234,6 +234,11 @@ public final class OperationFacts {
             // `rangeInclusive` holds none below its first argument or above its second.
             about("List", "rangeInclusive", eachElementBounded(Rel.GE, at(0))),
             about("List", "rangeInclusive", eachElementBounded(Rel.LE, at(1))),
+            // And which numbers those are, in which order: every one between the two, each once,
+            // from the first up. The bounds above and the size below say less than this and are
+            // still declared, for the readers that read them.
+            about("List", "rangeInclusive",
+                    new OperationFact.HoldsEachWholeNumberInTurn(at(0), at(1))),
             about("Int", "abs", bounded(Rel.GE, 0)),
             about("Decimal", "abs", bounded(Rel.GE, 0)),
             about("Int", "floorMod", bounded(Rel.GE, 0, aboveZero(at(1)))),
@@ -308,6 +313,12 @@ public final class OperationFacts {
             about("DateTime", "addMinutes", shifts("DateTime", "minutesBetween", at(1), at(0), 1)),
             about("DateTime", "addHours", shifts("DateTime", "minutesBetween", at(1), at(0), 60)),
             about("DateTime", "addDays", shifts("DateTime", "minutesBetween", at(1), at(0), 1440)),
+            // And the one that moves a date by months, which is no shift: how many days a month is
+            // turns on the month, so it is stated as the calendar move it is.
+            about("Date", "addMonths", new OperationFact.MovesADateByMonths(at(0), at(1),
+                    ValueName.Stdlib.operation("Date", "year"),
+                    ValueName.Stdlib.operation("Date", "month"),
+                    ValueName.Stdlib.operation("Int", "floorMod"))),
 
             // The operations answering the order of their two arguments as the sign of a number.
             // The direction is not the same for all of them: `compare(a, b)` is positive where `a`

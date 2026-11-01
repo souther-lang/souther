@@ -352,6 +352,8 @@ final class OperationFactBinder {
                                     TypeRequirement.ANY,
                                     "the argument a positive answer names as lesser"));
             case OperationFact.ShiftsBy shifts -> holdShift(stdlib, declaration, shifts);
+            case OperationFact.MovesADateByMonths moves ->
+                    holdAMoveByMonths(stdlib, declaration, moves);
             case OperationFact.CountsWholeUnitsBetween counts ->
                     holdCountOfWholeUnits(declaration, counts);
             case OperationFact.CountsTheWholeUnitsOf counts ->
@@ -371,6 +373,18 @@ final class OperationFactBinder {
                                 "the argument a bound on each element is held against"),
                                 bound.offset(), bound.rel(), new ResultBound.Provided.Always<>(),
                                 bound.origin()));
+            }
+            // Every whole number between two, each once and in order: both ends are whole numbers
+            // and so is every element, or the element at a position is no end moved by it.
+            case OperationFact.HoldsEachWholeNumberInTurn each -> {
+                requireAKernel(stdlib, operation, "which numbers it answers");
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.LIST_OF_INTS,
+                        "a list of every whole number between two");
+                DeclaredArgument from = holdAWholeNumber(declaration, each.from(),
+                        "the number the list starts at");
+                DeclaredArgument to = holdAWholeNumber(declaration, each.to(),
+                        "the number the list ends at");
+                yield new BoundOperationFact.HoldsEachWholeNumberInTurn(operation, from, to);
             }
             // A value that is one of the elements of a container.
             case OperationFact.AnswersAnElementOf of -> {
@@ -631,6 +645,19 @@ final class OperationFactBinder {
         };
     }
 
+    /** {@code at} held to the declaration as an argument that is a whole number. */
+    private static DeclaredArgument holdAWholeNumber(CompleteSignature declaration, ArgumentRef at,
+                                                     String role) {
+        DeclaredArgument held = holdToTheDeclaration(declaration, at, null, TypeRequirement.EXACT,
+                role);
+        if (held.stands() != Type.Prim.INT) {
+            throw new IllegalStateException("argument " + (held.position() + 1) + " of "
+                    + declaration.declaring().operation() + " is " + Type.show(held.stands())
+                    + ", not a whole number; it is named as " + role);
+        }
+        return held;
+    }
+
     /**
      * Holds one rule to the operation it is about: the argument it names is one the declaration
      * has, and what stands there is what the rule requires. A rule naming a part of something the
@@ -772,6 +799,47 @@ final class OperationFactBinder {
         }
         return new BoundOperationFact.ShiftsBy(declaration.declaring(),
                 declaredSignature(stdlib, shift.measure()).declaring(), moved, amount, shift.per());
+    }
+
+    /**
+     * As {@link #holdToTheDeclaration}, for a move of a date by months: the operation answers a
+     * date, moves a date by a whole number of months, the year and the month a date is counted by
+     * each take a date and answer a whole number, and the remainder the month it lands in is
+     * stated through takes two whole numbers and answers one. A move stated through anything else
+     * would land in a month no number of months says.
+     */
+    private static BoundOperationFact.MovesADateByMonths holdAMoveByMonths(
+            Stdlib stdlib, CompleteSignature declaration, OperationFact.MovesADateByMonths moves) {
+        ValueName.Stdlib library = (ValueName.Stdlib) declaration.declaring().operation();
+        DeclaredArgument months = holdToTheDeclaration(declaration, moves.months(), null,
+                TypeRequirement.ANY, "the months a date is moved by");
+        DeclaredArgument date = holdToTheDeclaration(declaration, moves.date(), null,
+                TypeRequirement.ANY, "the date moved by months");
+        if (months.stands() != Type.Prim.INT || date.stands() != Type.Prim.DATE
+                || declaration.result() != Type.Prim.DATE) {
+            throw new IllegalStateException(library.qualified() + " moves "
+                    + Type.show(date.stands()) + " by " + Type.show(months.stands())
+                    + " and answers " + Type.show(declaration.result())
+                    + ", which is no date moved by a whole number of months");
+        }
+        CompleteSignature year = declaredSignature(stdlib, moves.year());
+        CompleteSignature month = declaredSignature(stdlib, moves.month());
+        for (CompleteSignature part : List.of(year, month)) {
+            if (!part.params().equals(List.of(Type.Prim.DATE)) || part.result() != Type.Prim.INT) {
+                throw new IllegalStateException("a date " + library.qualified()
+                        + " moves is counted by " + part.declaring().operation()
+                        + ", which takes no number of a date");
+            }
+        }
+        CompleteSignature remainder = declaredSignature(stdlib, moves.remainder());
+        if (!remainder.params().equals(List.of(Type.Prim.INT, Type.Prim.INT))
+                || remainder.result() != Type.Prim.INT) {
+            throw new IllegalStateException("the month " + library.qualified()
+                    + " lands in is stated through " + moves.remainder().qualified()
+                    + ", which does not leave a whole number of a whole number");
+        }
+        return new BoundOperationFact.MovesADateByMonths(declaration.declaring(), months, date,
+                year.declaring(), month.declaring(), remainder.declaring());
     }
 
     /**

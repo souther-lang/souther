@@ -42,6 +42,24 @@ class CongruencesTest {
     }
 
     @Test
+    void aCongruenceIsSolvedByTheNumbersThatMeetIt() {
+        for (int modulus = 1; modulus <= 12; modulus++) {
+            for (int weight = -13; weight <= 13; weight++) {
+                for (int constant = -13; constant <= 13; constant++) {
+                    Congruences solved = Congruences.solving(n(weight), n(constant), n(modulus));
+                    for (int x = -60; x <= 60; x++) {
+                        boolean meets = Math.floorMod(weight * x + constant, modulus) == 0;
+                        boolean held = solved != null && solved.residue()
+                                .equals(n(Math.floorMod(x, solved.modulus().intValue())));
+                        assertEquals(meets, held, x + " in " + weight + "·x + " + constant
+                                + " by " + modulus);
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     void twoClassesWhoseResiduesDifferByWhatTheirCommonFactorDoesNotDivideShareNothing() {
         assertNull(new Congruences(n(0), n(4)).meet(new Congruences(n(1), n(6))));
     }
