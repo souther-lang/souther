@@ -2,10 +2,14 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.TypeView;
 import souther.compiler.check.UnreadComparison;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.Arrivals;
@@ -32,6 +36,7 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WrittenChoice;
 import souther.compiler.meaning.WrittenLine;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
@@ -50,6 +55,8 @@ import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -1926,13 +1933,66 @@ sealed interface ComparisonAssessment {
         for (FilingCoordinate each : filed) {
             writtenAt(each.path(), read, lengths, values);
         }
+        NumericDomain.Bounds runs = apartWithin(comparison.left(), comparison.right(), read);
         BorderQuantity apart = BorderQuantity.comparedOnARun(behavior, which,
                 written(comparison.left()) + " - " + written(comparison.right()), filed,
-                lengths, values);
+                lengths, values, runs);
         Cutting cutting = new Cutting(apart, new Level.OfTheQuantity(ExactRatio.ZERO),
-                comparison.claim(), NumericDomain.Bounds.OPEN);
+                comparison.claim(), runs);
         return onTheQuantity(at, cutting, new Cutting.Read.Cuts(cutting).authored(), read, false,
                 witnesses);
+    }
+
+    /**
+     * Where the left side less the right can stand, from what the types of the two sides leave
+     * each of them: an end of the difference is there only where the end of each side it is drawn
+     * from is.
+     *
+     * <p>Whole numbers, since both sides are an {@code Int}, and taken exactly: a difference of
+     * two {@code Int}s may lie beyond what an {@code Int} holds.
+     */
+    private static NumericDomain.Bounds apartWithin(Core left, Core right, InputReading read) {
+        NumericDomain.Bounds of = sideRuns(left, read);
+        NumericDomain.Bounds from = sideRuns(right, read);
+        return new NumericDomain.Bounds(
+                differenceEnd(of.min(), true, from.max(), false),
+                differenceEnd(of.max(), false, from.min(), true));
+    }
+
+    private static Endpoint differenceEnd(Endpoint one, boolean oneIsLower, Endpoint other,
+                                          boolean otherIsLower) {
+        BigInteger first = one == null ? null : one.wholeAdmitted(oneIsLower);
+        BigInteger second = other == null ? null : other.wholeAdmitted(otherIsLower);
+        return first == null || second == null ? null
+                : Endpoint.inclusive(Count.of(new BigDecimal(first.subtract(second))));
+    }
+
+    /**
+     * Where the whole number {@code side} works out to can stand, as far as its type says: the
+     * number itself where it is written, and the ends the rules of a newtype leave its value where
+     * it is read from one. Anything else is as open as a number can be.
+     */
+    private static NumericDomain.Bounds sideRuns(Core side, InputReading read) {
+        Core seen = Core.withoutStanding(side);
+        if (seen instanceof Core.Int number) {
+            Endpoint only = Endpoint.inclusive(Count.of(number.value()));
+            return new NumericDomain.Bounds(only, only);
+        }
+        Core.FieldAccess access = switch (seen) {
+            case Core.FieldAccess one -> one;
+            case Core.FieldProjection projection -> projection.lastAccess();
+            default -> null;
+        };
+        if (access == null
+                || Location.isStep(access.target().type(), access.field(), read.newtypes())) {
+            return NumericDomain.Bounds.OPEN;
+        }
+        RuleReadingSource rules = read.rules();
+        TypeView view = TypeView.of(access.target().type(), rules.inners(), rules.symbols(),
+                rules.kinds(), rules.sums());
+        DeclaredBounds.Range own = DeclaredBounds.of(view, read.ruleReading());
+        return own == null ? NumericDomain.Bounds.OPEN
+                : new NumericDomain.Bounds(own.min(), own.max());
     }
 
     /**

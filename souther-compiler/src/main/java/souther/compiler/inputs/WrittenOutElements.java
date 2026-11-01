@@ -9,7 +9,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -104,8 +103,13 @@ public final class WrittenOutElements {
     /** What a walk in this reading of names came to, as its occurrences. */
     private static Walked from(ElementsWrittenOut.Walked<InputReads> walked) {
         return switch (walked) {
-            case ElementsWrittenOut.Walked.Each<InputReads>(var each) ->
-                    new Walked.Each(each.stream().map(WrittenOutElements::occurrence).toList());
+            case ElementsWrittenOut.Walked.Each<InputReads>(var each) -> {
+                ReadMeaning.Occurrence[] made = new ReadMeaning.Occurrence[each.size()];
+                for (int at = 0; at < made.length; at++) {
+                    made[at] = occurrence(each.get(at));
+                }
+                yield new Walked.Each(List.of(made));
+            }
             case ElementsWrittenOut.Walked.PastTheFigure<InputReads> _ ->
                     new Walked.PastTheFigure();
             case ElementsWrittenOut.Walked.NotWrittenOut<InputReads> _ ->
@@ -137,10 +141,11 @@ public final class WrittenOutElements {
         if (keptWhere.isEmpty()) {
             kept = List.of();
         } else {
-            kept = new ArrayList<>(keptWhere.size());
-            for (ElementsWrittenOut.Kept<InputReads> each : keptWhere) {
-                kept.add(kept(each));
+            ReadMeaning.Occurrence.Kept[] made = new ReadMeaning.Occurrence.Kept[keptWhere.size()];
+            for (int at = 0; at < made.length; at++) {
+                made[at] = kept(keptWhere.get(at));
             }
+            kept = List.of(made);
         }
         return new ReadMeaning.Occurrence(denotation(one.value()), kept, one.answered(),
                 one.within());

@@ -18,6 +18,8 @@ import souther.compiler.types.WrittenOwner;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import souther.compiler.numeric.NumericDomain;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -45,7 +47,7 @@ class ARowStandsWhereItsRunWorkedTheSidesOutTest {
     private static final BorderQuantity.ComparedOnARun APART = new BorderQuantity.ComparedOnARun(
             "out", new ModelOccurrence(new SourceConstructOrigin(new WrittenOwner.Body("m", "out"),
                     0, 0, SourceConstruct.BINARY), ExpansionLineage.ORIGINAL),
-            "misses(xs) - 3", List.of(), List.of(), List.of());
+            "misses(xs) - 3", List.of(), List.of(), List.of(), NumericDomain.Bounds.OPEN);
 
     private static Criterion at(BigInteger level) {
         return new Criterion.AtTheLevel(new Level.OfTheQuantity(ExactRatio.of(level)));

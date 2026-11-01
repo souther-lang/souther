@@ -1740,15 +1740,20 @@ public sealed interface BorderQuantity
      *                   at each
      * @param values     the whole numbers at those places outside a container, a candidate
      *                   written at each
+     * @param runs       where the difference can stand at all: the ends the types of the two
+     *                   sides leave it, and none where a side's type says nothing of it. Never
+     *                   narrower than the difference of any run, and no claim that each value
+     *                   inside is reached
      */
     record ComparedOnARun(String behavior, ModelOccurrence comparison, String spelled,
                           List<FilingCoordinate> filed,
                           List<NumericTerm.FromOnePosition> lengths,
-                          List<NumericTerm.FromOnePosition> values) implements BorderQuantity {
+                          List<NumericTerm.FromOnePosition> values,
+                          NumericDomain.Bounds runs) implements BorderQuantity {
 
         public ComparedOnARun {
             if (behavior == null || comparison == null || spelled == null || filed == null
-                    || lengths == null || values == null) {
+                    || lengths == null || values == null || runs == null) {
                 throw new IllegalArgumentException(
                         "a comparison read on its runs is one comparison, named and filed");
             }
@@ -1824,8 +1829,9 @@ public sealed interface BorderQuantity
     static BorderQuantity comparedOnARun(String behavior, ModelOccurrence comparison,
                                          String spelled, List<FilingCoordinate> filed,
                                          List<NumericTerm.FromOnePosition> lengths,
-                                         List<NumericTerm.FromOnePosition> values) {
-        return new ComparedOnARun(behavior, comparison, spelled, filed, lengths, values);
+                                         List<NumericTerm.FromOnePosition> values,
+                                         NumericDomain.Bounds runs) {
+        return new ComparedOnARun(behavior, comparison, spelled, filed, lengths, values, runs);
     }
 
     /** How this quantity's own values are ordered, and which of them it can take. */
@@ -2041,8 +2047,9 @@ public sealed interface BorderQuantity
             case ProductOfAPair product -> ProductOfAPair.across(
                     quantities.runsBetween(product.alone(0)),
                     quantities.runsBetween(product.alone(1)));
-            // Nothing the rules say of the input reaches what a run works out of it.
-            case ComparedOnARun _ -> NumericDomain.Bounds.OPEN;
+            // Nothing the rules say of the input reaches what a run works out of it; what bounds
+            // it is the types of the two sides.
+            case ComparedOnARun run -> run.runs();
         };
     }
 
@@ -2101,9 +2108,9 @@ public sealed interface BorderQuantity
                 yield new NumericDomain.FormProjection.Within(ProductOfAPair.across(each[0],
                         each[1]));
             }
-            // No relation a region holds is about what a run works out.
-            case ComparedOnARun _ ->
-                    new NumericDomain.FormProjection.Within(NumericDomain.Bounds.OPEN);
+            // No relation a region holds is about what a run works out: it leaves the difference
+            // what the types of the two sides do.
+            case ComparedOnARun run -> new NumericDomain.FormProjection.Within(run.runs());
         };
     }
 
