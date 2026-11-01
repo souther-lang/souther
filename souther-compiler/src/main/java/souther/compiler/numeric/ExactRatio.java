@@ -14,6 +14,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 
 /**
  * An exact ratio of two whole numbers, which is what the constraint algebra reasons in.
@@ -143,32 +144,44 @@ public final class ExactRatio implements Comparable<ExactRatio> {
             return shared(ExactArithmetic.canonical(at));
         }
         int hash = at.hashCode();
-        int slot = (hash ^ (hash >>> 16)) & (DECIMALS.length - 1);
-        DecimalRatio known = DECIMALS[slot];
-        if (known != null && known.decimal().equals(at)) {
+        int slot = (hash ^ (hash >>> 16)) & (DECIMALS.length() - 1);
+        DecimalRatio known = DECIMALS.get(slot);
+        if (known != null && known.isWrittenAs(at)) {
             return known.ratio();
         }
         ExactRatio made = shared(ExactArithmetic.canonical(at));
-        DECIMALS[slot] = new DecimalRatio(at, made);
+        DECIMALS.set(slot, new DecimalRatio(at, made));
         return made;
     }
 
-    /** A decimal and the ratio it is, which is a function of the decimal's scale and unscaled value
-     *  alone, and so is the ratio for every decimal {@code equals} to it. */
-    private record DecimalRatio(BigDecimal decimal, ExactRatio ratio) {}
+    /**
+     * A decimal and the ratio it is. The ratio is a function of the decimal's scale and unscaled
+     * value, so it is the ratio of every decimal written with that scale and that value; two
+     * decimals of one value written with different scales are two entries, and both hold the one
+     * ratio.
+     */
+    private record DecimalRatio(BigDecimal decimal, ExactRatio ratio) {
+        /** Whether {@code other} has this decimal's scale and unscaled value. */
+        boolean isWrittenAs(BigDecimal other) {
+            return decimal.scale() == other.scale() && decimal.compareTo(other) == 0;
+        }
+    }
 
     /** Digits above which a decimal is converted and not kept, so that the slots hold a bounded
-     *  number of bytes and not only a bounded number of entries. */
+     *  number of bytes and not only a bounded number of entries. The decimals a compile asks for
+     *  are far below it: they are bounds and coefficients a person wrote. */
     private static final int LARGEST_DECIMAL_KEPT = 40;
 
     /**
      * The ratios of the decimals asked last, each in the slot its hash falls in. A compile asks for
      * the same few decimals over and over, and each ask would otherwise build the exact parts and
      * put them in canonical form again. Held strongly, since the pair is held by nothing else; it
-     * refers to numbers only. Written and read without a lock as {@link HeldOnce} is: the pair is
-     * immutable, and two threads filling one slot leave one of their pairs in it.
+     * refers to numbers only. Written and read without a lock: a pair is published whole through
+     * the array, and two threads filling one slot leave one of their pairs in it, which only means
+     * the ratio of that decimal is made again by the next ask that finds the other.
      */
-    private static final DecimalRatio[] DECIMALS = new DecimalRatio[1 << 12];
+    private static final AtomicReferenceArray<DecimalRatio> DECIMALS =
+            new AtomicReferenceArray<>(1 << 12);
 
     /**
      * Ten to {@code power}, which is two to it and five to it: held as the two exponents, and never

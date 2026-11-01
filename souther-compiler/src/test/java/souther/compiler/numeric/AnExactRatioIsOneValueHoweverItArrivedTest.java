@@ -1,7 +1,9 @@
 package souther.compiler.numeric;
 
+import com.sun.management.ThreadMXBean;
 import org.junit.jupiter.api.Test;
 
+import java.lang.management.ManagementFactory;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
@@ -86,6 +88,25 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
             assertEquals(ratio(n, 1000), ExactRatio.of(decimal), decimal.toString());
         }
         assertEquals(first, ExactRatio.of(asked));
+    }
+
+    @Test
+    void aDecimalAskedAgainIsNotConvertedAgain() {
+        BigDecimal[] asks = new BigDecimal[2_000];
+        for (int i = 0; i < asks.length; i++) {
+            asks[i] = new BigDecimal("12345.6789");
+        }
+        ExactRatio kept = ExactRatio.of(asks[0]);
+        ThreadMXBean threads = (ThreadMXBean) ManagementFactory.getThreadMXBean();
+        long thread = Thread.currentThread().threadId();
+        long before = threads.getThreadAllocatedBytes(thread);
+        for (BigDecimal ask : asks) {
+            assertSame(kept, ExactRatio.of(ask));
+        }
+        long allocated = threads.getThreadAllocatedBytes(thread) - before;
+        assertTrue(allocated < asks.length,
+                "a ratio found by its decimal allocates nothing per ask, and " + allocated
+                        + " bytes were allocated for " + asks.length + " asks");
     }
 
     @Test
