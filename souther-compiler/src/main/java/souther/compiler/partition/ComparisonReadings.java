@@ -1591,7 +1591,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *
      * <p><b>Answered as the parts nobody else states, and not as whether somebody states one.</b>
      * What an operation's answer turns on is as many things as the closure states
-     * ({@link WhatAForkTests#partsOfTheAnswer}): a closure answering
+     * ({@link WhatAForkTests#partsRead}): a closure answering
      * {@code p.age > 18 && List.contains(0, p.tags)} states a comparison and something nothing here
      * reads, and the fork around the operation states the second whoever owns the first. Answered
      * as "something in there is owned", the second went with the first — which is the same partial

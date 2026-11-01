@@ -43,7 +43,11 @@ final class WhatAForkTests {
      */
     sealed interface PartsRead {
 
-        /** The proposition was read to the end, so these are all the parts the answer turns on. */
+        /**
+         * No figure stopped the proposition, so these are all the parts the answer turns on.
+         * That is all this says: a part another reason left unread is among them, and nothing
+         * here is a proof that the answer was worked out.
+         */
         record Complete(List<Denotation> parts) implements PartsRead {}
 
         /** The proposition was stopped in at a figure, for these, and says nothing of which parts
