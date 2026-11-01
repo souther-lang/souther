@@ -158,6 +158,32 @@ class ARulesRestIsBoundedByRelationsAndNotOnlyByEndsTest {
                 "and reading it as that rule's own rest does not");
     }
 
+    /**
+     * What is left out is the rule as a value: a copy made apart from the one held is the same rule,
+     * and a rule of the same form with another bound is not. Asked more than once, since which
+     * premises a rule is stays the same from one ask to the next.
+     */
+    @Test
+    void aRuleIsLeftOutByItsValueAndARuleOfTheSameFormWithAnotherBoundIsNot() {
+        AffineConstraint<String> atNought = stated(form("x", 10, "y", -1), Rel.GE);
+        AffineConstraint<String> atFive = stated(form("x", 10, "y", -1, null, -5), Rel.GE);
+        List<AffineConstraint<String>> both = List.of(atNought, atFive);
+        FormReach<String> reading = FormReach.over(both, Box.unbounded(),
+                DifferenceBounds.over(both, CanonicalOrder.asTheyAreSpelled()),
+                CanonicalOrder.asTheyAreSpelled());
+        Map<String, ExactRatio> itsOwnForm =
+                Map.of("x", ExactRatio.of(10), "y", ExactRatio.of(-1));
+        AffineConstraint<String> copyOfAtNought = stated(form("x", 10, "y", -1), Rel.GE);
+        AffineConstraint<String> copyOfAtFive = stated(form("x", 10, "y", -1, null, -5), Rel.GE);
+
+        for (int ask = 0; ask < 2; ask++) {
+            assertEquals(ExactRatio.of(5), reading.leastOfTheRestOf(copyOfAtNought, itsOwnForm,
+                    ExactRatio.ZERO).at(), "without the rule at nought, the one at five is read");
+            assertEquals(ExactRatio.ZERO, reading.leastOfTheRestOf(copyOfAtFive, itsOwnForm,
+                    ExactRatio.ZERO).at(), "without the rule at five, the one at nought is read");
+        }
+    }
+
     private static AffineConstraint<String> stated(LinearForm<String> f, Rel rel) {
         AffineConstraint.Read<String> read = AffineConstraint.of(f.coefs(),
                 f.constant(), rel, position -> Granularity.DISCRETE);
