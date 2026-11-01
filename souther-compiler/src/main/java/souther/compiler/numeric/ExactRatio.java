@@ -1,5 +1,6 @@
 package souther.compiler.numeric;
 
+import souther.compiler.collect.HeldByKey;
 import souther.compiler.collect.HeldOnce;
 import souther.exact.ExactArithmetic;
 import souther.exact.ExactDecimals;
@@ -122,6 +123,13 @@ public final class ExactRatio implements Comparable<ExactRatio> {
     }
 
     public static ExactRatio of(BigInteger whole) {
+        if (whole.bitLength() > LARGEST_KEPT_BITS) {
+            return madeOf(whole);
+        }
+        return WHOLES.get(whole, ExactRatio::madeOf);
+    }
+
+    private static ExactRatio madeOf(BigInteger whole) {
         return shared(ExactArithmetic.canonical(whole, BigInteger.ONE, 0, 0));
     }
 
@@ -139,8 +147,34 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      * digits as it has, and this holds the value it was given without spelling them.
      */
     public static ExactRatio of(BigDecimal at) {
+        if (at.precision() > LARGEST_KEPT_DIGITS) {
+            return madeOf(at);
+        }
+        return DECIMALS.get(at, ExactRatio::madeOf);
+    }
+
+    private static ExactRatio madeOf(BigDecimal at) {
         return shared(ExactArithmetic.canonical(at));
     }
+
+    /**
+     * The numbers above which a decimal or a whole number is converted and not kept, so that the
+     * tables hold a bounded number of bytes and not only a bounded number of entries: at most a few
+     * megabytes with every slot full of numbers this long. The numbers a compile asks for are bounds
+     * and coefficients a person wrote, and are far below them.
+     */
+    private static final int LARGEST_KEPT_DIGITS = 100;
+    private static final int LARGEST_KEPT_BITS = 332;
+
+    /**
+     * The ratios of the decimals and of the whole numbers asked last. A compile asks for the same
+     * few of each over and over, in every form that holds them, and each ask would otherwise build
+     * the exact parts and put them in canonical form again. A decimal is a key by its scale and its
+     * unscaled value, which is what the ratio is a function of: two decimals of one value written
+     * with different scales are two keys and have the one ratio.
+     */
+    private static final HeldByKey<BigDecimal, ExactRatio> DECIMALS = new HeldByKey<>(11);
+    private static final HeldByKey<BigInteger, ExactRatio> WHOLES = new HeldByKey<>(11);
 
     /**
      * Ten to {@code power}, which is two to it and five to it: held as the two exponents, and never
