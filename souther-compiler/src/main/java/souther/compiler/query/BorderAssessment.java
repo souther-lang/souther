@@ -372,22 +372,23 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
      * ({@link WhereAPartDecides#said}) — or null where the position the line is read at already
      * names all of them: always for a line that is the whole of what its rule states.
      *
-     * <p>Not what a report prints. Another line of the comparison can be said in the same words
-     * under a different point, and that is told apart only where the readings of the behavior
-     * are held together ({@link #decidesWhere(WhereTheReadingsDiffer, DomainPoint)}).
+     * <p>The words the published document holds for a reading: the cases of values and nothing
+     * else, whatever else a surface adds to tell one line from another
+     * ({@link #lineLabel}).
      */
-    String decidesWhere() {
+    public String decidesWhere() {
         List<TermPath> readAt = positionsReadAt();
         return border.origin() instanceof LineOrigin.ComparisonOrigin read
                 ? read.part().map(part -> part.said(readAt)).orElse(null) : null;
     }
 
     /**
-     * The same, with the readings of the comparison that {@code apart} finds saying the same words
-     * told apart at {@code point}.
+     * Which of the lines of the comparison that {@code apart} finds saying the same words under
+     * different points this reading is of, as a surface says it — or null where its words are
+     * its own. A label of the line and not a condition of any case.
      */
-    public String decidesWhere(WhereTheReadingsDiffer apart, DomainPoint point) {
-        return apart.told(this, point);
+    public String lineLabel(WhereTheReadingsDiffer apart, DomainPoint point) {
+        return apart.label(this, point);
     }
 
     /** The positions the line is read at, which a case need not name again. */
@@ -439,9 +440,11 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
             if (border.operator(at) == null) {
                 return null;
             }
-            String where = border.decidesWhere(apart, at);
+            String where = border.decidesWhere();
+            String label = border.lineLabel(apart, at);
             return border.operator(at) + " " + border.against(at)
-                    + (where == null ? "" : " where " + where);
+                    + (where == null ? "" : " where " + where)
+                    + (label == null ? "" : " (" + label + ")");
         }
 
         /** What the point is against, or null where none is owed. */

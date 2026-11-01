@@ -445,7 +445,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     @Test
     void whatTheWayHereLeavesIsReadBeforeTheWays() {
         Set<String> lines = linesOnK(report(guarded("k > 0 && k >= " + COUNT))).stream()
-                .map(line -> line.replaceFirst(" where case \\d+ of \\d+$", ""))
+                .map(line -> line.replaceFirst(" \\(line \\d+ of \\d+\\)$", ""))
                 .collect(Collectors.toSet());
         assertEquals(Set.of("· read as f/k: = 1", "· read as f/k: = 2", "· read as f/k: in 2 < k",
                 "· read as f/k: = 0", "· read as f/k: in k < 0"), lines);
@@ -455,7 +455,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
      *  same words where there are several. */
     private static boolean says(Set<String> lines, String words) {
         return lines.stream().anyMatch(line -> line.equals(words)
-                || line.startsWith(words + " where case "));
+                || line.startsWith(words + " (line "));
     }
 
     /** A count weighed alone is read as which of its statements hold, however many there are:

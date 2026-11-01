@@ -69,7 +69,7 @@ class AClassTheOtherReadingsOfAComparisonCoverIsNotSearchedForTest {
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertTrue(human.contains(
-                "read as full/n: in 51 < n where n <= 50 — no value can stand at 51 < n"), human);
+                "read as full/n: in 51 < n (line 1 of 2) — no value can stand at 51 < n"), human);
         assertFalse(human.contains("how many values a point is tried with"), human);
         assertFalse(human.contains("no row is at an OUT point"), human);
     }

@@ -5,22 +5,14 @@ import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.CasesHeldTo;
 import souther.compiler.meaning.Proposition;
-import souther.compiler.meaning.Quantity;
-import souther.compiler.meaning.Relation;
-import souther.compiler.numeric.ExactAnswer;
-import souther.compiler.numeric.ExactRatio;
-import souther.compiler.numeric.LinearForm;
-import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 /**
@@ -63,8 +55,10 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
      * and what the values of the point do not say. The relations beside them are said by the
      * values a search composes against; written out here as well, a reader is shown how the
      * statement was taken apart — a part read once held and once failing where one of them is
-     * enough — and not anything a row has to do. Two readings that this leaves saying the same
-     * words are told apart by {@code WhereTheReadingsDiffer}.
+     * enough — and not anything a row has to do. Two lines of a comparison that this leaves
+     * saying the same words under different points are told apart by their place among them, and
+     * not by these cases ({@code WhereTheReadingsDiffer}): how a statement is taken apart into
+     * cases differs between two spellings of one line.
      *
      * <p>What every row in the case is, read through the whole of it ({@link CasesHeldTo}): a case
      * said as one of several things is where each of them holds, and what they all hold a value
@@ -74,80 +68,8 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
      * where the value is that case, and the position it is read at is named through that case.
      */
     public String said(List<TermPath> readAt) {
-        return casesSaid(decides, readAt);
-    }
-
-    /**
-     * The case as the one relation it is, written in the one scale every writing of it comes to —
-     * the first term with weight one, so {@code 2 * k < 4} and {@code k < 2} are said alike — or
-     * empty where the case is more than one relation or is not a relation.
-     *
-     * <p>For telling two readings apart where {@link #said} leaves them saying the same words. A
-     * case of several parts is not said here: how a statement is taken apart into parts differs
-     * between two spellings of one line, and a report that says the parts would say the line
-     * differently for each spelling. One relation is one statement whichever way it was written.
-     */
-    public Optional<String> asOneRelation() {
-        if (!(decides instanceof Proposition.Compared compared)) {
-            return Optional.empty();
-        }
-        return switch (compared.relation()) {
-            case Relation.Affine affine -> inUnitScale(affine.form()).map(scaled -> {
-                Rel states = compared.holds() ? affine.proposition()
-                        : affine.proposition().denied();
-                return sumSaid(scaled.coefs()) + " " + states.written() + " "
-                        + scaled.constant().negated().spelled();
-            });
-            case Relation.Ordered ordered -> {
-                Rel states = compared.holds() ? ordered.proposition()
-                        : ordered.proposition().denied();
-                yield Optional.of(ordered.term().spelled() + " " + states.written() + " "
-                        + ordered.at().spelled());
-            }
-        };
-    }
-
-    /** {@code form} divided by the size of the weight of its first term by name, or empty where
-     *  a number in it cannot be held after the division. */
-    private static Optional<ScaledForm> inUnitScale(LinearForm<Quantity> form) {
-        Map<String, ExactRatio> byName = new TreeMap<>();
-        form.coefs().forEach((atom, weight) -> byName.put(atom.spelled(), weight));
-        if (byName.isEmpty()) {
-            return Optional.empty();
-        }
-        ExactRatio scale = byName.values().iterator().next().abs();
-        Map<String, ExactRatio> coefs = new TreeMap<>();
-        for (Map.Entry<String, ExactRatio> each : byName.entrySet()) {
-            if (!(each.getValue().dividedBy(scale) instanceof ExactAnswer.Held<ExactRatio> held)) {
-                return Optional.empty();
-            }
-            coefs.put(each.getKey(), held.value());
-        }
-        return form.constant().dividedBy(scale) instanceof ExactAnswer.Held<ExactRatio> constant
-                ? Optional.of(new ScaledForm(coefs, constant.value())) : Optional.empty();
-    }
-
-    private record ScaledForm(Map<String, ExactRatio> coefs, ExactRatio constant) {}
-
-    /** The terms, without the constant, in the order of their names. */
-    private static String sumSaid(Map<String, ExactRatio> byName) {
-        StringBuilder out = new StringBuilder();
-        byName.forEach((name, weight) -> {
-            boolean first = out.isEmpty();
-            ExactRatio size = weight.signum() < 0 ? weight.negated() : weight;
-            String term = size.equals(ExactRatio.ONE) ? name : size.spelled() + " * " + name;
-            if (first) {
-                out.append(weight.signum() < 0 ? "-" : "").append(term);
-            } else {
-                out.append(weight.signum() < 0 ? " - " : " + ").append(term);
-            }
-        });
-        return out.toString();
-    }
-
-    private static String casesSaid(Proposition stated, List<TermPath> readAt) {
         List<String> said = new ArrayList<>();
-        CasesHeldTo.of(stated).forEach((at, held) -> {
+        CasesHeldTo.of(decides).forEach((at, held) -> {
             switch (held) {
                 case CasesHeldTo.Held.OneOf(var cases) -> {
                     if (readAt.stream().noneMatch(each -> each.isAtOrUnder(at.refine(cases)))) {
