@@ -63,6 +63,14 @@ import java.util.function.Supplier;
 public final class LevelRealizer {
 
     /**
+     * The proofs this realizer has made, which it answers again from rather than make twice.
+     *
+     * <p>Held as long as the realizer is, so a caller that makes one for a search decides how long
+     * the regions the search asked about are kept.
+     */
+    private final ProofsOfNoValue proofs = new ProofsOfNoValue();
+
+    /**
      * Where the positions have to stand for a row to be at this item, or why this found nowhere.
      *
      * <p>The region is handed in per item and is no part of this. Where a row may be written depends
@@ -92,7 +100,7 @@ public final class LevelRealizer {
             return true;
         }
         return goal instanceof PointSearchGoal.ByConstraints(Standing constraint)
-                && StandingImpossibility.provesImpossible(within, constraint);
+                && proofs.provesImpossible(within, constraint);
     }
 
     /**
@@ -148,7 +156,7 @@ public final class LevelRealizer {
         // they come to between them runs nowhere — or runs somewhere, and nowhere the item asks
         // for, which is what the rules on the way to a border and the border itself say between
         // them. Neither is readable off the positions one at a time.
-        if (StandingImpossibility.provesImpossible(within, standing)) {
+        if (proofs.provesImpossible(within, standing)) {
             return new Realization.Impossible();
         }
         for (NumericTerm term : termsOf(standing)) {

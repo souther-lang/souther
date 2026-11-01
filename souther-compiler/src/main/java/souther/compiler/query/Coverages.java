@@ -1228,11 +1228,14 @@ final class Coverages {
     static LineReadings searched(LineReadings measured,
                                  souther.compiler.partition.MeasuredInput input,
                                  Probe probe, ReachingCuts reaching) {
-        LevelRealizer realizer = new LevelRealizer();
         List<BorderAssessment> out = new ArrayList<>();
         MeasuredInput.Lines lines = input.lines();
         List<Border> everyLine = everyLineOf(input.partitioning());
         for (BorderAssessment border : measured.each()) {
+            // One for the border. Two borders that reach one region each prove what they are asked
+            // of it, which is given up so that the regions a border is searched in are let go with
+            // it: a realizer that outlived its border would hold them to the end of the search.
+            LevelRealizer realizer = new LevelRealizer();
             MeasuredInput.BorderReading read = lines.at(border.border());
             WayToTheBorder way = wayTo(border.border(), reaching);
             StandingAtAPoint.OtherReadings otherReadings =
@@ -1501,10 +1504,10 @@ final class Coverages {
      * <p>False where nothing reaches the line, or where the quantity is one only a run works out
      * and no proof is made of it.
      */
-    private static boolean classLiesOutsideTheCase(BorderQuantity quantity, Criterion criterion,
-                                                   Reachability reaching) {
+    private static boolean classLiesOutsideTheCase(LevelRealizer realizer, BorderQuantity quantity,
+                                                   Criterion criterion, Reachability reaching) {
         return reaching instanceof Reachability.Reaching able
-                && new LevelRealizer().leavesNoValue(
+                && realizer.leavesNoValue(
                         quantity.searchGoalAt(criterion).alongTheWay(able), able.region());
     }
 
@@ -2061,8 +2064,8 @@ final class Coverages {
 
             @Override
             public boolean classLiesOutsideTheCase(Criterion criterion) {
-                return Coverages.classLiesOutsideTheCase(line.quantity(), criterion,
-                        Reachability.of(way, declarations));
+                return Coverages.classLiesOutsideTheCase(new LevelRealizer(), line.quantity(),
+                        criterion, Reachability.of(way, declarations));
             }
 
             @Override
@@ -2206,7 +2209,7 @@ final class Coverages {
 
             @Override
             public boolean classLiesOutsideTheCase(Criterion criterion) {
-                return Coverages.classLiesOutsideTheCase(quantity, criterion, reaching);
+                return Coverages.classLiesOutsideTheCase(realizer, quantity, criterion, reaching);
             }
 
             @Override
