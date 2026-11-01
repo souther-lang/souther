@@ -66,9 +66,13 @@ class WhoMayComposeAFixtureReferenceTest {
             // The reference a module's entry for a value is made of. It is the only reference in
             // that definition, so it is not told apart from another by a number.
             "souther/compiler/check/ValueEntries -> " + ORIGIN + "#<init>(I)V",
+            // The minter that builds nothing, which hands its own arguments on to the one that
+            // is given what the templates of a run mean.
+            "souther/compiler/partition/FixtureReferences -> " + MINTER + "#<init>("
+                    + "Ljava/lang/String;Ljava/lang/String;Lsouther/compiler/partition/WrittenOut;)V",
             "souther/compiler/partition/FixtureReferences -> " + ORIGIN + "#<init>(I)V",
-            "souther/compiler/partition/Generator -> " + MINTER
-                    + "#<init>(Ljava/lang/String;Ljava/lang/String;)V",
+            "souther/compiler/partition/Generator -> " + MINTER + "#<init>("
+                    + "Ljava/lang/String;Ljava/lang/String;Lsouther/compiler/partition/WrittenOut;)V",
             // A search for a row showing a count reaches every value beside its container's size
             // is a run of its own: it composes rows to try and offers none, and the values a module
             // states that it names are numbered within that one search.

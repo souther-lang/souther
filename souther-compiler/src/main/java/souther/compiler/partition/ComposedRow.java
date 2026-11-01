@@ -28,10 +28,14 @@ public record ComposedRow(List<FixtureTemplate> inputs, List<StoodInAnswer> answ
         answers = List.copyOf(answers);
     }
 
-    /** What the row is written as, which is what tells one line of a file from another. */
-    public List<String> writtenAs() {
+    /**
+     * What the row puts in, which is what tells one line of a file from another and one run from
+     * another. A value is taken as it is written out ({@link FixtureTemplate#meaning}), so a row
+     * naming a value the module states and a row writing it out are the one line, and run once.
+     */
+    public List<String> identity() {
         List<String> out = new ArrayList<>(
-                inputs.stream().map(FixtureTemplate::text).toList());
+                inputs.stream().map(FixtureTemplate::meaning).toList());
         for (StoodInAnswer each : answers) {
             // The one leaning on the module writes no value, and the name alone is what tells it
             // from a line writing one — two lines answering a dependency two ways are two lines.

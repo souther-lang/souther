@@ -7563,10 +7563,10 @@ public final class Adequacy {
             }
 
             private Optional<RowTrials.Prepared> builtFor(RowToRun row) {
-                // Kept by what the row is written as, which is how Generator.once tells one row
-                // from another, and not by the RowToRun a caller happened to make: a row asked
-                // about again is handed a value made again.
-                List<String> written = new ComposedRow(row.inputs(), row.answers()).writtenAs();
+                // Kept by what the row puts in, which is how Generator.once tells one row from
+                // another, and not by the RowToRun a caller happened to make: a row asked about
+                // again is handed a value made again.
+                List<String> written = new ComposedRow(row.inputs(), row.answers()).identity();
                 BuiltRow held = last;
                 if (held != null && held.written().equals(written)) {
                     return held.built();
