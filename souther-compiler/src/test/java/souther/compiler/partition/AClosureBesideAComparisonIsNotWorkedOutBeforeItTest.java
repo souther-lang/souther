@@ -60,12 +60,14 @@ class AClosureBesideAComparisonIsNotWorkedOutBeforeItTest {
 
                 %s
                 """.formatted(body, EXAMPLES);
+        return measured(model);
+    }
+
+    private static PartitionEvidence measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        PartitionEvidence evidence = compilation.db()
-                .ask(new Adequacy.Coverage("probe")).value().get("reasons");
-        return evidence;
+        return compilation.db().ask(new Adequacy.Coverage("probe")).value().get("reasons");
     }
 
     /** Where a reading of a rule stopped or was left unclassified. */
@@ -114,6 +116,48 @@ class AClosureBesideAComparisonIsNotWorkedOutBeforeItTest {
                                      match request.intent with
                                          | NoAsk -> []
                                          | Asked { closeDate } -> [ closeDate ]))"""));
+    }
+
+    /**
+     * A match that gives an element on some cases only: the step is reached on those and on no
+     * other, so the comparison is asked at the element each of them gives and at none the other
+     * case could be asked at.
+     */
+    @Test
+    void aMatchGivingAnElementOnSomeCasesOnlyLetsOnlyThoseCasesReachTheStep() {
+        String model = """
+                module probe
+
+                data Asked = { closeDate: Date }
+                data Moved = { closeDate: Date }
+                data NoAsk
+                data Intent = NoAsk | Asked | Moved
+
+                data Request = { convertedOn: Date, intent: Intent }
+
+                data Past = { requested: Date }
+
+                behavior reasons : (request: Request) -> List<Past>
+                    constructs Past
+
+                let asked (intent: Intent): List<Date> =
+                    match intent with
+                        | NoAsk -> []
+                        | Asked { closeDate } -> [ closeDate ]
+                        | Moved { closeDate } -> [ closeDate ]
+
+                let reasons (request) =
+                    List.map(d -> Past { requested = d },
+                             List.filter(d -> Date.daysBetween(request.convertedOn, d) < 0,
+                                         asked(request.intent)))
+                """;
+        PartitionEvidence evidence = measured(model);
+        String shown = evidence.notRead().toString();
+        assertEquals(List.of(), unreadAt(evidence), () -> shown);
+        assertEquals(List.of("request.convertedOn", "request.intent@Asked.closeDate",
+                        "request.intent@Moved.closeDate"),
+                evidence.notRead().stream().map(PartitionEvidence.NotRead::at).sorted().distinct()
+                        .toList(), () -> shown);
     }
 
     /** A closure bound by a {@code let} is the same function value as one written in place. */
