@@ -1,6 +1,7 @@
 package souther.compiler.collect;
 
 import java.lang.ref.WeakReference;
+import java.util.function.Function;
 
 /**
  * The values of one kind made last, each in the slot its hash falls in, so that a value made again
@@ -50,6 +51,27 @@ public final class HeldOnce<T> {
         if (there != null && there.equals(made)) {
             return (T) there;
         }
+        slots[slot] = new WeakReference<>(made);
+        return made;
+    }
+
+    /**
+     * The value held here whose key is {@code key}, or what {@code make} makes of it, held from now
+     * on — so that a value found by what it is made of costs nothing to ask for.
+     *
+     * <p>For a kind whose value is a function of a key it holds, and is equal to another exactly
+     * where their keys are equal: {@code keyOf} reads the key back off a value, and a value's hash
+     * is its key's, which is what puts the two in one slot.
+     */
+    @SuppressWarnings("unchecked")
+    public <K> T held(K key, Function<? super T, ?> keyOf, Function<? super K, ? extends T> make) {
+        int slot = slotOf(key.hashCode(), slots.length);
+        WeakReference<?> at = slots[slot];
+        Object there = at == null ? null : at.get();
+        if (there != null && keyOf.apply((T) there).equals(key)) {
+            return (T) there;
+        }
+        T made = make.apply(key);
         slots[slot] = new WeakReference<>(made);
         return made;
     }

@@ -41,6 +41,16 @@ public final class ExactParts {
     private final long fives;
 
     /**
+     * {@link #hashCode} once it has been asked, and nought before — and after, for parts whose hash
+     * is nought, which are only worked out again. Parts are a key of every table of exact values a
+     * compile keeps, and asked for their hash at every look into one.
+     *
+     * <p>Written without a lock: an {@code int} is written whole, and two threads asking first write
+     * the same hash.
+     */
+    private int hash;
+
+    /**
      * Parts with a nought below the line are no value, canonical or not, so none are made. What
      * the arithmetic forms below the line is a product of denominators it was handed and of a
      * divisor's numerator once nought is turned away, so it never forms one.
@@ -143,10 +153,15 @@ public final class ExactParts {
      *  one way, as a long or wider. */
     @Override
     public int hashCode() {
-        int hash = wideNumerator != null ? wideNumerator.hashCode() : hashOf(numerator);
-        hash = 31 * hash + (wideDenominator != null ? wideDenominator.hashCode() : hashOf(denominator));
-        hash = 31 * hash + Long.hashCode(twos);
-        return 31 * hash + Long.hashCode(fives);
+        int asked = hash;
+        if (asked == 0) {
+            asked = wideNumerator != null ? wideNumerator.hashCode() : hashOf(numerator);
+            asked = 31 * asked + (wideDenominator != null ? wideDenominator.hashCode() : hashOf(denominator));
+            asked = 31 * asked + Long.hashCode(twos);
+            asked = 31 * asked + Long.hashCode(fives);
+            hash = asked;
+        }
+        return asked;
     }
 
     /** {@link BigInteger#hashCode} of {@code whole}: the magnitude's words from the most significant,
@@ -197,6 +212,15 @@ public final class ExactParts {
      *  below nought, and of the magnitude less one where it is. */
     private static int bitLengthOf(long whole) {
         return Long.SIZE - Long.numberOfLeadingZeros(whole < 0 ? ~whole : whole);
+    }
+
+    /** How many bits the wider of the two whole numbers takes, as {@link BigInteger#bitLength} counts
+     *  them — which is what a caller bounding the bytes these hold asks, and asked without making a
+     *  {@code BigInteger} of a number held as a long. */
+    public int widestBits() {
+        int above = wideNumerator != null ? wideNumerator.bitLength() : bitLengthOf(numerator);
+        int below = wideDenominator != null ? wideDenominator.bitLength() : bitLengthOf(denominator);
+        return Math.max(above, below);
     }
 
     /** These parts with the sign turned, which canonical parts are again. */

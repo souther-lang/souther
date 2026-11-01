@@ -1,6 +1,7 @@
 package souther.compiler.numeric;
 
 import souther.compiler.collect.HeldByKey;
+import souther.compiler.collect.HeldByPair;
 import souther.compiler.collect.HeldOnce;
 import souther.exact.ExactArithmetic;
 import souther.exact.ExactDecimals;
@@ -15,6 +16,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.function.BiFunction;
 
 /**
  * An exact ratio of two whole numbers, which is what the constraint algebra reasons in.
@@ -158,10 +160,11 @@ public final class ExactRatio implements Comparable<ExactRatio> {
     }
 
     /**
-     * The numbers above which a decimal or a whole number is converted and not kept, so that the
-     * tables hold a bounded number of bytes and not only a bounded number of entries: at most a few
-     * megabytes with every slot full of numbers this long. The numbers a compile asks for are bounds
-     * and coefficients a person wrote, and are far below them.
+     * The numbers above which a decimal or a whole number is converted and not kept, and a ratio is
+     * operated on and its answer not kept, so that the tables hold a bounded number of bytes and not
+     * only a bounded number of entries: at most a few megabytes with every slot full of numbers this
+     * long. The numbers a compile asks for are bounds and coefficients a person wrote and what is
+     * worked out of them, and are far below them.
      */
     private static final int LARGEST_KEPT_DIGITS = 100;
     private static final int LARGEST_KEPT_BITS = 332;
@@ -197,9 +200,68 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      */
     private static final HeldOnce<ExactRatio> MADE = new HeldOnce<>(14);
 
-    /** The ratio {@code canonical} is, the one made before where it is still held. */
+    /** The ratio {@code canonical} is, the one made before where it is still held — found by the
+     *  parts, so that an ask that finds it makes nothing. */
     private static ExactRatio shared(ExactParts canonical) {
-        return MADE.held(new ExactRatio(canonical));
+        return MADE.held(canonical, ratio -> ratio.parts, ExactRatio::new);
+    }
+
+    /**
+     * The answers of each operation of two ratios asked last, by the two operands in the order they
+     * were asked. A compile asks the same few sums, products and quotients of the same coefficients
+     * and bounds over and over, and each ask would otherwise work the answer out again and put it in
+     * canonical form.
+     *
+     * <p>Every answer of operands of a size to keep comes from here, a sum with nought and a product
+     * with one among them: what an operation answers without the arithmetic is still an answer made
+     * at every ask, and is worked out once as the others are.
+     *
+     * <p>Kept only where the operands and the value are no wider than {@link #LARGEST_KEPT_BITS}
+     * ({@link #keptBy}, {@link #kept}), so that the tables hold a bounded number of bytes and not only
+     * a bounded number of entries — at most a few megabytes a table with every slot full of numbers
+     * that wide. Two operands far apart in scale can have a sum of any number of digits, and that sum
+     * is worked out at every ask. Of the answers that are no value, only the one that says there is
+     * none is kept ({@link #kept}).
+     */
+    private static final HeldByPair<ExactRatio, ExactRatio, ExactAnswer<ExactRatio>> SUMS =
+            new HeldByPair<>(11);
+    private static final HeldByPair<ExactRatio, ExactRatio, ExactAnswer<ExactRatio>> PRODUCTS =
+            new HeldByPair<>(11);
+    private static final HeldByPair<ExactRatio, ExactRatio, ExactAnswer<ExactRatio>> QUOTIENTS =
+            new HeldByPair<>(11);
+
+    /** What {@code work} answers for this and {@code other}, kept in {@code answers} where the two
+     *  are of a size to keep. */
+    private ExactAnswer<ExactRatio> answered(
+            HeldByPair<ExactRatio, ExactRatio, ExactAnswer<ExactRatio>> answers, ExactRatio other,
+            BiFunction<ExactRatio, ExactRatio, ExactAnswer<ExactRatio>> work) {
+        if (!keptBy(this) || !keptBy(other)) {
+            return work.apply(this, other);
+        }
+        return answers.get(this, other, work, ExactRatio::kept);
+    }
+
+    /** Whether a ratio is of a size the tables keep: neither of its two numbers wider than a whole
+     *  number {@link #WHOLES} keeps. Asked of every operand, and nearly every one is held in longs,
+     *  which answers without counting bits. */
+    private static boolean keptBy(ExactRatio ratio) {
+        return ratio.parts.inLongs() || ratio.parts.widestBits() <= LARGEST_KEPT_BITS;
+    }
+
+    /**
+     * Whether an answer is one the tables keep: one that is a function of the operands alone, and of
+     * a size to keep. A value is, where it is no wider than the operands may be. That a value has no
+     * representation is a fact about the number, so it is too. That the host had no room for it is a
+     * fact about the run that asked, which another run with more room answers, so it is never kept.
+     */
+    static boolean kept(ExactAnswer<ExactRatio> answer) {
+        return switch (answer) {
+            case ExactAnswer.Held<ExactRatio> held -> keptBy(held.value());
+            case ExactAnswer.Unheld<ExactRatio> unheld -> switch (unheld.why()) {
+                case NO_REPRESENTATION_EXISTS -> true;
+                case MORE_ROOM_COULD_ANSWER -> false;
+            };
+        };
     }
 
     /**
@@ -469,30 +531,26 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      * {@link ExactAnswer}.
      */
     public ExactAnswer<ExactRatio> plus(ExactRatio other) {
+        return answered(SUMS, other, ExactRatio::sumOf);
+    }
+
+    private static ExactAnswer<ExactRatio> sumOf(ExactRatio a, ExactRatio b) {
         // A sum with nought is the other term, which is canonical already; a good part of the sums
         // the constraint algebra asks are with a coefficient a form does not name.
-        if (other.isZero()) {
-            return ExactAnswer.held(this);
+        if (b.isZero()) {
+            return ExactAnswer.held(a);
         }
-        if (isZero()) {
-            return ExactAnswer.held(other);
+        if (a.isZero()) {
+            return ExactAnswer.held(b);
         }
-        return ExactAnswer.of(() -> from(ExactArithmetic.plus(parts, other.parts)));
+        return ExactAnswer.of(() -> from(ExactArithmetic.plus(a.parts, b.parts)));
     }
 
     /** The difference, or which way the arithmetic could not hold it. Same failure as {@link #plus}:
-     *  a difference is a sum of the negation. */
+     *  a difference is a sum of the negation, and is asked as one, so that the two share what is
+     *  kept of them. */
     public ExactAnswer<ExactRatio> minus(ExactRatio other) {
-        if (other.isZero()) {
-            return ExactAnswer.held(this);
-        }
-        // The negation as parts and not as a ratio: a canonical form negated is canonical, and the
-        // sum is put in canonical form once.
-        ExactParts negation = negation(other.parts);
-        if (isZero()) {
-            return ExactAnswer.held(shared(negation));
-        }
-        return ExactAnswer.of(() -> from(ExactArithmetic.plus(parts, negation)));
+        return plus(other.negated());
     }
 
     /** {@code of} negated, which a canonical form is again: the sign is the numerator's alone. */
@@ -512,18 +570,22 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      * thrown. See {@link ExactAnswer}.
      */
     public ExactAnswer<ExactRatio> times(ExactRatio other) {
+        return answered(PRODUCTS, other, ExactRatio::productOf);
+    }
+
+    private static ExactAnswer<ExactRatio> productOf(ExactRatio a, ExactRatio b) {
         // A product with nought is nought whatever the other's exponents, and a product with one is
         // the other factor.
-        if (isZero() || other.isZero()) {
+        if (a.isZero() || b.isZero()) {
             return ExactAnswer.held(ZERO);
         }
-        if (other.equals(ONE)) {
-            return ExactAnswer.held(this);
+        if (b.equals(ONE)) {
+            return ExactAnswer.held(a);
         }
-        if (equals(ONE)) {
-            return ExactAnswer.held(other);
+        if (a.equals(ONE)) {
+            return ExactAnswer.held(b);
         }
-        return ExactAnswer.of(() -> from(ExactArithmetic.times(parts, other.parts)));
+        return ExactAnswer.of(() -> from(ExactArithmetic.times(a.parts, b.parts)));
     }
 
     /**
@@ -538,18 +600,38 @@ public final class ExactRatio implements Comparable<ExactRatio> {
         if (other.signum() == 0) {
             throw new ArithmeticException("divided by zero");
         }
-        if (isZero()) {
+        return answered(QUOTIENTS, other, ExactRatio::quotientOf);
+    }
+
+    private static ExactAnswer<ExactRatio> quotientOf(ExactRatio a, ExactRatio b) {
+        if (a.isZero()) {
             return ExactAnswer.held(ZERO);
         }
-        if (other.equals(ONE)) {
-            return ExactAnswer.held(this);
+        if (b.equals(ONE)) {
+            return ExactAnswer.held(a);
         }
-        return ExactAnswer.of(() -> from(ExactArithmetic.dividedBy(parts, other.parts)));
+        return ExactAnswer.of(() -> from(ExactArithmetic.dividedBy(a.parts, b.parts)));
     }
 
     public ExactRatio negated() {
-        return isZero() ? this : shared(negation(parts));
+        if (isZero()) {
+            return this;
+        }
+        if (!keptBy(this)) {
+            return shared(negation(parts));
+        }
+        return NEGATIONS.get(this, ratio -> shared(negation(ratio.parts)));
     }
+
+    /**
+     * The negations of the ratios negated last, by the ratio: a negation is a function of the value
+     * alone, and a compile negates the same few coefficients and bounds over and over.
+     *
+     * <p>A table and not a field on the ratio. A ratio holding its negation holds a ratio that holds
+     * it, so every ratio negated would be a graph that holds itself, and every answer holding one a
+     * value a walk of what answers hold cannot get to the end of.
+     */
+    private static final HeldByKey<ExactRatio, ExactRatio> NEGATIONS = new HeldByKey<>(11);
 
     public ExactRatio abs() {
         return signum() < 0 ? negated() : this;
@@ -589,10 +671,30 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      * write, so it is not an end of the range nothing reaches. Cross-multiplying would write out the
      * difference between their exponents, which is why the order is read from brackets of a working
      * width and not from the numbers ({@link ExactArithmetic#compare}).
+     *
+     * <p>An order only brackets settle is kept by the pair, as the answers of the operations are
+     * ({@link #SUMS}), where both are of a size to keep: a compile orders the same few bounds against
+     * each other over and over, and two bounds whose exponents are far apart are ordered by brackets
+     * built afresh at every ask. An order the arithmetic settles without them is asked again, since it
+     * costs less than a look into the table and makes nothing. An order that needed more room than
+     * the host had is thrown and so not kept.
      */
     @Override
     public int compareTo(ExactRatio other) {
-        return ExactArithmetic.compare(parts, other.parts);
+        int settled = ExactArithmetic.compareWithoutBrackets(parts, other.parts);
+        if (settled != ExactArithmetic.UNSETTLED) {
+            return settled;
+        }
+        if (!keptBy(this) || !keptBy(other)) {
+            return ExactArithmetic.compare(parts, other.parts);
+        }
+        return ORDERS.get(this, other, ExactRatio::orderOf, order -> true);
+    }
+
+    private static final HeldByPair<ExactRatio, ExactRatio, Integer> ORDERS = new HeldByPair<>(11);
+
+    private static Integer orderOf(ExactRatio a, ExactRatio b) {
+        return ExactArithmetic.compare(a.parts, b.parts);
     }
 
     /** What {@link #times} answers where the product is more than a long holds. */
