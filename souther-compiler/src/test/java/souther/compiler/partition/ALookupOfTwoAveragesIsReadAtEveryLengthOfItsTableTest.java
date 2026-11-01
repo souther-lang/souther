@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.observe.Figure;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -13,6 +12,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A lookup of two averages is read at every length of its table or at none: whether a month is
@@ -68,27 +68,41 @@ class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
                 """.formatted(table);
     }
 
-    private record Unread(String at, UndividedPosition.Reason reason, List<Figure> figures) {}
+    /**
+     * The same lookup with the second average compared beside a count over a closure of its own:
+     * how many elements of {@code w.xs} hold a list containing nought. That count is a part of
+     * what the comparison states that no reader of the values answers for.
+     */
+    private static String sourceBesideAClosure(int rows) {
+        return replaced(replaced(replaced(replaced(source(rows),
+                "b3: Month }", "b3: Month, xs: List<List<Int>> }"),
+                "(ma: Yen, mb: Yen): Row =", "(ma: Yen, mb: Yen, n: Int): Row ="),
+                "mb <= r.upperBound then", "mb.value + n <= r.upperBound.value then"),
+                "gradeRowFor(averageOf(pa), averageOf(pb)).grade",
+                "gradeRowFor(averageOf(pa), averageOf(pb),"
+                        + " List.length(List.filter(ys -> List.contains(0, ys), w.xs))).grade");
+    }
 
-    /** What the report leaves unread at the months themselves, where a rule over an average is
-     *  filed. */
-    private static List<Unread> atTheMonths(int rows) {
-        Compilation compilation = Compilation.ofSource(source(rows), "Main");
+    private static String replaced(String in, String what, String with) {
+        assertTrue(in.contains(what), what);
+        return in.replace(what, with);
+    }
+
+    /** Everything the report leaves unread, with why and at which figure. */
+    private static List<String> unread(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
                 "the model under test compiles");
-        List<Unread> out = new ArrayList<>();
+        List<String> out = new ArrayList<>();
         for (AdequacyReport.BehaviorReport each :
                 AdequacyReport.of(compilation).modules().get(0).behaviors()) {
-            each.partition().notRead().forEach(one -> {
-                if (one.at().toString().matches("w\\.[ab][123]")) {
-                    out.add(new Unread(one.at().toString(), one.reason(), one.figures()));
-                }
-            });
+            each.partition().notRead().forEach(one -> out.add(
+                    one.at() + " " + one.reason() + " " + one.figures()));
         }
-        return out;
+        return out.stream().sorted().toList();
     }
 
     /**
@@ -102,12 +116,32 @@ class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
      */
     @Test
     void noLengthOfTheTableLeavesAMonthUnreadThatAnotherLengthDoesNot() {
-        Map<Integer, List<Unread>> monthsUnread = new TreeMap<>();
+        Map<Integer, List<String>> unreadByRows = new TreeMap<>();
         for (int rows : new int[] {4, 5}) {
-            monthsUnread.put(rows, atTheMonths(rows));
+            unreadByRows.put(rows, unread(source(rows)));
         }
 
-        assertEquals(Map.of(4, List.of(), 5, List.of()), monthsUnread,
-                "the months left unread, by the rows of the table");
+        assertEquals(Map.of(4, List.of(), 5, List.of()), unreadByRows,
+                "what is left unread, by the rows of the table");
+    }
+
+    /**
+     * And what the comparison states beside the average is not lost at the lengths that run out.
+     *
+     * <p>The count over the closure is nothing a reader of the values answers for, so the report
+     * says it was not read, and says the same at every length. A length at which the reading ran
+     * out of readings must not be one at which that goes unsaid, nor one that says more.
+     */
+    @Test
+    void aPartOfTheComparisonNoReaderAnswersForIsSaidAtEveryLengthOfTheTable() {
+        Map<Integer, List<String>> unreadByRows = new TreeMap<>();
+        for (int rows : new int[] {4, 6}) {
+            unreadByRows.put(rows, unread(sourceBesideAClosure(rows)));
+        }
+
+        assertEquals(unreadByRows.get(6), unreadByRows.get(4),
+                "what is left unread does not follow the rows of the table");
+        assertTrue(unreadByRows.get(4).stream().anyMatch(each -> each.startsWith("w.xs ")),
+                "the count over the closure is said to be unread: " + unreadByRows.get(4));
     }
 }

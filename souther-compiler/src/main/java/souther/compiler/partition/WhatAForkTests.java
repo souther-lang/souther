@@ -34,47 +34,30 @@ final class WhatAForkTests {
      * What was read of the parts an answer turns on.
      *
      * <p>A proposition a reading stopped in at a figure states the parts it got to, and where it
-     * got to is where the figure ran out and not what the answer turns on: the parts of one that
-     * stopped are no list of the parts there are, and a part missing from it was not found absent.
-     * A part nothing reads is a part of the answer all the same, and does not make it incomplete.
+     * got to is where the figure ran out and not what the answer turns on. A part it holds may be
+     * one the complete reading would not hold in that form, and a part it lacks was not found
+     * absent. Only a complete reading therefore offers its parts: that no part is left, and which
+     * parts are, are both questions the figure took away. A part nothing reads is a part of the
+     * answer all the same, and does not make it incomplete.
      */
     sealed interface PartsRead {
 
         /** The proposition was read to the end, so these are all the parts the answer turns on. */
         record Complete(List<Denotation> parts) implements PartsRead {}
 
-        /** The proposition was stopped in at a figure: these are the parts it got to, and they
-         *  say nothing of which parts there are. */
-        record Incomplete(List<Denotation> established) implements PartsRead {}
-
-        /** The parts that were got to, however far the reading went. */
-        default List<Denotation> got() {
-            return switch (this) {
-                case Complete(var parts) -> parts;
-                case Incomplete(var established) -> established;
-            };
-        }
-    }
-
-    /** The parts the truth of {@code atom} turns on, each read where it stands. */
-    static List<Denotation> partsOfTheAnswer(Core atom, WhatNamesStandFor names) {
-        return partsOf(pulled(atom, names));
+        /** The proposition was stopped in at a figure, and says nothing of which parts there are.
+         *  The parts it got to are kept for a reader that holds no owner for the answer and has no
+         *  better evidence, which takes what it finds as found and concludes nothing of the rest. */
+        record Incomplete(List<Denotation> reached) implements PartsRead {}
     }
 
     /** What was read of the parts the truth of {@code atom} turns on. */
     static PartsRead partsRead(Core atom, WhatNamesStandFor names) {
-        Pullback.Pulled truth = pulled(atom, names);
+        Pullback.Pulled truth =
+                WhatConditionsState.of(names.read()).truth(atom, names.reads(), names.read());
+        List<Denotation> parts = truth.turnsOn().stream().map(Pullback.Leaf::from).toList();
         boolean stoppedAtAFigure = Proposition.stopsIn(truth.proposition()).stream()
                 .anyMatch(why -> why.figure().isPresent());
-        return stoppedAtAFigure ? new PartsRead.Incomplete(partsOf(truth))
-                : new PartsRead.Complete(partsOf(truth));
-    }
-
-    private static Pullback.Pulled pulled(Core atom, WhatNamesStandFor names) {
-        return WhatConditionsState.of(names.read()).truth(atom, names.reads(), names.read());
-    }
-
-    private static List<Denotation> partsOf(Pullback.Pulled truth) {
-        return truth.turnsOn().stream().map(Pullback.Leaf::from).toList();
+        return stoppedAtAFigure ? new PartsRead.Incomplete(parts) : new PartsRead.Complete(parts);
     }
 }

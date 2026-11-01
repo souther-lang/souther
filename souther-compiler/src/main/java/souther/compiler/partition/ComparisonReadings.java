@@ -1621,16 +1621,28 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 }
             }
         }
-        // Where the answer was stopped in at a figure, the parts it got to are no list of the parts
-        // there are. The comparison that states the atom has said what stopped it, and a reader of
-        // that comparison says so, so the fork is left no part of it.
-        WhatAForkTests.PartsRead parts =
-                WhatAForkTests.partsRead(atom.value(), WhatNamesStandFor.in(atom.at(), read));
-        if (whole != null && parts instanceof WhatAForkTests.PartsRead.Incomplete) {
-            return new Atom(atom, List.of(), stoppedFor);
-        }
+        return switch (WhatAForkTests.partsRead(atom.value(),
+                WhatNamesStandFor.in(atom.at(), read))) {
+            case WhatAForkTests.PartsRead.Complete(var parts) ->
+                    new Atom(atom, unowned(parts, read, here), stoppedFor);
+            // A comparison states the atom, and its own reading was stopped at a figure: it is the
+            // comparison's to say so, at every place it names, which are all the places a part of
+            // the atom names. What the answer turns on is not read off a proposition the figure
+            // cut, whose parts depend on where it was cut.
+            case WhatAForkTests.PartsRead.Incomplete _ when whole != null ->
+                    new Atom(atom, List.of(), stoppedFor);
+            // Nothing states the atom, so there is no reader to leave it to. What the reading got
+            // to is all there is to go by, and a part it found is taken as found.
+            case WhatAForkTests.PartsRead.Incomplete(var reached) ->
+                    new Atom(atom, unowned(reached, read, here), stoppedFor);
+        };
+    }
+
+    /** The {@code parts} that none of the three readers answers for. */
+    private static List<Denotation> unowned(List<Denotation> parts, InputReading read,
+                                            StatedHere here) {
         List<Denotation> left = new ArrayList<>();
-        for (Denotation part : parts.got()) {
+        for (Denotation part : parts) {
             // Which rule the part is, by the node; where it stands, in the reading it is written in.
             if (statedAt(part.value(), () -> WhatNamesStandFor.in(part.at(), read), here) == null
                     && !(part.at().pathOf(part.value(), read.rules().newtypes())
@@ -1638,7 +1650,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 left.add(part);
             }
         }
-        return new Atom(atom, left, stoppedFor);
+        return left;
     }
 
     /** The parts of what {@code atom} decides that none of the three readers answers for, which is
