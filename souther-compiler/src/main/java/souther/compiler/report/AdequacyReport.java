@@ -2803,9 +2803,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *
      * <p>A point of a comparison in a body is told apart from the others by the behavior and the
      * place of its comparison, and the line the point is on says neither.
+     *
+     * <p>Only for the points asked for: choosing a handle weighs every reading's citation of the
+     * point, and a model has far more points than the few that hold a verdict open.
      */
     private Map<BorderObligationPoint, PublishedRuleHandle> handlesOfWrittenPoints(
-            PublishedRuleHandle.WhereARuleIs places) {
+            PublishedRuleHandle.WhereARuleIs places, Set<BorderObligationPoint> wanted) {
         Map<BorderObligationPoint, PublishedRuleHandle> out = new LinkedHashMap<>();
         for (ModuleReport module : modules) {
             for (BehaviorReport behavior : module.behaviors()) {
@@ -2813,8 +2816,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     continue;
                 }
                 for (BorderObligationPointAssessment point : behavior.account()) {
-                    if (point.point().line().provenance() instanceof RuleRef.Written) {
-                        out.putIfAbsent(point.point(), point.handle(places));
+                    if (wanted.contains(point.point()) && !out.containsKey(point.point())
+                            && point.point().line().provenance() instanceof RuleRef.Written) {
+                        out.put(point.point(), point.handle(places));
                     }
                 }
             }
@@ -3169,8 +3173,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             Map<ModelOccurrence, CopyShown> copies = everyCopyShown();
             Map<BorderObligationPoint, ModelOccurrences> pointsReadAt = whereEachPointIsRead();
             Map<Subject.OfAReplacement, String> rewrites = everyUndecidedRewriteSaid(rendering);
+            List<AdequacyUncertainty> opened = whatKeepsTheVerdictOpenInOrder(rendering, places);
+            Set<BorderObligationPoint> openedPoints = new HashSet<>();
+            for (AdequacyUncertainty each : opened) {
+                if (each.subject() instanceof Subject.AtAPoint it) {
+                    openedPoints.add(it.point());
+                }
+            }
             Map<BorderObligationPoint, PublishedRuleHandle> writtenPoints =
-                    handlesOfWrittenPoints(places);
+                    handlesOfWrittenPoints(places, openedPoints);
             out.append("  what keeps it open\n");
             out.append(String.format("    stopped at a figure of this compiler   %3d%n",
                     open.atAFigure()));
@@ -3183,7 +3194,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             //
             // In the order the document writes them in. The facts are a set, so the order they
             // come in is no order at all, and the page and the document list them alike.
-            for (AdequacyUncertainty each : whatKeepsTheVerdictOpenInOrder(rendering, places)) {
+            for (AdequacyUncertainty each : opened) {
                 // What it is about and what to do with it, and not the word the document writes
                 // for the kind: those are for a consumer keyed on this report, and a person reading
                 // a line is owed a sentence. What kind of thing it is comes out in what is said to
