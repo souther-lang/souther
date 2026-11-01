@@ -137,14 +137,17 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
      * nothing of it is left not worked out: {@code x} compared with nought where an even number of
      * truths hold, each case one the line turns in. As few truths as make more cases than are said
      * one by one: an even number of {@code n} truths holds in half their assignments, so the
-     * fewest past the figure is the {@code n} whose half first exceeds it.
+     * fewest truths are the {@code n} whose half first exceeds the figure, and one case past the
+     * figure is enough. No two assignments with the same parity of truths differ in one truth, so
+     * none of the cases joins another.
      */
     @Test
     void aLineEveryCaseOfWhichDividesRowsIsWorkedOutInAll() {
         List<String> ways = new ArrayList<>();
         int truths = Integer.numberOfTrailingZeros(
                 Integer.highestOneBit(WhereEachLineDecides.MOST_CASES)) + 2;
-        for (int each = 0; each < 1 << truths; each++) {
+        for (int each = 0; each < 1 << truths && ways.size() <= WhereEachLineDecides.MOST_CASES;
+                each++) {
             if (Integer.bitCount(each) % 2 != 0) {
                 continue;
             }
@@ -154,9 +157,8 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
             }
             ways.add("(" + String.join(" && ", parts) + ")");
         }
-        assertTrue(ways.size() > WhereEachLineDecides.MOST_CASES
-                        && ways.size() / 2 <= WhereEachLineDecides.MOST_CASES,
-                () -> "the fewest cases past the figure: " + ways.size());
+        assertEquals(WhereEachLineDecides.MOST_CASES + 1, ways.size(),
+                "one case past the figure");
         List<String> names = new ArrayList<>();
         List<String> typed = new ArrayList<>();
         for (int i = 0; i < truths; i++) {

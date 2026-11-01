@@ -56,4 +56,9 @@ public record HeldIn(Core container, Part part, HowAClosureIsApplied applied,
         Objects.requireNonNull(part, "and is some part of what it holds");
         Objects.requireNonNull(applied, "handed over some way");
     }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(Core.hashWithoutWalking(container), part, applied, ofAnOption);
+    }
 }
