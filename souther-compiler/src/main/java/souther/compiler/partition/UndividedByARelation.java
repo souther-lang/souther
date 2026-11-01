@@ -1582,7 +1582,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         List<Source> sources = declared.sources();
         List<Carrier> carriers = declared.carriers();
-        WayRead entire = wayRead(written, past, false, way.region(), false, read, sources, true);
+        WayRead entire = wayRead(written, past, null, way.region(), false, read, sources, true);
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = termsAlong(read,
                 sources, carriers, entire.along(), entire.declared(), entire.conditions(), null,
                 entire.stating(), true, entire.narrowing(), false);
@@ -1637,7 +1637,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<Carrier> carriers = declared.carriers();
         if (ways.isEmpty()) {
             return leftAlong(read, sources, carriers, read.quantities().region(), List.of(),
-                    null, true, Optional.of(Set.of()), DemandReading.Answered.NOTHING, witnesses);
+                    null, true, Optional.of(Set.of()), DemandReading.Answered.NOTHING,
+                    Optional.empty(), witnesses);
         }
         List<Reachability.Reaching> branches = new ArrayList<>();
         Set<CompositionBudget> stopped = new LinkedHashSet<>();
@@ -1674,9 +1675,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? alike.computeIfAbsent(new Along(each.narrowedBy().get(), conditions,
                             remainders, heldWhole, declined, past), _ -> leftAlong(read, sources,
                                     carried, each.region(), conditions, remainders, heldWhole,
-                                    declined, past, witnesses))
+                                    declined, past, each.narrowedBy(), witnesses))
                     : leftAlong(read, sources, carried, each.region(), conditions, remainders,
-                            heldWhole, declined, past, witnesses);
+                            heldWhole, declined, past, each.narrowedBy(), witnesses);
             out = out == null ? along : out.alongBoth(along);
         }
         return out;
@@ -2490,12 +2491,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param past     what the run works out asks of a row: the numbers it narrows, which the
      *                 region took in and the way does not state as a condition, and the places
      *                 it ties together, which a region does not say
+     * @param applied  what the declarations were narrowed by to make {@code region}, or empty
+     *                 where it was made some other way ({@link Rebuilding})
      */
     private WhatItLeaves leftAlong(InputReading read, List<Source> sources,
                                    List<Carrier> carriers, SearchRegion region,
                                    List<OnAWay> written, WholeNumberRuns remainders,
                                    boolean heldWhole,
                                    Optional<Set<String>> declined, DemandReading.Answered past,
+                                   Optional<List<TakenConstraint>> applied,
                                    CountWitnesses.Lookup witnesses) {
         // A way stating nothing but that the rows are off the line this relation draws — the form
         // held unequal to nought, as `sign == 0` taken the other way holds
@@ -2526,8 +2530,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         WhatStatementsOfOneFormDecide.Verdict decided = WhatStatementsOfOneFormDecide.of(
                 unfree.stream().map(OnAWay::affine).toList(), askedAsAStatement());
         // The way as it states itself, which every reading but the terms' own is made of.
-        WayRead entire = wayRead(unfree, past, unfree.size() != written.size(), region,
-                offItsLine, read, sources, heldWhole);
+        WayRead entire = wayRead(unfree, past,
+                unfree.size() != written.size() ? new Rebuilding(applied, written, List.of()) : null,
+                region, offItsLine, read, sources, heldWhole);
         // A statement a row beside this relation's line meets leaves the sides as they stand to
         // one another there, whatever the others hold. Each term is read without it, and no
         // other reading is: they speak of the whole of what the way leaves, and a row beside the
@@ -2540,7 +2545,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         WayRead beside = met.isEmpty() ? entire : wayRead(
                 unfree.stream().filter(each -> each.affine() == null
                         || !met.contains(each.affine())).toList(),
-                past.without(met), true, region, offItsLine, read, sources, heldWhole);
+                past.without(met), new Rebuilding(applied, written, met), region, offItsLine,
+                read, sources, heldWhole);
         SearchRegion along = entire.along();
         SearchRegion declared = entire.declared();
         LeftToTheCalendar left = entire.left();
@@ -4768,6 +4774,51 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
+     * A way's region before statements were taken away, and what was taken: the region again
+     * without them.
+     *
+     * <p>A region is the declarations with the constraints the way took into it, in order
+     * ({@link Reachability.Reaching#narrowedBy}), and a statement that took one in is taken away
+     * by taking that one out of the list. What else narrowed it — the cases a value is held out
+     * of, a container held to an element — is in the list and stays, whatever the statements
+     * left say of it.
+     *
+     * @param applied what the declarations were narrowed by to make the region, or empty where it
+     *                was made some other way
+     * @param written the statements of the way before any was taken away
+     * @param met     the forms of statements a row at the line meets, which come out of the list
+     *                wherever they are in it
+     */
+    private record Rebuilding(Optional<List<TakenConstraint>> applied, List<OnAWay> written,
+                              List<TakenConstraint.Affine> met) {
+
+        /**
+         * The region of the declarations with {@code stated} left of the way, or null where it
+         * cannot be told: the region was made some other way, or a statement taken away
+         * narrowed it by something it does not carry.
+         */
+        SearchRegion without(List<OnAWay> stated, InputReading read) {
+            if (applied.isEmpty()) {
+                return null;
+            }
+            List<TakenConstraint> remaining = new ArrayList<>(applied.get());
+            List<OnAWay> gone = new ArrayList<>(written);
+            for (OnAWay each : stated) {
+                gone.remove(each);
+            }
+            for (OnAWay each : gone) {
+                if (each.relation() != null) {
+                    remaining.remove(each.relation());
+                } else if (each.whatStands() || each.elementsOf() != null) {
+                    return null;
+                }
+            }
+            remaining.removeIf(met::contains);
+            return TakenConstraint.narrowedBy(remaining, read.quantities().region());
+        }
+    }
+
+    /**
      * The way as one reading of it takes it.
      *
      * @param along     the region the rows of the way are read in
@@ -4787,18 +4838,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * The way as {@code stated} and {@code answered} state it.
      *
-     * @param tookAway whether a statement of the way or of what the run narrows has been taken
-     *                 away, so that its own region is no longer the one the rows were found in
+     * @param rebuilding what the way was before a statement of it or of what the run narrows was
+     *                   taken away, so that its own region is no longer the one the rows were
+     *                   found in — or null where none was
      */
     private WayRead wayRead(List<OnAWay> stated, DemandReading.Answered answered,
-                            boolean tookAway, SearchRegion region, boolean offItsLine,
+                            Rebuilding rebuilding, SearchRegion region, boolean offItsLine,
                             InputReading read, List<Source> sources, boolean heldWhole) {
         // Without a statement taken away, the region is the one its rows were found in; with one,
         // the one the rest of them leave, where the rest can be taken in again.
-        SearchRegion rest = tookAway ? narrowedBy(stated, read) : null;
-        // And the run is what it got past working out as much without the statement: taking one
-        // off the way takes no operator off the run.
-        rest = rest == null ? null : TakenConstraint.narrowedBy(answered.narrowing(), rest);
+        SearchRegion rest = null;
+        if (rebuilding != null) {
+            rest = rebuilding.without(stated, read);
+            if (rest == null) {
+                rest = narrowedBy(stated, read);
+                // And the run is what it got past working out as much without the statement:
+                // taking one off the way takes no operator off the run.
+                rest = rest == null ? null : TakenConstraint.narrowedBy(answered.narrowing(), rest);
+            }
+        }
         SearchRegion declared = answered.leaving(read.quantities().region());
         SearchRegion along = offItsLine ? declared : rest != null ? rest : region;
         LeftToTheCalendar left = leavingPartsAlone(stated, read);
