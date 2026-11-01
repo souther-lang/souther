@@ -1,9 +1,8 @@
 package souther.compiler.numeric;
 
-import com.sun.management.ThreadMXBean;
 import org.junit.jupiter.api.Test;
+import souther.test.Allocated;
 
-import java.lang.management.ManagementFactory;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
@@ -96,11 +95,7 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
      *  paid for whatever the code allocates once, in loading and linking it. */
     private static long allocatedBy(Runnable asking) {
         asking.run();
-        ThreadMXBean threads = (ThreadMXBean) ManagementFactory.getThreadMXBean();
-        long thread = Thread.currentThread().threadId();
-        long before = threads.getThreadAllocatedBytes(thread);
-        asking.run();
-        return threads.getThreadAllocatedBytes(thread) - before;
+        return Allocated.byWhichMayBeNothing(asking);
     }
 
     @Test

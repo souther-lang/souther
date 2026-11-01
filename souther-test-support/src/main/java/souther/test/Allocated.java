@@ -33,6 +33,32 @@ public final class Allocated {
         return allocated;
     }
 
+    /**
+     * What running {@code work} allocated on this thread, in bytes, where it may allocate nothing.
+     *
+     * <p>For a test that holds a cost to nothing at all, or to a bound. A reading of nothing is then
+     * the answer the test wants, so it cannot be told from a counter that counts nothing by the
+     * reading; the counter is asked to count an allocation of known size first.
+     */
+    public static long byWhichMayBeNothing(Runnable work) {
+        com.sun.management.ThreadMXBean counter = counter();
+        long calibrationStart = counter.getCurrentThreadAllocatedBytes();
+        calibration = new byte[CALIBRATION_BYTES];
+        long counted = counter.getCurrentThreadAllocatedBytes() - calibrationStart;
+        if (counted < CALIBRATION_BYTES) {
+            throw new AssertionError("the allocation counter reported " + counted + " bytes for an array of "
+                    + CALIBRATION_BYTES + ", so it is not counting");
+        }
+        long before = counter.getCurrentThreadAllocatedBytes();
+        work.run();
+        return counter.getCurrentThreadAllocatedBytes() - before;
+    }
+
+    private static final int CALIBRATION_BYTES = 4096;
+
+    /** Where the calibration array goes, so that it is not an allocation the JIT may leave out. */
+    private static volatile byte[] calibration;
+
     private static com.sun.management.ThreadMXBean counter() {
         ThreadMXBean threads = ManagementFactory.getThreadMXBean();
         Assumptions.assumeTrue(threads instanceof com.sun.management.ThreadMXBean,
