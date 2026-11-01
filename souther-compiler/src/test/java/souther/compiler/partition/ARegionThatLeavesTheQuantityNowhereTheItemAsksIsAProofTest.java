@@ -484,6 +484,50 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
     }
 
     /**
+     * A form is the same question however many times its levels were built.
+     *
+     * <p>The space a form's levels are written in is made afresh each time the quantity is asked for
+     * its standing, and a space has no equality of its own. The proof reads the form and where the
+     * item stands and nothing of the space, so a question told apart by the space is asked again
+     * for nothing.
+     */
+    @Test
+    void aFormWhoseLevelsWereBuiltAgainIsTheSameQuestion() {
+        SearchRegion within = yIsNoMoreThanX();
+        LevelRealizer realizer = new LevelRealizer();
+        assertTrue(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(
+                formAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)))), within));
+        assertTrue(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(
+                formAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)))), within));
+        assertEquals(1, realizer.proofsMade());
+    }
+
+    /**
+     * A standing no region can be asked about is not kept at all.
+     *
+     * <p>Nothing is proved of a count or of a remainder, so there is no proof to read back, and an
+     * entry for each of them would only hold the region.
+     */
+    @Test
+    void aStandingNothingIsProvedOfLeavesNothingBehind() {
+        LevelRealizer realizer = new LevelRealizer();
+        SearchRegion within = region();
+        Quantities measuring = COUNTED.input().quantities(COUNTED.rules());
+        TermPath xs = pathIn(COUNTED, "xs");
+        CountedElements counted = CountedElements.of("counted", new Quantity.HowManyMeet(
+                new DecisionSubject.AnInput(xs),
+                new Proposition.Compared(new Relation.Affine(
+                        new LinearForm<>(ExactRatio.ZERO, Map.of(
+                                new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(xs.element())),
+                                ExactRatio.ONE)), Rel.GE), false)), measuring,
+                AnElementMeeting.UNREAD);
+        Standing none = new Standing.OfACount(counted, counted.numbers(),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));
+        assertFalse(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(none), within));
+        assertEquals(0, realizer.proofsMade(), "no proof is made of a count");
+    }
+
+    /**
      * An answer that settled nothing is kept as well.
      *
      * <p>Where the region and the item meet the proof comes back {@code false}, which is the

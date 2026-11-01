@@ -47,7 +47,11 @@ final class StandingImpossibility {
     private StandingImpossibility() {}
 
     /**
-     * Whether the region leaves {@code standing}'s quantity no value the item asks for.
+     * Whether the region leaves the quantity of {@code asked} no value the item asks for.
+     *
+     * <p>Handed the question and not the {@link Standing} it was read from, so that everything the
+     * answer can turn on is in the parameter: what a standing carries beyond it is no part of the
+     * proof, and a reader that keeps answers keeps them by this.
      *
      * <p>Named for what a {@code true} is. What this decides is that a proof exists, and a name
      * saying whether the item can be satisfied would have {@code false} answering a question this
@@ -58,11 +62,7 @@ final class StandingImpossibility {
      * proof reported as one takes a coverage item away, so everything this cannot tell apart is on
      * the side that proves nothing.
      */
-    static boolean provesImpossible(SearchRegion region, Standing standing) {
-        Asked asked = askedBy(standing);
-        if (asked == null) {
-            return false;
-        }
+    static boolean provesImpossible(SearchRegion region, Asked asked) {
         NumericDomain.Bounds runs = switch (region.projectionOf(asked.quantity())) {
             case NumericDomain.FormProjection.NothingIsLeft _ -> null;
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
@@ -71,7 +71,7 @@ final class StandingImpossibility {
             // stands on a quantity — which is what the shapes of a Standing are built refusing.
             case null -> throw new IllegalStateException(
                     "an item stands on a quantity, and a form weighing no term is not one: "
-                            + standing);
+                            + asked);
         };
         if (runs == null) {
             return true;
@@ -149,11 +149,15 @@ final class StandingImpossibility {
      * What an item asks, as this question needs it: the quantity, the values of it the item stands
      * for, and how those values are written.
      *
+     * <p>Told apart by what it says. This is the question the proof is a function of, so two askings
+     * that are equal here have the same answer in the same region, whatever else the standings they
+     * were read from carry.
+     *
      * @param on the carrier the levels are values of, or null where the quantity counts its own
      *           numbers. Which is what tells a level of a coordinate from a level of a distance,
      *           and a run built with the wrong one would compare a place against a number
      */
-    private record Asked(LinearForm<NumericTerm> quantity, Criterion where, Carrier on) {
+    record Asked(LinearForm<NumericTerm> quantity, Criterion where, Carrier on) {
 
         /** Where the quantity runs, in the words its own levels are written in. */
         LevelInterval runBetween(NumericDomain.Bounds runs) {
@@ -188,7 +192,7 @@ final class StandingImpossibility {
      * a sign would have been compared against a bound and whichever answer came back would have
      * been read as a proof.
      */
-    private static Asked askedBy(Standing standing) {
+    static Asked askedBy(Standing standing) {
         return switch (standing) {
             case Standing.OfOneCoordinate one ->
                     new Asked(LinearForm.atom(one.term()), one.where(), one.of());

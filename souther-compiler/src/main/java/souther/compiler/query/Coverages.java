@@ -1228,11 +1228,14 @@ final class Coverages {
     static LineReadings searched(LineReadings measured,
                                  souther.compiler.partition.MeasuredInput input,
                                  Probe probe, ReachingCuts reaching) {
-        LevelRealizer realizer = new LevelRealizer();
         List<BorderAssessment> out = new ArrayList<>();
         MeasuredInput.Lines lines = input.lines();
         List<Border> everyLine = everyLineOf(input.partitioning());
         for (BorderAssessment border : measured.each()) {
+            // One for the border. The regions a border is searched in are made for it, so nothing
+            // one border proved is asked again by the next, and a realizer that outlived its
+            // border would hold those regions for nothing.
+            LevelRealizer realizer = new LevelRealizer();
             MeasuredInput.BorderReading read = lines.at(border.border());
             WayToTheBorder way = wayTo(border.border(), reaching);
             StandingAtAPoint.OtherReadings otherReadings =
