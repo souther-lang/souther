@@ -13,6 +13,9 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
@@ -53,6 +56,44 @@ import java.util.concurrent.ConcurrentHashMap;
 final class HowManyCanMeet {
 
     private HowManyCanMeet() {
+    }
+
+    /**
+     * What the rules leave the quantity that is the count of {@code counted} with {@code against}
+     * added to it, as {@code read} has its container.
+     *
+     * <p>Alone, from none to the most it comes to ({@link #of}). With numbers of the input added
+     * the sum runs wherever they do, and is left unbounded — except where what is added is the
+     * size of the counted container, once taken away: the count is of elements the container
+     * holds, so it is never more than that size and the difference is never above nought. The
+     * difference has no end below, because the size has no end the rules say.
+     *
+     * <p>The one place the range is worked out, so a fact about it has no second place to be
+     * stated in or to disagree with.
+     */
+    static NumericDomain.Bounds runsOf(CountedElements counted, LinearForm<NumericTerm> against,
+                                       InputReading read) {
+        if (against.coefs().isEmpty()) {
+            return of(counted, read)
+                    .map(end -> new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+                            Endpoint.inclusive(end)))
+                    .orElse(BorderQuantity.NONE_OR_MORE);
+        }
+        return takesAwayTheSizeOfItsContainer(counted, against, read)
+                ? new NumericDomain.Bounds(null, Endpoint.inclusive(Count.of(0)))
+                : NumericDomain.Bounds.OPEN;
+    }
+
+    private static boolean takesAwayTheSizeOfItsContainer(CountedElements counted,
+                                                          LinearForm<NumericTerm> against,
+                                                          InputReading read) {
+        if (against.coefs().size() != 1) {
+            return false;
+        }
+        Map.Entry<NumericTerm, ExactRatio> only = against.coefs().entrySet().iterator().next();
+        Position at = read.domain().at(counted.container());
+        return only.getValue().equals(ExactRatio.ONE.negated()) && at != null
+                && only.getKey().equals(sizeOf(counted.container(), at.type(), read));
     }
 
     /**
@@ -115,16 +156,6 @@ final class HowManyCanMeet {
         ValueName.Stdlib size = NumericMeasures.takenOf(type, source.inners());
         return size == null ? null : NumericTerm.TakenOf.howManyHeldAt(size, container, type,
                 source.inners(), source.symbols());
-    }
-
-    /**
-     * Whether {@code term} is how many the container {@code counted} counts the elements of
-     * holds: the number a count of some of its elements is never more than.
-     */
-    static boolean isTheSizeOfTheContainer(CountedElements counted, NumericTerm term,
-                                           InputReading read) {
-        Position at = read.domain().at(counted.container());
-        return at != null && term.equals(sizeOf(counted.container(), at.type(), read));
     }
 
     /**

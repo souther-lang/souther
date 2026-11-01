@@ -916,8 +916,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         ComparisonClaim claim = ComparisonClaim.stating(
                 holds ? affine.proposition() : affine.proposition().denied());
-        BorderQuantity.HowMany of =
-                new BorderQuantity.HowMany(counted, HowManyCanMeet.of(counted, read));
+        BorderQuantity.HowMany of = BorderQuantity.HowMany.reading(counted, read);
         Cutting drawn = made(of, new Level.OfTheQuantity(level), claim, read.quantities());
         return drawn == null ? null : cutsOrRefused(drawn);
     }
@@ -1167,22 +1166,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return null;
         }
         Map<NumericTerm, ExactRatio> added = new LinkedHashMap<>();
-        Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
         for (Map.Entry<Quantity, ExactRatio> each : scaled.coefs().entrySet()) {
             if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
                 added.put(term, each.getValue());
-                on.put(term, read.quantities().ordersOf(term));
             }
         }
         ComparisonClaim claim = ComparisonClaim.stating(
                 holds ? affine.proposition() : affine.proposition().denied());
-        boolean netOfItsContainer = added.size() == 1
-                && added.entrySet().iterator().next().getValue().equals(ExactRatio.ONE.negated())
-                && HowManyCanMeet.isTheSizeOfTheContainer(counted,
-                        added.keySet().iterator().next(), read);
-        BorderQuantity.HowMany of = new BorderQuantity.HowMany(counted,
-                new LinearForm<>(ExactRatio.ZERO, added), on, Optional.empty(),
-                netOfItsContainer);
+        BorderQuantity.HowMany of = BorderQuantity.HowMany.reading(counted,
+                new LinearForm<>(ExactRatio.ZERO, added), read);
         Cutting drawn = made(of, new Level.OfTheQuantity(scaled.constant().negated()),
                 scale.signum() < 0 ? claim.turned() : claim, read.quantities());
         return drawn == null ? null : cutsOrRefused(drawn);

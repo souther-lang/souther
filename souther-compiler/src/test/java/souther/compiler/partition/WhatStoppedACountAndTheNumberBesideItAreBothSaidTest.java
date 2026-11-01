@@ -24,6 +24,7 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
@@ -33,7 +34,6 @@ import souther.compiler.query.ReadAs;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -94,7 +94,7 @@ class WhatStoppedACountAndTheNumberBesideItAreBothSaidTest {
         Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
         on.put(limit, TermOrdersFixtures.itself(limit, Carrier.WHOLE));
         return new BorderQuantity.HowMany(counted, new LinearForm<>(ExactRatio.ZERO, added), on,
-                Optional.empty(), false);
+                NumericDomain.Bounds.OPEN);
     }
 
     private static TermPath pathIn(InputDomain input, String spelled) {
