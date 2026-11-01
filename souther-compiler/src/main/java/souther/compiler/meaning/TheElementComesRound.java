@@ -4,9 +4,12 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * That a statement over the element of a list of every whole number between two comes out on an
@@ -83,8 +86,16 @@ public record TheElementComesRound(Quantity.OfABinding element, Quantity.AWholeN
             this.besideTheRest = besideTheRest;
         }
 
+        /** The parts walked so far, as a statement shares its parts: each is walked once, and a
+         *  part met again said what it says the first time, since any part not of that kind ends
+         *  the walk there. */
+        private final Set<Proposition> walked = Collections.newSetFromMap(new IdentityHashMap<>());
+
         /** Whether {@code stated} is of that kind, as far as what has been walked says. */
         boolean through(Proposition stated) {
+            if (!walked.add(stated)) {
+                return true;
+            }
             return switch (stated) {
                 case Proposition.Always _ -> true;
                 case Proposition.All(var parts, var _) -> parts.stream().allMatch(this::through);

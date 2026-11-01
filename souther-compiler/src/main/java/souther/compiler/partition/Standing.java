@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
-import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -49,7 +48,7 @@ public sealed interface Standing {
      * decides in: what the case says of the item's own quantity narrows where a row is composed.
      * Never narrower than what every row meeting the case is at.
      */
-    default Standing inTheCase(Proposition decides) {
+    default Standing inTheCase(TheCaseALineDecidesIn decides) {
         return this;
     }
 
@@ -257,9 +256,8 @@ public sealed interface Standing {
          * at, which a point of it asks for no row of.
          */
         @Override
-        public Standing inTheCase(Proposition decides) {
-            WholeNumberRuns left = remainders.and(
-                    ResiduesAStatementLeaves.of(decides, dividend, divisor));
+        public Standing inTheCase(TheCaseALineDecidesIn decides) {
+            WholeNumberRuns left = remainders.and(decides.remaindersOf(dividend, divisor));
             return left.equals(remainders) ? this
                     : new OfARemainder(dividend, on, levels, divisor, left, where);
         }

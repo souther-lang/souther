@@ -39,6 +39,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -139,12 +140,42 @@ final class AStatementAtARow {
      */
     static boolean askableAtSomeElement(Proposition stated) {
         Optional<Quantity.OfABinding> element = OnOneElement.theElementOf(stated);
-        if (element.isEmpty()) {
-            return askable(stated);
+        return element.isEmpty() ? askable(stated)
+                : askableAt(stated, element.get(), new IdentityHashMap<>());
+    }
+
+    /**
+     * Whether {@code stated}, with {@code element} put at a value, is a statement a row can be
+     * asked: asked part by part, each relation with the element put in it alone, since a
+     * relation's form is all the element is weighed in; and a part the statement shares, once
+     * ({@code asked}). The statement with the element put in it is never built. A part the
+     * element would settle to a constant is asked as it is put, whatever it settles to, so a
+     * statement whose other parts no row can be asked is not one either.
+     */
+    private static boolean askableAt(Proposition stated, Quantity.OfABinding element,
+                                     Map<Proposition, Boolean> asked) {
+        Boolean had = asked.get(stated);
+        if (had != null) {
+            return had;
         }
-        Proposition there = OnOneElement.at(stated, element.get(),
-                LinearForm.constant(ExactRatio.ZERO));
-        return there != null && askable(there);
+        boolean out = switch (stated) {
+            case Proposition.All all ->
+                    all.parts().stream().allMatch(each -> askableAt(each, element, asked));
+            case Proposition.Any any ->
+                    any.parts().stream().allMatch(each -> askableAt(each, element, asked));
+            case Proposition.WhereItAnswers where -> askableAt(where.answers(), element, asked)
+                    && askableAt(where.states(), element, asked);
+            case Proposition.SoManyHold counted -> counted.statements().stream()
+                    .allMatch(each -> askableAt(each, element, asked));
+            case Proposition.OfTheWays ways -> askableAt(ways.written(), element, asked);
+            case Proposition.Some some -> askableAt(some.ofTheElement(), element, asked);
+            case Proposition.Compared compared -> OnOneElement.at(compared, element,
+                    LinearForm.constant(ExactRatio.ZERO)) instanceof Proposition there
+                    && askable(there);
+            default -> askable(stated);
+        };
+        asked.put(stated, out);
+        return out;
     }
 
     /**
@@ -419,11 +450,11 @@ final class AStatementAtARow {
         BigInteger every = turn == null ? BigInteger.ONE
                 : ((Quantity.RemainderOfADividend) ((Relation.Affine) turn.relation()).form()
                         .coefs().keySet().iterator().next()).divisor();
+        boolean alike = OnOneElement.comesOutAlikeEvery(stated, element.get())
+                .filter(every::equals).isPresent();
         return new AStatementAtARow(stated, asItStands.relations, asItStands.elements,
                 asItStands.positions, new AtSomeElement(element.get(), turn, every,
-                        OnOneElement.comesOutAlikeEvery(stated, element.get())
-                                .filter(every::equals).isPresent(),
-                        behavior, quantities, read, new ConcurrentHashMap<>(),
+                        alike, behavior, quantities, read, new ConcurrentHashMap<>(),
                         new ConcurrentHashMap<>()));
     }
 

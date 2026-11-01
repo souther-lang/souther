@@ -13,6 +13,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.WholeNumberRuns;
 
 import java.math.BigInteger;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -45,7 +46,8 @@ final class ResiduesAStatementLeaves {
         if (!dividend.constant().isWhole()) {
             return WholeNumberRuns.EVERY;
         }
-        return new Reading(dividend, divisor, turnIn(stated, divisor)).held(stated);
+        return new Reading(dividend, divisor, turnIn(stated, divisor), new IdentityHashMap<>())
+                .held(stated);
     }
 
     /** An element of a list of whole numbers a statement holds to come round, and what it leaves
@@ -80,10 +82,27 @@ final class ResiduesAStatementLeaves {
         return null;
     }
 
+    /**
+     * One reading of a statement for one form, divisor and element coming round.
+     *
+     * @param read what each part met so far was read to hold at: a part a statement holds in
+     *             several places is the same part, read once, as a statement is built to share
+     *             them
+     */
     private record Reading(LinearForm<NumericTerm> dividend, BigInteger divisor,
-                           ComesRound round) {
+                           ComesRound round, Map<Proposition, WholeNumberRuns> read) {
 
         WholeNumberRuns held(Proposition stated) {
+            WholeNumberRuns had = read.get(stated);
+            if (had != null) {
+                return had;
+            }
+            WholeNumberRuns out = heldOnce(stated);
+            read.put(stated, out);
+            return out;
+        }
+
+        private WholeNumberRuns heldOnce(Proposition stated) {
             return switch (stated) {
                 case Proposition.Always(boolean holds) ->
                         holds ? WholeNumberRuns.EVERY : WholeNumberRuns.NONE;

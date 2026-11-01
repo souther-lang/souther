@@ -7,9 +7,13 @@ import souther.compiler.numeric.Rel;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * A statement over the element of a list of every whole number between two, read on one element.
@@ -34,34 +38,41 @@ public final class OnOneElement {
      * weighs one and no other value read off a binding of such a list.
      */
     public static Optional<Quantity.OfABinding> theElementOf(Proposition stated) {
-        List<Quantity.OfABinding> found = new ArrayList<>();
-        elementsIn(stated, found);
-        return found.size() == 1 ? Optional.of(found.getFirst()) : Optional.empty();
+        Set<Quantity.OfABinding> found = new LinkedHashSet<>();
+        elementsIn(stated, found, Collections.newSetFromMap(new IdentityHashMap<>()));
+        return found.size() == 1 ? Optional.of(found.iterator().next()) : Optional.empty();
     }
 
-    private static void elementsIn(Proposition stated, List<Quantity.OfABinding> into) {
+    /** The elements {@code stated} weighs, put in {@code into}; a part met before, as a
+     *  statement shares its parts, is walked once ({@code walked}). */
+    private static void elementsIn(Proposition stated, Set<Quantity.OfABinding> into,
+                                   Set<Proposition> walked) {
+        if (!walked.add(stated)) {
+            return;
+        }
         switch (stated) {
-            case Proposition.All(var parts, var _) -> parts.forEach(each -> elementsIn(each, into));
-            case Proposition.Any(var parts, var _) -> parts.forEach(each -> elementsIn(each, into));
+            case Proposition.All(var parts, var _) ->
+                    parts.forEach(each -> elementsIn(each, into, walked));
+            case Proposition.Any(var parts, var _) ->
+                    parts.forEach(each -> elementsIn(each, into, walked));
             case Proposition.WhereItAnswers(var answers, var states, var _) -> {
-                elementsIn(answers, into);
-                elementsIn(states, into);
+                elementsIn(answers, into, walked);
+                elementsIn(states, into, walked);
             }
             case Proposition.Some(var _, var ofTheElement, var _, var _) ->
-                    elementsIn(ofTheElement, into);
+                    elementsIn(ofTheElement, into, walked);
             case Proposition.Compared(Relation.Affine affine, var _, var _) ->
                     elementsIn(affine.form(), into);
             default -> { }
         }
     }
 
-    private static void elementsIn(LinearForm<Quantity> form, List<Quantity.OfABinding> into) {
+    private static void elementsIn(LinearForm<Quantity> form, Set<Quantity.OfABinding> into) {
         for (Quantity each : form.coefs().keySet()) {
             if (each instanceof Quantity.RemainderOfADividend remainder) {
                 elementsIn(remainder.dividend(), into);
             } else if (each instanceof Quantity.OfABinding bound
-                    && bound.handed().orElse(null) instanceof Quantity.AWholeNumberInTurn
-                    && !into.contains(bound)) {
+                    && bound.handed().orElse(null) instanceof Quantity.AWholeNumberInTurn) {
                 into.add(bound);
             }
         }
@@ -74,7 +85,7 @@ public final class OnOneElement {
      */
     public static Proposition at(Proposition stated, Quantity.OfABinding element,
                                  LinearForm<Quantity> there) {
-        return at(stated, element, there, true);
+        return new Putting(element, there, true, new IdentityHashMap<>()).at(stated);
     }
 
     /**
@@ -85,66 +96,92 @@ public final class OnOneElement {
      */
     public static Proposition inItsRemainders(Proposition stated, Quantity.OfABinding element,
                                               LinearForm<Quantity> there) {
-        return at(stated, element, there, false);
+        return new Putting(element, there, false, new IdentityHashMap<>()).at(stated);
     }
 
-    /** {@code stated} with {@code element} at {@code there}, in its remainders and, where
-     *  {@code itself}, wherever it is weighed itself. */
-    private static Proposition at(Proposition stated, Quantity.OfABinding element,
-                                  LinearForm<Quantity> there, boolean itself) {
-        return switch (stated) {
-            case Proposition.Always _ -> stated;
-            case Proposition.All(var parts, var _) -> {
-                List<Proposition> each = at(parts, element, there, itself);
-                yield each == null ? null : Proposition.all(each);
-            }
-            case Proposition.Any(var parts, var _) -> {
-                List<Proposition> each = at(parts, element, there, itself);
-                yield each == null ? null : Proposition.any(each);
-            }
-            case Proposition.WhereItAnswers(var answers, var states, var _) -> {
-                Proposition answering = at(answers, element, there, itself);
-                Proposition stating = at(states, element, there, itself);
-                yield answering == null || stating == null ? null
-                        : Proposition.whereItAnswers(answering, stating);
-            }
-            case Proposition.Some(var container, var ofTheElement, var holds, var _) -> {
-                Proposition met = at(ofTheElement, element, there, itself);
-                yield met == null ? null : met.equals(ofTheElement) ? stated
-                        : new Proposition.Some(container, met, holds);
-            }
-            case Proposition.Compared(Relation.Affine affine, boolean holds, var _) -> {
-                LinearForm<Quantity> on = formAt(affine.form(), element, there, itself);
-                if (on == null) {
-                    yield null;
-                }
-                if (on.equals(affine.form())) {
-                    yield stated;
-                }
-                if (on.coefs().isEmpty()) {
-                    yield new Proposition.Always(
-                            holds == affine.proposition().holds(on.constant().signum()));
-                }
-                Relation.OneWay<Quantity> one = Relation.OneWay.of(on, affine.proposition());
-                yield new Proposition.Compared(new Relation.Affine(one.form(), one.proposition()),
-                        holds == one.holds());
-            }
-            default -> stated;
-        };
-    }
+    /**
+     * One putting of {@code element} at {@code there}, in remainders and, where {@code itself},
+     * wherever it is weighed itself.
+     *
+     * @param put what each part met so far came to, or {@link #CANNOT} where the exact arithmetic
+     *            could not hold the element there: a part a statement holds in several places is
+     *            put once, and a part that does not weigh the element is itself
+     */
+    private record Putting(Quantity.OfABinding element, LinearForm<Quantity> there,
+                           boolean itself, Map<Proposition, Proposition> put) {
 
-    private static List<Proposition> at(List<Proposition> parts, Quantity.OfABinding element,
-                                        LinearForm<Quantity> there, boolean itself) {
-        List<Proposition> out = new ArrayList<>();
-        for (Proposition part : parts) {
-            Proposition on = at(part, element, there, itself);
-            if (on == null) {
-                return null;
+        Proposition at(Proposition stated) {
+            Proposition had = put.get(stated);
+            if (had == null) {
+                Proposition made = atOnce(stated);
+                had = made == null ? CANNOT : made;
+                put.put(stated, had);
             }
-            out.add(on);
+            return had == CANNOT ? null : had;
         }
-        return out;
+
+        private Proposition atOnce(Proposition stated) {
+            return switch (stated) {
+                case Proposition.Always _ -> stated;
+                case Proposition.All(var parts, var _) -> {
+                    List<Proposition> each = at(parts);
+                    yield each == null ? null : each == parts ? stated : Proposition.all(each);
+                }
+                case Proposition.Any(var parts, var _) -> {
+                    List<Proposition> each = at(parts);
+                    yield each == null ? null : each == parts ? stated : Proposition.any(each);
+                }
+                case Proposition.WhereItAnswers(var answers, var states, var _) -> {
+                    Proposition answering = at(answers);
+                    Proposition stating = at(states);
+                    yield answering == null || stating == null ? null
+                            : answering == answers && stating == states ? stated
+                            : Proposition.whereItAnswers(answering, stating);
+                }
+                case Proposition.Some(var container, var ofTheElement, var holds, var _) -> {
+                    Proposition met = at(ofTheElement);
+                    yield met == null ? null : met == ofTheElement ? stated
+                            : new Proposition.Some(container, met, holds);
+                }
+                case Proposition.Compared(Relation.Affine affine, boolean holds, var _) -> {
+                    LinearForm<Quantity> on = formAt(affine.form(), element, there, itself);
+                    if (on == null) {
+                        yield null;
+                    }
+                    if (on.equals(affine.form())) {
+                        yield stated;
+                    }
+                    if (on.coefs().isEmpty()) {
+                        yield new Proposition.Always(
+                                holds == affine.proposition().holds(on.constant().signum()));
+                    }
+                    Relation.OneWay<Quantity> one = Relation.OneWay.of(on, affine.proposition());
+                    yield new Proposition.Compared(new Relation.Affine(one.form(),
+                            one.proposition()), holds == one.holds());
+                }
+                default -> stated;
+            };
+        }
+
+        /** Each of {@code parts} put, the same parts where none changed — or null where one
+         *  cannot be. */
+        private List<Proposition> at(List<Proposition> parts) {
+            List<Proposition> out = new ArrayList<>();
+            boolean changed = false;
+            for (Proposition part : parts) {
+                Proposition on = at(part);
+                if (on == null) {
+                    return null;
+                }
+                changed |= on != part;
+                out.add(on);
+            }
+            return changed ? out : parts;
+        }
     }
+
+    /** What a part that cannot be put comes to, told apart from every part by identity. */
+    private static final Proposition CANNOT = new Proposition.Always(false);
 
     /**
      * {@code form} with {@code element} at {@code there} in every remainder and, where

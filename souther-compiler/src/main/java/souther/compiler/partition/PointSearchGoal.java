@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.meaning.Proposition;
 
 import java.util.List;
 import java.util.Optional;
@@ -41,7 +40,7 @@ public sealed interface PointSearchGoal {
      * This, where a row is a witness only inside {@code decides}, the case the line decides in
      * ({@link Standing#inTheCase}); itself where there is no such case, and for a run's goal.
      */
-    default PointSearchGoal inTheCase(Optional<Proposition> decides) {
+    default PointSearchGoal inTheCase(Optional<TheCaseALineDecidesIn> decides) {
         return switch (this) {
             case ByConstraints(Standing constraint) when decides.isPresent() ->
                     new ByConstraints(constraint.inTheCase(decides.get()));
