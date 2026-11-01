@@ -69,12 +69,45 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
                   what keeps it open
                     stopped at a figure of this compiler     1
                     stopped at no figure                     0
-                      the comparison (in the region, above) — the search stopped at how many \
+                      comparison@0:null (in the region, above) — the search stopped at how many \
                 values a point is tried with (VALUES_A_POINT_IS_TRIED_WITH, 8), which no option \
                 sets: a row there, or a rule that leaves no value there, would settle it; \
                 nothing shows one is needed
                 """), human(report));
         assertFalse(human(report).contains("allowing more"), human(report));
+    }
+
+    /**
+     * Two behaviors each holding the verdict open at a comparison of their own: the line says which
+     * comparison, so a reader is not left with "the comparison" for either.
+     */
+    @Test
+    void aPointOfABodyComparisonIsNamedByItsPlaceAndNotByItsKind() {
+        Compilation compilation = Compilation.ofSource("""
+                module probe.sizes
+
+                behavior h : (s: Set<Decimal>) -> Int
+                let h (s) = if Set.size(s) == 3 then 1 else 0
+
+                behavior g : (s: Set<Decimal>) -> Int
+                let g (s) = if Set.size(s) == 2 then 1 else 0
+
+                example h
+                    | "none"  : ([]) -> 0
+                %s%s%s%s
+                example g
+                    | "none"  : ([]) -> 0
+                %s%s%s
+                """.formatted(row("one", 1, 0), row("two", 2, 0), row("three", 3, 1),
+                row("four", 4, 0), row("one", 1, 0), row("two", 2, 1), row("three", 3, 0)),
+                "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String human = human(AdequacyReport.of(compilation));
+
+        String open = human.substring(human.indexOf("what keeps it open"));
+        assertFalse(open.contains("the comparison"), human);
+        assertTrue(open.contains("comparison@"), human);
     }
 
     /** And a row written there settles it. */
