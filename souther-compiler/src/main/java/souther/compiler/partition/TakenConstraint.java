@@ -9,6 +9,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -124,6 +125,21 @@ public sealed interface TakenConstraint {
             within = one.narrowing(within);
         }
         return within;
+    }
+
+    /**
+     * {@code region} with {@code these} taken in but for the ones taken away: one occurrence of
+     * each of {@code once}, and every occurrence of each of {@code everywhere}. What else
+     * {@code these} narrow is kept, whatever the ones taken away say of it.
+     */
+    static SearchRegion narrowedByAllBut(List<TakenConstraint> these, List<TakenConstraint> once,
+                                         List<Affine> everywhere, SearchRegion region) {
+        List<TakenConstraint> remaining = new ArrayList<>(these);
+        for (TakenConstraint each : once) {
+            remaining.remove(each);
+        }
+        remaining.removeIf(everywhere::contains);
+        return narrowedBy(remaining, region);
     }
 
     /**
