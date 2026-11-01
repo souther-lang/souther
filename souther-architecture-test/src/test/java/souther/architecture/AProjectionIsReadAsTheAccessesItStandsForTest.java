@@ -613,6 +613,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + ")Ljava/lang/String;", Reading.NAMES,
                 "spells a side of a comparison for a report, a projection as the accesses it"
                         + " stands for, written from the last of them");
+        row(out, c + "partition/ComparisonAssessment", "sideRuns", "(" + core + "L" + c
+                + "inputs/InputReading;)L" + c + "numeric/NumericDomain$Bounds;", Reading.NAMES,
+                "reads a side of a comparison that is a newtype's value, a projection as the"
+                        + " accesses it stands for, the last of them holding the rest");
         row(out, c + "partition/ComparisonReadings", "collectWritten", "(" + core + "L" + c
                 + "partition/ComparisonReadings$Body;Ljava/util/Set;)V", Reading.STRUCTURE,
                 "which comparisons of the model are written in a condition, which no name read is");
