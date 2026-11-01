@@ -98,6 +98,21 @@ class AValueMadeAgainIsTheOneHeldTest {
         assertSame(b, held.held(new Hashed("b", 7)), "the slot holds what was made last in it");
     }
 
+    /** A value made through its key is held as weakly as one handed in made. */
+    @Test
+    void aValueMadeByItsKeyIsNotKeptAliveByTheTable() throws InterruptedException {
+        HeldOnce<Hashed> held = new HeldOnce<>(4);
+        WeakReference<Hashed> watched = new WeakReference<>(
+                held.held(new Hashed("gone", 3), value -> value, key -> new Hashed(key.name(), 3)));
+
+        for (int asked = 0; asked < 20 && watched.get() != null; asked++) {
+            System.gc();
+            Thread.sleep(10);
+        }
+
+        assertNull(watched.get(), "the table still holds a value nothing else does");
+    }
+
     private static final int ASKS = 2_000;
 
     private static Hashed unmade(Hashed key) {

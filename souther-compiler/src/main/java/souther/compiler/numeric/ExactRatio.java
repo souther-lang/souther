@@ -212,6 +212,10 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      * and bounds over and over, and each ask would otherwise work the answer out again and put it in
      * canonical form.
      *
+     * <p>Every answer of operands of a size to keep comes from here, a sum with nought and a product
+     * with one among them: what an operation answers without the arithmetic is still an answer made
+     * at every ask, and is worked out once as the others are.
+     *
      * <p>Kept only where the operands and the value are no wider than {@link #LARGEST_KEPT_BITS}
      * ({@link #keptBy}, {@link #kept}), so that the tables hold a bounded number of bytes and not only
      * a bounded number of entries — at most a few megabytes a table with every slot full of numbers
@@ -515,18 +519,18 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      * {@link ExactAnswer}.
      */
     public ExactAnswer<ExactRatio> plus(ExactRatio other) {
-        // A sum with nought is the other term, which is canonical already; a good part of the sums
-        // the constraint algebra asks are with a coefficient a form does not name.
-        if (other.isZero()) {
-            return ExactAnswer.held(this);
-        }
-        if (isZero()) {
-            return ExactAnswer.held(other);
-        }
         return answered(SUMS, other, ExactRatio::sumOf);
     }
 
     private static ExactAnswer<ExactRatio> sumOf(ExactRatio a, ExactRatio b) {
+        // A sum with nought is the other term, which is canonical already; a good part of the sums
+        // the constraint algebra asks are with a coefficient a form does not name.
+        if (b.isZero()) {
+            return ExactAnswer.held(a);
+        }
+        if (a.isZero()) {
+            return ExactAnswer.held(b);
+        }
         return ExactAnswer.of(() -> from(ExactArithmetic.plus(a.parts, b.parts)));
     }
 
@@ -554,21 +558,21 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      * thrown. See {@link ExactAnswer}.
      */
     public ExactAnswer<ExactRatio> times(ExactRatio other) {
-        // A product with nought is nought whatever the other's exponents, and a product with one is
-        // the other factor.
-        if (isZero() || other.isZero()) {
-            return ExactAnswer.held(ZERO);
-        }
-        if (other.equals(ONE)) {
-            return ExactAnswer.held(this);
-        }
-        if (equals(ONE)) {
-            return ExactAnswer.held(other);
-        }
         return answered(PRODUCTS, other, ExactRatio::productOf);
     }
 
     private static ExactAnswer<ExactRatio> productOf(ExactRatio a, ExactRatio b) {
+        // A product with nought is nought whatever the other's exponents, and a product with one is
+        // the other factor.
+        if (a.isZero() || b.isZero()) {
+            return ExactAnswer.held(ZERO);
+        }
+        if (b.equals(ONE)) {
+            return ExactAnswer.held(a);
+        }
+        if (a.equals(ONE)) {
+            return ExactAnswer.held(b);
+        }
         return ExactAnswer.of(() -> from(ExactArithmetic.times(a.parts, b.parts)));
     }
 
@@ -584,16 +588,16 @@ public final class ExactRatio implements Comparable<ExactRatio> {
         if (other.signum() == 0) {
             throw new ArithmeticException("divided by zero");
         }
-        if (isZero()) {
-            return ExactAnswer.held(ZERO);
-        }
-        if (other.equals(ONE)) {
-            return ExactAnswer.held(this);
-        }
         return answered(QUOTIENTS, other, ExactRatio::quotientOf);
     }
 
     private static ExactAnswer<ExactRatio> quotientOf(ExactRatio a, ExactRatio b) {
+        if (a.isZero()) {
+            return ExactAnswer.held(ZERO);
+        }
+        if (b.equals(ONE)) {
+            return ExactAnswer.held(a);
+        }
         return ExactAnswer.of(() -> from(ExactArithmetic.dividedBy(a.parts, b.parts)));
     }
 
@@ -656,13 +660,19 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      * difference between their exponents, which is why the order is read from brackets of a working
      * width and not from the numbers ({@link ExactArithmetic#compare}).
      *
-     * <p>Where both are of a size to keep, the order is kept by the pair as the answers of the
-     * operations are ({@link #SUMS}): a compile orders the same few bounds against each other over and
-     * over, and two bounds whose exponents are far apart are ordered by brackets built afresh at
-     * every ask. An order that needed more room than the host had is thrown and so not kept.
+     * <p>An order only brackets settle is kept by the pair, as the answers of the operations are
+     * ({@link #SUMS}), where both are of a size to keep: a compile orders the same few bounds against
+     * each other over and over, and two bounds whose exponents are far apart are ordered by brackets
+     * built afresh at every ask. An order the arithmetic settles without them is asked again, since it
+     * costs less than a look into the table and makes nothing. An order that needed more room than
+     * the host had is thrown and so not kept.
      */
     @Override
     public int compareTo(ExactRatio other) {
+        int settled = ExactArithmetic.compareWithoutBrackets(parts, other.parts);
+        if (settled != ExactArithmetic.UNSETTLED) {
+            return settled;
+        }
         if (!keptBy(this) || !keptBy(other)) {
             return ExactArithmetic.compare(parts, other.parts);
         }

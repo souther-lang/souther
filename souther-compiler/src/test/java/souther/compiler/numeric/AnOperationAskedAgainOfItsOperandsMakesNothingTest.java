@@ -87,6 +87,51 @@ class AnOperationAskedAgainOfItsOperandsMakesNothingTest {
         assertTrue(small.compareTo(THIRD) < 0, "the other way round is another pair");
     }
 
+    /** An answer the operation gives without the arithmetic — a sum with nought, a product with one
+     *  or nought, a quotient of nought or by one — is an answer all the same, and asked again makes
+     *  nothing either. */
+    @Test
+    void anAnswerWithoutTheArithmeticAskedAgainMakesNothing() {
+        makesNothing("a sum with nought", () -> THIRD.plus(ExactRatio.ZERO));
+        makesNothing("a sum of nought", () -> ExactRatio.ZERO.plus(THIRD));
+        makesNothing("a product with one", () -> THIRD.times(ExactRatio.ONE));
+        makesNothing("a product of one", () -> ExactRatio.ONE.times(THIRD));
+        makesNothing("a product with nought", () -> THIRD.times(ExactRatio.ZERO));
+        makesNothing("a quotient of nought", () -> ExactRatio.ZERO.dividedBy(THIRD));
+        makesNothing("a quotient by one", () -> THIRD.dividedBy(ExactRatio.ONE));
+        assertEquals(THIRD, THIRD.plus(ExactRatio.ZERO).orNull());
+        assertEquals(THIRD, ExactRatio.ONE.times(THIRD).orNull());
+        assertEquals(ExactRatio.ZERO, THIRD.times(ExactRatio.ZERO).orNull());
+        assertEquals(THIRD, THIRD.dividedBy(ExactRatio.ONE).orNull());
+    }
+
+    /** An order the arithmetic settles without brackets — by sign, or in longs — is not kept: pairs
+     *  asked once each, as a sort asks them, make nothing at all. */
+    @Test
+    void anOrderSettledWithoutBracketsIsNotKept() {
+        // the code is loaded and linked over pairs of its own, so that every pair measured is new
+        comparingOnce(0).run();
+        long allocated = Allocated.byWhichMayBeNothing(comparingOnce(ASKS));
+        assertTrue(allocated < ASKS, "an order settled in longs makes nothing, and " + allocated
+                + " bytes were allocated for " + ASKS + " pairs");
+    }
+
+    /** Pairs from {@code from} on, each asked once: one of them below nought every other time, so
+     *  that some are settled by sign and the rest in longs. */
+    private static Runnable comparingOnce(int from) {
+        ExactRatio[] firsts = new ExactRatio[ASKS];
+        ExactRatio[] seconds = new ExactRatio[ASKS];
+        for (int i = 0; i < ASKS; i++) {
+            firsts[i] = ratio(from + i + 1, 7);
+            seconds[i] = i % 2 == 0 ? ratio(-(from + i + 2), 3) : ratio(from + i + 2, 3);
+        }
+        return () -> {
+            for (int i = 0; i < ASKS; i++) {
+                assertEquals(i % 2 == 0 ? 1 : -1, Integer.signum(firsts[i].compareTo(seconds[i])));
+            }
+        };
+    }
+
     /** Operands wider than a long and within what is kept are kept as well. */
     @Test
     void aSumOfOperandsWiderThanALongAskedAgainMakesNothing() {
