@@ -10467,19 +10467,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // A comparison a body wrote is at whatever value a call put it at, and what tells two
             // of its points apart is the line and where on it the point is.
             case Subject.AtAPoint it -> {
-                PublishedRuleHandle handle = writtenPoints.get(it.point());
-                String rule = it.point().line().saidWithoutAPlace();
-                if (handle != null) {
-                    // This list runs across every behavior, which the border section of one does
-                    // not, so a handle that is a place alone gets the behavior that wrote the
-                    // comparison after it. A handle for code out of sight names what reaches it.
-                    String where = RuleHandleProse.said(handle, rendering, null);
-                    if (handle instanceof PublishedRuleHandle.Written
-                            && it.point().line().provenance() instanceof RuleRef.Written written) {
-                        where += " in " + written.behavior();
+                String rule = switch (it.point().line().provenance()) {
+                    case RuleRef.Named _ -> it.point().line().saidWithoutAPlace();
+                    case RuleRef.Written written -> {
+                        PublishedRuleHandle handle = writtenPoints.get(it.point());
+                        if (handle == null) {
+                            throw new IllegalStateException("a point of a rule nobody named is"
+                                    + " sent to by where the rule is, and no assessment of this"
+                                    + " one said where: " + it.point());
+                        }
+                        // The behavior that read it, after the handle whatever form the handle
+                        // takes: a comparison of a helper is the reading of each behavior calling
+                        // it and is a debt of each, and this list runs across all of them where the
+                        // border section of one does not. The handle says where it is written.
+                        yield it.point().line().line().said(
+                                RuleHandleProse.said(handle, rendering, null)
+                                        + " in " + written.behavior());
                     }
-                    rule = it.point().line().line().said(where);
-                }
+                };
                 yield rule
                         + it.point().line().at().map(at -> " = " + at).orElse("")
                         + placeOn(it.point().point());

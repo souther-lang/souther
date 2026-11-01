@@ -475,6 +475,10 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      */
     public static PublishedRuleHandle handleOf(List<BorderObligationPointAssessment> assessments,
                                                PublishedRuleHandle.WhereARuleIs places) {
+        if (assessments.isEmpty()) {
+            throw new IllegalArgumentException("a point with no assessment has no rule to send a"
+                    + " reader to");
+        }
         BorderObligationPoint point = assessments.getFirst().point();
         java.util.Set<souther.compiler.check.RuleCitation> cited = new java.util.LinkedHashSet<>();
         for (BorderObligationPointAssessment each : assessments) {

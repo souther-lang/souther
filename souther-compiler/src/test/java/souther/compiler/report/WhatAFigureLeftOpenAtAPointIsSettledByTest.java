@@ -114,48 +114,83 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
         assertEquals(2, new HashSet<>(points).size(), human);
     }
 
-    /**
-     * A helper's comparison read through two behaviors is one comparison, so it is one line, and
-     * the behavior it names is the one that wrote it.
-     */
-    @Test
-    void aComparisonOfAHelperTwoBehaviorsReadIsOneLineNamingTheHelper() {
-        Compilation compilation = Compilation.ofSource("""
-                module probe.sizes
+    /** Two behaviors calling one helper, each with the rows that leave its region open. */
+    private static final String ONE_HELPER_TWO_READERS = """
+            module probe.sizes
 
-                behavior c : (s: Set<Decimal>) -> Int
-                let c (s) = if Set.size(s) == 3 then 1 else 0
+            let big (s: Set<Decimal>) = Set.size(s) == 3
 
-                behavior a : (s: Set<Decimal>) -> Int
-                let a (s) = c(s)
+            behavior a : (s: Set<Decimal>) -> Int
+            let a (s) = if big(s) then 1 else 0
 
-                behavior b : (s: Set<Decimal>) -> Int
-                let b (s) = c(s)
+            behavior b : (s: Set<Decimal>) -> Int
+            let b (s) = if big(s) then 1 else 0
 
-                example c
-                    | "none"  : ([]) -> 0
-                %s%s%s%s
-                example a
-                    | "none"  : ([]) -> 0
-                example b
-                    | "none"  : ([]) -> 0
-                """.formatted(row("one", 1, 0), row("two", 2, 0), row("three", 3, 1),
-                row("four", 4, 0)), "Main");
+            example a
+                | "none"  : ([]) -> 0
+            %1$s
+            example b
+                | "none"  : ([]) -> 0
+            %1$s
+            """;
+
+    private static Compilation measuredHelperTwoBehaviorsRead() {
+        Compilation compilation = Compilation.ofSource(ONE_HELPER_TWO_READERS.formatted(
+                row("one", 1, 0) + row("two", 2, 0) + row("three", 3, 1) + row("four", 4, 0)),
+                "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        return compilation;
+    }
+
+    /**
+     * A comparison written in a helper is read by each behavior that calls it, and each reading is
+     * a debt of its own, so the two are two lines that differ in the behavior and in nothing else.
+     * The place the comparison is written is the same for both.
+     */
+    @Test
+    void aComparisonOfAHelperTwoBehaviorsReadIsALinePerReader() {
+        Compilation compilation = measuredHelperTwoBehaviorsRead();
         String human = human(AdequacyReport.of(compilation));
 
         List<String> points = pointsOfComparisons(human);
-        assertEquals(1, points.size(), human);
-        assertTrue(points.getFirst().contains(" in c "), human);
+        assertEquals(2, points.size(), human);
+        assertEquals(1, points.stream().filter(each -> each.contains(" in a ")).count(), human);
+        assertEquals(1, points.stream().filter(each -> each.contains(" in b ")).count(), human);
+        assertEquals(2, new HashSet<>(points).size(), human);
     }
 
-    /** The lines under {@code what keeps it open} that name a point of a comparison in a body. */
+    /**
+     * And the place it names is the one in the source the compilation was given, which the handle
+     * is built from and a layout-less rendering cannot show.
+     */
+    @Test
+    void theComparisonIsNamedByThePlaceItIsWrittenAt() {
+        Compilation compilation = measuredHelperTwoBehaviorsRead();
+        String human = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+
+        List<String> points = pointsOfComparisons(human);
+        assertEquals(2, points.size(), human);
+        // Source, line, column: the helper is the third line of the module text, and both readers
+        // are told that line and not the line of the call that reached it.
+        for (String each : points) {
+            assertTrue(each.contains("comparison@0:3:"), each);
+        }
+    }
+
+    /**
+     * The lines under {@code what keeps it open} that name a point of a comparison in a body,
+     * which are the entries of that section and nothing the report says elsewhere.
+     */
     private static List<String> pointsOfComparisons(String human) {
         assertTrue(human.contains("what keeps it open"), human);
-        String open = human.substring(human.indexOf("what keeps it open"));
-        assertFalse(open.contains("the comparison"), human);
-        return open.lines().filter(each -> each.contains("comparison@")).toList();
+        List<String> section = human.substring(human.indexOf("what keeps it open")).lines()
+                .skip(1)
+                .takeWhile(each -> each.startsWith("    "))
+                .toList();
+        assertFalse(section.stream().anyMatch(each -> each.contains("the comparison")), human);
+        return section.stream().filter(each -> each.startsWith("      ")).toList();
     }
 
     /** And a row written there settles it. */
