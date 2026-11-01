@@ -54,8 +54,7 @@ import java.util.TreeSet;
 public final class WhereTheReadingsDiffer {
 
     /** Nothing said alike, which is every behavior whose lines are told apart by their words. */
-    public static final WhereTheReadingsDiffer NONE =
-            new WhereTheReadingsDiffer(Map.of(), Map.of());
+    public static final WhereTheReadingsDiffer NONE = new WhereTheReadingsDiffer(Map.of());
 
     /** What a report says of a reading of a comparison at a point. */
     private record Words(RuleRef.Comparison rule, ModelOccurrence states, String asks,
@@ -68,15 +67,12 @@ public final class WhereTheReadingsDiffer {
         }
     }
 
-    /** The lines that share words under different points, in the order that tells them apart. */
-    private final Map<Words, List<String>> sharing;
-    /** The parts of the statement each of those lines is read in. */
-    private final Map<String, Set<WhereAPartDecides>> partsOf;
+    /** For the words that are shared under different points, what each line sharing them is told
+     *  apart by. */
+    private final Map<Words, Map<String, String>> sharing;
 
-    private WhereTheReadingsDiffer(Map<Words, List<String>> sharing,
-                                   Map<String, Set<WhereAPartDecides>> partsOf) {
+    private WhereTheReadingsDiffer(Map<Words, Map<String, String>> sharing) {
         this.sharing = sharing;
-        this.partsOf = partsOf;
     }
 
     /** The lines among the readings of {@code byPoint} that share their words under different
@@ -99,37 +95,45 @@ public final class WhereTheReadingsDiffer {
                 partsOf.computeIfAbsent(line, _ -> new HashSet<>()).add(partOf(reading));
             }
         }));
-        Map<Words, List<String>> sharing = new LinkedHashMap<>();
+        Map<Words, Map<String, String>> sharing = new LinkedHashMap<>();
         byWords.forEach((words, sharers) -> {
             if (sharers.points().size() > 1 && sharers.lines().size() > 1) {
-                sharing.put(words, List.copyOf(sharers.lines()));
+                sharing.put(words, toldApart(List.copyOf(sharers.lines()), partsOf));
             }
         });
-        return sharing.isEmpty() ? NONE : new WhereTheReadingsDiffer(sharing, partsOf);
+        return sharing.isEmpty() ? NONE : new WhereTheReadingsDiffer(sharing);
+    }
+
+    /** What each of {@code lines}, in the order that tells them apart, is told apart by: its case
+     *  where each is one relation and no two are the same, and otherwise its place among them. */
+    private static Map<String, String> toldApart(List<String> lines,
+                                                 Map<String, Set<WhereAPartDecides>> partsOf) {
+        List<Optional<String>> cases = lines.stream().map(line -> {
+            Set<WhereAPartDecides> parts = partsOf.get(line);
+            return parts.size() == 1 ? parts.iterator().next().asOneRelation()
+                    : Optional.<String>empty();
+        }).toList();
+        boolean byCase = cases.stream().allMatch(Optional::isPresent)
+                && new HashSet<>(cases).size() == cases.size();
+        Map<String, String> out = new LinkedHashMap<>();
+        for (int place = 0; place < lines.size(); place++) {
+            out.put(lines.get(place), byCase ? cases.get(place).orElseThrow()
+                    : "case " + (place + 1) + " of " + lines.size());
+        }
+        return out;
     }
 
     /** Where {@code reading} decides at {@code point}, told apart from the lines it shares its
      *  words with — or null where there is nothing to say of it. */
     String told(BorderAssessment reading, DomainPoint point) {
         String said = reading.decidesWhere();
-        Words words = wordsOf(reading, point);
-        List<String> alike = words == null ? null : sharing.get(words);
-        if (alike == null) {
+        Words words = wordsOf(reading, point, said);
+        Map<String, String> alike = words == null ? null : sharing.get(words);
+        String told = alike == null ? null : alike.get(lineOf(reading));
+        if (told == null) {
             return said;
         }
-        List<Optional<String>> cases = alike.stream().map(this::caseOf).toList();
-        int place = alike.indexOf(lineOf(reading));
-        boolean eachIsOneRelation = cases.stream().allMatch(Optional::isPresent);
-        boolean allDiffer = new HashSet<>(cases).size() == cases.size();
-        String told = eachIsOneRelation && allDiffer ? cases.get(place).orElseThrow()
-                : "case " + (place + 1) + " of " + alike.size();
         return said == null ? told : said + " and " + told;
-    }
-
-    /** The case of a line as one relation, where the line is read in one part and it is one. */
-    private Optional<String> caseOf(String line) {
-        Set<WhereAPartDecides> parts = partsOf.get(line);
-        return parts.size() == 1 ? parts.iterator().next().asOneRelation() : Optional.empty();
     }
 
     /** The line as its geometry: every point it asks of a row, in one order. */
@@ -155,22 +159,27 @@ public final class WhereTheReadingsDiffer {
     /** What is said of {@code reading} at {@code point}, or null where it is a reading of no
      *  statement of several lines or asks nothing of a row there. */
     private static Words wordsOf(BorderAssessment reading, DomainPoint point) {
+        return isAReadingOfAStatement(reading) && reading.operator(point) != null
+                ? wordsOf(reading, point, reading.decidesWhere()) : null;
+    }
+
+    /** The same, for a reading whose cases of values have been said already. */
+    private static Words wordsOf(BorderAssessment reading, DomainPoint point, String said) {
         if (!isAReadingOfAStatement(reading) || reading.operator(point) == null) {
             return null;
         }
         LineOrigin.ComparisonOrigin read = (LineOrigin.ComparisonOrigin) reading.border().origin();
         return new Words(read.read().rule(), read.read().states(),
-                reading.operator(point) + " " + reading.against(point), reading.decidesWhere());
+                reading.operator(point) + " " + reading.against(point), said);
     }
 
     @Override
     public boolean equals(Object other) {
-        return other instanceof WhereTheReadingsDiffer that && sharing.equals(that.sharing)
-                && partsOf.equals(that.partsOf);
+        return other instanceof WhereTheReadingsDiffer that && sharing.equals(that.sharing);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(sharing, partsOf);
+        return Objects.hash(sharing);
     }
 }
