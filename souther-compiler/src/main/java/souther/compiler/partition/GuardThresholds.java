@@ -316,10 +316,16 @@ public final class GuardThresholds {
                             Reachability toIt = Reachability.gettingPast(Reachability.of(
                                     new WayToTheBorder(each.assumed()),
                                     read.quantities().region()), each.getsPast());
+                            // A stop is dropped on the way to the comparison and not on the way
+                            // past it: a run that stops in it has not got past it.
                             ComparisonAssessment arrived =
-                                    ComparisonAssessment.narrowedByWhatArrives(admitted.read(),
-                                            toIt, wayToACase, arrivals, false, read,
-                                            each.witnesses());
+                                    ComparisonAssessment.whereItsStopIsReached(
+                                            ComparisonAssessment.narrowedByWhatArrives(
+                                                    admitted.read(), toIt, wayToACase, arrivals,
+                                                    false, read, each.witnesses()),
+                                            Reachability.of(new WayToTheBorder(each.assumed()),
+                                                    read.quantities().region()),
+                                            arrivals);
                             // And whether a run that some row takes stops in it, which the line it
                             // draws does not say: a stop the ways before it rule out is no run's.
                             // A comparison every run stops in is already said as that.
