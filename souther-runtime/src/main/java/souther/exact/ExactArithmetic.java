@@ -1101,6 +1101,34 @@ public final class ExactArithmetic {
      * work pays for these as they come.
      */
     public static int compare(ExactParts a, ExactParts b, LongConsumer widened) {
+        // Only where nobody counts the brackets is the long route taken: a pair it settles can be one
+        // the brackets refine, and a caller paying for each bracket pays for the work the order takes
+        // at any width.
+        int settled = settledWithoutBrackets(a, b, widened == ExactOrder.NOBODY_ASKS);
+        if (settled != UNSETTLED) {
+            return settled;
+        }
+        int byMagnitude = ExactOrder.magnitudes(a, b, widened);
+        return a.signum() > 0 ? byMagnitude : -byMagnitude;
+    }
+
+    /**
+     * Where {@code a} stands against {@code b} where that is settled without refining a bracket — by
+     * equal parts, by sign, or by the magnitudes in longs — and {@link #UNSETTLED} where only the
+     * brackets settle it.
+     *
+     * <p>For a caller that keeps the orders it is asked for: what this settles costs nothing and
+     * makes nothing, and keeping it would cost more than asking again. What it leaves is the order
+     * {@link #compare(ExactParts, ExactParts)} works out from brackets built at every ask.
+     */
+    public static int compareWithoutBrackets(ExactParts a, ExactParts b) {
+        return settledWithoutBrackets(a, b, true);
+    }
+
+    /** What {@link #compareWithoutBrackets} answers where only the brackets settle the order. */
+    public static final int UNSETTLED = 2;
+
+    private static int settledWithoutBrackets(ExactParts a, ExactParts b, boolean inLongs) {
         if (a.equals(b)) {
             return 0;
         }
@@ -1108,11 +1136,9 @@ public final class ExactArithmetic {
         if (bySign != 0) {
             return bySign;
         }
-        // Only where nobody counts the brackets: a pair this settles can be one the brackets refine,
-        // and a caller paying for each bracket pays for the work the order takes at any width.
-        int byMagnitude = widened == ExactOrder.NOBODY_ASKS ? magnitudesInLongs(a, b) : UNDECIDED;
+        int byMagnitude = inLongs ? magnitudesInLongs(a, b) : UNDECIDED;
         if (byMagnitude == UNDECIDED) {
-            byMagnitude = ExactOrder.magnitudes(a, b, widened);
+            return UNSETTLED;
         }
         return a.signum() > 0 ? byMagnitude : -byMagnitude;
     }

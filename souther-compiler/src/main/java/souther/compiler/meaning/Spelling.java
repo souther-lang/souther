@@ -77,10 +77,14 @@ public final class Spelling implements Comparable<Spelling> {
         this.power = power;
     }
 
-    /** The spelling that is {@code text}. */
+    /** The spelling that is {@code text} — found by the text, so that an ask that finds it makes
+     *  nothing. A spelling of one piece hashes as its text does, which puts the two in one slot. */
     public static Spelling of(String text) {
-        return WRITTEN.held(new Spelling(text, List.of(), text.length(), text.hashCode(),
-                powerOf(text.length())));
+        return WRITTEN.held(text, spelling -> spelling.text, Spelling::ofOnePiece);
+    }
+
+    private static Spelling ofOnePiece(String text) {
+        return new Spelling(text, List.of(), text.length(), text.hashCode(), powerOf(text.length()));
     }
 
     /**
