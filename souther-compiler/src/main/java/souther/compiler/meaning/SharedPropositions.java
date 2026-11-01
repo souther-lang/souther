@@ -112,11 +112,8 @@ final class SharedPropositions {
      * What holds exactly where {@code stated} does not: the one made the first time it was asked
      * while both are held, or {@code denying}'s, kept from now on.
      *
-     * <p>And {@code stated} kept as the denial of what is made, where nothing is kept as that
-     * yet: {@code stated} holds exactly where its denial does not. Made again from the denial's
-     * parts, the denial of a denial would be joined from them and may be written another way —
-     * a statement saying what {@code stated} says and spelled otherwise — where a reader naming
-     * one column by a statement and its denial asks either of them which spells first.
+     * <p>What is kept is equal to what {@code denying} would make: keeping it saves the making,
+     * and never says anything another making would not.
      *
      * <p>Made outside the lock, since making it asks for the denial of every part. Two readers
      * asking at once make two equal denials and keep the one {@link #shared} hands both.
@@ -131,16 +128,7 @@ final class SharedPropositions {
         }
         Proposition made = denying.get();
         synchronized (DENIED) {
-            WeakReference<Proposition> raced = DENIED.get(stated);
-            Proposition first = raced == null ? null : raced.get();
-            if (first != null) {
-                return first;
-            }
             DENIED.put(stated, new WeakReference<>(made));
-            WeakReference<Proposition> back = DENIED.get(made);
-            if (back == null || back.get() == null) {
-                DENIED.put(made, new WeakReference<>(stated));
-            }
         }
         return made;
     }

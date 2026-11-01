@@ -63,7 +63,7 @@ class WhatAPointIsSearchedAtIsWhatTheWayAndTheCaseLeaveTest {
             int divisor = 1 + random.nextInt(12);
             WholeNumberRuns asked = WholeNumberRuns.NONE;
             for (int at = 0; at < 1 + random.nextInt(3); at++) {
-                long from = random.nextInt(3 * divisor) - divisor;
+                long from = (long) random.nextInt(3 * divisor) - divisor;
                 asked = asked.or(WholeNumberRuns.one(BigInteger.valueOf(from),
                         BigInteger.valueOf(from + random.nextInt(divisor + 1))));
             }

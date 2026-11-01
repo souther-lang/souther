@@ -17,10 +17,12 @@ import souther.compiler.numeric.Rel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A statement met coming out one way and its denial met coming out the other are one column with
@@ -31,8 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * statement; named by either, a column would be two columns, and named by the denial where the
  * denial's own denial spells first, refused as its own denial's.
  *
- * <p>Drawn at random from a fixed seed, as {@code DenyingFromAStatementComesBackWithinTwoDenialsTest}
- * draws them: truths and comparisons, held together and as alternatives, denied, read where a
+ * <p>Drawn at random from a fixed seed, as
+ * {@code DenyingAStatementOverAndOverComesRoundToTwoThatDenyOneAnotherTest} draws them: truths and comparisons, held together and as alternatives, denied, read where a
  * truth answers, counted, said of some element of a container, and a condition beside each way of
  * it as joining an if writes it.
  */
@@ -49,7 +51,8 @@ class AStatementAndItsDenialNameOneColumnWhicheverIsMetTest {
             Proposition stated = statement(random, 4, true);
             Proposition once = stated.denied();
             Proposition twice = once.denied();
-            DecidedCondition.Held holding = DecisionCondition.AStatement.of(once, true);
+            Optional<DecidedCondition.Held> holding = DecisionCondition.AStatement.of(once, true);
+            assertTrue(holding.isPresent(), stated::toString);
             assertEquals(holding, DecisionCondition.AStatement.of(twice, false),
                     stated::toString);
             assertEquals(holding, DecisionCondition.AStatement.of(twice.denied(), true),

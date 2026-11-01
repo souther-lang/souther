@@ -64,7 +64,7 @@ class TheFirstElementsOfAListStandForEveryElementOfItTest {
             List<Proposition> parts = new ArrayList<>(OnOneElement.heldByItsList(ELEMENT));
             parts.add(said);
             Proposition stated = Proposition.all(parts);
-            long apart = 1 + random.nextInt(12);
+            long apart = 1L + random.nextInt(12);
             if (!OnOneElement.comesOutAlikeApart(stated, ELEMENT, BigInteger.valueOf(apart))) {
                 not++;
                 continue;
