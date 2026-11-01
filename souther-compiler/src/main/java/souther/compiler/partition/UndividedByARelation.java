@@ -1780,6 +1780,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return false;
     }
 
+    /** Whether {@link #aRunMayStopIn} says no run stops in {@code working} on any region: it
+     *  tells no operation, so whatever regions it is asked over do not need working out. */
+    static boolean noRunMayStopIn(Working working) {
+        return working.operations().isEmpty();
+    }
+
     /**
      * Whether a run getting to this relation may stop in an operation the reading told over a
      * bound value ({@link Working#aRunMayStopOverABoundValue}).

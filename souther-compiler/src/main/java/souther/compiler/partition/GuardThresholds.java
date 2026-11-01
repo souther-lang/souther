@@ -1120,7 +1120,7 @@ public final class GuardThresholds {
             return false;
         }
         for (StopEvidence.OnAnArm arm : each.onTheArms()) {
-            if (ComparisonAssessment.someRowArrives(wayToACase.apply(arm.reached()), arrivals)
+            if (!arm.stops().noRunMayStopAnywhere() && ComparisonAssessment.someRowArrives(wayToACase.apply(arm.reached()), arrivals)
                     && arm.stops().aRunMayStopIn(read, regionsOf(Reachability.of(
                             new WayToTheBorder(each.wayToACase(aCase.apply(arm.reached()))),
                             read.quantities().region())))) {

@@ -80,6 +80,12 @@ record StopEvidence(UndividedByARelation.Working operations) {
         return UndividedByARelation.aRunMayStopIn(operations, read, regions);
     }
 
+    /** Whether {@link #aRunMayStopIn} is false over every region, so that no region need be
+     *  worked out to ask it ({@link UndividedByARelation#noRunMayStopIn}). */
+    boolean noRunMayStopAnywhere() {
+        return UndividedByARelation.noRunMayStopIn(operations);
+    }
+
     /**
      * Where every run getting here stops in what it works out, over {@code regions}, where it may
      * also work out {@code alsoWorkedOut} first ({@link UndividedByARelation#everyRunStopsIn}).
