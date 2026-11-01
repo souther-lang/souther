@@ -256,7 +256,7 @@ final class WhatARunWorksOutBeforeACount {
                 case Core.Widen _ -> { }
                 case Core.LetIn let -> {
                     if (child == let.body()) {
-                        out.add(let.value());
+                        workedOut(out, let.value());
                     }
                 }
                 case Core node -> {
@@ -264,11 +264,8 @@ final class WhatARunWorksOutBeforeACount {
                         if (step.expression() == child) {
                             break;
                         }
-                        if (aFunctionValue(step.expression())) {
-                            continue;
-                        }
                         if (!onlyWhatAlwaysRuns || step instanceof Evaluated.Step.Always) {
-                            out.add(step.expression());
+                            workedOut(out, step.expression());
                         }
                     }
                 }
@@ -314,6 +311,9 @@ final class WhatARunWorksOutBeforeACount {
                             .noneMatch(arg -> Core.withoutStanding(arg) == block)) {
                         return null;
                     }
+                    // Whole, a closure beside this one included: which of the closures a call is
+                    // handed it applies first is the call's, and one applied before this one has
+                    // run its body by then.
                     for (Core arg : Within.argumentsOf(applying)) {
                         if (Core.withoutStanding(arg) != block
                                 && out.stream().noneMatch(part -> part == arg)) {
@@ -325,7 +325,7 @@ final class WhatARunWorksOutBeforeACount {
                 case Core.Widen _ -> { }
                 case Core.LetIn let -> {
                     if (child == let.body()) {
-                        out.add(let.value());
+                        workedOut(out, let.value());
                     }
                 }
                 case Core node -> {
@@ -333,11 +333,8 @@ final class WhatARunWorksOutBeforeACount {
                         if (step.expression() == child) {
                             break;
                         }
-                        if (aFunctionValue(step.expression())) {
-                            continue;
-                        }
                         if (step instanceof Evaluated.Step.Always) {
-                            out.add(step.expression());
+                            workedOut(out, step.expression());
                         }
                     }
                 }
@@ -361,13 +358,20 @@ final class WhatARunWorksOutBeforeACount {
     record Applying(Core call, Core.Block closure) {}
 
     /**
-     * Whether {@code e} is a closure written as an argument. Evaluating that position makes the
-     * function and runs nothing of its body, which runs when the call applies it, after every
-     * argument written beside it: so it is no part of what a run works out on the way to a
-     * comparison in one of those arguments ({@link Evaluated}).
+     * Files {@code e} as worked out on the way to a comparison, unless it is a function value.
+     * Every expression a run is said to work out before the comparison comes through here, so
+     * what a closure written on the way is taken for is said once.
+     *
+     * <p>Evaluating a closure makes the function and runs nothing of its body. The body runs
+     * where a call applies the function, and a call handed the closure beside the argument the
+     * comparison stands in applies it after every argument, that one included ({@link Evaluated}).
+     * A closure bound by a {@code let} is the same value: what its body does is the call that
+     * applies the name, which is its own step where it comes.
      */
-    private static boolean aFunctionValue(Core e) {
-        return Core.withoutStanding(e) instanceof Core.Block;
+    private static void workedOut(List<Core> out, Core e) {
+        if (!Evaluated.makesAFunction(e)) {
+            out.add(e);
+        }
     }
 
     /** The nodes from {@code e} down to {@code node}, both included, by identity — or null where

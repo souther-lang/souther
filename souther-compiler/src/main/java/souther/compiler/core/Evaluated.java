@@ -59,6 +59,15 @@ public final class Evaluated {
         record OnlyWhere(Core asked, boolean comesOut, Core expression) implements Step {}
     }
 
+    /**
+     * Whether evaluating {@code e} makes a function and runs nothing of its body, which is so of
+     * a closure however it is standing. A reader that files what a run works out in order asks
+     * this of each thing it files, so that a closure written on the way is not filed as work.
+     */
+    public static boolean makesAFunction(Core e) {
+        return Core.withoutStanding(e) instanceof Core.Block;
+    }
+
     /** The sub-expressions of {@code e} that run, in the order they run. */
     public static List<Step> inOrder(Core e) {
         return switch (e) {
