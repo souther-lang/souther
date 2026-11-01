@@ -2892,7 +2892,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), restored);
         assertEquals(restored, leftPast("x: Int, y: Int, q: Q", held, worked, "x == y", true));
 
-        String around = "data Z ={ a: Int, b: Int } invariant a >= 0 invariant a <= 10"
+        String around = "data Z = { a: Int, b: Int } invariant a >= 0 invariant a <= 10"
                 + " invariant b >= 0 invariant b <= 10"
                 + " data W = { p: Z, q: Z } invariant p.a <= q.a";
         String across = "(w.p.a >= 8 && w.q.a <= 2 || x >= 5)";
