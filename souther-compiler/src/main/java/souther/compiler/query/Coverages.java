@@ -1411,12 +1411,11 @@ final class Coverages {
             // — so it is no reason to leave the other side unlooked at; which of the two the block
             // keeps is the offering's to say.
             //
-            // Beside a value singled out, the side the value is singled out for is the value
-            // itself, which has no run beside the line: a row there is a row at the line.
-            Criterion refusedHere = refused == null && line.atOneValue()
-                    ? atTheLine(border.border(), false) : refused;
-            Criterion keptHere = kept == null && line.atOneValue()
-                    ? atTheLine(border.border(), true) : kept;
+            // Where this border has no run on a side, its point at the line is the side: a row
+            // there is a row at the line. That is the border's to say, and the kind of line it is
+            // told apart from — a value singled out or a threshold — does not change it.
+            Criterion refusedHere = refused == null ? atTheLine(border.border(), false) : refused;
+            Criterion keptHere = kept == null ? atTheLine(border.border(), true) : kept;
             //
             // And each region a side names on its own: off a value is below it or above it, and a
             // way that leaves rows on one of the two is looked along that one.
