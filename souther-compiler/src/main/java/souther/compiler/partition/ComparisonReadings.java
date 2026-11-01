@@ -232,11 +232,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   where it was not: the stops of the parts of its statement nothing read.
      *                   Empty where the reading of it never stopped, and then the parts left are
      *                   left for what they are made of
-     * @param way        every condition on the way to evaluating the part: those on the way to
-     *                   the fork, and then what a short-circuiting {@code &&} or {@code ||} before
-     *                   it had to come out as for it to be evaluated at all. The fork is reached
-     *                   where the part is not, and a question about what is unread of a part is
-     *                   owed only where the part is evaluated
+     * @param way        for a part something is left of ({@link #unanswered} is not empty), every
+     *                   condition on the way to evaluating it: those on the way to the fork, and
+     *                   then what a short-circuiting {@code &&} or {@code ||} before it had to come
+     *                   out as for it to be evaluated at all. The fork is reached where the part is
+     *                   not, and a question about what is unread of a part is owed only where the
+     *                   part is evaluated. For any other part it is the way to the fork, which
+     *                   nothing asks of it
      */
     record Atom(Denotation at, List<Denotation> unanswered, List<WhyUnread> stoppedFor,
                 List<OnTheWay> way) {
@@ -954,7 +956,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                 in.newtypes());
                         Atom met = statedElsewhere(atom, in.read(), in.stated(), assumed);
                         // Where the part is evaluated is worked out only for the parts something
-                        // is owed of: the conditions before it are said once for each of them.
+                        // is left of: it puts every condition before the part on the way, and
+                        // that is cost for a part nobody asks it of.
                         atoms.add(met.unanswered().isEmpty() ? met
                                 : met.evaluatedUnder(evaluatedUnder(part, in, applying, assumed,
                                         numbering)));

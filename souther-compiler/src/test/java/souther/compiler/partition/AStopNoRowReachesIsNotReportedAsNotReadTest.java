@@ -9,7 +9,7 @@ import souther.compiler.query.PartitionEvidence;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * What a reading could not read of a condition is owed only where the condition is evaluated. A
@@ -18,9 +18,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * compiler cannot show that keeps its question.
  *
  * <p>Two readers raise such a question, a comparison of the values and a fork whose condition no
- * reader took in, and each case is asked of both. What is compared is the entry itself — the
- * position, the reason, whether the reading stopped, and how many rules it is filed under — and
- * never the positions alone, so a rule that stays cannot stand in for one that went.
+ * reader took in; a stopped comparison and an opaque fork are each asked, and the shapes around
+ * them are asked of whichever reader their part falls to. What is compared is the entry itself —
+ * the position, the reason, whether the reading stopped — and never the positions alone, so a rule
+ * that stays cannot stand in for one that went.
  */
 class AStopNoRowReachesIsNotReportedAsNotReadTest {
 
@@ -118,7 +119,7 @@ class AStopNoRowReachesIsNotReportedAsNotReadTest {
     void theSameConditionsOnAWayNotShownEmptyOweWhatTheyOweAlone() {
         for (String condition : List.of(STOP, OPAQUE, SEVERAL, CLOSURE, "stopped(c, d)")) {
             List<String> alone = entriesOf(plain(condition));
-            assertTrue(!alone.isEmpty(), "the control owes something: " + condition);
+            assertFalse(alone.isEmpty(), "the control owes something: " + condition);
             assertEquals(alone, entriesOf(reached(condition)), condition);
             assertEquals(alone, entriesOf("if t == Eom then " + NO + " else if " + condition
                     + " then " + YES + " else " + NO), condition);
