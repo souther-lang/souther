@@ -5,6 +5,7 @@ import souther.compiler.collect.InTheOrderGiven;
 import souther.compiler.coverage.SeenComparison;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.SearchRegion;
@@ -769,16 +770,31 @@ public sealed interface BorderQuantity
         private final AStatementAtARow perElement;
         private final LinearForm<NumericTerm> against;
         private final Map<NumericTerm, TermOrders> on;
-        private final Optional<Count> most;
+        private final NumericDomain.Bounds runs;
 
         /**
-         * The count of what {@code counted} counts.
+         * The count of what {@code counted} counts, as {@code read} has its container.
          *
          * @param counted what is counted, which is the whole of which count this is
-         * @param most    the most the count comes to, where something says ({@link HowManyCanMeet})
          */
-        HowMany(CountedElements counted, Optional<Count> most) {
-            this(counted, new LinearForm<>(ExactRatio.ZERO, Map.of()), Map.of(), most);
+        static HowMany reading(CountedElements counted, InputReading read) {
+            return reading(counted, new LinearForm<>(ExactRatio.ZERO, Map.of()), read);
+        }
+
+        /**
+         * The count of what {@code counted} counts with what a form of the input's numbers comes
+         * to added, as {@code read} has its container: the one way a quantity of this kind is made
+         * from a reading, so that the orders the form's numbers are read on and what the rules
+         * leave the quantity ({@link HowManyCanMeet#runsOf}) are both the reading's and nowhere
+         * handed in beside the form they are of.
+         */
+        static HowMany reading(CountedElements counted, LinearForm<NumericTerm> against,
+                               InputReading read) {
+            Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
+            against.coefs().keySet()
+                    .forEach(term -> on.put(term, read.quantities().ordersOf(term)));
+            return new HowMany(counted, against, on,
+                    HowManyCanMeet.runsOf(counted, against, read));
         }
 
         /**
@@ -791,22 +807,18 @@ public sealed interface BorderQuantity
          * so {@code count >= n} and {@code 2 * count >= 2 * n} are one quantity, and what a rule
          * holds it against is the level, which is where the form's constant went.
          *
-         * <p>A most is the count's alone. With a form added, the form runs wherever its numbers do
-         * and the sum is left unbounded whatever the count comes to ({@link #runs}), so a most
-         * handed beside a form would be an end nothing reads.
+         * <p>What the rules leave the quantity is {@code runs}. It is not part of which quantity
+         * this is, as the orders of the form's numbers are not: it is a function of which count
+         * and which form, and of the reading, which has one answer for each.
          *
          * @param counted what is counted, which is the whole of which count this is
          * @param against the form of the input's numbers added to the count, with no constant
          * @param on      the orders each of its numbers is read and written on
-         * @param most    the most the count comes to, where something says and nothing is added
-         *                to it ({@link HowManyCanMeet})
+         * @param runs    what the rules leave the quantity, as {@link HowManyCanMeet#runsOf}
+         *                works it out for these
          */
         HowMany(CountedElements counted, LinearForm<NumericTerm> against,
-                Map<NumericTerm, TermOrders> on, Optional<Count> most) {
-            if (most.isPresent() && !against.coefs().isEmpty()) {
-                throw new IllegalArgumentException("a most is of the count alone, and this one has"
-                        + " a form added to it: " + against);
-            }
+                Map<NumericTerm, TermOrders> on, NumericDomain.Bounds runs) {
             if (against.constant().signum() != 0) {
                 throw new IllegalArgumentException(
                         "a quantity carries no constant; it belongs to the level: " + against);
@@ -829,7 +841,7 @@ public sealed interface BorderQuantity
             this.perElement = counted.perElement();
             this.against = against;
             this.on = Map.copyOf(on);
-            this.most = most;
+            this.runs = runs;
         }
 
         /** The count and the form beside it, held against {@code level} as {@code relation}:
@@ -844,21 +856,9 @@ public sealed interface BorderQuantity
                     relation);
         }
 
-        /**
-         * What the rules leave the quantity: the count from none to the most it comes to, where
-         * nothing is added to it. With a form added, the sum runs wherever the form's numbers do,
-         * and is left unbounded.
-         *
-         * <p>The most is not part of which quantity this is, as the orders of the form's numbers
-         * are not: both are what the reading has of the count, and a reading works out one most
-         * for each count it reads ({@link HowManyCanMeet#of}).
-         */
+        /** What the rules leave the quantity ({@link HowManyCanMeet#runsOf}). */
         NumericDomain.Bounds runs() {
-            if (!against.coefs().isEmpty()) {
-                return NumericDomain.Bounds.OPEN;
-            }
-            return most.map(end -> new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
-                    Endpoint.inclusive(end))).orElse(NONE_OR_MORE);
+            return runs;
         }
 
         /** What is added to the count, with no constant; no coefficient where the quantity is the
