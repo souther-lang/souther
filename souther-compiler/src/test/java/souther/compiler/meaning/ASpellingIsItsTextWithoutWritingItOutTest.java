@@ -193,9 +193,11 @@ class ASpellingIsItsTextWithoutWritingItOutTest {
      *  finding it makes nothing. */
     @Test
     void aTextSpelledAgainIsTheSpellingHeldAndMakesNothing() {
+        // each ask a string of its own, so that what finds the spelling is the text and not the object
+        char[] text = "the name of a place".toCharArray();
         String[] asks = new String[ASKS];
         for (int i = 0; i < ASKS; i++) {
-            asks[i] = new StringBuilder("the name of a place").toString();
+            asks[i] = String.valueOf(text);
         }
         Spelling held = Spelling.of(asks[0]);
         Runnable asking = () -> {
