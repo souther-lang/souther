@@ -30,10 +30,13 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -462,25 +465,27 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
      */
     @Test
     void theProofAskedForAClassIsReadBackWhenARowIsLookedForThere() {
-        SearchRegion within = yIsNoMoreThanX();
+        ProofsMade proofs = new ProofsMade();
+        SearchRegion within = proofs.watching(yIsNoMoreThanX());
         Standing standing = pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)));
         LevelRealizer realizer = new LevelRealizer();
         assertTrue(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(standing), within));
         assertInstanceOf(Realization.Impossible.class, realizer.realize(standing, within,
                 NothingTheDeclarationsRefuse.at(pathOf("x"), pathOf("y"))));
-        assertEquals(1, realizer.proofsMade(), "one region and one standing, asked twice");
+        assertEquals(1, proofs.count(), "one region and one standing, asked twice");
     }
 
     /** The same standing is built again for each asker, so it is told apart by what it says. */
     @Test
     void aStandingBuiltAgainIsTheSameQuestion() {
-        SearchRegion within = yIsNoMoreThanX();
+        ProofsMade proofs = new ProofsMade();
+        SearchRegion within = proofs.watching(yIsNoMoreThanX());
         LevelRealizer realizer = new LevelRealizer();
         realizer.leavesNoValue(new PointSearchGoal.ByConstraints(
                 pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)))), within);
         realizer.leavesNoValue(new PointSearchGoal.ByConstraints(
                 pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)))), within);
-        assertEquals(1, realizer.proofsMade());
+        assertEquals(1, proofs.count());
     }
 
     /**
@@ -493,26 +498,28 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
      */
     @Test
     void aFormWhoseLevelsWereBuiltAgainIsTheSameQuestion() {
-        SearchRegion within = yIsNoMoreThanX();
+        ProofsMade proofs = new ProofsMade();
+        SearchRegion within = proofs.watching(yIsNoMoreThanX());
         LevelRealizer realizer = new LevelRealizer();
         assertTrue(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(
                 formAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)))), within));
         assertTrue(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(
                 formAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)))), within));
-        assertEquals(1, realizer.proofsMade());
+        assertEquals(1, proofs.count());
     }
 
     /**
-     * A standing no region can be asked about is not kept at all.
+     * A standing nothing is proved of is never put to the region.
      *
-     * <p>Nothing is proved of a count or of a remainder, so there is no proof to read back, and an
-     * entry for each of them would only hold the region.
+     * <p>A count or a remainder has no question for a region to answer, so asking it of one would
+     * be a proof made for nothing.
      */
     @Test
-    void aStandingNothingIsProvedOfLeavesNothingBehind() {
+    void aStandingNothingIsProvedOfIsNotPutToTheRegion() {
+        ProofsMade proofs = new ProofsMade();
         LevelRealizer realizer = new LevelRealizer();
-        SearchRegion within = region();
         Quantities measuring = COUNTED.input().quantities(COUNTED.rules());
+        SearchRegion within = proofs.watching(measuring.region());
         TermPath xs = pathIn(COUNTED, "xs");
         CountedElements counted = CountedElements.of("counted", new Quantity.HowManyMeet(
                 new DecisionSubject.AnInput(xs),
@@ -524,7 +531,7 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
         Standing none = new Standing.OfACount(counted, counted.numbers(),
                 new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));
         assertFalse(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(none), within));
-        assertEquals(0, realizer.proofsMade(), "no proof is made of a count");
+        assertEquals(0, proofs.count(), "no proof is made of a count");
     }
 
     /**
@@ -536,14 +543,15 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
      */
     @Test
     void anAnswerThatSettledNothingIsNotWorkedOutAgain() {
-        SearchRegion within = yIsNoMoreThanX();
+        ProofsMade proofs = new ProofsMade();
+        SearchRegion within = proofs.watching(yIsNoMoreThanX());
         Standing standing = pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));
         LevelRealizer realizer = new LevelRealizer();
         assertFalse(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(standing), within));
         assertFalse(realizer.realize(standing, within,
                 NothingTheDeclarationsRefuse.at(pathOf("x"), pathOf("y")))
                 instanceof Realization.Impossible);
-        assertEquals(1, realizer.proofsMade());
+        assertEquals(1, proofs.count());
     }
 
     /**
@@ -556,14 +564,47 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
     void anotherRegionOrAnotherStandingIsAnotherProof() {
         Standing one = pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)));
         Standing nought = pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));
-        SearchRegion within = yIsNoMoreThanX();
+        ProofsMade proofs = new ProofsMade();
+        SearchRegion within = proofs.watching(yIsNoMoreThanX());
         LevelRealizer realizer = new LevelRealizer();
         assertTrue(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(one), within));
         assertFalse(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(nought), within),
                 "the same region answers the other level differently");
-        assertTrue(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(one), yIsNoMoreThanX()),
+        assertTrue(realizer.leavesNoValue(new PointSearchGoal.ByConstraints(one),
+                        proofs.watching(yIsNoMoreThanX())),
                 "and a region made again is asked again");
-        assertEquals(3, realizer.proofsMade());
+        assertEquals(3, proofs.count());
+    }
+
+    /**
+     * The proofs put to the regions it watches, counted at the one question a proof asks of a
+     * region: where the quantity runs.
+     *
+     * <p>Read off the region and not off the realizer, so that the realizer carries nothing that is
+     * there for a test to read.
+     */
+    private static final class ProofsMade {
+
+        private final AtomicInteger asked = new AtomicInteger();
+
+        SearchRegion watching(SearchRegion region) {
+            return (SearchRegion) Proxy.newProxyInstance(SearchRegion.class.getClassLoader(),
+                    new Class<?>[] {SearchRegion.class}, (proxy, method, args) -> {
+                        if (method.getName().equals("projectionOf") && args != null
+                                && args.length == 1 && args[0] instanceof LinearForm<?>) {
+                            asked.incrementAndGet();
+                        }
+                        try {
+                            return method.invoke(region, args);
+                        } catch (InvocationTargetException e) {
+                            throw e.getCause();
+                        }
+                    });
+        }
+
+        int count() {
+            return asked.get();
+        }
     }
 
     /** The item's line, as far as a row for it is concerned. */

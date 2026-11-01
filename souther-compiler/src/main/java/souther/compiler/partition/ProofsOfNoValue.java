@@ -27,10 +27,8 @@ import java.util.Map;
  */
 final class ProofsOfNoValue {
 
-    /** Made when the first question is kept, since most owners are never asked one. */
+    /** Made when the first question is kept, so an owner asked nothing it can prove holds no table. */
     private Map<SearchRegion, Map<StandingImpossibility.Asked, Boolean>> answers;
-
-    private int made;
 
     /** Whether the region leaves the standing's quantity no value the item asks for. */
     boolean provesImpossible(SearchRegion region, Standing standing) {
@@ -48,14 +46,7 @@ final class ProofsOfNoValue {
             return had;
         }
         boolean proved = StandingImpossibility.provesImpossible(region, asked);
-        made++;
         ofTheRegion.put(asked, proved);
         return proved;
-    }
-
-    /** How many proofs were worked out rather than read back, for a test that holds a question to
-     *  being asked once. */
-    int made() {
-        return made;
     }
 }

@@ -103,12 +103,6 @@ public final class LevelRealizer {
                 && proofs.provesImpossible(within, constraint);
     }
 
-    /** How many proofs this realizer has worked out rather than read back, for a test that holds a
-     *  question to being asked once. */
-    int proofsMade() {
-        return proofs.made();
-    }
-
     /**
      * The same, leaving out the places this point was already composed at.
      *
