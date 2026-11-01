@@ -371,8 +371,12 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
      * The cases of the input's values the line decides in, as a report says them
      * ({@link WhereAPartDecides#said}) — or null where the position the line is read at already
      * names all of them: always for a line that is the whole of what its rule states.
+     *
+     * <p>Not what a report prints. Another line of the comparison can be said in the same words
+     * under a different point, and that is told apart only where the readings of the behavior
+     * are held together ({@link #decidesWhere(WhereTheReadingsDiffer, DomainPoint)}).
      */
-    public String decidesWhere() {
+    String decidesWhere() {
         List<TermPath> readAt = positionsReadAt();
         return border.origin() instanceof LineOrigin.ComparisonOrigin read
                 ? read.part().map(part -> part.said(readAt)).orElse(null) : null;
@@ -424,23 +428,18 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
             return border.label(at);
         }
 
-        /** What this asks of a row, as a report writes it, or null where none is owed: the values,
-         *  and the cases of the input the line decides in where the position does not name
-         *  them. */
-        public String asked() {
-            return asked(border.decidesWhere());
-        }
-
-        /** The same, with the readings of the comparison that {@code apart} finds saying the same
-         *  words told apart. */
+        /**
+         * What this asks of a row, as a report writes it, or null where none is owed: the values,
+         * and the cases of the input the line decides in where the position does not name them.
+         * Another line of the comparison said in the same words under a different point is told
+         * apart by {@code apart}, which is held for the readings of the behavior together
+         * ({@link WhereTheReadingsDiffer#NONE} for a reader that has only this one).
+         */
         public String asked(WhereTheReadingsDiffer apart) {
-            return asked(border.decidesWhere(apart, at));
-        }
-
-        private String asked(String where) {
             if (border.operator(at) == null) {
                 return null;
             }
+            String where = border.decidesWhere(apart, at);
             return border.operator(at) + " " + border.against(at)
                     + (where == null ? "" : " where " + where);
         }

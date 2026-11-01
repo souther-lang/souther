@@ -12,6 +12,7 @@ import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.query.WhereTheReadingsDiffer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -251,7 +252,8 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     private static List<String> owedAt(BorderAssessment line) {
         List<String> said = new ArrayList<>();
         for (BorderAssessment.Point point : line.points()) {
-            said.add(point.role() + (point.asked() == null ? "" : " " + point.asked()) + ": "
+            String asked = point.asked(WhereTheReadingsDiffer.NONE);
+            said.add(point.role() + (asked == null ? "" : " " + asked) + ": "
                     + switch (point.item()) {
                 case ItemAssessment.Owed _ -> "owed";
                 case ItemAssessment.NotOwed not -> not.reason().name();

@@ -13,7 +13,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -173,13 +172,22 @@ public final class WhereTheReadingsDiffer {
                 reading.operator(point) + " " + reading.against(point), said);
     }
 
+    /**
+     * Every one of these is equal to every other.
+     *
+     * <p>What this holds is worked out from the readings of the points that hold it, so two
+     * accounts whose points are equal hold equal ones, and an account whose points differ is
+     * already told apart by them. Compared as well, it would be compared once for each point of
+     * the account — each time the whole of it — whenever an answer is checked against the one
+     * before it. Not a value to be used as a key of anything on its own.
+     */
     @Override
     public boolean equals(Object other) {
-        return other instanceof WhereTheReadingsDiffer that && sharing.equals(that.sharing);
+        return other instanceof WhereTheReadingsDiffer;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(sharing);
+        return WhereTheReadingsDiffer.class.hashCode();
     }
 }

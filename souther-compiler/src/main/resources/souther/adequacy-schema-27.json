@@ -2443,7 +2443,7 @@
                 },
                 "where": {
                   "type": "string",
-                  "description": "What every row at this reading has to be beside the values: which cases of a sum a value is or is not, whether it holds a value, which truth it is, as the cases the line decides in hold them, less what the position read already names. Absent where those cases hold no value of the input to a case or a truth; the relations they ask beside it are not said here."
+                  "description": "What every row at this reading has to be beside the values: which cases of a sum a value is or is not, whether it holds a value, which truth it is, as the cases the line decides in hold them, less what the position read already names. Absent where those cases hold no value of the input to a case or a truth. The relations they ask beside it are not said here, except to tell this reading from another line of the same comparison that is said in the same words under a different point: then the case follows, as the one relation it is when it is one (`n /= 50`), and otherwise as the place of the line among those that share the words (`case 2 of 3`), in the order of the points each asks of a row. Neither is a key: the words are for a reader."
                 },
                 "status": {
                   "$ref": "#/$defs/status"
