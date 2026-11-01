@@ -33,7 +33,7 @@ public record ComposedRow(List<FixtureTemplate> inputs, List<StoodInAnswer> answ
      * another. A value is taken as it is written out ({@link FixtureTemplate#meaning}), so a row
      * naming a value the module states and a row writing it out are the one line, and run once.
      */
-    public List<String> writtenAs() {
+    public List<String> identity() {
         List<String> out = new ArrayList<>(
                 inputs.stream().map(FixtureTemplate::meaning).toList());
         for (StoodInAnswer each : answers) {

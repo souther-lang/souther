@@ -14,8 +14,13 @@ import java.util.Optional;
  * names the same few stated values in every candidate it takes.
  *
  * <p>A template nothing built, or whose build cannot be written out, means its own spelling, so a
- * value that could not be read is never taken for another. That answer is asked again next time:
- * it says nothing about the template.
+ * value that could not be read is never taken for another. That is remembered too: the build is
+ * the run's own answer and asking again would give it again.
+ *
+ * <p>Only the templates this search writes against a value the module states are given a meaning
+ * here. Every other template means its own spelling, which is the spelling the generator wrote it
+ * in and the only one it writes it in; a value is told from another by its meaning where a stated
+ * value is in play, and by nothing the generator could have written two ways elsewhere.
  */
 final class WrittenOut {
 
@@ -28,7 +33,7 @@ final class WrittenOut {
 
     private final Generator.CandidateCheck check;
 
-    private final Map<At, String> meant = new HashMap<>();
+    private final Map<At, Optional<String>> meant = new HashMap<>();
 
     WrittenOut(MeasuredInput subject, Generator.CandidateCheck check) {
         this.subject = subject;
@@ -40,17 +45,16 @@ final class WrittenOut {
         if (check == null) {
             return template;
         }
-        At key = new At(parameter, template.text());
-        String had = meant.get(key);
-        if (had != null) {
-            return template.meaningAs(had);
-        }
-        Optional<String> made = check.build(parameter, template)
+        return meant.computeIfAbsent(new At(parameter, template.text()),
+                        _ -> writtenOut(parameter, template))
+                .map(template::meaningAs).orElse(template);
+    }
+
+    private Optional<String> writtenOut(int parameter, FixtureTemplate template) {
+        return check.build(parameter, template)
                 instanceof Generator.CandidateCheck.Built.Value(var value)
                 ? SeedFixtures.written(value, subject.types().get(parameter), subject.ruleReading())
                         .map(FixtureTemplate::text)
                 : Optional.empty();
-        made.ifPresent(each -> meant.put(key, each));
-        return made.map(template::meaningAs).orElse(template);
     }
 }

@@ -1390,7 +1390,7 @@ public final class Generator {
          * run; null where it needed a run and {@code spend} had none.
          */
         ObservedRun run(RowToRun row, Spend spend) {
-            ObservedRun already = ran.get(writtenAs(row));
+            ObservedRun already = ran.get(identity(row));
             if (already != null) {
                 return already;
             }
@@ -1402,7 +1402,7 @@ public final class Generator {
          * {@code spend} allows a run; null where it needed a run and {@code spend} had none.
          */
         Optional<AnswerObservation> runReplacing(RowToRun row, Rewriting asked, Spend spend) {
-            Optional<AnswerObservation> already = replaced.get(new Replaced(writtenAs(row), asked));
+            Optional<AnswerObservation> already = replaced.get(new Replaced(identity(row), asked));
             if (already != null) {
                 return already;
             }
@@ -1416,7 +1416,7 @@ public final class Generator {
 
         @Override
         public ObservedRun run(RowToRun row) {
-            List<String> written = writtenAs(row);
+            List<String> written = identity(row);
             ObservedRun already = ran.get(written);
             if (already != null) {
                 return already;
@@ -1430,7 +1430,7 @@ public final class Generator {
 
         @Override
         public Optional<AnswerObservation> runReplacing(RowToRun row, Rewriting asked) {
-            Replaced key = new Replaced(writtenAs(row), asked);
+            Replaced key = new Replaced(identity(row), asked);
             Optional<AnswerObservation> already = replaced.get(key);
             if (already != null) {
                 return already;
@@ -1451,8 +1451,8 @@ public final class Generator {
             return trial.rewritesThrough(ran);
         }
 
-        static List<String> writtenAs(RowToRun row) {
-            return new ComposedRow(row.inputs(), row.answers()).writtenAs();
+        static List<String> identity(RowToRun row) {
+            return new ComposedRow(row.inputs(), row.answers()).identity();
         }
     }
 
@@ -3161,20 +3161,21 @@ public final class Generator {
      * answers two different things.
      */
     private static RowId keep(SequencedMap<RowId, FilledRow> composed, GeneratedRow row) {
-        List<String> written = new ComposedRow(row.inputs(), row.answers()).writtenAs();
+        List<String> written = new ComposedRow(row.inputs(), row.answers()).identity();
         for (Map.Entry<RowId, FilledRow> already : composed.entrySet()) {
             // Whatever the row beside it was composed for, and not the arms alone. One set of
             // values is one line in the file: a class's row and an arm's row of the same values are
             // one row that fills the class and goes through the arm, and written down twice the
             // second was printed over the first and took its name away with it.
             //
-            // By what the rows are written as, which is what "the same line" means and is a string
-            // to compare. A template also carries the expression it stands for, and holding two
-            // rows to that walks two trees for an answer the text already gave.
+            // By what the rows put in, which is what "the same line" means and is a string to
+            // compare: the value as it is written out, so a value named by a let and the same value
+            // written out are one line. A template also carries the expression it stands for, and
+            // holding two rows to that walks two trees for an answer the strings already gave.
             // The line already here keeps what came of looking past it. The rows kept this way
             // are an arm's and a meeting's, taken where the run went and never exchanged for one
             // that goes further, so they bring nothing of the kind.
-            if (already.getValue().line().writtenAs().equals(written)) {
+            if (already.getValue().line().identity().equals(written)) {
                 return already.getKey();
             }
         }
@@ -10675,7 +10676,7 @@ public final class Generator {
                     return Acceptance.STOPPED;
                 }
                 RowToRun row = new RowToRun(inputs, answers);
-                List<String> written = RunOnce.writtenAs(row);
+                List<String> written = RunOnce.identity(row);
                 if (ranked.contains(written)) {
                     return Acceptance.PASSED;
                 }
@@ -10901,7 +10902,7 @@ public final class Generator {
                     return Acceptance.STOPPED;
                 }
                 RowToRun row = new RowToRun(inputs, answers);
-                if (!judged.add(RunOnce.writtenAs(row))) {
+                if (!judged.add(RunOnce.identity(row))) {
                     return Acceptance.PASSED;
                 }
                 Acceptance met = meets.take(inputs);

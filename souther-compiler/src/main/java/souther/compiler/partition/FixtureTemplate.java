@@ -51,7 +51,14 @@ import java.util.function.UnaryOperator;
  * when it is read back from a build ({@link SeedFixtures#written}). A value written by the name of a
  * {@code let} and the same value written out are two {@code text}s and one {@code meaning}, so a
  * question of whether two rows put in the same value is asked of {@code meaning}, and what a reader
- * is shown is {@code text}. It is the text itself wherever no build said otherwise.
+ * is shown is {@code text}.
+ *
+ * <p>Set only where the generator writes one value in more than one way: the templates it composes
+ * against a value the module states, which are written by the name, by a spread over it, and by
+ * what a run read back ({@link WrittenOut}). Every other constructor here writes a value in the one
+ * way it writes it, so {@code meaning} is the text; it is not the language's equality of values,
+ * which asks the type of the position ({@code Set<Int>} holds {@code [1, 2]} and {@code [2, 1]}
+ * as one value) and is {@code Comparisons.same}'s to say.
  *
  * @param text    what a row prints
  * @param value   what a decoder builds

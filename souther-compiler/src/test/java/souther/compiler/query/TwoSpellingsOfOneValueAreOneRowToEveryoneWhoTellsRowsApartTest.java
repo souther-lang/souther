@@ -14,6 +14,11 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 /**
  * The questions "is this the row already offered" and "was this row already run" are answered by
  * what the row puts in, never by how the generator happened to spell it.
+ *
+ * <p>The templates here are given a meaning by hand, so this fixes only that the comparison reads
+ * the meaning. That the meaning is the value written out is fixed against the module's own decoder
+ * by {@link NoTwoOfferedRowsPutInTheSameValuesTest} and by
+ * {@code ATemplateWrittenAgainstAStatedValueMeansTheValueItBuildsTest}.
  */
 class TwoSpellingsOfOneValueAreOneRowToEveryoneWhoTellsRowsApartTest {
 
@@ -51,9 +56,9 @@ class TwoSpellingsOfOneValueAreOneRowToEveryoneWhoTellsRowsApartTest {
 
     @Test
     void aRowIsTheSameLineAndTheSameRunWhateverItsValuesWereSpelledAs() {
-        assertEquals(new ComposedRow(List.of(BY_NAME), List.of()).writtenAs(),
-                new ComposedRow(List.of(WRITTEN_OUT), List.of()).writtenAs());
-        assertNotEquals(new ComposedRow(List.of(WRITTEN_OUT), List.of()).writtenAs(),
-                new ComposedRow(List.of(ANOTHER_VALUE), List.of()).writtenAs());
+        assertEquals(new ComposedRow(List.of(BY_NAME), List.of()).identity(),
+                new ComposedRow(List.of(WRITTEN_OUT), List.of()).identity());
+        assertNotEquals(new ComposedRow(List.of(WRITTEN_OUT), List.of()).identity(),
+                new ComposedRow(List.of(ANOTHER_VALUE), List.of()).identity());
     }
 }
