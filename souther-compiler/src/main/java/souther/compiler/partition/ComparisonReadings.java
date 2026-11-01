@@ -232,12 +232,37 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   where it was not: the stops of the parts of its statement nothing read.
      *                   Empty where the reading of it never stopped, and then the parts left are
      *                   left for what they are made of
+     * @param way        every condition on the way to evaluating the part: those on the way to
+     *                   the fork, and then what a short-circuiting {@code &&} or {@code ||} before
+     *                   it had to come out as for it to be evaluated at all. The fork is reached
+     *                   where the part is not, and a question about what is unread of a part is
+     *                   owed only where the part is evaluated
      */
-    record Atom(Denotation at, List<Denotation> unanswered, List<WhyUnread> stoppedFor) {
+    record Atom(Denotation at, List<Denotation> unanswered, List<WhyUnread> stoppedFor,
+                List<OnTheWay> way) {
 
         Atom {
             unanswered = List.copyOf(unanswered);
             stoppedFor = List.copyOf(stoppedFor);
+            way = List.copyOf(way);
+        }
+
+        /** The same part, evaluated under {@code evaluatedUnder} instead. */
+        Atom evaluatedUnder(List<OnTheWay> evaluatedUnder) {
+            return new Atom(at, unanswered, stoppedFor, evaluatedUnder);
+        }
+
+        /**
+         * Whether the part may be evaluated: its way is not shown to hold no row of what the
+         * declarations leave.
+         *
+         * <p>Asked of the way to the part and not of the rows that arrive at places the rule is
+         * watched at, so a proof that the places could add is not used here: a part nothing proves
+         * unevaluated keeps what is owed of it.
+         */
+        boolean mayBeEvaluated(InputReading read) {
+            return Reachability.of(new WayToTheBorder(way), read.quantities().region())
+                    .leavesARow();
         }
     }
 
@@ -872,10 +897,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(both.left(), in, reads, applying, flow, assumed, live, out, forks,
                         numbering);
                 walk(both.right(), in, reads, applying.taking(both.left(), true, in.read()), flow,
-                        applying.saysWhatStandsInIt() ? assumed
-                                : taking(Condition.of(both.left(), reads, symbols, in.newtypes(),
-                                        numbering), true, in.read(), assumed, in.conditions(),
-                                        numbering),
+                        pastTheLeft(both.left(), reads, true, in, applying, assumed, numbering),
                         live, out, forks, numbering);
             }
             case Core.Binary either when either.op() == BinOp.OR -> {
@@ -883,10 +905,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         numbering);
                 walk(either.right(), in, reads, applying.taking(either.left(), false, in.read()),
                         flow,
-                        applying.saysWhatStandsInIt() ? assumed
-                                : taking(Condition.of(either.left(), reads, symbols,
-                                        in.newtypes(), numbering), false, in.read(), assumed,
-                                        in.conditions(), numbering),
+                        pastTheLeft(either.left(), reads, false, in, applying, assumed, numbering),
                         live, out, forks, numbering);
             }
             // The condition under what stood above the fork, and each arm under what that arm proves
@@ -929,10 +948,16 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     // the name denotes is the owner's question, and a reader that could not answer
                     // it would call a fork on a named comparison one nobody read.
                     List<Atom> atoms = new ArrayList<>();
-                    for (Denotation part : ConditionSkeleton.atoms(iff.cond(),
+                    for (ConditionSkeleton.Part part : ConditionSkeleton.atoms(iff.cond(),
                             WhatNamesStandFor.in(reads, in.read()))) {
-                        Denotation atom = part.at().denotes(part.value(), symbols, in.newtypes());
-                        atoms.add(statedElsewhere(atom, in.read(), in.stated()));
+                        Denotation atom = part.atom().at().denotes(part.atom().value(), symbols,
+                                in.newtypes());
+                        Atom met = statedElsewhere(atom, in.read(), in.stated(), assumed);
+                        // Where the part is evaluated is worked out only for the parts something
+                        // is owed of: the conditions before it are said once for each of them.
+                        atoms.add(met.unanswered().isEmpty() ? met
+                                : met.evaluatedUnder(evaluatedUnder(part, in, applying, assumed,
+                                        numbering)));
                     }
                     forks.add(new ForkMet(in.context().of(iff.occurrence()), iff.cond(),
                             Citation.of(iff.pos()),
@@ -1374,6 +1399,39 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 ReachingCuts.stating(condition, read, holding, conditions)));
     }
 
+    /**
+     * What stands on the way to the right of an {@code &&} or {@code ||} whose left is {@code left}:
+     * the right is evaluated only where the left came out {@code holding}.
+     *
+     * <p>Inside a closure whose applications are said, what the left came to is a statement about
+     * each application, so it goes onto what each is reached under and not onto the way every
+     * application shares.
+     *
+     * <p>The one statement of it, for the walk into the right operand and for the way to a part of
+     * a fork's condition, so that the two cannot disagree about where a part is evaluated.
+     */
+    private static List<OnTheWay> pastTheLeft(Core left, InputReads reads, boolean holding,
+                                              Body in, ClosureApplications applying,
+                                              List<OnTheWay> assumed,
+                                              ConditionNumbering numbering) {
+        return applying.saysWhatStandsInIt() ? assumed
+                : taking(Condition.of(left, reads, in.symbols(), in.newtypes(), numbering),
+                        holding, in.read(), assumed, in.conditions(), numbering);
+    }
+
+    /** The way to {@code part}: {@code assumed}, and then each condition before it in turn. */
+    private static List<OnTheWay> evaluatedUnder(ConditionSkeleton.Part part, Body in,
+                                                 ClosureApplications applying,
+                                                 List<OnTheWay> assumed,
+                                                 ConditionNumbering numbering) {
+        List<OnTheWay> way = assumed;
+        for (ConditionSkeleton.Guard each : part.before()) {
+            way = pastTheLeft(each.condition().value(), each.condition().at(), each.holds(), in,
+                    applying, way, numbering);
+        }
+        return way;
+    }
+
     /** What stood before, and then what was {@code stated} past it. */
     private static List<OnTheWay> past(List<OnTheWay> assumed, List<OnTheWay> stated) {
         List<OnTheWay> out = new ArrayList<>(assumed);
@@ -1640,19 +1698,20 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * {@code xs} holds something, and the comparison draws both. A statement with a part nobody
      * read leaves that part where it was read off, as any other part is.
      */
-    private static Atom statedElsewhere(Denotation atom, InputReading read, StatedHere here) {
+    private static Atom statedElsewhere(Denotation atom, InputReading read, StatedHere here,
+                                        List<OnTheWay> assumed) {
         StatedAt whole = statedAt(atom.value(), () -> WhatNamesStandFor.in(atom.at(), read), here);
         List<WhyUnread> stoppedFor = List.of();
         if (whole != null) {
             switch (whole.statement()) {
                 case Stated.AnApplication _ -> {
-                    return new Atom(atom, List.of(), List.of());
+                    return new Atom(atom, List.of(), List.of(), assumed);
                 }
                 case Stated.AComparison(var comparison) -> {
                     Proposition stated = WhatConditionsState.of(read)
                             .comparison(comparison, atom.at(), read).stated().proposition();
                     if (!Proposition.leavesSomethingUnread(stated)) {
-                        return new Atom(atom, List.of(), List.of());
+                        return new Atom(atom, List.of(), List.of(), assumed);
                     }
                     stoppedFor = Proposition.stopsIn(stated);
                 }
@@ -1661,18 +1720,18 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         return switch (WhatAForkTests.partsRead(atom.value(),
                 WhatNamesStandFor.in(atom.at(), read))) {
             case WhatAForkTests.PartsRead.Complete(var parts) ->
-                    new Atom(atom, unowned(parts, read, here), stoppedFor);
+                    new Atom(atom, unowned(parts, read, here), stoppedFor, assumed);
             // A comparison states the atom, and its own reading was stopped at a figure: the
             // comparison reader says so, at the places the comparison names. The fork is offered
             // no part, because the parts of a proposition the figure cut depend on where it was
             // cut, and so would what the fork says.
             case WhatAForkTests.PartsRead.Incomplete _ when whole != null ->
-                    new Atom(atom, List.of(), List.of());
+                    new Atom(atom, List.of(), List.of(), assumed);
             // Nothing states the atom, so there is no reader to leave it to, and which of its
             // parts nobody answers for is what the figure took away. The atom is left whole to
             // the fork, with what stopped its answer.
             case WhatAForkTests.PartsRead.Incomplete(var stops) ->
-                    new Atom(atom, List.of(atom), stops);
+                    new Atom(atom, List.of(atom), stops, assumed);
         };
     }
 

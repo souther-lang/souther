@@ -757,6 +757,12 @@ public final class BehaviorSetStatements {
             // asked about, which is not what the fork turns on.
             List<Unread> unread = new ArrayList<>();
             for (ComparisonReadings.Atom atom : each.leftHere()) {
+                // A part the conditions before it keep from being evaluated is owed nothing: the
+                // fork is reached where it is not, and a question about what it would have said of
+                // a row has no row to be about.
+                if (!atom.mayBeEvaluated(reading)) {
+                    continue;
+                }
                 List<Denotation> parts = ComparisonReadings.leftUnread(atom, read).stream()
                         .filter(part -> !dependencies.part(part.value(), part.at()))
                         .toList();

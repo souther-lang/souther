@@ -1446,9 +1446,7 @@ sealed interface ComparisonAssessment {
      * not settle as much as of one a row takes.
      */
     static boolean someRowArrives(Reachability way, List<ComparisonArrival> arrivals) {
-        return waysArrivedBy(way, arrivals).stream().anyMatch(reaching ->
-                reaching.holdingEveryRow().stream()
-                        .anyMatch(region -> region.emptiness().isEmpty()));
+        return waysArrivedBy(way, arrivals).stream().anyMatch(Reachability::leavesARow);
     }
 
     /**

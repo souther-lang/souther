@@ -51,30 +51,55 @@ final class ConditionSkeleton {
      * parameters there. A part handed on without that reading would be asked about in the one the
      * condition stands in, where the helper's parameter is no name at all.
      */
-    static List<Denotation> atoms(Core condition, WhatNamesStandFor names) {
-        List<Denotation> out = new ArrayList<>();
-        cut(condition, names, out);
+    static List<Part> atoms(Core condition, WhatNamesStandFor names) {
+        List<Part> out = new ArrayList<>();
+        cut(condition, names, List.of(), out);
         return out;
     }
 
-    private static void cut(Core standing, WhatNamesStandFor names, List<Denotation> out) {
+    /**
+     * One part of a condition, and what has to have come out for it to be evaluated at all.
+     *
+     * <p>Said by the shape and nothing else: {@code a && b} evaluates {@code b} only where
+     * {@code a} came out true, and {@code a || b} only where it came out false. What those
+     * conditions say of a row is for whoever holds the way to the condition to work out.
+     *
+     * @param before the conditions that decide whether the part is evaluated, outermost first
+     */
+    record Part(Denotation atom, List<Guard> before) {
+
+        Part {
+            before = List.copyOf(before);
+        }
+    }
+
+    /** A condition, read where it stands, and the way it has to have come out. */
+    record Guard(Denotation condition, boolean holds) {}
+
+    private static void cut(Core standing, WhatNamesStandFor names, List<Guard> before,
+                            List<Part> out) {
         // What decides the answer is the value, whatever type it stands as.
         Core e = Core.withoutStanding(standing);
         switch (e) {
             // Both sides decide the fork: one of them coming out the wrong way is the whole answer,
-            // and a rule about either is a rule the fork tests.
+            // and a rule about either is a rule the fork tests. The right side is evaluated only
+            // where the left left the answer unsettled.
             case Core.Binary both when both.op() == BinOp.AND || both.op() == BinOp.OR -> {
-                cut(both.left(), names, out);
-                cut(both.right(), names, out);
+                cut(both.left(), names, before, out);
+                List<Guard> afterTheLeft = new ArrayList<>(before);
+                afterTheLeft.add(new Guard(new Denotation(both.left(), names.reads()),
+                        both.op() == BinOp.AND));
+                cut(both.right(), names, afterTheLeft, out);
             }
             // A binding whose body is the answer. What it computes is a value the body may or may
             // not read, and reading it here would be following where a value came from rather than
             // what this expression answers with. Its name stands for what it was given, there.
-            case Core.LetIn let -> cut(let.body(), names.entering(new ScopeStep.Let(let)), out);
+            case Core.LetIn let ->
+                    cut(let.body(), names.entering(new ScopeStep.Let(let)), before, out);
             // And everything else is a part. Not because nothing is inside it, but because what is
             // inside is on the way to a value: an argument, a closure, the target of a field.
             case null -> { }
-            default -> out.add(new Denotation(e, names.reads()));
+            default -> out.add(new Part(new Denotation(e, names.reads()), before));
         }
     }
 }
