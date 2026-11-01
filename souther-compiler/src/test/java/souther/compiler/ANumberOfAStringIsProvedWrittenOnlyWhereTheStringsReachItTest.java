@@ -6,6 +6,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.query.WhereTheReadingsDiffer;
 
 import java.util.List;
 import java.util.Map;
@@ -286,11 +287,13 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
      *  number draws lines of its own, and those are not what the body asked about. */
     private static java.util.stream.Stream<BorderAssessment.Point> onNumberNamed(
             List<BorderAssessment.Point> points, String fragment) {
-        return points.stream().filter(p -> String.valueOf(p.asked()).contains(fragment));
+        return points.stream().filter(p ->
+                String.valueOf(p.asked(WhereTheReadingsDiffer.NONE)).contains(fragment));
     }
 
     private static List<String> labels(List<BorderAssessment.Point> points) {
-        return points.stream().map(p -> String.valueOf(p.asked())).toList();
+        return points.stream().map(p -> String.valueOf(p.asked(WhereTheReadingsDiffer.NONE)))
+                .toList();
     }
 
     private static boolean provedAny(List<BorderAssessment.Point> points) {

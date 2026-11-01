@@ -86,7 +86,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                                               Optional<Demand> demand, ObligationAssessment item,
                                               java.util.SequencedMap<Reading, BorderAssessment>
                                                       met,
-                                              Map<Reading, ReadingSeat> seats)
+                                              Map<Reading, ReadingSeat> seats,
+                                              WhereTheReadingsDiffer apart)
         implements RuleCitations {
 
     /**
@@ -331,9 +332,12 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                 seats.get(each.point()).merge(where, each.seat(), ReadingSeat::closer);
             }
         }
+        // Held beside every point, since the readings that a report would say in the same words are
+        // of different points of one comparison.
+        WhereTheReadingsDiffer apart = WhereTheReadingsDiffer.of(byPoint, seats);
         List<BorderObligationPointAssessment> out = new ArrayList<>();
-        byPoint.forEach((point, met) ->
-                out.add(of(point, attribution.get(point), met, seats.get(point), premisesOf)));
+        byPoint.forEach((point, met) -> out.add(of(point, attribution.get(point), met,
+                seats.get(point), premisesOf, apart)));
         return List.copyOf(out);
     }
 
@@ -355,12 +359,13 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
             souther.compiler.partition.PointAttribution attribution,
             java.util.SequencedMap<Reading, BorderAssessment> met,
             Map<Reading, ReadingSeat> seats,
-            Function<BorderAssessment, List<WhereNothingIsAnswered.Premise>> premisesOf) {
+            Function<BorderAssessment, List<WhereNothingIsAnswered.Premise>> premisesOf,
+            WhereTheReadingsDiffer apart) {
         List<BorderAssessment> readings = List.copyOf(met.values());
         Optional<Demand> asked = asked(point, met, seats);
         return new BorderObligationPointAssessment(point, attribution,
                 reachedBy(point, readings), asked,
-                came(met, seats, asked, premisesOf), met, seats);
+                came(met, seats, asked, premisesOf), met, seats, apart);
     }
 
     /**
@@ -803,7 +808,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
         met.forEach((where, at) -> {
             DomainPoint asked = seats.get(where).asked();
             out.add(new ReadingSaid(where, at.axis(),
-                    new BorderAssessment.Point(at, asked, at.at(asked)).asked(), at.readAt()));
+                    new BorderAssessment.Point(at, asked, at.at(asked)).asked(apart),
+                    at.readAt()));
         });
         out.sort(java.util.Comparator.comparing((ReadingSaid said) -> said.at())
                 .thenComparing(ReadingSaid::asks));
