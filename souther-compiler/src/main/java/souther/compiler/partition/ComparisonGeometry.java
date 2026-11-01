@@ -84,8 +84,9 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between,
         List<LineEvidence> evidence = new ArrayList<>();
         List<LineDrawn> between = new ArrayList<>();
         List<DerivedValues.Settling> throughADerivedValue = new ArrayList<>();
+        boolean severalReadings = several.hasSeveralReadings();
         for (ComparisonAssessment.Several.Part part : several.parts()) {
-            for (WhereAPartDecides reading : several.readingsOf(part)) {
+            for (WhereAPartDecides reading : part.readings(severalReadings)) {
                 ComparisonGeometry line = ofALine(part.line(),
                         (cutting, authored) -> originOf.of(cutting, Optional.of(reading),
                                 authored));

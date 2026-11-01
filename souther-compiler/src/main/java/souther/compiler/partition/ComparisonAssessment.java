@@ -685,14 +685,15 @@ sealed interface ComparisonAssessment {
         /** Each reading of each line, told whether the statement has another reading beside it:
          *  another line on the input space, or the same line in another case. */
         public List<WhereAPartDecides> readings() {
-            return parts.stream().flatMap(part -> readingsOf(part).stream()).toList();
+            boolean several = hasSeveralReadings();
+            return parts.stream().flatMap(part -> part.readings(several).stream()).toList();
         }
 
-        /** The readings of {@code part}, one of this statement's lines. */
-        List<WhereAPartDecides> readingsOf(Part part) {
-            boolean severalReadings = parts.stream().filter(each -> Part.isALine(each.line()))
-                    .count() > 1 || parts.stream().anyMatch(each -> each.cases().size() > 1);
-            return part.readings(severalReadings);
+        /** Whether there is more than one reading to tell apart: another line on the input
+         *  space, or a line in another case. */
+        boolean hasSeveralReadings() {
+            return parts.stream().filter(each -> Part.isALine(each.line())).count() > 1
+                    || parts.stream().anyMatch(each -> each.cases().size() > 1);
         }
 
         /**
