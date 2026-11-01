@@ -57,7 +57,6 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.semantics.TakenAs;
-import souther.compiler.types.FixtureReferenceOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -5229,7 +5228,8 @@ public final class Generator {
             // parameter to be composed from its classes. How a row is written never decides
             // whether the model allows it — the check below asks that of every parameter alike.
             if (written != null) {
-                out.put(parameter, written);
+                out.put(parameter, moved.isEmpty() ? written
+                        : meaningOf(written, subject, p, check, references));
             }
         }
         return Map.copyOf(out);
@@ -5245,15 +5245,37 @@ public final class Generator {
                                                ReachName.Declaration reachedAs,
                                                CandidateCheck check,
                                                FixtureReferences references) {
-        FixtureReferenceOrigin occurrence = references.next();
-        FixtureTemplate byName = FixtureTemplate.named(reachedAs, occurrence);
-        Optional<String> meaning = references.meaning(p, byName.text(), () ->
-                check.build(p, byName) instanceof CandidateCheck.Built.Value(var value)
-                        ? SeedFixtures.written(value, subject.types().get(p), subject.ruleReading())
-                                .map(FixtureTemplate::text)
-                        : Optional.empty());
-        return meaning.isPresent()
-                ? FixtureTemplate.named(reachedAs, occurrence, meaning.get()) : byName;
+        return meaningOf(subject, p, FixtureTemplate.named(reachedAs, references.next()), check,
+                references);
+    }
+
+    /**
+     * {@code written} meaning what the build reads back from it, written out, or {@code written}
+     * itself where nothing built it. Every template this search writes against a stated value goes
+     * through here — the name and the spread over it alike — so that no spelling the generator
+     * chooses for a value is told from another spelling of the same value.
+     */
+    private static FixtureTemplate meaningOf(MeasuredInput subject, int p, FixtureTemplate written,
+                                             CandidateCheck check, FixtureReferences references) {
+        return references.meaning(p, written.text(), () ->
+                        check.build(p, written) instanceof CandidateCheck.Built.Value(var value)
+                                ? SeedFixtures.written(value, subject.types().get(p),
+                                        subject.ruleReading()).map(FixtureTemplate::text)
+                                : Optional.empty())
+                .map(written::meaningAs).orElse(written);
+    }
+
+    /** {@code written} with the template of each way it writes a parameter given its meaning. */
+    private static Written meaningOf(Written written, MeasuredInput subject, int p,
+                                     CandidateCheck check, FixtureReferences references) {
+        List<WrittenWay> ways = new ArrayList<>();
+        for (WrittenWay way : written.ways()) {
+            FixtureTemplate meant = meaningOf(subject, p, way.value(), check, references);
+            Map<TermPath, FixtureTemplate> at = new LinkedHashMap<>(way.at());
+            at.replaceAll((_, each) -> each == way.value() ? meant : each);
+            ways.add(new WrittenWay(meant, at));
+        }
+        return new Written(ways, written.cut());
     }
 
     /**

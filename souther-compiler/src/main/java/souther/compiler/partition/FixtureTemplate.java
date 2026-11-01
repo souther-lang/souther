@@ -75,6 +75,11 @@ public record FixtureTemplate(String text, Hir.Expr value, String meaning) {
         }
     }
 
+    /** The same value and spelling, meaning {@code written} out. */
+    public FixtureTemplate meaningAs(String written) {
+        return new FixtureTemplate(text, value, written);
+    }
+
     /** A value whose spelling is all it is known by. */
     public FixtureTemplate(String text, Hir.Expr value) {
         this(text, value, text);
@@ -326,19 +331,9 @@ public record FixtureTemplate(String text, Hir.Expr value, String meaning) {
      */
     public static FixtureTemplate named(ReachName.Declaration reachedAs,
                                         FixtureReferenceOrigin occurrence) {
-        return named(reachedAs, occurrence, reachedAs.rendered());
-    }
-
-    /**
-     * The same, with the value written out as a build read it back, which is what the row means
-     * where it is not what it prints. {@code meaning} is the name itself where nothing built the
-     * value, so a name nothing could read is never taken for the value of another.
-     */
-    public static FixtureTemplate named(ReachName.Declaration reachedAs,
-                                        FixtureReferenceOrigin occurrence, String meaning) {
         String written = reachedAs.rendered();
         return new FixtureTemplate(written,
-                Hir.Var.respelled(written, reachedAs, occurrence, NOWHERE, NO_SOURCE), meaning);
+                Hir.Var.respelled(written, reachedAs, occurrence, NOWHERE, NO_SOURCE));
     }
 
     /**
