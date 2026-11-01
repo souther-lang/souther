@@ -278,9 +278,11 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
 
     private static List<Core> partsOf(String behavior) {
         Read read = readingOf(behavior);
-        return WhatAForkTests.partsOfTheAnswer(read.body(),
-                WhatNamesStandFor.in(read.reads(), read.read())).stream()
-                .map(Denotation::value).toList();
+        WhatAForkTests.PartsRead.Complete parts = assertInstanceOf(
+                WhatAForkTests.PartsRead.Complete.class, WhatAForkTests.partsRead(read.body(),
+                        WhatNamesStandFor.in(read.reads(), read.read())),
+                () -> behavior + " is read to the end");
+        return parts.parts().stream().map(Denotation::value).toList();
     }
 
     /** Everything the body's single condition asks of a row, coming out {@code holding}. */

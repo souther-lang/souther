@@ -403,6 +403,13 @@ public enum CompositionBudget {
      * out as one nothing read, naming this as why
      * ({@link souther.compiler.meaning.WhyUnread.MoreTotalReadingsThanAreMade}). Counted before a
      * split is read, so a reading that stops here never built the readings it stopped short of.
+     *
+     * <p>Reaching it says what the reading could not do, and nothing of what the answer turns on:
+     * the parts of a proposition that stopped here are the parts it got to, which move with the
+     * length of a table the condition is read over. A reader that wants the parts an answer turns
+     * on asks whether it was read to the end first ({@link WhatAForkTests.PartsRead}); a lookup
+     * of a row against two averages runs out of this at every length of its table, and what is
+     * said of it must not depend on which length.
      */
     TOTAL_READINGS_OF_ONE_CONDITION(512),
 
