@@ -1624,14 +1624,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         // Where the answer was stopped in at a figure, the parts it got to are no list of the parts
         // there are. The comparison that states the atom has said what stopped it, and a reader of
         // that comparison says so, so the fork is left no part of it.
-        if (whole != null && WhatAForkTests.partsRead(atom.value(),
-                WhatNamesStandFor.in(atom.at(), read))
-                instanceof WhatAForkTests.PartsRead.Incomplete) {
+        WhatAForkTests.PartsRead parts =
+                WhatAForkTests.partsRead(atom.value(), WhatNamesStandFor.in(atom.at(), read));
+        if (whole != null && parts instanceof WhatAForkTests.PartsRead.Incomplete) {
             return new Atom(atom, List.of(), stoppedFor);
         }
         List<Denotation> left = new ArrayList<>();
-        for (Denotation part : WhatAForkTests.partsOfTheAnswer(atom.value(),
-                WhatNamesStandFor.in(atom.at(), read))) {
+        for (Denotation part : parts.got()) {
             // Which rule the part is, by the node; where it stands, in the reading it is written in.
             if (statedAt(part.value(), () -> WhatNamesStandFor.in(part.at(), read), here) == null
                     && !(part.at().pathOf(part.value(), read.rules().newtypes())

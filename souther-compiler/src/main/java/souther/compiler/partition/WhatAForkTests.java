@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.meaning.Proposition;
-import souther.compiler.meaning.WhyUnread;
 
 import java.util.List;
 
@@ -44,12 +43,16 @@ final class WhatAForkTests {
         /** The proposition was read to the end, so these are all the parts the answer turns on. */
         record Complete(List<Denotation> parts) implements PartsRead {}
 
-        /** The proposition was stopped in at a figure, and says nothing of which parts there are. */
-        record Incomplete(List<WhyUnread> stoppedFor) implements PartsRead {
+        /** The proposition was stopped in at a figure: these are the parts it got to, and they
+         *  say nothing of which parts there are. */
+        record Incomplete(List<Denotation> established) implements PartsRead {}
 
-            public Incomplete {
-                stoppedFor = List.copyOf(stoppedFor);
-            }
+        /** The parts that were got to, however far the reading went. */
+        default List<Denotation> got() {
+            return switch (this) {
+                case Complete(var parts) -> parts;
+                case Incomplete(var established) -> established;
+            };
         }
     }
 
@@ -61,9 +64,9 @@ final class WhatAForkTests {
     /** What was read of the parts the truth of {@code atom} turns on. */
     static PartsRead partsRead(Core atom, WhatNamesStandFor names) {
         Pullback.Pulled truth = pulled(atom, names);
-        List<WhyUnread> stops = Proposition.stopsIn(truth.proposition());
-        return stops.stream().anyMatch(why -> why.figure().isPresent())
-                ? new PartsRead.Incomplete(stops)
+        boolean stoppedAtAFigure = Proposition.stopsIn(truth.proposition()).stream()
+                .anyMatch(why -> why.figure().isPresent());
+        return stoppedAtAFigure ? new PartsRead.Incomplete(partsOf(truth))
                 : new PartsRead.Complete(partsOf(truth));
     }
 
