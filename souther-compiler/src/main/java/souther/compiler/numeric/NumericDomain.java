@@ -1288,7 +1288,8 @@ public final class NumericDomain<A> {
                 return leavesAValueInside(atoms) ? Shown.PROVEN : Shown.NOTHING;
             }
             Map<A, Bounds> runs = runsInsideTheirOrders(atoms);
-            if (runs != null && limitsOnSumsHoldAtTheLowCorner(atoms, runs, rules)) {
+            if (runs != null && limitsOnSumsHoldAtTheLowCorner(atoms, runs,
+                    rulesTheBoxesDoNotHold(rules, runs))) {
                 return Shown.AT_THE_LOW_CORNER;
             }
             if ((runs != null && aPointOfTheBoxHolds(atoms, runs, rules))
@@ -1404,9 +1405,6 @@ public final class NumericDomain<A> {
             }
         }
         for (AffineConstraint<A> rule : rules) {
-            if (holdsThroughoutTheBoxes(rule, runs)) {
-                continue;
-            }
             if (!(rule instanceof AffineConstraint.HalfSpace<A> half)) {
                 return false;
             }
@@ -1437,9 +1435,20 @@ public final class NumericDomain<A> {
     }
 
     /**
-     * Whether every point of the boxes {@code runs} holds {@code rule}, so that the rule leaves
-     * the low corner, and what the limits on sums read from it, as they were: a value the boxes
-     * hold one sum to, or a value the sum never takes. A half-space is read by the corner itself.
+     * The {@code rules} some point of the boxes {@code runs} does not hold: the only ones a
+     * witness drawn from the boxes has to be checked against.
+     *
+     * <p>Written once here and not in the corner's proof, which reads a shape — a limit on a sum —
+     * and has no place for a rule that is another shape because of how it was written.
+     */
+    private static <A> List<AffineConstraint<A>> rulesTheBoxesDoNotHold(
+            List<AffineConstraint<A>> rules, Map<A, Bounds> runs) {
+        return rules.stream().filter(rule -> !holdsThroughoutTheBoxes(rule, runs)).toList();
+    }
+
+    /**
+     * Whether every point of the boxes {@code runs} holds {@code rule}: a sum the boxes keep
+     * under its bound, a sum they hold to one value, or a value the sum never takes.
      *
      * <p>Asked of the boxes alone and not of the closure of the rules: a difference such as
      * {@code x > y} holds {@code x /= y} while the boxes of {@code x} and {@code y} still meet at
@@ -1455,7 +1464,9 @@ public final class NumericDomain<A> {
         ExactCut least = reach.least();
         ExactCut most = reach.most();
         return switch (rule) {
-            case AffineConstraint.HalfSpace<A> _ -> false;
+            case AffineConstraint.HalfSpace<A> half -> liesAbove(most, half.bound().at())
+                    || (most != null && most.at().equals(half.bound().at())
+                            && half.bound().inclusive());
             case AffineConstraint.Equality<A> at -> least != null && most != null
                     && least.inclusive() && most.inclusive()
                     && least.at().equals(at.at()) && most.at().equals(at.at());

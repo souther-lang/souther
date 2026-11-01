@@ -190,6 +190,157 @@ class ARuleOverOtherPositionsLeavesARunWholeOnlyWhereSomePointHoldsItTest {
     }
 
     /**
+     * A half-space the boxes lie inside of is no rule at the corner either, with a weight of
+     * either sign: {@code a - b <= 5} beside {@code a + b <= 5}, whose boxes run nought to five.
+     */
+    @Test
+    void aHalfSpaceTheBoxesLieInsideOfLeavesALimitOnASumItsRuns() {
+        Written limit = new Written(coefsOf("a", 1, "b", 1), -5, Rel.LE);
+        Written difference = new Written(coefsOf("a", 1, "b", -1), -5, Rel.LE);
+        Written strictDifference = new Written(coefsOf("a", 1, "b", -1), -6, Rel.LT);
+        for (Written redundant : List.of(difference, strictDifference)) {
+            NumericDomain<String> domain = told(domainOf(List.of(limit, redundant)),
+                    endless("a", "b", "c"));
+            assertEquals(run(LOW, 5), domain.wholeRunOf("a"), redundant::toString);
+            assertEquals(run(LOW, 5), domain.wholeRunOf("b"), redundant::toString);
+        }
+        // It is not held at a = 5, b = 0, so a is not left its whole run.
+        NumericDomain<String> cuts = told(domainOf(List.of(limit,
+                new Written(coefsOf("a", 1, "b", -1), -4, Rel.LE))), endless("a", "b", "c"));
+        assertNull(cuts.wholeRunOf("a"));
+    }
+
+    /**
+     * A bound the box reaches is held only where it is not strict: over two decimals from nought
+     * and in sum to one, {@code a - b <= 1} is held at {@code a = 1, b = 0} and
+     * {@code a - b < 1} is not, which leaves {@code a} no whole run, since one is not a value it
+     * takes beside the limit.
+     */
+    @Test
+    void aStrictBoundTheBoxReachesIsNotHeldThroughoutIt() {
+        Map<String, Granularity> spacing = Map.of("a", Granularity.DENSE,
+                "b", Granularity.DENSE, "c", Granularity.DISCRETE);
+        Written limit = new Written(coefsOf("a", 1, "b", 1), -1, Rel.LE);
+        NumericDomain<String> held = told(domainOf(List.of(limit,
+                new Written(coefsOf("a", 1, "b", -1), -1, Rel.LE)), spacing),
+                endless("a", "b", "c"));
+        assertEquals(run(LOW, 1), held.wholeRunOf("a"));
+        NumericDomain<String> cuts = told(domainOf(List.of(limit,
+                new Written(coefsOf("a", 1, "b", -1), -1, Rel.LT)), spacing),
+                endless("a", "b", "c"));
+        assertNull(cuts.wholeRunOf("a"));
+    }
+
+    /**
+     * The end of a box is taken or left out as the bound is: over two decimals kept above nought
+     * and under one in sum, {@code a - b < 1} is held by the open boxes, and {@code a - b < 0}
+     * is not.
+     */
+    @Test
+    void aHalfSpaceAnOpenBoxEndMeetsIsHeldOnlyWhereTheBoundIsPast() {
+        Map<String, Granularity> spacing = Map.of("a", Granularity.DENSE,
+                "b", Granularity.DENSE, "c", Granularity.DISCRETE);
+        Written positiveA = over("a", 1, Rel.GT);
+        Written positiveB = over("b", 1, Rel.GT);
+        Written limit = new Written(coefsOf("a", 1, "b", 1), -1, Rel.LT);
+        NumericDomain.Bounds open = new NumericDomain.Bounds(Endpoint.exclusive(Count.of(0)),
+                Endpoint.exclusive(Count.of(1)));
+        NumericDomain<String> held = told(domainOf(List.of(positiveA, positiveB, limit,
+                new Written(coefsOf("a", 1, "b", -1), -1, Rel.LT)), spacing),
+                endless("a", "b", "c"));
+        assertEquals(open, held.wholeRunOf("a"));
+        assertEquals(open, held.wholeRunOf("b"));
+        NumericDomain<String> cuts = told(domainOf(List.of(positiveA, positiveB, limit,
+                new Written(coefsOf("a", 1, "b", -1), 0, Rel.LT)), spacing),
+                endless("a", "b", "c"));
+        assertNull(cuts.wholeRunOf("a"));
+    }
+
+    /**
+     * What a limit on a sum leaves a run does not depend on a rule every point of the rectangle
+     * its solutions fill holds, whichever shape the rule is written in: a bound, an equality or a
+     * hole, with a weight of either sign. Enumerated over whole numbers from nought to seven.
+     */
+    @Test
+    void aRuleTheSolutionsRectangleHoldsChangesNoRunOfALimitOnASum() {
+        Random random = new Random(29442);
+        Map<Rel, Integer> asked = new LinkedHashMap<>();
+        for (int s = 0; s < STATES; s++) {
+            List<Written> system = new ArrayList<>(List.of(new Written(
+                    coefsOf("a", 1 + random.nextInt(3), "b", 1 + random.nextInt(3)),
+                    -random.nextInt(16), Rel.LE)));
+            if (random.nextBoolean()) {
+                system.add(new Written(Map.of(random.nextBoolean() ? "a" : "b", 1L),
+                        -random.nextInt(HIGH + 1), Rel.LE));
+            }
+            int[] rectangle = rectangleOf(system);
+            if (rectangle == null) {
+                continue;
+            }
+            Rel rel = Rel.values()[random.nextInt(Rel.values().length)];
+            Written redundant = new Written(coefsOf("a", random.nextInt(7) - 3L,
+                    "b", random.nextInt(7) - 3L), random.nextInt(21) - 10L, rel);
+            if (redundant.coefs().values().stream().allMatch(weight -> weight == 0)
+                    || !holdsOnTheRectangle(redundant, rectangle)) {
+                continue;
+            }
+            asked.merge(rel, 1, Integer::sum);
+            NumericDomain<String> without = told(domainOf(system), endless("a", "b", "c"));
+            NumericDomain<String> with = told(domainOf(concat(system, List.of(redundant))),
+                    endless("a", "b", "c"));
+            for (String atom : List.of("a", "b")) {
+                assertEquals(without.wholeRunOf(atom), with.wholeRunOf(atom),
+                        () -> atom + " under " + system + " with " + redundant);
+            }
+        }
+        for (Rel rel : Rel.values()) {
+            assertTrue(asked.getOrDefault(rel, 0) > 0, "no redundant " + rel + " was asked");
+        }
+    }
+
+    /** The least and greatest {@code a} and {@code b} of the whole points of the box that hold
+     *  {@code rules}, as {@code {aLow, aHigh, bLow, bHigh}} — or null where none does. */
+    private static int[] rectangleOf(List<Written> rules) {
+        int[] out = {HIGH + 1, -1, HIGH + 1, -1};
+        for (int a = LOW; a <= HIGH; a++) {
+            for (int b = LOW; b <= HIGH; b++) {
+                Map<String, Integer> point = Map.of("a", a, "b", b);
+                if (rules.stream().allMatch(each -> holdsAt(each, point))) {
+                    out[0] = Math.min(out[0], a);
+                    out[1] = Math.max(out[1], a);
+                    out[2] = Math.min(out[2], b);
+                    out[3] = Math.max(out[3], b);
+                }
+            }
+        }
+        return out[1] < 0 ? null : out;
+    }
+
+    /** Whether the sum of {@code rule}, over the reals between its least and greatest on the
+     *  corners of {@code rectangle}, lies where the rule holds. Not a point at a time: whole
+     *  numbers hold {@code 2b /= 7} everywhere, and that is no fact about the boxes. */
+    private static boolean holdsOnTheRectangle(Written rule, int[] rectangle) {
+        long least = Long.MAX_VALUE;
+        long greatest = Long.MIN_VALUE;
+        for (int a : new int[] {rectangle[0], rectangle[1]}) {
+            for (int b : new int[] {rectangle[2], rectangle[3]}) {
+                long sum = rule.constant() + rule.coefs().getOrDefault("a", 0L) * a
+                        + rule.coefs().getOrDefault("b", 0L) * b;
+                least = Math.min(least, sum);
+                greatest = Math.max(greatest, sum);
+            }
+        }
+        return switch (rule.rel()) {
+            case LT -> greatest < 0;
+            case LE -> greatest <= 0;
+            case GT -> least > 0;
+            case GE -> least >= 0;
+            case EQ -> least == 0 && greatest == 0;
+            case NE -> least > 0 || greatest < 0;
+        };
+    }
+
+    /**
      * Enumerated: a limit on a sum beside holes and bounds written at random, and every whole
      * number of a run shown of {@code a} or {@code b} has a value of the other that holds all the
      * rules. The holes outside the boxes are among the states, so a run shown through them is
