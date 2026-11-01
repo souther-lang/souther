@@ -97,8 +97,10 @@ final class OutsideTheOtherReadings {
         };
     }
 
-    private static boolean insideAContainer(NumericTerm term) {
-        return term.subjectPath().steps().stream().anyMatch(step ->
-                step instanceof TermPath.Step.Element || step instanceof TermPath.Step.Key);
+    /** Whether any place {@code term} is read off is inside a container. Asked of every place
+     *  and not of {@link NumericTerm#subjectPath}, which for a product is where its first number
+     *  is read from and says nothing of the second. */
+    static boolean insideAContainer(NumericTerm term) {
+        return term.placesReadOff().stream().anyMatch(TermPath::insideAContainer);
     }
 }
