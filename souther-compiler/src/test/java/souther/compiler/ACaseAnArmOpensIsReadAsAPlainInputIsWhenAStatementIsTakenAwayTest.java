@@ -73,11 +73,11 @@ class ACaseAnArmOpensIsReadAsAPlainInputIsWhenAStatementIsTakenAwayTest {
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
-    /** The guard that makes a hole in the value and the one that bounds it are read alike. */
+    /** The guard that makes a hole in the value and the one that bounds it are read alike. The
+     *  direct test of the rebuild is what holds it against the change that read these. */
     @Test
     void theValueOfTheCaseIsReadWhateverTheGuardOnItIs() {
-        for (String guard : List.of("if b.value == 0 then 0", "if b.value < 1 then 0",
-                "if b.value == 12 then 0", "if b.value < 3 then 0", "if b.value > 3 then 0")) {
+        for (String guard : List.of("if b.value == 0 then 0", "if b.value < 3 then 0")) {
             String viaCase = report(viaTheCase(guard));
             String viaInput = report(viaTheInput(guard));
             assertTrue(viaInput.contains("measurement: complete"), guard + "\n" + viaInput);

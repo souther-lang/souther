@@ -80,7 +80,14 @@ class ARegionRebuiltWithoutAConstraintKeepsWhatTheRestNarrowedTest {
         return new LinearForm<>(constant, coefs);
     }
 
+    /** What the declarations leave, read once: every test narrows it and none changes it. */
+    private static final SearchRegion DECLARATIONS = declarationsOfTheModel();
+
     private static SearchRegion declarations() {
+        return DECLARATIONS;
+    }
+
+    private static SearchRegion declarationsOfTheModel() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
