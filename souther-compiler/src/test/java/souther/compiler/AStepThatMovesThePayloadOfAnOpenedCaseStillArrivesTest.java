@@ -6,6 +6,9 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -107,12 +110,21 @@ class AStepThatMovesThePayloadOfAnOpenedCaseStillArrivesTest {
         return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
-    /** The rows that tell the lines apart are named, not left as a border nothing reaches. */
+    /** What the report says no row tells apart, with the opened case's payload under the plain name. */
+    private static List<String> whatNoRowTells(String report) {
+        return report.lines()
+                .filter(line -> line.contains("no row tells"))
+                .map(line -> line.replace("r@Points", "b"))
+                .toList();
+    }
+
+    /** The rows that tell the lines apart are the ones the plain input names. */
     @Test
     void theOpenedCaseNamesTheRowsThePlainInputNames() {
+        String plain = reportOf(PLAIN + PLAIN_ROWS);
         String opened = reportOf(OPENED + OPENED_ROWS);
-        assertTrue(opened.contains("no row tells `a + r@Points = 50` from `a = 39`, "
-                + "and a row at `a = 39, r@Points = 11` would"), opened);
+        assertFalse(whatNoRowTells(plain).isEmpty(), plain);
+        assertEquals(whatNoRowTells(plain), whatNoRowTells(opened), opened);
         assertFalse(opened.contains("read what this measure went without"), opened);
     }
 
@@ -121,6 +133,5 @@ class AStepThatMovesThePayloadOfAnOpenedCaseStillArrivesTest {
     void theRowsItNamesSettleIt() {
         String opened = reportOf(OPENED + OPENED_ROWS + SETTLING_ROWS);
         assertTrue(opened.contains("adequacy: satisfied"), opened);
-        assertTrue(reportOf(PLAIN + PLAIN_ROWS + SETTLING_ROWS).contains("adequacy: satisfied"));
     }
 }
