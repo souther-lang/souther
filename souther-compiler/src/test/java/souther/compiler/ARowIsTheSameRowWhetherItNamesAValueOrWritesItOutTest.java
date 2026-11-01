@@ -101,6 +101,42 @@ class ARowIsTheSameRowWhetherItNamesAValueOrWritesItOutTest {
                 () -> "no input is offered twice: " + offered(FIFTY));
     }
 
+    private static final String A_SPREAD_OVER_A_STATED_VALUE = """
+            module demo
+
+            data C
+            data B
+            data F = C | B
+
+            data Amount = Decimal
+            data Cond = { f: F, amount: Amount }
+            data Out = { n: Int }
+
+            let baseline = Cond { f = B, amount = Amount(4.0m) }
+
+            behavior calc : (c: Cond) -> Out
+                constructs Out
+
+            let calc (c) =
+                match c.f with
+                    | C -> Out { n = 0 }
+                    | B -> Out { n = 0 }
+            """;
+
+    @Test
+    void aSpreadOverAStatedValueMeansTheValueItBuilds() {
+        Compilation compilation = Compilation.ofSource(A_SPREAD_OVER_A_STATED_VALUE, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        List<FixtureTemplate> spread = Adequacy.generatedOf(compilation.db(),
+                compilation.modules().get(0)).get("calc").composed().rows().stream()
+                .map(row -> row.inputs().getFirst())
+                .filter(each -> each.text().contains("...baseline")).toList();
+        assertEquals(List.of("Cond { ...baseline, f = C }"),
+                spread.stream().map(FixtureTemplate::text).toList());
+        assertEquals(List.of("Cond { f = C, amount = Amount(4m) }"), spread.stream().map(FixtureTemplate::meaning).toList());
+    }
+
     private static List<String> meanings(String source) {
         return rowsOfRecord(source).stream()
                 .map(inputs -> String.join(", ", inputs.stream().map(FixtureTemplate::meaning).toList()))

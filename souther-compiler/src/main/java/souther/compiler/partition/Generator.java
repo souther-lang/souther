@@ -1745,8 +1745,8 @@ public final class Generator {
         // writes for a value the module states reaches a declaration and is some reference of it,
         // and no source wrote that one: the occurrence begins here, so this is what says which it
         // is. One minter for the run, so that two of them are two.
-        FixtureReferences references =
-                new FixtureReferences(subject.symbols().module(), subject.behavior());
+        FixtureReferences references = new FixtureReferences(subject.symbols().module(),
+                subject.behavior(), new WrittenOut(subject, check));
 
         List<ResolvedOrigin> origins = resolve(axes, baselines, check, references);
 
@@ -3869,7 +3869,7 @@ public final class Generator {
         // goes and what is chosen here keeps it.
         Candidate from = searched.from();
         List<FixtureTemplate> told = tellingArmsApart(axes, from.where(), check,
-                from.from().writtenAgainst(axes, from.delta(), from.where(), check, references),
+                from.from().writtenAgainst(axes, from.delta(), from.where(), references),
                 goingOn.trial(), answers, made.row().inputs(),
                 inputs -> pins.holds(axes, inputs, check) ? Acceptance.TAKEN
                         : Acceptance.PASSED);
@@ -4162,7 +4162,7 @@ public final class Generator {
         @Override
         public Taken take(Candidate candidate) {
             Map<String, Written> given = candidate.from().writtenAgainst(axes,
-                    candidate.delta(), candidate.where(), check, references);
+                    candidate.delta(), candidate.where(), references);
             known.written(candidate, given);
             if (!candidate.from().composes() && given.isEmpty()) {
                 return Taken.AND_MORE;   // nothing here can be written against the model's value
@@ -4334,11 +4334,10 @@ public final class Generator {
          * the composition, which writes no parameter that way.
          */
         Map<String, Written> writtenAgainst(MeasuredInput.MeasuredAxes axes, Delta delta,
-                                            int[] where, CandidateCheck check,
-                                            FixtureReferences references) {
+                                            int[] where, FixtureReferences references) {
             return switch (origin) {
                 case Origin.Stated stated ->
-                        against(axes, delta, where, stated.baseline(), check, references);
+                        against(axes, delta, where, stated.baseline(), references);
                 case Origin.Composition _ -> Map.of();
             };
         }
@@ -5207,7 +5206,7 @@ public final class Generator {
      */
     private static Map<String, Written> against(MeasuredInput.MeasuredAxes axes,
                                                 Delta delta, int[] where,
-                                                Baseline baseline, CandidateCheck check,
+                                                Baseline baseline,
                                                 FixtureReferences references) {
         MeasuredInput subject = axes.subject();
         Map<String, Written> out = new LinkedHashMap<>();
@@ -5217,7 +5216,11 @@ public final class Generator {
             if (at == null) {
                 continue;
             }
-            FixtureTemplate named = nameMeaning(subject, p, at.reachedAs(), check, references);
+            // Meaning what it builds, as every template written against a stated value does, so
+            // that no spelling the generator chooses for a value is told from another spelling of
+            // the same value.
+            FixtureTemplate named = references.writtenOut().of(p,
+                    FixtureTemplate.named(at.reachedAs(), references.next()));
             List<Integer> moved = delta.under(axes.axes(), parameter);
             Written written = moved.isEmpty()
                     ? new Written(List.of(new WrittenWay(named,
@@ -5228,54 +5231,10 @@ public final class Generator {
             // parameter to be composed from its classes. How a row is written never decides
             // whether the model allows it — the check below asks that of every parameter alike.
             if (written != null) {
-                out.put(parameter, moved.isEmpty() ? written
-                        : meaningOf(written, subject, p, check, references));
+                out.put(parameter, written);
             }
         }
         return Map.copyOf(out);
-    }
-
-    /**
-     * The value the module states, written by its name and meaning what the build reads back from
-     * it, so that the name and the same value written out are one value to whoever tells rows
-     * apart. Meaning only the name where nothing built it or the build cannot be written out: a
-     * value that could not be read is never taken for another.
-     */
-    private static FixtureTemplate nameMeaning(MeasuredInput subject, int p,
-                                               ReachName.Declaration reachedAs,
-                                               CandidateCheck check,
-                                               FixtureReferences references) {
-        return meaningOf(subject, p, FixtureTemplate.named(reachedAs, references.next()), check,
-                references);
-    }
-
-    /**
-     * {@code written} meaning what the build reads back from it, written out, or {@code written}
-     * itself where nothing built it. Every template this search writes against a stated value goes
-     * through here — the name and the spread over it alike — so that no spelling the generator
-     * chooses for a value is told from another spelling of the same value.
-     */
-    private static FixtureTemplate meaningOf(MeasuredInput subject, int p, FixtureTemplate written,
-                                             CandidateCheck check, FixtureReferences references) {
-        return references.meaning(p, written.text(), () ->
-                        check.build(p, written) instanceof CandidateCheck.Built.Value(var value)
-                                ? SeedFixtures.written(value, subject.types().get(p),
-                                        subject.ruleReading()).map(FixtureTemplate::text)
-                                : Optional.empty())
-                .map(written::meaningAs).orElse(written);
-    }
-
-    /** {@code written} with the template of each way it writes a parameter given its meaning. */
-    private static Written meaningOf(Written written, MeasuredInput subject, int p,
-                                     CandidateCheck check, FixtureReferences references) {
-        List<WrittenWay> ways = new ArrayList<>();
-        for (WrittenWay way : written.ways()) {
-            FixtureTemplate meant = meaningOf(subject, p, way.value(), check, references);
-            Map<TermPath, FixtureTemplate> at = new LinkedHashMap<>(way.at());
-            at.replaceAll((_, each) -> each == way.value() ? meant : each);
-            ways.add(new WrittenWay(meant, at));
-        }
-        return new Written(ways, written.cut());
     }
 
     /**
@@ -5346,13 +5305,15 @@ public final class Generator {
             for (int i = 0; i < leaves.size(); i++) {
                 leaves.get(i).choose(at[i]);
             }
-            FixtureTemplate way = moves.over(subject, subject.types().get(p), baseline,
+            FixtureTemplate spread = moves.over(subject, subject.types().get(p), baseline,
                     subject.parameters().get(p), references);
             // What cannot be written is the shape of the moves and not the values chosen, so no
             // other choice writes it either.
-            if (way == null) {
+            if (spread == null) {
                 return null;
             }
+            // Meaning what it builds, as the name it spreads over does.
+            FixtureTemplate way = references.writtenOut().of(p, spread);
             // The value at each place a path ends at, where that place is one position: a place
             // under every element of a list is written at each of them, and is no one value.
             Map<TermPath, FixtureTemplate> written = new LinkedHashMap<>();
@@ -11250,7 +11211,7 @@ public final class Generator {
             @Override
             public Taken take(Candidate candidate) {
                 Map<String, Written> given = candidate.from().writtenAgainst(axes,
-                        candidate.delta(), candidate.where(), check, references);
+                        candidate.delta(), candidate.where(), references);
                 known.written(candidate, given);
                 if (!candidate.from().composes() && given.isEmpty()) {
                     // nothing here can be written against the model's value

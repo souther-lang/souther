@@ -5,11 +5,6 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.FixtureReferenceOrigin;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.function.Supplier;
-
 /**
  * Mints the references one run of the generator composes, and the bindings its rows write.
  *
@@ -36,36 +31,32 @@ public final class FixtureReferences {
 
     private int next;
 
-    /** What a value the module states means at a parameter, worked out once per run: the build
-     *  and the writing out of it are the same each time a candidate names the value there. */
-    private final Map<String, String> meanings = new HashMap<>();
+    private final WrittenOut writtenOut;
 
     private final Hir.Binders binders;
 
-    /** A minter for the rows composed for {@code behavior} of {@code module}. */
-    public FixtureReferences(String module, String behavior) {
+    /** A minter for the rows composed for {@code behavior} of {@code module}, whose templates
+     *  mean what {@code writtenOut} says. */
+    FixtureReferences(String module, String behavior, WrittenOut writtenOut) {
+        this.writtenOut = writtenOut;
         this.binders = new Hir.Binders(new BindingOwner.Synthesized(
                 new BindingOwner.OfValue(module, behavior), BindingOwner.Pass.GENERATOR, 0));
+    }
+
+    /** A minter for the rows composed for {@code behavior} of {@code module}, where nothing is
+     *  built and so every template means its own spelling. */
+    public FixtureReferences(String module, String behavior) {
+        this(module, behavior, WrittenOut.NOTHING_TO_BUILD);
+    }
+
+    /** What the templates of this run mean. */
+    WrittenOut writtenOut() {
+        return writtenOut;
     }
 
     /** A reference nothing else in this run has. */
     public FixtureReferenceOrigin next() {
         return new FixtureReferenceOrigin(next++);
-    }
-
-    /**
-     * The meaning of {@code rendered} at {@code parameter}, asked of {@code worked} the first time
-     * and remembered. Empty where {@code worked} had none, which is asked again.
-     */
-    Optional<String> meaning(int parameter, String rendered, Supplier<Optional<String>> worked) {
-        String key = parameter + ":" + rendered;
-        String had = meanings.get(key);
-        if (had != null) {
-            return Optional.of(had);
-        }
-        Optional<String> made = worked.get();
-        made.ifPresent(each -> meanings.put(key, each));
-        return made;
     }
 
     /** A binding nothing else in this run has, written as {@code name} and anchored {@code at}. */
