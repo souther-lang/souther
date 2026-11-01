@@ -130,8 +130,10 @@ class EachThresholdOfADerivedValueOwesItsOwnOnAndOffPointsTest {
         // The bounds 100 and 300, each once for the pairs and the three together.
         assertEquals(2, count(report, MISSING_ON + " (comparison@10"), report);
         assertEquals(2, count(report, MISSING_OFF + " (comparison@10"), report);
+        // Said in gradeOf, with the place of its line where another line says the same words.
         assertTrue(report.contains("a.amount + b.amount: = 200 in gradeOf")
-                && report.contains("a.amount + b.amount + c.amount: = 300"), report);
+                && report.matches("(?s).*a\\.amount \\+ b\\.amount \\+ c\\.amount: = 300"
+                        + "( \\(line \\d+ of \\d+\\))? in gradeOf.*"), report);
         // And the bound the table holds, which is what a reader changes, beside the total.
         assertTrue(report.contains(", the bound written is 100"), report);
         assertTrue(report.contains(", the bound written is 300"), report);

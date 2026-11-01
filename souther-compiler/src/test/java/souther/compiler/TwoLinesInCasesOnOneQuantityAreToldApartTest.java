@@ -170,6 +170,30 @@ class TwoLinesInCasesOnOneQuantityAreToldApartTest {
         assertFalse(human.contains("(line "), human);
     }
 
+    /**
+     * A line is the same number at every point it is said at: the number is of the line among the
+     * lines of its comparison, and not of the words that happen to be shared at one point.
+     */
+    @Test
+    void aLineIsTheSameNumberAtEveryPointItIsSaidAt() {
+        List<String> readings = readingsOf(human(CLAMPED), "full/n");
+        for (String place : List.of("(line 1 of 2)", "(line 2 of 2)")) {
+            Set<String> words = readings.stream().filter(line -> line.endsWith(place))
+                    .map(line -> line.replace("· read as full/n: ", "").replace(" " + place, ""))
+                    .collect(Collectors.toSet());
+            assertTrue(words.contains("= 51") && words.contains("in 51 < n"), place + " " + words);
+        }
+    }
+
+    /** Which line is numbered first is of the lines and not of the order the walk met them in. */
+    @Test
+    void theNumbersDoNotDependOnTheOrderTheReadingsWereMetIn() {
+        String first = human(CLAMPED);
+        for (int again = 0; again < 3; again++) {
+            assertEquals(first, human(CLAMPED));
+        }
+    }
+
     /** The place is for the reader of the report; the document keeps the words its schema gives. */
     @Test
     void theDocumentSaysNoPlace() {

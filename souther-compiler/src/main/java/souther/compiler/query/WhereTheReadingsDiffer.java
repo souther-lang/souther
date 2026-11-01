@@ -20,7 +20,7 @@ import java.util.TreeSet;
 
 /**
  * Which lines of one comparison a report would say in the same words under different points, and
- * which of them each reading is.
+ * which of the comparison's lines each reading is.
  *
  * <p>A reading is said by the position it is read at, the point it asks of a row and the cases of
  * values it decides in ({@link BorderAssessment#decidesWhere}). Two lines of one comparison can
@@ -34,20 +34,28 @@ import java.util.TreeSet;
  * line a reading is of is a question about the model ({@link Line}): the line its author drew
  * ({@link AuthoredLine}) and where it lies. And which comparison a reading belongs to is part of
  * the first, so that a line of another comparison that happens to lie in the same place is never
- * counted among these. A group is what shares words, and holds the lines that share them; nothing
- * is kept about a line outside the group it is told apart in.
+ * counted among these.
  *
  * <p><b>Mistaken for one another</b> is when the words are shared under different points by
  * different lines. Under one point the readings that say alike are the entries of a bag a surface
  * counts ({@link BorderObligationPointAssessment.ReadingSaid}), and nothing there is mistaken for
  * anything.
  *
- * <p><b>What is given is the place of the line among those that share the words</b>, in the order
- * of where they lie and then of the line the author drew. Not a case: the relations a case is
- * made of differ between two spellings of one statement, and a relation over whole numbers has
- * two spellings of its own ({@code n > 50}, {@code n >= 51}) that nothing here can tell are one.
- * The place does not depend on the order the readings were met in or on any row, so a row added
- * to the model moves nothing here.
+ * <p><b>What is given is the place of the line among the lines of its comparison</b>, once for the
+ * comparison and not for the words that happen to collide: a line is the same line at every point
+ * it is said at, so a reader who follows it from one point to another finds the same number. A
+ * comparison is numbered only where some of its lines are mistaken for one another, and a line of
+ * it is given its number only where its words are shared.
+ *
+ * <p>Not a case: the relations a case is made of differ between two spellings of one statement,
+ * and a relation over whole numbers has two spellings of its own ({@code n > 50},
+ * {@code n >= 51}) that nothing here can tell are one.
+ *
+ * <p><b>The order is of what a reader is shown.</b> The lines of a comparison are put in the order
+ * of where they lie and then of everything the report says of them ({@link Line} and
+ * {@link #shownOf}), which does not depend on the order the readings were met in or on any row. Two
+ * lines that tie on both say every word alike, so which of them is numbered first is no word of
+ * the report.
  *
  * <p>Held for the readings of a behavior together, because the points that share words are
  * different points: {@code = 51} as the point a line is owed a row at and as the point another
@@ -56,11 +64,14 @@ import java.util.TreeSet;
 public final class WhereTheReadingsDiffer {
 
     /** Nothing said alike, which is every behavior whose lines are told apart by their words. */
-    public static final WhereTheReadingsDiffer NONE = new WhereTheReadingsDiffer(Map.of());
+    public static final WhereTheReadingsDiffer NONE =
+            new WhereTheReadingsDiffer(Set.of(), Map.of());
+
+    /** Which comparison, as a reader tells one from another. */
+    private record Comparison(RuleRef.Comparison rule, ModelOccurrence states) {}
 
     /** What a reader is shown of a reading of a comparison at a point. */
-    private record Words(RuleRef.Comparison rule, ModelOccurrence states, String axis,
-                         String asks, String said) {}
+    private record Words(Comparison of, String axis, String asks, String said) {}
 
     /** Which line a reading is of: the one its author drew, and where it lies — every point it
      *  asks of a row, in one order. */
@@ -73,11 +84,15 @@ public final class WhereTheReadingsDiffer {
         }
     }
 
-    /** The lines that share words under different points, in the order that tells them apart. */
-    private final Map<Words, List<Line>> sharing;
+    /** The words that are shared under different points by different lines. */
+    private final Set<Words> shared;
+    /** The lines of each comparison some of whose words are shared, in the order they are
+     *  numbered in. */
+    private final Map<Comparison, List<Line>> numbered;
 
-    private WhereTheReadingsDiffer(Map<Words, List<Line>> sharing) {
-        this.sharing = sharing;
+    private WhereTheReadingsDiffer(Set<Words> shared, Map<Comparison, List<Line>> numbered) {
+        this.shared = shared;
+        this.numbered = numbered;
     }
 
     /** The lines among the readings of {@code byPoint} that share their words under different
@@ -86,33 +101,51 @@ public final class WhereTheReadingsDiffer {
             Map<BorderObligationPoint, ? extends Map<Reading, BorderAssessment>> byPoint,
             Map<BorderObligationPoint, ? extends Map<Reading, ReadingSeat>> seats) {
         Map<Words, Sharers> byWords = new LinkedHashMap<>();
+        Map<Comparison, Map<Line, Set<String>>> linesOf = new LinkedHashMap<>();
         byPoint.forEach((owed, met) -> met.forEach((where, reading) -> {
             Words words = wordsOf(reading, seats.get(owed).get(where).asked());
-            if (words != null) {
-                Sharers sharers = byWords.computeIfAbsent(words, _ -> new Sharers());
-                sharers.points().add(owed);
-                sharers.lines().add(lineOf(reading));
+            if (words == null) {
+                return;
             }
+            Line line = lineOf(reading);
+            Sharers sharers = byWords.computeIfAbsent(words, _ -> new Sharers());
+            sharers.points().add(owed);
+            sharers.lines().add(line);
+            linesOf.computeIfAbsent(words.of(), _ -> new LinkedHashMap<>())
+                    .computeIfAbsent(line, _ -> new TreeSet<>()).addAll(shownOf(reading));
         }));
-        Map<Words, List<Line>> sharing = new LinkedHashMap<>();
+        Set<Words> shared = new HashSet<>();
+        Set<Comparison> told = new HashSet<>();
         byWords.forEach((words, sharers) -> {
             if (sharers.points().size() > 1 && sharers.lines().size() > 1) {
-                List<Line> ordered = new ArrayList<>(sharers.lines());
-                ordered.sort(Comparator.comparing(Line::lies)
-                        .thenComparing(line -> line.drawn().which().toString()));
-                sharing.put(words, List.copyOf(ordered));
+                shared.add(words);
+                told.add(words.of());
             }
         });
-        return sharing.isEmpty() ? NONE : new WhereTheReadingsDiffer(sharing);
+        if (shared.isEmpty()) {
+            return NONE;
+        }
+        Map<Comparison, List<Line>> numbered = new LinkedHashMap<>();
+        for (Comparison comparison : told) {
+            Map<Line, Set<String>> lines = linesOf.get(comparison);
+            List<Line> ordered = new ArrayList<>(lines.keySet());
+            ordered.sort(Comparator.comparing(Line::lies)
+                    .thenComparing(line -> String.join("\n", lines.get(line))));
+            numbered.put(comparison, List.copyOf(ordered));
+        }
+        return new WhereTheReadingsDiffer(shared, numbered);
     }
 
-    /** Which of the lines sharing its words {@code reading} is of at {@code point}, or null where
-     *  its words are its own. */
+    /** Which of the lines of its comparison {@code reading} is of, where its words at
+     *  {@code point} are shared with another line's — or null where they are its own. */
     String label(BorderAssessment reading, DomainPoint point) {
         Words words = wordsOf(reading, point);
-        List<Line> alike = words == null ? null : sharing.get(words);
-        int place = alike == null ? -1 : alike.indexOf(lineOf(reading));
-        return place < 0 ? null : "line " + (place + 1) + " of " + alike.size();
+        if (words == null || !shared.contains(words)) {
+            return null;
+        }
+        List<Line> lines = numbered.get(words.of());
+        int place = lines.indexOf(lineOf(reading));
+        return place < 0 ? null : "line " + (place + 1) + " of " + lines.size();
     }
 
     private static Line lineOf(BorderAssessment reading) {
@@ -125,6 +158,18 @@ public final class WhereTheReadingsDiffer {
         return new Line(reading.border().origin().authoredLine(), String.join("\n", asks));
     }
 
+    /** Everything a reader is shown of {@code reading}, at each point it asks of a row. */
+    private static Set<String> shownOf(BorderAssessment reading) {
+        Set<String> shown = new TreeSet<>();
+        for (DomainPoint point : reading.items().keySet()) {
+            Words words = wordsOf(reading, point);
+            if (words != null) {
+                shown.add(words.axis() + "|" + words.asks() + "|" + words.said());
+            }
+        }
+        return shown;
+    }
+
     /** What is shown of {@code reading} at {@code point}, or null where it is a reading of no
      *  statement of several lines or asks nothing of a row there. */
     private static Words wordsOf(BorderAssessment reading, DomainPoint point) {
@@ -132,8 +177,9 @@ public final class WhereTheReadingsDiffer {
                 || read.part().isEmpty() || reading.operator(point) == null) {
             return null;
         }
-        return new Words(read.read().rule(), read.read().states(), reading.axis(),
-                reading.operator(point) + " " + reading.against(point), reading.decidesWhere());
+        return new Words(new Comparison(read.read().rule(), read.read().states()),
+                reading.axis(), reading.operator(point) + " " + reading.against(point),
+                reading.decidesWhere());
     }
 
     /**
