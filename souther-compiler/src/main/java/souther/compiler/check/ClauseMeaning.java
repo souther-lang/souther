@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * One clause of a declaration, as what it states rather than as where it is written.
@@ -130,6 +131,15 @@ public sealed interface ClauseMeaning permits ClauseMeaning.Stated, ClauseMeanin
                 Objects.requireNonNull(id, "a rule an author wrote is some part of a clause");
                 reads = Set.copyOf(reads);
             }
+        }
+
+        /** The same rules joined the same way, each with the places {@code readsOf} says it reads. */
+        default Parts withReads(Function<PartId<RuleRef.Invariant>, Set<ClauseRead>> readsOf) {
+            return switch (this) {
+                case One it -> new One(it.id(), readsOf.apply(it.id()));
+                case Both it -> new Both(it.left().withReads(readsOf),
+                        it.right().withReads(readsOf));
+            };
         }
 
         /** Each rule the clause was written as, in the order it was written. */

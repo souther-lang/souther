@@ -4560,13 +4560,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return Roomy.NONE;
         }
         Set<Object> nodes = new LinkedHashSet<>();
+        Set<ClauseAt> tried = new HashSet<>();
         Map<String, Set<RuleRef>> refs = new LinkedHashMap<>();
         Map<String, Set<PartId<RuleRef.Invariant>>> parts = new LinkedHashMap<>();
         for (Side side : sides) {
             for (FilingCoordinate place : placesAsked(side)) {
                 for (Object node : reachedByTheDeclarations(place.path(), read).nodes().ties()) {
                     if (node instanceof TiedOnTheWay.Rule rule && rule.clause() >= 0
-                            && !nodes.contains(rule)) {
+                            && asked(tried, rule)) {
                         ClauseMeaning.Stated stated = leavingRoomAroundTheLine(rule, asked, read,
                                 inWholeSteps);
                         if (stated != null) {
@@ -4586,6 +4587,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return new Roomy(nodes, refs, parts);
+    }
+
+    /** One clause of a declaration at one place of a parameter, whichever of its rules is held. */
+    private record ClauseAt(TermPath at, TypeSymbol worn, int clause) {}
+
+    /** Whether the clause {@code rule} is one of has not been asked about yet, which it is from
+     *  now on: the proof is of the clause, and is the same for every rule it was written as. */
+    private static boolean asked(Set<ClauseAt> tried, TiedOnTheWay.Rule rule) {
+        return tried.add(new ClauseAt(rule.at(), rule.worn(), rule.clause()));
     }
 
     /**

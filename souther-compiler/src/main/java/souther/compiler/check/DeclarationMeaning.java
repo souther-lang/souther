@@ -1,13 +1,17 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * What a declaration says, published for a reader in another module.
@@ -150,14 +154,26 @@ public sealed interface DeclarationMeaning {
                         TermMeaning.of(typed.value()),
                         reading.fieldsRead(typed.value(), named),
                         reading.reads(typed.value(), named),
-                        each.shape().asWritten(new RuleRef.Invariant(clause),
-                                ClauseExpr.of(typed.value(), true),
-                                part -> reading.reads(part, named)),
+                        partsReading(each.shape().asWritten(new RuleRef.Invariant(clause)),
+                                typed.value(), named, reading),
                         reading.affineMeaning(typed.value(), named));
                 case TypedClause.Stopped _ -> new ClauseMeaning.Stopped(clause);
             });
         }
         return clauses;
+    }
+
+    /**
+     * {@code written} with the places each rule reads, asked of the subtree of the clause's reading
+     * that {@link ClauseMeaning.Parts#onto} finds for it.
+     */
+    private static ClauseMeaning.Parts partsReading(ClauseMeaning.Parts written, Core clause,
+                                                    TypeSymbol.AtModule named, Clauses reading) {
+        Map<PartId<RuleRef.Invariant>, Set<ClauseRead>> reads = new HashMap<>();
+        for (Clauses.StatedPart each : reading.partsOf(new Clauses.AsStated(clause, written))) {
+            reads.put(each.id(), reading.reads(each.expr(), named));
+        }
+        return written.withReads(reads::get);
     }
 
     /** What a list of names in the tree says, which is which declaration each of them reaches. */

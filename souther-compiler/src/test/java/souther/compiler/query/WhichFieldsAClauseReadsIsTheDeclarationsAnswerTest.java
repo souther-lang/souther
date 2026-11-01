@@ -142,6 +142,7 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                         Set.of(howMany("tags"), neededMember("tags")),
                         Set.of(howMany("items"), howMany("inner", "members"))),
                 clausesSay(c, ClauseMeaning.Stated::reads));
+        everyClauseReadsWhatItsRulesRead(c);
     }
 
     /**
@@ -175,6 +176,7 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                         Set.of(values("key"), lookedUpMember("tags"), howMany("tags")),
                         Set.of(values("key"), neededMember("table"), neededMember("tags"))),
                 clausesSay(c, ClauseMeaning.Stated::reads));
+        everyClauseReadsWhatItsRulesRead(c);
     }
 
     /** A call saying no two elements share a field reads that field of each element, and no
@@ -267,18 +269,21 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                 data Range = { low: Int, high: Int, cap: Int }
                     invariant low >= 0 && low <= high && cap >= 0 && (cap >= 8 || high >= 8)
                 """);
-        PublishedDeclarationResult said = c.db().ask(new Shapes.MeaningOf(RANGE)).value();
-        DeclarationMeaning meaning = assertInstanceOf(PublishedDeclarationResult.Found.class, said,
-                "the declaration under test is published").said();
-        ClauseMeaning.Stated clause = (ClauseMeaning.Stated) ((DeclarationMeaning.Product) meaning)
-                .clauses().getFirst();
+        ClauseMeaning.Stated clause = statedClauses(c).getFirst();
 
         assertEquals(List.of(Set.of(values("low")), Set.of(values("low"), values("high")),
                         Set.of(values("cap")), Set.of(values("cap"), values("high"))),
                 clause.parts().leaves().stream().map(ClauseMeaning.Parts.One::reads).toList());
-        Set<ClauseRead> together = new HashSet<>();
-        clause.parts().leaves().forEach(part -> together.addAll(part.reads()));
-        assertEquals(clause.reads(), together);
+        everyClauseReadsWhatItsRulesRead(c);
+    }
+
+    /** What a clause reads is what the rules it was written as read, taken together. */
+    private static void everyClauseReadsWhatItsRulesRead(Compilation c) {
+        statedClauses(c).forEach(clause -> {
+            Set<ClauseRead> together = new HashSet<>();
+            clause.parts().leaves().forEach(part -> together.addAll(part.reads()));
+            assertEquals(clause.reads(), together, clause.ref().toString());
+        });
     }
 
     private static ClauseRead values(String... steps) {
@@ -309,12 +314,16 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
     /** What each clause of {@code Range} says, in the order the declaration writes them. */
     private static <T> List<Set<T>> clausesSay(Compilation c,
                                                Function<ClauseMeaning.Stated, Set<T>> says) {
+        return statedClauses(c).stream().map(says).toList();
+    }
+
+    /** Each clause of {@code Range}, in the order the declaration writes them. */
+    private static List<ClauseMeaning.Stated> statedClauses(Compilation c) {
         PublishedDeclarationResult said = c.db().ask(new Shapes.MeaningOf(RANGE)).value();
         DeclarationMeaning meaning = assertInstanceOf(PublishedDeclarationResult.Found.class, said,
                 "the declaration under test is published").said();
         return ((DeclarationMeaning.Product) meaning).clauses().stream()
                 .map(ClauseMeaning.Stated.class::cast)
-                .map(says)
                 .toList();
     }
 

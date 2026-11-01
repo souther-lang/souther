@@ -1,12 +1,10 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.core.Core;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Function;
 
 /**
  * How an author wrote a clause as several rules, kept as the shape they wrote rather than as a list.
@@ -59,28 +57,15 @@ public sealed interface AuthoredShape {
      * would hand a reader parts that had changed. The expansion needs those nodes and is here;
      * every reader that only has to find the parts again in a tree it read takes this.
      *
-     * <p>Each part is published with the places it reads, asked of the subtree {@code read} holds
-     * for it. The descent is {@link ClauseMeaning.Parts#onto(ClauseExpr)}'s, driven by this shape
-     * and never by the tree.
-     *
-     * @param read the clause as the reading of it came to
-     * @param readsOf the places a part reads, asked of the tree it was read as
+     * <p>The parts are named here and read nothing yet: the places each reads are asked of the
+     * subtree the clause's reading holds for it, which {@link ClauseMeaning.Parts#onto} finds and
+     * {@link ClauseMeaning.Parts#withReads} puts beside the name.
      */
-    default ClauseMeaning.Parts asWritten(RuleRef.Invariant rule, ClauseExpr read,
-                                          Function<Core, Set<ClauseRead>> readsOf) {
+    default ClauseMeaning.Parts asWritten(RuleRef.Invariant rule) {
         return switch (this) {
-            case One it -> new ClauseMeaning.Parts.One(it.part().idFor(rule),
-                    readsOf.apply(read.written()));
-            case Both it -> {
-                if (!(read instanceof ClauseExpr.Joined joined)) {
-                    throw new IllegalStateException("an author wrote two rules where this"
-                            + " reading has one " + read.getClass().getSimpleName() + ", so the"
-                            + " clause was read into a shape it was not written in");
-                }
-                yield new ClauseMeaning.Parts.Both(
-                        it.left().asWritten(rule, joined.left(), readsOf),
-                        it.right().asWritten(rule, joined.right(), readsOf));
-            }
+            case One it -> new ClauseMeaning.Parts.One(it.part().idFor(rule), Set.of());
+            case Both it -> new ClauseMeaning.Parts.Both(it.left().asWritten(rule),
+                    it.right().asWritten(rule));
         };
     }
 
