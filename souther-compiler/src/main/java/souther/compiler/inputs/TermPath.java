@@ -539,16 +539,19 @@ public record TermPath(String head, List<Step> steps) {
      * keeps an account of its own.
      */
     public Requirements requirements() {
-        Map<TermPath, CasesLeft> out = new LinkedHashMap<>();
+        Map<TermPath, CasesLeft> out = null;
         for (int at = 0; at < steps.size(); at++) {
             if (steps.get(at) instanceof Step.Refine refine) {
+                if (out == null) {
+                    out = new LinkedHashMap<>();
+                }
                 // Keyed by where the value stands: under a narrowing to several cases, a name is
                 // the name read at the sum, and what is required of it is required there. A path
                 // is built only where it is a key, and not at every step on the way.
                 out.put(prefix(at).position(), refine.cases());
             }
         }
-        return new Requirements(out, List.of());
+        return out == null ? Requirements.NONE : new Requirements(out, List.of());
     }
 
     /**
