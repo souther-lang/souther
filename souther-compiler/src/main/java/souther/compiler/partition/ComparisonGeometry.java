@@ -136,6 +136,7 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between,
                  ComparisonAssessment.NothingArrivesAtItsLine _,
                  ComparisonAssessment.TurnsNothing _,
                  ComparisonAssessment.NothingArrivesAtItsRelation _,
+                 ComparisonAssessment.NothingArrivesAtItsStop _,
                  ComparisonAssessment.RelationTurnsNothing _,
                  ComparisonAssessment.NoFeasibleInput _, ComparisonAssessment.Unread _ -> NONE;
         };

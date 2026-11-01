@@ -2829,7 +2829,7 @@ public final class FieldDomains {
         }
         Set<RuleRef> unheld = new LinkedHashSet<>();
         for (ProjectionEvidence.Cause each : causes) {
-            if (place == null && operatorsOfOnlyADefinition(each)) {
+            if (operatorsOfOnlyADefinition(each, place)) {
                 continue;
             }
             if (!(each instanceof ProjectionEvidence.Cause.Unrepresented(RuleRef rule, String _))) {
@@ -2858,13 +2858,22 @@ public final class FieldDomains {
      * <p>Such a rule is met by the number it comes to at any places: every step of the number is
      * held inside the order it is worked out in, and the number lies inside what the defined place
      * admits. So the operators answer wherever the rest of the rules put the places, and a value
-     * exists where the rest has one. That says nothing of which values the bounds leave the
-     * places, which are the image of the number and not a box: only the question of whether a
-     * value exists is answered this way.
+     * exists where the rest has one. That is the question asked where {@code place} is null.
+     *
+     * <p>Of a place the number is made of it says as much: the rule leaves that place as free as
+     * it was ({@link ReadingEvidence#isFreedByDefinition}), so every value the rest of the rules
+     * leave it is in a whole value, with the defined place at the number. Of the defined place it
+     * says nothing, since the values the bounds leave there are the image of the number and not a
+     * box.
+     *
+     * @param place the place asked about, or null where what is asked is whether a value exists
      */
-    private boolean operatorsOfOnlyADefinition(ProjectionEvidence.Cause cause) {
+    private boolean operatorsOfOnlyADefinition(ProjectionEvidence.Cause cause, RuleKey place) {
         return cause instanceof ProjectionEvidence.Cause.OperatorsNotShownToAnswer(RuleRef rule)
-                && took.isOnlyDefining(rule);
+                && took.isOnlyDefining(rule)
+                && (place == null || (rule instanceof RuleRef.Invariant invariant
+                        && atomAt.get(place) instanceof FactSubject at
+                        && took.isFreedByDefinition(invariant, at)));
     }
 
     /** Which places the parts of this value's rules tie together, made the first time it is

@@ -5548,6 +5548,18 @@ final class Pullback {
                             () -> compared(compared));
                 }
             }
+            // And on each arm of a container chosen by cases, which holds as many as that arm
+            // answers: a helper answering a list written out in each arm of an if holds a number
+            // of its own in each.
+            for (LawNumber<DeclaredArgument> number : form.coefs().keySet()) {
+                if (number instanceof LawNumber.SizeOf<DeclaredArgument>(
+                        LawSubject.Argument<DeclaredArgument>(DeclaredArgument at))
+                        && chosenAt(new Denotation(applied.argument(at), reads)) != null) {
+                    return goingIn(new Inside.AChoice(new Denotation(applied.argument(at), reads)),
+                            reads, new Denotation(e, reads), fixed(e, reads),
+                            taking -> new ALawRead(this, taking.apply(reads)).compared(compared));
+                }
+            }
             Map<Quantity, Derivation.AComparisonRead.Counted> outer = counting;
             List<Derivation.AComparisonRead.Counted> outerAlike = alike;
             counting = new LinkedHashMap<>();
