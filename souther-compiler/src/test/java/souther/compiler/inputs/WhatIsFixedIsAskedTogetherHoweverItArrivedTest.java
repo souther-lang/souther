@@ -370,12 +370,15 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         NumericTerm d = FOUR_TERMS.get(3);
         ReadQuantities fixed = region.fixing(Map.of(a, count(1)));
         NumericDomain.FormProjection first = fixed.projectionOf(b, List.of(c, d));
+        NumericDomain.Bounds alone = fixed.runsBetween(b);
 
         long before = ReadQuantities.stepsPutOn();
         NumericDomain.FormProjection again = fixed.projectionOf(b, List.of(d, c, d));
+        NumericDomain.Bounds aloneAgain = fixed.runsBetween(b);
 
         assertEquals(0, ReadQuantities.stepsPutOn() - before);
         assertEquals(first, again);
+        assertEquals(alone, aloneAgain);
         assertEquals(first, region.fixing(Map.of(a, count(1))).projectionOf(b, List.of(c, d)),
                 "a reading that never asked works out the same");
         Map<NumericTerm, Place> more = new LinkedHashMap<>();
