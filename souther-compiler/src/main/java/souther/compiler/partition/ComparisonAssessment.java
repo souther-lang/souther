@@ -1462,7 +1462,8 @@ sealed interface ComparisonAssessment {
      */
     static ComparisonAssessment whereItsStopIsReached(ComparisonAssessment read, Reachability way,
                                                       List<ComparisonArrival> arrivals) {
-        if (someRowArrives(way, arrivals)) {
+        if (!(read instanceof Unread || read instanceof Several)
+                || someRowArrives(way, arrivals)) {
             return read;
         }
         return switch (read) {

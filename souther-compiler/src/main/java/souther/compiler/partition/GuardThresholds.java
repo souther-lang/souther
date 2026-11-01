@@ -318,14 +318,15 @@ public final class GuardThresholds {
                                     read.quantities().region()), each.getsPast());
                             // A stop is dropped on the way to the comparison and not on the way
                             // past it: a run that stops in it has not got past it.
+                            Reachability beforeIt = Reachability.of(
+                                    new WayToTheBorder(each.assumed()),
+                                    read.quantities().region());
                             ComparisonAssessment arrived =
                                     ComparisonAssessment.whereItsStopIsReached(
                                             ComparisonAssessment.narrowedByWhatArrives(
                                                     admitted.read(), toIt, wayToACase, arrivals,
                                                     false, read, each.witnesses()),
-                                            Reachability.of(new WayToTheBorder(each.assumed()),
-                                                    read.quantities().region()),
-                                            arrivals);
+                                            beforeIt, arrivals);
                             // And whether a run that some row takes stops in it, which the line it
                             // draws does not say: a stop the ways before it rule out is no run's.
                             // A comparison every run stops in is already said as that.
@@ -361,9 +362,7 @@ public final class GuardThresholds {
                             // And the values at which every run getting to it stops in what it
                             // works out, asked of the way before a row is narrowed to getting
                             // past that: a row that got past holds none of them.
-                            List<SearchRegion> before = regionsOf(Reachability.of(
-                                    new WayToTheBorder(each.assumed()),
-                                    read.quantities().region()));
+                            List<SearchRegion> before = regionsOf(beforeIt);
                             List<EveryRunStops> stops =
                                     arrived instanceof ComparisonAssessment.AnswersNowhere
                                             ? List.<EveryRunStops>of()
