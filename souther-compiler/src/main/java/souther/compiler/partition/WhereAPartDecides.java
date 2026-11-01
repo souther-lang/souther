@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -114,16 +115,22 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
      * @param subject the input the rows are of, whose reading says which order each number is on
      */
     AskedOfRows askedOfRows(String behavior, MeasuredInput subject) {
-        return new AskedOfRows(subject.putToRows(decides, behavior));
+        return new AskedOfRows(subject.putToRows(decides, behavior),
+                subject.putToRowsAtSomeElement(decides, behavior));
     }
 
     /** Where a line decides, ready to be asked of rows. */
     static final class AskedOfRows {
 
         private final AStatementAtARow decides;
+        /** The same, asked at some element of a list of whole numbers it weighs, where it weighs
+         *  one: what a row is asked then. */
+        private final Optional<ACaseAskedAtSomeElement> atSomeElement;
 
-        private AskedOfRows(AStatementAtARow decides) {
+        private AskedOfRows(AStatementAtARow decides,
+                            Optional<ACaseAskedAtSomeElement> atSomeElement) {
             this.decides = decides;
+            this.atSomeElement = atSomeElement;
         }
 
         /** Reads {@code row} the way {@link #at} does, for the walk that finds which containers a
@@ -139,7 +146,8 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
          * row is not somewhere it holds.
          */
         AtARow at(BorderQuantity.Observation row) {
-            return switch (decides.at(row)) {
+            return switch (atSomeElement.map(asked -> asked.at(row)).orElseGet(() ->
+                    decides.at(row))) {
                 case AStatementAtARow.Answer.Holds _ -> AtARow.DECIDES;
                 case AStatementAtARow.Answer.Fails _ -> AtARow.DECIDES_NOTHING;
                 case AStatementAtARow.Answer.CouldNotTell(var why) -> new AtARow.CouldNotTell(why);

@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
-import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.ElementKey;
@@ -30,7 +29,6 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -44,7 +42,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 /**
@@ -95,19 +92,9 @@ final class AStatementAtARow {
     private final Map<Spelling,OverTheElements> elements;
     /** The positions a part asks of their own value: whether it is true, whether there is one. */
     private final Set<TermPath> positions;
-    /** The element of a list of whole numbers the statement is asked at some value of, where it is
-     *  asked so ({@link #atSomeElement}); null where it is asked as it stands. */
-    private final AtSomeElement atSomeElement;
 
     private AStatementAtARow(Proposition stated, Map<Relation, OneRelation> relations,
                              Map<Spelling,OverTheElements> elements, Set<TermPath> positions) {
-        this(stated, relations, elements, positions, null);
-    }
-
-    private AStatementAtARow(Proposition stated, Map<Relation, OneRelation> relations,
-                             Map<Spelling,OverTheElements> elements, Set<TermPath> positions,
-                             AtSomeElement atSomeElement) {
-        this.atSomeElement = atSomeElement;
         this.stated = stated;
         // In the order the relations were met, which is the order their containers are found in
         // when a row is walked for them.
@@ -135,7 +122,7 @@ final class AStatementAtARow {
     /**
      * Whether a row can be asked {@code stated} where a case a line decides in is put to rows: at
      * some element, where it weighs the element of a list of every whole number between two
-     * ({@link #atSomeElement}), and so where it is a statement a row can be asked with the element
+     * ({@link ACaseAskedAtSomeElement}), and so where it is a statement a row can be asked with the element
      * put at a value; as it stands otherwise.
      */
     static boolean askableAtSomeElement(Proposition stated) {
@@ -421,206 +408,6 @@ final class AStatementAtARow {
         Set<TermPath> positions = new LinkedHashSet<>();
         gather(stated, behavior, quantities, read, relations, elements, positions);
         return new AStatementAtARow(stated, relations, elements, positions);
-    }
-
-    /**
-     * The same, where {@code stated} weighs the element of a list of every whole number between
-     * two ({@link OnOneElement}): asked whether it holds with the element at some value the row's
-     * list holds, each value put in the statement and the statement then asked of the row as one
-     * of the input's numbers alone.
-     *
-     * <p>Every value from the list's start to its end at the row, up to
-     * {@link ElementsWrittenOut#MOST_WALKED} of them, and of a turn the statement holds the element
-     * to come round to only the values of that turn — the first alone where the statement comes
-     * out alike on all of them. A list holding more, with no value tried
-     * holding it, is one this could not tell of: the values left are not values it fails at. One
-     * value the statement could not be told at is said the same way, unless another holds it.
-     * The element is the same one wherever the statement weighs it, so a row holding it is one on
-     * which every part of the statement is read at one element.
-     */
-    static AStatementAtARow atSomeElement(Proposition stated, String behavior,
-                                          Quantities quantities,
-                                          Map<RelationRead, OneRelation> read) {
-        AStatementAtARow asItStands = readBy(stated, behavior, quantities, read);
-        Optional<Quantity.OfABinding> element = OnOneElement.theElementOf(stated);
-        if (element.isEmpty()) {
-            return asItStands;
-        }
-        Proposition.Compared turn = turnIn(stated, element.get());
-        BigInteger every = turn == null ? BigInteger.ONE
-                : ((Quantity.RemainderOfADividend) ((Relation.Affine) turn.relation()).form()
-                        .coefs().keySet().iterator().next()).divisor();
-        boolean alike = OnOneElement.comesOutAlikeEvery(stated, element.get())
-                .filter(every::equals).isPresent();
-        return new AStatementAtARow(stated, asItStands.relations, asItStands.elements,
-                asItStands.positions, new AtSomeElement(element.get(), turn, every,
-                        alike, behavior, quantities, read, new ConcurrentHashMap<>(),
-                        new ConcurrentHashMap<>()));
-    }
-
-    /**
-     * The part of {@code stated} holding {@code element} to come round to one value, every other
-     * part beside it ({@link OnOneElement#comesRoundTo}): a remainder the element is weighed in
-     * once, said to leave nothing — or null where it holds no such part.
-     */
-    private static Proposition.Compared turnIn(Proposition stated, Quantity.OfABinding element) {
-        List<Proposition> each = stated instanceof Proposition.All all ? all.parts()
-                : List.of(stated);
-        for (Proposition part : each) {
-            if (part instanceof Proposition.All) {
-                Proposition.Compared inside = turnIn(part, element);
-                if (inside != null) {
-                    return inside;
-                }
-            }
-            if (part instanceof Proposition.Compared compared && compared.holds()
-                    && compared.relation() instanceof Relation.Affine affine
-                    && affine.proposition() == Rel.EQ
-                    && affine.form().constant().signum() == 0
-                    && affine.form().coefs().size() == 1
-                    && affine.form().coefs().keySet().iterator().next()
-                            instanceof Quantity.RemainderOfADividend remainder
-                    && remainder.dividend().coefs().get(element) instanceof ExactRatio weight
-                    && weight.abs().equals(ExactRatio.ONE)) {
-                return compared;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * What a statement asked at some element of a list of whole numbers is asked with.
-     *
-     * @param element    the element, read off a binding of a list of every whole number between
-     *                   two
-     * @param turn       the part holding the element to come round to one value in turns of
-     *                   {@code every} ({@link #turnIn}), or null where none does and every value
-     *                   is one of a turn
-     * @param onceATurn  whether the statement comes out alike on every value of a turn
-     *                   ({@link OnOneElement#comesOutAlikeEvery}), so that the first the list holds
-     *                   answers for it
-     * @param read       the relations read so far over {@code quantities}, for each value's
-     *                   statement to share
-     * @param atValue    the statement with the element at each value tried so far, read to be
-     *                   put to rows, or nothing where the element cannot be put there: one
-     *                   statement whichever row asks it
-     * @param atTurn     the same of {@code turn}
-     */
-    private record AtSomeElement(Quantity.OfABinding element, Proposition.Compared turn,
-                                 BigInteger every, boolean onceATurn, String behavior,
-                                 Quantities quantities, Map<RelationRead, OneRelation> read,
-                                 Map<BigInteger, Optional<AStatementAtARow>> atValue,
-                                 Map<BigInteger, Optional<AStatementAtARow>> atTurn) {
-
-        /** Whether {@code stated} holds at {@code row} with the element at some value the row's
-         *  list holds. */
-        Answer at(Proposition stated, BorderQuantity.Observation row) {
-            Quantity.AWholeNumberInTurn number =
-                    (Quantity.AWholeNumberInTurn) element.handed().orElseThrow();
-            Set<ReadingGap> why = new LinkedHashSet<>();
-            BigInteger from = valueAt(number.from(), row, why);
-            BigInteger to = valueAt(number.to(), row, why);
-            if (from == null || to == null) {
-                return new Answer.CouldNotTell(why);
-            }
-            // Where the statement holds the element to come round to one value in turns of a
-            // divisor, only the values it comes round to are tried: the first of them is among as
-            // many values from the start as the divisor, and each next is a turn past it.
-            BigInteger start = null;
-            for (BigInteger value = from; start == null && value.compareTo(to) <= 0
-                    && value.compareTo(from.add(every)) < 0; value = value.add(BigInteger.ONE)) {
-                AStatementAtARow there = turn == null ? null
-                        : atTurn.computeIfAbsent(value, at ->
-                                Optional.ofNullable(OnOneElement.at(turn, element,
-                                        LinearForm.constant(ExactRatio.of(at))))
-                                        .map(one -> readBy(one, behavior, quantities, read)))
-                                .orElse(null);
-                Answer turned = turn == null ? Answer.HOLDS
-                        : there == null ? new Answer.CouldNotTell(Set.of(
-                                ReadingGap.of(UnheldNumber.NO_REPRESENTATION_EXISTS)))
-                        : there.at(row);
-                switch (turned) {
-                    case Answer.Holds _ -> start = value;
-                    case Answer.Fails _ -> { }
-                    case Answer.CouldNotTell(var stopped) -> {
-                        why.addAll(stopped);
-                        return new Answer.CouldNotTell(why);
-                    }
-                }
-            }
-            if (start == null) {
-                return Answer.FAILS;
-            }
-            int tried = 0;
-            for (BigInteger value = start; value.compareTo(to) <= 0; value = value.add(every)) {
-                if (onceATurn && tried == 1) {
-                    break;
-                }
-                if (tried++ == ElementsWrittenOut.MOST_WALKED) {
-                    why.add(new ReadingGap.ReachNotRead(
-                            ReadingGap.ReachNotRead.Why.MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT));
-                    break;
-                }
-                AStatementAtARow there = atValue.computeIfAbsent(value, at ->
-                        Optional.ofNullable(OnOneElement.at(stated, element,
-                                LinearForm.constant(ExactRatio.of(at))))
-                                .map(one -> readBy(one, behavior, quantities, read)))
-                        .orElse(null);
-                if (there == null) {
-                    why.add(ReadingGap.of(UnheldNumber.NO_REPRESENTATION_EXISTS));
-                    continue;
-                }
-                switch (there.at(row)) {
-                    case Answer.Holds _ -> {
-                        return Answer.HOLDS;
-                    }
-                    case Answer.Fails _ -> { }
-                    case Answer.CouldNotTell(var stopped) -> why.addAll(stopped);
-                }
-            }
-            return why.isEmpty() ? Answer.FAILS : new Answer.CouldNotTell(why);
-        }
-
-        /** The whole number {@code form} comes to at {@code row} — or null, with why put in
-         *  {@code why}, where it could not be read or is no whole number. */
-        private BigInteger valueAt(LinearForm<NumericTerm> form, BorderQuantity.Observation row,
-                                   Set<ReadingGap> why) {
-            ExactAnswer<ExactRatio> sum;
-            if (form.coefs().isEmpty()) {
-                sum = ExactAnswer.held(form.constant());
-            } else {
-                LinearQuantity over = Cutting.readAt(behavior, form, quantities);
-                if (over == null) {
-                    why.add(ReadingGap.of(UnheldNumber.NO_REPRESENTATION_EXISTS));
-                    return null;
-                }
-                switch (over.valuesOf(over.read(row))) {
-                    case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
-                            sum = OrderedAffineBoundary.at(form, values);
-                    case ValuesAtARow.CouldNotTell(var stopped) -> {
-                        why.addAll(stopped);
-                        return null;
-                    }
-                    case ValuesAtARow.NoneHere _ -> {
-                        why.add(ReadingGap.NO_VALUE);
-                        return null;
-                    }
-                }
-            }
-            return switch (sum) {
-                case ExactAnswer.Held<ExactRatio>(ExactRatio held) when held.isWhole()
-                        && held.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole) ->
-                        whole;
-                case ExactAnswer.Held<ExactRatio> _ -> {
-                    why.add(ReadingGap.NO_VALUE);
-                    yield null;
-                }
-                case ExactAnswer.Unheld<ExactRatio> unheld -> {
-                    why.add(ReadingGap.of(unheld.why()));
-                    yield null;
-                }
-            };
-        }
     }
 
     /** A relation as it is read to be put to rows: for which behavior's input. */
@@ -1197,8 +984,7 @@ final class AStatementAtARow {
      * row wherever it stands.
      */
     Answer at(BorderQuantity.Observation row) {
-        return atSomeElement != null ? atSomeElement.at(stated, row)
-                : at(stated, row, new HashMap<>());
+        return at(stated, row, new HashMap<>());
     }
 
     /**
@@ -2490,8 +2276,7 @@ final class AStatementAtARow {
     public boolean equals(Object other) {
         return other instanceof AStatementAtARow that && stated.equals(that.stated)
                 && relations.equals(that.relations) && elements.equals(that.elements)
-                && positions.equals(that.positions)
-                && (atSomeElement == null) == (that.atSomeElement == null);
+                && positions.equals(that.positions);
     }
 
     @Override
