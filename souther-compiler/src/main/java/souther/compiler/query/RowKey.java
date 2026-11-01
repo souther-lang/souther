@@ -5,6 +5,7 @@ import souther.compiler.partition.Generator;
 import souther.compiler.partition.StoodInAnswer;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * What tells one piece of work from another among the rows a run offers.
@@ -29,24 +30,54 @@ import java.util.List;
  * values under two answers are two pieces of work that go two different ways. Left out, the second
  * would be joined onto the first and a person would be handed one row said to answer both.
  *
+ * <p><b>Except where one path names a value the module states.</b> A baseline is written by the
+ * name of a {@code let}, and the run that read the same value back writes it out. Those are two
+ * spellings the generator itself chose for one value, not two rows a person would write, so the
+ * identity is taken from {@link FixtureTemplate#meaning}, which the two share. What a reader is
+ * shown stays {@link #written}, from whichever spelling was composed first.
+ *
  * @param behavior the behavior the row is written under
  * @param written  one value per parameter, as the source an author is handed
+ * @param meant    one value per parameter, written out, which two spellings of one value share
  * @param stoodIn  what each asking of a dependency is answered with, as the source says it
  */
-public record RowKey(String behavior, List<String> written, List<String> stoodIn) {
+public record RowKey(String behavior, List<String> written, List<String> meant,
+                     List<String> stoodIn) {
 
     public RowKey {
         written = List.copyOf(written);
+        meant = List.copyOf(meant);
         stoodIn = List.copyOf(stoodIn);
         if (behavior == null) {
             throw new IllegalArgumentException("a row is written under some behavior");
         }
+        if (meant.size() != written.size()) {
+            throw new IllegalArgumentException("a row means as many values as it writes");
+        }
+    }
+
+    /** A row whose values mean what they are written as. */
+    public RowKey(String behavior, List<String> written, List<String> stoodIn) {
+        this(behavior, written, written, stoodIn);
     }
 
     /** The key of one composed row, under the behavior whose block it belongs in. */
     public static RowKey of(String behavior, Generator.GeneratedRow row) {
         return new RowKey(behavior, row.inputs().stream().map(FixtureTemplate::text).toList(),
+                row.inputs().stream().map(FixtureTemplate::meaning).toList(),
                 row.answers().stream().map(RowKey::spelled).toList());
+    }
+
+    /** The same row when it puts in the same values, whatever they were written as. */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof RowKey that && behavior.equals(that.behavior)
+                && meant.equals(that.meant) && stoodIn.equals(that.stoodIn);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(behavior, meant, stoodIn);
     }
 
     /**

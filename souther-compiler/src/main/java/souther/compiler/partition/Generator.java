@@ -57,6 +57,7 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.semantics.TakenAs;
+import souther.compiler.types.FixtureReferenceOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -3869,7 +3870,7 @@ public final class Generator {
         // goes and what is chosen here keeps it.
         Candidate from = searched.from();
         List<FixtureTemplate> told = tellingArmsApart(axes, from.where(), check,
-                from.from().writtenAgainst(axes, from.delta(), from.where(), references),
+                from.from().writtenAgainst(axes, from.delta(), from.where(), check, references),
                 goingOn.trial(), answers, made.row().inputs(),
                 inputs -> pins.holds(axes, inputs, check) ? Acceptance.TAKEN
                         : Acceptance.PASSED);
@@ -4162,7 +4163,7 @@ public final class Generator {
         @Override
         public Taken take(Candidate candidate) {
             Map<String, Written> given = candidate.from().writtenAgainst(axes,
-                    candidate.delta(), candidate.where(), references);
+                    candidate.delta(), candidate.where(), check, references);
             known.written(candidate, given);
             if (!candidate.from().composes() && given.isEmpty()) {
                 return Taken.AND_MORE;   // nothing here can be written against the model's value
@@ -4334,10 +4335,11 @@ public final class Generator {
          * the composition, which writes no parameter that way.
          */
         Map<String, Written> writtenAgainst(MeasuredInput.MeasuredAxes axes, Delta delta,
-                                            int[] where, FixtureReferences references) {
+                                            int[] where, CandidateCheck check,
+                                            FixtureReferences references) {
             return switch (origin) {
                 case Origin.Stated stated ->
-                        against(axes, delta, where, stated.baseline(), references);
+                        against(axes, delta, where, stated.baseline(), check, references);
                 case Origin.Composition _ -> Map.of();
             };
         }
@@ -5206,7 +5208,7 @@ public final class Generator {
      */
     private static Map<String, Written> against(MeasuredInput.MeasuredAxes axes,
                                                 Delta delta, int[] where,
-                                                Baseline baseline,
+                                                Baseline baseline, CandidateCheck check,
                                                 FixtureReferences references) {
         MeasuredInput subject = axes.subject();
         Map<String, Written> out = new LinkedHashMap<>();
@@ -5216,7 +5218,7 @@ public final class Generator {
             if (at == null) {
                 continue;
             }
-            FixtureTemplate named = FixtureTemplate.named(at.reachedAs(), references.next());
+            FixtureTemplate named = nameMeaning(subject, p, at.reachedAs(), check, references);
             List<Integer> moved = delta.under(axes.axes(), parameter);
             Written written = moved.isEmpty()
                     ? new Written(List.of(new WrittenWay(named,
@@ -5231,6 +5233,28 @@ public final class Generator {
             }
         }
         return Map.copyOf(out);
+    }
+
+    /**
+     * The value the module states, written by its name and meaning what the build reads back from
+     * it, so that the name and the same value written out are one value to whoever tells rows
+     * apart. Meaning only the name where nothing built it or the build cannot be written out: a
+     * value that could not be read is never taken for another.
+     */
+    private static FixtureTemplate nameMeaning(MeasuredInput subject, int p,
+                                               ReachName.Declaration reachedAs,
+                                               CandidateCheck check,
+                                               FixtureReferences references) {
+        FixtureReferenceOrigin occurrence = references.next();
+        FixtureTemplate byName = FixtureTemplate.named(reachedAs, occurrence);
+        if (check.build(p, byName) instanceof CandidateCheck.Built.Value(var value)) {
+            Optional<FixtureTemplate> writtenOut = SeedFixtures.written(value,
+                    subject.types().get(p), subject.ruleReading());
+            if (writtenOut.isPresent()) {
+                return FixtureTemplate.named(reachedAs, occurrence, writtenOut.get().text());
+            }
+        }
+        return byName;
     }
 
     /**
@@ -11205,7 +11229,7 @@ public final class Generator {
             @Override
             public Taken take(Candidate candidate) {
                 Map<String, Written> given = candidate.from().writtenAgainst(axes,
-                        candidate.delta(), candidate.where(), references);
+                        candidate.delta(), candidate.where(), check, references);
                 known.written(candidate, given);
                 if (!candidate.from().composes() && given.isEmpty()) {
                     // nothing here can be written against the model's value

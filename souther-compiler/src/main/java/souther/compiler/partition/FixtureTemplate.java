@@ -46,8 +46,18 @@ import java.util.function.UnaryOperator;
  * {@code up.Amount} by a module that reached it through an alias, and a generator that spelled the
  * declaration's own name offered a row nobody could paste while handing the reader a name it
  * resolved to something else (issue #696).
+ *
+ * <p>A third form for telling values apart: {@code meaning}, the text the value is written out as
+ * when it is read back from a build ({@link SeedFixtures#written}). A value written by the name of a
+ * {@code let} and the same value written out are two {@code text}s and one {@code meaning}, so a
+ * question of whether two rows put in the same value is asked of {@code meaning}, and what a reader
+ * is shown is {@code text}. It is the text itself wherever no build said otherwise.
+ *
+ * @param text    what a row prints
+ * @param value   what a decoder builds
+ * @param meaning the value written out, which two spellings of one value share
  */
-public record FixtureTemplate(String text, Hir.Expr value) {
+public record FixtureTemplate(String text, Hir.Expr value, String meaning) {
 
     /** Nothing generated is anywhere, and a fixture built here is never quoted back at a source. */
     private static final SourcePos NOWHERE = new SourcePos(0, 0);
@@ -60,6 +70,14 @@ public record FixtureTemplate(String text, Hir.Expr value) {
         if (text == null || text.isBlank()) {
             throw new IllegalArgumentException("a fixture template is written text");
         }
+        if (meaning == null || meaning.isBlank()) {
+            throw new IllegalArgumentException("a fixture template means some written value");
+        }
+    }
+
+    /** A value whose spelling is all it is known by. */
+    public FixtureTemplate(String text, Hir.Expr value) {
+        this(text, value, text);
     }
 
     public static FixtureTemplate integer(long value) {
@@ -308,9 +326,19 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      */
     public static FixtureTemplate named(ReachName.Declaration reachedAs,
                                         FixtureReferenceOrigin occurrence) {
+        return named(reachedAs, occurrence, reachedAs.rendered());
+    }
+
+    /**
+     * The same, with the value written out as a build read it back, which is what the row means
+     * where it is not what it prints. {@code meaning} is the name itself where nothing built the
+     * value, so a name nothing could read is never taken for the value of another.
+     */
+    public static FixtureTemplate named(ReachName.Declaration reachedAs,
+                                        FixtureReferenceOrigin occurrence, String meaning) {
         String written = reachedAs.rendered();
         return new FixtureTemplate(written,
-                Hir.Var.respelled(written, reachedAs, occurrence, NOWHERE, NO_SOURCE));
+                Hir.Var.respelled(written, reachedAs, occurrence, NOWHERE, NO_SOURCE), meaning);
     }
 
     /**
