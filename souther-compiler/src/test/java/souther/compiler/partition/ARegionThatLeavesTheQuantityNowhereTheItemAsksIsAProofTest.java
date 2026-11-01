@@ -488,13 +488,21 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
         assertEquals(1, proofs.count());
     }
 
+    /** A standing built again from the same quantity is equal to the first, levels and all. */
+    @Test
+    void aStandingWhoseLevelsWereBuiltAgainIsEqualToTheFirst() {
+        Standing first = formAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)));
+        Standing again = formAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)));
+        assertEquals(first, again);
+        assertEquals(first.hashCode(), again.hashCode());
+    }
+
     /**
      * A form is the same question however many times its levels were built.
      *
-     * <p>The space a form's levels are written in is made afresh each time the quantity is asked for
-     * its standing, and a space has no equality of its own. The proof reads the form and where the
-     * item stands and nothing of the space, so a question told apart by the space is asked again
-     * for nothing.
+     * <p>The proof reads the form and where the item stands, and what a standing carries beside
+     * them is no part of it. The answers are kept by that question, so a form built again is not
+     * proved again.
      */
     @Test
     void aFormWhoseLevelsWereBuiltAgainIsTheSameQuestion() {

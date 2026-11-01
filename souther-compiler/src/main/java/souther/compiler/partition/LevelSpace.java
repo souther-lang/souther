@@ -237,7 +237,12 @@ public interface LevelSpace {
     static LevelSpace onACarrier(Carrier carrier) {
         BoundaryDomain steps = BoundaryDomain.on(carrier);
         OrderedInterval extent = carrier == null ? OrderedInterval.OPEN : carrier.extent();
-        return new LevelSpace() {
+        return new Defined() {
+
+            @Override
+            Definition definition() {
+                return new Definition.OnACarrier(carrier);
+            }
 
             @Override
             public int compare(Level l, Level r) {
@@ -415,6 +420,11 @@ public interface LevelSpace {
     static LevelSpace steppingBy(ExactRatio step) {
         return new Lattice(step, new AdditiveImage.OverWholeNumbers(step)) {
 
+            @Override
+            Definition definition() {
+                return new Definition.SteppingBy(step);
+            }
+
             /** Every multiple of the step, so a run has a first value and a last wherever it is
              *  bounded. */
             @Override
@@ -471,6 +481,11 @@ public interface LevelSpace {
      */
     static LevelSpace overFiniteDecimals(ExactRatio generator) {
         return new Lattice(generator, new AdditiveImage.OverFiniteDecimals(generator)) {
+
+            @Override
+            Definition definition() {
+                return new Definition.OverFiniteDecimals(generator);
+            }
 
             /**
              * The level itself where this takes it, and no first value past it where it does not.
@@ -654,7 +669,12 @@ public interface LevelSpace {
      *
      */
     static LevelSpace onlyWhereTheyMeet() {
-        return new LevelSpace() {
+        return new Defined() {
+
+            @Override
+            Definition definition() {
+                return new Definition.OnlyWhereTheyMeet();
+            }
 
             @Override
             public int compare(Level l, Level r) {
@@ -911,10 +931,58 @@ public interface LevelSpace {
         }
     }
 
+    /**
+     * A space known by what it is made from: the kind of space and what that kind was given.
+     *
+     * <p>Two spaces made the same way are the same space, whichever call made them. Left to
+     * identity, a value that holds a space — a {@link Standing} does — would differ from one built
+     * again from the same quantity, which is a difference nothing in either of them says.
+     *
+     * <p>The kind is part of what a space is made from. The whole numbers cut at a step and the
+     * decimals cut at the same step have the same generator and are not the same space, so equal
+     * arguments to two kinds do not make two spaces equal.
+     */
+    abstract class Defined implements LevelSpace {
+
+        /** What this space is made from. */
+        abstract Definition definition();
+
+        @Override
+        public final boolean equals(Object other) {
+            return other instanceof Defined that && definition().equals(that.definition());
+        }
+
+        @Override
+        public final int hashCode() {
+            return definition().hashCode();
+        }
+
+        @Override
+        public final String toString() {
+            return definition().toString();
+        }
+    }
+
+    /** The kinds of space there are, each with what it takes. */
+    sealed interface Definition {
+
+        /** The values of a carrier, written as places of it; null where the quantity has none. */
+        record OnACarrier(Carrier carrier) implements Definition {}
+
+        /** The whole-number multiples of a step. */
+        record SteppingBy(ExactRatio step) implements Definition {}
+
+        /** The finite decimals that a generator reaches. */
+        record OverFiniteDecimals(ExactRatio generator) implements Definition {}
+
+        /** The one level two values with no distance between them take. */
+        record OnlyWhereTheyMeet() implements Definition {}
+    }
+
     /** The shared half of every space whose levels are numbers: how two of them compare. What stops
      *  a border having a side on one of these is what the rules leave, which is asked of them and
      *  not of the order. */
-    abstract class Counting implements LevelSpace {
+    abstract class Counting extends Defined {
 
         @Override
         public int compare(Level l, Level r) {
