@@ -42,6 +42,9 @@ final class WaysReadAgain {
     /** A number the relation does not read. */
     static final TermPath Z = TermPath.of("z");
 
+    /** Another number the relation does not read. */
+    static final TermPath W = TermPath.of("w");
+
     /** How many {@code Bool}s the met choices ask of, each asked by several. */
     private static final int TRUTHS = 16;
 
@@ -131,6 +134,46 @@ final class WaysReadAgain {
                 return true;
             }
         });
+    }
+
+    /**
+     * The same where the declarations leave {@code z} and {@code w} every value from nought to a
+     * hundred each, and a rule holds the two beside each other where {@code heldBeside}.
+     */
+    static AWayReadForARelation.ReadAgain readAgainLeavingZAndW(List<OnTheWay> way,
+                                                                boolean heldBeside) {
+        return readAgain(way, new AWayReadForARelation.Declarations() {
+            @Override
+            public boolean tie(TermPath one, TermPath other) {
+                return NOTHING_DECLARED.tie(one, other)
+                        || (heldBeside && ((one.equals(Z) && other.equals(W))
+                                || (one.equals(W) && other.equals(Z))));
+            }
+
+            @Override
+            public boolean nameNothingAt(TermPath at) {
+                return true;
+            }
+
+            @Override
+            public NumericDomain.Bounds leaveEveryValueBetween(NumericTerm term) {
+                return term.equals(new NumericTerm.ValueOf(Z))
+                        || term.equals(new NumericTerm.ValueOf(W))
+                        ? new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+                                Endpoint.inclusive(Count.of(100)))
+                        : null;
+            }
+
+            @Override
+            public boolean leaveAValueOf(TypeSymbol leaf) {
+                return true;
+            }
+        });
+    }
+
+    /** {@code weight * w rel threshold}, asked of the other number the relation does not read. */
+    static OnTheWay w(long weight, Rel rel, long threshold) {
+        return number(W, weight, rel, threshold);
     }
 
     private static AWayReadForARelation.ReadAgain readAgain(
@@ -241,8 +284,8 @@ final class WaysReadAgain {
         Compilation compilation = Compilation.ofSource("""
                 module m
                 data Yes
-                behavior f : (x: Int, y: Int, xs: List<Int>, z: Int) -> Yes
-                let f (x, y, xs, z) = Yes
+                behavior f : (x: Int, y: Int, xs: List<Int>, z: Int, w: Int) -> Yes
+                let f (x, y, xs, z, w) = Yes
                 """, "Main");
         return compilation.db().ask(new Adequacy.Inputs("m")).value().get("f")
                 .reading(RuleReadings.of(compilation, "m")).quantities().region();

@@ -2860,6 +2860,49 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * A number a rule of its record bounds alone is given a value apart: {@code p.z} held between
+     * nought and thirty-one by two rules naming nothing else is met by {@code 17}, so the choice
+     * on it comes to nothing for {@code p.x == y} past the five. Two numbers a rule holds beside
+     * each other are not: each of {@code q.a} and {@code q.b} is held between nought and ten, yet
+     * {@code q.a >= 8 && q.b <= 2} is met by no row of {@code q.a <= q.b}, so the choice is kept
+     * as it is.
+     */
+    @Test
+    void aNumberItsRecordBoundsAloneIsGivenAValueApart() {
+        String bounded = "data P = { x: Int, z: Int } invariant z >= 0 invariant z <= 31";
+        assertEquals(Map.of("p.x", RELATES, "y", RELATES),
+                leftPast("p: P, y: Int", bounded, "(p.z >= 17 || p.x >= 5)", "p.x == y", true));
+
+        String held = "data Q = { a: Int, b: Int } invariant a >= 0 invariant a <= 10"
+                + " invariant b >= 0 invariant b <= 10 invariant a <= b";
+        String guard = "(q.a >= 8 && q.b <= 2 || x >= 5)";
+        Map<String, String> alone = leftPast("x: Int, y: Int, q: Q", held, guard, "x == y",
+                false);
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), alone);
+        assertEquals(alone, leftPast("x: Int, y: Int, q: Q", held, guard, "x == y", true));
+
+        String apart = "data Q = { a: Int, b: Int } invariant a >= 0 invariant a <= 10"
+                + " invariant b >= 0 invariant b <= 10";
+        assertEquals(Map.of("x", RELATES, "y", RELATES),
+                leftPast("x: Int, y: Int, q: Q", apart, guard, "x == y", true));
+
+        String worked = "(q.a + q.b == 16 && q.a - q.b == 4 || x >= 5)";
+        Map<String, String> restored = leftPast("x: Int, y: Int, q: Q", held, worked, "x == y",
+                false);
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), restored);
+        assertEquals(restored, leftPast("x: Int, y: Int, q: Q", held, worked, "x == y", true));
+
+        String around = "data Z = { a: Int, b: Int } invariant a >= 0 invariant a <= 10"
+                + " invariant b >= 0 invariant b <= 10"
+                + " data W = { p: Z, q: Z } invariant p.a <= q.a";
+        String across = "(w.p.a >= 8 && w.q.a <= 2 || x >= 5)";
+        Map<String, String> crossed = leftPast("x: Int, y: Int, w: W", around, across, "x == y",
+                false);
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), crossed);
+        assertEquals(crossed, leftPast("x: Int, y: Int, w: W", around, across, "x == y", true));
+    }
+
+    /**
      * A choice naming what the relation reads and what it does not comes to the first, where a
      * value is shown to meet the second: past {@code !(x >= 70 && a && !d)}, {@code a} false
      * lets every {@code x} through, so {@code y} reaches every value as {@code x} does. Where no

@@ -1949,7 +1949,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                 || step instanceof TermPath.Step.Refine)) {
                     return null;
                 }
-                return everyValueTheDeclarationsLeave(value, read, false);
+                return everyValueTheDeclarationsLeave(value, read, true);
             }
 
             @Override

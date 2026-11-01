@@ -75,7 +75,9 @@ final class AWayReadForARelation {
          * The ends between which a row may hold {@code term} at every value and at no other: what
          * the declarations leave it, within where its type stops — or null where that is not
          * shown. Shown only of the number at a place every row holds, on a count or a decimal,
-         * that no rule of a value around it names.
+         * that rules of a value around it name only so that its ends are the whole of what they
+         * leave it: a rule holding it beside another number is not among them, so a value given
+         * to each of the numbers apart is a row's.
          */
         NumericDomain.Bounds leaveEveryValueBetween(NumericTerm term);
 
@@ -1246,8 +1248,8 @@ final class AWayReadForARelation {
      * <p>The numbers those positions are asked of are given values, and every statement of them is
      * then worked out at those values ({@link WholeValuesMeeting}). That is the proof: the values
      * are a row's, whatever the region took in or rounded, where
-     * the declarations leave each every value between its ends and no rule of a value around it
-     * names it, which may hold it beside another. A truth asked of a {@code Bool} no rule around it
+     * the declarations leave each every value between its ends, which they do not of a number a
+     * rule of a value around it holds beside another. A truth asked of a {@code Bool} no rule around it
      * names is met by one of its values, and a case asked of a position no rule around it names by
      * a value of the case, where one is shown to exist. Anything else asked of those positions
      * shows nothing.
@@ -1309,6 +1311,9 @@ final class AWayReadForARelation {
                 return false;
             }
         }
+        if (heldBesideEachOther(numbers)) {
+            return false;
+        }
         WholeValuesMeeting.Witness witness = WholeValuesMeeting.of(numbers, region,
                 declarations::leaveEveryValueBetween,
                 CompositionBudget.PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH.maximum() - pairs);
@@ -1317,5 +1322,34 @@ final class AWayReadForARelation {
             stoppedAt.add(CompositionBudget.PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH);
         }
         return witness instanceof WholeValuesMeeting.Witness.Found;
+    }
+
+    /**
+     * Whether a rule of the declarations holds two of the positions {@code numbers} are about
+     * beside each other, so that a value given to each apart need not be a row's.
+     *
+     * <p>The ends the declarations leave a number are those of the number alone: each can be
+     * exact while the pairs they allow are fewer than the product of the ends, as
+     * {@code x <= y} leaves both every value from nought to ten and {@code x = 10, y = 0} not a
+     * row. So the ends are used only of numbers no rule ties to another that is given a value.
+     */
+    private boolean heldBesideEachOther(List<TakenConstraint.Affine> numbers) {
+        List<TermPath> given = new ArrayList<>();
+        for (TakenConstraint.Affine each : numbers) {
+            for (NumericTerm term : each.terms()) {
+                if (term instanceof NumericTerm.ValueOf value
+                        && !given.contains(value.subjectPath())) {
+                    given.add(value.subjectPath());
+                }
+            }
+        }
+        for (int one = 0; one < given.size(); one++) {
+            for (int other = one + 1; other < given.size(); other++) {
+                if (declarations.tie(given.get(one), given.get(other))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }
