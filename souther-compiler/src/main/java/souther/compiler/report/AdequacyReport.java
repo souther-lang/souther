@@ -9543,7 +9543,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 r.put("against", at.border().against(point.askedAt(at)));
                 // And the cases the line decides in, which the values alone do not say: two
                 // readings of one comparison can be two lines, each in a case of its own.
-                String where = at.decidesWhere();
+                String where = at.decidesWhere(point.apart(), point.askedAt(at));
                 if (where != null) {
                     r.put("where", where);
                 }

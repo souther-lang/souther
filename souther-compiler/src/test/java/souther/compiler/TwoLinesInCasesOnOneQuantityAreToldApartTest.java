@@ -7,6 +7,8 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,6 +49,25 @@ class TwoLinesInCasesOnOneQuantityAreToldApartTest {
         String human = human(CLAMPED);
         assertTrue(human.contains("read as full/n: = 51 where n /= 50"), human);
         assertTrue(human.contains("read as full/n: = 51 where n <= 50"), human);
+    }
+
+    /**
+     * What tells the readings apart comes from the readings and not from the rows: a row added to
+     * the model moves none of the words, whichever points it answers.
+     */
+    @Test
+    void theWordsDoNotDependOnTheRowsTheModelHolds() {
+        List<String> without = readingsOf(human(CLAMPED));
+        List<String> withMore = readingsOf(human(CLAMPED.replace("    | (0) -> false\n",
+                "    | (0) -> false\n    | (60) -> false\n    | (51) -> false\n")));
+        assertFalse(withMore.isEmpty());
+        // A point a row answers is no longer listed; what is listed is said as it was.
+        assertTrue(without.containsAll(withMore), () -> without + " and " + withMore);
+    }
+
+    private static List<String> readingsOf(String human) {
+        return human.lines().map(String::strip).filter(line -> line.startsWith("· read as full/n"))
+                .map(line -> line.replaceFirst(" — .*", "")).sorted().toList();
     }
 
     /** A comparison that is one line in one case has nothing for a case to tell apart. */

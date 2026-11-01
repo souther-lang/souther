@@ -131,7 +131,7 @@ class EachThresholdOfADerivedValueOwesItsOwnOnAndOffPointsTest {
         assertEquals(2, count(report, MISSING_ON + " (comparison@10"), report);
         assertEquals(2, count(report, MISSING_OFF + " (comparison@10"), report);
         assertTrue(report.contains("a.amount + b.amount: = 200 in gradeOf")
-                && report.contains("a.amount + b.amount + c.amount: = 300 in gradeOf"), report);
+                && report.contains("a.amount + b.amount + c.amount: = 300"), report);
         // And the bound the table holds, which is what a reader changes, beside the total.
         assertTrue(report.contains(", the bound written is 100"), report);
         assertTrue(report.contains(", the bound written is 300"), report);

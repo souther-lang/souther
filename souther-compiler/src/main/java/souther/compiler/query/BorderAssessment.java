@@ -373,10 +373,22 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
      * names all of them: always for a line that is the whole of what its rule states.
      */
     public String decidesWhere() {
-        List<TermPath> readAt = border.cut().of().numbers().stream()
-                .map(NumericTerm::subjectPath).toList();
+        List<TermPath> readAt = positionsReadAt();
         return border.origin() instanceof LineOrigin.ComparisonOrigin read
                 ? read.part().map(part -> part.said(readAt)).orElse(null) : null;
+    }
+
+    /**
+     * The same, with the readings of the comparison that {@code apart} finds saying the same words
+     * told apart at {@code point}.
+     */
+    public String decidesWhere(WhereTheReadingsDiffer apart, DomainPoint point) {
+        return apart.told(this, point);
+    }
+
+    /** The positions the line is read at, which a case need not name again. */
+    List<TermPath> positionsReadAt() {
+        return border.cut().of().numbers().stream().map(NumericTerm::subjectPath).toList();
     }
 
     /** The left of the {@code left = right} a report names this line by. */
@@ -416,10 +428,19 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
          *  and the cases of the input the line decides in where the position does not name
          *  them. */
         public String asked() {
+            return asked(border.decidesWhere());
+        }
+
+        /** The same, with the readings of the comparison that {@code apart} finds saying the same
+         *  words told apart. */
+        public String asked(WhereTheReadingsDiffer apart) {
+            return asked(border.decidesWhere(apart, at));
+        }
+
+        private String asked(String where) {
             if (border.operator(at) == null) {
                 return null;
             }
-            String where = border.decidesWhere();
             return border.operator(at) + " " + border.against(at)
                     + (where == null ? "" : " where " + where);
         }

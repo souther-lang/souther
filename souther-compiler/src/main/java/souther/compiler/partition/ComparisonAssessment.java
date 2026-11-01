@@ -682,20 +682,6 @@ sealed interface ComparisonAssessment {
             }
         }
 
-        /** Each reading of each line, told whether the statement has another reading beside it:
-         *  another line on the input space, or the same line in another case. */
-        public List<WhereAPartDecides> readings() {
-            boolean several = hasSeveralReadings();
-            return parts.stream().flatMap(part -> part.readings(several).stream()).toList();
-        }
-
-        /** Whether there is more than one reading to tell apart: another line on the input
-         *  space, or a line in another case. */
-        boolean hasSeveralReadings() {
-            return parts.stream().filter(each -> Part.isALine(each.line())).count() > 1
-                    || parts.stream().anyMatch(each -> each.cases().size() > 1);
-        }
-
         /**
          * Each string position some part shows parted by the strings its partner can hold, where
          * every part about its place shows it parted by the same strings, and every part is a
@@ -973,17 +959,12 @@ sealed interface ComparisonAssessment {
              * the line, and the line is out of reach only where it is out of reach in all of them.
              */
             public List<WhereAPartDecides> readings() {
-                return readings(false);
-            }
-
-            /** The same, for a line the statement draws {@code besideOtherLines} or not. */
-            List<WhereAPartDecides> readings(boolean besideOtherLines) {
                 // A relation that parts nothing has no line to read in a case.
                 if (line instanceof AgainstAnotherValue against && against.settling().isEmpty()) {
                     return List.of();
                 }
-                return cases.stream().map(each ->
-                        new WhereAPartDecides(id, each.condition(), besideOtherLines)).toList();
+                return cases.stream().map(each -> new WhereAPartDecides(id, each.condition()))
+                        .toList();
             }
         }
 

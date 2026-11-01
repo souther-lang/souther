@@ -193,7 +193,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     @Test
     void theCountIsReadAsTheSumOfOnesOverTheSameListIs() {
         Set<String> count = linesDrawn(report(guarded("k >= " + COUNT)));
-        assertTrue(count.contains("· read as f/k: = 1"), count::toString);
+        assertTrue(says(count, "· read as f/k: = 1"), count::toString);
         assertEquals(linesDrawn(report(guarded("k >= " + ONES))), count);
     }
 
@@ -238,11 +238,11 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
         Set<String> lines = linesDrawn(report("""
                     let xs = List.filter(x -> x > 0, [a, b])
                     guard k >= List.sum(xs) + List.length(xs) else No"""));
-        assertTrue(lines.contains("· read as f/k: = 0"), lines::toString);
-        assertTrue(lines.contains("· read as f/k: = a + 1"), lines::toString);
-        assertTrue(lines.contains("· read as f/k: = b + 1"), lines::toString);
-        assertFalse(lines.contains("· read as f/k: = a + 2"), lines::toString);
-        assertFalse(lines.contains("· read as f/k: = 1"), lines::toString);
+        assertTrue(says(lines, "· read as f/k: = 0"), lines::toString);
+        assertTrue(says(lines, "· read as f/k: = a + 1"), lines::toString);
+        assertTrue(says(lines, "· read as f/k: = b + 1"), lines::toString);
+        assertFalse(says(lines, "· read as f/k: = a + 2"), lines::toString);
+        assertFalse(says(lines, "· read as f/k: = 1"), lines::toString);
     }
 
     /**
@@ -444,9 +444,18 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
      *  least one, a count of nought or one holds whatever {@code k} is, and only two is a line. */
     @Test
     void whatTheWayHereLeavesIsReadBeforeTheWays() {
-        Set<String> lines = linesOnK(report(guarded("k > 0 && k >= " + COUNT)));
+        Set<String> lines = linesOnK(report(guarded("k > 0 && k >= " + COUNT))).stream()
+                .map(line -> line.replaceFirst(" where case \\d+ of \\d+$", ""))
+                .collect(Collectors.toSet());
         assertEquals(Set.of("· read as f/k: = 1", "· read as f/k: = 2", "· read as f/k: in 2 < k",
                 "· read as f/k: = 0", "· read as f/k: in k < 0"), lines);
+    }
+
+    /** Whether a line says {@code words}, with the place of its line among the lines that say the
+     *  same words where there are several. */
+    private static boolean says(Set<String> lines, String words) {
+        return lines.stream().anyMatch(line -> line.equals(words)
+                || line.startsWith(words + " where case "));
     }
 
     /** A count weighed alone is read as which of its statements hold, however many there are:
