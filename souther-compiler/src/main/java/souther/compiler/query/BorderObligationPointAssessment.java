@@ -9,6 +9,7 @@ import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.PointRole;
 import souther.compiler.partition.ReadingSeat;
 import souther.compiler.partition.WhereNothingIsAnswered;
+import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.reach.WhatMayStopARun;
@@ -480,7 +481,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                     + " reader to");
         }
         BorderObligationPoint point = assessments.getFirst().point();
-        java.util.Set<souther.compiler.check.RuleCitation> cited = new java.util.LinkedHashSet<>();
+        Set<RuleCitation> cited = new LinkedHashSet<>();
         for (BorderObligationPointAssessment each : assessments) {
             if (!each.point().equals(point)) {
                 throw new IllegalStateException("assessments of two points are not one point's: "

@@ -2811,17 +2811,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             PublishedRuleHandle.WhereARuleIs places, Set<BorderObligationPoint> wanted) {
         Map<BorderObligationPoint, List<BorderObligationPointAssessment>> assessed =
                 new LinkedHashMap<>();
-        for (ModuleReport module : modules) {
-            for (BehaviorReport behavior : module.behaviors()) {
-                if (behavior.partition() == null) {
-                    continue;
-                }
-                for (BorderObligationPointAssessment point : behavior.account()) {
-                    if (wanted.contains(point.point())
-                            && point.point().line().provenance() instanceof RuleRef.Written) {
-                        assessed.computeIfAbsent(point.point(), _ -> new ArrayList<>()).add(point);
-                    }
-                }
+        for (BorderObligationPointAssessment point : everyAssessedPoint()) {
+            if (wanted.contains(point.point())
+                    && point.point().line().provenance() instanceof RuleRef.Written) {
+                assessed.computeIfAbsent(point.point(), _ -> new ArrayList<>()).add(point);
             }
         }
         Map<BorderObligationPoint, PublishedRuleHandle> out = new LinkedHashMap<>();
@@ -2838,20 +2831,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private Map<BorderObligationPoint, ModelOccurrences> whereEachPointIsRead() {
         Map<BorderObligationPoint, ModelOccurrences.Gathering> gathering = new LinkedHashMap<>();
-        for (ModuleReport module : modules) {
-            for (BehaviorReport behavior : module.behaviors()) {
-                if (behavior.partition() == null) {
-                    continue;
-                }
-                for (BorderObligationPointAssessment point : behavior.account()) {
-                    ModelOccurrences.Gathering readAt = gathering.computeIfAbsent(point.point(),
-                            each -> new ModelOccurrences.Gathering());
-                    point.readingsSaid().forEach(said -> readAt.add(said.readAt()));
-                }
-            }
+        for (BorderObligationPointAssessment point : everyAssessedPoint()) {
+            ModelOccurrences.Gathering readAt = gathering.computeIfAbsent(point.point(),
+                    each -> new ModelOccurrences.Gathering());
+            point.readingsSaid().forEach(said -> readAt.add(said.readAt()));
         }
         Map<BorderObligationPoint, ModelOccurrences> out = new LinkedHashMap<>();
         gathering.forEach((point, readAt) -> out.put(point, readAt.gathered()));
+        return out;
+    }
+
+    /**
+     * Every point any behavior of this report is owed, in the order the behaviors are written.
+     *
+     * <p>A point of a module's declaration is owed to the declaration and not to a behavior, so it
+     * is not here ({@link Adequacy.DeclaredDebt}).
+     */
+    private List<BorderObligationPointAssessment> everyAssessedPoint() {
+        List<BorderObligationPointAssessment> out = new ArrayList<>();
+        for (ModuleReport module : modules) {
+            for (BehaviorReport behavior : module.behaviors()) {
+                if (behavior.partition() != null) {
+                    out.addAll(behavior.account());
+                }
+            }
+        }
         return out;
     }
 
@@ -10469,20 +10473,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Subject.AtAPoint it -> {
                 String rule = switch (it.point().line().provenance()) {
                     case RuleRef.Named _ -> it.point().line().saidWithoutAPlace();
-                    case RuleRef.Written written -> {
+                    case RuleRef.Written _ -> {
                         PublishedRuleHandle handle = writtenPoints.get(it.point());
                         if (handle == null) {
                             throw new IllegalStateException("a point of a rule nobody named is"
                                     + " sent to by where the rule is, and no assessment of this"
                                     + " one said where: " + it.point());
                         }
-                        // The behavior that read it, after the handle whatever form the handle
-                        // takes: a comparison of a helper is the reading of each behavior calling
-                        // it and is a debt of each, and this list runs across all of them where the
-                        // border section of one does not. The handle says where it is written.
-                        yield it.point().line().line().said(
-                                RuleHandleProse.said(handle, rendering, null)
-                                        + " in " + written.behavior());
+                        yield it.point().line().saidAfter(
+                                RuleHandleProse.said(handle, rendering, null));
                     }
                 };
                 yield rule

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -157,6 +158,44 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
         assertEquals(2, points.size(), human);
         assertEquals(1, points.stream().filter(each -> each.contains(" in a ")).count(), human);
         assertEquals(1, points.stream().filter(each -> each.contains(" in b ")).count(), human);
+        assertEquals(2, new HashSet<>(points).size(), human);
+    }
+
+    /**
+     * Two modules each with a behavior of the same name reading one helper: the comparison is one
+     * point read twice, and what tells the two entries apart is the call each was read through,
+     * which names its module.
+     */
+    @Test
+    void behaviorsOfOneNameInTwoModulesAreToldApartByTheCallTheyReadItThrough() {
+        String rows = row("one", 1, 0) + row("two", 2, 0) + row("three", 3, 1) + row("four", 4, 0);
+        String reader = """
+                module %s exposing ( a )
+
+                import lib ( big )
+
+                behavior a : (s: Set<Decimal>) -> Int
+                let a (s) = if big(s) then 1 else 0
+
+                example a
+                    | "none"  : ([]) -> 0
+                %s
+                """;
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module lib exposing ( big )
+
+                let big (s: Set<Decimal>) = Set.size(s) == 3
+                """, reader.formatted("m1", rows), reader.formatted("m2", rows)),
+                ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String human = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+
+        List<String> points = pointsOfComparisons(human);
+        assertEquals(2, points.size(), human);
+        assertTrue(points.stream().allMatch(each -> each.contains("comparison@0:3:")
+                && each.contains(" in a ")), human);
         assertEquals(2, new HashSet<>(points).size(), human);
     }
 

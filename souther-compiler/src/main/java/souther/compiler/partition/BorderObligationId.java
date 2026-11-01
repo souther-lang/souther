@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.RuleRef;
+
 import java.util.Optional;
 
 /**
@@ -100,6 +102,24 @@ public record BorderObligationId(AuthoredLine line, Optional<Level> at) {
      *  the rule is where they did not, and never a place a body reached it at. */
     public String saidWithoutAPlace() {
         return line.saidWithoutAPlace();
+    }
+
+    /**
+     * What a list running across behaviors calls this line, after the handle that sends a reader to
+     * its rule.
+     *
+     * <p>A comparison a body wrote is the reading of each behavior that reads it, and a debt of
+     * each: two behaviors calling one helper owe the helper's comparison apart. The handle says
+     * where the comparison is written and is the same for both, so what tells the two debts apart
+     * is the behavior that read it, and it is said here with the rest of what a report calls the
+     * line. A rule the author named is found by its name from anywhere and one debt however many
+     * behaviors carry it, so the handle is the whole of it.
+     */
+    public String saidAfter(String handle) {
+        return line.said(handle + switch (line.which().rule()) {
+            case RuleRef.Named _ -> "";
+            case RuleRef.Written written -> " in " + written.behavior();
+        });
     }
 
     /** The declaration this line is owed to, where a declaration's clause drew it. */
