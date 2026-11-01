@@ -46,6 +46,15 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
     private static final int PAST_THE_READINGS =
             CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / WAYS + 1;
 
+    /**
+     * How the report names the figure a split stops at. The figure of the readings in all is named
+     * the same way with a prefix, so it is the opening bracket that tells them apart: a fork
+     * whose truth is read over every application of the closures may run out of the readings in
+     * all, which is nothing a split of the comparison does.
+     */
+    private static final String SPLIT_PAST_THE_WAYS =
+            "(" + CompositionBudget.READINGS_OF_ONE_CONDITION.name() + ",";
+
     private static final String MONTHS = "[ w.first, w.second, w.third, w.fourth ]";
 
     /** How many of the four months are kept. */
@@ -86,7 +95,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
     @Test
     void aTableWalkedAgainstAFilteredTotalIsReadWhateverItsLength() {
         String report = reachedBy(KEPT, PAST_THE_READINGS);
-        assertFalse(report.contains("READINGS_OF_ONE_CONDITION"), report);
+        assertFalse(report.contains(SPLIT_PAST_THE_WAYS), report);
         assertTrue(report.contains("read as g/w.first.days"), report);
     }
 
@@ -176,7 +185,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
                     Ok
                 }
                 """.formatted(table(6)));
-        assertFalse(report.contains("READINGS_OF_ONE_CONDITION"), report);
+        assertFalse(report.contains(SPLIT_PAST_THE_WAYS), report);
     }
 
     /**
@@ -195,7 +204,12 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
                     Ok
                 }
                 """.formatted(table(inner), table(outer)));
-        assertFalse(report.contains("READINGS_OF_ONE_CONDITION"), report);
+        assertFalse(report.contains(SPLIT_PAST_THE_WAYS), report);
+        // The fork's own truth is read over every application of both closures, which is as many
+        // readings as the comparison is split into at most and more than are made in all. Nothing
+        // else states the fork, so what stopped it is said and not taken for an answer.
+        assertTrue(report.contains("(" + CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.name()
+                + ","), report);
     }
 
     private static String monthsRepeated(int times) {
@@ -274,7 +288,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
         String turning = innerParameterSplit("[ t.pay, t.pay + 1 ]");
         assertTrue(turning.contains("READINGS_OF_ONE_CONDITION"), turning);
         String alike = innerParameterSplit("[ w.first.pay, w.first.pay + 1 ]");
-        assertFalse(alike.contains("READINGS_OF_ONE_CONDITION"), alike);
+        assertFalse(alike.contains(SPLIT_PAST_THE_WAYS), alike);
     }
 
     /**
@@ -304,7 +318,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
         }
         assertEquals(List.of(), notStopped, "reached from the parameter and not stopped");
         String alike = outerParameterSplit("1 <= Int.max(w.first.pay, 0)", months);
-        assertFalse(alike.contains("READINGS_OF_ONE_CONDITION"), alike);
+        assertFalse(alike.contains(SPLIT_PAST_THE_WAYS), alike);
     }
 
     private static String outerParameterSplit(String body, int months) {
@@ -327,7 +341,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
                     List.length(List.filter(r -> r.days >= 17, %s))
                 """.formatted(MONTHS);
         String report = report(walked(helpers, "kept(w)", PAST_THE_READINGS));
-        assertFalse(report.contains("READINGS_OF_ONE_CONDITION"), report);
+        assertFalse(report.contains(SPLIT_PAST_THE_WAYS), report);
         assertTrue(report.contains("read as g/w.first.days"), report);
     }
 }

@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhyUnread;
 
 import java.util.List;
 
@@ -29,12 +31,43 @@ final class WhatAForkTests {
 
     private WhatAForkTests() {}
 
-    /** The parts the truth of {@code atom} turns on, each read where it stands. */
-    static List<Denotation> partsOfTheAnswer(Core atom, WhatNamesStandFor names) {
-        return WhatConditionsState.of(names.read()).truth(atom, names.reads(), names.read())
-                .turnsOn()
-                .stream()
-                .map(Pullback.Leaf::from)
-                .toList();
+    /**
+     * What was read of the parts an answer turns on.
+     *
+     * <p>A proposition a reading stopped in at a figure states the parts it got to, and where it
+     * got to is where the figure ran out and not what the answer turns on. A part it holds may be
+     * one the complete reading would not hold in that form, and a part it lacks was not found
+     * absent. Only a complete reading therefore offers its parts: that no part is left, and which
+     * parts are, are both questions the figure took away. A part nothing reads is a part of the
+     * answer all the same, and does not make it incomplete.
+     */
+    sealed interface PartsRead {
+
+        /**
+         * No figure stopped the proposition, so these are all the parts the answer turns on.
+         * That is all this says: a part another reason left unread is among them, and nothing
+         * here is a proof that the answer was worked out.
+         */
+        record Complete(List<Denotation> parts) implements PartsRead {}
+
+        /** The proposition was stopped in at a figure, for these, and says nothing of which parts
+         *  there are: the parts it got to are not offered. */
+        record Incomplete(List<WhyUnread> stoppedFor) implements PartsRead {
+
+            public Incomplete {
+                stoppedFor = List.copyOf(stoppedFor);
+            }
+        }
+    }
+
+    /** What was read of the parts the truth of {@code atom} turns on. */
+    static PartsRead partsRead(Core atom, WhatNamesStandFor names) {
+        Pullback.Pulled truth =
+                WhatConditionsState.of(names.read()).truth(atom, names.reads(), names.read());
+        List<WhyUnread> stops = Proposition.stopsIn(truth.proposition());
+        return stops.stream().anyMatch(why -> why.figure().isPresent())
+                ? new PartsRead.Incomplete(stops)
+                : new PartsRead.Complete(
+                        truth.turnsOn().stream().map(Pullback.Leaf::from).toList());
     }
 }
