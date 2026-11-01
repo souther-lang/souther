@@ -51,11 +51,12 @@ import java.util.TreeSet;
  * and a relation over whole numbers has two spellings of its own ({@code n > 50},
  * {@code n >= 51}) that nothing here can tell are one.
  *
- * <p><b>The order is of what a reader is shown.</b> The lines of a comparison are put in the order
- * of where they lie and then of everything the report says of them ({@link Line} and
- * {@link #shownOf}), which does not depend on the order the readings were met in or on any row. Two
- * lines that tie on both say every word alike, so which of them is numbered first is no word of
- * the report.
+ * <p><b>The order is total.</b> The lines of a comparison are put in the order of where they lie,
+ * then of everything the report says of them ({@link #shownOf}), and then of the line each is
+ * among the lines its author drew ({@link AuthoredLine#inASteadyOrder}). The last is what tells
+ * apart two lines that lie in one place and say every word alike, which a comparison can draw: the
+ * numbers are the only words that tell them apart, so which is first has to be settled by the
+ * lines and not left to the order the readings were met in. None of it depends on a row.
  *
  * <p>Held for the readings of a behavior together, because the points that share words are
  * different points: {@code = 51} as the point a line is owed a row at and as the point another
@@ -130,7 +131,8 @@ public final class WhereTheReadingsDiffer {
             Map<Line, Set<String>> lines = linesOf.get(comparison);
             List<Line> ordered = new ArrayList<>(lines.keySet());
             ordered.sort(Comparator.comparing(Line::lies)
-                    .thenComparing(line -> String.join("\n", lines.get(line))));
+                    .thenComparing(line -> String.join("\n", lines.get(line)))
+                    .thenComparing(Line::drawn, AuthoredLine.inASteadyOrder()));
             numbered.put(comparison, List.copyOf(ordered));
         }
         return new WhereTheReadingsDiffer(shared, numbered);
@@ -185,11 +187,16 @@ public final class WhereTheReadingsDiffer {
     /**
      * Every one of these is equal to every other.
      *
-     * <p>What this holds is worked out from the readings of the points that hold it, so two
-     * accounts whose points are equal hold equal ones, and an account whose points differ is
-     * already told apart by them. Compared as well, it would be compared once for each point of
-     * the account — each time the whole of it — whenever an answer is checked against the one
-     * before it. Not a value to be used as a key of anything on its own.
+     * <p>What this holds is worked out from the readings of every point of the account that holds
+     * it, so two accounts whose points are equal hold equal ones, and an account that gained or
+     * lost a point is already told apart by the points. That is the only way these are compared:
+     * as part of the points of an account, checked against the account before it. Compared in
+     * full, the whole of it would be compared once for each point of the account.
+     *
+     * <p>Held to that by a test that puts the readings of a behavior in other orders and asks the
+     * same words of every point ({@code TheLinesOfAComparisonAreNumberedByTheLinesAndNotByTheWalkTest}).
+     * Not a value to be used as a key of anything on its own, and not to be compared for a single
+     * point taken out of its account.
      */
     @Override
     public boolean equals(Object other) {

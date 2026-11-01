@@ -1,6 +1,7 @@
 package souther.compiler.meaning;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
@@ -23,6 +24,28 @@ public record WrittenLine(List<Arm> arms) {
 
     public WrittenLine {
         arms = List.copyOf(arms);
+    }
+
+    /**
+     * The lines of one comparison in the order a reader that has nothing else to go on puts them
+     * in: the arms taken, outermost first, each by its choice, then which arm, then whether it
+     * selects; a line that is a prefix of another comes before it.
+     *
+     * <p>Total over the lines of one comparison: two lines it puts together are the same line.
+     */
+    public static Comparator<WrittenLine> inASteadyOrder() {
+        Comparator<Arm> arm = Comparator.comparing(Arm::at, WrittenChoice.inASteadyOrder())
+                .thenComparingInt(Arm::arm)
+                .thenComparing(Arm::selects);
+        return (one, other) -> {
+            for (int at = 0; at < Math.min(one.arms().size(), other.arms().size()); at++) {
+                int order = arm.compare(one.arms().get(at), other.arms().get(at));
+                if (order != 0) {
+                    return order;
+                }
+            }
+            return Integer.compare(one.arms().size(), other.arms().size());
+        };
     }
 
     /**

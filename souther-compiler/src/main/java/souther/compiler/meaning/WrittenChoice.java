@@ -8,6 +8,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -37,6 +38,38 @@ public record WrittenChoice(SourceConstructOrigin origin, List<ExpansionLineage.
     public WrittenChoice {
         Objects.requireNonNull(origin, "a choice is some construct");
         within = List.copyOf(within);
+    }
+
+    /**
+     * The choices in the order a reader that has nothing else to go on puts them in: by the
+     * construct, then by the calls it is reached through, outermost first.
+     *
+     * <p>Told by what the document publishes a choice by (the construct and the sites between),
+     * so two choices it tells apart are two here. A call the caller handed in is no part of a
+     * choice ({@link #of}), so a supplied site here is a mistake and not an order.
+     */
+    public static Comparator<WrittenChoice> inASteadyOrder() {
+        Comparator<ExpansionSite> sites = (one, other) -> ExpansionSite.inASteadyOrder()
+                .compare(direct(one), direct(other));
+        return Comparator.comparing(WrittenChoice::origin, SourceConstructOrigin.inASteadyOrder())
+                .thenComparing(choice -> choice.within().stream().map(ExpansionLineage.Step::at)
+                        .toList(), (one, other) -> {
+                            for (int at = 0; at < Math.min(one.size(), other.size()); at++) {
+                                int order = sites.compare(one.get(at), other.get(at));
+                                if (order != 0) {
+                                    return order;
+                                }
+                            }
+                            return Integer.compare(one.size(), other.size());
+                        });
+    }
+
+    private static ExpansionSite.Direct direct(ExpansionSite site) {
+        if (site instanceof ExpansionSite.Direct direct) {
+            return direct;
+        }
+        throw new IllegalStateException("a choice is reached through calls its definition writes,"
+                + " and a supplied site is the caller's: " + site);
     }
 
     /**
