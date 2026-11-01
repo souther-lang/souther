@@ -73,8 +73,9 @@ class ACaseAnArmOpensIsReadAsAPlainInputIsWhenAStatementIsTakenAwayTest {
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
-    /** The guard that makes a hole in the value and the one that bounds it are read alike. The
-     *  direct test of the rebuild is what holds it against the change that read these. */
+    /** The guard that makes a hole in the value and the one that bounds it are read alike. What
+     *  holds the region rebuilt without a statement is asked directly in
+     *  {@code ARegionRebuiltWithoutAConstraintKeepsWhatTheRestNarrowedTest}. */
     @Test
     void theValueOfTheCaseIsReadWhateverTheGuardOnItIs() {
         for (String guard : List.of("if b.value == 0 then 0", "if b.value < 3 then 0")) {
