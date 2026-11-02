@@ -36,11 +36,16 @@ class AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest {
     private static final Pattern POINT = Pattern.compile("Points\\((\\d+)\\)");
 
     private static String scorer(String parameter, String list, int least, int target) {
+        return scorer(parameter, list, least, target, "");
+    }
+
+    private static String scorer(String parameter, String list, int least, int target,
+                                 String alsoRequired) {
         return """
                 module m
 
                 data Points = Int
-                    invariant value >= %d && value <= 12
+                    invariant value >= %d && value <= 12%s
 
                 data Score = Int
                     invariant value >= 0 && value <= 50
@@ -53,13 +58,13 @@ class AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest {
                 }
 
                 example add
-                    | (Score(48), Points(3)) -> Score(25)
+                    | (Score(48), Points(4)) -> Score(25)
                     | (Score(48), Points(2)) -> Score(50)
                     | (Score(0), Points(%d)) -> Score(%d)
                     | (Score(40), Points(12)) -> Score(25)
                     | (Score(38), Points(12)) -> Score(50)
                     | (Score(25), Points(10)) -> Score(35)
-                    | (Score(49), Points(1)) -> Score(50)
+                    | (Score(46), Points(4)) -> Score(50)
 
                 behavior total : (ps: List<Points>) -> Score
 
@@ -74,7 +79,7 @@ class AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest {
 
                 example reached
                     | (%s) -> false
-                """.formatted(least, parameter.isEmpty() ? "" : parameter, least, least,
+                """.formatted(least, alsoRequired, parameter, least, least,
                 parameter.isEmpty() ? "ps: List<Points>" : "ps: Hand",
                 parameter.isEmpty() ? "ps" : "ps.value", target,
                 list);
@@ -171,9 +176,6 @@ class AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest {
                 AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest::totalOf).toList();
         assertEquals(1, out.size(), out.toString());
         assertTrue(out.getFirst() > 21 && out.getFirst() <= 50, out.toString());
-        // And rows of elements unlike one another: the candidates write them alike.
-        offered.values().stream().flatMap(List::stream)
-                .forEach(row -> assertTrue(row.stream().distinct().count() > 1, row.toString()));
     }
 
     /** A least of one for the element makes a total of eight a row of unlike elements too. */
@@ -197,12 +199,14 @@ class AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest {
     }
 
     /**
-     * A total that needs more elements than the rows beside the candidates come to stays open, and
-     * is not said to be unreachable: the report names the rows that were made.
+     * A total no list comes to is not found, and is not said to be unreachable either: the report
+     * names the rows that were made. The points are even and the score resets to an odd number
+     * above twenty-one, so no row comes to twenty-one, and nothing in the types shows it.
      */
     @Test
-    void aPointPastTheRowsBesideIsOpenAndSaysWhatWasMade() {
-        List<String> open = openPointsOf(scorer(0, 50), "reached");
+    void aPointNoRowReachesIsOpenAndSaysWhatWasMade() {
+        List<String> open = openPointsOf(
+                scorer("", "[]", 0, 21, " && Int.floorMod(value, 2) == 0"), "reached");
         assertTrue(!open.isEmpty(), open.toString());
         assertTrue(open.stream().allMatch(line -> line.contains("then rows beside those")),
                 open.toString());

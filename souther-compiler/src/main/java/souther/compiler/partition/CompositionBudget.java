@@ -335,7 +335,7 @@ public enum CompositionBudget {
      * way it is looked along. A search that reaches it has stopped with candidates unmade, and is
      * carried out with the figure.
      */
-    ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT(2000),
+    ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT(1000),
 
     /** How many paths through one body a reading of its decision takes. What it had read is carried
      *  out with the figure ({@link DecisionReading.Enumeration.StoppedAtAFigure}), so the rules it

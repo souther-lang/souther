@@ -2497,16 +2497,16 @@ final class Coverages {
              *
              * @param built how the row came to be built, whose account its neighbours keep
              * @param read  the inputs of the row as its run read them back
-             * @param depth how many rows beside rows this one is
+             * @param distance how far the sides of the comparison came out from the item
              */
             private record Ran(Generator.BoundaryAttempt.Built built, ObservedInputs read,
-                               int depth, ExactRatio distance, int elements) {
+                               ExactRatio distance, int elements) {
 
                 /** A row run, with how many elements it holds counted once: the queue compares
                  *  rows at every step, and the count walks every value of the row. */
-                Ran(Generator.BoundaryAttempt.Built built, ObservedInputs read, int depth,
+                Ran(Generator.BoundaryAttempt.Built built, ObservedInputs read,
                     ExactRatio distance) {
-                    this(built, read, depth, distance, Generator.elementsHeld(read.inputs()));
+                    this(built, read, distance, Generator.elementsHeld(read.inputs()));
                 }
             }
 
@@ -2534,10 +2534,6 @@ final class Coverages {
                 }
                 return nearest;
             }
-
-            /** How many rows beside rows a row may be: the row of a candidate, one beside it, and
-             *  one beside that. */
-            private static final int DEPTH_OF_ROWS_BESIDE = 2;
 
             /**
              * A row beside the rows the candidates ran that stands at {@code criterion}, where one
@@ -2573,12 +2569,9 @@ final class Coverages {
                 while (!waiting.isEmpty()) {
                     Open open = waiting.poll();
                     Ran from = open.from();
-                    Iterator<Generator.GeneratedRow> beside =
-                            open.beside() != null ? open.beside()
-                                    : from.depth() < DEPTH_OF_ROWS_BESIDE
-                                            ? probe.rowsBeside(from.built().row(),
-                                                    from.read().inputs(), spent)
-                                            : Collections.emptyIterator();
+                    Iterator<Generator.GeneratedRow> beside = open.beside() != null
+                            ? open.beside()
+                            : probe.rowsBeside(from.built().row(), from.read().inputs(), spent);
                     if (!beside.hasNext()) {
                         continue;
                     }
@@ -2597,7 +2590,7 @@ final class Coverages {
                         return Optional.of(certified);
                     }
                     if (back.read() != null) {
-                        waiting.add(new Open(new Ran(built, back.read(), from.depth() + 1,
+                        waiting.add(new Open(new Ran(built, back.read(),
                                 distanceFrom(criterion, back.read())), null));
                     }
                 }
@@ -2779,7 +2772,7 @@ final class Coverages {
                                             ran.add(new Ran(
                                                     (souther.compiler.partition.Generator
                                                             .BoundaryAttempt.Built) each,
-                                                    back.read(), 0,
+                                                    back.read(),
                                                     distanceFrom(criterion, back.read())));
                                         }
                                         return back;
