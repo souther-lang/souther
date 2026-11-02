@@ -1110,6 +1110,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** {@code form} held against nought as {@code relation}. */
     static UndividedByARelation ofAForm(LinearForm<Quantity> form, Rel relation) {
+        boolean textsApart = textsMadeOfApartPositions(form);
         List<Side> sides = new ArrayList<>();
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             sides.add(switch (each.getKey()) {
@@ -1124,6 +1125,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         instanceof ExactAnswer.Held<ExactRatio>(ExactRatio weight)
                         ? ofTheInput(made.product(), weight)
                         : new Side(List.of(), each.getValue(), null, null, null);
+                case Quantity.WhatAnOperationAnswers answers when textsApart
+                        && ConvertedText.of(answers) instanceof ConvertedText made ->
+                        new Side(List.of(FilingCoordinate.of(made.place())), each.getValue(),
+                                null, null, null, made);
                 case Quantity.WhatAnOperationAnswers answers -> new Side(
                         answers.positionsItIsMadeOf().stream().map(FilingCoordinate::of).toList(),
                         each.getValue(), null, null, null);
@@ -1145,6 +1150,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         return new UndividedByARelation(sides, form.constant(), relation, List.of(), Kind.AFFINE,
                 null);
+    }
+
+    /**
+     * Whether {@code form} is made of two strings, each a string of the input or one made of it by
+     * case conversions, of two positions that share no place, and one of them converted. Such a
+     * form is the equality of what the conversions make of two strings, which is read through the
+     * conversions ({@link #stringsInside}) and not as a relation between the positions alone.
+     */
+    private static boolean textsMadeOfApartPositions(LinearForm<Quantity> form) {
+        if (form.coefs().size() != 2) {
+            return false;
+        }
+        List<ConvertedText> texts = form.coefs().keySet().stream().map(ConvertedText::of).toList();
+        return !texts.contains(null)
+                && texts.stream().anyMatch(text -> !text.through().equals(CaseMapping.NONE))
+                && !overlap(FilingCoordinate.of(texts.get(0).place()),
+                        FilingCoordinate.of(texts.get(1).place()));
     }
 
     /**
@@ -3308,9 +3330,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (shownOther == null || mayOther == null) {
             return null;
         }
-        Language shownHere = hereIsFirst ? StringsInsideStrings.standingIn(shownOther, where, meter)
+        Language shownHere = where == null ? shownOther
+                : hereIsFirst ? StringsInsideStrings.standingIn(shownOther, where, meter)
                 : StringsInsideStrings.havingInside(shownOther, where, meter);
-        Language mayHere = hereIsFirst ? StringsInsideStrings.standingIn(mayOther, where, meter)
+        Language mayHere = where == null ? mayOther
+                : hereIsFirst ? StringsInsideStrings.standingIn(mayOther, where, meter)
                 : StringsInsideStrings.havingInside(mayOther, where, meter);
         if (shownHere == null || mayHere == null) {
             return null;
@@ -3331,7 +3355,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         // A string looked for that is shown inside a value stands in one written round it, which
         // is longer than it by what the machine needs before and after.
-        long upTo = hereIsFirst
+        long upTo = where != null && hereIsFirst
                 ? TextExtents.LONGEST_STRING - 2L * (shownOther.size() + 1L)
                 : TextExtents.LONGEST_STRING;
         List<String> operations = new ArrayList<>(
@@ -3342,7 +3366,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     called).withTheImagesNotShownOf(operations);
         }
         return StringsAPartnerCanHold.unreached(ValueSet.matching(canBe),
-                ValueSet.matching(mayBe), hereIsFirst ? upTo : null, called)
+                ValueSet.matching(mayBe), where != null && hereIsFirst ? upTo : null, called)
                 .withTheImagesNotShownOf(operations);
     }
 
@@ -3356,6 +3380,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                   String called) {
         if (kind.inside() != null) {
             return stringsInside(hereIsFirst, here.text(), there.text(), theirStrings, mine,
+                    called);
+        }
+        if (here.text() != null || there.text() != null) {
+            return stringsInside(hereIsFirst, textOf(here), textOf(there), theirStrings, mine,
                     called);
         }
         if (there.piece() != null) {
@@ -3518,6 +3546,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return set.isEmpty()
                 ? Language.EVERY_STRING.not(PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter())
                 : null;
+    }
+
+    /**
+     * The text {@code side} is: the string made of a position by conversions, or the string at the
+     * position it is a number of — or null where it is neither.
+     */
+    private static ConvertedText textOf(Side side) {
+        if (side.text() != null) {
+            return side.text();
+        }
+        return side.number() instanceof NumericTerm.ValueOf place
+                ? new ConvertedText(place, CaseMapping.NONE) : null;
     }
 
     /**
