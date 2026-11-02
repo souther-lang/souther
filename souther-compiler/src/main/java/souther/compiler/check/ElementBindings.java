@@ -521,12 +521,13 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
      * ({@link BoundOperationFacts#assembles}).
      *
      * @param step    the step
+     * @param closure the argument the step is written as, which stands where the step is read
      * @param element the parameter of the step each element arrives on
      * @param walked  the argument whose elements it is handed
      * @param piece   what the piece of one element is
      */
-    public record PiecesOfEachElement(Core.Block step, Core.Binder element, Core walked,
-                                      PieceOfAnElement piece) {}
+    public record PiecesOfEachElement(Core.Block step, Core closure, Core.Binder element,
+                                      Core walked, PieceOfAnElement piece) {}
 
     /**
      * The step {@code container} is put together of a piece of each element by, or null where it
@@ -556,8 +557,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                 && closure >= 0 && closure < call.args().size()
                 && call.args().get(source) == handed.container()
                 && call.args().get(closure) == handed.closure()
-                ? new PiecesOfEachElement(handed.step(), handed.element(), handed.container(),
-                        assembled.piece())
+                ? new PiecesOfEachElement(handed.step(), handed.closure(), handed.element(),
+                        handed.container(), assembled.piece())
                 : null;
     }
 

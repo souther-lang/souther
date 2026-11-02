@@ -178,6 +178,27 @@ class ASumOfTheCountsOfListsMadeByFlatMapOfAnAttemptIsReadTest {
                 .isEmpty(), difference);
     }
 
+    /** A list mapped over the lists another made is held somewhere as the list it maps is. */
+    @Test
+    void aListMappedOverTheListsAFlatMapMadeIsReadLikeThoseLists() {
+        String mapped = """
+                let named = List.map(a -> a.domain, matchedAccounts)
+                guard List.length(named) + List.length(matchedContacts) >= 1 else Nobody""";
+        String report = reportOf(mapped);
+        assertEquals(List.of(), aboutAValueMadeFromAnother(report), report);
+    }
+
+    /** A flatMap walking the domains another flatMap made of the emails is the same existence. */
+    @Test
+    void aFlatMapWalkingTheListsAnotherFlatMapMadeIsReadLikeTheOneLevel() {
+        String nested = """
+                let domains = List.flatMap(e -> domainOf(e), [ lead ])
+                let viaDomains = List.flatMap(d -> accountsOn(d, accounts), domains)
+                guard List.length(viaDomains) + List.length(matchedContacts) >= 1 else Nobody""";
+        String report = reportOf(nested);
+        assertEquals(List.of(), aboutAValueMadeFromAnother(report), report);
+    }
+
     private static final String PLAIN_COUNT = """
             module probe.s0 exposing ( screen, Domain, Yes, No )
 

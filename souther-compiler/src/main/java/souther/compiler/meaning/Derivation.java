@@ -1224,13 +1224,18 @@ public sealed interface Derivation {
                     case SomePieceEqualling(Derivation ofThePiece, var _) ->
                             positionOf(some.container()) == null
                                     && reads(some.ofTheElement(), ofThePiece);
-                    case SomeElementEquallingSomePiece(var _, Derivation ofThePieces, var _,
+                    case SomeElementEquallingSomePiece(var _, Derivation ofThePieces, var _, var _,
                                                        var _) ->
                             positionOf(some.container()) == null
                                     && reads(some.ofTheElement(), ofThePieces);
                     case SomePieceInALanguage(var _, var _, var _, var _, Derivation ofThePiece) ->
                             positionOf(some.container()) == null
                                     && reads(some.ofTheElement(), ofThePiece);
+                    // Each is the same quantifier read over the list one application answered.
+                    case SomeElementOfTheListsAnswered(List<Derivation> inEach) -> some.holds()
+                            && inEach.stream().allMatch(each -> meets(some,
+                                    each instanceof OfWhatWasKept(Derivation list, var _)
+                                            ? list : each));
                     case OverElementsWrittenOut(List<Derivation> ofEach, boolean holds, var _) -> {
                         Set<DeclaredArgument> inside = new HashSet<>(writtenOut);
                         inside.add(some.container());
@@ -1935,6 +1940,36 @@ public sealed interface Derivation {
                 }
                 case NOT_SAID -> numbering.whichElementARunStopsAt();
             };
+        }
+    }
+
+    /**
+     * Some element of the lists a closure answered of each element of a list written out put end
+     * to end meeting a statement: some one of the elements written out whose list holds one that
+     * does, each read on the application that hands the closure that element.
+     *
+     * <p>Each step is a reading of the same quantifier over the list that application answered, so
+     * what is held of the container is held of that list there, and what is concluded is that some
+     * one of them holds it. Where what is stated of an element may answer nothing, which element
+     * a run stops at is not said.
+     *
+     * @param inEach what is read of the list answered on each application, in the order the
+     *               elements were written
+     */
+    record SomeElementOfTheListsAnswered(List<Derivation> inEach) implements Derivation {
+
+        public SomeElementOfTheListsAnswered {
+            inEach = List.copyOf(inEach);
+            if (inEach.isEmpty()) {
+                throw new IllegalArgumentException("lists are answered of some element");
+            }
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            List<Proposition> each = inEach.stream().map(numbering::of).toList();
+            return each.stream().noneMatch(Proposition::mayAnswerNothing)
+                    ? Proposition.any(each) : numbering.whichElementARunStopsAt();
         }
     }
 
@@ -2833,11 +2868,15 @@ public sealed interface Derivation {
      * @param container   the container whose elements are held to the pieces
      * @param ofThePieces what was read of the pieces being the same as some element
      * @param among       the element being one of the pieces
+     * @param alsoPresent the optional values of the element that the value it is the piece of is
+     *                    the content of, said present: an element whose content is a piece has
+     *                    one, so this is the same element and not another
      * @param alsoIn      the strings the piece was also held to be one of, and the position of
      *                    the element that is the piece, where it was
      */
     record SomeElementEquallingSomePiece(DecisionSubject container, Derivation ofThePieces,
                                          Quantity.IsAmongThePieces among,
+                                         List<DecisionSubject> alsoPresent,
                                          Optional<InALanguage> alsoIn) implements Derivation {
 
         /**
@@ -2858,19 +2897,21 @@ public sealed interface Derivation {
             Objects.requireNonNull(container, "an element is of a container");
             Objects.requireNonNull(ofThePieces, "a piece is read as the same as something");
             Objects.requireNonNull(among, "and the element is one of the pieces");
+            alsoPresent = List.copyOf(alsoPresent);
             Objects.requireNonNull(alsoIn, "the piece was also held to a language or was not");
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            Proposition one = Proposition.compared(new Relation.Affine(
-                    LinearForm.atomMinusConstant(among, ExactRatio.ONE), Rel.EQ), true);
-            return numbering.someElement(container, alsoIn
-                    .<Proposition>map(language -> Proposition.all(List.of(one,
-                            new Proposition.InTheStrings(
-                                    new Proposition.InTheStrings.Strings.AtAPosition(language.at()),
-                                    language.accepts(), true))))
-                    .orElse(one));
+            List<Proposition> ofTheElement = new ArrayList<>();
+            ofTheElement.add(Proposition.compared(new Relation.Affine(
+                    LinearForm.atomMinusConstant(among, ExactRatio.ONE), Rel.EQ), true));
+            alsoPresent.forEach(subject -> ofTheElement.add(new Proposition.Present(subject, true)));
+            alsoIn.ifPresent(language -> ofTheElement.add(new Proposition.InTheStrings(
+                    new Proposition.InTheStrings.Strings.AtAPosition(language.at()),
+                    language.accepts(), true)));
+            return numbering.someElement(container, ofTheElement.size() == 1
+                    ? ofTheElement.getFirst() : Proposition.all(ofTheElement));
         }
 
         @Override
