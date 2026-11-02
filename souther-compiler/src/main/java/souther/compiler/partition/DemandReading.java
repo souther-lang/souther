@@ -512,10 +512,10 @@ final class DemandReading {
         private final Map<Proposition, ModelOccurrences> partsReadOff = new HashMap<>();
         /** The string each piece held to a language was read as a piece of, and how its pieces
          *  were taken, by the statement about some piece it is a piece of. */
-        private final Map<PieceWitness, Derivation.APieceInALanguage.PartedString> partedStrings;
+        private final PartedStringsOfThePieces partedStrings;
 
         private Projection(Map<Spelling,ModelOccurrences> byPart, ModelOccurrences own,
-                           Map<PieceWitness, Derivation.APieceInALanguage.PartedString> parted) {
+                           PartedStringsOfThePieces parted) {
             this.byPart = byPart;
             this.own = own;
             this.partedStrings = parted;
@@ -524,12 +524,13 @@ final class DemandReading {
         /** The string the piece {@code within} is a piece of, where it is read to be of one. */
         Optional<Derivation.APieceInALanguage.PartedString> partedStringOfThePiece(
                 PieceWitness within) {
-            return Optional.ofNullable(partedStrings.get(within));
+            return partedStrings.of(within);
         }
 
         /** A projection nothing says the parts of. */
         static Projection unplaced() {
-            return new Projection(Map.of(), ModelOccurrences.NONE, Map.of());
+            return new Projection(Map.of(), ModelOccurrences.NONE,
+                    PartedStringsOfThePieces.NONE);
         }
 
         /** A projection of what {@code pulled} states, each part read off where it was, and what
@@ -550,17 +551,15 @@ final class DemandReading {
             }
             Map<Spelling,ModelOccurrences> byPart = new LinkedHashMap<>();
             found.forEach((key, copies) -> byPart.put(key, copies.gathered()));
-            Map<PieceWitness, Derivation.APieceInALanguage.PartedString> strings =
-                    new LinkedHashMap<>();
+            List<Derivation.APieceInALanguage> held = new ArrayList<>();
             if (pulled != null) {
                 for (Pullback.Leaf leaf : pulled.leaves()) {
-                    if (leaf.step() instanceof Derivation.APieceInALanguage piece
-                            && piece.parted().isPresent()) {
-                        strings.putIfAbsent(piece.within(), piece.parted().get());
+                    if (leaf.step() instanceof Derivation.APieceInALanguage piece) {
+                        held.add(piece);
                     }
                 }
             }
-            return new Projection(byPart, own, strings);
+            return new Projection(byPart, own, PartedStringsOfThePieces.of(held));
         }
 
         /**

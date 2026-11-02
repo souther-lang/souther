@@ -41,9 +41,6 @@ public record PieceWitness(int depth, Site site) {
                 Objects.requireNonNull(binding, "a parameter is some binding");
             }
         }
-
-        /** A piece nothing tells apart from the one a statement at that depth would be about. */
-        record Unnamed() implements Site { }
     }
 
     public PieceWitness {
@@ -59,7 +56,6 @@ public record PieceWitness(int depth, Site site) {
         return switch (site) {
             case Site.Quantifier quantifier -> depth + "@" + quantifier.call();
             case Site.Parameter parameter -> depth + "@" + parameter.binding();
-            case Site.Unnamed _ -> Integer.toString(depth);
         };
     }
 

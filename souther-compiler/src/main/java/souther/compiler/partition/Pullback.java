@@ -3206,7 +3206,8 @@ final class Pullback {
     /**
      * Where the quantifier {@code call} is stands: the call as the source wrote it, in the copy of
      * the body that holds it. Two statements about some piece are about the same piece only where
-     * they are read at the same site, whatever string they are over.
+     * they are read at the same site, whatever string they are over. Null where the call is
+     * none the source wrote: a piece it is about cannot be told from another's, so it is not read.
      */
     private static PieceWitness.Site siteOf(Core call) {
         ConstructOccurrence occurrence = switch (Core.withoutStanding(call)) {
@@ -3214,22 +3215,21 @@ final class Pullback {
             case Core.Call plain -> plain.occurrence();
             default -> null;
         };
-        return occurrence == null ? new PieceWitness.Site.Unnamed()
-                : new PieceWitness.Site.Quantifier(occurrence);
+        return occurrence == null ? null : new PieceWitness.Site.Quantifier(occurrence);
     }
 
     /**
      * The piece of a statement about some piece that {@code subject}, read in {@code at}, is the
      * parameter of, where no statement about some piece is being read: the closure parameter that
      * stands for the piece is the one thing every statement about that piece names, so two
-     * statements about two parameters are about two pieces.
+     * statements about two parameters are about two pieces. Null where {@code subject} is no
+     * parameter: a piece it stands for cannot be told from another's, so it is not read.
      */
     private PieceWitness witnessOfTheParameter(Core subject, InputReads at) {
         Core stood = withoutTheNewtypesItWears(new Denotation(subject, at)).value();
-        PieceWitness.Site site = Core.withoutStanding(stood) instanceof Core.Read named
-                && named.binding() != null ? new PieceWitness.Site.Parameter(named.binding())
-                : new PieceWitness.Site.Unnamed();
-        return new PieceWitness(parting.size(), site);
+        return Core.withoutStanding(stood) instanceof Core.Read named && named.binding() != null
+                ? new PieceWitness(parting.size(), new PieceWitness.Site.Parameter(named.binding()))
+                : null;
     }
 
     /**
@@ -3306,7 +3306,7 @@ final class Pullback {
 
         Quantity string = valueOfTheInput(
                 piece.split().args().get(piece.parted().string().position()), piece.at());
-        return string == null ? null
+        return string == null || within == null ? null
                 : new Quantity.APieceOf(piece.operation(), piece.separator(), string, within,
                         piece.from(), piece.first());
     }
@@ -4890,7 +4890,12 @@ final class Pullback {
             if (partingOf(pieces) != null) {
                 return unread(e, reads, new WhyUnread.TwoElementsOfOneContainer());
             }
-            PieceWitness within = new PieceWitness(parting.size(), siteOf(e));
+            PieceWitness.Site site = siteOf(e);
+            if (site == null) {
+                return unread(e, reads, new WhyUnread.AtNoPosition(
+                        WhyUnread.AtNoPosition.Place.CONTAINER));
+            }
+            PieceWitness within = new PieceWitness(parting.size(), site);
             parting.put(pieces, within);
             Derivation answered;
             try {
@@ -5448,6 +5453,9 @@ final class Pullback {
             // about some piece would be about at the depth this is read at, as a comparison's is.
             PieceWitness within = taken != null ? taken
                     : witnessOfTheParameter(stated.subject(), reads);
+            if (within == null) {
+                return null;
+            }
             return leaf(new Derivation.APieceInALanguage(new StringsLanguage(accepts), operation,
                     written, within, partedStringOf(piece)), e, reads);
         }

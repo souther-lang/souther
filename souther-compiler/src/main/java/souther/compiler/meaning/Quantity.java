@@ -675,6 +675,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * <p>Which statement that is, is {@code within}: how many statements about some piece of a
      * string it is read inside of, the outermost being nought. A statement about some piece read
      * inside another one names two pieces, and a count of the outer piece is no count of the inner.
+     *
+     * <p>That is all {@code within} tells apart, and it is enough only because this never leaves
+     * the statement it is read in: it is taken up into what the string holds
+     * ({@link Derivation.SomePieceMeeting}) or the statement is not read. Two statements that
+     * follow each other are told apart by {@link PieceWitness}, which is what any value that is
+     * held beside a statement other than its own carries instead.
      */
     record CodePointsOfAPiece(CodePointClass counted, int within) implements Quantity {
 

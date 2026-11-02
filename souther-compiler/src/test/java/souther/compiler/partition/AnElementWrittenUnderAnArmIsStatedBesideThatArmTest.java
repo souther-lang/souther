@@ -13,6 +13,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.PieceWitness;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
@@ -20,13 +21,19 @@ import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ValueName;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.OptionalLong;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -81,6 +88,101 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
         assertNotEquals(first.spelling(), second.spelling());
     }
 
+    /** A count of the pieces of {@code of}, parted at {@code at}, that {@code type} builds and rows name. */
+    private static String counted(String type, String bound, String at, String of) {
+        return counted(type, bound, at, of, "rows");
+    }
+
+    private static String counted(String type, String bound, String at, String of, String rows) {
+        return "List.length(List.flatMap(" + bound + " -> List.filter(a -> a.name == " + bound
+                + ".value, " + rows + "), List.flatMap(d -> if " + type + "(d) as " + bound
+                + " then [ " + bound + " ] else [ ], String.split(\"" + at + "\", " + of
+                + ")))) >= 1";
+    }
+
+    /**
+     * The statements about some piece the pieces held to a language were read in, as each says
+     * which it is, taken from the steps the reading met.
+     */
+    private static Set<String> statementsAboutSomePiece(Pullback.Pulled pulled) {
+        Set<String> out = new LinkedHashSet<>();
+        Pattern said = Pattern.compile("within=(.*?), parted=");
+        for (Pullback.Leaf leaf : pulled.leaves()) {
+            Matcher found = said.matcher(leaf.step().toString());
+            while (found.find()) {
+                out.add(found.group(1));
+            }
+        }
+        return out;
+    }
+
+    /** One statement about some piece is one piece, however many parts it is read in. */
+    @Test
+    void oneQuantifierIsOneStatementAboutSomePiece() {
+        assertEquals(1, statementsAboutSomePiece(pulled(counted("Letters", "n", "@", "s"))).size());
+    }
+
+    /**
+     * Two quantifiers over the same pieces are two statements: the pieces are the same set and
+     * the witnesses are two, so what one says of its piece is not said of the other's.
+     */
+    @Test
+    void twoQuantifiersOverOneSplitAreTwoStatementsAboutSomePiece() {
+        Set<String> statements = statementsAboutSomePiece(pulled(
+                counted("Letters", "n", "@", "s") + " && " + counted("Letters", "m", "@", "s")));
+        assertEquals(2, statements.size(), statements::toString);
+    }
+
+    /** And over two strings. */
+    @Test
+    void twoQuantifiersOverTwoStringsAreTwoStatementsAboutSomePiece() {
+        Set<String> statements = statementsAboutSomePiece(pulled(
+                counted("Letters", "n", "@", "s") + " && " + counted("Digits", "m", "#", "t")));
+        assertEquals(2, statements.size(), statements::toString);
+    }
+
+    /** One helper applied to two strings is two statements, one for each call. */
+    @Test
+    void oneHelperAppliedTwiceIsTwoStatementsAboutSomePiece() {
+        String helper = "let named (x: String, rs: List<Row>): Bool = "
+                + counted("Letters", "n", "@", "x", "rs") + "\n";
+        Set<String> statements = statementsAboutSomePiece(pulled(helper,
+                "named(s, rows) && named(t, rows)"));
+        assertEquals(2, statements.size(), statements::toString);
+    }
+
+    /**
+     * What is said of where a piece comes from is one thing: statements that disagree are about
+     * no piece, and nothing is taken of it.
+     */
+    @Test
+    void statementsThatDisagreeOnWhereAPieceComesFromGiveNoString() {
+        PieceWitness piece = at(0, 0);
+        Derivation.APieceInALanguage fromS = held(piece, "ab", "s");
+        Derivation.APieceInALanguage fromT = held(piece, "ab", "t");
+        PartedStringsOfThePieces agreed = PartedStringsOfThePieces.of(List.of(fromS, fromS));
+        assertEquals(fromS.parted(), agreed.of(piece));
+        PartedStringsOfThePieces disagreed = PartedStringsOfThePieces.of(List.of(fromS, fromT));
+        assertEquals(Optional.empty(), disagreed.of(piece));
+        assertEquals(true, disagreed.contradicts(piece));
+    }
+
+    /** Pieces at one depth that are two statements' keep each its own string. */
+    @Test
+    void piecesAtOneDepthKeepTheStringsOfTheirOwnStatements() {
+        PartedStringsOfThePieces strings = PartedStringsOfThePieces.of(List.of(
+                held(at(0, 0), "ab", "s"), held(at(0, 1), "12", "t")));
+        assertEquals(held(at(0, 0), "ab", "s").parted(), strings.of(at(0, 0)));
+        assertEquals(held(at(0, 1), "12", "t").parted(), strings.of(at(0, 1)));
+    }
+
+    private static Derivation.APieceInALanguage held(PieceWitness of, String text, String string) {
+        return new Derivation.APieceInALanguage(new StringsLanguage(PatternMeaning.text(text)),
+                "String.matches", text, of, Optional.of(
+                        new Derivation.APieceInALanguage.PartedString(TermPath.of(string),
+                                CaseMapping.NONE, '@', 0, OptionalLong.empty())));
+    }
+
     private static List<Proposition> partsOfWhatSomeRowMeets(Proposition stated) {
         Proposition.Some some = assertInstanceOf(Proposition.Some.class, stated);
         assertEquals("rows", some.container().toString().replaceAll(".*?(rows).*", "$1"));
@@ -114,6 +216,11 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
 
     /** What the condition of the fork on {@code truth} was read as. */
     private static Pullback.Pulled pulled(String truth) {
+        return pulled("", truth);
+    }
+
+    /** What the condition of the fork on {@code truth} was read as, with {@code lets} before it. */
+    private static Pullback.Pulled pulled(String lets, String truth) {
         String source = """
                 module p
                 data Letters = String
@@ -128,8 +235,10 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
                 behavior f : (s: String, t: String, rows: List<Row>, r: Word, u: Word)
                         -> Yes | No
                     constructs %s
+                %s
                 let f (s, t, rows, r, u) = if %s then Yes else No
-                """.formatted(truth.contains("Digits(") ? "Letters, Digits" : "Letters", truth);
+                """.formatted(truth.contains("Digits(") || lets.contains("Digits(")
+                        ? "Letters, Digits" : "Letters", lets, truth);
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
