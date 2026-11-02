@@ -71,8 +71,8 @@ class AClosureOverAContainerThatHoldsNothingIsEnteredByNoRunTest {
                 "· no line: comparison@3:36 — it relates the value here to another value rather"
                         + " than dividing the values here, about `email`",
                 "· not read: comparison@3:36 — what it states was read, and it relates the value"
-                        + " here to another value not shown to reach every value here, so which"
-                        + " values here settle it on their own is not worked out, about `d`"),
+                        + " here to another value; its classes hold the values it was shown over,"
+                        + " and the rest are shown on neither side of it, about `d`"),
                 unread(report));
     }
 

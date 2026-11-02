@@ -51,9 +51,16 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
                 + " here settle it on their own is not worked out, about `" + position + "`";
     }
 
+    private static String overARegion(String at, String position) {
+        return "· not read: comparison@" + at + " — what it states was read, and it relates the"
+                + " value here to another value; its classes hold the values it was shown over,"
+                + " and the rest are shown on neither side of it, about `" + position + "`";
+    }
+
     @Test
     void aValueHeldAgainstAPieceIsRelatedToTheString() {
-        assertEquals(Set.of(relates("3:36", "email"), notShown("3:36", "d")), Set.copyOf(said("""
+        assertEquals(Set.of(relates("3:36", "email"), overARegion("3:36", "d")),
+                Set.copyOf(said("""
                 module w1
                 behavior m : (email: String, d: String) -> Bool
                 let m (email, d) = List.any(p -> p == d, String.split("@", email))
@@ -62,7 +69,8 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
 
     @Test
     void aValueHeldAgainstOneOfTheFirstPiecesIsRelatedToTheString() {
-        assertEquals(Set.of(relates("3:36", "email"), notShown("3:36", "d")), Set.copyOf(said("""
+        assertEquals(Set.of(relates("3:36", "email"), overARegion("3:36", "d")),
+                Set.copyOf(said("""
                 module w1
                 behavior m : (email: String, d: String) -> Bool
                 let m (email, d) = List.any(p -> p == d, List.take(1, String.split("@", email)))
@@ -77,9 +85,7 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
     @Test
     void severalStatementsAboutTheFirstFewPiecesAreEachRead() {
         assertEquals(Set.of(relates("7:27", "email"), relates("8:27", "email"),
-                        notShown("7:27", "d"), notShown("8:27", "d"),
-                        ofTheFork("7:5", "d"), ofTheFork("7:5", "email"),
-                        ofTheFork("8:5", "d"), ofTheFork("8:5", "email")),
+                        overARegion("7:27", "d"), overARegion("8:27", "d")),
                 Set.copyOf(said("""
                         module w1
                         data A
@@ -112,9 +118,9 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
                     then Both
                     else Other
                 """;
-        assertEquals(Set.of(relates("6:24", "email"), notShown("6:24", "d"),
-                        ofTheFork("6:5", "d"), ofTheFork("6:5", "email"),
-                        notShown("7:32", "d"), relates("7:32", "email")),
+        assertEquals(Set.of(relates("6:24", "email"), overARegion("6:24", "d"),
+                        ofTheFork("6:5", "email"),
+                        overARegion("7:32", "d"), relates("7:32", "email")),
                 Set.copyOf(said(source)));
         List<String> report = fullReport(source).stream().map(String::strip).toList();
         boolean bothOnOnePath = false;

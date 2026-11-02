@@ -228,14 +228,14 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * with a value is a statement about that piece alone, and "some piece is the value" is not
      * "the piece is the value" held once — nor is its denial "the piece is another value" — so
      * what leaves the statement is {@link IsAmongThePieces}, which says it of all the pieces.
-     * Told apart by the string, the separator and {@code within}, which is how many statements
-     * about some piece it is read inside of: two pieces of one string read in two statements are
-     * two values, and one read in a single statement is one.
+     * Told apart by the string, the separator and {@code within}, which is the statement about
+     * some piece it is read in: two pieces of one string read in two statements are two values,
+     * and one read in a single statement is one.
      *
      * @param operation the library's operation that parts the string
      * @param separator the code point it is parted at, or none where it parts into characters
      * @param string    the string, a number of the input or what an operation answers of one
-     * @param within    how many statements about some piece this one is read inside of
+     * @param within    the statement about some piece this one is read in
      * @param from      the index of the first piece it may be, nought where it may be the first
      * @param among     the index the pieces it may be stop before, or nought where they run to
      *                  the last: the piece of the first one and the piece of the first two are
@@ -243,19 +243,16 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      *                  and so are those of the pieces from the second on and from the third
      */
     record APieceOf(ValueName.Stdlib operation, OptionalInt separator, Quantity string,
-                    int within, int from, int among) implements Quantity {
+                    PieceWitness within, int from, int among) implements Quantity {
 
         public APieceOf {
             Objects.requireNonNull(operation, "a piece is of what some operation parts");
             Objects.requireNonNull(separator, "parted at a code point, or into characters");
+            Objects.requireNonNull(within, "a piece is read in some statement about a piece");
             if (!(string instanceof DecisionAtom.OfTheInput)
                     && !(string instanceof WhatAnOperationAnswers)) {
                 throw new IllegalArgumentException(
                         "a piece read here is of a string of the input: " + string);
-            }
-            if (within < 0) {
-                throw new IllegalArgumentException(
-                        "a piece is of a statement some number of statements in: " + within);
             }
             if (from < 0 || among < 0 || (among > 0 && among <= from)) {
                 throw new IllegalArgumentException(
@@ -280,7 +277,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public Spelling spelling() {
-            return Spelling.of("a piece " + within + " in" + fromSpelled(from)
+            return Spelling.of("a piece " + within.spelled() + " in" + fromSpelled(from)
                     + (among > 0 ? " among the first " + among : "") + " of "
                     + operation.qualified() + "("
                     + (separator.isPresent() ? "U+" + Integer.toHexString(separator.getAsInt())
@@ -678,6 +675,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * <p>Which statement that is, is {@code within}: how many statements about some piece of a
      * string it is read inside of, the outermost being nought. A statement about some piece read
      * inside another one names two pieces, and a count of the outer piece is no count of the inner.
+     *
+     * <p>That is all {@code within} tells apart, and it is enough only because this never leaves
+     * the statement it is read in: it is taken up into what the string holds
+     * ({@link Derivation.SomePieceMeeting}) or the statement is not read. Two statements that
+     * follow each other are told apart by {@link PieceWitness}, which is what any value that is
+     * held beside a statement other than its own carries instead.
      */
     record CodePointsOfAPiece(CodePointClass counted, int within) implements Quantity {
 

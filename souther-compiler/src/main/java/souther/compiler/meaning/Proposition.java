@@ -427,20 +427,16 @@ public sealed interface Proposition {
                 }
             }
 
-            /** The piece of a string that {@code within} statements about some piece in is. */
-            record OfAPiece(int within) implements Strings {
+            /** The piece of a string that one statement about some piece is about. */
+            record OfAPiece(PieceWitness within) implements Strings {
 
                 public OfAPiece {
-                    if (within < 0) {
-                        throw new IllegalArgumentException(
-                                "a piece is of a statement some number of statements in: "
-                                        + within);
-                    }
+                    Objects.requireNonNull(within, "a piece is of some statement about a piece");
                 }
 
                 @Override
                 public String spelled() {
-                    return "piece#" + within;
+                    return "piece#" + within.spelled();
                 }
             }
         }

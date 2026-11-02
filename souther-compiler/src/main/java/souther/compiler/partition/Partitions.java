@@ -32,6 +32,7 @@ import souther.compiler.inputs.Position;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TypeBounds;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.Value;
@@ -4193,6 +4194,14 @@ public final class Partitions {
         }
         return all == null ? new CandidateStrings(null, shortfall)
                 : withinTheCount(all, characters, meter, shortfall);
+    }
+
+    /**
+     * The strings {@code accepts} says, or null where the allowance of {@code meter} would not pay
+     * for them.
+     */
+    static Language languageOf(StringsLanguage accepts, Meter meter) {
+        return PatternPlan.of(accepts.meaning()).compile(meter);
     }
 
     /**

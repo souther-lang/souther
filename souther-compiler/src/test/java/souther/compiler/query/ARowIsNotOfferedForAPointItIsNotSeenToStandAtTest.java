@@ -104,7 +104,7 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
                     ItemAssessment.Attempt.Searched.class,
                     ((ItemAssessment.Owed) item).searches().only());
             assertTrue(no.way().takenIn().stream().allMatch(each ->
-                            each.demand() instanceof RowDemand.ForTheRun(var _, var why, var _)
+                            each.demand() instanceof RowDemand.ForTheRun(var _, var why, var _, var _)
                                     && why == RowDemand.NoComposer.A_PRODUCT_OF_TWO_NUMBERS),
                     "the condition is on a product of two numbers: " + no.way().onTheWay());
             assertTrue(no.uncomposed().onTheWay().stream().anyMatch(each ->

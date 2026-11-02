@@ -313,18 +313,74 @@ class AConditionHoldingAPieceOfASplitToAPatternDividesTheStringTest {
             """;
 
     /**
-     * What a helper holds of a piece is not read, as the equality of a piece to a value is not: the
-     * element the closure is handed does not cross into the helper's body, and a piece the helper
-     * is handed is not known for the piece of a window. Said unread rather than read as another.
+     * The rows offered for a helper stand on the two sides of what the condition comes to, as the
+     * runtime parts the string and as the predicate holds of the pieces, with the window of the
+     * pieces the helper is handed as the one written in place: the helper divides the string the
+     * way the predicate in the closure does, and not into other classes.
      */
     @Test
-    void aPredicateHeldOfAPieceThroughAHelperIsLeftUnread() {
+    void theRowsOfferedForAHelperStandOnTheSidesTheConditionComesTo() {
+        Held matches = PREDICATES.get("matches");
+        for (String window : List.of("all", "past the first")) {
+            Condition inPlace = condition(matches, Quantifier.SOME, WINDOWS.get(window));
+            String viaAHelper = "List.any(t -> isCode(t), " + WINDOWS.get(window).written() + ")";
+            List<String> placed = offeredFor(measured(model(inPlace.written(), "")), A_CODE);
+            List<String> helped = offeredFor(measured(model(viaAHelper, A_HELPER)), A_CODE);
+            assertEquals(2, helped.size(), () -> window + ": " + helped);
+            assertEquals(placed.stream().map(inPlace.ofTheString()::test).collect(
+                            java.util.stream.Collectors.toSet()),
+                    helped.stream().map(inPlace.ofTheString()::test).collect(
+                            java.util.stream.Collectors.toSet()),
+                    () -> window + ": " + placed + " against " + helped);
+            assertNotEquals(inPlace.ofTheString().test(helped.get(0)),
+                    inPlace.ofTheString().test(helped.get(1)),
+                    () -> window + ": two rows of one side: " + helped);
+        }
+    }
+
+    /**
+     * A quantifier inside another over the pieces one call parted is over another piece, and the
+     * two are not read as one: a reading that was, would find every piece equal to itself and
+     * divide nothing, where what is stated of two pieces of one string is not worked out.
+     */
+    @Test
+    void anotherQuantifierOverTheSamePiecesIsNotTheSamePiece() {
+        String source = """
+                module example.codes
+
+                data Codes = String
+
+                behavior hasCode : (list: Codes) -> Bool
+                let hasCode (list) = {
+                    let ps = %s
+                    if List.any(t -> List.any(u -> t == u, ps), ps) then true else false
+                }
+                """.formatted(SPLIT);
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors(), "the model compiles");
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertFalse(report.contains("is divided by"), report);
+        assertTrue(report.contains("not read: fork"), report);
+    }
+
+    /**
+     * What a helper holds of a piece is what the closure would hold of it written in place: the
+     * piece the helper is handed is the piece the closure was handed, the same call parting the
+     * same string, and it divides the string as the predicate written in the closure does.
+     */
+    @Test
+    void aPredicateHeldOfAPieceThroughAHelperDividesTheStringAsInPlace() {
         for (String condition : List.of(
                 "List.any(t -> isCode(t), " + SPLIT + ")",
-                "List.any(isCode, " + SPLIT + ")")) {
+                "List.any(isCode, " + SPLIT + ")",
+                "List.any(t -> isCode(t), List.drop(1, " + SPLIT + "))",
+                "List.any(isCode, List.drop(1, " + SPLIT + "))")) {
             String report = report(condition, A_HELPER, "");
-            assertFalse(report.contains("is divided by"), () -> condition + "\n" + report);
-            assertTrue(report.contains("not read: fork"), () -> condition + "\n" + report);
+            assertTrue(report.contains("is divided by"), () -> condition + "\n" + report);
+            assertFalse(report.contains("not read: fork"), () -> condition + "\n" + report);
         }
     }
 

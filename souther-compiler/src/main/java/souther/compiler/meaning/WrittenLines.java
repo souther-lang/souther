@@ -436,6 +436,8 @@ public final class WrittenLines {
             case Derivation.SomePieceMeeting(var _, var _, var _, var string, var piece) ->
                     string.map(held -> List.of(held, piece)).orElseGet(() -> List.of(piece));
             case Derivation.SomePieceEqualling(var piece, var _) -> List.of(piece);
+            case Derivation.SomeElementEquallingSomePiece(var _, var pieces, var _, var _) ->
+                    List.of(pieces);
             case Derivation.SomePieceInALanguage(var _, var _, var _, var _, var piece) ->
                     List.of(piece);
             case Derivation.EveryElementMeetsIt(var _, var element, var holds, var _) ->
@@ -457,7 +459,7 @@ public final class WrittenLines {
                  Derivation.UnderOneOfItsOwnKeys _,
                  Derivation.CasesOfASubject _, Derivation.CasesWrittenOut _,
                  Derivation.SizeAboveNought _, Derivation.ACharacterInAClass _,
-                 Derivation.APieceInALanguage _,
+                 Derivation.APieceInALanguage _, Derivation.AStringInALanguage _,
                  Derivation.OfAnElementOfAnAnswer _, Derivation.AComparisonRead _,
                  Derivation.ATruthCompared _, Derivation.ACutThatCutsNothing _,
                  Derivation.Stopped _ -> List.of();
