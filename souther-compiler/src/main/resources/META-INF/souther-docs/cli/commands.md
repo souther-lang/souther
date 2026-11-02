@@ -485,6 +485,11 @@ Reports how well the `example` rows cover the model — which partitions, bounda
 no row reaches. `--generate` prints commented rows for what nothing covers, the points of a border
 among them, and `--strict` exits non-zero on a gap the report names.
 
+`--generate` also offers rows that try the inputs of the rows of called behaviors in their callers.
+These owe nothing: the header counts them apart as optional rows and a comment over each says
+`suggested input; no uncovered obligation`. Work is done when no row is left to fill what nothing
+covers; the optional rows may stay after a model is satisfied.
+
 There is no `--adequacy` here. This command's whole output is the report, so everything is measured
 and there is nothing for `off`, `witness` or `all` to choose; and what the report marks as a gap is
 every obligation the account derives, which no caller chooses either. `--strict` decides an exit
