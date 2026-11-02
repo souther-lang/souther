@@ -1323,6 +1323,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 .allMatch(each -> overTheSides(each, named));
         List<DecimalOperation> decimals = decimalsOverTheSides ? working.decimals() : List.of();
         leftOut |= !decimalsOverTheSides;
+        // An operation left out is one a row is not asked to get past here: not every one told.
+        WhatARelationLeavesUndivided.Told told =
+                leftOut && working.exact() ? WhatARelationLeavesUndivided.Told.SOME
+                        : runningTotalsAreNoneOfTheRows && !leftOut
+                        ? WhatARelationLeavesUndivided.Told.EVERY
+                        : working.told();
         Map<Object, ExactRatio> held = new LinkedHashMap<>();
         for (WhatARelationLeavesUndivided.IntSum each : sums) {
             each.coefs().keySet().forEach(key -> {
@@ -1331,13 +1337,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             });
         }
-        // An operation left out is one a row is not asked to get past here: not every one told.
-        return new WhatARelationLeavesUndivided.Operations(sums, decimals,
-                leftOut && working.exact() ? WhatARelationLeavesUndivided.Told.SOME
-                        : runningTotalsAreNoneOfTheRows && !leftOut
-                        ? WhatARelationLeavesUndivided.Told.EVERY
-                        : working.told(),
-                held);
+        if (held.isEmpty()) {
+            return new WhatARelationLeavesUndivided.Operations(sums, decimals, told);
+        }
+        if (told == WhatARelationLeavesUndivided.Told.EVERY) {
+            return new WhatARelationLeavesUndivided.Operations(sums, decimals,
+                    WhatARelationLeavesUndivided.Told.EVERY_AT_HELD_VALUES, held);
+        }
+        // Not every operation is told, so a row is shown computed nowhere, and an operation over a
+        // number held at a value is one no row is asked to get past here, as it was before it was.
+        sums.removeIf(each -> each.coefs().keySet().stream().anyMatch(held::containsKey));
+        return new WhatARelationLeavesUndivided.Operations(sums, decimals, told);
     }
 
     /**

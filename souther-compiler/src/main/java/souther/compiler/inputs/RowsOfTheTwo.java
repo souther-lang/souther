@@ -6,7 +6,6 @@ import souther.compiler.numeric.ExactRatio;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -91,7 +90,9 @@ final class RowsOfTheTwo {
 
     /**
      * The rows of the operations, or null where they cannot be read exactly: not every operation
-     * is told, one is of decimals, none is there to read, or one weighs a term other than the two
+     * is told over every row (a number held at a value of its own leaves the rows where it
+     * stands elsewhere unsaid, and these are said to be all the rows computed), one is of
+     * decimals, none is there to read, or one weighs a term other than the two
      * and those held still, weighs the partner other than by nought, one or minus one, or comes
      * to a number that is not whole at the values the others are held at.
      *
@@ -102,16 +103,14 @@ final class RowsOfTheTwo {
      */
     static RowsOfTheTwo of(Operations operations, Object asked, Object partner,
                            Map<Object, ExactRatio> standing) {
-        if (operations.told() != WhatARelationLeavesUndivided.Told.EVERY
+        if (!operations.exact()
                 || !operations.decimals().isEmpty() || operations.sums().isEmpty()
                 || asked == null || partner == null || asked.equals(partner)) {
             return null;
         }
-        Map<Object, ExactRatio> held = new LinkedHashMap<>(operations.standing());
-        held.putAll(standing);
         List<Operation> read = new ArrayList<>();
         for (IntSum each : operations.sums()) {
-            Operation operation = read(each, asked, partner, held);
+            Operation operation = read(each, asked, partner, standing);
             if (operation == null) {
                 return null;
             }
