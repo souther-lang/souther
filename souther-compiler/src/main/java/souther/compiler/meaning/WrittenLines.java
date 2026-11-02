@@ -411,6 +411,7 @@ public final class WrittenLines {
             case Derivation.AnOrderOfItsArguments(var _, var _, var arguments) ->
                     List.of(arguments);
             case Derivation.OverElementsWrittenOut(var each, var _, var _) -> each;
+            case Derivation.SomeElementOfTheListsAnswered(var each) -> each;
             case Derivation.OnEachApplication(var each) -> each;
             case Derivation.SomeElementMeeting(var _, var element, var _, var holds, var _) ->
                     holds.map(something -> List.of(element, something))
@@ -436,7 +437,8 @@ public final class WrittenLines {
             case Derivation.SomePieceMeeting(var _, var _, var _, var string, var piece) ->
                     string.map(held -> List.of(held, piece)).orElseGet(() -> List.of(piece));
             case Derivation.SomePieceEqualling(var piece, var _) -> List.of(piece);
-            case Derivation.SomeElementEquallingSomePiece(var _, var pieces, var _, var _) ->
+            case Derivation.SomeElementEquallingSomePiece(var _, var pieces, var _, var _,
+                                                          var _) ->
                     List.of(pieces);
             case Derivation.SomePieceInALanguage(var _, var _, var _, var _, var piece) ->
                     List.of(piece);

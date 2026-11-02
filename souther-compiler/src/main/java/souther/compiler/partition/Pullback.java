@@ -1723,7 +1723,13 @@ final class Pullback {
     private List<Supplier<Derivation>> rulesFor(StatedComparison stated, Denotation at,
                                                 boolean fixed, InputReads reads,
                                                 Once<AffineReading.OfAComparison> arithmetic) {
-        AnEmptinessCheck.Checked checked = AnEmptinessCheck.checked(stated);
+        // Asked when a rule that needs it is tried, and once for all of them: a size alone and a
+        // sum of sizes are one reading of the comparison, told apart by how many containers it
+        // holds.
+        AnEmptinessCheck.Standing standing = (e, where) -> where.standing(e,
+                read.rules().symbols(), read.rules().newtypes());
+        Once<Optional<AnEmptinessCheck.Checked>> sizes = new Once<>(() ->
+                Optional.ofNullable(AnEmptinessCheck.checked(stated, reads, standing)));
         Asked emptiness = new Asked.OnASide(AnswerAspect.EMPTINESS);
         // Whether the arithmetic stops at a value to go into decides both of the last two rules:
         // the one goes in where it does, and the other takes the comparison only where it does
@@ -1734,10 +1740,10 @@ final class Pullback {
                 new Weighed(new Denotation(stated.right(), reads), ExactRatio.ONE.negated())),
                 Pullback::nothingElse, () -> false)));
         List<Supplier<Derivation>> rules = List.of(
-                () -> checked == null ? null : new Derivation.AnEmptinessCheck(at == null
-                        ? observe(checked.container(), emptiness, reads)
-                        : asking(at, () -> observe(checked.container(), emptiness, reads)),
-                        checked.emptyWhereItHolds()),
+                () -> sizes.get().filter(AnEmptinessCheck.Checked::ofOneContainer)
+                        .map(checked -> new Derivation.AnEmptinessCheck(
+                                holdingSomething(checked.containers().getFirst(), at, emptiness),
+                                checked.emptyWhereItHolds())).orElse(null),
                 () -> partOf(at, truthCompared(stated, reads)),
                 () -> heldAgainstAWrittenTruth(stated, reads),
                 () -> partOf(at, ofTwoValuesWrittenOut(stated, reads)),
@@ -1764,8 +1770,43 @@ final class Pullback {
                 },
                 () -> readingTheComparisonAgain(
                         throughWhatItStopsAt(stated, at, fixed, reads, wayIn.get())),
-                () -> partOf(at, ofBoundValues(stated, fixed, reads, wayIn.get())));
+                // A sum given a name, before the one that takes the name as a number nothing
+                // follows: the name stands for the sum, and where the arithmetic over the input
+                // does not read the sum it is a statement about the containers rather than a
+                // relation between numbers no position holds.
+                () -> sizes.get().filter(checked -> !checked.ofOneContainer() && checked.named()
+                                && AffineReading.read(checked.written(), checked.writtenAt(),
+                                        read) instanceof AffineReading.OfAComparison.Stopped)
+                        .map(checked -> new Derivation.AnEmptinessCheck(
+                                holdingSomethingOfAny(checked.containers(), at, emptiness),
+                                checked.emptyWhereItHolds())).orElse(null),
+                () -> partOf(at, ofBoundValues(stated, fixed, reads, wayIn.get())),
+                // Last, so that every rule reading the sizes as numbers of the input is asked
+                // first: a sum of sizes written in the comparison is read as some one of the
+                // containers holding something only where none of them reads it whole.
+                () -> sizes.get().filter(checked -> !checked.ofOneContainer())
+                        .map(checked -> new Derivation.AnEmptinessCheck(
+                                holdingSomethingOfAny(checked.containers(), at, emptiness),
+                                checked.emptyWhereItHolds())).orElse(null));
         return rules;
+    }
+
+    /** Whether {@code container} holds anything, asked at {@code at} where the comparison is
+     *  read in a place. */
+    private Derivation holdingSomething(Denotation container, Denotation at, Asked emptiness) {
+        return at == null ? observe(container.value(), emptiness, container.at())
+                : asking(at, () -> observe(container.value(), emptiness, container.at()));
+    }
+
+    /** Whether some one of {@code containers} holds anything. */
+    private Derivation holdingSomethingOfAny(List<Denotation> containers, Denotation at,
+                                             Asked emptiness) {
+        Derivation some = holdingSomething(containers.getFirst(), at, emptiness);
+        for (Denotation each : containers.subList(1, containers.size())) {
+            some = new Derivation.Joined(ConditionJoin.EITHER, some,
+                    holdingSomething(each, at, emptiness));
+        }
+        return some;
     }
 
     /**
@@ -3188,6 +3229,60 @@ final class Pullback {
         }
         return new Quantity.IsAmongThePieces(value, piece.operation(), piece.separator(),
                 piece.string(), piece.from(), piece.among());
+    }
+
+    /**
+     * An element that is one of the pieces, and the optional values of it that its being so says
+     * present.
+     */
+    private record AnElementAmongThePieces(Quantity.IsAmongThePieces among,
+                                           List<DecisionSubject> present) {}
+
+    /**
+     * That an element is one of {@code pieces}, where {@code read} says no more of it than that,
+     * and that the optional value whose content it is is present — or null where it says anything
+     * else.
+     *
+     * <p>A content is a value only where its optional holds one, so an element whose content is a
+     * piece has one present, and saying both is saying the first. Only a value at a position the
+     * present subject holds, and only of the input: what is said present of another is a
+     * statement of its own.
+     */
+    private AnElementAmongThePieces elementBeingOneOfThePieces(Proposition read,
+                                                               PieceWitness within,
+                                                               Pieces pieces) {
+        Quantity.IsAmongThePieces alone = valueBeingOneOfThePieces(read, within, pieces);
+        if (alone != null) {
+            return new AnElementAmongThePieces(alone, List.of());
+        }
+        if (!(read instanceof Proposition.All(List<Proposition> parts, var _))) {
+            return null;
+        }
+        Quantity.IsAmongThePieces among = null;
+        List<DecisionSubject> present = new ArrayList<>();
+        for (Proposition part : parts) {
+            if (part instanceof Proposition.Present(DecisionSubject of, boolean holds, var _)
+                    && holds) {
+                present.add(of);
+            } else if (among == null && valueBeingOneOfThePieces(part, within, pieces)
+                    instanceof Quantity.IsAmongThePieces found) {
+                among = found;
+            } else {
+                return null;
+            }
+        }
+        if (among == null || present.isEmpty()
+                || !(among.value() instanceof DecisionAtom.OfTheInput(
+                        NumericTerm.ValueOf value))) {
+            return null;
+        }
+        for (DecisionSubject each : present) {
+            if (!(each instanceof DecisionSubject.AnInput(TermPath optional))
+                    || !value.subjectPath().isAtOrUnder(optional)) {
+                return null;
+            }
+        }
+        return new AnElementAmongThePieces(among, present);
     }
 
     /** Whether what {@code pieces} are of has a piece however the string stands, as the library
@@ -4716,6 +4811,10 @@ final class Pullback {
             // has, for each element there, the step's answer on it.
             Located located = locate(container, over, in, kept, false);
             if (located == null) {
+                Derivation through = someOfTheListsAnswered(container, some);
+                if (through != null) {
+                    return through;
+                }
                 Derivation across = acrossTheListsOfAFold(container, some);
                 return across != null ? across : unread(over, in,
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
@@ -4759,6 +4858,59 @@ final class Pullback {
                             && located.each() instanceof ElementAt.AtASubject
                             && reads.orderLeftToTheRows());
             return new Derivation.SomeElementMeeting(heldAt, answered, true, holdsSomething, asked);
+        }
+
+        /**
+         * Some element of {@code container} meeting what {@code some} says, where it is the lists a
+         * closure answered of each element of a list written out put end to end and the lists are
+         * not themselves written out: some element of the list written out whose list holds one
+         * that meets it, read once for each element written out, on the reading where the closure
+         * is handed that element and the container stands for the list it answers — or null where
+         * the container is no such flattening.
+         *
+         * <p>An element of the container is one of the list the closure answered of some element
+         * of the one it walks, so some element of the container meets a statement exactly where
+         * that holds of some element of one of those lists, and of an element not kept out of the
+         * list walked. Each reading is the one-level case again, and a list that is itself such a
+         * flattening is read the same way inside it.
+         */
+        private Derivation someOfTheListsAnswered(
+                Denotation container, LawProposition.SomeElement<DeclaredArgument> some) {
+            ElementBindings.PiecesOfEachElement assembled =
+                    ElementBindings.piecesOfEachElement(container.value(), blockIn(container));
+            if (assembled == null
+                    || assembled.piece() != PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS
+                    || assembled.element() == null || assembled.element().binding() == null) {
+                return null;
+            }
+            Denotation walked = container.at().standing(assembled.walked(),
+                    read.rules().symbols(), read.rules().newtypes());
+            if (!(eachValue(walked) instanceof WrittenOutElements.Walked.Each each)) {
+                return null;
+            }
+            List<ReadMeaning.Occurrence> occurrences = there(each);
+            Denotation closure = container.at().standing(assembled.closure(),
+                    read.rules().symbols(), read.rules().newtypes());
+            WhyUnread past = splitInto(reads, occurrences.size(), valuesOf(closure, occurrences));
+            if (past != null) {
+                return unread(e, reads, past);
+            }
+            Core inside = applied.argument(some.container());
+            List<Derivation> ofEach = new ArrayList<>();
+            for (ReadMeaning.Occurrence occurrence : occurrences) {
+                InputReads handing = closure.at().handing(assembled.element().binding(),
+                        occurrence.value(), read.rules().newtypes());
+                Denotation answered = handing.standing(assembled.step().body(),
+                        read.rules().symbols(), read.rules().newtypes());
+                ALawRead onIt = new ALawRead(this, reads.taking(inside, answered, 1)
+                        .taking(container.value(), answered, 1));
+                ofEach.add(whereItIsKept(onIt.meeting(answered, answered, some),
+                        occurrence.keptWhere()));
+            }
+            return ofEach.isEmpty()
+                    ? new Derivation.OverElementsWrittenOut(ofEach, true,
+                            HowTheElementsAreAsked.NOT_SAID)
+                    : new Derivation.SomeElementOfTheListsAnswered(ofEach);
         }
 
         /**
@@ -4932,10 +5084,10 @@ final class Pullback {
             // being one of the pieces, which neither the pieces nor the container turn on.
             if (element instanceof Proposition.Some(DecisionSubject walked,
                     Proposition ofAnElement, boolean holds, var _) && holds
-                    && valueBeingOneOfThePieces(ofAnElement, within, pieces)
-                            instanceof Quantity.IsAmongThePieces ofAnElementAmong) {
+                    && elementBeingOneOfThePieces(ofAnElement, within, pieces)
+                            instanceof AnElementAmongThePieces ofAnElementAmong) {
                 return leaf(new Derivation.SomeElementEquallingSomePiece(walked, answered,
-                        ofAnElementAmong, Optional.empty()),
+                        ofAnElementAmong.among(), ofAnElementAmong.present(), Optional.empty()),
                         askedAt != null ? askedAt : new Denotation(e, reads));
             }
             Derivation.SomeElementEquallingSomePiece elementInALanguage =
@@ -5002,13 +5154,14 @@ final class Pullback {
                 }
             }
             if (language == null || some == null
-                    || !(valueBeingOneOfThePieces(some.ofTheElement(), within, pieces)
-                            instanceof Quantity.IsAmongThePieces among)
-                    || !(among.value() instanceof DecisionAtom.OfTheInput(
+                    || !(elementBeingOneOfThePieces(some.ofTheElement(), within, pieces)
+                            instanceof AnElementAmongThePieces equalling)
+                    || !(equalling.among().value() instanceof DecisionAtom.OfTheInput(
                             NumericTerm.ValueOf value))) {
                 return null;
             }
-            return new Derivation.SomeElementEquallingSomePiece(some.container(), answered, among,
+            return new Derivation.SomeElementEquallingSomePiece(some.container(), answered,
+                    equalling.among(), equalling.present(),
                     Optional.of(new Derivation.SomeElementEquallingSomePiece.InALanguage(
                             value.subjectPath(), language)));
         }

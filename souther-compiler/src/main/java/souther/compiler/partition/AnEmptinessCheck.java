@@ -5,12 +5,18 @@ import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.InputReads;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.ValueName;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Whether a comparison is a size held against a number that parts nought from every size above it
@@ -32,24 +38,79 @@ final class AnEmptinessCheck {
     private AnEmptinessCheck() {}
 
     /**
-     * What a comparison says of whether a container holds anything.
+     * What a comparison says of whether containers hold anything.
      *
-     * @param container         the container whose size is held against nought
-     * @param emptyWhereItHolds whether the comparison holding is the container holding nothing
+     * @param containers        the containers whose sizes are added up and held against nought,
+     *                          one where a size alone is, each where it is read
+     * @param emptyWhereItHolds whether the comparison holding is the containers holding nothing
+     * @param written           the comparison with the name its sum was given followed, and the
+     *                          reading it is read in: what the arithmetic over the input is
+     *                          asked of, to tell a sum it reads from one it does not
+     * @param named             whether the sum is a name that was followed to what it stands for
      */
-    record Checked(Core container, boolean emptyWhereItHolds) {}
+    record Checked(List<Denotation> containers, boolean emptyWhereItHolds,
+                   StatedComparison written, InputReads writtenAt, boolean named) {
+
+        Checked {
+            containers = List.copyOf(containers);
+        }
+
+        /** Whether it is a size alone and not a sum. */
+        boolean ofOneContainer() {
+            return containers.size() == 1;
+        }
+    }
+
+    /** A size, and the reading the container it is the size of is read in. */
+    private record Size(AnOperationApplied applied, InputReads at) {}
 
     /**
-     * The emptiness {@code stated} checks, or null where it is no size held against a number that
-     * parts nought from every size above it.
+     * What a name stands for, in the reading it is read in: the value it is bound to and where
+     * that value is read ({@link InputReads#standing}). A size or a sum of sizes that was given a
+     * name is the check as much as one written in the comparison.
      */
-    static Checked checked(StatedComparison stated) {
-        StatedComparison.Numbered<AnOperationApplied> size = stated.at(AnEmptinessCheck::aSize);
-        if (size == null
-                || !(Core.withoutStanding(size.other()) instanceof Core.Int against)) {
+    @FunctionalInterface
+    interface Standing {
+
+        Denotation of(Core e, InputReads reads);
+    }
+
+    /**
+     * The emptiness {@code stated} checks, read in {@code reads}: of one container where it is a
+     * size, of several where it is their sizes added up — or null where it is neither held
+     * against a number that parts nought from every size or sum above it.
+     *
+     * <p>A size is no lower than nought, so a sum of them is nought exactly where every one is and
+     * is one or more exactly where some one is: the comparison holds exactly where some container
+     * holds something, or exactly where none does. Any other way of combining sizes — taking one
+     * from another, weighing one more than the rest — is a relation between them, and is not
+     * this.
+     *
+     * <p>That is what the comparison holds, and it says nothing of what a run works out to get
+     * there: a sum works out every size, and what is read as some one of them holding something is
+     * a statement about the containers and not an order of evaluation. A comparison read as an
+     * emptiness check is carried to the input ({@link Pullback#carriesPast}), and what a run works
+     * out before it is asked of the written arithmetic, as it is for a size alone.
+     */
+    static Checked checked(StatedComparison stated, InputReads reads, Standing standing) {
+        Denotation[] stood = {null};
+        Core[] side = {null};
+        StatedComparison.Numbered<List<Size>> sizes = stated.at(each -> {
+            List<Size> out = new ArrayList<>();
+            Denotation followed = standing.of(each, reads);
+            if (!addedUp(followed, standing, out)) {
+                return null;
+            }
+            stood[0] = followed;
+            side[0] = each;
+            return out;
+        });
+        if (sizes == null
+                || !(Core.withoutStanding(standing.of(sizes.other(), reads).value())
+                        instanceof Core.Int against)) {
             return null;
         }
-        Rel relation = size.claim().statedRelation();
+        Rel relation = sizes.claim().statedRelation();
         boolean atNought = relation.holds(Long.compare(0, against.value()));
         boolean above = relation.holds(1);
         if (atNought == above) {
@@ -59,9 +120,31 @@ final class AnEmptinessCheck {
         // whatever else is known of the size: it comes out one way at nought and the other way on
         // either side of it.
         boolean noughtAlone = against.value() == 0 && relation.holds(-1) == above;
-        return noughtAlone || partsNoughtFromEverySizeAbove(relation, against.value(),
-                        size.number().operation())
-                ? new Checked(size.number().args().getFirst(), atNought) : null;
+        if (!noughtAlone && !sizes.number().stream().allMatch(size -> partsNoughtFromEverySizeAbove(
+                relation, against.value(), size.applied().operation()))) {
+            return null;
+        }
+        boolean onTheLeft = side[0] == stated.left();
+        StatedComparison written = new StatedComparison(stated.claim(),
+                onTheLeft ? stood[0].value() : stated.left(),
+                onTheLeft ? stated.right() : stood[0].value(), stated.reading());
+        return new Checked(sizes.number().stream().map(size -> new Denotation(
+                size.applied().args().getFirst(), size.at())).toList(), atNought, written,
+                stood[0].at(),
+                Core.withoutStanding(stood[0].value()) != Core.withoutStanding(side[0]));
+    }
+
+    /**
+     * Whether {@code e} is sizes and nothing else added together, the sizes put in {@code into}
+     * in the order they are added.
+     */
+    private static boolean addedUp(Denotation e, Standing standing, List<Size> into) {
+        if (Core.withoutStanding(e.value()) instanceof Core.Binary sum && sum.op() == BinOp.ADD) {
+            return addedUp(standing.of(sum.left(), e.at()), standing, into)
+                    && addedUp(standing.of(sum.right(), e.at()), standing, into);
+        }
+        AnOperationApplied size = aSize(e.value());
+        return size != null && into.add(new Size(size, e.at()));
     }
 
     /**
