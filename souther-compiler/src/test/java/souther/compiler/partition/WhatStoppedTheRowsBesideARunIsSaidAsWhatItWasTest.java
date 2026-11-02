@@ -72,7 +72,8 @@ class WhatStoppedTheRowsBesideARunIsSaidAsWhatItWasTest {
     void whatABuildingMetIsKeptInItsOwnVocabularyAndNotAsTheFigure() {
         Generator.RowsBesideBudget budget = new Generator.RowsBesideBudget();
         CompositionBudget other = CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS;
-        CompositionRepertoire population = CompositionRepertoire.values()[0];
+        CompositionRepertoire population =
+                CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES;
 
         budget.met(CompositionShortfall.of(Set.of(other), Set.of(population), Set.of()));
 
