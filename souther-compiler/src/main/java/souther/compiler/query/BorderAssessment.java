@@ -433,7 +433,7 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
          * What this asks of a row, as a report writes it, or null where none is owed: the values,
          * and the cases of the input the line decides in where the position does not name them.
          * Another line of the comparison said in the same words under a different point is told
-         * apart by {@code apart}, which is held for the readings of the behavior together
+         * apart by {@code apart}, which is worked out from the points of the module together
          * ({@link WhereTheReadingsDiffer#NONE} for a reader that has only this one).
          */
         public String asked(WhereTheReadingsDiffer apart) {

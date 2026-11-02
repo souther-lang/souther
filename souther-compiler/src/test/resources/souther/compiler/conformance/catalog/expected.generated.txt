@@ -154,5 +154,3 @@ example everyDealPriced
         }
     )
         -> <?>
-// no row for `#deals [some rates.rates [rates.rates[key] == deals[*].currency]] - List.length(deals) = 1` in `everyDealPriced`: the search left something untried
-// no row for `1 < #deals [some rates.rates [rates.rates[key] == deals[*].currency]] - List.length(deals)` in `everyDealPriced`: the search left something untried

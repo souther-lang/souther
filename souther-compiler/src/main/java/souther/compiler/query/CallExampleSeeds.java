@@ -236,7 +236,7 @@ final class CallExampleSeeds {
                 List<FixtureTemplate> inputs = lifted.isEmpty() ? List.of()
                         : composed(base, lifted.get(), subject);
                 List<String> key = inputs.stream()
-                        .map(each -> each == null ? null : each.text()).toList();
+                        .map(each -> each == null ? null : each.meaning()).toList();
                 // A row the author has written costs no build, so the first lift to it takes none
                 // of the rows tried, and the rows looked at past the limit are no more than the
                 // rows the author wrote. It is considered at once, so a later lift to it takes a

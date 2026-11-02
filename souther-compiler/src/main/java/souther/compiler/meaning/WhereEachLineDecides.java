@@ -254,7 +254,7 @@ public final class WhereEachLineDecides {
         for (TermPath position : positionsOf(part)) {
             List<TermPath.Step> steps = position.steps();
             for (int step = 0; step < steps.size(); step++) {
-                CasesLeft stands = at.get(new TermPath(position.head(), steps.subList(0, step)));
+                CasesLeft stands = at.get(position.prefix(step));
                 if (stands != null && steps.get(step) instanceof TermPath.Step.Refine(
                         CasesLeft cases) && stands.meet(cases) == null) {
                     return AskedOfTheValue.OF_ANOTHER_CASE;
@@ -309,7 +309,7 @@ public final class WhereEachLineDecides {
             List<TermPath.Step> steps = position.steps();
             for (int at = 0; at < steps.size(); at++) {
                 if (steps.get(at) instanceof TermPath.Step.Refine(CasesLeft cases)) {
-                    out.merge(new TermPath(position.head(), steps.subList(0, at)), cases,
+                    out.merge(position.prefix(at), cases,
                             (one, other) -> one.meet(other) == null ? one : one.meet(other));
                 }
             }

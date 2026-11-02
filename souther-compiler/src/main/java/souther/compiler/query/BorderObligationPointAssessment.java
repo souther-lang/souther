@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BorderQuantity;
@@ -19,6 +20,7 @@ import souther.compiler.publish.PublishedSentence;
 import souther.compiler.types.ModelOccurrences;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.LinkedHashSet;
@@ -86,8 +88,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                                               Optional<Demand> demand, ObligationAssessment item,
                                               java.util.SequencedMap<Reading, BorderAssessment>
                                                       met,
-                                              Map<Reading, ReadingSeat> seats,
-                                              WhereTheReadingsDiffer apart)
+                                              Map<Reading, ReadingSeat> seats)
         implements RuleCitations {
 
     /**
@@ -332,12 +333,9 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                 seats.get(each.point()).merge(where, each.seat(), ReadingSeat::closer);
             }
         }
-        // Held beside every point, since the readings that a report would say in the same words are
-        // of different points of one comparison.
-        WhereTheReadingsDiffer apart = WhereTheReadingsDiffer.of(byPoint, seats);
         List<BorderObligationPointAssessment> out = new ArrayList<>();
         byPoint.forEach((point, met) -> out.add(of(point, attribution.get(point), met,
-                seats.get(point), premisesOf, apart)));
+                seats.get(point), premisesOf)));
         return List.copyOf(out);
     }
 
@@ -359,13 +357,12 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
             souther.compiler.partition.PointAttribution attribution,
             java.util.SequencedMap<Reading, BorderAssessment> met,
             Map<Reading, ReadingSeat> seats,
-            Function<BorderAssessment, List<WhereNothingIsAnswered.Premise>> premisesOf,
-            WhereTheReadingsDiffer apart) {
+            Function<BorderAssessment, List<WhereNothingIsAnswered.Premise>> premisesOf) {
         List<BorderAssessment> readings = List.copyOf(met.values());
         Optional<Demand> asked = asked(point, met, seats);
         return new BorderObligationPointAssessment(point, attribution,
                 reachedBy(point, readings), asked,
-                came(met, seats, asked, premisesOf), met, seats, apart);
+                came(met, seats, asked, premisesOf), met, seats);
     }
 
     /**
@@ -791,6 +788,40 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     public static final int READINGS_SAID = 4;
 
     /**
+     * Every reading of the point in one order, whatever order they were made in and whatever a
+     * report would call them.
+     *
+     * <p>For a surface that needs the readings in a steady order and says none of the words
+     * ({@link #readingsSaid}'s order is the words, and is the one a reader sees). By the quantity,
+     * what is asked of it, the cases it decides in, and the behavior that read it. Every reading
+     * here is of the one line that owes the point, so the lines are not compared: the order of the
+     * lines of a comparison ({@link AuthoredLine#inASteadyOrder}) is for numbering the lines of one
+     * comparison, and is refused for a declaration's. What is left tied is the readings of one
+     * behavior that ask alike and differ only by the call they were made at, which is a bag.
+     */
+    public List<Reading> readingsInSteadyOrder() {
+        Comparator<SteadyKey> order = Comparator
+                .comparing(SteadyKey::axis, Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(SteadyKey::asks, Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(SteadyKey::where,
+                        Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(SteadyKey::behavior);
+        List<SteadyKey> keys = new ArrayList<>();
+        met.forEach((reading, at) -> {
+            DomainPoint asked = seatOf(reading).asked();
+            keys.add(new SteadyKey(reading, at.axis(),
+                    at.operator(asked) == null ? null : at.operator(asked) + " " + at.against(asked),
+                    at.decidesWhere(), reading.behavior()));
+        });
+        return keys.stream().sorted(order).map(SteadyKey::reading).toList();
+    }
+
+    /** What a reading is put in order by, worked out once for each reading and not once for each
+     *  comparison of two. */
+    private record SteadyKey(Reading reading, String axis, String asks, String where,
+                             String behavior) {}
+
+    /**
      * Every reading of the point, as the sentences a surface prints under it, in the order the
      * sentences sort.
      *
@@ -803,7 +834,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * <p>All of them. Which to show is the surface's ({@link #READINGS_SAID}), so that what is left
      * out is a count the surface says rather than a reading this dropped.
      */
-    public List<ReadingSaid> readingsSaid() {
+    public List<ReadingSaid> readingsSaid(WhereTheReadingsDiffer apart) {
         List<ReadingSaid> out = new ArrayList<>();
         met.forEach((where, at) -> {
             DomainPoint asked = seats.get(where).asked();
@@ -811,7 +842,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                     new BorderAssessment.Point(at, asked, at.at(asked)).asked(apart),
                     at.readAt()));
         });
-        out.sort(java.util.Comparator.comparing((ReadingSaid said) -> said.at())
+        out.sort(Comparator.comparing((ReadingSaid said) -> said.at())
                 .thenComparing(ReadingSaid::asks));
         return List.copyOf(out);
     }

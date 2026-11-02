@@ -307,6 +307,33 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      *  a machine. */
     public Optional<Emptiness> holdsNothing(SequencedMap<A, Emptiness.AtAField.Where> positions,
                                             StringMachineAnswers machines) {
+        return verdict(positions, machines).proof();
+    }
+
+    /**
+     * What {@link #holdsNothing} answers, and whether the readings it asked were settled.
+     *
+     * @param proof   the proof that nothing satisfies this state, where there is one
+     * @param settled whether the answer is one that saying more of the rules would not take back:
+     *                the numbers settled and composed every bound
+     *                ({@link NumericDomain#isSettledAndComposed}) and the pair of values and ranges
+     *                decided what it was asked rather than leaving it for later
+     *                ({@link souther.compiler.values.Emptiness#UNDECIDED}). Where there is a proof
+     *                it is, since a state shown to hold nothing is settled however it was shown.
+     *                Where there is none it separates a state the readings looked at to the end
+     *                from one they stopped short of. Only the first is one that no state with fewer
+     *                of its rules was shown empty of, and a reader leaning on that has to ask it.
+     */
+    public record Verdict(Optional<Emptiness> proof, boolean settled) {}
+
+    /** {@link #holdsNothing(SequencedMap)}, with whether it settles. */
+    public Verdict verdict(SequencedMap<A, Emptiness.AtAField.Where> positions) {
+        return verdict(positions, StringMachineAnswers.NONE);
+    }
+
+    /** The same, borrowing what {@code machines} has already made. */
+    public Verdict verdict(SequencedMap<A, Emptiness.AtAField.Where> positions,
+                           StringMachineAnswers machines) {
         Confinement.Admission<A> shown = admitted(machines);
         // What can be said whatever the readings show, which the nearer sentences are preferred to.
         Emptiness why = shownByAnother() || shown.holdsNothing()
@@ -314,7 +341,9 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         // Which proof holds is what this state answers; what it is called in a value declaring
         // these positions is {@link ProofOfEmptiness}'s, and is about what a proof can say rather
         // than about the walk that reached this one.
-        return ProofOfEmptiness.named(shown, positions, why);
+        Optional<Emptiness> proof = ProofOfEmptiness.named(shown, positions, why);
+        return new Verdict(proof, proof.isPresent()
+                || (numbers.isSettledAndComposed() && shown.wasAskedToTheEnd()));
     }
 
     /**

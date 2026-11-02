@@ -555,4 +555,26 @@ public final class ClosedState<A> {
     public boolean everyBoundWasComposed() {
         return everyBoundWasComposed;
     }
+
+    /**
+     * Whether the box is where reading every rule against it stops, and not a step on the way
+     * there: the rounds settled and every bound was composed. Also where the rules leave nothing,
+     * which is settled however the rounds went.
+     *
+     * <p>What is claimed is that reading the rules against this box narrows nothing further and
+     * nothing was left out of the reading. It is not a claim that the box is the narrowest the rules
+     * imply: the rules are read the ways {@link FormReach} reads them, and what those ways do not
+     * reach stays in the box at a fixed point as it does anywhere.
+     *
+     * <p>That is what a reader needs who treats a state shown empty with fewer rules as shown empty
+     * with more. A closure the rounds ran out on, or that left a bound it could not compose out, is
+     * a box the rules read again may still narrow, and nothing is said of how it stands beside the
+     * closure of fewer. The property is held against the regions a model reads, with relations taken
+     * in and numbers fixed at random
+     * ({@code ARegionIsShownEmptyWhereAnythingItRefinesWasIfItsReadingIsSettledTest}); it is not
+     * derived from this definition alone, and a reading it does not cover should be added there.
+     */
+    public boolean isSettledAndComposed() {
+        return holdsNothing || (status == Status.STABLE && everyBoundWasComposed);
+    }
 }

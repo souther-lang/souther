@@ -64,6 +64,24 @@ class ADeclarationsPointIsWrittenFromTheDeclarationTest {
                 | "a" : (Onl { hiredOn = Date("2020-01-01"), leaveFrom = Date("2020-01-02") }) -> Ok
             """;
 
+    /** A helper that takes the type, called from two places of one behavior. */
+    private static final String TWO_CALLS = """
+            module example.calls
+
+            data Ok
+
+            data Common = { hiredOn: Date }
+
+            data Onl = { ...Common, leaveFrom: Date }
+                invariant Date.daysBetween(hiredOn, leaveFrom) >= 0
+
+            behavior help : (y: Onl) -> Ok
+            let help (y) = Ok
+
+            behavior outer : (a: Onl, b: Onl) -> Ok
+            let outer (a, b) = if help(a) == help(b) then Ok else Ok
+            """;
+
     /**
      * The readings really do name the position two ways, so what is held below is not vacuous.
      *
@@ -72,7 +90,8 @@ class ADeclarationsPointIsWrittenFromTheDeclarationTest {
      */
     @Test
     void theTwoReadingsNameThePositionDifferently() {
-        List<String> at = measured().modules().get(0).debts().get(0).debt().readingsSaid().stream()
+        List<String> at = measured().modules().get(0).debts().get(0).debt()
+                .readingsSaid(WhereTheReadingsDiffer.NONE).stream()
                 .map(BorderObligationPointAssessment.ReadingSaid::at)
                 .distinct().sorted().toList();
 
@@ -104,6 +123,29 @@ class ADeclarationsPointIsWrittenFromTheDeclarationTest {
                         .filter(each -> each.contains("no row is at the"))
                         .noneMatch(each -> each.contains("x@Onl.") || each.contains("x.leaveFrom")),
                 "a point of a declaration's line names no reading's position:\n" + report);
+    }
+
+    /**
+     * A declaration's point read at three positions by two behaviors, one a helper called twice, is
+     * put in a steady order and published. No comparison of the lines of a comparison is asked of
+     * it: a declaration's line is not one, and the order of those refuses it.
+     */
+    @Test
+    void readingsThatAskAlikeAreStillPutInAnOrderAndPublished() {
+        Compilation compilation = Compilation.ofSource(TWO_CALLS, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        AdequacyReport report = AdequacyReport.of(compilation);
+
+        BorderObligationPointAssessment debt = report.modules().get(0).debts().get(0).debt();
+        List<BorderObligationPointAssessment.ReadingSaid> said =
+                debt.readingsSaid(WhereTheReadingsDiffer.NONE);
+        assertEquals(3, said.size(), said.toString());
+
+        List<BorderObligationPointAssessment.Reading> ordered = debt.readingsInSteadyOrder();
+        assertEquals(3, ordered.size());
+        assertEquals(ordered, debt.readingsInSteadyOrder(), "and the same one every time");
+        assertNotNull(report.json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }
 
     /** And nothing is written for a quantity the declaration has no words for. */

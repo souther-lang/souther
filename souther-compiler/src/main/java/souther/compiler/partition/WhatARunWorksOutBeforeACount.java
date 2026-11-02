@@ -256,7 +256,7 @@ final class WhatARunWorksOutBeforeACount {
                 case Core.Widen _ -> { }
                 case Core.LetIn let -> {
                     if (child == let.body()) {
-                        out.add(let.value());
+                        workedOut(out, let.value());
                     }
                 }
                 case Core node -> {
@@ -284,9 +284,9 @@ final class WhatARunWorksOutBeforeACount {
     private static void addWorkedOut(List<Core> out, Core node, Core expression) {
         if (Core.withoutStanding(node) instanceof Core.IfConstructed attempt
                 && expression == attempt.construct()) {
-            Core.forEachChild(expression, out::add);
+            Core.forEachChild(expression, child -> workedOut(out, child));
         } else {
-            out.add(expression);
+            workedOut(out, expression);
         }
     }
 
@@ -326,6 +326,9 @@ final class WhatARunWorksOutBeforeACount {
                             .noneMatch(arg -> Core.withoutStanding(arg) == block)) {
                         return null;
                     }
+                    // Whole, a closure beside this one included: which of the closures a call is
+                    // handed it applies first is the call's, and one applied before this one has
+                    // run its body by then.
                     for (Core arg : Within.argumentsOf(applying)) {
                         if (Core.withoutStanding(arg) != block
                                 && out.stream().noneMatch(part -> part == arg)) {
@@ -337,7 +340,7 @@ final class WhatARunWorksOutBeforeACount {
                 case Core.Widen _ -> { }
                 case Core.LetIn let -> {
                     if (child == let.body()) {
-                        out.add(let.value());
+                        workedOut(out, let.value());
                     }
                 }
                 case Core node -> {
@@ -368,6 +371,25 @@ final class WhatARunWorksOutBeforeACount {
 
     /** A closure on the way to a comparison, and the call it is handed to. */
     record Applying(Core call, Core.Block closure) {}
+
+    /**
+     * Files {@code e} as worked out on the way to a comparison, unless it is a function value.
+     * What a node evaluates before the part the way goes down through, and the value of a
+     * {@code let} the way goes into the body of, come through here, so what a closure written
+     * there is taken for is said once. The call a closure is handed to, and the arguments beside
+     * the closure, are filed whole where the way enters the closure.
+     *
+     * <p>Evaluating a closure makes the function and runs nothing of its body. The body runs
+     * where a call applies the function, and a call handed the closure beside the argument the
+     * comparison stands in applies it after every argument, that one included ({@link Evaluated}).
+     * A closure bound by a {@code let} is the same value: what its body does is the call that
+     * applies the name, which is its own step where it comes.
+     */
+    private static void workedOut(List<Core> out, Core e) {
+        if (!Evaluated.makesAFunction(e)) {
+            out.add(e);
+        }
+    }
 
     /** The nodes from {@code e} down to {@code node}, both included, by identity — or null where
      *  {@code node} is not under {@code e}. */

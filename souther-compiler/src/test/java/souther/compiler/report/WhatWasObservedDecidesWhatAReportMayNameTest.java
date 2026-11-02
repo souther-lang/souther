@@ -25,6 +25,7 @@ import souther.compiler.publish.PublishedSubject;
 import souther.compiler.source.SourceId;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.RowWitnesses;
+import souther.compiler.query.WhereTheReadingsDiffer;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 
@@ -173,7 +174,8 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
 
     private static AdequacyReport.ModuleReport moduleOf(String name) {
         return new AdequacyReport.ModuleReport(name, new SourceId("m.sou"),
-                List.of(reported()), List.of(), AdequacyReport.DeclarationsShown.NONE);
+                List.of(reported()), List.of(), AdequacyReport.DeclarationsShown.NONE,
+                WhereTheReadingsDiffer.NONE);
     }
 
     /** And a document names them in an order that does not depend on the order they were met in. */

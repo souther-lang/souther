@@ -2363,7 +2363,7 @@ public final class InputReads {
         if (path.steps().isEmpty()) {
             return null;
         }
-        TermPath held = new TermPath(path.head(), path.steps().subList(0, path.steps().size() - 1));
+        TermPath held = path.prefix(path.steps().size() - 1);
         ContainerOf in = new ContainerOf.AtAPosition(held);
         return switch (path.steps().getLast()) {
             case TermPath.Step.Element _ -> new ElementStood(name, in, HeldIn.Part.ELEMENT);

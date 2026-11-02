@@ -305,7 +305,7 @@ final class FormReach<A> {
             return fromTheEnds(coefs, constant);
         }
         ExactCut ranges = fromTheRanges(coefs, constant);
-        ExactCut best = withTheDifference(coefs, constant, ranges);
+        ExactCut best = withTheDifference(difference(coefs), constant, ranges);
         // What a premise naming none of the form's positions leaves is the form and the premise
         // side by side. Where the form weighs two positions or more, that residual has three or
         // more, so the ranges are its only route — see passesOver for when they bound it no lower
@@ -334,11 +334,7 @@ final class FormReach<A> {
             // exact arithmetic cannot hold the sum. Where that happens this premise composes no
             // route this round — the same as a premise this form does not name — which costs a
             // tighter bound this route might have found and claims nothing this route did not.
-            Map<A, ExactRatio> without1 = withoutThe(premise, coefs);
-            ExactRatio residualConstant =
-                    without1 == null ? null : constant.plus(premise.bound().at()).orNull();
-            ExactCut residual = residualConstant == null ? null
-                    : fromTheEnds(without1, residualConstant);
+            ExactCut residual = fromTheEndsWithout(premise, coefs, constant);
             if (residual != null) {
                 // The form reaches the sum only where the residual reaches its own end and the
                 // premise reaches its bound.
@@ -712,38 +708,83 @@ final class FormReach<A> {
         }
     }
 
-    /** {@code coefs} with {@code premise}'s form taken off it, which is what is left to bound once
-     *  the premise has been used — or {@code null} where a coefficient the merge combines is one the
-     *  exact arithmetic cannot sum. */
-    private Map<A, ExactRatio> withoutThe(AffineConstraint.HalfSpace<A> premise,
-                                          Map<A, ExactRatio> coefs) {
-        Map<A, ExactRatio> left = new LinkedHashMap<>(coefs);
-        // The premise walked in the one order its positions decide. What comes of the merge is the
-        // same whichever order it is taken in, and the walk is what would let the next change here
-        // start depending on one the premise does not hold.
-        boolean[] everyMergeWasComposed = {true};
-        walked.apply(premise.form()).forEach(each -> left.merge(each.getKey(),
-                each.getValue().negated(), (a, b) -> {
-                    ExactAnswer<ExactRatio> sum = a.plus(b);
-                    if (sum instanceof ExactAnswer.Held<ExactRatio> held) {
-                        return held.value();
-                    }
-                    everyMergeWasComposed[0] = false;
-                    return a;
-                }));
-        if (!everyMergeWasComposed[0]) {
+    /**
+     * What the ends and the closed differences leave {@code coefs·position + constant} once
+     * {@code premise}'s form is taken off it and its bound added — what is left to bound once the
+     * premise has been used. Null where a coefficient the merge combines, or the bound it adds, is
+     * one the exact arithmetic cannot sum.
+     *
+     * <p>The residual is added up as it is made and not held in a map: it is asked of once for each
+     * premise a form is merged with, and is let go after. It is taken in the order a map copied from
+     * {@code coefs} and merged with the premise's form, walked in the one order its positions
+     * decide, iterates in — the positions of {@code coefs} where they were, then those only the
+     * premise names, in the premise's order — because a sum is exact and can fail part of the way,
+     * and whether it does turns on which terms were added before it. A position weighed nought, in
+     * {@code coefs} or by what the merge leaves, is no term.
+     */
+    ExactCut fromTheEndsWithout(AffineConstraint.HalfSpace<A> premise, Map<A, ExactRatio> coefs,
+                                ExactRatio constant) {
+        List<Map.Entry<A, ExactRatio>> taken = walked.apply(premise.form());
+        Map<A, ExactRatio> takenAt = taken.size() > FEW_TAKEN ? indexed(taken) : null;
+        OrderedTerms<A> left = new OrderedTerms<>(coefs.size() + taken.size());
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+            ExactRatio weight = each.getValue();
+            ExactRatio off = weightTaken(taken, takenAt, each.getKey());
+            if (off != null) {
+                if (!(weight.plus(off.negated()) instanceof ExactAnswer.Held<ExactRatio> sum)) {
+                    return null;
+                }
+                weight = sum.value();
+            }
+            left.addUnlessNought(each.getKey(), weight);
+        }
+        for (Map.Entry<A, ExactRatio> each : taken) {
+            if (!coefs.containsKey(each.getKey())) {
+                left.addUnlessNought(each.getKey(), each.getValue().negated());
+            }
+        }
+        ExactRatio residualConstant = constant.plus(premise.bound().at()).orNull();
+        if (residualConstant == null) {
             return null;
         }
-        left.values().removeIf(ExactRatio::isZero);
-        return left;
+        if (left.size() == 0) {
+            return ExactCut.inclusive(residualConstant);
+        }
+        ExactCut fromTheRanges = Reach.mostOfTerms(left, residualConstant, ends::endWeighedBy);
+        Apart<A> apart = left.size() == 2 ? apartOf(left) : null;
+        return withTheDifference(apart, residualConstant, fromTheRanges);
+    }
+
+    /** How many positions a premise names before looking them up one by one costs more than
+     *  indexing them. */
+    private static final int FEW_TAKEN = 8;
+
+    private static <A> Map<A, ExactRatio> indexed(List<Map.Entry<A, ExactRatio>> taken) {
+        Map<A, ExactRatio> out = HashMap.newHashMap(taken.size());
+        taken.forEach(each -> out.put(each.getKey(), each.getValue()));
+        return out;
+    }
+
+    /** What the premise weighs {@code position} by, or null where it does not name it. */
+    private static <A> ExactRatio weightTaken(List<Map.Entry<A, ExactRatio>> taken,
+                                              Map<A, ExactRatio> takenAt, A position) {
+        if (takenAt != null) {
+            return takenAt.get(position);
+        }
+        for (Map.Entry<A, ExactRatio> each : taken) {
+            if (each.getKey().equals(position)) {
+                return each.getValue();
+            }
+        }
+        return null;
     }
 
     /** What the ends and the closed differences leave the form, which is where every route starts. */
-    private ExactCut fromTheEnds(Map<A, ExactRatio> coefs, ExactRatio constant) {
+    ExactCut fromTheEnds(Map<A, ExactRatio> coefs, ExactRatio constant) {
         if (coefs.isEmpty()) {
             return ExactCut.inclusive(constant);
         }
-        return withTheDifference(coefs, constant, fromTheRanges(coefs, constant));
+        return withTheDifference(difference(coefs), constant, fromTheRanges(coefs, constant));
     }
 
     /** What the ends leave the form, each position read at its own end. The highest alone, which
@@ -758,10 +799,9 @@ final class FormReach<A> {
 
     /** {@code best}, tightened by the closed differences where the form is the difference of two
      *  positions. */
-    private ExactCut withTheDifference(Map<A, ExactRatio> coefs, ExactRatio constant,
+    private ExactCut withTheDifference(Apart<A> apart, ExactRatio constant,
                                        ExactCut fromTheRanges) {
         ExactCut best = fromTheRanges;
-        Apart<A> apart = difference(coefs);
         if (apart != null) {
             ExactCut held = differences.differenceBound(apart.above(), apart.below());
             // Where the difference and the constant are too far apart in scale for the exact
@@ -785,9 +825,11 @@ final class FormReach<A> {
      * {@link CanonicalForm} removed from the rules, one level down in the reading.
      */
     private static <A> Apart<A> difference(Map<A, ExactRatio> coefs) {
-        if (coefs.size() != 2) {
-            return null;
-        }
+        return coefs.size() == 2 ? apartOf(coefs.entrySet()) : null;
+    }
+
+    /** {@link #difference} of a form of the two positions {@code terms} hands over. */
+    private static <A> Apart<A> apartOf(Iterable<? extends Map.Entry<A, ExactRatio>> terms) {
         // Which of the two is taken away from the other is read off the sign of what each weighs,
         // and not off which of them the mapping hands over first. The two readings agree wherever
         // the weights really are one of each sign, which is the only shape this answers about — and
@@ -795,16 +837,17 @@ final class FormReach<A> {
         A above = null;
         A below = null;
         ExactRatio by = null;
-        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+        ExactRatio belowWeighs = null;
+        for (Map.Entry<A, ExactRatio> each : terms) {
             if (each.getValue().signum() > 0) {
                 above = each.getKey();
                 by = each.getValue();
             } else {
                 below = each.getKey();
+                belowWeighs = each.getValue();
             }
         }
-        if (above == null || below == null
-                || !coefs.get(above).equals(coefs.get(below).negated())) {
+        if (above == null || below == null || !by.equals(belowWeighs.negated())) {
             return null;
         }
         return new Apart<>(above, below, by);

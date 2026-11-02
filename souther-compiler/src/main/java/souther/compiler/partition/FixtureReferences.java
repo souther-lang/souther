@@ -31,12 +31,27 @@ public final class FixtureReferences {
 
     private int next;
 
+    private final WrittenOut writtenOut;
+
     private final Hir.Binders binders;
 
-    /** A minter for the rows composed for {@code behavior} of {@code module}. */
-    public FixtureReferences(String module, String behavior) {
+    /** A minter for the rows composed for {@code behavior} of {@code module}, whose templates
+     *  mean what {@code writtenOut} says. */
+    FixtureReferences(String module, String behavior, WrittenOut writtenOut) {
+        this.writtenOut = writtenOut;
         this.binders = new Hir.Binders(new BindingOwner.Synthesized(
                 new BindingOwner.OfValue(module, behavior), BindingOwner.Pass.GENERATOR, 0));
+    }
+
+    /** A minter for the rows composed for {@code behavior} of {@code module}, where nothing is
+     *  built and so every template means its own spelling. */
+    public FixtureReferences(String module, String behavior) {
+        this(module, behavior, WrittenOut.NOTHING_TO_BUILD);
+    }
+
+    /** What the templates of this run mean. */
+    WrittenOut writtenOut() {
+        return writtenOut;
     }
 
     /** A reference nothing else in this run has. */

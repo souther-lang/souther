@@ -206,7 +206,7 @@ final class ElementValues {
         /** {@code path} as the part's own row names it, or null where it is not inside the
          *  part. */
         private TermPath inside(TermPath path) {
-            return path.isAtOrUnder(part) ? new TermPath(ALONE,
+            return path.isAtOrUnder(part) ? TermPath.of(ALONE,
                     path.steps().subList(part.steps().size(), path.steps().size())) : null;
         }
     }

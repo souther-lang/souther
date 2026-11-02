@@ -2,6 +2,9 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.RuleKey;
 
+import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
 import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -10,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.RandomAccess;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * A parameter-rooted location: a parameter, and the steps taken from it.
@@ -143,7 +148,8 @@ public record TermPath(String head, List<Step> steps) {
         // A path is rooted somewhere. Rooted at nothing it is a place with no parameter to be a
         // place of, and every answer that carries one says a position was reached.
         Objects.requireNonNull(head, "a path is rooted at a parameter");
-        steps = steps instanceof Steps ? steps : new Steps(List.copyOf(steps));
+        steps = steps instanceof Steps own && own.head.equals(head) && own.id == 0
+                ? steps : Steps.plain(head, List.copyOf(steps));
     }
 
     /**
@@ -175,8 +181,23 @@ public record TermPath(String head, List<Step> steps) {
      */
     private static final class Steps extends AbstractList<Step> implements RandomAccess {
 
+        /** The head these steps are under: the steps of a path are never shared with another head,
+         *  since what they remember about the path derived from them is about this head. */
+        private final String head;
         private final List<Step> of;
         private int hash;
+
+        /** The path these steps are one step further than; null for a root and for a path built
+         *  by the constructor. */
+        private final TermPath parent;
+
+        /** What the table of derived paths calls the path these are the steps of, or nought where
+         *  that is not the one path of its head that derivations return. A number and not a
+         *  reference, so that what the table files a path under keeps no path alive. What is
+         *  derived from a path is kept beside this type ({@link #FILED}) and not in it: a path is
+         *  carried by a great many answers, and a path that held the paths made from it would
+         *  hold itself through them. */
+        private long id;
 
         /** How a path under one head spells these, kept for the last head asked: a path is spelled
          *  to be put in an order or into a message far more often than it is made, and one value
@@ -185,8 +206,24 @@ public record TermPath(String head, List<Step> steps) {
 
         private record Spelling(String head, String text) {}
 
-        private Steps(List<Step> of) {
+        private Steps(String head, List<Step> of, TermPath parent) {
+            this.head = head;
             this.of = of;
+            this.parent = parent;
+        }
+
+        static Steps plain(String head, List<Step> of) {
+            return new Steps(head, of, null);
+        }
+
+        /** The path made with these steps, which is the one derivations return once it is filed;
+         *  numbered before it is handed to anybody, since the constructor does not share the steps
+         *  of a numbered path with a path of its own. */
+        static TermPath numberedPath(String head, List<Step> of, TermPath parent) {
+            Steps made = new Steps(head, of, parent);
+            TermPath path = new TermPath(head, made);
+            made.id = NUMBERS.incrementAndGet();
+            return path;
         }
 
         /** The path under {@code head} written out, as {@link TermPath#toString} writes it. */
@@ -254,8 +291,153 @@ public record TermPath(String head, List<Step> steps) {
         }
     }
 
+    private static final Step ELEMENT = new Step.Element();
+    private static final Step KEY = new Step.Key();
+
+    /** The numbers paths are filed under; nought is no path, and stands for the place roots are
+     *  filed from. */
+    private static final AtomicLong NUMBERS = new AtomicLong();
+
+    /**
+     * Every path derivations return, by the place it is filed at: the number of the path it is one
+     * step further than and that step, or, for a root, no path and the field named by its
+     * parameter. A process shares this across every compile it makes, so it lets go of whatever
+     * nothing else holds.
+     *
+     * <p>Its keys are numbers and steps and name no path, which is what lets a path go: a key that
+     * held the parent would keep it, and everything above it, for as long as the entry stayed,
+     * and the entry stays until it is swept. A path made from another holds that one itself, so a
+     * parent is filed for as long as a path made from it is, and a number is never given twice.
+     * What is swept is the entry of a path that was collected, and it is swept at every ask, since
+     * the ask that finds nothing to sweep costs a read.
+     */
+    private static final ConcurrentHashMap<Place, Filed> FILED = new ConcurrentHashMap<>();
+    private static final ReferenceQueue<TermPath> COLLECTED = new ReferenceQueue<>();
+
+    /** Where a path is filed. Compared in the code and not through a record's own, which goes
+     *  through a method handle: this is asked at every derivation of a path. */
+    private record Place(long under, Step step) {
+
+        @Override
+        public int hashCode() {
+            return 31 * Long.hashCode(under) + step.hashCode();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Place place && place.under == under && place.step.equals(step);
+        }
+    }
+
+    /** A path filed, weakly, with the place to take the entry out of by. */
+    private static final class Filed extends WeakReference<TermPath> {
+
+        private final Place place;
+
+        Filed(TermPath path, Place place) {
+            super(path, COLLECTED);
+            this.place = place;
+        }
+    }
+
+    /** How many places are filed, which is what a test asks to know that the entries of paths
+     *  nothing holds are gone as well. */
+    static int placesFiled() {
+        sweep();
+        return FILED.size();
+    }
+
+    /** Takes out the entries of the paths that were collected; an entry that has been filed again
+     *  since is not the one taken out. */
+    private static void sweep() {
+        for (Reference<? extends TermPath> gone = COLLECTED.poll(); gone != null;
+             gone = COLLECTED.poll()) {
+            FILED.remove(((Filed) gone).place, gone);
+        }
+    }
+
+    /** The path filed at {@code place}, or null where none is held. */
+    private static TermPath filedAt(Place place) {
+        sweep();
+        Filed held = FILED.get(place);
+        return held == null ? null : held.get();
+    }
+
+    /** {@code made} filed at {@code place}, or the path another thread filed there first. */
+    private static TermPath filing(Place place, TermPath made) {
+        Filed mine = new Filed(made, place);
+        while (true) {
+            Filed held = FILED.putIfAbsent(place, mine);
+            if (held == null) {
+                return made;
+            }
+            TermPath had = held.get();
+            if (had != null) {
+                return had;
+            }
+            if (FILED.replace(place, held, mine)) {
+                return made;
+            }
+        }
+    }
+
+    /** The path of the parameter itself, which is the same instance for as long as one is held. */
     public static TermPath of(String head) {
-        return new TermPath(head, List.of());
+        Objects.requireNonNull(head, "a path is rooted at a parameter");
+        Place place = new Place(0, new Step.Field(head));
+        TermPath root = filedAt(place);
+        return root != null ? root : filing(place, Steps.numberedPath(head, List.of(), null));
+    }
+
+    /**
+     * The path under {@code head} that takes {@code steps}, which is the one every derivation of
+     * the same steps from the same head returns; equal to {@code new TermPath(head, steps)}.
+     */
+    public static TermPath of(String head, List<Step> steps) {
+        return of(head).continuedBy(steps);
+    }
+
+    /** The one path equal to this, which is this one where it was derived. */
+    private TermPath canonical() {
+        return held().id != 0 ? this : of(head, steps);
+    }
+
+    private Steps held() {
+        return (Steps) steps;
+    }
+
+    /** The path one step further than this filed one, made the first time it is asked. */
+    private TermPath within(Step step) {
+        Place place = new Place(held().id, step);
+        TermPath had = filedAt(place);
+        if (had != null) {
+            return had;
+        }
+        List<Step> longer = new ArrayList<>(steps.size() + 1);
+        longer.addAll(steps);
+        longer.add(step);
+        return filing(place, Steps.numberedPath(head, List.copyOf(longer), this));
+    }
+
+    /** This canonical path taken on by each of {@code more}. */
+    private TermPath continuedBy(List<Step> more) {
+        TermPath at = this;
+        for (int i = 0; i < more.size(); i++) {
+            at = at.within(more.get(i));
+        }
+        return at;
+    }
+
+    /** The path of the first {@code length} steps of this one. */
+    public TermPath prefix(int length) {
+        if (length < 0 || length > steps.size()) {
+            throw new IndexOutOfBoundsException(length);
+        }
+        TermPath at = canonical();
+        while (at.steps.size() > length) {
+            at = at.held().parent;
+        }
+        return at;
     }
 
     /**
@@ -317,12 +499,11 @@ public record TermPath(String head, List<Step> steps) {
         if (fields.isEmpty()) {
             return this;
         }
-        List<Step> longer = new ArrayList<>(steps.size() + fields.size());
-        longer.addAll(steps);
+        TermPath at = canonical();
         for (String field : fields) {
-            longer.add(new Step.Field(field));
+            at = at.within(new Step.Field(field));
         }
-        return new TermPath(head, longer);
+        return at;
     }
 
     /**
@@ -330,25 +511,23 @@ public record TermPath(String head, List<Step> steps) {
      * names: a way into a behavior's parameter, as the same way into what a call handed it.
      */
     public TermPath under(TermPath root) {
-        List<Step> moved = new ArrayList<>(root.steps);
-        moved.addAll(steps);
-        return new TermPath(root.head, moved);
+        return root.canonical().continuedBy(steps);
     }
 
     /** The same path, inside the container it has reached. */
     public TermPath element() {
-        return append(new Step.Element());
+        return append(ELEMENT);
     }
 
     /** The same path, inside the map it has reached, at its keys. */
     public TermPath key() {
-        return append(new Step.Key());
+        return append(KEY);
     }
 
     /** The map this position is the keys of, or null where it is not at a map's keys. */
     public TermPath mapOfTheKeys() {
         return !steps.isEmpty() && steps.getLast() instanceof Step.Key
-                ? new TermPath(head, steps.subList(0, steps.size() - 1)) : null;
+                ? prefix(steps.size() - 1) : null;
     }
 
     /** The same position, narrowed to the values {@code refinement} leaves. */
@@ -362,9 +541,7 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     private TermPath append(Step step) {
-        List<Step> longer = new ArrayList<>(steps);
-        longer.add(step);
-        return new TermPath(head, longer);
+        return canonical().within(step);
     }
 
     /**
@@ -377,16 +554,19 @@ public record TermPath(String head, List<Step> steps) {
      * keeps an account of its own.
      */
     public Requirements requirements() {
-        Map<TermPath, CasesLeft> out = new LinkedHashMap<>();
+        Map<TermPath, CasesLeft> out = null;
         for (int at = 0; at < steps.size(); at++) {
             if (steps.get(at) instanceof Step.Refine refine) {
+                if (out == null) {
+                    out = new LinkedHashMap<>();
+                }
                 // Keyed by where the value stands: under a narrowing to several cases, a name is
                 // the name read at the sum, and what is required of it is required there. A path
                 // is built only where it is a key, and not at every step on the way.
-                out.put(new TermPath(head, steps.subList(0, at)).position(), refine.cases());
+                out.put(prefix(at).position(), refine.cases());
             }
         }
-        return new Requirements(out, List.of());
+        return out == null ? Requirements.NONE : new Requirements(out, List.of());
     }
 
     /**
@@ -411,7 +591,8 @@ public record TermPath(String head, List<Step> steps) {
      * anything asked.
      */
     public TermPath narrowedFrom() {
-        return new TermPath(head, requireNarrowing().subList(0, steps.size() - 1));
+        requireNarrowing();
+        return prefix(steps.size() - 1);
     }
 
     /** Which values the last step leaves, which is what the arm that took it came out as. */
@@ -438,7 +619,7 @@ public record TermPath(String head, List<Step> steps) {
                 kept.add(step);
             }
         }
-        return kept.size() == steps.size() ? this : new TermPath(head, kept);
+        return kept.size() == steps.size() ? this : of(head, kept);
     }
 
     private List<Step> requireNarrowing() {
@@ -562,9 +743,7 @@ public record TermPath(String head, List<Step> steps) {
         if (below == null) {
             return null;
         }
-        List<Step> moved = new ArrayList<>(to.steps);
-        moved.addAll(below);
-        return new TermPath(to.head, moved);
+        return to.canonical().continuedBy(below);
     }
 
     /** The steps of this below {@code root}, or null where this is not under it. */
@@ -582,7 +761,7 @@ public record TermPath(String head, List<Step> steps) {
     public TermPath outermostContainer() {
         for (int i = 0; i < steps.size(); i++) {
             if (reachesInsideAContainer(steps.get(i))) {
-                return new TermPath(head, steps.subList(0, i));
+                return prefix(i);
             }
         }
         return this;
@@ -601,7 +780,7 @@ public record TermPath(String head, List<Step> steps) {
         List<TermPath> out = new ArrayList<>();
         for (int i = 0; i < steps.size(); i++) {
             if (reachesInsideAContainer(steps.get(i))) {
-                out.add(new TermPath(head, steps.subList(0, i)));
+                out.add(prefix(i));
             }
         }
         return List.copyOf(out);

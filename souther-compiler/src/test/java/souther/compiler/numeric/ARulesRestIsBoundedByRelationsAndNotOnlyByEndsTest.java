@@ -158,6 +158,85 @@ class ARulesRestIsBoundedByRelationsAndNotOnlyByEndsTest {
                 "and reading it as that rule's own rest does not");
     }
 
+    /**
+     * What is left out is the rule as a value: a copy made apart from the one held is the same rule,
+     * and a rule of the same form with another bound is not. Asked more than once, since which
+     * premises a rule is stays the same from one ask to the next.
+     */
+    @Test
+    void aRuleIsLeftOutByItsValueAndARuleOfTheSameFormWithAnotherBoundIsNot() {
+        AffineConstraint<String> atNought = stated(form("x", 10, "y", -1), Rel.GE);
+        AffineConstraint<String> atFive = stated(form("x", 10, "y", -1, null, -5), Rel.GE);
+        List<AffineConstraint<String>> both = List.of(atNought, atFive);
+        FormReach<String> reading = FormReach.over(both, Box.unbounded(),
+                DifferenceBounds.over(both, CanonicalOrder.asTheyAreSpelled()),
+                CanonicalOrder.asTheyAreSpelled());
+        Map<String, ExactRatio> itsOwnForm =
+                Map.of("x", ExactRatio.of(10), "y", ExactRatio.of(-1));
+        AffineConstraint<String> copyOfAtNought = stated(form("x", 10, "y", -1), Rel.GE);
+        AffineConstraint<String> copyOfAtFive = stated(form("x", 10, "y", -1, null, -5), Rel.GE);
+
+        // Each rule twice running, then the other: the second ask of a rule is the one that is
+        // answered from what the first worked out.
+        for (int ask = 0; ask < 2; ask++) {
+            assertEquals(ExactRatio.of(5), reading.leastOfTheRestOf(copyOfAtNought, itsOwnForm,
+                    ExactRatio.ZERO).at(), "without the rule at nought, the one at five is read");
+        }
+        for (int ask = 0; ask < 2; ask++) {
+            assertEquals(ExactRatio.ZERO, reading.leastOfTheRestOf(copyOfAtFive, itsOwnForm,
+                    ExactRatio.ZERO).at(), "without the rule at five, the one at nought is read");
+        }
+        assertEquals(ExactRatio.of(5), reading.leastOfTheRestOf(copyOfAtNought, itsOwnForm,
+                ExactRatio.ZERO).at(), "and back to the first");
+    }
+
+    /**
+     * An equality is both of its half-spaces: leaving it out leaves out the half that bounds below
+     * as well as the half that bounds above.
+     */
+    @Test
+    void anEqualityIsLeftOutOnBothSides() {
+        AffineConstraint<String> equality = stated(form("x", 10, "y", -1, null, -3), Rel.EQ);
+        AffineConstraint<String> atNought = stated(form("x", 10, "y", -1), Rel.GE);
+        List<AffineConstraint<String>> both = List.of(equality, atNought);
+        FormReach<String> reading = FormReach.over(both, Box.unbounded(),
+                DifferenceBounds.over(both, CanonicalOrder.asTheyAreSpelled()),
+                CanonicalOrder.asTheyAreSpelled());
+        Map<String, ExactRatio> itsOwnForm =
+                Map.of("x", ExactRatio.of(10), "y", ExactRatio.of(-1));
+
+        assertEquals(ExactRatio.of(3), reading.leastOfTheRestOf(
+                stated(form("x", 1, "y", -1, null, -9), Rel.GE), itsOwnForm, ExactRatio.ZERO).at(),
+                "a rule that is not among the rules leaves out none of them, the equality bounding "
+                        + "the form at three");
+        assertEquals(ExactRatio.ZERO, reading.leastOfTheRestOf(
+                stated(form("x", 10, "y", -1, null, -3), Rel.EQ), itsOwnForm, ExactRatio.ZERO).at(),
+                "a copy of the equality leaves out the equality, and the rule at nought is read");
+    }
+
+    /**
+     * What was derived is numbered with the rules: a half-space derived that a rule states is that
+     * rule, and leaving the rule out leaves it out too.
+     */
+    @Test
+    void aDerivedHalfSpaceThatARuleStatesIsLeftOutWithIt() {
+        AffineConstraint<String> atNought = stated(form("x", 10, "y", -1), Rel.GE);
+        AffineConstraint<String> atFive = stated(form("x", 10, "y", -1, null, -5), Rel.GE);
+        List<AffineConstraint<String>> alone = List.of(atNought);
+        FormReach<String> reading = FormReach.over(alone, Box.unbounded(),
+                DifferenceBounds.over(alone, CanonicalOrder.asTheyAreSpelled()),
+                CanonicalOrder.asTheyAreSpelled())
+                .alsoReading(List.of((AffineConstraint.HalfSpace<String>)
+                        stated(form("x", 10, "y", -1), Rel.GE)));
+        Map<String, ExactRatio> itsOwnForm =
+                Map.of("x", ExactRatio.of(10), "y", ExactRatio.of(-1));
+
+        assertNull(reading.leastOfTheRestOf(atNought, itsOwnForm, ExactRatio.ZERO),
+                "the rule and the copy of it that was derived are one, so neither is read");
+        assertEquals(ExactRatio.ZERO, reading.leastOfTheRestOf(atFive, itsOwnForm,
+                ExactRatio.ZERO).at(), "a rule that is neither leaves both of them read");
+    }
+
     private static AffineConstraint<String> stated(LinearForm<String> f, Rel rel) {
         AffineConstraint.Read<String> read = AffineConstraint.of(f.coefs(),
                 f.constant(), rel, position -> Granularity.DISCRETE);

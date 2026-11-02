@@ -5,6 +5,7 @@ import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.WrittenLine;
 import souther.compiler.query.WeakeningSet;
+import souther.compiler.query.WhereTheReadingsDiffer;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.Measurement;
@@ -328,7 +329,8 @@ final class AReportOfOneBorder {
                         new AdequacyReport.DeclarationsShown(
                                 new Adequacy.DeclaredBoundaries(List.of(), List.of(), List.of(),
                                         Map.of()),
-                                AdequacyReport.ConditionsShown.NONE, Map.of(), Map.of()))))
+                                AdequacyReport.ConditionsShown.NONE, Map.of(), Map.of()),
+                        WhereTheReadingsDiffer.NONE)))
                 .adequacy();
     }
 

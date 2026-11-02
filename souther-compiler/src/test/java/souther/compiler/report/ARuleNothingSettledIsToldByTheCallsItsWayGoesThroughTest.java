@@ -317,7 +317,8 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
                         each.weights(), each.rewritePlaces()));
             }
             modules.add(new AdequacyReport.ModuleReport(module.module(), module.declaredIn(),
-                    behaviors, module.declarations(), module.owedByDeclarations()));
+                    behaviors, module.declarations(), module.owedByDeclarations(),
+                    module.apart()));
         }
         return new AdequacyReport(real.schemaVersion(), real.compilerVersion(), real.weakenedBy(),
                 modules);
