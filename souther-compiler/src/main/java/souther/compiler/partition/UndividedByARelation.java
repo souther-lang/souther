@@ -2501,7 +2501,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     taken.demand() instanceof RowDemand.Exists some ? some.ofAnElement() : null,
                     OnAWay.PartsLeftAlone.NONE,
                     taken.demand() instanceof RowDemand.ForTheRun run
-                            && run.partedStrings().isPresent() ? run : null));
+                            && run.partedStrings().isPresent() ? run : null,
+                    taken.demand() instanceof RowDemand.OnARemainder on ? on : null));
         });
         way.requirements().refinements().keySet()
                 .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
@@ -2560,27 +2561,32 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param ofThePieces the demand it is, where it holds a piece of a string to a language: what
      *                   says which piece of which string, and which language, so that the strings
      *                   of a relation over that piece are shown as that parts them
+     * @param onARemainder the remainder it holds a form of the input's numbers to, where it is
+     *                   that, so that what it leaves of the form's numbers can be asked of the
+     *                   remainder itself and not of the places it names
      */
     record OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                   TermPath elementsOf, RowDemand.AnElementMeets bySome,
-                  PartsLeftAlone leavesAlone, RowDemand.ForTheRun ofThePieces) {
+                  PartsLeftAlone leavesAlone, RowDemand.ForTheRun ofThePieces,
+                  RowDemand.OnARemainder onARemainder) {
 
         /** The parts of a date a statement of the other parts says nothing of. */
         enum PartsLeftAlone { NONE, YEARS, MONTHS_AND_DAYS }
 
         OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                TermPath elementsOf) {
-            this(positions, whatStands, relation, elementsOf, null, PartsLeftAlone.NONE, null);
+            this(positions, whatStands, relation, elementsOf, null, PartsLeftAlone.NONE, null,
+                    null);
         }
 
         OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                TermPath elementsOf, RowDemand.AnElementMeets bySome, PartsLeftAlone leavesAlone) {
-            this(positions, whatStands, relation, elementsOf, bySome, leavesAlone, null);
+            this(positions, whatStands, relation, elementsOf, bySome, leavesAlone, null, null);
         }
 
         OnAWay leavingAlone(PartsLeftAlone parts) {
             return new OnAWay(positions, whatStands, relation, elementsOf, bySome, parts,
-                    ofThePieces);
+                    ofThePieces, onARemainder);
         }
 
         /** Whether this says nothing of {@code term} because it is a part of a date this leaves
@@ -4824,6 +4830,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * ({@link DemandReading#stated}), and stays there. Taken away one at a time, each against the
      * statements still left: a number the next one is free in is chosen after every number in the
      * statements left, which do not read it.
+     *
+     * <p>A remainder is taken away the same way, and all its statements together: they are one
+     * remainder where they divide the same form, moved by the same number, by the same divisor,
+     * and a number free to meet each is free to meet all of them only where they leave a
+     * remainder between them ({@link #allowTogether}) and the number brings the form to each
+     * ({@link #choosesEveryRemainder}).
      */
     private List<OnAWay> withoutWhatAFreeNumberMeets(List<OnAWay> conditions,
                                                      Optional<Set<String>> declined,
@@ -4837,8 +4849,31 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             freeToMeet(term, each, out, declined, past, read))) {
                 out.remove(each);
             }
+            if (each.onARemainder() != null && out.contains(each)) {
+                List<OnAWay> together = out.stream()
+                        .filter(other -> sameRemainder(each, other)).toList();
+                if (allowTogether(together) && each.onARemainder().dividend().coefs().keySet()
+                        .stream().anyMatch(term ->
+                                freeToMeet(term, each, out, declined, past, read))) {
+                    out.removeAll(together);
+                }
+            }
         }
         return out;
+    }
+
+    /**
+     * Whether the statements of one remainder leave a remainder between them: free to choose is
+     * a claim about the statements together, and one that each could be met by does not make them
+     * met by a single choice.
+     */
+    static boolean allowTogether(List<OnAWay> statements) {
+        WholeNumberRuns between = null;
+        for (OnAWay each : statements) {
+            WholeNumberRuns leaves = each.onARemainder().leaves();
+            between = between == null ? leaves : between.and(leaves);
+        }
+        return between != null && !between.isNone();
     }
 
     /**
@@ -4868,7 +4903,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         for (OnAWay other : conditions) {
-            if (!other.equals(statement) && touches(number, other.positions())) {
+            if (!other.equals(statement) && !sameRemainder(statement, other)
+                    && touches(number, other.positions())) {
+                return false;
+            }
+            // A statement the run says whether it held names no place, though what it states is
+            // about numbers of the input ({@link RowDemand.ForTheRun}), so nothing here says which
+            // it turns on: a remainder is taken away only where none such stands beside it.
+            if (statement.onARemainder() != null && !other.equals(statement)
+                    && !sameRemainder(statement, other) && other.positions().isEmpty()
+                    && !other.whatStands()) {
                 return false;
             }
         }
@@ -4899,7 +4943,164 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         NumericDomain.Bounds takes = realized(number, source, left,
                 ofIt.isEmpty() ? Way.UNTOUCHED : Way.NARROWED);
+        if (statement.onARemainder() != null) {
+            return choosesEveryRemainder(number, statement.onARemainder(), takes, read);
+        }
         return takesTwoValues(takes) && workedOutBeside(statement.affine(), number, takes, read);
+    }
+
+    /** Whether {@code other} holds the very remainder {@code statement} does: the same division of
+     *  the same form, moved by the same number. */
+    static boolean sameRemainder(OnAWay statement, OnAWay other) {
+        return statement.onARemainder() != null && other.onARemainder() != null
+                && statement.onARemainder().remainder().equals(other.onARemainder().remainder());
+    }
+
+    /**
+     * Whether choosing {@code free}, whatever the other numbers of the form stand at, brings the
+     * form {@code on} holds to a remainder to every remainder: the form is moved by the number
+     * with a weight prime to the divisor, the values of the number that keep the form inside what
+     * the program works it out in hold as many whole values side by side as there are remainders,
+     * and that holds at each end of what the rest of the form comes to.
+     *
+     * <p>The values of a number are those of its type and those the declarations and the run leave
+     * it, and not whichever of the two a range written down happens to say: a range with no end is
+     * a range nothing written down ends, and a type ends it all the same. The form is held inside
+     * an {@code Int}, whatever its numbers are counts of, since a division by a written number is
+     * of one.
+     *
+     * <p>The window of values that keep the form inside the {@code Int}s is as wide whatever the
+     * rest comes to, and where it lies moves with it, so what it leaves of the values of the
+     * number is least at one of the two ends of the rest.
+     *
+     * <p>What is held inside is the form the way states, which is all a way keeps of the
+     * arithmetic that wrote it. A stop of a partial sum that the form does not show, a number moved
+     * in and out of it, is no stop on the way, here as for every other statement of a way.
+     */
+    private static boolean choosesEveryRemainder(NumericTerm.FromOnePosition free,
+                                                 RowDemand.OnARemainder on,
+                                                 NumericDomain.Bounds takes, InputReading read) {
+        BigInteger divisor = on.remainder().divisor();
+        LinearForm<NumericTerm> form = on.dividend();
+        BigInteger weight = wholeNumberOf(form.coefs().get(free));
+        BigInteger rest = wholeNumberOf(form.constant());
+        TermOrders freeOrders = read.quantities().ordersOf(free);
+        if (takes == null || weight == null || rest == null || weight.signum() == 0
+                || freeOrders == null || !weight.abs().gcd(divisor).equals(BigInteger.ONE)) {
+            return false;
+        }
+        WholeEnds mine = wholeEndsOf(takes.meet(freeOrders.answered().whereItStops()));
+        BigInteger least = leastOf(Carrier.WHOLE);
+        BigInteger greatest = greatestOf(Carrier.WHOLE);
+        if (mine == null || least == null || greatest == null) {
+            return false;
+        }
+        BigInteger lowest = rest;
+        BigInteger highest = rest;
+        for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+            if (each.getKey().equals(free)) {
+                continue;
+            }
+            BigInteger by = wholeNumberOf(each.getValue());
+            TermOrders orders = read.quantities().ordersOf(each.getKey());
+            if (by == null || orders == null || !(read.quantities().region()
+                    .projectionOf(each.getKey()) instanceof NumericDomain.FormProjection.Within(
+                            NumericDomain.Bounds run))) {
+                return false;
+            }
+            WholeEnds ends = wholeEndsOf(run.meet(orders.answered().whereItStops()));
+            if (ends == null || ends.low() == null || ends.high() == null) {
+                return false;
+            }
+            lowest = lowest.add(by.multiply(by.signum() > 0 ? ends.low() : ends.high()));
+            highest = highest.add(by.multiply(by.signum() > 0 ? ends.high() : ends.low()));
+        }
+        return windowHoldsEveryRemainder(weight, mine, lowest, highest, divisor, least, greatest);
+    }
+
+    /**
+     * Whether the values of a number ({@code mine}), moved by {@code weight} and added to a rest
+     * that comes to anything from {@code lowest} to {@code highest}, include as many whole values
+     * side by side as a division by {@code divisor} has remainders among those that keep the sum
+     * from {@code least} to {@code greatest}.
+     *
+     * <p>Asked at each end of the rest and nowhere between: the window of values that keep the sum
+     * inside is as wide whatever the rest comes to, and moves with it, so what it leaves of
+     * {@code mine} is least at one of the two ends. Moved by a weight below nought the number is
+     * taken the other way round.
+     */
+    static boolean windowHoldsEveryRemainder(BigInteger weight, WholeEnds mine,
+                                             BigInteger lowest, BigInteger highest,
+                                             BigInteger divisor, BigInteger least,
+                                             BigInteger greatest) {
+        BigInteger by = weight.abs();
+        BigInteger from = weight.signum() > 0 ? mine.low() : negated(mine.high());
+        BigInteger to = weight.signum() > 0 ? mine.high() : negated(mine.low());
+        for (BigInteger rests : List.of(lowest, highest)) {
+            BigInteger windowFrom = ceilingOfQuotient(least.subtract(rests), by);
+            BigInteger windowTo = floorOfQuotient(greatest.subtract(rests), by);
+            BigInteger low = from == null ? windowFrom : windowFrom.max(from);
+            BigInteger high = to == null ? windowTo : windowTo.min(to);
+            if (high.subtract(low).add(BigInteger.ONE).compareTo(divisor) < 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The whole values from {@code low} to {@code high}, either null where it has no end. */
+    record WholeEnds(BigInteger low, BigInteger high) {}
+
+    /** {@code ratio} as a whole number, or null where it is none. */
+    private static BigInteger wholeNumberOf(ExactRatio ratio) {
+        return ratio != null && ratio.isWhole()
+                && ratio.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
+                ? whole : null;
+    }
+
+    private static BigInteger negated(BigInteger value) {
+        return value == null ? null : value.negate();
+    }
+
+    /** The least whole number and the greatest that {@code run} holds, or null where an end is no
+     *  number this reads. */
+    private static WholeEnds wholeEndsOf(NumericDomain.Bounds run) {
+        if (run == null || !run.holdsAValue()) {
+            return null;
+        }
+        BigInteger low = null;
+        BigInteger high = null;
+        if (run.min() != null) {
+            if (!(run.min().at() instanceof Count least)) {
+                return null;
+            }
+            low = run.min().inclusive() ? least.exactly().ceiling().orNull()
+                    : least.exactly().floor().map(at -> at.add(BigInteger.ONE)).orNull();
+            if (low == null) {
+                return null;
+            }
+        }
+        if (run.max() != null) {
+            if (!(run.max().at() instanceof Count most)) {
+                return null;
+            }
+            high = run.max().inclusive() ? most.exactly().floor().orNull()
+                    : most.exactly().ceiling().map(at -> at.subtract(BigInteger.ONE)).orNull();
+            if (high == null) {
+                return null;
+            }
+        }
+        return new WholeEnds(low, high);
+    }
+
+    private static BigInteger floorOfQuotient(BigInteger dividend, BigInteger divisor) {
+        BigInteger[] both = dividend.divideAndRemainder(divisor);
+        return both[1].signum() < 0 ? both[0].subtract(BigInteger.ONE) : both[0];
+    }
+
+    private static BigInteger ceilingOfQuotient(BigInteger dividend, BigInteger divisor) {
+        BigInteger[] both = dividend.divideAndRemainder(divisor);
+        return both[1].signum() > 0 ? both[0].add(BigInteger.ONE) : both[0];
     }
 
     /**
