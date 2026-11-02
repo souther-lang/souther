@@ -4,10 +4,11 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The rows a number only a run works out is looked for with, in the order they are tried.
@@ -60,9 +61,9 @@ public final class RowsARunIsTriedFor {
 
     /** Every candidate for {@code goal}, in the order they are tried, none of them empty. */
     static List<Map<RealizationTarget, Place>> candidates(PointSearchGoal.ByObservation goal) {
-        List<Map<RealizationTarget, Place>> out = new ArrayList<>();
+        Set<Map<RealizationTarget, Place>> out = new LinkedHashSet<>();
         if (goal.lengths().isEmpty() && goal.values().isEmpty()) {
-            return out;
+            return List.of();
         }
         int most = goal.lengths().isEmpty() ? 0 : MOST_ELEMENTS;
         for (int size = 0; size <= most; size++) {
@@ -74,11 +75,9 @@ public final class RowsARunIsTriedFor {
                 for (NumericTerm.FromOnePosition number : goal.values()) {
                     fixing.put(RealizationTarget.of(number), Count.of(value));
                 }
-                if (!out.contains(fixing)) {
-                    out.add(fixing);
-                }
+                out.add(fixing);
             }
         }
-        return out;
+        return List.copyOf(out);
     }
 }
