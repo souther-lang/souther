@@ -77,6 +77,13 @@ public final class Offering {
             throw new IllegalArgumentException("a suggestion is a row that is offered: "
                     + suggestions);
         }
+        for (Settlements.Shown shown : shownAt.values()) {
+            if (suggestions.contains(shown.rowKey())) {
+                throw new IllegalArgumentException(
+                        "a row that owes nothing is not the row a line is shown at: "
+                                + shown.rowKey());
+            }
+        }
         this.suggestions = Collections.unmodifiableSet(new LinkedHashSet<>(suggestions));
         this.shownAt = Collections.unmodifiableMap(new LinkedHashMap<>(shownAt));
         Map<RowKey, List<ObligationIdentity>> over = new HashMap<>();

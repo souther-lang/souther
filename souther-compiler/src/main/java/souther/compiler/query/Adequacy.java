@@ -4444,15 +4444,17 @@ public final class Adequacy {
         // them.
         Set<ObligationIdentity> answered = new LinkedHashSet<>();
         for (ObligationIdentity item : table.requested()) {
-            if (kept.stream().anyMatch(row -> table.at(row, item).settles())) {
+            if (covering.stream().anyMatch(row -> table.at(row, item).settles())) {
                 answered.add(item);
             }
         }
         // And where the row a person is handed stands on each line it answers. Asked of the table
         // after the reduction, because that is when it is settled: a row that tells two lines apart
         // answers the line whoever it was composed for, so the row composed for it is not always
-        // the one that goes out.
-        return composed.keeping(kept, suggestions, answered, table.shownFor(kept));
+        // the one that goes out. And of the rows that cover and not of all that go out: a
+        // suggestion owes nothing, so no line is shown at one, and the answer above is the same
+        // either way because the reduction keeps whatever settles.
+        return composed.keeping(kept, suggestions, answered, table.shownFor(covering));
     }
 
     /**

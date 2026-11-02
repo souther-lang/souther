@@ -487,8 +487,10 @@ among them, and `--strict` exits non-zero on a gap the report names.
 
 `--generate` also offers rows that try the inputs of the rows of called behaviors in their callers.
 These owe nothing: the header counts them apart as optional rows and a comment over each says
-`suggested input; no uncovered obligation`. Work is done when no row is left to fill what nothing
-covers; the optional rows may stay after a model is satisfied.
+`suggested input; no uncovered obligation`. The optional rows need not be completed for the model to
+be adequately covered. Whether it is is the adequacy verdict's to say, not the number of generated
+rows: a model can owe something that no row could be generated for, and one reported `undetermined`
+is not settled by an empty block.
 
 There is no `--adequacy` here. This command's whole output is the report, so everything is measured
 and there is nothing for `off`, `witness` or `all` to choose; and what the report marks as a gap is
