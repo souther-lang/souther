@@ -1110,7 +1110,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** {@code form} held against nought as {@code relation}. */
     static UndividedByARelation ofAForm(LinearForm<Quantity> form, Rel relation) {
-        boolean textsApart = textsMadeOfApartPositions(form);
+        boolean textsApart = textsMadeOfApartPositions(form, relation);
         List<Side> sides = new ArrayList<>();
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             sides.add(switch (each.getKey()) {
@@ -1156,10 +1156,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * Whether {@code form} is made of two strings, each a string of the input or one made of it by
      * case conversions, of two positions that share no place, and one of them converted. Such a
      * form is the equality of what the conversions make of two strings, which is read through the
-     * conversions ({@link #stringsInside}) and not as a relation between the positions alone.
+     * conversions ({@link #stringsThroughConversions}) and not as a relation between the positions alone.
      */
-    private static boolean textsMadeOfApartPositions(LinearForm<Quantity> form) {
-        if (form.coefs().size() != 2) {
+    private static boolean textsMadeOfApartPositions(LinearForm<Quantity> form, Rel relation) {
+        if (form.coefs().size() != 2 || (relation != Rel.EQ && relation != Rel.NE)
+                || !WhatARelationLeavesUndivided.eachStandsAtTheOthersValue(
+                        form.coefs().values().stream().toList(), form.constant())) {
             return false;
         }
         List<ConvertedText> texts = form.coefs().keySet().stream().map(ConvertedText::of).toList();
@@ -2893,8 +2895,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 theirStrings = ValueSet.matching(reaching);
             }
             String called = inside ? calledInside(at == 0, there.text(), theirs.subjectPath())
-                    : there.piece() == null ? theirs.subjectPath().toString()
-                    : there.piece().calledOver(theirs.subjectPath().toString());
+                    : there.piece() != null
+                    ? there.piece().calledOver(theirs.subjectPath().toString())
+                    : there.text() != null ? there.text().writtenAround(
+                            theirs.subjectPath().toString())
+                    : theirs.subjectPath().toString();
             ValueSet mineHolds = stringsAtMostAt(mine.subjectPath(), read);
             // The pieces that reach the relation are those the way holds to a language, where it
             // does: the strings are shown as that parts the pieces, and a string whose pieces are
@@ -3297,10 +3302,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * exactly a map on the strings it is exactly one for ({@link CodeMap}); the strings it is not
      * exact on come to strings of the code points the conversion leaves, and nothing narrower is
      * said of them.
+     *
+     * <p>Where this relation is an equality and no string inside another, the strings of this
+     * side are those whose conversion is one the other side comes to, which is the same machine
+     * with nothing standing round the other side's strings.
      */
-    private StringsAPartnerCanHold stringsInside(boolean hereIsFirst, ConvertedText mine,
-                                                 ConvertedText theirs, ValueSet theirStrings,
-                                                 ValueSet mineHolds, String called) {
+    private StringsAPartnerCanHold stringsThroughConversions(
+            boolean hereIsFirst, ConvertedText mine, ConvertedText theirs, ValueSet theirStrings,
+            ValueSet mineHolds, String called) {
         Language partner = languageOf(theirStrings);
         if (mine == null || theirs == null || partner == null) {
             return null;
@@ -3379,12 +3388,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                   ValueSet theirStrings, ValueSet mine,
                                                   String called) {
         if (kind.inside() != null) {
-            return stringsInside(hereIsFirst, here.text(), there.text(), theirStrings, mine,
-                    called);
+            return stringsThroughConversions(hereIsFirst, here.text(), there.text(), theirStrings,
+                    mine, called);
         }
         if (here.text() != null || there.text() != null) {
-            return stringsInside(hereIsFirst, textOf(here), textOf(there), theirStrings, mine,
-                    called);
+            return stringsThroughConversions(hereIsFirst, textOf(here), textOf(there),
+                    theirStrings, mine, called);
         }
         if (there.piece() != null) {
             return stringsThatAreThePiece(there.piece(), theirStrings, mine, called);

@@ -53,7 +53,39 @@ class AStoredStringEqualToTheLowercaseOfAStringIsReadTest {
             assertTrue(json.contains("relation_shown_over_a_region"), () -> body + " " + json);
             assertFalse(json.contains("relation_not_shown_to_reach_every_value"),
                     () -> body + " " + json);
-            assertFalse(json.contains("own: x is never s"), () -> body + " " + json);
+            assertFalse(json.contains("is never String.lowercase(s)"), () -> body + " " + json);
+        }
+    }
+
+    /**
+     * The other side is called what it is, the lowercase of {@code s}: a stored string that
+     * matches it need not be {@code s}, and no string of {@code s} is the stored one.
+     */
+    @Test
+    void theOtherSideIsNamedByWhatItIsMadeOf() {
+        for (String body : BODIES) {
+            String json = report("[A-Za-z0-9.]+", body);
+            assertTrue(json.contains("own: x can be String.lowercase(s)")
+                    && json.contains("own: x is never String.lowercase(s)"),
+                    () -> body + " " + json);
+            assertFalse(json.contains("own: x can be s\"") || json.contains("own: x is never s\""),
+                    () -> body + " " + json);
+        }
+    }
+
+    /**
+     * A string whose lowercase is no string of its own code points is not shown to be a lowercase
+     * of anything: the stored side that admits one is not all reached, and the conversion is named
+     * as an image not shown.
+     */
+    @Test
+    void aStoredStringThatNoMapOfCodePointsReachesIsNotShownReached() {
+        for (String pattern : List.of("[a-zİ]+", "[a-zΣ]+", "[a-zẞ]+")) {
+            String json = report(pattern, "own.value == String.lowercase(s)");
+            assertTrue(json.contains("\"imagesNotShown\" : [ \"String.lowercase\" ]"),
+                    () -> pattern + " " + json);
+            assertTrue(json.contains("own: x is never String.lowercase(s)"),
+                    () -> pattern + " " + json);
         }
     }
 
@@ -63,7 +95,8 @@ class AStoredStringEqualToTheLowercaseOfAStringIsReadTest {
             String json = report("[A-Za-z0-9.]+", body);
             assertFalse(json.contains("relation_not_shown_to_reach_every_value"),
                     () -> body + " " + json);
-            assertTrue(json.contains("own: x can be s") && json.contains("own: x is never s"),
+            assertTrue(json.contains("own: x can be String.lowercase(s)")
+                    && json.contains("own: x is never String.lowercase(s)"),
                     () -> body + " " + json);
         }
     }
