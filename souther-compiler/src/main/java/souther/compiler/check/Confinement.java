@@ -212,6 +212,19 @@ sealed interface Confinement<A> {
             return emptiness.isEmpty();
         }
 
+        /**
+         * Whether the pair was asked to the end: what it was asked was decided one way or the
+         * other, and not left for a machine that has yet to be made
+         * ({@link souther.compiler.values.Emptiness#UNDECIDED}).
+         *
+         * <p>Not that something is admitted. A reader that finds nothing shown empty here, and needs
+         * to know whether that is because there is nothing to show, asks this; it says nothing of
+         * the components beside the pair.
+         */
+        public boolean wasAskedToTheEnd() {
+            return emptiness.isDecided();
+        }
+
         /** Whether these two readings are the whole of what showed it. */
         boolean byTheReadings() {
             return how == Shown.BY_THE_READINGS;

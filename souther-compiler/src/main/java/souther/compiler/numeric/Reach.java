@@ -75,11 +75,21 @@ public record Reach(ExactCut least, ExactCut most) {
         };
     }
 
+    /** {@link #mostOf(Map, ExactRatio, Ends)} over terms held in the order they are added in. */
+    static <A> ExactCut mostOfTerms(OrderedTerms<A> terms, ExactRatio constant, Ends<A> ends) {
+        return endOf(terms, constant, ends, true);
+    }
+
     private static <A> ExactCut endOf(Map<A, ExactRatio> coefs, ExactRatio constant,
                                       Ends<A> ends, boolean upper) {
+        return endOf(coefs.entrySet(), constant, ends, upper);
+    }
+
+    private static <A> ExactCut endOf(Iterable<? extends Map.Entry<A, ExactRatio>> terms,
+                                      ExactRatio constant, Ends<A> ends, boolean upper) {
         ExactRatio sum = constant;
         boolean reached = true;
-        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+        for (Map.Entry<A, ExactRatio> each : terms) {
             ExactRatio weight = each.getValue();
             ExactCut end = ends.weighedBy(each.getKey(), weight.signum(), upper);
             if (end == null) {
