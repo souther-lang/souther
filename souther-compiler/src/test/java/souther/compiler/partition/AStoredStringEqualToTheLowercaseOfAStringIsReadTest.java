@@ -70,6 +70,33 @@ class AStoredStringEqualToTheLowercaseOfAStringIsReadTest {
         }
     }
 
+    /**
+     * A string against its own lowercase is made of one position, which no two texts are: the
+     * string is the same in both, so no class says some string of one is the other's.
+     */
+    @Test
+    void aStringAgainstItsOwnLowercaseIsPartedByNothing() {
+        for (String source : List.of("""
+                module w1
+                data P = { s: String, n: Int }
+                behavior m : (p: P) -> Bool
+                let m (p) = p.s == String.lowercase(p.s)
+                """, """
+                module w1
+                data P = { s: String, n: Int }
+                behavior m : (p: P) -> Bool
+                let m (p) = String.lowercase(p.s) /= p.s
+                """)) {
+            Compilation compilation = Compilation.ofSource(source, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            String json = AdequacyReport.of(compilation)
+                    .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+            assertFalse(json.contains("x can be"), () -> source + json);
+            assertFalse(json.contains("x is never"), () -> source + json);
+        }
+    }
+
     /** A string against its own lowercase is made of one position, which no two texts are. */
     @Test
     void aStringAgainstItsOwnLowercaseIsNotReadAsTwoTexts() {

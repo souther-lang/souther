@@ -3301,9 +3301,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * exact on come to strings of the code points the conversion leaves, and nothing narrower is
      * said of them.
      *
-     * <p>Where this relation is an equality and no string inside another, the strings of this
-     * side are those whose conversion is one the other side comes to, which is the same machine
-     * with nothing standing round the other side's strings.
+     * <p>Where this relation is no string inside another, it is read only as the equality or
+     * denial of two strings of positions the caller has shown independent
+     * ({@link #stringsAPartnerCanHold}): the strings of this side are those whose conversion is
+     * one the other side comes to, which is the same machine with nothing standing round the
+     * other side's strings.
      */
     private StringsAPartnerCanHold stringsThroughConversions(
             boolean hereIsFirst, ConvertedText mine, ConvertedText theirs, ValueSet theirStrings,
