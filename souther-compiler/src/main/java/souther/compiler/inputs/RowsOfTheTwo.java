@@ -6,6 +6,7 @@ import souther.compiler.numeric.ExactRatio;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -106,9 +107,11 @@ final class RowsOfTheTwo {
                 || asked == null || partner == null || asked.equals(partner)) {
             return null;
         }
+        Map<Object, ExactRatio> held = new LinkedHashMap<>(operations.standing());
+        held.putAll(standing);
         List<Operation> read = new ArrayList<>();
         for (IntSum each : operations.sums()) {
-            Operation operation = read(each, asked, partner, standing);
+            Operation operation = read(each, asked, partner, held);
             if (operation == null) {
                 return null;
             }

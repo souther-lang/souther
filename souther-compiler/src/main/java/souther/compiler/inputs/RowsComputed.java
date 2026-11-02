@@ -58,9 +58,12 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
         return greatest == null ? ENDLESS : new RowsComputed(greatest, Operations.NONE, Map.of());
     }
 
-    /** The same, over a relation whose rows work out {@code operations}. */
+    /** The same, over a relation whose rows work out {@code operations}, with the numbers they
+     *  are over that no term names held at the values they stand at ({@link Operations}). */
     RowsComputed withOperations(Operations operations) {
-        return new RowsComputed(greatest, operations, held);
+        Map<Object, ExactRatio> together = new LinkedHashMap<>(operations.standing());
+        together.putAll(held);
+        return new RowsComputed(greatest, operations, together);
     }
 
     /** The same, for rows in which the terms called by the keys of {@code standing} stand at

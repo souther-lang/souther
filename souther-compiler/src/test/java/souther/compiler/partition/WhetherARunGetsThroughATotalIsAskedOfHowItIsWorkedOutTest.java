@@ -163,20 +163,21 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
     /**
      * A helper's arguments are worked out before its body, whichever of them the body reads, and
      * whichever arm it takes: one it never reads, or reads only in the other arm, stops the run
-     * where it passes the type, and the comparison of what it answers is not taken to get
-     * through there.
+     * where it passes the type. The comparison of what it answers is read at the rows where the
+     * argument stands at the value it is held at, nought, which get through.
      */
     @Test
     void anArgumentAHelperDoesNotReadStillStopsTheRun() {
         String unread = report("n: Int, m: Int, k: Int",
                 UNUSED + "\nlet first (a: Int, b: Int) : Int = a", "first(n, 2 * m) >= k");
         assertEquals(whereDoublingStops("m"), whereEveryRunStops(unread), unread);
-        assertEquals(Set.of(), related(unread), unread);
+        assertEquals(Set.of("k", "n"), related(unread), unread);
         String inAnArm = report("flag: Bool, n: Int, m: Int, k: Int",
                 UNUSED + "\nlet pick (c: Bool, a: Int, b: Int) : Int = if c then a else b",
                 "pick(flag, 2 * m, n) >= k");
-        assertFalse(related(inAnArm).contains("n"), inAnArm);
-        assertTrue(notShown(inAnArm).contains("n"), inAnArm);
+        assertTrue(related(inAnArm).contains("n"), inAnArm);
+        assertFalse(notShown(inAnArm).contains("n"), inAnArm);
+        assertTrue(inAnArm.contains("may stop a run"), inAnArm);
     }
 
     /** What the comparison {@code condition} of a behavior taking {@code inputs} works out, read

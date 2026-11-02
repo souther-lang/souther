@@ -220,8 +220,15 @@ public final class WhatARelationLeavesUndivided {
      *
      * <p>The operations of decimals ({@code decimals}) have no region: a row is asked by working
      * them out ({@link DecimalOperation}), and no size of the form says anything of them.
+     *
+     * <p>A sum may be over a number that is no term of the relation, which the comparison cancels
+     * out of the form and the program still works out. Such a number is held at the value of its
+     * own that {@code standing} gives it by key: a row is built there, so that the sum is told
+     * with that value as a constant. Where a number is not in {@code standing}, no row is shown
+     * to stand at a value of it, and the sum is not told.
      */
-    public record Operations(List<IntSum> sums, List<DecimalOperation> decimals, Told told) {
+    public record Operations(List<IntSum> sums, List<DecimalOperation> decimals, Told told,
+                             Map<Object, ExactRatio> standing) {
 
         /** Nothing said of the program. */
         public static final Operations NONE = new Operations(List.of(), Told.NOTHING_SAID);
@@ -230,6 +237,12 @@ public final class WhatARelationLeavesUndivided {
             sums = List.copyOf(sums);
             decimals = List.copyOf(decimals);
             Objects.requireNonNull(told, "what was told, or that nothing was said");
+            standing = Map.copyOf(standing);
+        }
+
+        /** The operations of whole numbers and decimals, over the terms of the relation alone. */
+        public Operations(List<IntSum> sums, List<DecimalOperation> decimals, Told told) {
+            this(sums, decimals, told, Map.of());
         }
 
         /** The operations of whole numbers alone. */
@@ -4463,7 +4476,7 @@ public final class WhatARelationLeavesUndivided {
      * The value {@code term} is shown to take nearest nought ({@link #takesTheValue}), or null
      * where it is shown to take none.
      */
-    private static <P> ExactRatio takenNearestNought(Term<P> term) {
+    public static <P> ExactRatio takenNearestNought(Term<P> term) {
         if (term.realizes() == null) {
             return null;
         }

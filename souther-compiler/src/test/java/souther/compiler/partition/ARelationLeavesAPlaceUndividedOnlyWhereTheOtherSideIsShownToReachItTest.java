@@ -3559,9 +3559,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *
      * <p>The arm is expanded into a relation of its own, which carries the operations its arm works
      * out and none of the other's: {@code a + c}, and the cap or {@code c} added to {@code s}.
-     * Those sums weigh {@code s} against {@code a} and {@code c} otherwise than the form does, so
-     * a row at an end of the type is not shown computed and nothing is shown of {@code a} or
-     * {@code s} along either arm; {@code c} is read.
+     * Along the arm where {@code c} is under the cap it is on both sides and cancels from the
+     * form; it is held at the value nearest nought it takes, where those operations are told, so
+     * {@code a} and {@code s} are read along both arms.
      */
     @Test
     void aTermHeldAboveItsCapAlongAnArmIsHeldWhereItStarts() {
@@ -3577,7 +3577,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 """;
         String written = capped.formatted("data Unused = Int", "Yen");
         String at = "7:" + (written.lines().toList().get(6).indexOf(">=") + 1);
-        assertEquals(Set.of("a", "s"), notReadIn(written, at));
+        assertEquals(Set.of(), notReadIn(written, at));
         String unshown = capped.formatted(
                 "data Gap = Int invariant value <= 150000 || Int.floorMod(value, 2) == 0", "Gap");
         assertTrue(notReadIn(unshown, at).contains("a"), () -> notReadIn(unshown, at).toString());
@@ -3631,12 +3631,13 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     Yen(gross.value - subtracted.value)
                 }
                 """;
-        // The capped allowance is a call whose arms are expanded into relations of their own,
-        // which carry none of the operations the comparison works out: nothing is shown of the
-        // places beside the allowance, and that is a reading short of what the comparison
-        // states. The allowance itself is read: a constant built into a Yen is inside its run.
-        assertEquals(Set.of("insurance", "p.base", "p.other", "uplift"),
-                notReadIn(payroll, whereWritten(payroll, ">= subtracted")));
+        // The capped allowance is a call whose arms are expanded into relations of their own. On
+        // the arm where the allowance is under its cap it is the allowance itself, which cancels
+        // from the form and is still added to the base and to the insurance. It is held at the
+        // value nearest nought it takes, where the operations over it are told, so the places
+        // beside it are read; the allowance is read as well, a constant built into a Yen being
+        // inside its run.
+        assertEquals(Set.of(), notReadIn(payroll, whereWritten(payroll, ">= subtracted")));
     }
 
     private static final String CONSTRUCTED_ABOVE = """

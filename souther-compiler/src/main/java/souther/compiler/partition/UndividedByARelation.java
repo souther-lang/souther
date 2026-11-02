@@ -1263,17 +1263,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * operation over a number that is no side of this relation, or is two sides, is left out,
      * which cuts less and says nothing false — and is an operation a row is not asked to get past
      * here, so the operations are then not every one, unless no row of the places it is over
-     * could stop at it.
+     * could stop at it. A number that is no side is not left out where it is held at a value of
+     * its own, as said below.
      *
      * <p>A total whose running totals are all that is left untold ({@link Working#partials}) is
      * told after all where every one of them is a side written by one element alone: such a row
      * holds one element, which runs no total but the answer, so a row of the term is computed
      * wherever the operations told hold at it. A row of any other arrangement of the container
      * is not claimed.
+     *
+     * <p>A number the comparison cancels out of the form is no side, and the program still works
+     * out the operations over it. Where {@code heldApart} gives it a value of its own, the
+     * operations over it are told with that value as a constant ({@link
+     * WhatARelationLeavesUndivided.Operations#standing}): a row of the sides is built with the
+     * number standing there.
+     *
+     * @param heldApart the value each of the numbers it is given is held at, for those it holds
+     *                  apart from every side and from one another ({@link #heldApart})
      */
     private WhatARelationLeavesUndivided.Operations operationsOverTheSides(
             InputReading read, List<OnAWay> conditions, boolean heldWhole,
-            Set<NumericTerm> writtenByOneElement) {
+            Set<NumericTerm> writtenByOneElement,
+            Function<Set<NumericTerm>, Map<NumericTerm, ExactRatio>> heldApart) {
         boolean runningTotalsAreNoneOfTheRows = !working.partials().isEmpty()
                 && writtenByOneElement.containsAll(working.partials());
         if (working.operations().isEmpty() && working.decimals().isEmpty()) {
@@ -1287,10 +1298,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NumericTerm witness = null;
         boolean witnessAsked = false;
         Map<Object, Integer> named = namedSides();
+        Map<NumericTerm, ExactRatio> standing = heldAtValuesOfTheirOwn(named, heldApart);
         List<WhatARelationLeavesUndivided.IntSum> sums = new ArrayList<>();
         boolean leftOut = false;
         for (IntOperation each : working.operations()) {
-            if (!isOverTheSides(each, named)) {
+            if (!isOverTheSides(each, named, standing.keySet())) {
                 if (!witnessAsked && remainder != null) {
                     witness = witnessForEveryRemainder(null, read, conditions, heldWhole);
                     witnessAsked = true;
@@ -1311,13 +1323,102 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 .allMatch(each -> overTheSides(each, named));
         List<DecimalOperation> decimals = decimalsOverTheSides ? working.decimals() : List.of();
         leftOut |= !decimalsOverTheSides;
+        Map<Object, ExactRatio> held = new LinkedHashMap<>();
+        for (WhatARelationLeavesUndivided.IntSum each : sums) {
+            each.coefs().keySet().forEach(key -> {
+                if (standing.containsKey(key)) {
+                    held.put(key, standing.get(key));
+                }
+            });
+        }
         // An operation left out is one a row is not asked to get past here: not every one told.
         return new WhatARelationLeavesUndivided.Operations(sums, decimals,
                 leftOut && working.exact() ? WhatARelationLeavesUndivided.Told.SOME
                         : runningTotalsAreNoneOfTheRows && !leftOut
                         ? WhatARelationLeavesUndivided.Told.EVERY
-                        : working.told());
+                        : working.told(),
+                held);
     }
+
+    /**
+     * The values {@code heldApart} holds the numbers the operations are over at, of those that are
+     * no side of this relation ({@code named}) and are the value at one place.
+     */
+    private Map<NumericTerm, ExactRatio> heldAtValuesOfTheirOwn(
+            Map<Object, Integer> named,
+            Function<Set<NumericTerm>, Map<NumericTerm, ExactRatio>> heldApart) {
+        Set<NumericTerm> unnamed = new LinkedHashSet<>();
+        for (IntOperation each : working.operations()) {
+            for (IntOperand operand : each.form().coefs().keySet()) {
+                if (operand instanceof IntOperand.OfTheInput(NumericTerm.ValueOf term)
+                        && !named.containsKey(term)) {
+                    unnamed.add(term);
+                }
+            }
+        }
+        return unnamed.isEmpty() ? Map.of() : heldApart.apply(unnamed);
+    }
+
+    /**
+     * The value each of {@code numbers} is held at, those of them a row of the sides can be built
+     * with at a value of its own.
+     *
+     * <p>Such a number is read as a side of the relation would be, in the way the rows are asked
+     * of: the value it is held at is the one it is shown to take nearest nought
+     * ({@link WhatARelationLeavesUndivided#takenNearestNought}), so that it is a value the
+     * declarations and the way leave it, and no row of the sides is built at a value it cannot
+     * stand. It must be apart from every side and from every other of the numbers — neither the
+     * declarations nor the way tie it to any — or a row of the sides could not leave it where it
+     * is held. A number that is not is left out, and the operations over it are not told.
+     */
+    private Map<NumericTerm, ExactRatio> heldApart(Set<NumericTerm> numbers, InputReading read,
+                                                   TheWay theWay) {
+        // Only a relation whose sides are all numbers of the input is read with another beside it.
+        if (kind != Kind.AFFINE || remainder != null || sides.stream()
+                .anyMatch(each -> each.number() == null)) {
+            return Map.of();
+        }
+        List<Side> together = new ArrayList<>(sides);
+        for (NumericTerm each : numbers) {
+            together.add(ofTheInput(each, ExactRatio.ONE));
+        }
+        UndividedByARelation withThem = new UndividedByARelation(together, constant, relation,
+                amongThemselves, kind, remainder, working);
+        SidesAsDeclared declared = withThem.sidesAsDeclared(read);
+        if (declared == null) {
+            return Map.of();
+        }
+        WayRead entire = withThem.wayRead(theWay.stated(), theWay.answered(),
+                theWay.rebuilding(), theWay.region(), theWay.offItsLine(), read,
+                declared.sources(), theWay.heldWhole());
+        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = withThem.termsAlong(
+                read, declared.sources(), declared.carriers(), entire.along(), entire.declared(),
+                entire.conditions(), null, entire.stating(), theWay.heldWhole(),
+                entire.narrowing(), false);
+        WhatARelationLeavesUndivided.Independence apart = withThem.apartOnTheWay(entire.tying(),
+                declared.sources(), read, Set.of());
+        Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>();
+        for (int at = sides.size(); at < together.size(); at++) {
+            boolean standsApart = true;
+            for (int other = 0; other < together.size() && standsApart; other++) {
+                standsApart = other == at || apart.between(at, other);
+            }
+            ExactRatio value = standsApart
+                    ? WhatARelationLeavesUndivided.takenNearestNought(terms.get(at)) : null;
+            if (value != null) {
+                out.put(together.get(at).number(), value);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What the way is read from, for the reading of what a number that is no side of the
+     * relation is held at ({@link #heldApart}): the way as {@link #wayRead} takes it.
+     */
+    private record TheWay(List<OnAWay> stated, DemandReading.Answered answered,
+                          Rebuilding rebuilding, SearchRegion region, boolean offItsLine,
+                          boolean heldWhole) {}
 
     /**
      * The totals of a container among the sides that a row writes with one element alone: the
@@ -1382,8 +1483,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /** Whether every number {@code operation} is over is a side of this relation, once — or a
      *  product of numbers that are. */
     private static boolean isOverTheSides(IntOperation operation, Map<Object, Integer> named) {
+        return isOverTheSides(operation, named, Set.of());
+    }
+
+    /** The same, a number of {@code held} counting as a side: it is held at a value of its own. */
+    private static boolean isOverTheSides(IntOperation operation, Map<Object, Integer> named,
+                                          Set<NumericTerm> held) {
         return operation.form().coefs().keySet().stream().allMatch(operand ->
                 Integer.valueOf(1).equals(named.get(keyOf(operand)))
+                        || (operand instanceof IntOperand.OfTheInput(NumericTerm term)
+                        && held.contains(term))
                         || (operand instanceof IntOperand.OfTheInput(
                                 NumericTerm.ProductOf product)
                         && product.factors().stream().flatMap(form -> form.coefs().keySet().stream())
@@ -1597,8 +1706,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 entire.stating(), true, entire.narrowing(), false);
         WhatARelationLeavesUndivided.Independence independent =
                 apartOnTheWay(entire.tying(), sources, read, Set.of());
+        TheWay theWay = new TheWay(written, past, null, way.region(), false, true);
         WhatARelationLeavesUndivided.Operations operations = operationsOverTheSides(read,
-                entire.conditions(), true, totalsWrittenByOneElement(terms));
+                entire.conditions(), true, totalsWrittenByOneElement(terms),
+                numbers -> heldApart(numbers, read, theWay));
         Map<NumericTerm, EachWayItComesOut> out = new LinkedHashMap<>();
         for (int at = 0; at < sides.size(); at++) {
             if (sides.get(at).number() == null) {
@@ -2570,11 +2681,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // of it, so it is asked before any is taken away.
         WhatStatementsOfOneFormDecide.Verdict decided = WhatStatementsOfOneFormDecide.of(
                 unfree.stream().map(OnAWay::affine).toList(), askedAsAStatement());
+        Rebuilding rebuilt = unfree.size() != written.size()
+                ? Rebuilding.of(applied, written, List.of()) : null;
         // The way as it states itself, which every reading but the terms' own is made of.
-        WayRead entire = wayRead(unfree, past,
-                unfree.size() != written.size()
-                        ? Rebuilding.of(applied, written, List.of()) : null,
-                region, offItsLine, read, sources, heldWhole);
+        WayRead entire = wayRead(unfree, past, rebuilt, region, offItsLine, read, sources,
+                heldWhole);
         // A statement a row beside this relation's line meets leaves the sides as they stand to
         // one another there, whatever the others hold. Each term is read without it, and no
         // other reading is: they speak of the whole of what the way leaves, and a row beside the
@@ -2704,9 +2815,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<WhatARelationLeavesUndivided.Leaves> leaves = new ArrayList<>();
         List<WhatARelationLeavesUndivided.JointSupport> supports =
                 datePartsTogether(sources, stating, heldWhole, left.years());
+        TheWay theWay = new TheWay(unfree, past, rebuilt, region, offItsLine, heldWhole);
         WhatARelationLeavesUndivided.Operations operations =
                 operationsOverTheSides(read, conditions, heldWhole,
-                        totalsWrittenByOneElement(terms));
+                        totalsWrittenByOneElement(terms),
+                        numbers -> heldApart(numbers, read, theWay));
         for (int at = 0; at < sides.size(); at++) {
             WhatARelationLeavesUndivided.Leaves each = offItsLine
                     ? WhatARelationLeavesUndivided.leavesOffItsLine(terms, at, constant, relation,
