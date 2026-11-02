@@ -75,20 +75,25 @@ public final class RowsARunIsTriedFor {
      * comma-separated list of populations it is read among.
      */
     public static String sizes() {
-        return "the containers the comparison names each hold the same number of elements from 0 to "
-                + MOST_ELEMENTS + " built as their types hold that many";
+        return "the containers the comparison names each holding the same number of elements from"
+                + " 0 to " + MOST_ELEMENTS + " built as their types hold that many";
     }
 
     /** What is said of the whole numbers outside a container a candidate is written for. */
     public static String values() {
-        return "the whole numbers it names outside a container are all one of ("
-                + VALUES.stream().map(String::valueOf).collect(Collectors.joining(", ")) + ")";
+        return "the whole numbers it names outside a container all at one of {"
+                + VALUES.stream().map(String::valueOf).collect(Collectors.joining(", ")) + "}";
     }
 
-    /** The population a candidate is one of, said as what is not tried beyond it. */
+    /**
+     * The population the report says this compiler writes some of: the rows a run comes to the
+     * item at, which the candidates are some of. Said as the candidates in a parenthesis and not
+     * as what is left out, since it is read after "writes some of" and an "other than" there reads
+     * as the rows this compiler does write.
+     */
     public static String population(String candidates) {
-        return "the rows whose run works out a number at the item, other than a row in which "
-                + candidates;
+        return "the rows whose run works out a number at the item (written with " + candidates
+                + ")";
     }
 
     /** Every candidate for {@code goal}, in the order they are tried, none of them empty. */

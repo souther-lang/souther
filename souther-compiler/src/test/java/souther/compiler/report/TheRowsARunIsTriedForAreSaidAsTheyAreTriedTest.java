@@ -39,15 +39,15 @@ class TheRowsARunIsTriedForAreSaidAsTheyAreTriedTest {
         assertFalse(sizes.contains("whole numbers"), sizes);
 
         String values = said(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES);
-        assertTrue(values.contains("(0, 1, -1, 2)"), values);
+        assertTrue(values.contains("{0, 1, -1, 2}"), values);
         assertFalse(values.contains("containers"), values);
 
         String both = said(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES);
-        assertTrue(both.contains("from 0 to 6") && both.contains("(0, 1, -1, 2)"), both);
+        assertTrue(both.contains("from 0 to 6") && both.contains("{0, 1, -1, 2}"), both);
 
         String none = said(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_NO_PLACE);
         assertTrue(none.contains("no place"), none);
-        assertFalse(none.contains("from 0 to") || none.contains("(0,"), none);
+        assertFalse(none.contains("from 0 to") || none.contains("{0,"), none);
     }
 
     /** No sentence claims how a container's elements are written: that is the type's. */
@@ -60,7 +60,7 @@ class TheRowsARunIsTriedForAreSaidAsTheyAreTriedTest {
         }
     }
 
-    /** Read among other populations a sentence is one item: its figures' commas are in parentheses. */
+    /** Read among other populations a sentence is one item: everything past its noun is in parentheses. */
     @Test
     void theSentenceIsOneItemOfACommaSeparatedList() {
         for (CompositionRepertoire each : Set.of(
@@ -70,7 +70,8 @@ class TheRowsARunIsTriedForAreSaidAsTheyAreTriedTest {
             String ours = said(each);
             String joined = said(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD, each);
             assertTrue(joined.endsWith(", " + ours), joined);
-            assertEquals(2, ours.replaceAll("\\([^)]*\\)", "").split(", ").length, ours);
+            assertEquals(1, ours.replaceAll("\\([^)]*\\)", "").split(", ").length, ours);
+            assertFalse(ours.contains("other than"), ours);
         }
     }
 
@@ -82,7 +83,7 @@ class TheRowsARunIsTriedForAreSaidAsTheyAreTriedTest {
             String text = new String(in.readAllBytes(), StandardCharsets.UTF_8)
                     .replaceAll("\\s+", " ");
             Matcher edge = Pattern.compile("from 0 to \\d+").matcher(RowsARunIsTriedFor.sizes());
-            Matcher values = Pattern.compile("\\(\\d[^)]*\\)").matcher(RowsARunIsTriedFor.values());
+            Matcher values = Pattern.compile("\\{\\d[^}]*\\}").matcher(RowsARunIsTriedFor.values());
             assertTrue(edge.find() && values.find(), RowsARunIsTriedFor.sizes());
             assertTrue(text.contains(edge.group()), "the largest container: " + edge.group());
             assertTrue(text.contains(values.group()), "the whole numbers: " + values.group());

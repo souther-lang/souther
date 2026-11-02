@@ -209,8 +209,8 @@ final class Reasons {
                         RowsARunIsTriedFor.population(RowsARunIsTriedFor.sizes() + " and "
                                 + RowsARunIsTriedFor.values());
                 case ROWS_A_RUN_IS_TRIED_FOR_AT_NO_PLACE ->
-                        "the rows whose run works out a number at the item, none of which is"
-                                + " written since the comparison names no place to write one at";
+                        "the rows whose run works out a number at the item (none is written since"
+                                + " the comparison names no place to write one at)";
             });
         }
         return String.join(", ", out);
