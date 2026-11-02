@@ -1232,8 +1232,8 @@ public sealed interface Derivation {
                             positionOf(some.container()) == null
                                     && reads(some.ofTheElement(), ofThePiece);
                     // Each is the same quantifier read over the list one application answered.
-                    case SomeElementOfTheListsAnswered(List<Derivation> inEach) -> some.holds()
-                            && inEach.stream().allMatch(each -> meets(some,
+                    case SomeElementOfTheListsAnswered(List<Derivation> inEach) ->
+                            inEach.stream().allMatch(each -> meets(some,
                                     each instanceof OfWhatWasKept(Derivation list, var _)
                                             ? list : each));
                     case OverElementsWrittenOut(List<Derivation> ofEach, boolean holds, var _) -> {

@@ -223,6 +223,37 @@ class AGuardOverTheListsAFlatMapOfFlatMapsMakesIsReadAsSomeoneHoldingSomethingTe
         assertTrue(report.contains("pair.first"), report);
     }
 
+    private static final String EVERY_DOMAIN_HAS_AN_ACCOUNT =
+            "guard List.all(d -> List.length(accountsOn(d, accounts)) >= 1, domains) else Nobody";
+
+    private static final String SOME_DOMAIN_HAS_AN_ACCOUNT =
+            "guard List.any(d -> List.length(accountsOn(d, accounts)) >= 1, domains) else Nobody";
+
+    /**
+     * The same lists asked whether every one of the domains has an account, and whether some one
+     * does. Every one is the denial of some one failing, which the law of the operation says as
+     * a quantifier that does not hold, and the reading met under it is the same one: the report is
+     * made, and the examples, one of them for both domains, are all met.
+     */
+    @Test
+    void theLawOfAnOperationThatAsksEveryElementIsReadOfTheSameLists() {
+        String guarded = "    let matched = List.flatMap(d -> accountsOn(d, accounts), domains)\n"
+                + "    guard List.length(matched) >= 1 else Nobody";
+        assertTrue(ACCOUNTS_OF_TWO_ADDRESSES.contains(guarded));
+        String base = ACCOUNTS_OF_TWO_ADDRESSES.replace(guarded, "    %s");
+        String some = report(base.replace("%s", SOME_DOMAIN_HAS_AN_ACCOUNT), "", "");
+        assertTrue(some.lines().map(line -> line.strip().replaceAll("\\s+", " ")).toList()
+                .contains("screen implemented rows 6 pending 0"), some);
+        String everyone = base.replace("])) -> Found", "])) -> Nobody").replace(
+                "| \"none\" :", "| \"on both\" : (Pair { first = Email(\"a@x.jp\"),"
+                        + " second = Email(\"b@y.jp\") }, Book([ Account { domain = Domain(\"x.jp\") },"
+                        + " Account { domain = Domain(\"y.jp\") } ])) -> Found\n"
+                        + "                | \"none\" :");
+        String all = report(everyone.replace("%s", EVERY_DOMAIN_HAS_AN_ACCOUNT), "", "");
+        assertTrue(all.lines().map(line -> line.strip().replaceAll("\\s+", " ")).toList()
+                .contains("screen implemented rows 7 pending 0"), all);
+    }
+
     private static final String ACCOUNTS_THAT_MAY_STOP = """
             module probe.s5 exposing ( screen, Email, Domain, Pair, Account, Book, Found, Nobody )
 
