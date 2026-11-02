@@ -126,7 +126,7 @@ class AGuardOverTheListsAFlatMapOfFlatMapsMakesIsReadAsSomeoneHoldingSomethingTe
                 invariant String.matches("[a-z0-9]+(\\\\.[a-z0-9]+)+", value)
 
             data Pair = { first: Email, second: Email }
-            data Account = { domain: Domain }
+            data Account = { domain: Domain? }
             data Book = List<Account>
 
             data Found
@@ -139,8 +139,13 @@ class AGuardOverTheListsAFlatMapOfFlatMapsMakesIsReadAsSomeoneHoldingSomethingTe
                 List.flatMap(d -> if Domain(d) as name then [ name ] else [],
                              List.drop(1, String.split("@", String.lowercase(email.value))))
 
+            let accountHasDomain (domain: Domain, a: Account): Bool =
+                match a.domain with
+                    | Some own -> own == domain
+                    | None     -> false
+
             let accountsOn (domain: Domain, Book(rows)): List<Account> =
-                List.filter(a -> a.domain == domain, rows)
+                List.filter(a -> accountHasDomain(domain, a), rows)
 
             let screen (pair, accounts) = {
                 let domains = List.flatMap(e -> domainOf(e), [ pair.first, pair.second ])
@@ -154,8 +159,14 @@ class AGuardOverTheListsAFlatMapOfFlatMapsMakesIsReadAsSomeoneHoldingSomethingTe
                                     Book([ Account { domain = Domain("x.jp") } ])) -> Found
                 | "on the second" : (Pair { first = Email("a@x.jp"), second = Email("b@y.jp") },
                                      Book([ Account { domain = Domain("y.jp") } ])) -> Found
+                | "on the second behind one with no website and one on neither" :
+                    (Pair { first = Email("a@x.jp"), second = Email("b@y.jp") },
+                     Book([ Account { domain = None }, Account { domain = Domain("z.jp") },
+                            Account { domain = Domain("y.jp") } ])) -> Found
                 | "on neither" : (Pair { first = Email("a@x.jp"), second = Email("b@y.jp") },
                                   Book([ Account { domain = Domain("z.jp") } ])) -> Nobody
+                | "no website on file" : (Pair { first = Email("a@x.jp"), second = Email("b@y.jp") },
+                                          Book([ Account { domain = None } ])) -> Nobody
                 | "none" : (Pair { first = Email("a@x.jp"), second = Email("b@y.jp") },
                             Book([ ])) -> Nobody
             """;
@@ -207,8 +218,66 @@ class AGuardOverTheListsAFlatMapOfFlatMapsMakesIsReadAsSomeoneHoldingSomethingTe
         assertEquals(List.of(), aboutAValueMadeFromAnother(report), report);
         List<String> owed = report.lines().map(line -> line.strip().replaceAll("\\s+", " "))
                 .toList();
-        assertTrue(owed.contains("screen implemented rows 4 pending 0"), report);
+        assertTrue(owed.contains("screen implemented rows 6 pending 0"), report);
         assertTrue(report.contains("pair.second"), report);
         assertTrue(report.contains("pair.first"), report);
+    }
+
+    private static final String ACCOUNTS_THAT_MAY_STOP = """
+            module probe.s5 exposing ( screen, Email, Domain, Pair, Account, Book, Found, Nobody )
+
+            data Email = String
+                invariant String.matches("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", value)
+
+            data Domain = String
+                invariant String.matches("[a-z0-9]+(\\\\.[a-z0-9]+)+", value)
+
+            data Pair = { first: Email, second: Email }
+            data Account = { domain: Domain }
+            data Book = List<Account>
+
+            data Found
+            data Nobody
+
+            behavior screen : (pair: Pair, accounts: Book) -> Found | Nobody
+                constructs Domain
+
+            let domainOf (email: Email): List<Domain> =
+                List.flatMap(d -> if Domain(d) as name then [ name ] else [],
+                             List.drop(1, String.split("@", String.lowercase(email.value))))
+
+            let accountsOn (domain: Domain, Book(rows)): List<Account> =
+                List.filter(a -> a.domain == domain, rows)
+
+            let sizeOf (Book(rows)): Int = List.length(rows)
+
+            let screen (pair, accounts) = {
+                let domains = List.flatMap(e -> domainOf(e), [ pair.first, pair.second ])
+                let matched = List.flatMap(
+                    d -> if 100 / sizeOf(accounts) >= 1 then accountsOn(d, accounts) else [],
+                    domains)
+                guard List.length(matched) >= 1 else Nobody
+                Found
+            }
+
+            example screen
+                | "on the first" : (Pair { first = Email("a@x.jp"), second = Email("b@y.jp") },
+                                    Book([ Account { domain = Domain("x.jp") } ])) -> Found
+                | "on neither" : (Pair { first = Email("a@x.jp"), second = Email("b@y.jp") },
+                                  Book([ Account { domain = Domain("z.jp") } ])) -> Nobody
+            """;
+
+    /**
+     * Some account being on a domain is true once the first is found, but the lists are all made
+     * and the closure divides by the number of accounts, so a run may stop on the way whichever
+     * address the account is on. What is read is the element being one of the pieces, and a
+     * closure that is a choice with a division in it is none of that: the guard stays unread and
+     * the measurement is not complete, so a stop is not carried off by the first match.
+     */
+    @Test
+    void aClosureThatMayStopIsNotReadAsSomeAccountBeingFound() {
+        String report = report(ACCOUNTS_THAT_MAY_STOP, "unused", "unused");
+        assertFalse(aboutAValueMadeFromAnother(report).isEmpty(), report);
+        assertTrue(report.contains("measurement: partial"), report);
     }
 }
