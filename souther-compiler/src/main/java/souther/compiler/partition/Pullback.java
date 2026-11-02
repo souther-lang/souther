@@ -87,6 +87,7 @@ import souther.compiler.meaning.GivenTotals;
 import souther.compiler.meaning.Derivation.ALawJoinsWithoutWhatImpliesAnother.Disjunct;
 import souther.compiler.meaning.HowTheElementsAreAsked;
 import souther.compiler.meaning.PieceDemand;
+import souther.compiler.meaning.PieceWitness;
 import souther.compiler.meaning.MeaningsOfABody.Meaning;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
@@ -356,7 +357,7 @@ final class Pullback {
      * such statements it is read inside of: a count of a piece is a count of the piece of one of
      * these, and names which ({@link Quantity.CodePointsOfAPiece}).
      */
-    private final Map<Pieces, Integer> parting = new HashMap<>();
+    private final Map<Pieces, PieceWitness> parting = new HashMap<>();
     /** What entering each arm of a fork derives on this reading, by the fork and its names
      *  ({@link #keeping}). */
     private final Map<WhatConditionsState.ANode, List<Derivation>> entered = new HashMap<>();
@@ -3159,7 +3160,8 @@ final class Pullback {
      * then one of them or not whatever the string holds; of the characters of a string that may
      * be empty it is none of them for every value, which divides the string.
      */
-    private Quantity.IsAmongThePieces valueBeingOneOfThePieces(Proposition read, int within,
+    private Quantity.IsAmongThePieces valueBeingOneOfThePieces(Proposition read,
+                                                               PieceWitness within,
                                                                Pieces pieces) {
         if (!(read instanceof Proposition.Compared(
                 Relation.Affine(LinearForm<Quantity> form, Rel rel), boolean holds, var _))
@@ -3170,7 +3172,7 @@ final class Pullback {
         Quantity.APieceOf piece = null;
         Quantity value = null;
         for (Quantity each : form.coefs().keySet()) {
-            if (each instanceof Quantity.APieceOf bound && bound.within() == within
+            if (each instanceof Quantity.APieceOf bound && bound.within().equals(within)
                     && piece == null) {
                 piece = bound;
             } else {
@@ -3202,6 +3204,32 @@ final class Pullback {
     }
 
     /**
+     * Where the quantifier {@code call} is stands: the call as the source wrote it, in the copy of
+     * the body that holds it. Two statements about some piece are about the same piece only where
+     * they are read at the same site, whatever string they are over.
+     */
+    private static String siteOf(Core call) {
+        return switch (Core.withoutStanding(call)) {
+            case Core.PreservedCall preserved -> preserved.occurrence().toString();
+            case Core.Call plain -> plain.occurrence().toString();
+            default -> "";
+        };
+    }
+
+    /**
+     * The piece of a statement about some piece that {@code subject}, read in {@code at}, is the
+     * parameter of, where no statement about some piece is being read: the closure parameter that
+     * stands for the piece is the one thing every statement about that piece names, so two
+     * statements about two parameters are about two pieces.
+     */
+    private PieceWitness witnessOfTheParameter(Core subject, InputReads at) {
+        Core stood = withoutTheNewtypesItWears(new Denotation(subject, at)).value();
+        String site = Core.withoutStanding(stood) instanceof Core.Read named
+                && named.binding() != null ? named.binding().toString() : "";
+        return new PieceWitness(parting.size(), site);
+    }
+
+    /**
      * The index of {@code piece} among the pieces a statement being read is about, or null where it
      * is none of them.
      *
@@ -3209,12 +3237,12 @@ final class Pullback {
      * same position, whatever else the reading holds: an arm of an attempt to build a value
      * binds a name, and the pieces read inside it are no others than the ones read outside.
      */
-    private Integer partingOf(Pieces piece) {
-        Integer within = parting.get(piece);
+    private PieceWitness partingOf(Pieces piece) {
+        PieceWitness within = parting.get(piece);
         if (within != null) {
             return within;
         }
-        for (Map.Entry<Pieces, Integer> each : parting.entrySet()) {
+        for (Map.Entry<Pieces, PieceWitness> each : parting.entrySet()) {
             if (sameStringParted(each.getKey(), piece)) {
                 return each.getValue();
             }
@@ -3269,8 +3297,9 @@ final class Pullback {
         if (piece == null || piece.window().isEmpty()) {
             return null;
         }
-        Integer taken = partingOf(piece);
-        int within = taken != null ? taken : parting.size();
+        PieceWitness taken = partingOf(piece);
+        PieceWitness within = taken != null ? taken
+                : witnessOfTheParameter(unwrapped.value(), unwrapped.at());
 
         Quantity string = valueOfTheInput(
                 piece.split().args().get(piece.parted().string().position()), piece.at());
@@ -4858,7 +4887,7 @@ final class Pullback {
             if (partingOf(pieces) != null) {
                 return unread(e, reads, new WhyUnread.TwoElementsOfOneContainer());
             }
-            int within = parting.size();
+            PieceWitness within = new PieceWitness(parting.size(), siteOf(e));
             parting.put(pieces, within);
             Derivation answered;
             try {
@@ -4915,7 +4944,8 @@ final class Pullback {
                         WhyUnread.AtNoPosition.Place.CONTAINER));
             }
             CodePoints held = pieces.first() > 0 ? null
-                    : Derivation.SomePieceMeeting.held(pieces.separator(), within, element);
+                    : Derivation.SomePieceMeeting.held(pieces.separator(), within.depth(),
+                            element);
             if (held == null) {
                 WhyUnread stopped = Proposition.firstStopIn(element);
                 return unread(over, in, stopped != null ? stopped : new WhyUnread.AtNoPosition(
@@ -4931,7 +4961,7 @@ final class Pullback {
             // statement about a number of the string, which is what a line is drawn on.
             return leaf(new Derivation.SomePieceMeeting(
                     callOf(pieces.operation(), split, pieces.at(), Set.of(pieces.parted().string())),
-                    pieces.separator(), within, ofTheString, answered),
+                    pieces.separator(), within.depth(), ofTheString, answered),
                     askedAt != null ? askedAt : new Denotation(e, reads));
         }
 
@@ -4945,7 +4975,7 @@ final class Pullback {
          * language it is held to is a class of that position.
          */
         private Derivation.SomeElementEquallingSomePiece someElementBeingAPieceInALanguage(
-                Proposition element, int within, Pieces pieces, Derivation answered) {
+                Proposition element, PieceWitness within, Pieces pieces, Derivation answered) {
             if (!(element instanceof Proposition.All(List<Proposition> parts, var _))
                     || parts.size() != 2) {
                 return null;
@@ -4954,9 +4984,9 @@ final class Pullback {
             Proposition.Some some = null;
             for (Proposition part : parts) {
                 if (part instanceof Proposition.InTheStrings(
-                        Proposition.InTheStrings.Strings.OfAPiece(int of),
+                        Proposition.InTheStrings.Strings.OfAPiece(PieceWitness of),
                         StringsLanguage accepts, boolean inIt, var _)
-                        && of == within && inIt && language == null) {
+                        && of.equals(within) && inIt && language == null) {
                     language = accepts;
                 } else if (part instanceof Proposition.Some found && found.holds()
                         && some == null) {
@@ -4988,13 +5018,13 @@ final class Pullback {
          * piece being in it, which is the other language, and not the denial of some piece being
          * in it.
          */
-        private Derivation somePieceInALanguage(Pieces pieces, int within, Proposition element,
-                                                Derivation answered) {
+        private Derivation somePieceInALanguage(Pieces pieces, PieceWitness within,
+                                                Proposition element, Derivation answered) {
             if (pieces.separator().isEmpty()
                     || !(element instanceof Proposition.InTheStrings(
-                            Proposition.InTheStrings.Strings.OfAPiece(int of),
+                            Proposition.InTheStrings.Strings.OfAPiece(PieceWitness of),
                             StringsLanguage piece, boolean inIt, var _))
-                    || of != within
+                    || !of.equals(within)
                     || !(subjectOf(pieces.split().args().get(pieces.parted().string().position()),
                             pieces.at()) instanceof DecisionSubject.AnInput(TermPath string))) {
                 return null;
@@ -5004,7 +5034,7 @@ final class Pullback {
             Derivation.APieceInALanguage held = null;
             for (Met each : met) {
                 if (each.step() instanceof Derivation.APieceInALanguage read
-                        && read.within() == within && read.accepts().equals(piece)) {
+                        && read.within().equals(within) && read.accepts().equals(piece)) {
                     held = read;
                     break;
                 }
@@ -5378,9 +5408,10 @@ final class Pullback {
             Pieces piece = predicate == null ? null
                     : pieceThatIs(call.args().get(predicate.subject()), reads,
                             Pullback.this::piecesOf);
-            Integer within = piece == null ? null : partingOf(piece);
+            PieceWitness within = piece == null ? null : partingOf(piece);
             return within == null || piece.separator().isPresent() ? null
-                    : leaf(new Derivation.ACharacterInAClass(matches.meaning(), within), e, reads);
+                    : leaf(new Derivation.ACharacterInAClass(matches.meaning(), within.depth()),
+                            e, reads);
         }
 
         /**
@@ -5405,14 +5436,15 @@ final class Pullback {
                 return null;
             }
             Pieces piece = pieceThatIs(stated.subject(), reads, Pullback.this::piecesInAWindow);
-            Integer taken = piece == null ? null : partingOf(piece);
+            PieceWitness taken = piece == null ? null : partingOf(piece);
             if (piece == null || piece.separator().isEmpty()
                     || (taken == null && piece.window().isEmpty())) {
                 return null;
             }
             // Where no statement about some piece is being read, the piece is the one a statement
             // about some piece would be about at the depth this is read at, as a comparison's is.
-            int within = taken != null ? taken : parting.size();
+            PieceWitness within = taken != null ? taken
+                    : witnessOfTheParameter(stated.subject(), reads);
             return leaf(new Derivation.APieceInALanguage(new StringsLanguage(accepts), operation,
                     written, within, partedStringOf(piece)), e, reads);
         }
@@ -6126,12 +6158,12 @@ final class Pullback {
          * such statement is being read.
          */
         private Sized codePointsOfAPiece(Pieces pieces, CodePointClass counted) {
-            Integer within = partingOf(pieces);
+            PieceWitness within = partingOf(pieces);
             return within == null
                     ? new Sized.NotSized(new WhyUnread.AtNoPosition(
                             WhyUnread.AtNoPosition.Place.SUBJECT))
                     : new Sized.AsAForm(LinearForm.atom(
-                            new Quantity.CodePointsOfAPiece(counted, within)));
+                            new Quantity.CodePointsOfAPiece(counted, within.depth())));
         }
 
         /**

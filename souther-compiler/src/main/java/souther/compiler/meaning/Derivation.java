@@ -2938,7 +2938,7 @@ public sealed interface Derivation {
      *                  were held — or none where the string stands at no one position
      */
     record APieceInALanguage(StringsLanguage accepts, String operation, String written,
-                             int within, Optional<PartedString> parted)
+                             PieceWitness within, Optional<PartedString> parted)
             implements Derivation {
 
         /**
@@ -2966,10 +2966,7 @@ public sealed interface Derivation {
             Objects.requireNonNull(operation, "the predicate was written as some operation");
             Objects.requireNonNull(written, "the predicate was written with some text");
             Objects.requireNonNull(parted, "the string is parted or is at no one position");
-            if (within < 0) {
-                throw new IllegalArgumentException(
-                        "a piece is of a statement some number of statements in: " + within);
-            }
+            Objects.requireNonNull(within, "a piece is of some statement about a piece");
         }
 
         @Override
