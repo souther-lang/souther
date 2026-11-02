@@ -175,17 +175,14 @@ class AGuardOverTheListsAFlatMapOfFlatMapsMakesIsReadAsSomeoneHoldingSomethingTe
         return report.lines().filter(line -> line.contains("a value made from this one")).toList();
     }
 
-    /** The guard is read, and no rule of it is left about a value made from the lead. */
+    /**
+     * The guard is read, no rule of it is left about a value made from the lead, and no example
+     * is dropped, merged or left waiting for the reading.
+     */
     @Test
-    void aCountAtLeastOneIsSomeElementOfSomeListHoldingOne() {
+    void aCountAtLeastOneIsSomeElementOfSomeListHoldingOneAndEveryExampleIsMet() {
         String report = report(ACCOUNTS_OF_A_REACH, "List.length(matched) >= 1", "Found");
         assertEquals(List.of(), aboutAValueMadeFromAnother(report), report);
-    }
-
-    /** No example is dropped, merged or left waiting for the reading. */
-    @Test
-    void theExamplesAreAllOwedAndMet() {
-        String report = report(ACCOUNTS_OF_A_REACH, "List.length(matched) >= 1", "Found");
         List<String> owed = report.lines().map(line -> line.strip().replaceAll("\\s+", " "))
                 .toList();
         assertTrue(owed.contains("screen implemented rows 8 pending 0"), report);
