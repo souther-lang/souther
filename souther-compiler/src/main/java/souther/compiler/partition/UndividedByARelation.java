@@ -4842,13 +4842,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>The values of a number are those of its type and those the declarations and the run leave
      * it, and not whichever of the two a range written down happens to say: a range with no end is
-     * a range nothing written down ends, and a type ends it all the same. The form is worked out
-     * in an {@code Int}, whatever its numbers are counts of, since a division by a written number
-     * is of one.
+     * a range nothing written down ends, and a type ends it all the same. The form is held inside
+     * an {@code Int}, whatever its numbers are counts of, since a division by a written number is
+     * of one.
      *
      * <p>The window of values that keep the form inside the {@code Int}s is as wide whatever the
      * rest comes to, and where it lies moves with it, so what it leaves of the values of the
      * number is least at one of the two ends of the rest.
+     *
+     * <p>What is held inside is the form the way states, which is all a way keeps of the
+     * arithmetic that wrote it. A stop of a partial sum that the form does not show, a number moved
+     * in and out of it, is no stop on the way, here as for every other statement of a way.
      */
     private static boolean choosesEveryRemainder(NumericTerm.FromOnePosition free,
                                                  RowDemand.OnARemainder on,
@@ -4858,8 +4862,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         BigInteger weight = wholeNumberOf(form.coefs().get(free));
         BigInteger rest = wholeNumberOf(form.constant());
         TermOrders freeOrders = read.quantities().ordersOf(free);
-        if (weight == null || rest == null || weight.signum() == 0 || freeOrders == null
-                || !weight.abs().gcd(divisor).equals(BigInteger.ONE)) {
+        if (takes == null || weight == null || rest == null || weight.signum() == 0
+                || freeOrders == null || !weight.abs().gcd(divisor).equals(BigInteger.ONE)) {
             return false;
         }
         WholeEnds mine = wholeEndsOf(takes.meet(freeOrders.answered().whereItStops()));
