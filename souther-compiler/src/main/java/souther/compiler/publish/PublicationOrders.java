@@ -424,7 +424,9 @@ public final class PublicationOrders {
                             CompositionRepertoire.MAPS_WRITTEN_WITH_ONE_ENTRY,
                             // Last of the ones about which rows: a number only a run works out
                             // is looked for by running them, with nothing said of where they are.
-                            CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR,
+                            CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES,
+                            CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES,
+                            CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES,
                             CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED,
                             CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE));
 

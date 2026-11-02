@@ -8,6 +8,7 @@ import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.CompositionShortfall;
+import souther.compiler.partition.RowsARunIsTriedFor;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
@@ -200,9 +201,13 @@ final class Reasons {
                 case MAPS_WRITTEN_WITH_ONE_ENTRY ->
                         "the maps whose values come to a total by more than one entry, and the"
                                 + " maps whose entries are asked to hold more than the number";
-                case ROWS_A_RUN_IS_TRIED_FOR ->
-                        "the rows whose run works out a number at the item, other than the few"
-                                + " sizes and values tried";
+                case ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES ->
+                        RowsARunIsTriedFor.population(RowsARunIsTriedFor.sizes());
+                case ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES ->
+                        RowsARunIsTriedFor.population(RowsARunIsTriedFor.values());
+                case ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES ->
+                        RowsARunIsTriedFor.population(RowsARunIsTriedFor.sizes() + " and "
+                                + RowsARunIsTriedFor.values());
             });
         }
         return String.join(", ", out);

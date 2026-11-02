@@ -3037,16 +3037,21 @@ public final class LevelRealizer {
     /**
      * The first candidate for {@code goal} that was not tried and the rules were not shown to
      * refuse, or that every one of them was: the population is said, and nothing is proved of it.
+     * A goal with no candidate says that none was composed, since there is no population to say.
      */
     private Realization nextCandidate(PointSearchGoal.ByObservation goal, SearchRegion within,
                                       ValuesTried tried) {
-        for (Map<RealizationTarget, Place> each : RowsARunIsTriedFor.candidates(goal)) {
+        List<Map<RealizationTarget, Place>> candidates = RowsARunIsTriedFor.candidates(goal);
+        if (candidates.isEmpty()) {
+            return Realization.Unknown.nothingComposedOne();
+        }
+        for (Map<RealizationTarget, Place> each : candidates) {
             if (found(each, within, tried) instanceof Realization.Found offered) {
                 return offered;
             }
         }
         return Realization.Unknown.searchLeftSomethingUntried(Set.of(),
-                Set.of(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR));
+                Set.of(RowsARunIsTriedFor.repertoireOf(goal)));
     }
 
     /**

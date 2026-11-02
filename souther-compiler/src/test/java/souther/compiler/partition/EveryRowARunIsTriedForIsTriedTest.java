@@ -22,6 +22,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -62,6 +63,9 @@ class EveryRowARunIsTriedForIsTriedTest {
         Set<List<Place>> pairs = new HashSet<>();
         candidates.forEach(each -> pairs.add(List.of(at(each, LENGTH), at(each, NUMBER))));
         assertEquals(candidates.size(), pairs.size(), "no candidate twice");
+        // The population itself, written out: moving an edge or a value is a decision about what
+        // the search tries, and is also a change to the report and the command reference.
+        assertEquals(7 * 4, candidates.size());
         for (int size = 0; size <= 6; size++) {
             for (long value : List.of(0L, 1L, -1L, 2L)) {
                 assertTrue(pairs.contains(List.of(Count.of(size), Count.of(value))),
@@ -70,6 +74,28 @@ class EveryRowARunIsTriedForIsTriedTest {
         }
         assertEquals(candidates.size(), both.askedAtMost(),
                 "every candidate is asked for, and no figure laid down elsewhere cuts them");
+    }
+
+    /** Only the axes the comparison names are candidates: sizes, values, both, or neither. */
+    @Test
+    void onlyTheAxesTheComparisonNamesAreVaried() {
+        assertEquals(7, RowsARunIsTriedFor.candidates(goal(List.of(LENGTH), List.of())).size());
+        assertEquals(4, RowsARunIsTriedFor.candidates(goal(List.of(), List.of(NUMBER))).size());
+        assertEquals(0, RowsARunIsTriedFor.candidates(goal(List.of(), List.of())).size());
+    }
+
+    /** The population a goal is said to have left is the one its candidates vary. */
+    @Test
+    void theRepertoireSaidIsTheAxesVaried() {
+        assertEquals(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES,
+                RowsARunIsTriedFor.repertoireOf(goal(List.of(LENGTH), List.of())));
+        assertEquals(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES,
+                RowsARunIsTriedFor.repertoireOf(goal(List.of(), List.of(NUMBER))));
+        assertEquals(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES,
+                RowsARunIsTriedFor.repertoireOf(goal(List.of(LENGTH), List.of(NUMBER))));
+        assertThrows(IllegalArgumentException.class,
+                () -> RowsARunIsTriedFor.repertoireOf(goal(List.of(), List.of())),
+                "a goal that names no place has no candidate to be a population of");
     }
 
     /** A size is tried at every value before the next size is. */
