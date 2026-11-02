@@ -71,6 +71,15 @@ public final class BoundUnderEvaluation {
         }
     }
 
+    /**
+     * The pieces {@code text} is parted into at the code point {@code separator}, as the run time
+     * parts it: a literal separator, with the empty pieces kept.
+     */
+    public static List<String> parted(String text, int separator) {
+        return Strings.split(text, new String(Character.toChars(separator)),
+                EvaluationContext.checkpoint());
+    }
+
     public static String admit(String text) {
         return Strings.admit(text, EvaluationContext.checkpoint());
     }
