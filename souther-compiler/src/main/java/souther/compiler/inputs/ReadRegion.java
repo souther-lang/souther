@@ -130,9 +130,16 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     /**
      * A region of numbers read from rules and taken in or fixed on top of them: the run of a
      * position is where the closure of everything said leaves it, and the closure of more said
-     * leaves it no wider. A class is the declarations' and a fixing does not change it. Held to this
-     * over the regions a model reads, where fixing a position and taking a relation in are each
-     * said at random ({@code ARegionRunsNoWiderOnceMoreIsSaidTest}).
+     * leaves it no wider. A class is the declarations' narrowed by the remainders pinned, and never
+     * widened.
+     *
+     * <p>For regions that are not shown empty, and held, not derived: over the regions a model
+     * reads — numbers of several classes, the cases of a sum, the elements and the size of a list,
+     * a remainder — with a number fixed, a relation taken in, one number taken against a value, or
+     * one held apart from a value, each said at random
+     * ({@code ARegionRunsNoWiderOnceMoreIsSaidTest}). A kind of number or of saying that test does
+     * not make is not covered by it; a search over such a number does not take the descent
+     * ({@code Search#straightDescent}).
      */
     @Override
     public boolean runsOnlyNarrowWhenFixed() {

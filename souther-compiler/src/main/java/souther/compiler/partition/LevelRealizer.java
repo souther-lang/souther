@@ -1981,6 +1981,10 @@ public final class LevelRealizer {
          * with nothing changed, and the walk runs as it would have. The budgets are spent as the walk
          * would have spent them, and a search that could not afford them all is left to the walk.
          *
+         * <p>And only over the numbers the property of {@link SearchRegion#runsOnlyNarrowWhenFixed}
+         * is held for: a position's own value, and what a remainder or a size takes of one. Any
+         * other number in the form is left to the walk.
+         *
          * <p>What the walk meets at a narrower run that this does not is the arithmetic of the
          * same coefficients and amounts owed, so a value it cannot hold is one this cannot either,
          * and is left to the walk by the same exit.
@@ -1992,6 +1996,12 @@ public final class LevelRealizer {
                     || asked + last > HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN
                     || steps.taken + terms.size() > STEPS_A_SEARCH_MAY_TAKE) {
                 return null;
+            }
+            for (Map.Entry<RealizationTarget.OfANumber, ExactRatio> each : terms) {
+                if (!(each.getKey().term() instanceof NumericTerm.ValueOf
+                        || each.getKey().term() instanceof NumericTerm.TakenOf)) {
+                    return null;
+                }
             }
             lastSaid = null;
             Set<CompositionCapacity> unheldBefore = new HashSet<>(unheld);

@@ -2,6 +2,8 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.HeldClass;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.NumericDomain;
 
 import java.math.BigInteger;
@@ -46,8 +48,8 @@ class ARegionRunsNoWiderOnceMoreIsSaidTest {
                     coarser = finer;
                     continue;
                 }
-                for (String name : RegionsRefinedAtRandom.NAMES) {
-                    NumericTerm term = RegionsRefinedAtRandom.term(name);
+                for (String name : RegionsRefinedAtRandom.EVERY_NUMBER) {
+                    NumericTerm term = RegionsRefinedAtRandom.anyTerm(name);
                     NumericDomain.FormProjection before = coarser.projectionOf(term);
                     NumericDomain.FormProjection after = finer.projectionOf(term);
                     compared++;
@@ -83,19 +85,32 @@ class ARegionRunsNoWiderOnceMoreIsSaidTest {
         Random random = new Random(2985);
         long[] values = {-3, -1, 0, 1, 2, 3, 7, 10, 20, 21, 500, 1000, 1500, 2000, 5000, 6000};
         int members = 0;
+        int narrowed = 0;
         for (int i = 0; i < REGIONS; i++) {
             SearchRegion coarser = RegionsRefinedAtRandom.region();
+            StringBuilder said = new StringBuilder();
             for (int step = 0, steps = 1 + random.nextInt(5); step < steps; step++) {
-                SearchRegion finer = RegionsRefinedAtRandom.refined(coarser, random);
+                int saidSoFar = said.length();
+                SearchRegion finer = RegionsRefinedAtRandom.refined(coarser, random, said);
+                String lastSaid = said.substring(saidSoFar);
+                String allSaid = said.toString();
+                if (coarser.emptiness().isPresent() || finer.emptiness().isPresent()) {
+                    coarser = finer;
+                    continue;
+                }
                 for (String name : RegionsRefinedAtRandom.NAMES) {
                     NumericTerm.ValueOf term = RegionsRefinedAtRandom.term(name);
                     for (long value : values) {
                         BigInteger whole = BigInteger.valueOf(value);
+                        boolean was = coarser.classAt(term).holds(whole);
                         if (finer.classAt(term).holds(whole)) {
                             members++;
-                            assertTrue(coarser.classAt(term).holds(whole),
-                                    () -> name + " may be " + whole + " in a region made from one"
-                                            + " where its class has no such member");
+                            String classes = coarser.classAt(term) + " then " + finer.classAt(term);
+                            assertTrue(was, () -> name + " may be " + whole + " in a region made"
+                                    + " from one where its class has no such member; said"
+                                    + allSaid + "; last" + lastSaid + "; classes " + classes);
+                        } else if (was) {
+                            narrowed++;
                         }
                     }
                 }
@@ -103,5 +118,64 @@ class ARegionRunsNoWiderOnceMoreIsSaidTest {
             }
         }
         assertTrue(members > REGIONS, "members of a class compared: " + members);
+        assertTrue(narrowed > 0, "and values a class lost to a remainder fixed beside it: "
+                + narrowed);
+    }
+
+    /**
+     * The same of the classes themselves and not of the values chosen to try them with: a class of
+     * remainders lies within another exactly where the other's divisor divides its own and the two
+     * leave the same remainder by it.
+     */
+    @Test
+    void everyClassLiesWithinTheOneBefore() {
+        Random random = new Random(2986);
+        int compared = 0;
+        int strictly = 0;
+        for (int i = 0; i < REGIONS; i++) {
+            SearchRegion coarser = RegionsRefinedAtRandom.region();
+            StringBuilder said = new StringBuilder();
+            for (int step = 0, steps = 1 + random.nextInt(5); step < steps; step++) {
+                SearchRegion finer = RegionsRefinedAtRandom.refined(coarser, random, said);
+                if (coarser.emptiness().isPresent() || finer.emptiness().isPresent()) {
+                    coarser = finer;
+                    continue;
+                }
+                for (String name : RegionsRefinedAtRandom.NAMES) {
+                    NumericTerm.ValueOf term = RegionsRefinedAtRandom.term(name);
+                    HeldClass before = coarser.classAt(term);
+                    HeldClass after = finer.classAt(term);
+                    String allSaid = said.toString();
+                    compared++;
+                    assertTrue(lies(after, before), () -> name + " is held to " + after
+                            + " in a region made from one that held it to " + before
+                            + "; said" + allSaid);
+                    if (!after.equals(before)) {
+                        strictly++;
+                    }
+                }
+                coarser = finer;
+            }
+        }
+        assertTrue(compared > REGIONS, "classes compared: " + compared);
+        assertTrue(strictly > 0, "and classes that were narrowed: " + strictly);
+    }
+
+    /** Whether every member of {@code finer} is a member of {@code coarser}. */
+    private static boolean lies(HeldClass finer, HeldClass coarser) {
+        if (finer instanceof HeldClass.NoValue || coarser instanceof HeldClass.None) {
+            return true;
+        }
+        if (coarser instanceof HeldClass.NoValue || finer instanceof HeldClass.None) {
+            return false;
+        }
+        if (finer instanceof HeldClass.OfResidues within
+                && coarser instanceof HeldClass.OfResidues around) {
+            Congruences inner = within.class_();
+            Congruences outer = around.class_();
+            return inner.modulus().mod(outer.modulus()).signum() == 0
+                    && inner.residue().subtract(outer.residue()).mod(outer.modulus()).signum() == 0;
+        }
+        return finer.equals(coarser);
     }
 }
