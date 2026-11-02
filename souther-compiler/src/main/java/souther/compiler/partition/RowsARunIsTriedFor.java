@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The rows a number only a run works out is looked for with, in the order they are tried.
@@ -49,14 +50,22 @@ public final class RowsARunIsTriedFor {
 
     private RowsARunIsTriedFor() {}
 
-    /** The most elements a candidate holds a container of: the edge the report names. */
-    public static int mostElements() {
-        return MOST_ELEMENTS;
-    }
-
-    /** The values a whole number outside a container is written at, in the order tried. */
-    public static List<Long> values() {
-        return VALUES;
+    /**
+     * The population the candidates are, as the report names what was not tried beyond it.
+     *
+     * <p>Of the places a comparison names and not of one point: a point whose comparison names no
+     * container has no sizes among its candidates, and one that names no whole number outside a
+     * container has no values, so each part is conditional. A container's elements are written as
+     * its type holds that many (a set's apart, a list's alike), which {@code Witnesses} decides and
+     * this does not repeat. The figures sit in parentheses so that the sentence stays one item in
+     * the comma-separated list of populations it is read among.
+     */
+    public static String population() {
+        return "the rows whose run works out a number at the item, other than a row in which the"
+                + " containers the comparison names (lists, sets, maps, strings) each hold the same"
+                + " number of elements from 0 to " + MOST_ELEMENTS + " built as their types hold"
+                + " that many and the whole numbers it names outside a container are all one of ("
+                + VALUES.stream().map(String::valueOf).collect(Collectors.joining(", ")) + ")";
     }
 
     /** Every candidate for {@code goal}, in the order they are tried, none of them empty. */

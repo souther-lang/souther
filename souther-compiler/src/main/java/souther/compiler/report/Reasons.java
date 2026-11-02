@@ -15,7 +15,6 @@ import souther.compiler.publish.PublicationOrders;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * What a reason reads as to a person.
@@ -202,14 +201,7 @@ final class Reasons {
                 case MAPS_WRITTEN_WITH_ONE_ENTRY ->
                         "the maps whose values come to a total by more than one entry, and the"
                                 + " maps whose entries are asked to hold more than the number";
-                case ROWS_A_RUN_IS_TRIED_FOR ->
-                        "the rows whose run works out a number at the item, other than a"
-                                + " container holding 0 to "
-                                + RowsARunIsTriedFor.mostElements()
-                                + " copies of one element written at its type's plain value, and"
-                                + " a whole number outside a container at "
-                                + RowsARunIsTriedFor.values().stream().map(String::valueOf)
-                                        .collect(Collectors.joining(", "));
+                case ROWS_A_RUN_IS_TRIED_FOR -> RowsARunIsTriedFor.population();
             });
         }
         return String.join(", ", out);

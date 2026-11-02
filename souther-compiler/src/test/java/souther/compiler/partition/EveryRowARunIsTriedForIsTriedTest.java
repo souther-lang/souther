@@ -62,14 +62,25 @@ class EveryRowARunIsTriedForIsTriedTest {
         Set<List<Place>> pairs = new HashSet<>();
         candidates.forEach(each -> pairs.add(List.of(at(each, LENGTH), at(each, NUMBER))));
         assertEquals(candidates.size(), pairs.size(), "no candidate twice");
-        for (int size = 0; size <= RowsARunIsTriedFor.mostElements(); size++) {
-            for (long value : RowsARunIsTriedFor.values()) {
+        // The population itself, written out: moving an edge or a value is a decision about what
+        // the search tries, and is also a change to the report and the command reference.
+        assertEquals(7 * 4, candidates.size());
+        for (int size = 0; size <= 6; size++) {
+            for (long value : List.of(0L, 1L, -1L, 2L)) {
                 assertTrue(pairs.contains(List.of(Count.of(size), Count.of(value))),
                         size + " elements at " + value);
             }
         }
         assertEquals(candidates.size(), both.askedAtMost(),
                 "every candidate is asked for, and no figure laid down elsewhere cuts them");
+    }
+
+    /** Only the axes the comparison names are candidates: sizes, values, both, or neither. */
+    @Test
+    void onlyTheAxesTheComparisonNamesAreVaried() {
+        assertEquals(7, RowsARunIsTriedFor.candidates(goal(List.of(LENGTH), List.of())).size());
+        assertEquals(4, RowsARunIsTriedFor.candidates(goal(List.of(), List.of(NUMBER))).size());
+        assertEquals(0, RowsARunIsTriedFor.candidates(goal(List.of(), List.of())).size());
     }
 
     /** A size is tried at every value before the next size is. */
