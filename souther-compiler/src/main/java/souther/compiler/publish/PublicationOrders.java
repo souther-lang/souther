@@ -427,7 +427,6 @@ public final class PublicationOrders {
                             CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES,
                             CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES,
                             CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES,
-                            CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_NO_PLACE,
                             CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED,
                             CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE));
 

@@ -22,6 +22,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -92,8 +93,9 @@ class EveryRowARunIsTriedForIsTriedTest {
                 RowsARunIsTriedFor.repertoireOf(goal(List.of(), List.of(NUMBER))));
         assertEquals(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES,
                 RowsARunIsTriedFor.repertoireOf(goal(List.of(LENGTH), List.of(NUMBER))));
-        assertEquals(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_NO_PLACE,
-                RowsARunIsTriedFor.repertoireOf(goal(List.of(), List.of())));
+        assertThrows(IllegalArgumentException.class,
+                () -> RowsARunIsTriedFor.repertoireOf(goal(List.of(), List.of())),
+                "a goal that names no place has no candidate to be a population of");
     }
 
     /** A size is tried at every value before the next size is. */

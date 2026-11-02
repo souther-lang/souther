@@ -44,10 +44,6 @@ class TheRowsARunIsTriedForAreSaidAsTheyAreTriedTest {
 
         String both = said(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES);
         assertTrue(both.contains("from 0 to 6") && both.contains("{0, 1, -1, 2}"), both);
-
-        String none = said(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_NO_PLACE);
-        assertTrue(none.contains("no place"), none);
-        assertFalse(none.contains("from 0 to") || none.contains("{0,"), none);
     }
 
     /** No sentence claims how a container's elements are written: that is the type's. */

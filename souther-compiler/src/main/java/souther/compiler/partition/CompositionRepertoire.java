@@ -263,13 +263,7 @@ public enum CompositionRepertoire {
      * The same, where the comparison names both: the candidates are every size crossed with every
      * value.
      */
-    ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES,
-
-    /**
-     * The same, where the comparison names neither: no place to write a candidate at, so none is
-     * written.
-     */
-    ROWS_A_RUN_IS_TRIED_FOR_AT_NO_PLACE;
+    ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES;
 
     /**
      * Whether a row that meets this for one value of a point meets it for every other: the
@@ -292,8 +286,7 @@ public enum CompositionRepertoire {
                  TREES_WRITTEN_FOR_A_COUNT, TREES_WRITTEN_FOR_A_LINE,
                  STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
                  MAPS_WRITTEN_WITH_ONE_ENTRY, ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES,
-                 ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES, ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES,
-                 ROWS_A_RUN_IS_TRIED_FOR_AT_NO_PLACE -> false;
+                 ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES, ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES -> false;
         };
     }
 

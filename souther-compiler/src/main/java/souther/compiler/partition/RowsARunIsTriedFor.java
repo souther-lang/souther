@@ -54,6 +54,12 @@ public final class RowsARunIsTriedFor {
      * {@link #candidates} varies, so that what is reported is what was written. A goal that names
      * containers is tried at sizes, one that names whole numbers outside a container at values,
      * and each axis a goal does not name is not varied.
+     *
+     * <p>A goal that names neither has no candidate to be a population of, and what it comes to is
+     * that none was composed ({@link Realization.Unknown#nothingComposedOne()}) and not that some
+     * of a population was written, so it has no repertoire.
+     *
+     * @throws IllegalArgumentException for a goal that names no place
      */
     static CompositionRepertoire repertoireOf(PointSearchGoal.ByObservation goal) {
         boolean sizes = !goal.lengths().isEmpty();
@@ -64,8 +70,11 @@ public final class RowsARunIsTriedFor {
         if (sizes) {
             return CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES;
         }
-        return values ? CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES
-                : CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_NO_PLACE;
+        if (values) {
+            return CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES;
+        }
+        throw new IllegalArgumentException("a goal that names no place writes no candidate: "
+                + goal);
     }
 
     /**
@@ -76,7 +85,8 @@ public final class RowsARunIsTriedFor {
      */
     public static String sizes() {
         return "the containers the comparison names each holding the same number of elements from"
-                + " 0 to " + MOST_ELEMENTS + " built as their types hold that many";
+                + " 0 to " + MOST_ELEMENTS + " with element values left to their types and not"
+                + " chosen by this search";
     }
 
     /** What is said of the whole numbers outside a container a candidate is written for. */

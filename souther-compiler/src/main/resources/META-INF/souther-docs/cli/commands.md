@@ -543,16 +543,21 @@ obligation covered only by such rows carries `onlyWitnessedBy`.
 A number only a run works out, such as a sum over a list, has no rule saying where the input stands
 for the run to come to a point, so the compiler writes candidate rows, runs each and reads what the
 run came to. The candidates are the containers the comparison names each holding the same number
-of elements from 0 to 6, built as their types hold that many, and the whole numbers it names
-outside a container all at one of {0, 1, -1, 2}. A comparison that names no container has no
-sizes among its candidates, and one that names no such number has no values; the report says which
-of these the point was tried at. The elements of a candidate list repeat one representative element
-unless the declarations require them to be distinct, so their reach depends on their type: with a
-`Points` newtype of `Int` whose lowest value is 0, every candidate list sums to 0. When no
-candidate reaches the point, the report names this population, and a longer list, elements of other
-values or elements unlike one another may still reach it. That no candidate reached a point does not make it unreachable. If it is
-reachable, a row written by hand with such elements settles it; if it is not, what settles it is
-proving that from the model's declarations. Running the same search again does neither.
+of elements from 0 to 6, and the whole numbers it names outside a container all at one of
+{0, 1, -1, 2}. A comparison that names no container has no sizes among its candidates, and one
+that names no such number has no values; the report says which of these the point was tried at.
+A comparison that names neither has no candidate, and the report says that none was composed.
+
+The search does not choose the values of a container's elements. They are what the declarations
+make of that many: a candidate list repeats one representative element unless the declarations
+require its elements to be distinct, so the reach of the candidates depends on the element type.
+With a `Points` newtype of `Int` whose lowest value is 0, every candidate list sums to 0.
+
+When no candidate reaches the point, the report names this population, and a longer list, elements
+of other values or elements unlike one another may still reach it. That no candidate reached a
+point does not make it unreachable. If it is reachable, a row written by hand with such elements
+settles it; if it is not, what settles it is proving that from the model's declarations. Running
+the same search again does neither.
 
 A position nothing the behavior states reads — not its body and not a clause of it — is owed no row
 at any of its classes, since a row at one of them gives the answer a row at any other gives. Its

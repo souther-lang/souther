@@ -22,7 +22,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TheReasonAPointIsOpenSaysWhatItsRowsWereTriedAtTest {
 
     private static final String SIZES = "the containers the comparison names each holding the"
-            + " same number of elements from 0 to 6 built as their types hold that many";
+            + " same number of elements from 0 to 6 with element values left to their types and"
+            + " not chosen by this search";
 
     private static final String VALUES = "the whole numbers it names outside a container all at"
             + " one of {0, 1, -1, 2}";
@@ -112,6 +113,20 @@ class TheReasonAPointIsOpenSaysWhatItsRowsWereTriedAtTest {
         String human = report(model("0", "(ps, q) = total(ps).value + q.value == 20",
                 "(ps: List<Points>, q: Points)", "([], Points(1))"));
         assertTrue(human.contains(told(SIZES + " and " + VALUES)), human);
+    }
+
+    /**
+     * A comparison that names no container and no whole number has no candidate, so the report does
+     * not say that some of a population was written: it says that none was composed.
+     */
+    @Test
+    void aComparisonNamingNoPlaceIsToldNothingWasComposedAndNoPopulation() {
+        String human = report(model("0",
+                "(b) = total(if b then [Points(1)] else [Points(2)]).value == 20", "(b: Bool)",
+                "(true)"));
+        assertTrue(human.contains(NO_ROW_AT_ON), human);
+        assertTrue(human.contains("nothing composed one"), human);
+        assertFalse(human.contains("writes some of the rows whose run"), human);
     }
 
     /**
