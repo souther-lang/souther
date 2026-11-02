@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BorderQuantity;
@@ -19,6 +20,7 @@ import souther.compiler.publish.PublishedSentence;
 import souther.compiler.types.ModelOccurrences;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.LinkedHashSet;
@@ -786,6 +788,37 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     public static final int READINGS_SAID = 4;
 
     /**
+     * Every reading of the point in one order, whatever order they were made in and whatever a
+     * report would call them.
+     *
+     * <p>For a surface that needs the readings in a steady order and says none of the words
+     * ({@link #readingsSaid}'s order is the words, and is the one a reader sees). By the quantity,
+     * what is asked of it, the cases it decides in, and then the line its author drew — the order
+     * {@link WhereTheReadingsDiffer} numbers the lines of a comparison in — so that two readings
+     * that ask alike are still put the same way round. What is left tied is the readings of one
+     * line that ask alike and differ only by the call they were made at, which is a bag.
+     */
+    public List<Reading> readingsInSteadyOrder() {
+        Comparator<Reading> order = Comparator
+                .comparing((Reading each) -> met.get(each).axis(),
+                        Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(each -> askedOf(each),
+                        Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(each -> met.get(each).decidesWhere(),
+                        Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(each -> met.get(each).border().origin().authoredLine(),
+                        AuthoredLine.inASteadyOrder());
+        return met.keySet().stream().sorted(order).toList();
+    }
+
+    /** What {@code reading} asks of a row at the point it is asked at, or null where nothing. */
+    private String askedOf(Reading reading) {
+        BorderAssessment at = met.get(reading);
+        DomainPoint asked = seatOf(reading).asked();
+        return at.operator(asked) == null ? null : at.operator(asked) + " " + at.against(asked);
+    }
+
+    /**
      * Every reading of the point, as the sentences a surface prints under it, in the order the
      * sentences sort.
      *
@@ -806,7 +839,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                     new BorderAssessment.Point(at, asked, at.at(asked)).asked(apart),
                     at.readAt()));
         });
-        out.sort(java.util.Comparator.comparing((ReadingSaid said) -> said.at())
+        out.sort(Comparator.comparing((ReadingSaid said) -> said.at())
                 .thenComparing(ReadingSaid::asks));
         return List.copyOf(out);
     }

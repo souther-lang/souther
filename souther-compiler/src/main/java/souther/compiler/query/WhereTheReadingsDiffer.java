@@ -97,7 +97,7 @@ public final class WhereTheReadingsDiffer {
         this.numbered = Map.copyOf(numbered);
     }
 
-    /** The lines among the readings of {@code byPoint} that share their words under different
+    /** The lines among the readings of {@code points} that share their words under different
      *  points. */
     public static WhereTheReadingsDiffer of(List<BorderObligationPointAssessment> points) {
         Map<Words, Sharers> byWords = new LinkedHashMap<>();

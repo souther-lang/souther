@@ -2851,7 +2851,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (BorderObligationPointAssessment point : everyAssessedPoint()) {
             ModelOccurrences.Gathering readAt = gathering.computeIfAbsent(point.point(),
                     each -> new ModelOccurrences.Gathering());
-            point.met().values().forEach(reading -> readAt.add(reading.readAt()));
+            point.readingsInSteadyOrder().forEach(
+                    where -> readAt.add(point.met().get(where).readAt()));
         }
         Map<BorderObligationPoint, ModelOccurrences> out = new LinkedHashMap<>();
         gathering.forEach((point, readAt) -> out.put(point, readAt.gathered()));
@@ -9600,12 +9601,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // the order is not a contract, and a consumer reads these as a bag: two entries that
             // print alike are two readings, so they may be counted and may not be merged.
             ArrayNode readings = o.putArray("readings");
-            for (BorderObligationPointAssessment.ReadingSaid said
-                    : point.readingsSaid(WhereTheReadingsDiffer.NONE)) {
-                BorderAssessment at = point.met().get(said.where());
+            for (BorderObligationPointAssessment.Reading read : point.readingsInSteadyOrder()) {
+                BorderAssessment at = point.met().get(read);
                 ObjectNode r = readings.addObject();
-                r.put("behavior", said.where().behavior());
-                r.put("axis", said.at());
+                r.put("behavior", read.behavior());
+                r.put("axis", at.axis());
                 r.put("relation", at.border().operator(point.askedAt(at)));
                 r.put("against", at.border().against(point.askedAt(at)));
                 // And the cases the line decides in, which the values alone do not say: two
