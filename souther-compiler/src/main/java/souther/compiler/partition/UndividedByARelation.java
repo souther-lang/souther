@@ -2708,8 +2708,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (kind == Kind.PRODUCT) {
             for (int at = 0; at < 2; at++) {
                 int other = 1 - at;
-                boolean apart = !overlapping(sides.get(at), sides.get(other))
-                        && independent.between(at, other);
+                boolean apart = standApart(at, other, independent);
                 putDown(at, WhatARelationLeavesUndivided.leavesOfAProduct(terms.get(at),
                         terms.get(other), constant.negated(), relation, apart,
                         greatestOf(carriers.get(at))), out, settled);
@@ -2718,8 +2717,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     declined);
         }
         if (kind == Kind.DIVISIBILITY) {
-            boolean apart = !overlapping(sides.get(0), sides.get(1))
-                    && independent.between(0, 1);
+            boolean apart = standApart(0, 1, independent);
             for (int at = 0; at < 2; at++) {
                 putDown(at, WhatARelationLeavesUndivided.leavesOfADivisibility(terms.get(0),
                         terms.get(1), at == 0, relation, apart, endsOf(carriers.get(0)),
@@ -2734,8 +2732,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (kind.inside() != null) {
             WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped);
             Set<TermPath> accounted = Set.of();
-            if (heldWhole && !overlapping(sides.get(0), sides.get(1))
-                    && independent.between(0, 1)) {
+            if (heldWhole && standApart(0, 1, independent)) {
                 Partnering partnering = stringsAPartnerCanHold(carriers, out, read, lengthsRoom,
                         written, lengths -> getsPastExactlyOn(past, read, along, written,
                                 declined, true, lengths));
@@ -2836,7 +2833,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped);
         Set<TermPath> accountedFor = Set.of();
-        if (sides.size() == 2 && heldWhole && independent.between(0, 1)) {
+        if (sides.size() == 2 && heldWhole && standApart(0, 1, independent)) {
             Partnering partnering = stringsAPartnerCanHold(carriers, out, read, lengthsRoom,
                     written, lengths -> getsPastExactlyOn(past, read, along, written, declined,
                             true, lengths));
@@ -5533,6 +5530,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static boolean settledAtEveryValue(WhatARelationLeavesUndivided.Leaves leaves) {
         return leaves instanceof WhatARelationLeavesUndivided.Leaves.Settled runs
                 && runs.noRowShownComputed().isEmpty() && runs.lines().isEmpty();
+    }
+
+    /**
+     * Whether the sides at {@code one} and {@code other} stand apart: made of places that share no
+     * place, and tied to one another by no rule or statement of the way.
+     *
+     * <p>The second does not give the first. {@code independent} says what the declarations and
+     * the way tie, and a side nothing can name is tied to nothing, however many places it shares
+     * with the other: {@code s == String.lowercase(s)} is one string twice, and every reader that
+     * takes two values to be chosen apart from one another asks both.
+     */
+    private boolean standApart(int one, int other,
+                               WhatARelationLeavesUndivided.Independence independent) {
+        return !overlapping(sides.get(one), sides.get(other)) && independent.between(one, other);
     }
 
     /** Whether a place of one side is a place of the other, or part of one. */
