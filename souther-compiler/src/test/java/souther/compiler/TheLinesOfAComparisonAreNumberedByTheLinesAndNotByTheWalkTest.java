@@ -28,9 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The numbers a report gives the lines of a comparison come from the lines, and the order the
  * readings were met in moves none of them.
  *
- * <p>The words of a point are held beside the points of its behavior, so the points of two walks
- * that met the readings in two orders have to say the same words: that is also what lets the held
- * words stand out of the points' equality.
+ * <p>The numbers are worked out from the points of the module ({@link WhereTheReadingsDiffer}), so
+ * the points of two walks that met the readings in two orders have to say the same words, and the
+ * two values have to be equal.
  */
 class TheLinesOfAComparisonAreNumberedByTheLinesAndNotByTheWalkTest {
 

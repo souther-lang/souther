@@ -1172,17 +1172,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 List.of()),
                         rulePlaces(compilation, citedByDeclarations(declared, owed)),
                         rowPlaces),
-                toldApart(compilation, name));
-    }
-
-    /**
-     * Which lines of a comparison the module's points say alike. A module with no points to ask
-     * about has no line to number, so nothing is consulted of the value it gets then.
-     */
-    private static WhereTheReadingsDiffer toldApart(Compilation compilation, String module) {
-        Answer<WhereTheReadingsDiffer> apart = compilation.db().ask(new Adequacy.ToldApart(
-                module, Adequacy.linesAskedOf(compilation.db())));
-        return apart.present() ? apart.value() : WhereTheReadingsDiffer.NONE;
+                Adequacy.ToldApart.of(compilation.db(), name));
     }
 
     /** The lines a module's declarations were read at, which is where the block about them looks

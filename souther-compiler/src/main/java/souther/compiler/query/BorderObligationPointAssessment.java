@@ -799,24 +799,26 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * line that ask alike and differ only by the call they were made at, which is a bag.
      */
     public List<Reading> readingsInSteadyOrder() {
-        Comparator<Reading> order = Comparator
-                .comparing((Reading each) -> met.get(each).axis(),
+        Comparator<SteadyKey> order = Comparator
+                .comparing(SteadyKey::axis, Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(SteadyKey::asks, Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(SteadyKey::where,
                         Comparator.nullsFirst(Comparator.naturalOrder()))
-                .thenComparing(each -> askedOf(each),
-                        Comparator.nullsFirst(Comparator.naturalOrder()))
-                .thenComparing(each -> met.get(each).decidesWhere(),
-                        Comparator.nullsFirst(Comparator.naturalOrder()))
-                .thenComparing(each -> met.get(each).border().origin().authoredLine(),
-                        AuthoredLine.inASteadyOrder());
-        return met.keySet().stream().sorted(order).toList();
+                .thenComparing(SteadyKey::drawn, AuthoredLine.inASteadyOrder());
+        List<SteadyKey> keys = new ArrayList<>();
+        met.forEach((reading, at) -> {
+            DomainPoint asked = seatOf(reading).asked();
+            keys.add(new SteadyKey(reading, at.axis(),
+                    at.operator(asked) == null ? null : at.operator(asked) + " " + at.against(asked),
+                    at.decidesWhere(), at.border().origin().authoredLine()));
+        });
+        return keys.stream().sorted(order).map(SteadyKey::reading).toList();
     }
 
-    /** What {@code reading} asks of a row at the point it is asked at, or null where nothing. */
-    private String askedOf(Reading reading) {
-        BorderAssessment at = met.get(reading);
-        DomainPoint asked = seatOf(reading).asked();
-        return at.operator(asked) == null ? null : at.operator(asked) + " " + at.against(asked);
-    }
+    /** What a reading is put in order by, worked out once for each reading and not once for each
+     *  comparison of two. */
+    private record SteadyKey(Reading reading, String axis, String asks, String where,
+                             AuthoredLine drawn) {}
 
     /**
      * Every reading of the point, as the sentences a surface prints under it, in the order the

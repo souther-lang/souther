@@ -8979,6 +8979,17 @@ public final class Adequacy {
     public record ToldApart(String name, HowALineIsRead reading)
             implements Key<WhereTheReadingsDiffer> {
 
+        /**
+         * What a surface saying the points of {@code module} is handed, at the reading the build
+         * asks lines at. A module whose points could not be gathered has none to say, so nothing
+         * is consulted of the value it gets then.
+         */
+        public static WhereTheReadingsDiffer of(Db db, String module) {
+            Answer<WhereTheReadingsDiffer> apart =
+                    db.ask(new ToldApart(module, linesAskedOf(db)));
+            return apart.present() ? apart.value() : WhereTheReadingsDiffer.NONE;
+        }
+
         @Override
         public String module() {
             return name;
@@ -10134,8 +10145,7 @@ public final class Adequacy {
                     // and what it has to do there is said here, one note per reading, in the
                     // order the sentences sort and never the order the walk took.
                     List<BorderObligationPointAssessment.ReadingSaid> readings =
-                            point.readingsSaid(db.ask(new ToldApart(module, linesAskedOf(db)))
-                                    .value());
+                            point.readingsSaid(ToldApart.of(db, module));
                     for (BorderObligationPointAssessment.ReadingSaid read : readings.subList(0,
                             Math.min(readings.size(),
                                     BorderObligationPointAssessment.READINGS_SAID))) {
