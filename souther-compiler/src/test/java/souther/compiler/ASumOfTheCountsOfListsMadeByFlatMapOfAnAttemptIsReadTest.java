@@ -148,11 +148,15 @@ class ASumOfTheCountsOfListsMadeByFlatMapOfAnAttemptIsReadTest {
      * stands for what it is bound to wherever the guard reads it.
      */
     @Test
-    void aSumGivenANameAndASizeGivenANameAreTheCheckToo() {
+    void aSumGivenANameIsTheCheckToo() {
         String sum = """
                 let total = List.length(matchedAccounts) + List.length(matchedContacts)
                 guard total >= 1 else Nobody""";
         assertEquals(List.of(), aboutAValueMadeFromAnother(reportOf(sum)), sum);
+    }
+
+    @Test
+    void aSizeGivenANameIsTheCheckToo() {
         String size = """
                 let accounts = List.length(matchedAccounts)
                 guard accounts >= 1 || List.length(matchedContacts) >= 1 else Nobody""";
@@ -201,19 +205,19 @@ class ASumOfTheCountsOfListsMadeByFlatMapOfAnAttemptIsReadTest {
                 | "none" : ("a@X") -> No
             """;
 
-    /** The fork over the count is read as the comparison it holds is. */
+    /**
+     * What the strings the list holds something for divide of the input is not worked out, and the
+     * report does not say it is: the fork over the count stays a rule nothing read, at the string
+     * it is about, and the measurement is partial.
+     */
     @Test
-    void theForkOverTheCountOfOneListIsRead() {
+    void theStringsAListOfPiecesHoldsSomethingForAreNotReportedAsDividingNothing() {
         Compilation compilation = Compilation.ofSource(PLAIN_COUNT, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String report = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
-        assertEquals(List.of(), notRead(report), report);
-        List<String> owed = report.lines().map(line -> line.strip().replaceAll("\\s+", " "))
-                .toList();
-        assertTrue(owed.contains("screen implemented rows 2 pending 0"), report);
-        assertTrue(owed.contains("branch 4/4"), report);
-        assertTrue(owed.contains("decision rules 2 taken 2"), report);
+        assertTrue(notRead(report).stream().anyMatch(line -> line.contains("fork@")), report);
+        assertTrue(report.contains("measurement: partial"), report);
     }
 }

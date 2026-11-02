@@ -89,9 +89,9 @@ final class AnEmptinessCheck {
      *
      * <p>That is what the comparison holds, and it says nothing of what a run works out to get
      * there: a sum works out every size, and what is read as some one of them holding something is
-     * a statement about the containers and not an order of evaluation. What a run works out is the
-     * comparison's own arithmetic, read apart from the rule that reads what it holds ({@link
-     * Pullback#ofAComparisonOnTheInput}).
+     * a statement about the containers and not an order of evaluation. A comparison read as an
+     * emptiness check is carried to the input ({@link Pullback#carriesPast}), and what a run works
+     * out before it is asked of the written arithmetic, as it is for a size alone.
      */
     static Checked checkedSum(StatedComparison stated, InputReads reads, Standing standing) {
         Checked all = checkedSizes(stated, reads, standing);
@@ -140,7 +140,8 @@ final class AnEmptinessCheck {
                 onTheLeft ? stated.right() : stood[0].value(), stated.reading());
         return new Checked(sizes.number().stream().map(size -> new Denotation(
                 size.applied().args().getFirst(), size.at())).toList(), atNought, written,
-                stood[0].at(), Core.withoutStanding(stood[0].value()) != Core.withoutStanding(side[0]));
+                stood[0].at(),
+                Core.withoutStanding(stood[0].value()) != Core.withoutStanding(side[0]));
     }
 
     /**

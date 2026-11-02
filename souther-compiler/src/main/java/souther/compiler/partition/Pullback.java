@@ -848,16 +848,6 @@ final class Pullback {
             return read.turnsOn().stream()
                     .allMatch(leaf -> aTruthStatedWhereItIsWritten(leaf.from().value(), check));
         }
-        // The strings a list made of the pieces of a string holds something for are read off the
-        // list the check asks about, and no call answering a truth states them: they are the
-        // check's own rule, as the strings a call answering a truth accepts are that call's.
-        if (emptiness && read.turnsOn().stream().anyMatch(leaf ->
-                leaf.part() instanceof Proposition.InTheStrings
-                        && Core.withoutStanding(leaf.from().value())
-                                instanceof Core.PreservedCall call
-                        && !Type.BOOL.equals(call.type()))) {
-            return false;
-        }
         // Relations and nothing else are lines on the input the check itself holds across, as
         // the same choices written out as `if`s are, beside the lines of the comparisons it turns
         // on.
