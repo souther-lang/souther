@@ -5,11 +5,19 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
+import souther.compiler.RowsOfABlock;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.OfferingRequest;
+import souther.compiler.query.Output;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.GeneratedRows;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -134,6 +142,56 @@ class AStoredStringEqualToTheLowercaseOfAStringIsReadTest {
                     () -> pattern + " " + json);
             assertTrue(json.contains("own: x is never String.lowercase(s)"),
                     () -> pattern + " " + json);
+        }
+    }
+
+    private static final String ANSWERING = """
+            module demo
+
+            data Domain = String
+                invariant String.matches("PATTERN", value)
+            data Same = { n: Int }
+            data Differ = { n: Int }
+
+            behavior f : (own: Domain, s: String) -> Same | Differ
+                constructs Same, Differ
+            let f (own, s) =
+                if BODY then Same { n = 0 } else Differ { n = 0 }
+            """;
+
+    /**
+     * The rows offered for the classes of {@code s} are run, and between them the comparison comes
+     * out both ways: a class is offered a row that stands on each side of the line, whether the
+     * stored side is all reached or parted.
+     */
+    @Test
+    void theRowsOfferedForTheClassesReachBothSidesOfTheComparison() {
+        for (String pattern : List.of("[a-z0-9.]+", "[A-Za-z0-9.]+")) {
+            for (String body : BODIES) {
+                String model = ANSWERING.replace("PATTERN", pattern).replace("BODY", body);
+                Compilation offering = Compilation.ofSource(model, "Main");
+                offering.measure(Adequacy.Asked.fullReport());
+                offering.answerEverything();
+                String block = GeneratedRows.of(
+                        Adequacy.offeredFor(offering.db(), OfferingRequest.overTheModule("demo")),
+                        Map.of(), SourceRendering.namedByIdentity(offering.texts()),
+                        offering.db()).text();
+                List<RowsOfABlock.Row> offered = RowsOfABlock.of(block);
+                assertFalse(offered.isEmpty(), () -> pattern + " " + body + " " + block);
+
+                String examples = offered.stream()
+                        .map(row -> "    | " + row.values().replace("<?>", "Same"))
+                        .collect(Collectors.joining("\n"));
+                Compilation running = Compilation.ofSource(model + "\nexample f\n" + examples + "\n",
+                        "Main");
+                running.answerEverything();
+                Output.Examples key = Output.Examples.asked(running.db(), "demo",
+                        running.sourceIds().get(0));
+                Set<String> answered = running.db().ask(key).value().rows().stream()
+                        .map(row -> row.resultArm().name()).collect(Collectors.toSet());
+                assertEquals(Set.of("Same", "Differ"), answered,
+                        () -> pattern + " " + body + "\n" + examples);
+            }
         }
     }
 
