@@ -113,7 +113,7 @@ class TheReasonAPointIsOpenSaysWhatItsRowsWereTriedAtTest {
     /** A comparison that names both is told both, as one population. */
     @Test
     void aComparisonNamingBothIsToldBoth() {
-        String human = report(model("0", "(ps, q) = total(ps).value + q.value == 20",
+        String human = report(model("0", "(ps, q) = total(ps).value + q.value == 99",
                 "(ps: List<Points>, q: Points)", "([], Points(1))"));
         assertTrue(human.contains(told(SIZES + " and " + VALUES)), human);
     }

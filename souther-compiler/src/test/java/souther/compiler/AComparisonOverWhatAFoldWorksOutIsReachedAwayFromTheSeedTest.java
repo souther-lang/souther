@@ -5,9 +5,15 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.GeneratedRows;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,7 +30,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest {
 
-    private static String scorer(int least, int target) {
+    private static final Pattern OFFERED = Pattern.compile(
+            "// fills (ON|OFF|OUT) point of comparison[^\\n]*\\n\\s*\\| \\((?:Hand\\()?\\[([^\\]]*)\\]");
+
+    private static final Pattern POINT = Pattern.compile("Points\\((\\d+)\\)");
+
+    private static String scorer(String parameter, String list, int least, int target) {
         return """
                 module m
 
@@ -33,7 +44,7 @@ class AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest {
 
                 data Score = Int
                     invariant value >= 0 && value <= 50
-
+                %s
                 behavior add : (s: Score, p: Points) -> Score
 
                 let add (s, p) = {
@@ -57,22 +68,43 @@ class AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest {
                 example total
                     | ([]) -> Score(0)
 
-                behavior reached : (ps: List<Points>) -> Bool
+                behavior reached : (%s) -> Bool
 
-                let reached (ps) = total(ps).value == %d
+                let reached (ps) = total(%s).value == %d
 
                 example reached
-                    | ([]) -> false
-                """.formatted(least, least, least, target);
+                    | (%s) -> false
+                """.formatted(least, parameter.isEmpty() ? "" : parameter, least, least,
+                parameter.isEmpty() ? "ps: List<Points>" : "ps: Hand",
+                parameter.isEmpty() ? "ps" : "ps.value", target,
+                list);
     }
 
-    private static List<String> openPointsOf(String source, String behavior) {
+    private static String scorer(int least, int target) {
+        return scorer("", "[]", least, target);
+    }
+
+    /** The list of at most three that the element type's own rule allows. */
+    private static String handOfAtMostThree(int target) {
+        return scorer("""
+
+                data Hand = List<Points>
+                    invariant List.length(value) <= 3
+                """, "Hand([])", 0, target);
+    }
+
+    private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
                 .map(e -> e.diagnostic().code().toString()).toList(),
                 "the model under test compiles");
+        return compilation;
+    }
+
+    private static List<String> openPointsOf(String source, String behavior) {
+        Compilation compilation = measured(source);
         List<String> lines = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip).toList();
@@ -86,10 +118,82 @@ class AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest {
                 .toList();
     }
 
+    /** What the rows offered for the points of `reached` are: the point, and the elements. */
+    private static Map<String, List<List<Integer>>> offeredFor(String source) {
+        Compilation compilation = measured(source);
+        String block = GeneratedRows.of(
+                Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("m")),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
+                compilation.db()).text();
+        Map<String, List<List<Integer>>> out = new java.util.LinkedHashMap<>();
+        Matcher row = OFFERED.matcher(block);
+        while (row.find()) {
+            List<Integer> elements = new ArrayList<>();
+            Matcher point = POINT.matcher(row.group(2));
+            while (point.find()) {
+                elements.add(Integer.valueOf(point.group(1)));
+            }
+            out.computeIfAbsent(row.group(1), _ -> new ArrayList<>()).add(elements);
+        }
+        return out;
+    }
+
+    /** What `total` works out of the elements: the model's own fold, run here. */
+    private static int totalOf(List<Integer> elements) {
+        int score = 0;
+        for (int each : elements) {
+            int t = score + each;
+            score = t > 50 ? 25 : t;
+        }
+        return score;
+    }
+
     /** Totals of twenty, one either side, and past it are reached by rows of unlike elements. */
     @Test
     void everyPointOfATotalAwayFromTheSeedIsReached() {
         assertEquals(List.of(), openPointsOf(scorer(0, 20), "reached"));
+    }
+
+    /**
+     * The rows offered are rows whose run comes out at each point: the total the model works out
+     * of them is the level the point is at, and not a total some other row came to.
+     */
+    @Test
+    void theRowOfferedForEachPointComesOutAtThePoint() {
+        Map<String, List<List<Integer>>> offered = offeredFor(scorer(0, 20));
+
+        assertEquals(List.of(20), offered.get("ON").stream().map(
+                AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest::totalOf).toList());
+        assertEquals(List.of(19, 21), offered.get("OFF").stream().map(
+                AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest::totalOf)
+                .sorted().toList());
+        List<Integer> out = offered.get("OUT").stream().map(
+                AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest::totalOf).toList();
+        assertEquals(1, out.size(), out.toString());
+        assertTrue(out.getFirst() > 21 && out.getFirst() <= 50, out.toString());
+        // And rows of elements unlike one another: the candidates write them alike.
+        offered.values().stream().flatMap(List::stream)
+                .forEach(row -> assertTrue(row.stream().distinct().count() > 1, row.toString()));
+    }
+
+    /** A least of one for the element makes a total of eight a row of unlike elements too. */
+    @Test
+    void aTotalMoreThanTheSizesTheCandidatesWriteIsReached() {
+        assertEquals(List.of(), openPointsOf(scorer(1, 8), "reached"));
+    }
+
+    /**
+     * A type that allows only some of the sizes the candidates are written at leaves the asking
+     * of the candidates with nothing more to give before it has run them all. The rows beside the
+     * ones that did run are looked at all the same.
+     */
+    @Test
+    void aTypeThatAllowsOnlySomeSizesIsStillLookedBesideTheRowsThatRan() {
+        String source = handOfAtMostThree(20);
+
+        assertEquals(List.of(), openPointsOf(source, "reached"));
+        offeredFor(source).values().stream().flatMap(List::stream)
+                .forEach(row -> assertTrue(row.size() <= 3, row.toString()));
     }
 
     /**
@@ -100,12 +204,7 @@ class AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest {
     void aPointPastTheRowsBesideIsOpenAndSaysWhatWasMade() {
         List<String> open = openPointsOf(scorer(0, 50), "reached");
         assertTrue(!open.isEmpty(), open.toString());
-        assertTrue(open.stream().allMatch(line -> line.contains("then rows beside those")), open.toString());
-    }
-
-    /** A least of one for the element makes a total of eight a row of unlike elements too. */
-    @Test
-    void aTotalMoreThanTheSizesTheCandidatesWriteIsReached() {
-        assertEquals(List.of(), openPointsOf(scorer(1, 8), "reached"));
+        assertTrue(open.stream().allMatch(line -> line.contains("then rows beside those")),
+                open.toString());
     }
 }

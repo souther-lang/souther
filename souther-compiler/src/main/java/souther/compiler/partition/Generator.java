@@ -2551,12 +2551,12 @@ public final class Generator {
                 looking.composingStopped(List.of(
                         WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(most)));
             }
-        }, where);
+        }, where, MOST_REPAIRS);
     }
 
     private static Growth aListGrownAmong(InputsRowsRanWith ranWith, MeasuredInput subject,
                                           CandidateCheck check, ElementsOfAType.Stops stops,
-                                          NearbyValues.Put where) {
+                                          NearbyValues.Put where, int most) {
         // What stands for a type is the same for every row and list the search grows, so it is one
         // for the search and made as far as the search asks, its stops said as they are met. A
         // type's values are bounded as a composing's candidates are, and the bound is said as that
@@ -2565,7 +2565,7 @@ public final class Generator {
                 standingFor -> subject.representativesHolding(standingFor,
                         FieldDomains.ConstructionLimits.NONE),
                 ofOne -> ElementsOfAType.withOneElement(ofOne, subject.ruleReading()),
-                subject.ruleReading(), check, MOST_REPAIRS, stops);
+                subject.ruleReading(), check, most, stops);
         return (value, type, reading, which, within) -> within == null
                 ? NearbyValues.grown(value, type, reading, ranWith, elements::of, where, which)
                 : NearbyValues.grownWithin(value, type, reading, ranWith, elements::of, where,
@@ -2783,19 +2783,21 @@ public final class Generator {
 
             @Override
             public void met(CompositionShortfall shortfall) {
-                spent.somethingLeft();
+                spent.met(shortfall);
             }
 
             @Override
             public void limitedAt(int most) {
-                spent.somethingLeft();
+                spent.valuesCutShort();
             }
         };
         // What stands for a type is made once for the search and as far as it asks, as it is for
-        // a walk's rewrite, so the rows of one search share the growth.
+        // a walk's rewrite, so the rows of one search share the growth. The values made of a type
+        // are held to the figure the rows are, so that reaching it is reaching that figure.
         if (spent.growth == null) {
             spent.growth = aListGrownAmong(ranWith, subject, check, stops,
-                    NearbyValues.Put.BEFORE_AND_AFTER);
+                    NearbyValues.Put.BEFORE_AND_AFTER,
+                    CompositionBudget.ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT.maximum());
         }
         Beside grown = grownTwice(spent.growth, List.of());
         Beside changed = (value, type, reading, _) ->
@@ -2810,34 +2812,64 @@ public final class Generator {
         return inOrder(in.size(), in::get);
     }
 
-    /** What is left of the rows beside a search's runs that may be made. */
+    /**
+     * What the rows beside a point's runs may still be made of, and what stopped them where they
+     * were stopped. One for the point, whichever way the point is looked along.
+     *
+     * <p>Two things are kept apart. The figure is reached only by a candidate being asked for
+     * after it was spent ({@link #oneMore}), or by the values made of a type reaching it; whatever
+     * else the building of values met comes through as what it is, a shortfall of its own
+     * vocabulary ({@link #met}), and is not turned into this figure.
+     */
     public static final class RowsBesideBudget {
 
-        private int left = CompositionBudget.ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT.maximum();
+        private static final CompositionBudget FIGURE =
+                CompositionBudget.ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT;
 
-        private boolean leftSome;
+        private int left = FIGURE.maximum();
+
+        private boolean figureReached;
+
+        private final Set<CompositionBudget> otherFigures = new LinkedHashSet<>();
+
+        private final Set<CompositionRepertoire> populations = new LinkedHashSet<>();
+
+        private final Set<CompositionCapacity> unheld = new LinkedHashSet<>();
 
         /** What stands for the types the search grows lists of, made as the search asks. */
         private Growth growth;
 
-        /** Whether one more row may be made; the first one past the bound is said to be left. */
+        /** Whether one more candidate may be made; the first asked for past the figure is the
+         *  one it stopped. */
         boolean oneMore() {
             if (left > 0) {
                 left--;
                 return true;
             }
-            leftSome = true;
+            figureReached = true;
             return false;
         }
 
-        /** What was not made is not found absent. */
-        void somethingLeft() {
-            leftSome = true;
+        /** The values made of a type were cut at the figure: rows past them were not made. */
+        void valuesCutShort() {
+            figureReached = true;
         }
 
-        /** Whether the search stopped making rows with some it could have made. */
-        public boolean leftSome() {
-            return leftSome;
+        /** What the building of a value met, kept as what it is. */
+        void met(CompositionShortfall shortfall) {
+            otherFigures.addAll(shortfall.figures());
+            populations.addAll(shortfall.populations());
+            unheld.addAll(shortfall.unheld());
+        }
+
+        /** What the rows beside were short of, in every vocabulary it was short in; nothing where
+         *  nothing stopped them. */
+        public CompositionShortfall shortOf() {
+            Set<CompositionBudget> figures = new LinkedHashSet<>(otherFigures);
+            if (figureReached) {
+                figures.add(FIGURE);
+            }
+            return CompositionShortfall.of(figures, populations, unheld);
         }
     }
 
