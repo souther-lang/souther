@@ -54,7 +54,15 @@ final class AnEmptinessCheck {
         Checked {
             containers = List.copyOf(containers);
         }
+
+        /** Whether it is a size alone and not a sum. */
+        boolean ofOneContainer() {
+            return containers.size() == 1;
+        }
     }
+
+    /** A size, and the reading the container it is the size of is read in. */
+    private record Size(AnOperationApplied applied, InputReads at) {}
 
     /**
      * What a name stands for, in the reading it is read in: the value it is bound to and where
@@ -68,18 +76,9 @@ final class AnEmptinessCheck {
     }
 
     /**
-     * The emptiness {@code stated} checks of one container, read in {@code reads}, or null where
-     * it is no size held against a number that parts nought from every size above it.
-     */
-    static Checked checked(StatedComparison stated, InputReads reads, Standing standing) {
-        Checked all = checkedSizes(stated, reads, standing);
-        return all != null && all.containers().size() == 1 ? all : null;
-    }
-
-    /**
-     * The emptiness {@code stated} checks of several containers, where it is their sizes added up
-     * and held against a number that parts nought from every sum above it — or null where it is
-     * no such sum.
+     * The emptiness {@code stated} checks, read in {@code reads}: of one container where it is a
+     * size, of several where it is their sizes added up — or null where it is neither held
+     * against a number that parts nought from every size or sum above it.
      *
      * <p>A size is no lower than nought, so a sum of them is nought exactly where every one is and
      * is one or more exactly where some one is: the comparison holds exactly where some container
@@ -93,16 +92,7 @@ final class AnEmptinessCheck {
      * emptiness check is carried to the input ({@link Pullback#carriesPast}), and what a run works
      * out before it is asked of the written arithmetic, as it is for a size alone.
      */
-    static Checked checkedSum(StatedComparison stated, InputReads reads, Standing standing) {
-        Checked all = checkedSizes(stated, reads, standing);
-        return all != null && all.containers().size() > 1 ? all : null;
-    }
-
-    /** A size, and the reading the container it is the size of is read in. */
-    private record Size(AnOperationApplied applied, InputReads at) {}
-
-    private static Checked checkedSizes(StatedComparison stated, InputReads reads,
-                                        Standing standing) {
+    static Checked checked(StatedComparison stated, InputReads reads, Standing standing) {
         Denotation[] stood = {null};
         Core[] side = {null};
         StatedComparison.Numbered<List<Size>> sizes = stated.at(each -> {

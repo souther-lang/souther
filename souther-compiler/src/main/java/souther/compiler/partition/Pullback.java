@@ -1723,13 +1723,13 @@ final class Pullback {
     private List<Supplier<Derivation>> rulesFor(StatedComparison stated, Denotation at,
                                                 boolean fixed, InputReads reads,
                                                 Once<AffineReading.OfAComparison> arithmetic) {
-        // Asked of a rule when it is tried, and once for the two that ask it.
+        // Asked when a rule that needs it is tried, and once for all of them: a size alone and a
+        // sum of sizes are one reading of the comparison, told apart by how many containers it
+        // holds.
         AnEmptinessCheck.Standing standing = (e, where) -> where.standing(e,
                 read.rules().symbols(), read.rules().newtypes());
-        Once<Optional<AnEmptinessCheck.Checked>> checkedOnce = new Once<>(() ->
+        Once<Optional<AnEmptinessCheck.Checked>> sizes = new Once<>(() ->
                 Optional.ofNullable(AnEmptinessCheck.checked(stated, reads, standing)));
-        Once<Optional<AnEmptinessCheck.Checked>> checkedSumOnce = new Once<>(() ->
-                Optional.ofNullable(AnEmptinessCheck.checkedSum(stated, reads, standing)));
         Asked emptiness = new Asked.OnASide(AnswerAspect.EMPTINESS);
         // Whether the arithmetic stops at a value to go into decides both of the last two rules:
         // the one goes in where it does, and the other takes the comparison only where it does
@@ -1740,9 +1740,10 @@ final class Pullback {
                 new Weighed(new Denotation(stated.right(), reads), ExactRatio.ONE.negated())),
                 Pullback::nothingElse, () -> false)));
         List<Supplier<Derivation>> rules = List.of(
-                () -> checkedOnce.get().map(checked -> new Derivation.AnEmptinessCheck(
-                        holdingSomething(checked.containers().getFirst(), at, emptiness),
-                        checked.emptyWhereItHolds())).orElse(null),
+                () -> sizes.get().filter(AnEmptinessCheck.Checked::ofOneContainer)
+                        .map(checked -> new Derivation.AnEmptinessCheck(
+                                holdingSomething(checked.containers().getFirst(), at, emptiness),
+                                checked.emptyWhereItHolds())).orElse(null),
                 () -> partOf(at, truthCompared(stated, reads)),
                 () -> heldAgainstAWrittenTruth(stated, reads),
                 () -> partOf(at, ofTwoValuesWrittenOut(stated, reads)),
@@ -1773,8 +1774,7 @@ final class Pullback {
                 // follows: the name stands for the sum, and where the arithmetic over the input
                 // does not read the sum it is a statement about the containers rather than a
                 // relation between numbers no position holds.
-                () -> checkedSumOnce.get()
-                        .filter(checked -> checked.named()
+                () -> sizes.get().filter(checked -> !checked.ofOneContainer() && checked.named()
                                 && AffineReading.read(checked.written(), checked.writtenAt(),
                                         read) instanceof AffineReading.OfAComparison.Stopped)
                         .map(checked -> new Derivation.AnEmptinessCheck(
@@ -1784,9 +1784,10 @@ final class Pullback {
                 // Last, so that every rule reading the sizes as numbers of the input is asked
                 // first: a sum of sizes written in the comparison is read as some one of the
                 // containers holding something only where none of them reads it whole.
-                () -> checkedSumOnce.get().map(checked -> new Derivation.AnEmptinessCheck(
-                        holdingSomethingOfAny(checked.containers(), at, emptiness),
-                        checked.emptyWhereItHolds())).orElse(null));
+                () -> sizes.get().filter(checked -> !checked.ofOneContainer())
+                        .map(checked -> new Derivation.AnEmptinessCheck(
+                                holdingSomethingOfAny(checked.containers(), at, emptiness),
+                                checked.emptyWhereItHolds())).orElse(null));
         return rules;
     }
 
