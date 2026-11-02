@@ -1110,7 +1110,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** {@code form} held against nought as {@code relation}. */
     static UndividedByARelation ofAForm(LinearForm<Quantity> form, Rel relation) {
-        boolean textsApart = textsMadeOfApartPositions(form, relation);
+        boolean texts = twoTextsOneConverted(form);
         List<Side> sides = new ArrayList<>();
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             sides.add(switch (each.getKey()) {
@@ -1125,7 +1125,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         instanceof ExactAnswer.Held<ExactRatio>(ExactRatio weight)
                         ? ofTheInput(made.product(), weight)
                         : new Side(List.of(), each.getValue(), null, null, null);
-                case Quantity.WhatAnOperationAnswers answers when textsApart
+                case Quantity.WhatAnOperationAnswers answers when texts
                         && ConvertedText.of(answers) instanceof ConvertedText made ->
                         new Side(List.of(FilingCoordinate.of(made.place())), each.getValue(),
                                 null, null, null, made);
@@ -1154,21 +1154,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * Whether {@code form} is made of two strings, each a string of the input or one made of it by
-     * case conversions, of two positions that share no place, and one of them converted. Such a
-     * form is the equality of what the conversions make of two strings, which is read through the
-     * conversions ({@link #stringsThroughConversions}) and not as a relation between the positions alone.
+     * case conversions, and one of them converted. Each is then kept as the text it is, which the
+     * readers of a relation between two strings read through the conversions
+     * ({@link #stringsThroughConversions}). Whether the two stand at each other's value, and are
+     * of positions that share no place, is for those readers to ask of the relation, as they do
+     * of any two strings.
      */
-    private static boolean textsMadeOfApartPositions(LinearForm<Quantity> form, Rel relation) {
-        if (form.coefs().size() != 2 || (relation != Rel.EQ && relation != Rel.NE)
-                || !WhatARelationLeavesUndivided.eachStandsAtTheOthersValue(
-                        form.coefs().values().stream().toList(), form.constant())) {
+    private static boolean twoTextsOneConverted(LinearForm<Quantity> form) {
+        if (form.coefs().size() != 2) {
             return false;
         }
         List<ConvertedText> texts = form.coefs().keySet().stream().map(ConvertedText::of).toList();
         return !texts.contains(null)
-                && texts.stream().anyMatch(text -> !text.through().equals(CaseMapping.NONE))
-                && !overlap(FilingCoordinate.of(texts.get(0).place()),
-                        FilingCoordinate.of(texts.get(1).place()));
+                && texts.stream().anyMatch(text -> !text.through().equals(CaseMapping.NONE));
     }
 
     /**
@@ -3316,6 +3314,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
         StringsInsideStrings.Where where = kind.inside();
+        boolean standsInside = where != null;
         CodeMap theirMap = theirs.through().equals(CaseMapping.NONE) ? null
                 : CaseMaps.of(theirs.through());
         // The strings the other side comes to, as far as it is shown: the values it is exactly a
@@ -3339,10 +3338,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (shownOther == null || mayOther == null) {
             return null;
         }
-        Language shownHere = where == null ? shownOther
+        Language shownHere = !standsInside ? shownOther
                 : hereIsFirst ? StringsInsideStrings.standingIn(shownOther, where, meter)
                 : StringsInsideStrings.havingInside(shownOther, where, meter);
-        Language mayHere = where == null ? mayOther
+        Language mayHere = !standsInside ? mayOther
                 : hereIsFirst ? StringsInsideStrings.standingIn(mayOther, where, meter)
                 : StringsInsideStrings.havingInside(mayOther, where, meter);
         if (shownHere == null || mayHere == null) {
@@ -3364,7 +3363,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         // A string looked for that is shown inside a value stands in one written round it, which
         // is longer than it by what the machine needs before and after.
-        long upTo = where != null && hereIsFirst
+        boolean boundedByWhatSurroundsIt = standsInside && hereIsFirst;
+        long upTo = boundedByWhatSurroundsIt
                 ? TextExtents.LONGEST_STRING - 2L * (shownOther.size() + 1L)
                 : TextExtents.LONGEST_STRING;
         List<String> operations = new ArrayList<>(
@@ -3375,7 +3375,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     called).withTheImagesNotShownOf(operations);
         }
         return StringsAPartnerCanHold.unreached(ValueSet.matching(canBe),
-                ValueSet.matching(mayBe), where != null && hereIsFirst ? upTo : null, called)
+                ValueSet.matching(mayBe), boundedByWhatSurroundsIt ? upTo : null, called)
                 .withTheImagesNotShownOf(operations);
     }
 

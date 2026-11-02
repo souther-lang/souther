@@ -57,6 +57,27 @@ class AStoredStringEqualToTheLowercaseOfAStringIsReadTest {
         }
     }
 
+    /** An order between the two is no equality of what the conversion makes, and is not read as
+     *  one. */
+    @Test
+    void anOrderAgainstTheLowercaseIsNotReadThroughTheConversion() {
+        for (String body : List.of("own.value < String.lowercase(s)",
+                "String.lowercase(s) <= own.value")) {
+            String json = report("[a-z0-9.]+", body);
+            assertTrue(json.contains("relation_not_shown_to_reach_every_value"),
+                    () -> body + " " + json);
+            assertFalse(json.contains("relation_shown_over_a_region"), () -> body + " " + json);
+        }
+    }
+
+    /** A string against its own lowercase is made of one position, which no two texts are. */
+    @Test
+    void aStringAgainstItsOwnLowercaseIsNotReadAsTwoTexts() {
+        String json = report("[a-z0-9.]+", "own.value == String.lowercase(own.value)");
+        assertFalse(json.contains("relation_shown_over_a_region"), json);
+        assertFalse(json.contains("can be String.lowercase"), json);
+    }
+
     /**
      * The other side is called what it is, the lowercase of {@code s}: a stored string that
      * matches it need not be {@code s}, and no string of {@code s} is the stored one.
