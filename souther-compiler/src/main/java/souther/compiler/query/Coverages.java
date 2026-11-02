@@ -2633,9 +2633,9 @@ final class Coverages {
              * another has been shown two answers about one search. {@code composed} is the
              * placement of numbers the rows in {@code outcomes} were built from, and it is absent
              * where there is none: either no row was built, or the row is one found beside a row
-             * that ran ({@link #besideARun}), which was made of no placement. The second is told
+             * that ran ({@code besideARun}), which was made of no placement. The second is told
              * from the first by {@code witness} being present, and a caller that needs the place
-             * a row was composed at asks for {@link #placement} and is not handed the placement
+             * a row was composed at asks for {@code placement()} and is not handed the placement
              * of another row.
              *
              * <p>{@code witness} is the row that ran and stood at the point, and is held as that row
