@@ -58,9 +58,12 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
         return greatest == null ? ENDLESS : new RowsComputed(greatest, Operations.NONE, Map.of());
     }
 
-    /** The same, over a relation whose rows work out {@code operations}. */
+    /** The same, over a relation whose rows work out {@code operations}, with the numbers they
+     *  are over that no term names held at the values they stand at ({@link Operations}). */
     RowsComputed withOperations(Operations operations) {
-        return new RowsComputed(greatest, operations, held);
+        Map<Object, ExactRatio> together = new LinkedHashMap<>(operations.standing());
+        together.putAll(held);
+        return new RowsComputed(greatest, operations, together);
     }
 
     /** The same, for rows in which the terms called by the keys of {@code standing} stand at
@@ -76,9 +79,15 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
         return greatest != null;
     }
 
-    /** Whether every operation that can stop a run is told. */
+    /**
+     * Whether every operation that can stop a run is told, so that a row is computed where each
+     * holds at it — at the values numbers no term names are held at, where there are any. It
+     * answers whether a row is shown computed, and no more: that no row is computed elsewhere is
+     * said only of {@link WhatARelationLeavesUndivided.Told#EVERY}, which {@link RowsOfTheTwo}
+     * asks.
+     */
     boolean tellsEveryOperation() {
-        return operations.told() == WhatARelationLeavesUndivided.Told.EVERY;
+        return operations.exactAtTheHeldValues();
     }
 
     /**
@@ -147,7 +156,7 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
     boolean rowIsComputed(Supplier<ExactRatio[]> addends,
                           Supplier<Map<Object, ExactRatio>> values) {
         return switch (operations.told()) {
-            case EVERY -> computedAt(values);
+            case EVERY, EVERY_AT_HELD_VALUES -> computedAt(values);
             case SOME -> false;
             case NOTHING_SAID -> computes(addends.get());
         };
@@ -302,7 +311,8 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
     <P> boolean farthestRowsAreComputed(List<Term<P>> terms, ExactRatio constant,
                                         ExactRatio... sizes) {
         return switch (operations.told()) {
-            case SOME -> false;
+            // A sum over a held number is no multiple of the form's own sum.
+            case SOME, EVERY_AT_HELD_VALUES -> false;
             case NOTHING_SAID -> computes(sizes);
             case EVERY -> {
                 ExactRatio multiple = operations.multipleOfTheForm(terms, constant);
@@ -320,7 +330,7 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
     <P> boolean theSizesMayBeLetGo(List<Term<P>> terms, ExactRatio constant) {
         return switch (operations.told()) {
             case NOTHING_SAID -> true;
-            case SOME -> false;
+            case SOME, EVERY_AT_HELD_VALUES -> false;
             case EVERY -> operations.multipleOfTheForm(terms, constant) != null;
         };
     }

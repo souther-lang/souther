@@ -90,8 +90,10 @@ final class RowsOfTheTwo {
 
     /**
      * The rows of the operations, or null where they cannot be read exactly: not every operation
-     * is told, one is of decimals, none is there to read, or one weighs a term other than the two
-     * and those held still, weighs the partner other than by nought, one or minus one, or comes
+     * is told over every row ({@link WhatARelationLeavesUndivided.Told#EVERY}: where a number is
+     * held at a value of its own the rows with it elsewhere are not said, and the rows read here
+     * would be taken for all of them), one is of decimals, none is there to read, or one weighs a
+     * term other than the two and those held still, weighs the partner other than by nought, one or minus one, or comes
      * to a number that is not whole at the values the others are held at.
      *
      * @param asked    the key of the term whose values are asked of ({@link
@@ -101,7 +103,7 @@ final class RowsOfTheTwo {
      */
     static RowsOfTheTwo of(Operations operations, Object asked, Object partner,
                            Map<Object, ExactRatio> standing) {
-        if (operations.told() != WhatARelationLeavesUndivided.Told.EVERY
+        if (!operations.exact()
                 || !operations.decimals().isEmpty() || operations.sums().isEmpty()
                 || asked == null || partner == null || asked.equals(partner)) {
             return null;
