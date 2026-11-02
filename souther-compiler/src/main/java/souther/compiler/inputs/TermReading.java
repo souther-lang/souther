@@ -86,8 +86,9 @@ final class TermReading {
         // reached one layer down leaves a construction that reads perfectly well with nothing where
         // the value should be, and a walk that only looked at the outside would call that a value
         // this term does not hold.
-        if (at instanceof ObservedValue.Constructed c && c.field("value") != null) {
-            return at(on, c.field("value"));
+        ObservedValue inside = ObservedValue.scalarInside(at);
+        if (inside != at) {
+            return at(on, inside);
         }
         return switch (term) {
             case NumericTerm.ValueOf _ -> asItStands(at, observed);

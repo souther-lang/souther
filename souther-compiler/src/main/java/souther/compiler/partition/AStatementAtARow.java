@@ -434,6 +434,31 @@ final class AStatementAtARow {
         return new AStatementAtARow(stated, relations, elements, positions);
     }
 
+    /**
+     * The positions {@code part} asks of their own value — whether one is true, holds a value, is
+     * a case of a sum, is the value another holds, is a string of a language — or null where it
+     * is no such part.
+     *
+     * <p>The one place that says which they are, so that a reader gathering what a statement
+     * reads and a reader asking which container it is about cannot differ over a part.
+     */
+    static List<TermPath> positionsAskedBy(Proposition part) {
+        return switch (part) {
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, Spelling _) ->
+                    List.of(at);
+            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _,
+                                     Spelling _) -> List.of(at);
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft _,
+                                     boolean _, Spelling _) -> List.of(at);
+            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtAPosition(
+                    TermPath at), StringsLanguage _, boolean _, Spelling _) -> List.of(at);
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
+                                       DecisionSubject.AnInput(TermPath other), boolean _,
+                                       Spelling _) -> List.of(one, other);
+            default -> null;
+        };
+    }
+
     /** A relation as it is read to be put to rows: for which behavior's input. */
     record RelationRead(Relation relation, String behavior) {}
 
@@ -457,21 +482,8 @@ final class AStatementAtARow {
                                Map<Spelling,OverTheElements> elements, Set<TermPath> positions) {
         switch (stated) {
             case Proposition.Always _, Proposition.LastToHold _ -> { }
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, Spelling _) ->
-                    positions.add(at);
-            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _, Spelling _) ->
-                    positions.add(at);
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft _,
-                                     boolean _, Spelling _) -> positions.add(at);
-            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
-                                       DecisionSubject.AnInput(TermPath other), boolean _,
-                                       Spelling _) -> {
-                positions.add(one);
-                positions.add(other);
-            }
-            case Proposition.InTheStrings(
-                    Proposition.InTheStrings.Strings.AtAPosition(TermPath at), StringsLanguage _,
-                    boolean _, Spelling _) -> positions.add(at);
+            case Proposition asked when positionsAskedBy(asked) != null ->
+                    positions.addAll(positionsAskedBy(asked));
             case Proposition.All all -> all.parts().forEach(part ->
                     gather(part, behavior, quantities, reading, into, elements, positions));
             case Proposition.Any any -> any.parts().forEach(part ->
@@ -544,6 +556,9 @@ final class AStatementAtARow {
                                 WhatTheDeclarationsLeave.ofTheInput(affine.form());
                         if (form != null) {
                             into.addAll(form.coefs().keySet());
+                        } else if (pieceMembershipIn(affine)
+                                instanceof Quantity.IsAmongThePieces membership) {
+                            into.addAll(membership.positionsItIsMadeOf());
                         } else if (productIn(affine) instanceof Quantity.ProductOfTwo product) {
                             into.addAll(product.factors());
                         } else if (remainderByAnInputIn(affine)
@@ -1226,11 +1241,13 @@ final class AStatementAtARow {
             case Proposition.InTheStrings(
                     Proposition.InTheStrings.Strings.AtAPosition(TermPath at),
                     StringsLanguage language, boolean holds, Spelling _) ->
-                    heldAs(holds, ofItsValue(at, row, value -> value instanceof
-                            ObservedValue.Text(String text)
-                            ? Recognizer.recognizes(language, language.meaning(), text)
-                                    .orElse(null)
-                            : null));
+                    switch (textAt(at, row)) {
+                        case TextAtARow.Written(String text) -> heldAs(holds, Recognizer
+                                .recognizes(language, language.meaning(), text)
+                                .<Said>map(Said.Is::new)
+                                .orElseGet(() -> new Said.NotRead(Set.of(ReadingGap.NO_VALUE))));
+                        case TextAtARow.Unsaid(Said said) -> heldAs(holds, said);
+                    };
             case Proposition.All all -> joined(all.parts().stream()
                     .map(each -> at(each, row, answered)).toList(), true);
             case Proposition.Any any -> joined(any.parts().stream()
@@ -1337,25 +1354,8 @@ final class AStatementAtARow {
                 yield overElementsOf(elementsOf(count).container().inputPosition(), about, read)
                         && readsOf(meetingOf(count), about, read);
             }
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, Spelling _) -> {
-                read.add(at);
-                yield true;
-            }
-            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _,
-                                     Spelling _) -> {
-                read.add(at);
-                yield true;
-            }
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft _,
-                                     boolean _, Spelling _) -> {
-                read.add(at);
-                yield true;
-            }
-            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
-                                       DecisionSubject.AnInput(TermPath other), boolean _,
-                                       Spelling _) -> {
-                read.add(one);
-                read.add(other);
+            case Proposition asked when positionsAskedBy(asked) != null -> {
+                read.addAll(positionsAskedBy(asked));
                 yield true;
             }
             case Proposition.Compared _, Proposition.Always _, Proposition.LastToHold _ -> true;
@@ -1640,6 +1640,56 @@ final class AStatementAtARow {
             case ValuesAtARow.CouldNotTell(var why) -> new Said.NotRead(why);
             case ValuesAtARow.NoneHere _ -> Said.NOTHING_THERE;
         };
+    }
+
+    /** The string a row put at a position, or why a reader has none to read. */
+    private sealed interface TextAtARow {
+
+        /** The string the row wrote. */
+        record Written(String text) implements TextAtARow { }
+
+        /** Nothing to read: the row put nothing there, or the walk or the value did not say. */
+        record Unsaid(Said said) implements TextAtARow { }
+    }
+
+    /**
+     * The string {@code row} put at {@code at}, a position of the input a string stands at.
+     *
+     * <p>A newtype is no step of a path, so what stands at a position declared a newtype over
+     * {@code String} is the construction, and the string is the one inside it
+     * ({@link ObservedValue#scalarInside}), taken off the way a term of the position is read.
+     */
+    private static TextAtARow textAt(TermPath at, BorderQuantity.Observation row) {
+        return switch (row.at(at)) {
+            case WalkResult.CouldNotWalk<ObservationAtPoint> _ -> new TextAtARow.Unsaid(
+                    new Said.NotRead(Set.of(ReadingGap.COULD_NOT_WALK)));
+            case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
+                case ObservationAtPoint.Value(ObservedValue value) -> {
+                    ObservedValue inside = ObservedValue.scalarInside(value);
+                    if (inside.cause() != null) {
+                        yield new TextAtARow.Unsaid(
+                                new Said.NotRead(Set.of(ReadingGap.of(inside.cause()))));
+                    }
+                    yield inside instanceof ObservedValue.Text(String text)
+                            ? new TextAtARow.Written(text)
+                            : new TextAtARow.Unsaid(new Said.NotRead(Set.of(ReadingGap.NO_VALUE)));
+                }
+                case ObservationAtPoint.WroteNothing _,
+                     ObservationAtPoint.BelongsToAnotherReading _ ->
+                        new TextAtARow.Unsaid(Said.NOTHING_THERE);
+            };
+        };
+    }
+
+    /** What is said where some string of a statement could not be read: what stopped the first
+     *  that was stopped, and otherwise that the row put nothing there. */
+    private static Said unsaid(TextAtARow... texts) {
+        for (TextAtARow each : texts) {
+            if (each instanceof TextAtARow.Unsaid(Said said) && said instanceof Said.NotRead) {
+                return said;
+            }
+        }
+        return Said.NOTHING_THERE;
     }
 
     /**
@@ -2071,37 +2121,20 @@ final class AStatementAtARow {
              * a position, and not read where a string could not be read.
              */
             Said at(BorderQuantity.Observation row) {
-                Said none = null;
-                String[] read = new String[2];
-                ConvertedText[] texts = {value, string};
-                for (int i = 0; i < texts.length; i++) {
-                    switch (row.at(texts[i].place().position())) {
-                        case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
-                                none = new Said.NotRead(Set.of(ReadingGap.COULD_NOT_WALK));
-                        case WalkResult.Reached(ObservationAtPoint standing) -> {
-                            if (standing instanceof ObservationAtPoint.Value(
-                                    ObservedValue.Text(String text))) {
-                                read[i] = BoundUnderEvaluation.mapped(texts[i].through(), text);
-                                if (read[i] == null) {
-                                    none = new Said.NotRead(Set.of(ReadingGap.NO_VALUE));
-                                }
-                            } else if (standing instanceof ObservationAtPoint.Value) {
-                                none = new Said.NotRead(Set.of(ReadingGap.NO_VALUE));
-                            } else if (none == null) {
-                                none = Said.NOTHING_THERE;
-                            }
-                        }
-                    }
-                    if (none instanceof Said.NotRead) {
-                        return none;
-                    }
+                TextAtARow looked = textAt(value.place().position(), row);
+                TextAtARow parted = textAt(string.place().position(), row);
+                if (!(looked instanceof TextAtARow.Written(String lookedFor))
+                        || !(parted instanceof TextAtARow.Written(String whole))) {
+                    return unsaid(looked, parted);
                 }
-                if (none != null) {
-                    return none;
+                String needle = BoundUnderEvaluation.mapped(value.through(), lookedFor);
+                String converted = BoundUnderEvaluation.mapped(string.through(), whole);
+                if (needle == null || converted == null) {
+                    return new Said.NotRead(Set.of(ReadingGap.NO_VALUE));
                 }
-                List<String> pieces = BoundUnderEvaluation.parted(read[1], separator);
+                List<String> pieces = BoundUnderEvaluation.parted(converted, separator);
                 int until = among > 0 ? Math.min(among, pieces.size()) : pieces.size();
-                boolean found = from < until && pieces.subList(from, until).contains(read[0]);
+                boolean found = from < until && pieces.subList(from, until).contains(needle);
                 ExactAnswer<ExactRatio> sum =
                         found ? weight.plus(constant) : ExactAnswer.held(constant);
                 return switch (sum) {

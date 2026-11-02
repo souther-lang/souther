@@ -147,6 +147,24 @@ public sealed interface ObservedValue {
     }
 
     /**
+     * The value a position holds that is a scalar, under whatever newtypes it is written in: the
+     * value itself, or the one inside the construction of a newtype, however many deep.
+     *
+     * <p>For a reader that already knows the position holds a scalar — a string, a number — and
+     * so that a construction there can only be a newtype over one: a record cannot stand where
+     * a scalar does, so its own field called {@code value} is never taken for a name worn over a
+     * value. A construction holding no value, which is what an observation stopped one layer down
+     * leaves, is handed back as it stands.
+     */
+    static ObservedValue scalarInside(ObservedValue value) {
+        ObservedValue at = value;
+        while (at instanceof Constructed constructed && constructed.field("value") != null) {
+            at = constructed.field("value");
+        }
+        return at;
+    }
+
+    /**
      * The value under {@code worn} where it wears every one of them, or null where it does not.
      *
      * <p>The same names taken off the same way, for a reader that needs the value to be one of the
