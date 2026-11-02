@@ -555,16 +555,23 @@ of elements from 0 to 6, and the whole numbers it names outside a container all 
 that names no such number has no values; the report says which of these the point was tried at.
 A comparison that names neither has no candidate, and the report says that none was composed.
 
-The search does not choose the values of a container's elements. They are what the declarations
-make of that many: a candidate list repeats one representative element unless the declarations
-require its elements to be distinct, so the reach of the candidates depends on the element type.
-With a `Points` newtype of `Int` whose lowest value is 0, every candidate list sums to 0.
+The candidates themselves do not choose the values of a container's elements. They are what the
+declarations make of that many: a candidate list repeats one representative element unless the
+declarations require its elements to be distinct. With a `Points` newtype of `Int` whose lowest
+value is 0, every candidate list sums to 0.
 
-When no candidate reaches the point, the report names this population, and a longer list, elements
-of other values or elements unlike one another may still reach it. That no candidate reached a
-point does not make it unreachable. If it is reachable, a row written by hand with such elements
-settles it; if it is not, what settles it is proving that from the model's declarations. Running
-the same search again does neither.
+Where no candidate reaches the point, rows beside the ones that ran are made and run: a list with
+another element put in it, an element changed for a value a row of the module ran the element's
+type with, a whole number moved by one. The rows whose run came out nearest the point are looked
+beside first. So a total of 20 over `Points` of 0 to 12 is reached by a list of two elements unlike
+the candidates, where the module has a row with a `Points(10)` in it. How many such rows are made
+for one point is a figure of the compiler's, and a point that reached it says so.
+
+When nothing reaches the point, the report names this population, and a longer list, elements of
+other values or elements unlike one another may still reach it. That nothing reached a point does
+not make it unreachable. If it is reachable, a row written by hand with such elements settles it;
+if it is not, what settles it is proving that from the model's declarations. Running the same
+search again does neither.
 
 A position nothing the behavior states reads — not its body and not a clause of it — is owed no row
 at any of its classes, since a row at one of them gives the answer a row at any other gives. Its

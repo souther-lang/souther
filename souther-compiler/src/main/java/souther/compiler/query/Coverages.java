@@ -31,10 +31,12 @@ import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.SeenComparison;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowRef;
 import souther.compiler.observe.Target;
@@ -58,6 +60,7 @@ import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.ThresholdOfADerivedValue;
+import souther.compiler.partition.Level;
 import souther.compiler.partition.LevelRealizer;
 import souther.compiler.partition.PointSearchGoal;
 import souther.compiler.partition.Realization;
@@ -85,11 +88,14 @@ import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.PriorityQueue;
 import java.util.SequencedMap;
 import java.util.SequencedSet;
 import java.util.Set;
@@ -1078,6 +1084,16 @@ final class Coverages {
          * the candidate was composed.
          */
         RowAsRead read(souther.compiler.partition.RowToRun row);
+
+        /**
+         * The rows beside a row a run read back, as many as {@code spent} has left: the row with
+         * an element put in a list it holds or changed, or a whole number moved by one, each held
+         * to the decoder. None where nothing is known to make them of.
+         */
+        default Iterator<Generator.GeneratedRow> rowsBeside(Generator.GeneratedRow base,
+                List<ObservedValue> seen, Generator.RowsBesideBudget spent) {
+            return Collections.emptyIterator();
+        }
 
         /** What the rows built and run here are written against: their parameters and the
          *  decoder every value put in a row besides the ones a search composed is held to. */
@@ -2341,6 +2357,7 @@ final class Coverages {
                 ValuesTried tried = ValuesTried.NONE;
                 SearchOutcomes last = null;
                 Realization.Found first = null;
+                List<Ran> ranBefore = new java.util.ArrayList<>();
                 // As many askings as the way the row is found says, which is said where what is
                 // asked is ({@link PointSearchGoal#askedAtMost}) — and the first whatever it says,
                 // since the first is the point's answer: a goal with nothing to try is asked, and
@@ -2379,7 +2396,18 @@ final class Coverages {
                     // into. Charged here for that reason: a point with more ways to stand its
                     // dependencies in would otherwise be allowed fewer values than one with fewer.
                     tried = tried.and(came.realized().fixing());
+                    ranBefore.addAll(came.ran());
                 } while (++value < askings);
+                // What a run only works out is not placed by where the input stands, so a point
+                // the candidates did not reach is looked for beside the rows they ran.
+                Generator.RowsBesideBudget spent = new Generator.RowsBesideBudget();
+                if (quantity.searchGoalAt(criterion) instanceof PointSearchGoal.ByObservation) {
+                    Optional<ItemAssessment.Attempt.Certified> beside =
+                            besideWhatRan(ranBefore, criterion, label, rows, spent);
+                    if (beside.isPresent()) {
+                        return new Looked(SearchOutcomes.of(beside.get()), first, beside);
+                    }
+                }
                 // The count ran out, and whether that is what ended the asking is the realizer's to
                 // say. Asked once more and for nothing else: a figure reported where the values
                 // themselves had run out is a number an author raises to be told the same thing,
@@ -2387,9 +2415,16 @@ final class Coverages {
                 // between the point and another value has to say so.
                 //
                 // Nothing is put to the point here, so no value is tried and none is charged for.
-                return new Looked(endedBy(last, realized(criterion, rows, able, region, tried)),
-                        first,
-                        Optional.empty());
+                SearchOutcomes ended = endedBy(last,
+                        realized(criterion, rows, able, region, tried));
+                // And the rows beside the ones run, where it was the figure that stopped making
+                // them: what the point is short of is those, whatever the candidates were.
+                if (spent.leftSome()) {
+                    ended = overLessThanThePointHad(ended,
+                            Set.of(CompositionBudget.ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT),
+                            Set.of(), Set.of());
+                }
+                return new Looked(ended, first, Optional.empty());
             }
 
             /**
@@ -2417,7 +2452,119 @@ final class Coverages {
              */
             private record Searching(Realization came, Realization.Found realized,
                                      SearchOutcomes outcomes,
-                                     Optional<ItemAssessment.Attempt.Certified> witness) {}
+                                     Optional<ItemAssessment.Attempt.Certified> witness,
+                                     List<Ran> ran) {
+
+                Searching(Realization came, Realization.Found realized, SearchOutcomes outcomes,
+                          Optional<ItemAssessment.Attempt.Certified> witness) {
+                    this(came, realized, outcomes, witness, List.of());
+                }
+            }
+
+            /**
+             * A row a run was read back from, which rows beside it are made of.
+             *
+             * @param built how the row came to be built, whose account its neighbours keep
+             * @param read  the inputs of the row as its run read them back
+             * @param depth how many rows beside rows this one is
+             */
+            private record Ran(Generator.BoundaryAttempt.Built built, ObservedInputs read,
+                               int depth, ExactRatio distance) {
+
+                int elements() {
+                    return Generator.elementsHeld(read.inputs());
+                }
+            }
+
+            /**
+             * How far the sides of the comparison came out from the item on the nearest visit of
+             * the run {@code read} came back from, or null where no visit was kept.
+             */
+            private ExactRatio distanceFrom(Criterion criterion, ObservedInputs read) {
+                if (!(criterion.anchor() instanceof Level.OfTheQuantity anchor)
+                        || !(read.watched()
+                                instanceof Generator.Watched.Ran(var run))) {
+                    return null;
+                }
+                ExactRatio nearest = null;
+                for (ConditionOutcomeSite each : site) {
+                    for (SeenComparison visit : run.comparedAt(each)) {
+                        ExactRatio apart = ExactRatio.of(visit.left() - visit.right());
+                        if (apart.minus(anchor.at())
+                                instanceof ExactAnswer.Held<ExactRatio>(var away)
+                                && (nearest == null || away.abs().compareTo(nearest) < 0)) {
+                            nearest = away.abs();
+                        }
+                    }
+                }
+                return nearest;
+            }
+
+            /** How many rows beside rows a row may be: the row of a candidate, one beside it, and
+             *  one beside that. */
+            private static final int DEPTH_OF_ROWS_BESIDE = 2;
+
+            /**
+             * A row beside the rows the candidates ran that stands at {@code criterion}, where one
+             * does. The candidates write every container at one size and every element alike, so
+             * a point only elements unlike one another reach is left to the rows beside them: a
+             * list with another element put in it, an element changed for one a row of the module
+             * ran, a whole number one away. Each is read back by the run as a candidate is, and
+             * stands at the point only where the run says so; nothing here says a point is
+             * unreachable where none does.
+             *
+             * <p>The row whose run came out nearest the item is looked beside first, one
+             * neighbour at a time, so that a row a unit from the item is moved by one before the
+             * rows far from it are grown. Ties go to the row with fewer elements.
+             */
+            private Optional<ItemAssessment.Attempt.Certified> besideWhatRan(
+                    List<Ran> ran, Criterion criterion, String label,
+                    StandingAtAPoint.AtALine rows, Generator.RowsBesideBudget spent) {
+                Set<Generator.GeneratedRow> met = new HashSet<>();
+                PriorityQueue<Open> waiting = new PriorityQueue<>(
+                        Comparator.comparing((Open each) -> each.from().distance(),
+                                        Comparator.nullsLast(ExactRatio::compareTo))
+                                .thenComparingInt(each -> each.from().elements()));
+                ran.forEach(each -> {
+                    met.add(each.built().row());
+                    waiting.add(new Open(each, null));
+                });
+                while (!waiting.isEmpty()) {
+                    Open open = waiting.poll();
+                    Ran from = open.from();
+                    Iterator<Generator.GeneratedRow> beside =
+                            open.beside() != null ? open.beside()
+                                    : from.depth() < DEPTH_OF_ROWS_BESIDE
+                                            ? probe.rowsBeside(from.built().row(),
+                                                    from.read().inputs(), spent)
+                                            : Collections.emptyIterator();
+                    if (!beside.hasNext()) {
+                        continue;
+                    }
+                    Generator.GeneratedRow next = beside.next();
+                    // The row it came from waits for its next neighbour, behind the rows nearer
+                    // the item than it is.
+                    waiting.add(new Open(from, beside));
+                    if (!met.add(next)) {
+                        continue;
+                    }
+                    Generator.BoundaryAttempt.Built built = new Generator.BoundaryAttempt.Built(
+                            next, from.built().unrepresented(), false);
+                    ReadBack back = standingThere(probe, rows, criterion, built);
+                    if (whatCameOfIt(built, label, within, () -> back)
+                            instanceof ItemAssessment.Attempt.Certified certified) {
+                        return Optional.of(certified);
+                    }
+                    if (back.read() != null) {
+                        waiting.add(new Open(new Ran(built, back.read(), from.depth() + 1,
+                                distanceFrom(criterion, back.read())), null));
+                    }
+                }
+                return Optional.empty();
+            }
+
+            /** A row waiting to have the rows beside it run, with those it has yet to give. */
+            private record Open(Ran from, Iterator<Generator.GeneratedRow> beside) {}
 
             /**
              * What a walk over one region came to, and the assignment the row it composed was
@@ -2553,11 +2700,22 @@ final class Coverages {
                         }
                         SearchOutcomes outcomes = SearchOutcomes.none();
                         ItemAssessment.Attempt.Certified witness = null;
+                        List<Ran> ran = new java.util.ArrayList<>();
                         for (souther.compiler.partition.Generator.BoundaryAttempt each : made) {
                             ItemAssessment.Attempt came = whatCameOfIt(each, label, within,
-                                    () -> standingThere(probe, rows, criterion,
-                                            (souther.compiler.partition.Generator
-                                                    .BoundaryAttempt.Built) each));
+                                    () -> {
+                                        ReadBack back = standingThere(probe, rows, criterion,
+                                                (souther.compiler.partition.Generator
+                                                        .BoundaryAttempt.Built) each);
+                                        if (back.read() != null) {
+                                            ran.add(new Ran(
+                                                    (souther.compiler.partition.Generator
+                                                            .BoundaryAttempt.Built) each,
+                                                    back.read(), 0,
+                                                    distanceFrom(criterion, back.read())));
+                                        }
+                                        return back;
+                                    });
                             if (witness == null
                                     && came instanceof ItemAssessment.Attempt.Certified certified) {
                                 witness = certified;
@@ -2565,7 +2723,7 @@ final class Coverages {
                             outcomes = outcomes.plus(SearchOutcomes.of(came));
                         }
                         yield new Searching(answered, found, outcomes,
-                                Optional.ofNullable(witness));
+                                Optional.ofNullable(witness), ran);
                     }
                     // And the two ways of finding nothing are not one answer. A walk of the whole
                     // of what the rules leave that reaches no value settles the point; a search

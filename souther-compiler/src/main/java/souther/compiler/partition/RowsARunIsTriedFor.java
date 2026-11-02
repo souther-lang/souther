@@ -85,14 +85,19 @@ public final class RowsARunIsTriedFor {
      */
     public static String sizes() {
         return "the containers the comparison names each holding the same number of elements from"
-                + " 0 to " + MOST_ELEMENTS + " with element values left to their types and not"
-                + " chosen by this search";
+                + " 0 to " + MOST_ELEMENTS + " with element values left to their types and then"
+                + BESIDE;
     }
+
+    /** What is said of the rows made beside the rows the candidates ran. */
+    private static final String BESIDE = " rows beside those with an element put in a list or"
+            + " changed for one a row of the module ran or a whole number moved by one";
 
     /** What is said of the whole numbers outside a container a candidate is written for. */
     public static String values() {
         return "the whole numbers it names outside a container all at one of {"
-                + VALUES.stream().map(String::valueOf).collect(Collectors.joining(", ")) + "}";
+                + VALUES.stream().map(String::valueOf).collect(Collectors.joining(", ")) + "} and"
+                + " then" + BESIDE;
     }
 
     /**

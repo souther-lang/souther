@@ -337,6 +337,7 @@ public final class PublicationOrders {
                     CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT,
                     CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,
                     CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH,
+                    CompositionBudget.ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT,
                     // After the figures for how many times a thing was tried, because the walking
                     // is what a reader raises once the trying turns out not to have been what
                     // stopped the search. Each sits by the trying figure it was split from.

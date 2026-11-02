@@ -488,6 +488,21 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/StatementsOfAnInput;)"
                             + "Lsouther/compiler/partition/InputNumbersAnAnswerTurnsOn$Pairs;",
                     "stops offering pairs at the figure and says whether some were left out"),
+            // The rows made beside the rows a point's candidates ran: one counter holds the
+            // figure, and the search for the point says it where the counter ran out with rows
+            // unmade and no row stood at the point.
+            Map.entry("souther.compiler.partition.Generator$RowsBesideBudget#<init>()V",
+                    "the rows made beside the rows run for one point, which is where the count"
+                            + " starts"),
+            Map.entry("souther.compiler.query.Coverages$2#lookedAlong("
+                            + "Lsouther/compiler/partition/Criterion;Ljava/lang/String;"
+                            + "Ljava/util/function/UnaryOperator;"
+                            + "Lsouther/compiler/partition/StandingAtAPoint$AtALine;"
+                            + "Lsouther/compiler/partition/Reachability$Reaching;)"
+                            + "Lsouther/compiler/query/Coverages$2$Looked;",
+                    "hands that figure on with the answer where the rows beside the ones run were"
+                            + " cut at it, which is what says the point is short of rows and not"
+                            + " of values"),
             Map.entry("souther.compiler.query.Coverages$2#endedBy("
                             + "Lsouther/compiler/query/SearchOutcomes;"
                             + "Lsouther/compiler/partition/Realization;)"

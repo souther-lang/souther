@@ -326,6 +326,16 @@ public enum CompositionBudget {
      */
     VALUES_A_POINT_IS_TRIED_WITH(8),
 
+    /**
+     * How many rows beside the rows a point's candidates ran are made and run for that point: a
+     * list with another element put in it, an element changed for one a row of the module ran, a
+     * whole number one away ({@link Generator#rowsBeside}). The rows whose run came out nearest the
+     * item are looked beside first, and every row made is run, so this bounds the runs a point
+     * costs. A search that reaches it has stopped with rows unmade, and is carried out with the
+     * figure.
+     */
+    ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT(192),
+
     /** How many paths through one body a reading of its decision takes. What it had read is carried
      *  out with the figure ({@link DecisionReading.Enumeration.StoppedAtAFigure}), so the rules it
      *  did not reach are neither covered nor gaps. */
@@ -808,6 +818,8 @@ public enum CompositionBudget {
             case ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR ->
                     "how many values of the numbers on the way a row is composed for";
             case VALUES_A_POINT_IS_TRIED_WITH -> "how many values a point is tried with";
+            case ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT ->
+                    "how many rows beside the rows run are made for a point";
             case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> "how deep a value is built";
             case PATHS_OF_A_DECISION_READ -> "how many paths through one body a decision is read for";
             case CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE ->
@@ -908,6 +920,7 @@ public enum CompositionBudget {
                  DIVISORS_OF_A_REMAINDER_TRIED, REMAINDERS_A_SUM_IS_TRIED_AT,
                  TIMES_THE_RULES_ARE_ASKED_AGAIN,
                  VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,
+                 ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT,
                  PATHS_OF_A_DECISION_READ, CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE,
                  READINGS_OF_ONE_CONDITION,
                  TOTAL_READINGS_OF_ONE_CONDITION, PARTS_A_DERIVATION_CONCLUDES,
