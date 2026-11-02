@@ -9,12 +9,9 @@ import souther.compiler.types.BinOp;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import net.unit8.notation199x.pattern.PatternMeaning;
 import net.unit8.notation199x.pattern.PatternParser;
-import souther.compiler.regex.PatternPlan;
 import net.unit8.notation199x.pattern.PatternRead;
 import souther.compiler.regex.Recognizer;
 import net.unit8.notation199x.Normalization;
@@ -393,19 +390,6 @@ final class ConstantAlgebra {
      * either of which leaves the match to the run time.
      */
     static Optional<Object> matching(PatternMeaning meaning, String s) {
-        return RECOGNIZERS.computeIfAbsent(meaning, ConstantAlgebra::recognizerOf)
-                .flatMap(recognizer -> recognizer.accepts(s, PatternPlan.Budget.OF_A_FOLD.meter()))
-                .map(Object.class::cast);
+        return Recognizer.recognizes(meaning, s).map(Object.class::cast);
     }
-
-    private static Optional<Recognizer> recognizerOf(PatternMeaning meaning) {
-        return Optional.ofNullable(Recognizer.of(meaning, PatternPlan.Budget.OF_A_FOLD.meter()));
-    }
-
-    /** What each pattern means, as the machine a fold walks. A declaration's pattern is asked about
-     * once per construction from it and once per reading of a branch, and building the machine is
-     * the only expensive thing here. Keyed by the meaning, so two spellings of one pattern are one
-     * machine. */
-    private static final Map<PatternMeaning, Optional<Recognizer>> RECOGNIZERS =
-            new ConcurrentHashMap<>();
 }

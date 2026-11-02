@@ -2507,21 +2507,34 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * holds, deciding where the cart is open, and a row says whether it is.
      */
     static boolean drawsLines(Proposition stated) {
-        return AStatementAtARow.askable(stated) && holdsARelation(stated);
+        return AStatementAtARow.askable(stated) && holdsARelation(stated, true);
     }
 
     private static boolean holdsARelation(Proposition stated) {
+        return holdsARelation(stated, false);
+    }
+
+    /**
+     * Whether {@code stated} holds a relation, or one that can be a line on the input where
+     * {@code aLine}: a string being among the pieces of another relates the two strings and is
+     * none, however a row is asked it.
+     */
+    private static boolean holdsARelation(Proposition stated, boolean aLine) {
         return switch (stated) {
-            case Proposition.Compared _ -> true;
-            case Proposition.All all -> all.parts().stream().anyMatch(Cutting::holdsARelation);
-            case Proposition.Any any -> any.parts().stream().anyMatch(Cutting::holdsARelation);
+            case Proposition.Compared compared -> !aLine
+                    || !(compared.relation() instanceof Relation.Affine affine
+                            && AStatementAtARow.pieceMembershipIn(affine) != null);
+            case Proposition.All all ->
+                    all.parts().stream().anyMatch(each -> holdsARelation(each, aLine));
+            case Proposition.Any any ->
+                    any.parts().stream().anyMatch(each -> holdsARelation(each, aLine));
             case Proposition.SoManyHold counted ->
-                    counted.statements().stream().anyMatch(Cutting::holdsARelation);
+                    counted.statements().stream().anyMatch(each -> holdsARelation(each, aLine));
             // Some element meeting it or none: the relation turns what is said of an element
             // either way round.
-            case Proposition.Some some -> holdsARelation(some.ofTheElement());
+            case Proposition.Some some -> holdsARelation(some.ofTheElement(), aLine);
             // Where it answers is no line of it.
-            case Proposition.WhereItAnswers where -> holdsARelation(where.states());
+            case Proposition.WhereItAnswers where -> holdsARelation(where.states(), aLine);
             default -> false;
         };
     }

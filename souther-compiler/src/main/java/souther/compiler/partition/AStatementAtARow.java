@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.ElementKey;
@@ -19,6 +20,7 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.Spelling;
+import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -28,6 +30,8 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.regex.Recognizer;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -204,6 +208,10 @@ final class AStatementAtARow {
                     cases.atoms().stream().allMatch(Refinement.SumCase.class::isInstance);
             case Proposition.SameValue(DecisionSubject.AnInput _, DecisionSubject.AnInput _,
                                        boolean _, Spelling _) -> true;
+            // A row writes the string at a position, and whether it is one of a language's is
+            // read off that string. A piece of a split string is no position's.
+            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtAPosition _,
+                                          StringsLanguage _, boolean _, Spelling _) -> true;
             case Proposition.LastToHold _ -> true;
             case Proposition.All all -> all.parts().stream()
                     .allMatch(each -> askable(each, besideItsRelations, besideItsStops));
@@ -223,6 +231,7 @@ final class AStatementAtARow {
                 case Relation.Affine affine ->
                         WhatTheDeclarationsLeave.ofTheInput(affine.form()) != null
                         || productIn(affine) != null
+                        || pieceMembershipIn(affine) != null
                         || remainderByAnInputIn(affine) != null
                         || remainderOfADividendIn(affine) != null
                         || (countIn(affine) instanceof Quantity count
@@ -369,6 +378,21 @@ final class AStatementAtARow {
         return new LinearForm<>(ExactRatio.ZERO, out);
     }
 
+    /**
+     * The one string being among the pieces of another that {@code affine} weighs where it weighs
+     * one and nothing else, and both strings are a position's own or a case conversion of it —
+     * or null.
+     *
+     * <p>The one place that says which relations are over a piece's membership, so that the row
+     * it is asked at is of the relations a reader may ask.
+     */
+    static Quantity.IsAmongThePieces pieceMembershipIn(Relation.Affine affine) {
+        return affine.form().coefs().size() == 1
+                && affine.form().coefs().keySet().iterator().next()
+                        instanceof Quantity.IsAmongThePieces among
+                && OneRelation.OnPieceMembership.readsARow(among) ? among : null;
+    }
+
     /** The one product {@code affine} weighs where it weighs one and nothing else, or null. */
     static Quantity.ProductOfTwo productIn(Relation.Affine affine) {
         return affine.form().coefs().size() == 1
@@ -445,6 +469,9 @@ final class AStatementAtARow {
                 positions.add(one);
                 positions.add(other);
             }
+            case Proposition.InTheStrings(
+                    Proposition.InTheStrings.Strings.AtAPosition(TermPath at), StringsLanguage _,
+                    boolean _, Spelling _) -> positions.add(at);
             case Proposition.All all -> all.parts().forEach(part ->
                     gather(part, behavior, quantities, reading, into, elements, positions));
             case Proposition.Any any -> any.parts().forEach(part ->
@@ -468,9 +495,13 @@ final class AStatementAtARow {
                             elementsOf(count).container().inputPosition(),
                             readBy(meetingOf(count), behavior, quantities, reading),
                             differentAt(count), acrossOf(count)));
-            case Proposition.Compared compared when askable(compared) ->
-                    into.computeIfAbsent(compared.relation(),
-                            relation -> relationRead(relation, behavior, quantities, reading));
+            case Proposition.Compared compared when askable(compared) -> {
+                OneRelation made = into.computeIfAbsent(compared.relation(),
+                        relation -> relationRead(relation, behavior, quantities, reading));
+                if (made instanceof OneRelation.OnPieceMembership membership) {
+                    positions.addAll(membership.positions());
+                }
+            }
             // Put to no row: answered as not known where it is asked ({@link #notAsked}).
             case Proposition.Compared _, Proposition.Truth _, Proposition.Present _,
                  Proposition.InCases _, Proposition.InTheStrings _, Proposition.SameValue _,
@@ -1192,6 +1223,13 @@ final class AStatementAtARow {
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
                                        DecisionSubject.AnInput(TermPath other), boolean holds,
                                        Spelling _) -> heldAs(holds, theSame(one, other, row));
+            case Proposition.InTheStrings(
+                    Proposition.InTheStrings.Strings.AtAPosition(TermPath at),
+                    StringsLanguage language, boolean holds, Spelling _) ->
+                    heldAs(holds, ofItsValue(at, row, value -> value instanceof
+                            ObservedValue.Text(String text)
+                            ? Recognizer.recognizes(language.meaning(), text).orElse(null)
+                            : null));
             case Proposition.All all -> joined(all.parts().stream()
                     .map(each -> at(each, row, answered)).toList(), true);
             case Proposition.Any any -> joined(any.parts().stream()
@@ -1226,6 +1264,7 @@ final class AStatementAtARow {
                         case OneRelation.OnAProduct product -> product.at(row);
                         case OneRelation.OnARemainderByAnInput remainder -> remainder.at(row);
                         case OneRelation.OnARemainderOfAForm remainder -> remainder.at(row);
+                        case OneRelation.OnPieceMembership membership -> membership.at(row);
                         case OneRelation.NoQuantity unread -> unread.at();
                     });
             case Proposition.Compared _, Proposition.Truth _, Proposition.Present _,
@@ -1867,6 +1906,13 @@ final class AStatementAtARow {
                         return null;
                     }
                 }
+                // Whether a string is among the pieces of another turns on the strings and on no
+                // place of an order, which is not known.
+                case OneRelation.OnPieceMembership membership -> {
+                    if (membership.terms().contains(term)) {
+                        return null;
+                    }
+                }
                 // A relation no row is read at turns wherever it does, which is not known.
                 case OneRelation.NoQuantity(LinearForm<NumericTerm> form) -> {
                     if (form.coefs().containsKey(term)) {
@@ -1926,6 +1972,11 @@ final class AStatementAtARow {
                         return null;
                     }
                 }
+                case OneRelation.OnPieceMembership membership -> {
+                    if (membership.terms().contains(term)) {
+                        return null;
+                    }
+                }
                 case OneRelation.NoQuantity(LinearForm<NumericTerm> form) -> {
                     if (form.coefs().containsKey(term)) {
                         return null;
@@ -1969,6 +2020,95 @@ final class AStatementAtARow {
             @Override
             default List<NumericTerm> terms() {
                 return over().terms();
+            }
+        }
+
+        /**
+         * Whether a string is among the pieces of another parted at a code point, as the number
+         * one where it is and nought where it is not, weighed and with a constant added, against
+         * nought.
+         *
+         * <p>Each string is the string at a position, or what case conversions make of it, worked
+         * out as the run time works it out ({@link BoundUnderEvaluation#mapped}) and parted as
+         * the run time parts it ({@link BoundUnderEvaluation#parted}). No number of the row is read, so it divides no
+         * order and a place a term turns at is not known.
+         *
+         * @param value    the string looked for
+         * @param string   the string parted
+         * @param weight   what the membership is weighed by
+         * @param constant what is added to it
+         */
+        record OnPieceMembership(ConvertedText value, ConvertedText string, int separator,
+                                 int from, int among, ExactRatio weight, ExactRatio constant,
+                                 Rel rel, List<NumericTerm> terms) implements OneRelation {
+
+            /** Whether the strings of {@code membership} are ones a row is read at. */
+            static boolean readsARow(Quantity.IsAmongThePieces membership) {
+                return ValueName.Stdlib.operation("String", "split").equals(membership.operation())
+                        && membership.separator().isPresent()
+                        && ConvertedText.of(membership.value()) != null
+                        && ConvertedText.of(membership.string()) != null;
+            }
+
+            static OnPieceMembership of(Relation.Affine affine,
+                                        Quantity.IsAmongThePieces membership) {
+                return new OnPieceMembership(ConvertedText.of(membership.value()),
+                        ConvertedText.of(membership.string()),
+                        membership.separator().getAsInt(), membership.from(), membership.among(),
+                        affine.form().coefs().get(membership), affine.form().constant(),
+                        affine.proposition(),
+                        NumericTerms.inOrder(membership.positionsItIsMadeOf()));
+            }
+
+            /** The positions whose strings a row is read at. */
+            List<TermPath> positions() {
+                return List.of(value.place().position(), string.place().position());
+            }
+
+            /**
+             * What the relation is at {@code row}: nothing there where the row holds no string at
+             * a position, and not read where a string could not be read.
+             */
+            Said at(BorderQuantity.Observation row) {
+                Said none = null;
+                String[] read = new String[2];
+                ConvertedText[] texts = {value, string};
+                for (int i = 0; i < texts.length; i++) {
+                    switch (row.at(texts[i].place().position())) {
+                        case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
+                                none = new Said.NotRead(Set.of(ReadingGap.COULD_NOT_WALK));
+                        case WalkResult.Reached(ObservationAtPoint standing) -> {
+                            if (standing instanceof ObservationAtPoint.Value(
+                                    ObservedValue.Text(String text))) {
+                                read[i] = BoundUnderEvaluation.mapped(texts[i].through(), text);
+                                if (read[i] == null) {
+                                    none = new Said.NotRead(Set.of(ReadingGap.NO_VALUE));
+                                }
+                            } else if (standing instanceof ObservationAtPoint.Value) {
+                                none = new Said.NotRead(Set.of(ReadingGap.NO_VALUE));
+                            } else if (none == null) {
+                                none = Said.NOTHING_THERE;
+                            }
+                        }
+                    }
+                    if (none instanceof Said.NotRead) {
+                        return none;
+                    }
+                }
+                if (none != null) {
+                    return none;
+                }
+                List<String> pieces = BoundUnderEvaluation.parted(read[1], separator);
+                int until = among > 0 ? Math.min(among, pieces.size()) : pieces.size();
+                boolean found = from < until && pieces.subList(from, until).contains(read[0]);
+                ExactAnswer<ExactRatio> sum =
+                        found ? weight.plus(constant) : ExactAnswer.held(constant);
+                return switch (sum) {
+                    case ExactAnswer.Held<ExactRatio>(ExactRatio held) ->
+                            new Said.Is(rel.holds(held.signum()));
+                    case ExactAnswer.Unheld<ExactRatio> unheld ->
+                            new Said.NotRead(Set.of(ReadingGap.of(unheld.why())));
+                };
             }
         }
 
@@ -2202,6 +2342,8 @@ final class AStatementAtARow {
             return switch (relation) {
                 case Relation.Affine affine when productIn(affine) != null ->
                         ofAProduct(affine, productIn(affine), behavior, quantities);
+                case Relation.Affine affine when pieceMembershipIn(affine) != null ->
+                        OnPieceMembership.of(affine, pieceMembershipIn(affine));
                 case Relation.Affine affine when remainderByAnInputIn(affine) != null ->
                         ofARemainderByAnInput(affine, remainderByAnInputIn(affine), behavior,
                                 quantities);
