@@ -147,4 +147,47 @@ class ASumOfTheCountsOfListsMadeByFlatMapOfAnAttemptIsReadTest {
         assertFalse(aboutAValueMadeFromAnother(report(difference, "Found", "Nobody", "Nobody"))
                 .isEmpty(), difference);
     }
+
+    private static final String PLAIN_COUNT = """
+            module probe.s0 exposing ( screen, Domain, Yes, No )
+
+            data Domain = String
+                invariant String.matches("[a-z0-9]+(\\\\.[a-z0-9]+)+", value)
+
+            data Yes
+            data No
+
+            behavior screen : (s: String) -> Yes | No
+                constructs Domain
+
+            let domainsIn (s: String): List<Domain> =
+                List.flatMap(d -> if Domain(d) as name then [ name ] else [],
+                             List.drop(1, String.split("@", s)))
+
+            let screen (s) = {
+                let a = domainsIn(s)
+                guard List.length(a) >= 1 else No
+                Yes
+            }
+
+            example screen
+                | "found" : ("a@x.jp") -> Yes
+                | "none" : ("a@X") -> No
+            """;
+
+    /** The fork over the count is read as the comparison it holds is. */
+    @Test
+    void theForkOverTheCountOfOneListIsRead() {
+        Compilation compilation = Compilation.ofSource(PLAIN_COUNT, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertEquals(List.of(), notRead(report), report);
+        List<String> owed = report.lines().map(line -> line.strip().replaceAll("\\s+", " "))
+                .toList();
+        assertTrue(owed.contains("screen implemented rows 2 pending 0"), report);
+        assertTrue(owed.contains("branch 4/4"), report);
+        assertTrue(owed.contains("decision rules 2 taken 2"), report);
+    }
 }
