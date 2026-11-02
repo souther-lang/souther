@@ -713,24 +713,31 @@ sealed interface ComparisonAssessment {
 
         /**
          * Each string position some part shows parted by the strings its partner can hold, where
-         * every part about its place shows it parted by the same strings, and every part is a
-         * relation to another value. A relation parts the strings of a position whichever case of
-         * the statement a row is in: what a case decides is which lines part what settles it.
+         * every part about its place that parts it shows it parted by the same strings, and every
+         * part is a relation to another value or a line the statement never turns on. A relation
+         * parts the strings of a position whichever case of the statement a row is in: what a case
+         * decides is which lines part what settles it. A part that leaves the place undivided, or
+         * is a line nothing turns on, parts it by nothing, and what the other parts part it by
+         * does not contradict that.
          */
         Map<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold> partnered() {
             List<Set<FilingCoordinate>> about = new ArrayList<>();
+            List<Set<FilingCoordinate>> undivided = new ArrayList<>();
             List<Map<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold>>
                     each = new ArrayList<>();
             for (Part part : parts) {
                 switch (part.line()) {
                     case AgainstAnotherValue relation -> {
                         about.add(Set.copyOf(relation.filedAt()));
+                        undivided.add(relation.undivided());
                         each.add(relation.partnered());
                     }
                     case AcrossPositions across -> {
                         about.add(across.relation().places());
+                        undivided.add(across.left().undivided());
                         each.add(across.left().partnered());
                     }
+                    case TurnsNothing _ -> { }
                     default -> {
                         return Map.of();
                     }
@@ -748,6 +755,9 @@ sealed interface ComparisonAssessment {
                         if (about.get(i).contains(at)) {
                             UndividedByARelation.StringsAPartnerCanHold theirs =
                                     each.get(i).get(term);
+                            if (theirs == null && undivided.get(i).contains(at)) {
+                                continue;
+                            }
                             alike &= strings.showsTheStringsOf(theirs);
                             if (alike) {
                                 named = named.orAnother(theirs);
