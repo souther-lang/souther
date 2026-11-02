@@ -373,12 +373,36 @@ public interface SearchRegion {
      * show a region empty and then, asked of that region with one more position fixed, show
      * nothing. Where this is true, none of that happens, and the absence of a proof here is the
      * absence of one anywhere above. A reader that goes straight to the end of a walk instead of
-     * asking the regions on the way is leaning on exactly that, and asks it first.
+     * asking the regions on the way is leaning on that, and asks it first — and, for the value it
+     * takes at each position, on {@link #runsOnlyNarrowWhenFixed}, which is not implied by this.
      *
      * <p>False unless a region says otherwise, and also false for a region whose emptiness shows
      * nothing — that is the answer to a question the reader may ask and not one it may act on.
      */
     default boolean emptinessIsSettled() {
+        return false;
+    }
+
+    /**
+     * Whether fixing a position can only narrow where the other positions run and which values of
+     * their classes they may take, and never widen either.
+     *
+     * <p>A different thing from {@link #emptinessIsSettled}, which is about proofs: that a region
+     * shown empty is shown empty with more fixed. This is about the first value of a position. A
+     * reader that takes it from where the position runs before anything is fixed, and not from
+     * where it runs once the positions before it are, gets the same value only if the narrower run
+     * is inside the wider one — and the narrower run is then the wider one cut, so a value that
+     * is first in the wider run and lies in the narrower is first in it.
+     *
+     * <p>Of regions that are not shown empty. Where a region is, there is nowhere for a position to
+     * run and what it answers about where is no run, so nothing is promised of it — a search asks
+     * {@link #emptiness} first and does not read a run out of a region it shows empty.
+     *
+     * <p>The ranges and the classes are approximations, and nothing in a region's other answers
+     * says they are held to this: a region may read a run one way before a position is fixed and
+     * more coarsely after. False unless a region says otherwise.
+     */
+    default boolean runsOnlyNarrowWhenFixed() {
         return false;
     }
 }

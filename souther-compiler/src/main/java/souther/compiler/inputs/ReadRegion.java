@@ -127,6 +127,18 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
         return within.emptinessIsSettled();
     }
 
+    /**
+     * A region of numbers read from rules and taken in or fixed on top of them: the run of a
+     * position is where the closure of everything said leaves it, and the closure of more said
+     * leaves it no wider. A class is the declarations' and a fixing does not change it. Held to this
+     * over the regions a model reads, where fixing a position and taking a relation in are each
+     * said at random ({@code ARegionRunsNoWiderOnceMoreIsSaidTest}).
+     */
+    @Override
+    public boolean runsOnlyNarrowWhenFixed() {
+        return true;
+    }
+
     @Override
     public Optional<EmptyInput> emptiness() {
         return within.emptiness();

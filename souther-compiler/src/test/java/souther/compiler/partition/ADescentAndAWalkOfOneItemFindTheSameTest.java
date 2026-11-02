@@ -57,14 +57,18 @@ class ADescentAndAWalkOfOneItemFindTheSameTest {
                 terms.add(new NumericTerm.ValueOf(TermPath.of("p.t" + i)));
             }
             int ceiling = 2 + random.nextInt(8);
-            boolean settled = random.nextInt(4) > 0;
+            int kind = random.nextInt(6);
             List<Map<NumericTerm, Place>> patterns = patterns(random, terms, ceiling);
             Map<NumericTerm, ExactRatio> weights = new LinkedHashMap<>();
             for (NumericTerm.FromOnePosition each : terms) {
                 weights.put(each, ExactRatio.of(1 + random.nextInt(2)));
             }
             int level = random.nextInt(ceiling * count + 1);
-            Script script = settled ? monotone(patterns, ceiling) : stoppingShort(patterns, ceiling);
+            Script script = switch (kind) {
+                case 4 -> stoppingShort(patterns, ceiling);
+                case 5 -> widening(patterns, ceiling);
+                default -> monotone(patterns, ceiling);
+            };
 
             ScriptedRegion byTheDescent = ScriptedRegion.of(script);
             ScriptedRegion byTheWalk = ScriptedRegion.of(script);
@@ -76,7 +80,8 @@ class ADescentAndAWalkOfOneItemFindTheSameTest {
             int itemNumber = item;
             assertEquals(walked, descended, () -> "item " + itemNumber + ": " + count
                     + " numbers, level " + level + ", weights " + weights + ", ceiling " + ceiling
-                    + ", patterns " + patterns + (settled ? ", settled" : ", stopping short"));
+                    + ", patterns " + patterns + ", " + List.of("settled", "settled", "settled",
+                            "settled", "stopping short", "widening").get(kind));
             if (descended instanceof Realization.Found) {
                 found++;
                 if (byTheDescent.counts().emptiness.get() < byTheWalk.counts().emptiness.get()) {
@@ -159,6 +164,22 @@ class ADescentAndAWalkOfOneItemFindTheSameTest {
                 Endpoint.inclusive(new Count(BigDecimal.ZERO)),
                 Endpoint.inclusive(new Count(BigDecimal.valueOf(ceiling))));
         return new Script(patterns::contains, false, (standing, term) -> whole);
+    }
+
+    /**
+     * Shown empty wherever a pattern holds, and settled, but running every position from one
+     * before anything is fixed and from nought once something is: runs that widen, which the
+     * region does not say only narrow.
+     */
+    private static Script widening(List<Map<NumericTerm, Place>> patterns, int ceiling) {
+        NumericDomain.Bounds fromOne = new NumericDomain.Bounds(
+                Endpoint.inclusive(new Count(BigDecimal.ONE)),
+                Endpoint.inclusive(new Count(BigDecimal.valueOf(ceiling))));
+        NumericDomain.Bounds fromNought = new NumericDomain.Bounds(
+                Endpoint.inclusive(new Count(BigDecimal.ZERO)),
+                Endpoint.inclusive(new Count(BigDecimal.valueOf(ceiling))));
+        return new Script(standing -> refusedBy(patterns, standing), true,
+                (standing, term) -> standing.isEmpty() ? fromOne : fromNought, false);
     }
 
     private static boolean refusedBy(List<Map<NumericTerm, Place>> patterns,

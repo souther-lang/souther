@@ -189,6 +189,47 @@ class AWalkWhoseFirstValuesAreTheOnesItSettlesOnReadsTheRulesOnceTest {
     }
 
     /**
+     * A region may read a run more coarsely once a position is fixed: here {@code y} runs from one
+     * before anything is fixed and from nought once {@code x} is, and nothing is shown empty. The
+     * walk takes the first value of {@code y} from the second, so the descent, which takes it from
+     * the first, would not find what the walk finds. A region that does not say its runs only
+     * narrow when a position is fixed is not one the descent is taken over.
+     */
+    @Test
+    void aRunThatWidensOnceAPositionIsFixedLeavesTheFirstValueToTheWalk() {
+        Script widening = widening();
+
+        assertEquals(assignment(0, 0, 6),
+                found(realizedAt(new LevelRealizer().walkingOnly(), 6, ScriptedRegion.of(widening))));
+        assertEquals(assignment(0, 0, 6),
+                found(realizedAt(new LevelRealizer(), 6, ScriptedRegion.of(widening))),
+                "the walk's, since the region does not say its runs only narrow");
+    }
+
+    /**
+     * And the same runs said to only narrow are taken at that word, so what comes back is not the
+     * walk's.
+     *
+     * <p>Held to show where the protection is, as with the word about the reading: the region's.
+     */
+    @Test
+    void aRegionSayingItsRunsOnlyNarrowWhereTheyWidenIsTakenAtItsWord() {
+        Script lying = widening().sayingTheyNarrow();
+
+        assertNotEquals(
+                found(realizedAt(new LevelRealizer().walkingOnly(), 6, ScriptedRegion.of(lying))),
+                found(realizedAt(new LevelRealizer(), 6, ScriptedRegion.of(lying))));
+    }
+
+    private static Script widening() {
+        return Script.refusingNothing().runningFromWithoutSayingTheyNarrow(
+                (standing, term) -> term == Y && standing.isEmpty()
+                        ? new NumericDomain.Bounds(Endpoint.inclusive(at(1)),
+                                Endpoint.inclusive(at(10)))
+                        : ScriptedRegion.ZERO_TO_TEN);
+    }
+
+    /**
      * Where the arithmetic cannot hold what is owed the walk comes back short, and the descent
      * leaves it to say so rather than answering over it.
      *

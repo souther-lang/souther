@@ -1960,19 +1960,26 @@ public final class LevelRealizer {
          * before anything was fixed, and the whole assignment held against the rules once.
          *
          * <p>The walk reads the declarations again with each position fixed, to find where the next
-         * one may stand and to skip a value the rules refuse. Those readings find nothing that a
-         * settled reading of the whole assignment does not ({@link SearchRegion#emptinessIsSettled}):
-         * a region shown empty is shown empty with more said of it, so an assignment the settled
-         * reading does not show empty is one no region on the way to it was shown empty of, and each
-         * of its values lies in the run its position had there. A value that is the first of its
-         * position's candidates in the wider run and lies in the narrower one is the first of the
-         * narrower one, which is the value the walk takes.
+         * one may stand and to skip a value the rules refuse. That is the same search only if two
+         * things hold, and they are two:
          *
-         * <p>So this answers only where the whole assignment is not refused and the reading that
-         * says so is settled. Anywhere else it answers null with nothing changed, and the walk runs
-         * as it would have: a reading that stopped short of the end is one the walk's readings can
-         * have gone further than. The budgets are spent as the walk would have spent them, and a
-         * search that could not afford them all is left to the walk.
+         * <p>No region on the way to the assignment was shown empty. A settled reading of the whole
+         * assignment shows nothing the readings on the way do not
+         * ({@link SearchRegion#emptinessIsSettled}): a region shown empty is shown empty with more
+         * said of it, so an assignment the settled reading does not show empty is one no region on
+         * the way to it was shown empty of.
+         *
+         * <p>And the first value of each position is the same. The wider run a position has before
+         * anything is fixed holds the narrower run it has once the positions before it are
+         * ({@link SearchRegion#runsOnlyNarrowWhenFixed}), and so does its class; the value of the
+         * assignment lies in the narrower run because the reading that does not show the assignment
+         * empty leaves it there, and a value that is first in the wider run and lies in the narrower
+         * one is first in it — which is the value the walk takes.
+         *
+         * <p>So this answers only where the region says the second, and where the whole assignment
+         * is not refused and the reading that says so is settled. Anywhere else it answers null
+         * with nothing changed, and the walk runs as it would have. The budgets are spent as the walk
+         * would have spent them, and a search that could not afford them all is left to the walk.
          *
          * <p>What the walk meets at a narrower run that this does not is the arithmetic of the
          * same coefficients and amounts owed, so a value it cannot hold is one this cannot either,
@@ -1981,6 +1988,7 @@ public final class LevelRealizer {
         private Reached straightDescent(ExactRatio target) {
             int last = terms.size() - 1;
             if (last < 1
+                    || !within.runsOnlyNarrowWhenFixed()
                     || asked + last > HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN
                     || steps.taken + terms.size() > STEPS_A_SEARCH_MAY_TAKE) {
                 return null;

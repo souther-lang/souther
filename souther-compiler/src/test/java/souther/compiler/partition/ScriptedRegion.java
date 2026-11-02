@@ -49,9 +49,16 @@ record ScriptedRegion(Counts counts, Map<NumericTerm, Place> standing, Script sc
      * @param shownEmpty whether the reading is shown empty with these positions fixed
      * @param settled    what the region says of its reading of a whole assignment
      * @param runs       where a position runs, given what stands fixed; null where nowhere
+     * @param narrowing  what the region says of its runs: that fixing a position only narrows them
      */
     record Script(Predicate<Map<NumericTerm, Place>> shownEmpty, boolean settled,
-                  BiFunction<Map<NumericTerm, Place>, NumericTerm, NumericDomain.Bounds> runs) {
+                  BiFunction<Map<NumericTerm, Place>, NumericTerm, NumericDomain.Bounds> runs,
+                  boolean narrowing) {
+
+        Script(Predicate<Map<NumericTerm, Place>> shownEmpty, boolean settled,
+               BiFunction<Map<NumericTerm, Place>, NumericTerm, NumericDomain.Bounds> runs) {
+            this(shownEmpty, settled, runs, true);
+        }
 
         static Script refusingNothing() {
             return refusing(standing -> false);
@@ -62,12 +69,23 @@ record ScriptedRegion(Counts counts, Map<NumericTerm, Place> standing, Script sc
         }
 
         Script unsettled() {
-            return new Script(shownEmpty, false, runs);
+            return new Script(shownEmpty, false, runs, narrowing);
         }
 
         Script runningFrom(BiFunction<Map<NumericTerm, Place>, NumericTerm,
                 NumericDomain.Bounds> narrower) {
-            return new Script(shownEmpty, settled, narrower);
+            return new Script(shownEmpty, settled, narrower, narrowing);
+        }
+
+        /** The runs a script gives, which this region does not say only narrow. */
+        Script runningFromWithoutSayingTheyNarrow(BiFunction<Map<NumericTerm, Place>, NumericTerm,
+                NumericDomain.Bounds> runs) {
+            return new Script(shownEmpty, settled, runs, false);
+        }
+
+        /** The same runs, said to only narrow. */
+        Script sayingTheyNarrow() {
+            return new Script(shownEmpty, settled, runs, true);
         }
     }
 
@@ -126,5 +144,10 @@ record ScriptedRegion(Counts counts, Map<NumericTerm, Place> standing, Script sc
     @Override
     public boolean emptinessIsSettled() {
         return script.settled();
+    }
+
+    @Override
+    public boolean runsOnlyNarrowWhenFixed() {
+        return script.narrowing();
     }
 }
