@@ -2429,25 +2429,26 @@ final class Coverages {
                 // asking of the candidates ended. A row found there has no place of its own, and is
                 // handed on as the witness it is and without the assignment of the candidate it was
                 // made beside.
-                CompositionShortfall besideShort = CompositionShortfall.NONE;
-                SearchOutcomes notRead = SearchOutcomes.none();
+                //
+                // And what it came to is an outcome beside the candidates' and not a mark on them:
+                // what was built and where the search was incomplete are two facts, and an outcome
+                // that is a row has nowhere to carry the second.
+                SearchOutcomes beside = SearchOutcomes.none();
                 if (besideRows.isPresent()
                         && quantity.searchGoalAt(criterion) instanceof PointSearchGoal.ByObservation) {
-                    BesideRows beside =
+                    BesideRows stage =
                             besideWhatRan(ranBefore, criterion, label, rows, besideRows.get());
-                    if (beside.witness().isPresent()) {
-                        return Looked.besideARun(beside.witness().get());
+                    if (stage.witness().isPresent()) {
+                        return Looked.besideARun(stage.witness().get());
                     }
-                    besideShort = besideRows.get().shortOf();
-                    notRead = beside.notRead();
+                    beside = stage.cameTo();
                 }
                 if (shortAtEveryValue) {
-                    return new Looked(last.alsoShortOf(besideShort).plus(notRead), first,
-                            Optional.empty());
+                    return new Looked(last.plus(beside), first, Optional.empty());
                 }
                 if (nothingMoreAsked != null) {
-                    return new Looked(endedBy(last, nothingMoreAsked, besideShort).plus(notRead),
-                            first, Optional.empty());
+                    return new Looked(endedBy(last, nothingMoreAsked).plus(beside), first,
+                            Optional.empty());
                 }
                 // The count ran out, and whether that is what ended the asking is the realizer's to
                 // say. Asked once more and for nothing else: a figure reported where the values
@@ -2456,22 +2457,21 @@ final class Coverages {
                 // between the point and another value has to say so.
                 //
                 // Nothing is put to the point here, so no value is tried and none is charged for.
-                return new Looked(endedBy(last, realized(criterion, rows, able, region, tried),
-                        besideShort).plus(notRead), first, Optional.empty());
+                return new Looked(endedBy(last, realized(criterion, rows, able, region, tried))
+                        .plus(beside), first, Optional.empty());
             }
 
             /**
              * What looking beside the rows the candidates ran came to: the row that stands at the
-             * point where one did, and otherwise the first row that was built and could not be read
-             * back.
+             * point where one did, and otherwise what the looking itself came to.
              *
-             * <p>The second is kept and not left out, as it is for a candidate: a row whose run
-             * nothing could read is a row built that a search was unable to say anything of, and a
-             * point looked for with a hundred such rows has not been looked for as one with none.
-             * Only the first is kept, since the rest are the same news.
+             * <p>That is the first row built whose run was watched and could not be told, which
+             * a candidate's is kept as, and what the looking was short of where something stopped
+             * it. A row whose read-back failed outright is neither: it is classed as a candidate
+             * of that kind is, as a search that built a row and did not find the point at it.
              */
             private record BesideRows(Optional<ItemAssessment.Attempt.Certified> witness,
-                                      SearchOutcomes notRead) {}
+                                      SearchOutcomes cameTo) {}
 
             /**
              * Where a row at {@code criterion} along {@code able} would stand, or why none is
@@ -2613,7 +2613,15 @@ final class Coverages {
                                 distanceFrom(criterion, back.read())), null));
                     }
                 }
-                return new BesideRows(Optional.empty(), notRead);
+                // And where something stopped the looking, it is an outcome of its own beside the
+                // row that could not be read: short in the vocabulary it was short in.
+                CompositionShortfall stopped = spent.shortOf();
+                return new BesideRows(Optional.empty(), stopped.nothing() ? notRead
+                        : notRead.plus(SearchOutcomes.of(ItemAssessment.Attempt.ofAStageShortOf(
+                                new Generator.UnresolvedCombination(List.of(label),
+                                        Generator.UnresolvedCombination.Reason
+                                                .NO_CERTIFIED_WITNESS),
+                                within, stopped))));
             }
 
             /** A row waiting to have the rows beside it run, with those it has yet to give. */
@@ -2685,16 +2693,7 @@ final class Coverages {
              * word is about what was tried rather than about the point, which is a second half and
              * not a different first one.
              */
-            private SearchOutcomes endedBy(SearchOutcomes last, Realization ended,
-                                           CompositionShortfall beside) {
-                // The rule above is about the asking of the candidates, and the second stage's
-                // shortfall is another thing: it joins what each outcome is short of whatever
-                // shape the outcome is in ({@link ItemAssessment.Attempt#alsoShortOf}), and is not
-                // held to the rule that only an outcome naming nothing is said to be short.
-                return endedAskingOf(last, ended).alsoShortOf(beside);
-            }
-
-            private SearchOutcomes endedAskingOf(SearchOutcomes last, Realization ended) {
+            private SearchOutcomes endedBy(SearchOutcomes last, Realization ended) {
                 if (ended instanceof Realization.Found) {
                     return overLessThanThePointHad(last,
                             Set.of(CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH), Set.of(),
@@ -2725,8 +2724,8 @@ final class Coverages {
              *
              * <p>For the asking of the candidates, which is why it leaves alone an outcome that
              * already says what fell short. What a later stage of the same search was short of is
-             * not that: it is a second dimension, and joins what every outcome says whatever its
-             * shape ({@link ItemAssessment.Attempt#alsoShortOf}).
+             * not that: it is an outcome of its own beside these
+             * ({@link ItemAssessment.Attempt#ofAStageShortOf}), and is not held to this rule.
              */
             private SearchOutcomes overLessThanThePointHad(SearchOutcomes outcomes,
                     Set<CompositionBudget> budgets, Set<CompositionRepertoire> repertoires,

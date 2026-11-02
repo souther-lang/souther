@@ -505,7 +505,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Iterator;",
                     "holds the values made of one type to the same figure, and says it was reached"
                             + " through the counter it is handed"),
-            Map.entry("souther.compiler.query.Coverages$2#endedAskingOf("
+            Map.entry("souther.compiler.query.Coverages$2#endedBy("
                             + "Lsouther/compiler/query/SearchOutcomes;"
                             + "Lsouther/compiler/partition/Realization;)"
                             + "Lsouther/compiler/query/SearchOutcomes;",

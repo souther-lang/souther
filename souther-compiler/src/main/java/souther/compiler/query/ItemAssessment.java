@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.MeasureReason;
+import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
@@ -10,15 +11,14 @@ import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.NotOwedReason;
 import souther.compiler.partition.ObservedInputs;
+import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
 import java.util.Collection;
 import java.util.EnumSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Everything known about one of the four coverage items of a border.
@@ -459,82 +459,37 @@ public sealed interface ItemAssessment {
                     Attempt.Unavailable {
 
         /**
-         * {@code attempt}, said to be short as well of what {@code extra} says.
+         * What a second stage of a search came to when it found nothing, and what it was short of:
+         * the outcome of that stage, to be kept beside the outcomes of the first.
          *
-         * <p><b>Total over the outcomes, and the one place that is.</b> A search that stopped, one
-         * that walked some of a population, one a figure limited and one that came to nothing each
-         * carry what they were short of in their own shape, and what a second stage of the same
-         * search was short of has to join it whichever shape it is in. Written by the caller for
-         * the shape it expected, an outcome of another shape took nothing and the stage's shortfall
-         * was lost without a word. A new outcome is a compile error here, and not a case that
-         * quietly keeps what it had.
+         * <p><b>A search of its own, and not a mark on the first.</b> What was built and what a
+         * search was incomplete in are two facts, and an outcome that is a row has no place to
+         * carry the second: written onto the outcomes of the first stage, a stage that came to a
+         * row, a stop or a limit each took it in its own way, or took nothing, and the shortfall
+         * was lost without a word. Kept as an outcome beside them it is read as every other is
+         * ({@link SearchOutcomes#prevented}), as a gap of its own whatever the first stage came to.
          *
-         * <p>Each vocabulary joins its own: the figures to the figures that stopped it, the
-         * populations to those it walked some of, the numbers it could not hold to the numbers it
-         * could not hold. An outcome that was not short of figures and is now becomes the one that
-         * was limited, since a figure is what a reader raises.
+         * <p>Limited where a figure is why, since a figure is what a reader raises, and otherwise
+         * a search that walked some of a population or could not hold a number.
          *
-         * <p>Rows and what was not searched are as they were: a row built is not made less by what
-         * a search beside it was short of, and an outcome that composed nothing was short of
-         * nothing a second stage could add to.
+         * @param extra what the stage was short of, which says something: a stage that was short
+         *              of nothing came to nothing for a reason of the model's and has no
+         *              outcome of this kind
          */
-        static Attempt alsoShortOf(Attempt attempt, CompositionShortfall extra) {
+        static Attempt ofAStageShortOf(Generator.UnresolvedCombination why, WayToTheBorder way,
+                                       CompositionShortfall extra) {
             if (extra.nothing()) {
-                return attempt;
+                throw new IllegalArgumentException("a stage short of nothing has no shortfall"
+                        + " to be an outcome of: " + extra);
             }
-            return switch (attempt) {
-                case Certified _, Unverified _, Unplanned _, Unavailable _ -> attempt;
-                case Unresolved it -> extra.figures().isEmpty()
-                        ? new Unexhausted(it.why(), it.way(), it.uncomposed(),
-                                PublicationOrders.COMPOSITION_REPERTOIRES.keep(extra.populations()),
-                                PublicationOrders.COMPOSITION_CAPACITIES.keep(extra.unheld()))
-                        : new Limited(it.why(), it.way(), it.uncomposed(),
-                                PublicationOrders.COMPOSITION_BUDGETS.keep(extra.figures()),
-                                PublicationOrders.COMPOSITION_REPERTOIRES.keep(extra.populations()),
-                                PublicationOrders.COMPOSITION_CAPACITIES.keep(extra.unheld()));
-                case Unexhausted it -> extra.figures().isEmpty()
-                        ? new Unexhausted(it.why(), it.way(), it.uncomposed(),
-                                PublicationOrders.COMPOSITION_REPERTOIRES.keep(
-                                        joined(it.notAllOf().written(), extra.populations())),
-                                PublicationOrders.COMPOSITION_CAPACITIES.keep(
-                                        joined(it.unheld().written(), extra.unheld())))
-                        : new Limited(it.why(), it.way(), it.uncomposed(),
-                                PublicationOrders.COMPOSITION_BUDGETS.keep(extra.figures()),
-                                PublicationOrders.COMPOSITION_REPERTOIRES.keep(
-                                        joined(it.notAllOf().written(), extra.populations())),
-                                PublicationOrders.COMPOSITION_CAPACITIES.keep(
-                                        joined(it.unheld().written(), extra.unheld())));
-                case Limited it -> new Limited(it.why(), it.way(), it.uncomposed(),
-                        PublicationOrders.COMPOSITION_BUDGETS.keep(
-                                joined(it.limitedBy().written(), extra.figures())),
-                        PublicationOrders.COMPOSITION_REPERTOIRES.keep(
-                                joined(it.notAllOf().written(), extra.populations())),
-                        PublicationOrders.COMPOSITION_CAPACITIES.keep(
-                                joined(it.unheld().written(), extra.unheld())));
-                case Stopped it -> {
-                    Set<CompositionBudget> figures =
-                            joined(it.stoppedBy().written(), extra.figures());
-                    // The word is the figures', and a stop by more of them says what the most
-                    // far-reaching of them says ({@code Stopped} checks the two agree).
-                    Generator.UnresolvedCombination said = new Generator.UnresolvedCombination(
-                            it.why().classes(),
-                            Generator.UnresolvedCombination.Reason.wordFor(figures),
-                            it.why().detail(), it.why().said(), it.why().alsoShort());
-                    yield new Stopped(said, it.way(), it.uncomposed(),
-                            PublicationOrders.COMPOSITION_BUDGETS.keep(figures),
-                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(
-                                    joined(it.notAllOf().written(), extra.populations())),
-                            PublicationOrders.COMPOSITION_CAPACITIES.keep(
-                                    joined(it.unheld().written(), extra.unheld())));
-                }
-            };
-        }
-
-        private static <T> Set<T> joined(Collection<? extends T> held,
-                                         Collection<? extends T> more) {
-            Set<T> both = new LinkedHashSet<>(held);
-            both.addAll(more);
-            return both;
+            return extra.figures().isEmpty()
+                    ? new Unexhausted(why, way, CompositionAccount.NOTHING,
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(extra.populations()),
+                            PublicationOrders.COMPOSITION_CAPACITIES.keep(extra.unheld()))
+                    : new Limited(why, way, CompositionAccount.NOTHING,
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(extra.figures()),
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(extra.populations()),
+                            PublicationOrders.COMPOSITION_CAPACITIES.keep(extra.unheld()));
         }
 
         /**

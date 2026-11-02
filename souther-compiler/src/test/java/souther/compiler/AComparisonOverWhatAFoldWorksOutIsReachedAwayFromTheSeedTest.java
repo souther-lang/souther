@@ -268,5 +268,10 @@ class AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest {
         assertTrue(!open.isEmpty(), open.toString());
         assertTrue(open.stream().allMatch(line -> line.contains("then rows beside those")),
                 open.toString());
+        // And the search was cut by the figure of what it makes beside the rows run — the one
+        // thing that stopped it, since nothing is there to be found — which the report names.
+        assertTrue(open.stream().allMatch(line -> line.contains(
+                        "how many candidates beside the rows run are made for a point")),
+                open.toString());
     }
 }
