@@ -488,6 +488,23 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/StatementsOfAnInput;)"
                             + "Lsouther/compiler/partition/InputNumbersAnAnswerTurnsOn$Pairs;",
                     "stops offering pairs at the figure and says whether some were left out"),
+            // The candidates made beside the rows a point's candidates ran: one counter holds the
+            // figure, and it is handed on as a shortfall (RowsBesideBudget#shortOf), which the
+            // search for the point says in the answer it gives where the count was reached.
+            Map.entry("souther.compiler.partition.Generator$RowsBesideBudget#<init>()V",
+                    "the candidates made beside the rows run for one point, which is where the"
+                            + " count starts"),
+            Map.entry("souther.compiler.partition.Generator$RowsBesideBudget#<clinit>()V",
+                    "the candidates made beside the rows run for one point, which is the figure"
+                            + " the count starts from and is said when it is reached"),
+            Map.entry("souther.compiler.partition.Generator#rowsBeside("
+                            + "Lsouther/compiler/partition/Generator$GeneratedRow;"
+                            + "Ljava/util/List;Lsouther/compiler/partition/RowWriting;"
+                            + "Lsouther/compiler/partition/InputsRowsRanWith;"
+                            + "Lsouther/compiler/partition/Generator$RowsBesideBudget;)"
+                            + "Ljava/util/Iterator;",
+                    "holds the values made of one type to the same figure, and says it was reached"
+                            + " through the counter it is handed"),
             Map.entry("souther.compiler.query.Coverages$2#endedBy("
                             + "Lsouther/compiler/query/SearchOutcomes;"
                             + "Lsouther/compiler/partition/Realization;)"

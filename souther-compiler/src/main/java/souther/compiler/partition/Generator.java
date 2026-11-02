@@ -843,6 +843,9 @@ public final class Generator {
                              // Likewise the choices of a number for each of several totals past
                              // this one: the search came to is about the choices it tried.
                              COMBINATIONS_OF_TOTALS_TRIED,
+                             // The rows beside the rows run, past this one, were never made or
+                             // run: the point is short of them.
+                             ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT,
                              // The counts a string is written for past this one, and the lengths
                              // past the ones looked at, were never asked for either.
                              CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
@@ -2536,6 +2539,24 @@ public final class Generator {
     private static Growth aListGrownAmong(InputsRowsRanWith ranWith, MeasuredInput subject,
                                           CandidateCheck check, ReplacementWitness looking,
                                           NearbyValues.Put where) {
+        return aListGrownAmong(ranWith, subject, check, new ElementsOfAType.Stops() {
+
+            @Override
+            public void met(CompositionShortfall shortfall) {
+                looking.composingMet(shortfall);
+            }
+
+            @Override
+            public void limitedAt(int most) {
+                looking.composingStopped(List.of(
+                        WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(most)));
+            }
+        }, where, MOST_REPAIRS);
+    }
+
+    private static Growth aListGrownAmong(InputsRowsRanWith ranWith, MeasuredInput subject,
+                                          CandidateCheck check, ElementsOfAType.Stops stops,
+                                          NearbyValues.Put where, int most) {
         // What stands for a type is the same for every row and list the search grows, so it is one
         // for the search and made as far as the search asks, its stops said as they are met. A
         // type's values are bounded as a composing's candidates are, and the bound is said as that
@@ -2544,19 +2565,7 @@ public final class Generator {
                 standingFor -> subject.representativesHolding(standingFor,
                         FieldDomains.ConstructionLimits.NONE),
                 ofOne -> ElementsOfAType.withOneElement(ofOne, subject.ruleReading()),
-                subject.ruleReading(), check, MOST_REPAIRS, new ElementsOfAType.Stops() {
-
-                    @Override
-                    public void met(CompositionShortfall shortfall) {
-                        looking.composingMet(shortfall);
-                    }
-
-                    @Override
-                    public void limitedAt(int most) {
-                        looking.composingStopped(List.of(
-                                WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(most)));
-                    }
-                });
+                subject.ruleReading(), check, most, stops);
         return (value, type, reading, which, within) -> within == null
                 ? NearbyValues.grown(value, type, reading, ranWith, elements::of, where, which)
                 : NearbyValues.grownWithin(value, type, reading, ranWith, elements::of, where,
@@ -2564,7 +2573,7 @@ public final class Generator {
     }
 
     /** How many elements the lists in {@code row} hold between them, at every depth. */
-    private static int elementsHeld(List<ObservedValue> row) {
+    public static int elementsHeld(List<ObservedValue> row) {
         int n = 0;
         for (ObservedValue each : row) {
             n += elementsIn(each);
@@ -2704,28 +2713,163 @@ public final class Generator {
      */
     private static final class Examining {
 
-        private final ReplacementWitness looking;
+        private final Runnable whenSpent;
 
-        private int left = MOST_REPAIRS;
+        private int left;
 
         private boolean said;
 
         private Examining(ReplacementWitness looking) {
-            this.looking = looking;
+            this(MOST_REPAIRS, () -> looking.composingStopped(
+                    List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(MOST_REPAIRS))));
+        }
+
+        private final RowsBesideBudget shared;
+
+        private Examining(int most, Runnable whenSpent) {
+            this.left = most;
+            this.whenSpent = whenSpent;
+            this.shared = null;
+        }
+
+        private Examining(RowsBesideBudget shared) {
+            this.left = 0;
+            this.whenSpent = () -> { };
+            this.shared = shared;
         }
 
         /** Whether one more candidate may be made, the first one past the bound said as stopped. */
         boolean oneMore() {
+            if (shared != null) {
+                return shared.oneMore();
+            }
             if (left > 0) {
                 left--;
                 return true;
             }
             if (!said) {
                 said = true;
-                looking.composingStopped(List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS
-                        .at(MOST_REPAIRS)));
+                whenSpent.run();
             }
             return false;
+        }
+    }
+
+    /**
+     * The rows that stand beside a row a run read back: a list holding one more element or two, a
+     * list with one element changed for one the rows of the module ran the position with, and a
+     * whole number one away. Each is written through the decoder every value of a row is, and what
+     * it runs to is for the run to say.
+     *
+     * <p>The same candidates a rewrite of a walk is asked about ({@link #candidatesBeside}); what
+     * differs is what they are for, and that is the caller's. Made as they are asked for, in the
+     * order the three are named, and no more than {@link
+     * CompositionBudget#ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT} between the rows of one
+     * {@code spent}.
+     *
+     * @param base    what the row was made for and the answers it stands the dependencies in with,
+     *                which its neighbours keep
+     * @param seen    the inputs of the row as its run read them back
+     * @param ranWith the values the rows of the module ran each type with
+     * @param spent   how many more rows may be made, shared by the rows of one search
+     */
+    public static Iterator<GeneratedRow> rowsBeside(GeneratedRow base, List<ObservedValue> seen,
+                                                    RowWriting writing, InputsRowsRanWith ranWith,
+                                                    RowsBesideBudget spent) {
+        MeasuredInput subject = writing.subject();
+        CandidateCheck check = writing.check();
+        Examining examining = new Examining(spent);
+        ElementsOfAType.Stops stops = new ElementsOfAType.Stops() {
+
+            @Override
+            public void met(CompositionShortfall shortfall) {
+                spent.met(shortfall);
+            }
+
+            @Override
+            public void limitedAt(int most) {
+                spent.valuesCutShort();
+            }
+        };
+        // What stands for a type is made once for the search and as far as it asks, as it is for
+        // a walk's rewrite, so the rows of one search share the growth. The values made of a type
+        // are held to the figure the rows are, so that reaching it is reaching that figure.
+        if (spent.growth == null) {
+            spent.growth = aListGrownAmong(ranWith, subject, check, stops,
+                    NearbyValues.Put.BEFORE_AND_AFTER,
+                    CompositionBudget.ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT.maximum());
+        }
+        Beside grown = grownTwice(spent.growth, List.of());
+        Beside changed = (value, type, reading, _) ->
+                NearbyValues.withAnElementChanged(value, type, reading, ranWith);
+        List<Iterator<GeneratedRow>> in = List.of(
+                candidatesBeside(seen, subject, base.purposes(), check, base.answers(), grown,
+                        examining),
+                candidatesBeside(seen, subject, base.purposes(), check, base.answers(), changed,
+                        examining),
+                candidatesBeside(seen, subject, base.purposes(), check, base.answers(),
+                        A_WHOLE_NUMBER_MOVED, examining));
+        return inOrder(in.size(), in::get);
+    }
+
+    /**
+     * What the rows beside a point's runs may still be made of, and what stopped them where they
+     * were stopped. One for the point, whichever way the point is looked along.
+     *
+     * <p>Two things are kept apart. The figure is reached only by a candidate being asked for
+     * after it was spent ({@link #oneMore}), or by the values made of a type reaching it; whatever
+     * else the building of values met comes through as what it is, a shortfall of its own
+     * vocabulary ({@link #met}), and is not turned into this figure.
+     */
+    public static final class RowsBesideBudget {
+
+        private static final CompositionBudget FIGURE =
+                CompositionBudget.ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT;
+
+        private int left = FIGURE.maximum();
+
+        private boolean figureReached;
+
+        private final Set<CompositionBudget> otherFigures = new LinkedHashSet<>();
+
+        private final Set<CompositionRepertoire> populations = new LinkedHashSet<>();
+
+        private final Set<CompositionCapacity> unheld = new LinkedHashSet<>();
+
+        /** What stands for the types the search grows lists of, made as the search asks. */
+        private Growth growth;
+
+        /** Whether one more candidate may be made; the first asked for past the figure is the
+         *  one it stopped. */
+        boolean oneMore() {
+            if (left > 0) {
+                left--;
+                return true;
+            }
+            figureReached = true;
+            return false;
+        }
+
+        /** The values made of a type were cut at the figure: rows past them were not made. */
+        void valuesCutShort() {
+            figureReached = true;
+        }
+
+        /** What the building of a value met, kept as what it is. */
+        void met(CompositionShortfall shortfall) {
+            otherFigures.addAll(shortfall.figures());
+            populations.addAll(shortfall.populations());
+            unheld.addAll(shortfall.unheld());
+        }
+
+        /** What the rows beside were short of, in every vocabulary it was short in; nothing where
+         *  nothing stopped them. */
+        public CompositionShortfall shortOf() {
+            Set<CompositionBudget> figures = new LinkedHashSet<>(otherFigures);
+            if (figureReached) {
+                figures.add(FIGURE);
+            }
+            return CompositionShortfall.of(figures, populations, unheld);
         }
     }
 
@@ -2743,7 +2887,15 @@ public final class Generator {
                                                            CandidateCheck check,
                                                            List<StoodInAnswer> answers,
                                                            Beside how, Examining examining) {
-        MeasuredInput subject = axes.subject();
+        return candidatesBeside(seen, axes.subject(), purposes, check, answers, how, examining);
+    }
+
+    private static Iterator<GeneratedRow> candidatesBeside(List<ObservedValue> seen,
+                                                           MeasuredInput subject,
+                                                           List<Purpose> purposes,
+                                                           CandidateCheck check,
+                                                           List<StoodInAnswer> answers,
+                                                           Beside how, Examining examining) {
         // As the run had them, written once: a candidate moves one position and leaves the others
         // as they were.
         List<FixtureTemplate> kept = new ArrayList<>();

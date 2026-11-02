@@ -163,7 +163,7 @@ public final class Replacements {
          * @param ofTheModule the rows of each behavior of this module, read once for all the
          *                    subjects of the module
          */
-        private static InputsRowsRanWith inputsRowsRanWith(Db db, CheckSurface prepared,
+        static InputsRowsRanWith inputsRowsRanWith(Db db, CheckSurface prepared,
                 String subject, Map<String, List<List<InputsRowsRanWith.Taken>>> ofTheModule) {
             List<List<List<InputsRowsRanWith.Taken>>> called = new ArrayList<>();
             for (ValueName.Behavior each : CalledBehaviors.of(db, prepared.name(), subject)) {

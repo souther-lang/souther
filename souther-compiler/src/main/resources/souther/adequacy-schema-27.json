@@ -159,6 +159,7 @@
         "places_a_position_on_the_way_is_looked_at",
         "assignments_on_the_way_composed_for",
         "values_a_point_is_tried_with",
+        "rows_beside_a_run_are_made_for_a_point",
         "paths_of_a_decision_read",
         "conditions_a_decision_takes_in_to_prove",
         "readings_of_one_condition",

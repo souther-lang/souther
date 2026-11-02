@@ -2904,7 +2904,8 @@ public final class Adequacy {
                     : probing(sig, subject, StatementsOfAnInput.of(read), constructing(db, name),
                             runningRowsOf(db, name, trialling(db, name), behavior, sig,
                                     RequiredDependencies.of(db, name, behavior)),
-                            answering(db, name, behavior, subject));
+                            answering(db, name, behavior, subject),
+                            rowsRanWith(db, name, behavior));
             if (probe == null) {
                 // Nothing builds the values, or nothing says what the behavior has to be stood in
                 // for, so no candidate goes through anything. Absent rather than an answer saying
@@ -3857,7 +3858,8 @@ public final class Adequacy {
                     probing(sig, subject, StatementsOfAnInput.of(read), constructing(db, name),
                             runningRowsOf(db, name, trialling(db, name), behavior, sig,
                                     RequiredDependencies.of(db, name, behavior)),
-                            answering(db, name, behavior, subject)),
+                            answering(db, name, behavior, subject),
+                            rowsRanWith(db, name, behavior)),
                     divided.reaching())));
         }
 
@@ -3879,9 +3881,34 @@ public final class Adequacy {
     static Coverages.Probe probing(Sig sig, souther.compiler.partition.MeasuredInput subject,
                                    StatementsOfAnInput ofTheRow,
                                    FixturesAtTheBoundary building, Generator.Trial trial,
-                                   AnswersForARule answers) {
+                                   AnswersForARule answers,
+                                   Supplier<souther.compiler.partition.InputsRowsRanWith> ranWith) {
         return building == null || answers == null ? null
-                : new ARowBuiltAndRun(sig, subject, ofTheRow, building, trial, answers);
+                : new ARowBuiltAndRun(sig, subject, ofTheRow, building, trial, answers, ranWith);
+    }
+
+    /**
+     * What the rows of the module ran with, read once and only if a search asks: the values a row
+     * beside a run is made of ({@link Generator#rowsBeside}).
+     */
+    private static Supplier<souther.compiler.partition.InputsRowsRanWith> rowsRanWith(
+            Db db, String name, String behavior) {
+        return new Supplier<>() {
+
+            private souther.compiler.partition.InputsRowsRanWith read;
+
+            @Override
+            public souther.compiler.partition.InputsRowsRanWith get() {
+                if (read == null) {
+                    Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(name));
+                    read = prepared.present()
+                            ? Replacements.Readings.inputsRowsRanWith(db, prepared.value(),
+                                    behavior, new HashMap<>())
+                            : souther.compiler.partition.InputsRowsRanWith.NONE;
+                }
+                return read;
+            }
+        };
     }
 
     /**
@@ -3920,10 +3947,14 @@ public final class Adequacy {
          */
         private final StatementsOfAnInput ofTheRow;
 
+        private final Supplier<souther.compiler.partition.InputsRowsRanWith> ranWith;
+
         private ARowBuiltAndRun(Sig sig, souther.compiler.partition.MeasuredInput subject,
                                 StatementsOfAnInput ofTheRow,
                                 FixturesAtTheBoundary building, Generator.Trial trial,
-                                AnswersForARule answers) {
+                                AnswersForARule answers,
+                                Supplier<souther.compiler.partition.InputsRowsRanWith> ranWith) {
+            this.ranWith = ranWith;
             this.sig = sig;
             this.subject = subject;
             this.ofTheRow = ofTheRow;
@@ -3998,6 +4029,12 @@ public final class Adequacy {
                 EvaluationContext.rethrowUnlessTheRuntimeIsAbsent(e);
                 return List.of();
             }
+        }
+
+        @Override
+        public Iterator<Generator.GeneratedRow> rowsBeside(Generator.GeneratedRow base,
+                List<ObservedValue> seen, Generator.RowsBesideBudget spent) {
+            return Generator.rowsBeside(base, seen, rowWriting(), ranWith.get(), spent);
         }
 
         @Override

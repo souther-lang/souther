@@ -2,13 +2,16 @@ package souther.compiler.query;
 
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.MeasureReason;
+import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
+import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.NotOwedReason;
 import souther.compiler.partition.ObservedInputs;
+import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
@@ -454,6 +457,40 @@ public sealed interface ItemAssessment {
             permits Attempt.Certified, Attempt.Unverified, Attempt.Stopped,
                     Attempt.Unexhausted, Attempt.Limited, Attempt.Unplanned, Attempt.Unresolved,
                     Attempt.Unavailable {
+
+        /**
+         * What a second stage of a search came to when it found nothing, and what it was short of:
+         * the outcome of that stage, to be kept beside the outcomes of the first.
+         *
+         * <p><b>A search of its own, and not a mark on the first.</b> What was built and what a
+         * search was incomplete in are two facts, and an outcome that is a row has no place to
+         * carry the second: written onto the outcomes of the first stage, a stage that came to a
+         * row, a stop or a limit each took it in its own way, or took nothing, and the shortfall
+         * was lost without a word. Kept as an outcome beside them it is read as every other is
+         * ({@link SearchOutcomes#prevented}), as a gap of its own whatever the first stage came to.
+         *
+         * <p>Limited where a figure is why, since a figure is what a reader raises, and otherwise
+         * a search that walked some of a population or could not hold a number.
+         *
+         * @param extra what the stage was short of, which says something: a stage that was short
+         *              of nothing came to nothing for a reason of the model's and has no
+         *              outcome of this kind
+         */
+        static Attempt ofAStageShortOf(Generator.UnresolvedCombination why, WayToTheBorder way,
+                                       CompositionShortfall extra) {
+            if (extra.nothing()) {
+                throw new IllegalArgumentException("a stage short of nothing has no shortfall"
+                        + " to be an outcome of: " + extra);
+            }
+            return extra.figures().isEmpty()
+                    ? new Unexhausted(why, way, CompositionAccount.NOTHING,
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(extra.populations()),
+                            PublicationOrders.COMPOSITION_CAPACITIES.keep(extra.unheld()))
+                    : new Limited(why, way, CompositionAccount.NOTHING,
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(extra.figures()),
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(extra.populations()),
+                            PublicationOrders.COMPOSITION_CAPACITIES.keep(extra.unheld()));
+        }
 
         /**
          * What a search of the region came to, whichever way it came out.

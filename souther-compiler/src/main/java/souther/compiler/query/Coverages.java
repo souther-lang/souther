@@ -31,10 +31,12 @@ import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.SeenComparison;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowRef;
 import souther.compiler.observe.Target;
@@ -50,6 +52,7 @@ import souther.compiler.partition.Border;
 import souther.compiler.partition.DrawnBoundary;
 import souther.compiler.partition.InputUse;
 import souther.compiler.partition.ClassCoexistence;
+import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.DerivedValue;
 import souther.compiler.partition.ReachingCuts;
@@ -58,6 +61,7 @@ import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.ThresholdOfADerivedValue;
+import souther.compiler.partition.Level;
 import souther.compiler.partition.LevelRealizer;
 import souther.compiler.partition.PointSearchGoal;
 import souther.compiler.partition.Realization;
@@ -80,16 +84,20 @@ import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.partition.WhyKept;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.PriorityQueue;
 import java.util.SequencedMap;
 import java.util.SequencedSet;
 import java.util.Set;
@@ -1078,6 +1086,16 @@ final class Coverages {
          * the candidate was composed.
          */
         RowAsRead read(souther.compiler.partition.RowToRun row);
+
+        /**
+         * The rows beside a row a run read back, as many as {@code spent} has left: the row with
+         * an element put in a list it holds or changed, or a whole number moved by one, each held
+         * to the decoder. None where nothing is known to make them of.
+         */
+        default Iterator<Generator.GeneratedRow> rowsBeside(Generator.GeneratedRow base,
+                List<ObservedValue> seen, Generator.RowsBesideBudget spent) {
+            return Collections.emptyIterator();
+        }
 
         /** What the rows built and run here are written against: their parameters and the
          *  decoder every value put in a row besides the ones a search composed is held to. */
@@ -2222,15 +2240,23 @@ final class Coverages {
                         : UnaryOperator.identity();
                 return looked(criterion, label, narrowing,
                         answeredAs.map(holds -> toRows.forAClass(holds, otherReadings))
-                                .orElse(toRows)).outcomes();
+                                .orElse(toRows),
+                        Optional.of(new Generator.RowsBesideBudget())).outcomes();
             }
 
+            /**
+             * Not looked for beside the rows the candidates ran. The row that tells a line apart is
+             * kept with the input it was composed at ({@link ARowTellingTheLinesApart}), and a row
+             * made beside another was composed at no input of its own: handed that of the
+             * candidate it was made beside, the row and the place it is said to stand at would be
+             * two askings' answers.
+             */
             @Override
             public ARowTellingTheLinesApart.AtOneReading tellingApart(
                     Criterion criterion, String label, AnotherLineTheRowsAllow.Stands line,
                     UnaryOperator<SearchRegion> narrowing) {
-                Looked looked = looked(criterion, label, narrowing, toRows);
-                return ARowTellingTheLinesApart.of(border, line, looked.composed(),
+                Looked looked = looked(criterion, label, narrowing, toRows, Optional.empty());
+                return ARowTellingTheLinesApart.of(border, line, looked.placement().orElse(null),
                         looked.outcomes());
             }
 
@@ -2242,10 +2268,15 @@ final class Coverages {
              * from the one beside it are looked for the same way — a place the criterion accepts,
              * a row built there, and the row read back — and what differs is the region. Written
              * twice, the second would be the first without whatever the first learned since.
+             *
+             * @param besideRows what the rows made beside the ones the candidates ran may spend,
+             *                   once for the point whichever way it is looked along; empty where
+             *                   the caller cannot be handed a row that has no place of its own
              */
             private Looked looked(Criterion criterion, String label,
                                   UnaryOperator<SearchRegion> narrowing,
-                                  StandingAtAPoint.AtALine rows) {
+                                  StandingAtAPoint.AtALine rows,
+                                  Optional<Generator.RowsBesideBudget> besideRows) {
                 // Nothing to build against. Told apart from nobody having asked, which is not a
                 // state anything here can be in: this runs because somebody asked.
                 if (probe == null) {
@@ -2278,7 +2309,7 @@ final class Coverages {
                 // way whole came to: one of them coming to nothing says nothing of the others, and
                 // the way whole is the account every one of them is inside.
                 if (able.along().isEmpty()) {
-                    return lookedAlong(criterion, label, narrowing, rows, able);
+                    return lookedAlong(criterion, label, narrowing, rows, able, besideRows);
                 }
                 // Past the figure the way whole is looked along first where a condition it was not
                 // split at is composed against whole there — a statement the elements of one
@@ -2288,14 +2319,15 @@ final class Coverages {
                 Looked whole = null;
                 if (able.ways() instanceof Reachability.Ways.Whole past
                         && past.composedAgainstWhole(line.quantity().behavior())) {
-                    whole = lookedAlong(criterion, label, narrowing, rows, able);
+                    whole = lookedAlong(criterion, label, narrowing, rows, able, besideRows);
                     if (whole.witness().isPresent()) {
                         return whole;
                     }
                 }
                 SearchOutcomes alongEach = SearchOutcomes.none();
                 for (Reachability.Reaching along : able.along()) {
-                    Looked one = lookedAlong(criterion, label, narrowing, rows, along);
+                    Looked one = lookedAlong(criterion, label, narrowing, rows, along,
+                            besideRows);
                     if (one.witness().isPresent()) {
                         return one;
                     }
@@ -2310,14 +2342,15 @@ final class Coverages {
                     return new Looked(alongEach, null, Optional.empty());
                 }
                 return whole != null ? whole
-                        : lookedAlong(criterion, label, narrowing, rows, able);
+                        : lookedAlong(criterion, label, narrowing, rows, able, besideRows);
             }
 
             /** What looking for a row at {@code criterion} along {@code able} came to. */
             private Looked lookedAlong(Criterion criterion, String label,
                                        UnaryOperator<SearchRegion> narrowing,
                                        StandingAtAPoint.AtALine rows,
-                                       Reachability.Reaching able) {
+                                       Reachability.Reaching able,
+                                       Optional<Generator.RowsBesideBudget> besideRows) {
                 // A reading of the line under a case this way does not take. A line at a name the
                 // cases of a sum share is read under each case, and a way split at the cases a
                 // narrowing leaves is looked along each of them, so no row along this one is the
@@ -2341,6 +2374,12 @@ final class Coverages {
                 ValuesTried tried = ValuesTried.NONE;
                 SearchOutcomes last = null;
                 Realization.Found first = null;
+                List<Ran> ranBefore = new ArrayList<>();
+                // How the asking by the candidates ended, which is settled before the rows beside
+                // the ones run are looked at and said after: none of these ends the point, since a
+                // row beside is not a candidate this asking could have left out.
+                Realization nothingMoreAsked = null;
+                boolean shortAtEveryValue = false;
                 // As many askings as the way the row is found says, which is said where what is
                 // asked is ({@link PointSearchGoal#askedAtMost}) — and the first whatever it says,
                 // since the first is the point's answer: a goal with nothing to try is asked, and
@@ -2357,8 +2396,11 @@ final class Coverages {
                     // leaving a value out, and what the point came to is what the value that was
                     // composed came to — said with whatever of this compiler's ended the asking.
                     if (came.realized() == null) {
-                        return new Looked(last == null ? came.outcomes()
-                                : endedBy(last, came.came()), first, Optional.empty());
+                        if (last == null) {
+                            return new Looked(came.outcomes(), first, Optional.empty());
+                        }
+                        nothingMoreAsked = came.came();
+                        break;
                     }
                     // The row a reader is offered is the first one composed. Every asking after it
                     // is put a narrower question — the values already tried are not there to be
@@ -2371,8 +2413,10 @@ final class Coverages {
                     // Short of a population at this value that it is short of at every value: the
                     // next value is written as short, builds no row, and ends the asking with the
                     // word this one did, so it is not asked for.
+                    ranBefore.addAll(came.ran());
                     if (came.outcomes().shortWhateverTheValue()) {
-                        return new Looked(last, first, Optional.empty());
+                        shortAtEveryValue = true;
+                        break;
                     }
                     // Every way of standing the dependencies in was built and none of them stood,
                     // so this is the value that did not answer and not one of the rows it was built
@@ -2380,6 +2424,32 @@ final class Coverages {
                     // dependencies in would otherwise be allowed fewer values than one with fewer.
                     tried = tried.and(came.realized().fixing());
                 } while (++value < askings);
+                // What a run only works out is not placed by where the input stands, so a point
+                // the candidates did not reach is looked for beside the rows they ran — however the
+                // asking of the candidates ended. A row found there has no place of its own, and is
+                // handed on as the witness it is and without the assignment of the candidate it was
+                // made beside.
+                //
+                // And what it came to is an outcome beside the candidates' and not a mark on them:
+                // what was built and where the search was incomplete are two facts, and an outcome
+                // that is a row has nowhere to carry the second.
+                SearchOutcomes beside = SearchOutcomes.none();
+                if (besideRows.isPresent()
+                        && quantity.searchGoalAt(criterion) instanceof PointSearchGoal.ByObservation) {
+                    BesideRows stage =
+                            besideWhatRan(ranBefore, criterion, label, rows, besideRows.get());
+                    if (stage.witness().isPresent()) {
+                        return Looked.besideARun(stage.witness().get());
+                    }
+                    beside = stage.cameTo();
+                }
+                if (shortAtEveryValue) {
+                    return new Looked(last.plus(beside), first, Optional.empty());
+                }
+                if (nothingMoreAsked != null) {
+                    return new Looked(endedBy(last, nothingMoreAsked).plus(beside), first,
+                            Optional.empty());
+                }
                 // The count ran out, and whether that is what ended the asking is the realizer's to
                 // say. Asked once more and for nothing else: a figure reported where the values
                 // themselves had run out is a number an author raises to be told the same thing,
@@ -2387,10 +2457,21 @@ final class Coverages {
                 // between the point and another value has to say so.
                 //
                 // Nothing is put to the point here, so no value is tried and none is charged for.
-                return new Looked(endedBy(last, realized(criterion, rows, able, region, tried)),
-                        first,
-                        Optional.empty());
+                return new Looked(endedBy(last, realized(criterion, rows, able, region, tried))
+                        .plus(beside), first, Optional.empty());
             }
+
+            /**
+             * What looking beside the rows the candidates ran came to: the row that stands at the
+             * point where one did, and otherwise what the looking itself came to.
+             *
+             * <p>That is the first row built whose run was watched and could not be told, which
+             * a candidate's is kept as, and what the looking was short of where something stopped
+             * it. A row whose read-back failed outright is neither: it is classed as a candidate
+             * of that kind is, as a search that built a row and did not find the point at it.
+             */
+            private record BesideRows(Optional<ItemAssessment.Attempt.Certified> witness,
+                                      SearchOutcomes cameTo) {}
 
             /**
              * Where a row at {@code criterion} along {@code able} would stand, or why none is
@@ -2417,7 +2498,140 @@ final class Coverages {
              */
             private record Searching(Realization came, Realization.Found realized,
                                      SearchOutcomes outcomes,
-                                     Optional<ItemAssessment.Attempt.Certified> witness) {}
+                                     Optional<ItemAssessment.Attempt.Certified> witness,
+                                     List<Ran> ran) {
+
+                Searching(Realization came, Realization.Found realized, SearchOutcomes outcomes,
+                          Optional<ItemAssessment.Attempt.Certified> witness) {
+                    this(came, realized, outcomes, witness, List.of());
+                }
+            }
+
+            /**
+             * A row a run was read back from, which rows beside it are made of.
+             *
+             * @param built how the row came to be built, whose account its neighbours keep
+             * @param read  the inputs of the row as its run read them back
+             * @param distance how far the sides of the comparison came out from the item
+             */
+            private record Ran(Generator.BoundaryAttempt.Built built, ObservedInputs read,
+                               ExactRatio distance, int elements) {
+
+                /** A row run, with how many elements it holds counted once: the queue compares
+                 *  rows at every step, and the count walks every value of the row. */
+                Ran(Generator.BoundaryAttempt.Built built, ObservedInputs read,
+                    ExactRatio distance) {
+                    this(built, read, distance, Generator.elementsHeld(read.inputs()));
+                }
+            }
+
+            /**
+             * How far the sides of the comparison came out from the item on the nearest visit of
+             * the run {@code read} came back from, or null where no visit was kept.
+             */
+            private ExactRatio distanceFrom(Criterion criterion, ObservedInputs read) {
+                if (!(criterion.anchor() instanceof Level.OfTheQuantity anchor)
+                        || !(read.watched()
+                                instanceof Generator.Watched.Ran(var run))) {
+                    return null;
+                }
+                ExactRatio nearest = null;
+                for (ConditionOutcomeSite each : site) {
+                    for (SeenComparison visit : run.comparedAt(each)) {
+                        ExactRatio apart = ExactRatio.of(BigInteger.valueOf(visit.left())
+                                .subtract(BigInteger.valueOf(visit.right())));
+                        if (apart.minus(anchor.at())
+                                instanceof ExactAnswer.Held<ExactRatio>(var away)
+                                && (nearest == null || away.abs().compareTo(nearest) < 0)) {
+                            nearest = away.abs();
+                        }
+                    }
+                }
+                return nearest;
+            }
+
+            /**
+             * A row beside the rows the candidates ran that stands at {@code criterion}, where one
+             * does. The candidates write every container at one size and every element alike, so
+             * a point only elements unlike one another reach is left to the rows beside them: a
+             * list with another element put in it, an element changed for one a row of the module
+             * ran, a whole number one away. Each is read back by the run as a candidate is, and
+             * stands at the point only where the run says so; nothing here says a point is
+             * unreachable where none does.
+             *
+             * <p>Held to the region the way the candidates are. What a row has to be to be a witness
+             * here is not a place the solver's region admits — no placement was made — but what
+             * {@code rows} reads back: the comparison was visited, so the way to it was taken, and
+             * for a point of a class the row is outside the cases the other readings decide in
+             * ({@link StandingAtAPoint.AtALine#forAClass}). A row that is not is read back as one
+             * the point holds at nothing, and is not a witness.
+             *
+             * <p>The row whose run came out nearest the item is looked beside first, one
+             * neighbour at a time, so that a row a unit from the item is moved by one before the
+             * rows far from it are grown. Ties go to the row with fewer elements.
+             */
+            private BesideRows besideWhatRan(
+                    List<Ran> ran, Criterion criterion, String label,
+                    StandingAtAPoint.AtALine rows, Generator.RowsBesideBudget spent) {
+                SearchOutcomes notRead = SearchOutcomes.none();
+                Set<Generator.GeneratedRow> met = new HashSet<>();
+                PriorityQueue<Open> waiting = new PriorityQueue<>(
+                        Comparator.comparing(Open::key, Comparator.nullsLast(ExactRatio::compareTo))
+                                .thenComparingInt(each -> each.from().elements()));
+                ran.forEach(each -> {
+                    met.add(each.built().row());
+                    waiting.add(new Open(each, null));
+                });
+                while (!waiting.isEmpty()) {
+                    Open open = waiting.poll();
+                    Ran from = open.from();
+                    Iterator<Generator.GeneratedRow> beside = open.beside() != null
+                            ? open.beside()
+                            : probe.rowsBeside(from.built().row(), from.read().inputs(), spent);
+                    if (!beside.hasNext()) {
+                        continue;
+                    }
+                    Generator.GeneratedRow next = beside.next();
+                    // The row it came from waits for its next neighbour, behind the rows nearer
+                    // the item than it is.
+                    waiting.add(new Open(from, beside));
+                    if (!met.add(next)) {
+                        continue;
+                    }
+                    Generator.BoundaryAttempt.Built built = new Generator.BoundaryAttempt.Built(
+                            next, from.built().unrepresented(), false);
+                    ReadBack back = standingThere(probe, rows, criterion, built);
+                    ItemAssessment.Attempt came = whatCameOfIt(built, label, within, () -> back);
+                    if (came instanceof ItemAssessment.Attempt.Certified certified) {
+                        return new BesideRows(Optional.of(certified), SearchOutcomes.none());
+                    }
+                    if (came instanceof ItemAssessment.Attempt.Unverified && notRead.made().isEmpty()) {
+                        notRead = SearchOutcomes.of(came);
+                    }
+                    if (back.read() != null) {
+                        waiting.add(new Open(new Ran(built, back.read(),
+                                distanceFrom(criterion, back.read())), null));
+                    }
+                }
+                // And where something stopped the looking, it is an outcome of its own beside the
+                // row that could not be read: short in the vocabulary it was short in.
+                CompositionShortfall stopped = spent.shortOf();
+                return new BesideRows(Optional.empty(), stopped.nothing() ? notRead
+                        : notRead.plus(SearchOutcomes.of(ItemAssessment.Attempt.ofAStageShortOf(
+                                new Generator.UnresolvedCombination(List.of(label),
+                                        Generator.UnresolvedCombination.Reason
+                                                .NO_CERTIFIED_WITNESS),
+                                within, stopped))));
+            }
+
+            /** A row waiting to have the rows beside it run, with those it has yet to give. */
+            private record Open(Ran from, Iterator<Generator.GeneratedRow> beside) {
+
+                /** How far its run came out from the item, which is its place in the queue. */
+                ExactRatio key() {
+                    return from.distance();
+                }
+            }
 
             /**
              * What a walk over one region came to, and the assignment the row it composed was
@@ -2425,8 +2639,12 @@ final class Coverages {
              *
              * <p>The two together, because a caller shown one place and handed a row built at
              * another has been shown two answers about one search. {@code composed} is the
-             * realization the row in {@code outcomes} was built from, and is null exactly where no
-             * row was built.
+             * placement of numbers the rows in {@code outcomes} were built from, and it is absent
+             * where there is none: either no row was built, or the row is one found beside a row
+             * that ran ({@code besideARun}), which was made of no placement. The second is told
+             * from the first by {@code witness} being present, and a caller that needs the place
+             * a row was composed at asks for {@code placement()} and is not handed the placement
+             * of another row.
              *
              * <p>{@code witness} is the row that ran and stood at the point, and is held as that row
              * and not as a flag beside {@code composed}: a realization is where the search placed
@@ -2434,7 +2652,19 @@ final class Coverages {
              * reached except a run that reached it.
              */
             private record Looked(SearchOutcomes outcomes, Realization.Found composed,
-                                  Optional<ItemAssessment.Attempt.Certified> witness) {}
+                                  Optional<ItemAssessment.Attempt.Certified> witness) {
+
+                /** The row that stands at the point, found beside a row that ran: it was made of
+                 *  no placement, and is not given that of the row it was made beside. */
+                static Looked besideARun(ItemAssessment.Attempt.Certified witness) {
+                    return new Looked(SearchOutcomes.of(witness), null, Optional.of(witness));
+                }
+
+                /** The placement the rows in the outcomes were composed from, where there is one. */
+                Optional<Realization.Found> placement() {
+                    return Optional.ofNullable(composed);
+                }
+            }
 
             /** A way no value takes, said in the word for what the model settled it by. */
             private static Looked noRowTakes(String label, WayToTheBorder within,
@@ -2491,6 +2721,11 @@ final class Coverages {
              * two readings of a pair walk one order, and one may meet a figure while the other walks
              * some of a population or reaches a place it cannot hold; choosing one of them would
              * tell a reader to act on it alone.
+             *
+             * <p>For the asking of the candidates, which is why it leaves alone an outcome that
+             * already says what fell short. What a later stage of the same search was short of is
+             * not that: it is an outcome of its own beside these
+             * ({@link ItemAssessment.Attempt#ofAStageShortOf}), and is not held to this rule.
              */
             private SearchOutcomes overLessThanThePointHad(SearchOutcomes outcomes,
                     Set<CompositionBudget> budgets, Set<CompositionRepertoire> repertoires,
@@ -2553,11 +2788,22 @@ final class Coverages {
                         }
                         SearchOutcomes outcomes = SearchOutcomes.none();
                         ItemAssessment.Attempt.Certified witness = null;
+                        List<Ran> ran = new java.util.ArrayList<>();
                         for (souther.compiler.partition.Generator.BoundaryAttempt each : made) {
                             ItemAssessment.Attempt came = whatCameOfIt(each, label, within,
-                                    () -> standingThere(probe, rows, criterion,
-                                            (souther.compiler.partition.Generator
-                                                    .BoundaryAttempt.Built) each));
+                                    () -> {
+                                        ReadBack back = standingThere(probe, rows, criterion,
+                                                (souther.compiler.partition.Generator
+                                                        .BoundaryAttempt.Built) each);
+                                        if (back.read() != null) {
+                                            ran.add(new Ran(
+                                                    (souther.compiler.partition.Generator
+                                                            .BoundaryAttempt.Built) each,
+                                                    back.read(),
+                                                    distanceFrom(criterion, back.read())));
+                                        }
+                                        return back;
+                                    });
                             if (witness == null
                                     && came instanceof ItemAssessment.Attempt.Certified certified) {
                                 witness = certified;
@@ -2565,7 +2811,7 @@ final class Coverages {
                             outcomes = outcomes.plus(SearchOutcomes.of(came));
                         }
                         yield new Searching(answered, found, outcomes,
-                                Optional.ofNullable(witness));
+                                Optional.ofNullable(witness), ran);
                     }
                     // And the two ways of finding nothing are not one answer. A walk of the whole
                     // of what the rules leave that reaches no value settles the point; a search

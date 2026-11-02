@@ -21,15 +21,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class TheReasonAPointIsOpenSaysWhatItsRowsWereTriedAtTest {
 
+    private static final String BESIDE = " rows beside those with an element put in a list or"
+            + " changed for one a row of the module ran or a whole number moved by one";
+
     private static final String SIZES = "the containers the comparison names each holding the"
             + " same number of elements from 0 to 6 with element values left to their types and"
-            + " not chosen by this search";
+            + " then" + BESIDE;
 
     private static final String VALUES = "the whole numbers it names outside a container all at"
-            + " one of {0, 1, -1, 2}";
+            + " one of {0, 1, -1, 2} and then" + BESIDE;
 
     private static final String NO_ROW_AT_ON = "nothing could show a row can be written at the ON"
             + " point";
+
+    /**
+     * The same, with points that are even only. A total of an odd number below the first the score
+     * resets to is one no row comes to, whatever the search writes, and nothing in the types shows
+     * it — so a point there stays open however far the search goes.
+     */
+    private static String evenModel(String reached, String signature, String row) {
+        return model("0 && Int.floorMod(value, 2) == 0", reached, signature, row);
+    }
 
     /** The model of a fold over a list of points, whose comparison is the one under test. */
     private static String model(String lowest, String reached, String signature, String row) {
@@ -50,13 +62,13 @@ class TheReasonAPointIsOpenSaysWhatItsRowsWereTriedAtTest {
                 }
 
                 example add
-                    | (Score(48), Points(3)) -> Score(25)
+                    | (Score(48), Points(4)) -> Score(25)
                     | (Score(48), Points(2)) -> Score(50)
-                    | (Score(0), Points(1)) -> Score(1)
+                    | (Score(0), Points(2)) -> Score(2)
                     | (Score(40), Points(12)) -> Score(25)
                     | (Score(38), Points(12)) -> Score(50)
                     | (Score(25), Points(10)) -> Score(35)
-                    | (Score(50), Points(1)) -> Score(25)
+                    | (Score(50), Points(2)) -> Score(25)
 
                 behavior total : (ps: List<Points>) -> Score
 
@@ -90,7 +102,7 @@ class TheReasonAPointIsOpenSaysWhatItsRowsWereTriedAtTest {
     /** A comparison that names a list is told its sizes and nothing of whole numbers. */
     @Test
     void aComparisonNamingOnlyAListIsToldItsSizes() {
-        String human = report(model("0", "(ps) = total(ps).value == 20", "(ps: List<Points>)",
+        String human = report(evenModel("(ps) = total(ps).value == 21", "(ps: List<Points>)",
                 "([])"));
         assertTrue(human.contains(NO_ROW_AT_ON), human);
         assertTrue(human.contains(told(SIZES)), human);
@@ -101,8 +113,8 @@ class TheReasonAPointIsOpenSaysWhatItsRowsWereTriedAtTest {
     /** A comparison that names a whole number outside a container is told its values. */
     @Test
     void aComparisonNamingOnlyAWholeNumberIsToldItsValues() {
-        String human = report(model("0", "(q) = total([q, q]).value == 20", "(q: Points)",
-                "(Points(1))"));
+        String human = report(evenModel("(q) = total([q, q]).value == 21", "(q: Points)",
+                "(Points(2))"));
         assertTrue(human.contains(told(VALUES)), human);
         assertFalse(human.contains("number of elements"), human);
     }
@@ -110,8 +122,8 @@ class TheReasonAPointIsOpenSaysWhatItsRowsWereTriedAtTest {
     /** A comparison that names both is told both, as one population. */
     @Test
     void aComparisonNamingBothIsToldBoth() {
-        String human = report(model("0", "(ps, q) = total(ps).value + q.value == 20",
-                "(ps: List<Points>, q: Points)", "([], Points(1))"));
+        String human = report(evenModel("(ps, q) = total(ps).value + q.value == 21",
+                "(ps: List<Points>, q: Points)", "([], Points(2))"));
         assertTrue(human.contains(told(SIZES + " and " + VALUES)), human);
     }
 
@@ -130,18 +142,22 @@ class TheReasonAPointIsOpenSaysWhatItsRowsWereTriedAtTest {
     }
 
     /**
-     * What the command reference says of reach is what the candidates do. Where the lowest value of
-     * the element is 0 every candidate list sums to 0, and the line at 20 is open; at 1 a list of
-     * the right number of elements sums to it and the point is reached.
+     * What the command reference says of reach is what the search does. Where the lowest value of
+     * the element is 0 every candidate list sums to 0, so a total of 20 is reached only by a row
+     * beside the candidates, with elements unlike one another; a total no list comes to stays
+     * open. At a lowest value of 1 a list of the right number of elements sums to the total and
+     * the candidates reach it.
      */
     @Test
-    void theReachTheCommandReferenceDescribesIsTheReachOfTheCandidates() {
+    void theReachTheCommandReferenceDescribesIsTheReachOfTheSearch() {
+        String reachedAt21 = "(ps) = total(ps).value == 21";
         String reachedAt20 = "(ps) = total(ps).value == 20";
         String reachedAt5 = "(ps) = total(ps).value == 5";
         String signature = "(ps: List<Points>)";
 
-        assertTrue(report(model("0", reachedAt20, signature, "([])")).contains(NO_ROW_AT_ON));
-        assertTrue(report(model("0", reachedAt5, signature, "([])")).contains(NO_ROW_AT_ON));
+        assertTrue(report(evenModel(reachedAt21, signature, "([])")).contains(NO_ROW_AT_ON));
+        assertFalse(report(model("0", reachedAt20, signature, "([])")).contains(NO_ROW_AT_ON));
+        assertFalse(report(model("0", reachedAt5, signature, "([])")).contains(NO_ROW_AT_ON));
         assertFalse(report(model("1", reachedAt5, signature, "([])")).contains(NO_ROW_AT_ON));
     }
 }
