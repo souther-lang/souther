@@ -480,10 +480,13 @@ final class AStatementAtARow {
                                Map<RelationRead, OneRelation> reading,
                                Map<Relation, OneRelation> into,
                                Map<Spelling,OverTheElements> elements, Set<TermPath> positions) {
+        List<TermPath> asked = positionsAskedBy(stated);
+        if (asked != null) {
+            positions.addAll(asked);
+            return;
+        }
         switch (stated) {
             case Proposition.Always _, Proposition.LastToHold _ -> { }
-            case Proposition asked when positionsAskedBy(asked) != null ->
-                    positions.addAll(positionsAskedBy(asked));
             case Proposition.All all -> all.parts().forEach(part ->
                     gather(part, behavior, quantities, reading, into, elements, positions));
             case Proposition.Any any -> any.parts().forEach(part ->
@@ -660,7 +663,8 @@ final class AStatementAtARow {
     }
 
     /** The positions the statement asks of their own value: whether one is true, holds a value,
-     *  is in some cases, or is the same as another. */
+     *  is in some cases, is the same as another or is a string of a language — and the strings
+     *  a piece's membership is read at. */
     Set<TermPath> positionsAsked() {
         return positions;
     }
@@ -1335,6 +1339,11 @@ final class AStatementAtARow {
      * to {@code read}. False where it reads something no position of the input is.
      */
     private static boolean readsOf(Proposition stated, Set<TermPath> about, Set<TermPath> read) {
+        List<TermPath> asked = positionsAskedBy(stated);
+        if (asked != null) {
+            read.addAll(asked);
+            return true;
+        }
         return switch (stated) {
             case Proposition.All all ->
                     all.parts().stream().allMatch(part -> readsOf(part, about, read));
@@ -1353,10 +1362,6 @@ final class AStatementAtARow {
                 differentAt(count).ifPresent(value -> read.addAll(value.places()));
                 yield overElementsOf(elementsOf(count).container().inputPosition(), about, read)
                         && readsOf(meetingOf(count), about, read);
-            }
-            case Proposition asked when positionsAskedBy(asked) != null -> {
-                read.addAll(positionsAskedBy(asked));
-                yield true;
             }
             case Proposition.Compared _, Proposition.Always _, Proposition.LastToHold _ -> true;
             case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
@@ -2081,8 +2086,8 @@ final class AStatementAtARow {
          *
          * <p>Each string is the string at a position, or what case conversions make of it, worked
          * out as the run time works it out ({@link BoundUnderEvaluation#mapped}) and parted as
-         * the run time parts it ({@link BoundUnderEvaluation#parted}). No number of the row is read, so it divides no
-         * order and a place a term turns at is not known.
+         * the run time parts it ({@link BoundUnderEvaluation#parted}). No number of the row is
+         * read, so it divides no order and a place a term turns at is not known.
          *
          * @param value    the string looked for
          * @param string   the string parted
