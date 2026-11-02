@@ -3208,12 +3208,14 @@ final class Pullback {
      * the body that holds it. Two statements about some piece are about the same piece only where
      * they are read at the same site, whatever string they are over.
      */
-    private static String siteOf(Core call) {
-        return switch (Core.withoutStanding(call)) {
-            case Core.PreservedCall preserved -> preserved.occurrence().toString();
-            case Core.Call plain -> plain.occurrence().toString();
-            default -> "";
+    private static PieceWitness.Site siteOf(Core call) {
+        ConstructOccurrence occurrence = switch (Core.withoutStanding(call)) {
+            case Core.PreservedCall preserved -> preserved.occurrence();
+            case Core.Call plain -> plain.occurrence();
+            default -> null;
         };
+        return occurrence == null ? new PieceWitness.Site.Unnamed()
+                : new PieceWitness.Site.Quantifier(occurrence);
     }
 
     /**
@@ -3224,8 +3226,9 @@ final class Pullback {
      */
     private PieceWitness witnessOfTheParameter(Core subject, InputReads at) {
         Core stood = withoutTheNewtypesItWears(new Denotation(subject, at)).value();
-        String site = Core.withoutStanding(stood) instanceof Core.Read named
-                && named.binding() != null ? named.binding().toString() : "";
+        PieceWitness.Site site = Core.withoutStanding(stood) instanceof Core.Read named
+                && named.binding() != null ? new PieceWitness.Site.Parameter(named.binding())
+                : new PieceWitness.Site.Unnamed();
         return new PieceWitness(parting.size(), site);
     }
 

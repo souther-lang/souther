@@ -20,6 +20,8 @@ import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -53,11 +55,17 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
      */
     @Test
     void twoStatementsAtOneDepthAreAboutTwoPieces() {
-        PieceWitness first = PieceWitness.of(0, "the first");
-        PieceWitness second = PieceWitness.of(0, "the second");
+        PieceWitness first = at(0, 0);
+        PieceWitness second = at(0, 1);
         assertNotEquals(held(first, "ab"), held(second, "ab"));
         assertNotEquals(held(first, "ab").spelling(), held(second, "ab").spelling());
-        assertEquals(held(first, "ab"), held(PieceWitness.of(0, "the first"), "ab"));
+        assertEquals(held(first, "ab"), held(at(0, 0), "ab"));
+    }
+
+    /** The piece the closure parameter number {@code parameter} stands for, {@code depth} in. */
+    private static PieceWitness at(int depth, int parameter) {
+        return new PieceWitness(depth, new PieceWitness.Site.Parameter(
+                new BindingId(new BindingOwner.OfValue("demo", "f"), parameter)));
     }
 
     /** And the piece of a comparison is the piece of the statement it is read in. */
@@ -66,9 +74,9 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
         Quantity string = new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of("s")));
         ValueName.Stdlib split = ValueName.Stdlib.operation("String", "split");
         Quantity.APieceOf first = new Quantity.APieceOf(split, OptionalInt.of('@'), string,
-                PieceWitness.of(0, "the first"), 0, 0);
+                at(0, 0), 0, 0);
         Quantity.APieceOf second = new Quantity.APieceOf(split, OptionalInt.of('@'), string,
-                PieceWitness.of(0, "the second"), 0, 0);
+                at(0, 1), 0, 0);
         assertNotEquals(first, second);
         assertNotEquals(first.spelling(), second.spelling());
     }

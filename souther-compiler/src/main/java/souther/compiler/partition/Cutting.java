@@ -2194,14 +2194,19 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     /**
      * Whether {@code stated} says only which case, which truth or whether a value positions of the
-     * input hold, or that some element of a container the input holds meets that, joined: no
-     * relation of numbers and nothing about what a dependency answered anywhere in it.
+     * input hold, or that some element of a container the input holds meets that or is in a
+     * language, joined: no relation of numbers and nothing about what a dependency answered
+     * anywhere in it.
      */
     static boolean statesNoRelation(Proposition stated) {
         return switch (stated) {
             case Proposition.InCases cases -> cases.of() instanceof DecisionSubject.AnInput;
             case Proposition.Truth truth -> truth.of() instanceof DecisionSubject.AnInput;
             case Proposition.Present present -> present.of() instanceof DecisionSubject.AnInput;
+            // Which strings a string is one of is read where the rules about a position's strings
+            // are, and is no line of numbers. Of the elements of a container it is the same
+            // statement of each element, so that some element is in a language is no more a
+            // relation than that some element is a case.
             case Proposition.Some some -> some.container() instanceof DecisionSubject.AnInput
                     && (statesNoRelation(some.ofTheElement())
                             || some.ofTheElement() instanceof Proposition.InTheStrings);
