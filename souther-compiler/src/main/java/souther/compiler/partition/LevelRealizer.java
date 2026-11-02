@@ -28,6 +28,7 @@ import souther.compiler.values.ValueSet;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -1934,7 +1935,90 @@ public final class LevelRealizer {
         }
 
         Reached solve(ExactRatio target) {
-            return walk(0, target, within);
+            Reached straight = straightDescent(target);
+            return straight != null ? straight : walk(0, target, within);
+        }
+
+        /**
+         * The walk's first candidate at every position, taken without reading the rules at any of
+         * them, and the whole assignment held against the rules once.
+         *
+         * <p>The walk reads the declarations again with each position fixed, to find where the next
+         * one may stand and to skip a value the rules refuse. When the first value of every position
+         * is the one it settles on, those readings only found what a single reading of the whole
+         * assignment finds: this takes each first value from the run the position had before
+         * anything was fixed, solves the last, and asks {@link #theDeclarationsHaveNotRefused} of
+         * the result.
+         *
+         * <p>Nothing is claimed by what this does not find. It answers {@link Reached#FOUND} with
+         * the assignment standing, or null with nothing changed, and the walk then runs as it would
+         * have. The budgets are spent as the walk would have spent them, and a search that could
+         * not afford them all is left to the walk.
+         */
+        private Reached straightDescent(ExactRatio target) {
+            int last = terms.size() - 1;
+            if (last < 1
+                    || asked + last > HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN
+                    || steps.taken + terms.size() > STEPS_A_SEARCH_MAY_TAKE) {
+                return null;
+            }
+            Set<CompositionCapacity> unheldBefore = new HashSet<>(unheld);
+            ExactRatio owed = target;
+            for (int i = 0; i < last; i++) {
+                ExactRatio coef = terms.get(i).getValue();
+                NumericDomain.Bounds left = leaving(i + 1, owed, coef, ranBetween(i));
+                AffinePreimage reaches =
+                        fromHere[i + 1].affinePreimage(coef, owed, carriers[i].spacing());
+                Congruences classOf = terms.get(i).getKey().term() instanceof NumericTerm.ValueOf value
+                        && within.classAt(value) instanceof HeldClass.OfResidues(Congruences residues)
+                        ? residues : null;
+                BigDecimal first = firstOf(CandidateDomain.of(
+                        classOf == null ? reaches : reaches.heldTo(classOf), left));
+                if (first == null || !(coef.times(ExactRatio.of(first)).flatMap(owed::minus)
+                        instanceof ExactAnswer.Held<ExactRatio> remaining)) {
+                    return noStraightDescent(unheldBefore);
+                }
+                at[i] = new Count(first);
+                owed = remaining.value();
+            }
+            ExactRatio coef = terms.get(last).getValue();
+            if (solving(last, owed, coef, leaving(last + 1, owed, coef, ranBetween(last)))
+                    != Reached.FOUND) {
+                return noStraightDescent(unheldBefore);
+            }
+            asked += last;
+            steps.taken += terms.size();
+            return Reached.FOUND;
+        }
+
+        /** Where position {@code i} runs before anything is fixed. */
+        private NumericDomain.Bounds ranBetween(int i) {
+            return runsBetween[i] == null ? NumericDomain.Bounds.OPEN : runsBetween[i];
+        }
+
+        /** Nothing left standing and nothing left over from a straight descent that did not
+         *  reach a row. */
+        private Reached noStraightDescent(Set<CompositionCapacity> unheldBefore) {
+            Arrays.fill(at, null);
+            unheld.retainAll(unheldBefore);
+            return null;
+        }
+
+        /** The first value {@code may} offers a position, written as the walk writes it, or null
+         *  where the walk does not take its first value from a set of this kind in one step. */
+        private BigDecimal firstOf(CandidateDomain may) {
+            return switch (may) {
+                case CandidateDomain.One only -> only.at().at();
+                case CandidateDomain.Walking every -> {
+                    int aligned = Math.max(every.first().scale(), every.by().scale());
+                    try {
+                        yield every.first().setScale(aligned);
+                    } catch (ArithmeticException cannotAlign) {
+                        yield null;
+                    }
+                }
+                default -> null;
+            };
         }
 
         /**

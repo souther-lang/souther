@@ -223,6 +223,14 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     Reason.REFUSAL_TRANSLATED,
                     "The second setScale of the same aligning pair, caught by the same try/catch."),
             new Permission(
+                    "souther/compiler/partition/LevelRealizer$Search#firstOf(Lsouther/compiler/"
+                            + "partition/CandidateDomain;)Ljava/math/BigDecimal; "
+                            + "setScale(I)Ljava/math/BigDecimal;",
+                    Reason.REFUSAL_TRANSLATED,
+                    "The first value of a run written at the scale the walk writes it at, caught by"
+                            + " try/catch(ArithmeticException) and answered as no first value, which"
+                            + " leaves the search to the walk that aligns the same pair."),
+            new Permission(
                     "souther/compiler/partition/LevelRealizer$Search#walkingAtOneScale(ILjava/"
                             + "math/BigDecimal;Ljava/math/BigDecimal;Ljava/math/BigDecimal;"
                             + "Lsouther/compiler/numeric/ExactRatio;Lsouther/compiler/numeric/"
