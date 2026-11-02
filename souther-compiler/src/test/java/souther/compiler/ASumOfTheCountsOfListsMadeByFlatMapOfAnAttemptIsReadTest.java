@@ -56,7 +56,7 @@ class ASumOfTheCountsOfListsMadeByFlatMapOfAnAttemptIsReadTest {
             let screen (lead, accounts, contacts) = {
                 let matchedAccounts = List.flatMap(d -> accountsOn(d, accounts), domainOf(lead))
                 let matchedContacts = List.flatMap(d -> contactsOn(d, contacts), domainOf(lead))
-                guard %s else Nobody
+                %s
                 Found
             }
 
@@ -79,7 +79,17 @@ class ASumOfTheCountsOfListsMadeByFlatMapOfAnAttemptIsReadTest {
 
     /** The model with {@code guard}, and what each of the three rows with a match comes to. */
     private static String report(String guard, String account, String contact, String both) {
-        Compilation compilation = Compilation.ofSource(TWO_BOOKS.formatted(guard)
+        return reportOf("guard " + guard + " else Nobody", account, contact, both);
+    }
+
+    /** The model with {@code statements} before the answer, in a block of the behavior. */
+    private static String reportOf(String statements) {
+        return reportOf(statements, "Found", "Found", "Found");
+    }
+
+    private static String reportOf(String statements, String account, String contact,
+                                   String both) {
+        Compilation compilation = Compilation.ofSource(TWO_BOOKS.formatted(statements)
                 .replace("@ACCOUNT@", account).replace("@CONTACT@", contact)
                 .replace("@BOTH@", both), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -118,7 +128,7 @@ class ASumOfTheCountsOfListsMadeByFlatMapOfAnAttemptIsReadTest {
         List<String> owed = report.lines().map(line -> line.strip().replaceAll("\\s+", " "))
                 .toList();
         assertTrue(owed.contains("screen implemented rows 6 pending 0"), report);
-        assertTrue(owed.stream().anyMatch(line -> line.matches("branch (\\d+)/\\1")), report);
+        assertTrue(owed.stream().anyMatch(line -> line.matches("branch ([1-9]\\d*)/\\1")), report);
         assertTrue(owed.contains("decision rules 2 taken 2"), report);
     }
 
@@ -131,6 +141,22 @@ class ASumOfTheCountsOfListsMadeByFlatMapOfAnAttemptIsReadTest {
                 "Bool.not(List.length(matchedAccounts) + List.length(matchedContacts) == 0)")) {
             assertEquals(List.of(), aboutAValueMadeFromAnother(report(guard)), guard);
         }
+    }
+
+    /**
+     * A sum or a size given a name is the check as much as one written in the guard: the name
+     * stands for what it is bound to wherever the guard reads it.
+     */
+    @Test
+    void aSumGivenANameAndASizeGivenANameAreTheCheckToo() {
+        String sum = """
+                let total = List.length(matchedAccounts) + List.length(matchedContacts)
+                guard total >= 1 else Nobody""";
+        assertEquals(List.of(), aboutAValueMadeFromAnother(reportOf(sum)), sum);
+        String size = """
+                let accounts = List.length(matchedAccounts)
+                guard accounts >= 1 || List.length(matchedContacts) >= 1 else Nobody""";
+        assertEquals(List.of(), aboutAValueMadeFromAnother(reportOf(size)), size);
     }
 
     /**

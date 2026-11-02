@@ -1733,8 +1733,13 @@ final class Pullback {
     private List<Supplier<Derivation>> rulesFor(StatedComparison stated, Denotation at,
                                                 boolean fixed, InputReads reads,
                                                 Once<AffineReading.OfAComparison> arithmetic) {
-        AnEmptinessCheck.Checked checked = AnEmptinessCheck.checked(stated);
-        AnEmptinessCheck.Checked checkedSum = AnEmptinessCheck.checkedSum(stated);
+        // Asked of a rule when it is tried, and once for the two that ask it.
+        AnEmptinessCheck.Standing standing = (e, where) -> where.standing(e,
+                read.rules().symbols(), read.rules().newtypes());
+        Once<Optional<AnEmptinessCheck.Checked>> checkedOnce = new Once<>(() ->
+                Optional.ofNullable(AnEmptinessCheck.checked(stated, reads, standing)));
+        Once<Optional<AnEmptinessCheck.Checked>> checkedSumOnce = new Once<>(() ->
+                Optional.ofNullable(AnEmptinessCheck.checkedSum(stated, reads, standing)));
         Asked emptiness = new Asked.OnASide(AnswerAspect.EMPTINESS);
         // Whether the arithmetic stops at a value to go into decides both of the last two rules:
         // the one goes in where it does, and the other takes the comparison only where it does
@@ -1745,9 +1750,9 @@ final class Pullback {
                 new Weighed(new Denotation(stated.right(), reads), ExactRatio.ONE.negated())),
                 Pullback::nothingElse, () -> false)));
         List<Supplier<Derivation>> rules = List.of(
-                () -> checked == null ? null : new Derivation.AnEmptinessCheck(
-                        holdingSomething(checked.containers().getFirst(), at, emptiness, reads),
-                        checked.emptyWhereItHolds()),
+                () -> checkedOnce.get().map(checked -> new Derivation.AnEmptinessCheck(
+                        holdingSomething(checked.containers().getFirst(), at, emptiness),
+                        checked.emptyWhereItHolds())).orElse(null),
                 () -> partOf(at, truthCompared(stated, reads)),
                 () -> heldAgainstAWrittenTruth(stated, reads),
                 () -> partOf(at, ofTwoValuesWrittenOut(stated, reads)),
@@ -1774,31 +1779,41 @@ final class Pullback {
                 },
                 () -> readingTheComparisonAgain(
                         throughWhatItStopsAt(stated, at, fixed, reads, wayIn.get())),
+                // A sum given a name, before the one that takes the name as a number nothing
+                // follows: the name stands for the sum, and where the arithmetic over the input
+                // does not read the sum it is a statement about the containers rather than a
+                // relation between numbers no position holds.
+                () -> checkedSumOnce.get()
+                        .filter(checked -> checked.named()
+                                && AffineReading.read(checked.written(), checked.writtenAt(),
+                                        read) instanceof AffineReading.OfAComparison.Stopped)
+                        .map(checked -> new Derivation.AnEmptinessCheck(
+                                holdingSomethingOfAny(checked.containers(), at, emptiness),
+                                checked.emptyWhereItHolds())).orElse(null),
                 () -> partOf(at, ofBoundValues(stated, fixed, reads, wayIn.get())),
                 // Last, so that every rule reading the sizes as numbers of the input is asked
-                // first: a sum of sizes is read as one of the containers holding something only
-                // where none of them reads it whole.
-                () -> checkedSum == null ? null : new Derivation.AnEmptinessCheck(
-                        holdingSomethingOfAny(checkedSum.containers(), at, emptiness, reads),
-                        checkedSum.emptyWhereItHolds()));
+                // first: a sum of sizes written in the comparison is read as some one of the
+                // containers holding something only where none of them reads it whole.
+                () -> checkedSumOnce.get().map(checked -> new Derivation.AnEmptinessCheck(
+                        holdingSomethingOfAny(checked.containers(), at, emptiness),
+                        checked.emptyWhereItHolds())).orElse(null));
         return rules;
     }
 
     /** Whether {@code container} holds anything, asked at {@code at} where the comparison is
      *  read in a place. */
-    private Derivation holdingSomething(Core container, Denotation at, Asked emptiness,
-                                        InputReads reads) {
-        return at == null ? observe(container, emptiness, reads)
-                : asking(at, () -> observe(container, emptiness, reads));
+    private Derivation holdingSomething(Denotation container, Denotation at, Asked emptiness) {
+        return at == null ? observe(container.value(), emptiness, container.at())
+                : asking(at, () -> observe(container.value(), emptiness, container.at()));
     }
 
     /** Whether some one of {@code containers} holds anything. */
-    private Derivation holdingSomethingOfAny(List<Core> containers, Denotation at,
-                                             Asked emptiness, InputReads reads) {
-        Derivation some = holdingSomething(containers.getFirst(), at, emptiness, reads);
-        for (Core each : containers.subList(1, containers.size())) {
+    private Derivation holdingSomethingOfAny(List<Denotation> containers, Denotation at,
+                                             Asked emptiness) {
+        Derivation some = holdingSomething(containers.getFirst(), at, emptiness);
+        for (Denotation each : containers.subList(1, containers.size())) {
             some = new Derivation.Joined(ConditionJoin.EITHER, some,
-                    holdingSomething(each, at, emptiness, reads));
+                    holdingSomething(each, at, emptiness));
         }
         return some;
     }
