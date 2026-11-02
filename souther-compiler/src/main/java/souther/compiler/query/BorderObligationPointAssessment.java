@@ -793,10 +793,11 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      *
      * <p>For a surface that needs the readings in a steady order and says none of the words
      * ({@link #readingsSaid}'s order is the words, and is the one a reader sees). By the quantity,
-     * what is asked of it, the cases it decides in, and then the line its author drew — the order
-     * {@link WhereTheReadingsDiffer} numbers the lines of a comparison in — so that two readings
-     * that ask alike are still put the same way round. What is left tied is the readings of one
-     * line that ask alike and differ only by the call they were made at, which is a bag.
+     * what is asked of it, the cases it decides in, and the behavior that read it. Every reading
+     * here is of the one line that owes the point, so the lines are not compared: the order of the
+     * lines of a comparison ({@link AuthoredLine#inASteadyOrder}) is for numbering the lines of one
+     * comparison, and is refused for a declaration's. What is left tied is the readings of one
+     * behavior that ask alike and differ only by the call they were made at, which is a bag.
      */
     public List<Reading> readingsInSteadyOrder() {
         Comparator<SteadyKey> order = Comparator
@@ -804,13 +805,13 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                 .thenComparing(SteadyKey::asks, Comparator.nullsFirst(Comparator.naturalOrder()))
                 .thenComparing(SteadyKey::where,
                         Comparator.nullsFirst(Comparator.naturalOrder()))
-                .thenComparing(SteadyKey::drawn, AuthoredLine.inASteadyOrder());
+                .thenComparing(SteadyKey::behavior);
         List<SteadyKey> keys = new ArrayList<>();
         met.forEach((reading, at) -> {
             DomainPoint asked = seatOf(reading).asked();
             keys.add(new SteadyKey(reading, at.axis(),
                     at.operator(asked) == null ? null : at.operator(asked) + " " + at.against(asked),
-                    at.decidesWhere(), at.border().origin().authoredLine()));
+                    at.decidesWhere(), reading.behavior()));
         });
         return keys.stream().sorted(order).map(SteadyKey::reading).toList();
     }
@@ -818,7 +819,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     /** What a reading is put in order by, worked out once for each reading and not once for each
      *  comparison of two. */
     private record SteadyKey(Reading reading, String axis, String asks, String where,
-                             AuthoredLine drawn) {}
+                             String behavior) {}
 
     /**
      * Every reading of the point, as the sentences a surface prints under it, in the order the
