@@ -2469,10 +2469,13 @@ final class Coverages {
              * @param depth how many rows beside rows this one is
              */
             private record Ran(Generator.BoundaryAttempt.Built built, ObservedInputs read,
-                               int depth, ExactRatio distance) {
+                               int depth, ExactRatio distance, int elements) {
 
-                int elements() {
-                    return Generator.elementsHeld(read.inputs());
+                /** A row run, with how many elements it holds counted once: the queue compares
+                 *  rows at every step, and the count walks every value of the row. */
+                Ran(Generator.BoundaryAttempt.Built built, ObservedInputs read, int depth,
+                    ExactRatio distance) {
+                    this(built, read, depth, distance, Generator.elementsHeld(read.inputs()));
                 }
             }
 

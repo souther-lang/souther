@@ -2791,9 +2791,13 @@ public final class Generator {
                 spent.somethingLeft();
             }
         };
-        Growth growth = aListGrownAmong(ranWith, subject, check, stops,
-                NearbyValues.Put.BEFORE_AND_AFTER);
-        Beside grown = grownTwice(growth, List.of());
+        // What stands for a type is made once for the search and as far as it asks, as it is for
+        // a walk's rewrite, so the rows of one search share the growth.
+        if (spent.growth == null) {
+            spent.growth = aListGrownAmong(ranWith, subject, check, stops,
+                    NearbyValues.Put.BEFORE_AND_AFTER);
+        }
+        Beside grown = grownTwice(spent.growth, List.of());
         Beside changed = (value, type, reading, _) ->
                 NearbyValues.withAnElementChanged(value, type, reading, ranWith);
         List<Iterator<GeneratedRow>> in = List.of(
@@ -2812,6 +2816,9 @@ public final class Generator {
         private int left = CompositionBudget.ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT.maximum();
 
         private boolean leftSome;
+
+        /** What stands for the types the search grows lists of, made as the search asks. */
+        private Growth growth;
 
         /** Whether one more row may be made; the first one past the bound is said to be left. */
         boolean oneMore() {
