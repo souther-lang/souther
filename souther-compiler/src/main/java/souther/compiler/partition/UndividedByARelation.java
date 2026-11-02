@@ -1344,8 +1344,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return new WhatARelationLeavesUndivided.Operations(sums, decimals,
                     WhatARelationLeavesUndivided.Told.EVERY_AT_HELD_VALUES, held);
         }
-        // Not every operation is told, so a row is shown computed nowhere, and an operation over a
-        // number held at a value is one no row is asked to get past here, as it was before it was.
+        // Not every operation is told, so no row is shown computed, and an operation over a number
+        // held at a value is left out as one over a number no side names is.
         sums.removeIf(each -> each.coefs().keySet().stream().anyMatch(held::containsKey));
         return new WhatARelationLeavesUndivided.Operations(sums, decimals, told);
     }
@@ -1383,9 +1383,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private Map<NumericTerm, ExactRatio> heldApart(Set<NumericTerm> numbers, InputReading read,
                                                    TheWay theWay) {
-        // Only a relation whose sides are all numbers of the input is read with another beside it.
-        if (kind != Kind.AFFINE || remainder != null || sides.stream()
-                .anyMatch(each -> each.number() == null)) {
+        // A remainder's first side is the form's own, and another side beside it would be read as
+        // a term of that form.
+        if (kind != Kind.AFFINE || remainder != null) {
             return Map.of();
         }
         List<Side> together = new ArrayList<>(sides);

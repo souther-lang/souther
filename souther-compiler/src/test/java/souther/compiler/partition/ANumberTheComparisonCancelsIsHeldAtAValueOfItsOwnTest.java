@@ -142,6 +142,21 @@ class ANumberTheComparisonCancelsIsHeldAtAValueOfItsOwnTest {
         assertTrue(notShown(compilation), () -> offered(compilation));
     }
 
+    /** A side that is no number of one place, how many a list holds, is read beside the number. */
+    @Test
+    void aSideThatIsAHowManyIsReadBesideTheHeldNumber() {
+        Compilation compilation = measuredSource("""
+                module demo
+
+                data Yen = Int invariant value >= 0
+
+                behavior f : (xs: List<Int>, c: Yen, k: Int) -> Bool
+                let f (xs, c, k) = List.length(xs) + c.value >= c.value + k
+                """);
+
+        assertFalse(notShown(compilation), () -> offered(compilation));
+    }
+
     /**
      * Held at nought, {@code c} leaves {@code x} of 100 no row: {@code x + c + MAX} stops. A row
      * at {@code c} of -100 has one, on each side of {@code x >= y}. No value of {@code x} is said
