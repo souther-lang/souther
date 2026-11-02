@@ -8967,6 +8967,46 @@ public final class Adequacy {
     }
 
     /**
+     * Which lines of a comparison the points of {@code name} would be said in the same words for,
+     * and the number each is given ({@link WhereTheReadingsDiffer}).
+     *
+     * <p>A fact about a report and not about a point: two points are equal by what they are owed,
+     * and what a reader is shown to tell them apart is worked out from every point of the module,
+     * so it is asked here once and handed to whoever says a point. The scope is the module's
+     * whatever the question, since the lines that share words are lines of other behaviors, and the
+     * reading is the one the points were asked at.
+     */
+    public record ToldApart(String name, HowALineIsRead reading)
+            implements Key<WhereTheReadingsDiffer> {
+
+        /**
+         * What a surface saying the points of {@code module} is handed, at the reading the build
+         * asks lines at. A module whose points could not be gathered has none to say, so nothing
+         * is consulted of the value it gets then.
+         */
+        public static WhereTheReadingsDiffer of(Db db, String module) {
+            Answer<WhereTheReadingsDiffer> apart =
+                    db.ask(new ToldApart(module, linesAskedOf(db)));
+            return apart.present() ? apart.value() : WhereTheReadingsDiffer.NONE;
+        }
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<WhereTheReadingsDiffer> compute(Db db) {
+            Answer<List<BorderObligationPointAssessment>> points =
+                    db.ask(new Obligations(name, new GenerationScope.Module(), reading));
+            if (!points.present()) {
+                return Answer.absent();
+            }
+            return Answer.of(WhereTheReadingsDiffer.of(points.value()));
+        }
+    }
+
+    /**
      * What each behavior of {@code name} is owed a row for at the lines its own rules drew, and how
      * far the reading that found those lines got.
      *
@@ -10105,7 +10145,7 @@ public final class Adequacy {
                     // and what it has to do there is said here, one note per reading, in the
                     // order the sentences sort and never the order the walk took.
                     List<BorderObligationPointAssessment.ReadingSaid> readings =
-                            point.readingsSaid();
+                            point.readingsSaid(ToldApart.of(db, module));
                     for (BorderObligationPointAssessment.ReadingSaid read : readings.subList(0,
                             Math.min(readings.size(),
                                     BorderObligationPointAssessment.READINGS_SAID))) {

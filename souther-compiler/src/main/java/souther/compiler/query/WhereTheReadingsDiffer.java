@@ -5,8 +5,6 @@ import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.LineOrigin;
-import souther.compiler.partition.ReadingSeat;
-import souther.compiler.query.BorderObligationPointAssessment.Reading;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
@@ -15,6 +13,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -58,9 +57,11 @@ import java.util.TreeSet;
  * numbers are the only words that tell them apart, so which is first has to be settled by the
  * lines and not left to the order the readings were met in. None of it depends on a row.
  *
- * <p>Held for the readings of a behavior together, because the points that share words are
+ * <p>Held for the points of a module together, because the points that share words are
  * different points: {@code = 51} as the point a line is owed a row at and as the point another
- * line of the comparison cannot be at.
+ * line of the comparison cannot be at. It is a value of its own ({@link Adequacy.ToldApart}) and
+ * not a part of any point, so a point is equal to another by what it is and not by what a report
+ * would call it.
  */
 public final class WhereTheReadingsDiffer {
 
@@ -92,29 +93,30 @@ public final class WhereTheReadingsDiffer {
     private final Map<Comparison, List<Line>> numbered;
 
     private WhereTheReadingsDiffer(Set<Words> shared, Map<Comparison, List<Line>> numbered) {
-        this.shared = shared;
-        this.numbered = numbered;
+        this.shared = Set.copyOf(shared);
+        this.numbered = Map.copyOf(numbered);
     }
 
-    /** The lines among the readings of {@code byPoint} that share their words under different
+    /** The lines among the readings of {@code points} that share their words under different
      *  points. */
-    static WhereTheReadingsDiffer of(
-            Map<BorderObligationPoint, ? extends Map<Reading, BorderAssessment>> byPoint,
-            Map<BorderObligationPoint, ? extends Map<Reading, ReadingSeat>> seats) {
+    public static WhereTheReadingsDiffer of(List<BorderObligationPointAssessment> points) {
         Map<Words, Sharers> byWords = new LinkedHashMap<>();
         Map<Comparison, Map<Line, Set<String>>> linesOf = new LinkedHashMap<>();
-        byPoint.forEach((owed, met) -> met.forEach((where, reading) -> {
-            Words words = wordsOf(reading, seats.get(owed).get(where).asked());
-            if (words == null) {
-                return;
-            }
-            Line line = lineOf(reading);
-            Sharers sharers = byWords.computeIfAbsent(words, _ -> new Sharers());
-            sharers.points().add(owed);
-            sharers.lines().add(line);
-            linesOf.computeIfAbsent(words.of(), _ -> new LinkedHashMap<>())
-                    .computeIfAbsent(line, _ -> new TreeSet<>()).addAll(shownOf(reading));
-        }));
+        for (BorderObligationPointAssessment each : points) {
+            BorderObligationPoint owed = each.point();
+            each.met().forEach((where, reading) -> {
+                Words words = wordsOf(reading, each.seatOf(where).asked());
+                if (words == null) {
+                    return;
+                }
+                Line line = lineOf(reading);
+                Sharers sharers = byWords.computeIfAbsent(words, _ -> new Sharers());
+                sharers.points().add(owed);
+                sharers.lines().add(line);
+                linesOf.computeIfAbsent(words.of(), _ -> new LinkedHashMap<>())
+                        .computeIfAbsent(line, _ -> new TreeSet<>()).addAll(shownOf(reading));
+            });
+        }
         Set<Words> shared = new HashSet<>();
         Set<Comparison> told = new HashSet<>();
         byWords.forEach((words, sharers) -> {
@@ -184,27 +186,16 @@ public final class WhereTheReadingsDiffer {
                 reading.decidesWhere());
     }
 
-    /**
-     * Every one of these is equal to every other.
-     *
-     * <p>What this holds is worked out from the readings of every point of the account that holds
-     * it, so two accounts whose points are equal hold equal ones, and an account that gained or
-     * lost a point is already told apart by the points. That is the only way these are compared:
-     * as part of the points of an account, checked against the account before it. Compared in
-     * full, the whole of it would be compared once for each point of the account.
-     *
-     * <p>Held to that by a test that puts the readings of a behavior in other orders and asks the
-     * same words of every point ({@code TheLinesOfAComparisonAreNumberedByTheLinesAndNotByTheWalkTest}).
-     * Not a value to be used as a key of anything on its own, and not to be compared for a single
-     * point taken out of its account.
-     */
+    /** Equal when the same words are shared and the same lines are numbered in the same order. */
     @Override
     public boolean equals(Object other) {
-        return other instanceof WhereTheReadingsDiffer;
+        return this == other
+                || (other instanceof WhereTheReadingsDiffer that
+                && shared.equals(that.shared) && numbered.equals(that.numbered));
     }
 
     @Override
     public int hashCode() {
-        return WhereTheReadingsDiffer.class.hashCode();
+        return Objects.hash(shared, numbered);
     }
 }

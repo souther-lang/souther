@@ -126,8 +126,12 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
                     () -> "and every reading of each of them: " + each.point());
             // What a surface says under the point is in the order the sentences sort, so a walk
             // that met the readings the other way round prints the same page.
-            assertEquals(each.readingsSaid(), also.readingsSaid(),
+            assertEquals(each.readingsSaid(WhereTheReadingsDiffer.of(forwards)),
+                    also.readingsSaid(WhereTheReadingsDiffer.of(backwards)),
                     () -> "and the readings as a surface says them: " + each.point());
+            // And the order a surface that says none of the words takes them in.
+            assertEquals(each.readingsInSteadyOrder(), also.readingsInSteadyOrder(),
+                    () -> "and the readings in their steady order: " + each.point());
             assertEquals(each.owed().hasRowWitness(), also.owed().hasRowWitness(),
                     () -> "and what each came to: " + each.point());
         }
