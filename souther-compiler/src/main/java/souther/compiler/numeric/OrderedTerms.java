@@ -14,7 +14,9 @@ import java.util.NoSuchElementException;
  * arrived in.
  *
  * <p>Walked as map entries, so that {@link Reach} sums these as it sums a map's. The one entry
- * handed out is reused for every term, and is only good until the walk moves on.
+ * handed out is reused for every term, and is only good until the walk moves on. So this is walked
+ * where it is made and by what sums it, and is no collection to copy from: a stream or a list made
+ * of its entries would hold the last term over and over.
  */
 final class OrderedTerms<A> implements Iterable<Map.Entry<A, ExactRatio>> {
 

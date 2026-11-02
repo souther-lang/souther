@@ -341,6 +341,16 @@ public final class NumericDomain<A> {
         return readARuleNothingSatisfies || parted().holdsNothing();
     }
 
+    /**
+     * Whether {@link #isBottom} is the answer of closures that settled and composed every bound
+     * ({@link ClosedState#isSettledAndComposed}). Where it is, this domain is shown empty wherever a
+     * domain with fewer of its rules was, so a reader that has been told a coarser domain is empty
+     * can rely on this one being asked.
+     */
+    public boolean isSettledAndComposed() {
+        return readARuleNothingSatisfies || parted().isSettledAndComposed();
+    }
+
     // --- assume: take in one more rule ------------------------------------------------------------
 
     /**

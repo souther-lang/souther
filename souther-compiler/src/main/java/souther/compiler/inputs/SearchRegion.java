@@ -363,4 +363,22 @@ public interface SearchRegion {
      * would take the absence of a proof for one.
      */
     Optional<EmptyInput> emptiness();
+
+    /**
+     * Whether {@link #emptiness} was answered by readings that looked to the end, so that this
+     * region is shown empty wherever a region it refines was.
+     *
+     * <p>Saying more of the rules, or fixing a position, only takes values away, but a reading that
+     * stops short of the end does not have to keep a proof it made of the coarser region: it can
+     * show a region empty and then, asked of that region with one more position fixed, show
+     * nothing. Where this is true, none of that happens, and the absence of a proof here is the
+     * absence of one anywhere above. A reader that goes straight to the end of a walk instead of
+     * asking the regions on the way is leaning on exactly that, and asks it first.
+     *
+     * <p>False unless a region says otherwise, and also false for a region whose emptiness shows
+     * nothing — that is the answer to a question the reader may ask and not one it may act on.
+     */
+    default boolean emptinessIsSettled() {
+        return false;
+    }
 }

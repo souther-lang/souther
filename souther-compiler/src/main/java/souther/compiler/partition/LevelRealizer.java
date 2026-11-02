@@ -72,6 +72,22 @@ public final class LevelRealizer {
     private final ProofsOfNoValue proofs = new ProofsOfNoValue();
 
     /**
+     * Whether a search may take the first assignment of its positions straight to the rules
+     * ({@code straightDescent}) before it walks for one.
+     */
+    private boolean straight = true;
+
+    /**
+     * This realizer, whose searches only walk from here on, for a test holding the descent to what
+     * the walk finds: the two are one search and what separates them is how often the rules are
+     * read.
+     */
+    LevelRealizer walkingOnly() {
+        straight = false;
+        return this;
+    }
+
+    /**
      * Where the positions have to stand for a row to be at this item, or why this found nowhere.
      *
      * <p>The region is handed in per item and is no part of this. Where a row may be written depends
@@ -1935,25 +1951,32 @@ public final class LevelRealizer {
         }
 
         Reached solve(ExactRatio target) {
-            Reached straight = straightDescent(target);
-            return straight != null ? straight : walk(0, target, within);
+            Reached direct = straight ? straightDescent(target) : null;
+            return direct != null ? direct : walk(0, target, within);
         }
 
         /**
-         * The walk's first candidate at every position, taken without reading the rules at any of
-         * them, and the whole assignment held against the rules once.
+         * The walk's first candidate at every position, taken against the runs the positions had
+         * before anything was fixed, and the whole assignment held against the rules once.
          *
          * <p>The walk reads the declarations again with each position fixed, to find where the next
-         * one may stand and to skip a value the rules refuse. When the first value of every position
-         * is the one it settles on, those readings only found what a single reading of the whole
-         * assignment finds: this takes each first value from the run the position had before
-         * anything was fixed, solves the last, and asks {@link #theDeclarationsHaveNotRefused} of
-         * the result.
+         * one may stand and to skip a value the rules refuse. Those readings find nothing that a
+         * settled reading of the whole assignment does not ({@link SearchRegion#emptinessIsSettled}):
+         * a region shown empty is shown empty with more said of it, so an assignment the settled
+         * reading does not show empty is one no region on the way to it was shown empty of, and each
+         * of its values lies in the run its position had there. A value that is the first of its
+         * position's candidates in the wider run and lies in the narrower one is the first of the
+         * narrower one, which is the value the walk takes.
          *
-         * <p>Nothing is claimed by what this does not find. It answers {@link Reached#FOUND} with
-         * the assignment standing, or null with nothing changed, and the walk then runs as it would
-         * have. The budgets are spent as the walk would have spent them, and a search that could
-         * not afford them all is left to the walk.
+         * <p>So this answers only where the whole assignment is not refused and the reading that
+         * says so is settled. Anywhere else it answers null with nothing changed, and the walk runs
+         * as it would have: a reading that stopped short of the end is one the walk's readings can
+         * have gone further than. The budgets are spent as the walk would have spent them, and a
+         * search that could not afford them all is left to the walk.
+         *
+         * <p>What the walk meets at a narrower run that this does not is the arithmetic of the
+         * same coefficients and amounts owed, so a value it cannot hold is one this cannot either,
+         * and is left to the walk by the same exit.
          */
         private Reached straightDescent(ExactRatio target) {
             int last = terms.size() - 1;
@@ -1962,6 +1985,7 @@ public final class LevelRealizer {
                     || steps.taken + terms.size() > STEPS_A_SEARCH_MAY_TAKE) {
                 return null;
             }
+            lastSaid = null;
             Set<CompositionCapacity> unheldBefore = new HashSet<>(unheld);
             ExactRatio owed = target;
             for (int i = 0; i < last; i++) {
@@ -1983,7 +2007,7 @@ public final class LevelRealizer {
             }
             ExactRatio coef = terms.get(last).getValue();
             if (solving(last, owed, coef, leaving(last + 1, owed, coef, ranBetween(last)))
-                    != Reached.FOUND) {
+                    != Reached.FOUND || lastSaid != Said.NOT_REFUSED_AND_SETTLED) {
                 return noStraightDescent(unheldBefore);
             }
             asked += last;
@@ -2441,10 +2465,12 @@ public final class LevelRealizer {
                 return Reached.EXHAUSTED;
             }
             at[i] = new Count(solved);
-            if (!theDeclarationsHaveNotRefused()) {
+            Said said = theDeclarationsSaid();
+            if (said == Said.REFUSED) {
                 at[i] = null;
                 return Reached.EXHAUSTED;
             }
+            lastSaid = said;
             // And not one a row was already built from that did not stand. Stepped past like a
             // value the rules leave nothing beside, and said as a walk that was cut short rather
             // than one that tried everything: what took this assignment away is this compiler
@@ -2472,7 +2498,7 @@ public final class LevelRealizer {
          * <p>What giving this up may not give up is the answer. An assignment out of the wider box
          * that nothing held against the rules is one the record can refuse, and offered as a row it
          * comes back refused where it is built — which is the defect this reading exists to remove,
-         * arriving by way of a budget. So the last step is {@link #theDeclarationsHaveNotRefused} and is
+         * arriving by way of a budget. So the last step is {@link #theDeclarationsSaid} and is
          * not budgeted.
          */
         private SearchRegion narrowing(
@@ -2487,8 +2513,9 @@ public final class LevelRealizer {
         }
 
         /**
-         * Whether the rules, with every position of the form fixed at what the walk chose, were not
-         * shown to leave nothing.
+         * What the rules said, with every position of the form fixed at what the walk chose: that
+         * they leave nothing, that they were not shown to, or that they were not and the reading
+         * of them is settled ({@link Said}).
          *
          * <p>Not that a value exists. Nothing here builds one, and the rules leaving something is
          * not the same as something being writable — what settles that is the row itself, where it
@@ -2501,13 +2528,17 @@ public final class LevelRealizer {
          * never put to the rules at all, so asking about the last of them alone would hold the walk
          * to nothing it had not already checked.
          */
-        private boolean theDeclarationsHaveNotRefused() {
+        private Said theDeclarationsSaid() {
             java.util.Map<RealizationTarget, Place> all = new LinkedHashMap<>();
             for (int j = 0; j < terms.size(); j++) {
                 all.put(terms.get(j).getKey(), at[j]);
             }
-            return LevelRealizer.this.theDeclarationsHaveNotRefused(all, within);
+            return declarationsSaid(all, within);
         }
+
+        /** What the declarations said of the last whole assignment {@link #solving} held against
+         *  them and did not find refused; null before one. */
+        private Said lastSaid;
 
         /**
          * The run this position has, narrowed by what the positions after it can add up to.
@@ -3062,6 +3093,24 @@ public final class LevelRealizer {
      */
     private boolean theDeclarationsHaveNotRefused(Map<RealizationTarget, Place> fixing,
                                            SearchRegion within) {
+        return declarationsSaid(fixing, within) != Said.REFUSED;
+    }
+
+    /**
+     * What the declarations said of a whole assignment.
+     *
+     * <p>{@link #NOT_REFUSED_AND_SETTLED} is more than not being refused. A region nothing showed
+     * empty may be one the readings stopped short of, and then a region it refines can have been
+     * shown empty where this was not ({@link SearchRegion#emptinessIsSettled}). Only a settled one
+     * lets a reader skip asking the regions on the way to it.
+     */
+    private enum Said {
+        REFUSED,
+        NOT_REFUSED,
+        NOT_REFUSED_AND_SETTLED
+    }
+
+    private Said declarationsSaid(Map<RealizationTarget, Place> fixing, SearchRegion within) {
         Map<NumericTerm, Place> standing = new LinkedHashMap<>();
         // A count is no number the region holds a range of; the numbers fixed beside it are.
         fixing.forEach((target, at) -> {
@@ -3069,6 +3118,13 @@ public final class LevelRealizer {
                 standing.put(number.term(), at);
             }
         });
-        return standing.isEmpty() || within.given(standing).emptiness().isEmpty();
+        if (standing.isEmpty()) {
+            return Said.NOT_REFUSED;
+        }
+        SearchRegion whole = within.given(standing);
+        if (whole.emptiness().isPresent()) {
+            return Said.REFUSED;
+        }
+        return whole.emptinessIsSettled() ? Said.NOT_REFUSED_AND_SETTLED : Said.NOT_REFUSED;
     }
 }

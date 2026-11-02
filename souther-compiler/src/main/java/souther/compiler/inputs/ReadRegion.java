@@ -123,6 +123,11 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
+    public boolean emptinessIsSettled() {
+        return within.emptinessIsSettled();
+    }
+
+    @Override
     public Optional<EmptyInput> emptiness() {
         return within.emptiness();
     }

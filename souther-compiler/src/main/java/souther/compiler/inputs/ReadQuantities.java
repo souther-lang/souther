@@ -168,6 +168,13 @@ final class ReadQuantities implements Quantities {
      */
     private volatile Optional<EmptyInput> emptiness;
     /**
+     * Whether the readings {@link #emptiness} rests on all settled: the closures of the numbers
+     * stopped moving and composed every bound, the pair of values and ranges decided what it was
+     * asked, and no case was left unwalked. Worked out with it, and set before it, so that whoever
+     * finds the one kept finds this.
+     */
+    private volatile boolean emptinessSettled;
+    /**
      * Which cases what is fixed and taken in stands under, worked out the first time anybody asks;
      * null until then.
      *
@@ -1981,6 +1988,19 @@ final class ReadQuantities implements Quantities {
                                                 LinearForm<NumericTerm> form,
                                                 boolean andTheDeclared,
                                                 List<NumericTerm> alongside) {
+        return runsIn(under, form, andTheDeclared, alongside, new boolean[] {true});
+    }
+
+    /**
+     * The same, and {@code settled} set false where the closure it read the range from stopped
+     * short ({@link NumericDomain#isSettledAndComposed}). A reader that acts on a range it will not
+     * be told is narrower than the rules leave has to ask.
+     */
+    private NumericDomain.FormProjection runsIn(StructuralContext under,
+                                                LinearForm<NumericTerm> form,
+                                                boolean andTheDeclared,
+                                                List<NumericTerm> alongside,
+                                                boolean[] settled) {
         ConstraintState<InputAtom> rules = effectiveConstraints(under);
         // Walked by the terms: what each one brings in is taken onto the state the one before it
         // left, and a form says which terms it weighs without saying which was written first.
@@ -2004,6 +2024,7 @@ final class ReadQuantities implements Quantities {
         } else if (rules.numbers().projectionOf(over)
                 instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)) {
             projected = within;
+            settled[0] &= rules.numbers().isSettledAndComposed();
         } else {
             return new NumericDomain.FormProjection.NothingIsLeft();
         }
@@ -2163,9 +2184,24 @@ final class ReadQuantities implements Quantities {
         if (had != null) {
             return had;
         }
-        Optional<EmptyInput> made = whyNothingIsLeft();
+        boolean[] settled = {true};
+        Optional<EmptyInput> made = whyNothingIsLeft(settled);
+        emptinessSettled = settled[0];
         emptiness = made;
         return made;
+    }
+
+    /**
+     * Whether {@link #emptiness} looked at every rule to the end, so that a value this one is made
+     * from by saying fewer of its fixings and rules was shown empty wherever this one is not.
+     *
+     * <p>Saying more can only take values away, and a reading that kept every proof it made would
+     * show a value empty wherever one it refines is. This one does where each closure it asked
+     * settled and composed every bound and the readings beside them decided what they were asked.
+     * Where one stopped short, it can show the coarser value empty and this one not.
+     */
+    boolean emptinessIsSettled() {
+        return emptiness().isPresent() || emptinessSettled;
     }
 
     /** Whether the rules leave {@code term} at {@code at} and nowhere else. */
@@ -2187,8 +2223,14 @@ final class ReadQuantities implements Quantities {
                 || classAt(value).holds(whole.value());
     }
 
-    /** {@link #emptiness}, worked out. */
-    private Optional<EmptyInput> whyNothingIsLeft() {
+    /**
+     * {@link #emptiness}, worked out.
+     *
+     * @param settled set false where a reading it rests on stopped short, which is only ever asked
+     *                of the rules said together: the sentences before them are about the fixings and
+     *                answer whatever the readings do
+     */
+    private Optional<EmptyInput> whyNothingIsLeft(boolean[] settled) {
         List<Map.Entry<NumericTerm, Fixed>> inOrder = inOrder();
         for (Map.Entry<NumericTerm, Fixed> each : inOrder) {
             if (!each.getValue().isOne()) {
@@ -2264,13 +2306,17 @@ final class ReadQuantities implements Quantities {
         // that can see what they contradict. The sentences above hold a fixing against the position
         // it is at; what a rule relating two positions refuses is a fact about the assignment, and
         // neither position's own range holds it.
-        return switch (viability(under, null)) {
+        return switch (viability(under, null, settled)) {
             case Viability.ProvedImpossible it ->
                     Optional.of(new EmptyInput.ProvedByTheDeclarations(it.why()));
             // Neither of these is a proof. One says nothing showed the input empty and the other
             // says this reading did not look, and a caller that read either as "there is a value"
             // would be reading the absence of a proof as one.
-            case Viability.MayStand _, Viability.NotRead _ -> Optional.empty();
+            case Viability.MayStand _ -> Optional.empty();
+            case Viability.NotRead _ -> {
+                settled[0] = false;
+                yield Optional.empty();
+            }
         };
     }
 
@@ -2296,12 +2342,12 @@ final class ReadQuantities implements Quantities {
      * proved — read as a choice, whichever of the two the fields happen to declare first would
      * settle whether the input is refused at all.
      */
-    private Viability viability(StructuralContext under, TermPath below) {
-        Optional<Emptiness> here =
-                effectiveConstraints(under).holdsNothing(positions(under));
-        if (here.isPresent()) {
-            return new Viability.ProvedImpossible(here.get());
+    private Viability viability(StructuralContext under, TermPath below, boolean[] settled) {
+        ConstraintState.Verdict here = effectiveConstraints(under).verdict(positions(under));
+        if (here.proof().isPresent()) {
+            return new Viability.ProvedImpossible(here.proof().get());
         }
+        settled[0] &= here.settled();
         Viability standing = new Viability.MayStand();
         for (CasesRead sum : cases) {
             // A sum inside a case is a place to ask about only once the value is that case, and one
@@ -2311,7 +2357,7 @@ final class ReadQuantities implements Quantities {
                     || !inside(sum.sum(), below)) {
                 continue;
             }
-            standing = standing.with(across(sum, under));
+            standing = standing.with(across(sum, under, settled));
             // Everything else it may say is already said. Kept going only for the one answer that
             // is not yet in hand, which is a proof — what a caller is told is the first the model
             // writes down, and the rest of the walk cannot change it.
@@ -2326,7 +2372,7 @@ final class ReadQuantities implements Quantities {
                     || !inside(it.container(), below)) {
                 continue;
             }
-            standing = standing.with(holds(it.container(), under));
+            standing = standing.with(holds(it.container(), under, settled));
             if (standing instanceof Viability.ProvedImpossible) {
                 return standing;
             }
@@ -2365,7 +2411,7 @@ final class ReadQuantities implements Quantities {
      * <p>Where nothing says how many it holds, nothing is proved. A reading that took an unmeasured
      * container for one that must hold something would refuse a model for a rule nobody wrote.
      */
-    private Viability holds(TermPath container, StructuralContext under) {
+    private Viability holds(TermPath container, StructuralContext under, boolean[] settled) {
         NumericTerm counted = howManyItHolds(container);
         if (counted == null) {
             return new Viability.MayStand();
@@ -2375,13 +2421,13 @@ final class ReadQuantities implements Quantities {
         // asked whether they hold anything — said here, this would be a container proved non-empty
         // out of a reading that proves nothing at all.
         NumericDomain.Bounds many =
-                runsIn(under, LinearForm.atom(counted), false, List.of())
+                runsIn(under, LinearForm.atom(counted), false, List.of(), settled)
                         instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds)
                         ? bounds : null;
         if (many == null || CountDomain.leastFrom(many.min()) < 1) {
             return new Viability.MayStand();
         }
-        Viability inside = viability(under.holding(container), container);
+        Viability inside = viability(under.holding(container), container, settled);
         return inside instanceof Viability.ProvedImpossible it
                 ? new Viability.ProvedImpossible(new Emptiness.AtAField(
                         new Emptiness.AtAField.Where.In(container.toString()),
@@ -2397,7 +2443,7 @@ final class ReadQuantities implements Quantities {
      * walk never entered stops the proof rather than joining it — nothing was shown about it, which
      * is not the same as its having been shown to hold nothing.
      */
-    private Viability across(CasesRead sum, StructuralContext under) {
+    private Viability across(CasesRead sum, StructuralContext under, boolean[] settled) {
         List<Viability> alternatives = new ArrayList<>();
         for (Map.Entry<Refinement, CaseOutcome> each : sum.outcomes().entrySet()) {
             alternatives.add(switch (each.getValue()) {
@@ -2412,9 +2458,12 @@ final class ReadQuantities implements Quantities {
                 // this compiler stopped.
                 case CaseOutcome.RefusedByTheRules _ ->
                         new Viability.ProvedImpossible(new Emptiness.ConflictingRules());
-                case CaseOutcome.NotWalked _ -> new Viability.NotRead();
+                case CaseOutcome.NotWalked _ -> {
+                    settled[0] = false;
+                    yield new Viability.NotRead();
+                }
                 case CaseOutcome.Opened _ -> viability(under.and(sum.sum(), each.getKey()),
-                        sum.sum().refine(each.getKey()));
+                        sum.sum().refine(each.getKey()), settled);
             });
         }
         // Where every case is refused, the sum is refused by all of them together and the place is

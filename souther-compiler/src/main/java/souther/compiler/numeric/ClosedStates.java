@@ -338,6 +338,24 @@ public final class ClosedStates {
             return composed;
         }
 
+        /** Whether every part settled and composed every bound, which is what the parts put
+         *  together do — and a part that holds nothing leaves the rules together nothing, which is
+         *  settled whatever the others did. */
+        public boolean isSettledAndComposed() {
+            ClosedState<A> put = state;
+            if (put != null) {
+                return put.isSettledAndComposed();
+            }
+            boolean settled = true;
+            for (ClosedState<A> each : closed) {
+                if (each.holdsNothing()) {
+                    return true;
+                }
+                settled &= each.isSettledAndComposed();
+            }
+            return settled;
+        }
+
         /**
          * What the part weighing {@code position} leaves, or null where no part does — which
          * includes a closure worked out in one piece, whose state is the only one there is.

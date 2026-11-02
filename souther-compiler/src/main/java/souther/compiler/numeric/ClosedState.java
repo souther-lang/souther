@@ -555,4 +555,20 @@ public final class ClosedState<A> {
     public boolean everyBoundWasComposed() {
         return everyBoundWasComposed;
     }
+
+    /**
+     * Whether the box is where reading every rule against it stops, and not a step on the way
+     * there: the rounds settled and every bound was composed. Also where the rules leave nothing,
+     * which is settled however the rounds went.
+     *
+     * <p>What a settled closure is: the narrowest box that reading the rules against it leaves, so
+     * saying more rules beside them can only narrow it. A closure the rounds ran out on, or that
+     * treated a bound it could not compose as absent, is a wider box than that, and with more rules
+     * said it can be left standing where the fewer rules were shown to leave nothing. A reader that
+     * needs a state with more rules to be shown empty wherever the same rules without them were
+     * shown empty needs the closure of the state with more to be this one.
+     */
+    public boolean isSettledAndComposed() {
+        return holdsNothing || (status == Status.STABLE && everyBoundWasComposed);
+    }
 }
