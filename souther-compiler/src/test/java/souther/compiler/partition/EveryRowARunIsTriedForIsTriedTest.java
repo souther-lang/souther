@@ -83,6 +83,19 @@ class EveryRowARunIsTriedForIsTriedTest {
         assertEquals(0, RowsARunIsTriedFor.candidates(goal(List.of(), List.of())).size());
     }
 
+    /** The population a goal is said to have left is the one its candidates vary. */
+    @Test
+    void theRepertoireSaidIsTheAxesVaried() {
+        assertEquals(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES,
+                RowsARunIsTriedFor.repertoireOf(goal(List.of(LENGTH), List.of())));
+        assertEquals(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES,
+                RowsARunIsTriedFor.repertoireOf(goal(List.of(), List.of(NUMBER))));
+        assertEquals(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES,
+                RowsARunIsTriedFor.repertoireOf(goal(List.of(LENGTH), List.of(NUMBER))));
+        assertEquals(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_NO_PLACE,
+                RowsARunIsTriedFor.repertoireOf(goal(List.of(), List.of())));
+    }
+
     /** A size is tried at every value before the next size is. */
     @Test
     void eachSizeIsTriedAtEveryValueBeforeTheNext() {

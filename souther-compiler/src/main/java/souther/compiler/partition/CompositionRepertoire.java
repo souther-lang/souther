@@ -241,16 +241,35 @@ public enum CompositionRepertoire {
     MAPS_WRITTEN_WITH_ONE_ENTRY,
 
     /**
-     * The rows whose run works a number out at an item, for a number only a run works out.
+     * The rows whose run works a number out at an item, for a number only a run works out, where
+     * the comparison names containers and no whole number outside one.
      *
      * <p>Nothing says where the input's numbers stand for the run to come to a value there, so a
-     * row is looked for by writing candidates and running each. The candidates are rows of a few
-     * sizes and values; a row the item asks for elsewhere — a longer list, a value no candidate
-     * holds — is found by none of them, and that none was found is not that none is there. What
-     * would reach the rest is a way of writing the candidates the run turns on, and raising no
-     * figure does.
+     * row is looked for by writing candidates and running each. The candidates here are the sizes
+     * of the containers named, all of them one size; a row the item asks for elsewhere — a longer
+     * container, elements of other values — is found by none of them, and that none was found is
+     * not that none is there. What would reach the rest is a way of writing the candidates the run
+     * turns on, and raising no figure does.
      */
-    ROWS_A_RUN_IS_TRIED_FOR;
+    ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES,
+
+    /**
+     * The same, where the comparison names whole numbers outside a container and no container:
+     * the candidates are those numbers, all of them at one value.
+     */
+    ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES,
+
+    /**
+     * The same, where the comparison names both: the candidates are every size crossed with every
+     * value.
+     */
+    ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES,
+
+    /**
+     * The same, where the comparison names neither: no place to write a candidate at, so none is
+     * written.
+     */
+    ROWS_A_RUN_IS_TRIED_FOR_AT_NO_PLACE;
 
     /**
      * Whether a row that meets this for one value of a point meets it for every other: the
@@ -272,7 +291,9 @@ public enum CompositionRepertoire {
                  MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER, ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL,
                  TREES_WRITTEN_FOR_A_COUNT, TREES_WRITTEN_FOR_A_LINE,
                  STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
-                 MAPS_WRITTEN_WITH_ONE_ENTRY, ROWS_A_RUN_IS_TRIED_FOR -> false;
+                 MAPS_WRITTEN_WITH_ONE_ENTRY, ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES,
+                 ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES, ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES,
+                 ROWS_A_RUN_IS_TRIED_FOR_AT_NO_PLACE -> false;
         };
     }
 

@@ -4,11 +4,10 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -34,7 +33,7 @@ import java.util.stream.Collectors;
  * <p>What none of them found is not that nothing is there: a row a run comes to the item at only
  * with elements of other values, elements unlike one another, or a size or value past these, is
  * found by none of them. So running out of candidates leaves the item owed, with the population
- * said ({@link CompositionRepertoire#ROWS_A_RUN_IS_TRIED_FOR}), and never proves it empty.
+ * said ({@link #repertoireOf}), and never proves it empty.
  */
 public final class RowsARunIsTriedFor {
 
@@ -43,7 +42,7 @@ public final class RowsARunIsTriedFor {
 
     /**
      * The most elements a container is written holding: the edge of the population the
-     * candidates are, which {@link CompositionRepertoire#ROWS_A_RUN_IS_TRIED_FOR} says, and not a
+     * candidates are, which {@link #sizes} says, and not a
      * figure a search stops at — every candidate inside it is tried.
      */
     private static final int MOST_ELEMENTS = 6;
@@ -51,32 +50,57 @@ public final class RowsARunIsTriedFor {
     private RowsARunIsTriedFor() {}
 
     /**
-     * The population the candidates are, as the report names what was not tried beyond it.
-     *
-     * <p>Of the places a comparison names and not of one point: a point whose comparison names no
-     * container has no sizes among its candidates, and one that names no whole number outside a
-     * container has no values, so each part is conditional. A container's elements are written as
-     * its type holds that many (a set's apart, a list's alike), which {@code Witnesses} decides and
-     * this does not repeat. The figures sit in parentheses so that the sentence stays one item in
-     * the comma-separated list of populations it is read among.
+     * Which population the candidates for {@code goal} are: the one repertoire that says what
+     * {@link #candidates} varies, so that what is reported is what was written. A goal that names
+     * containers is tried at sizes, one that names whole numbers outside a container at values,
+     * and each axis a goal does not name is not varied.
      */
-    public static String population() {
-        return "the rows whose run works out a number at the item, other than a row in which the"
-                + " containers the comparison names (lists, sets, maps, strings) each hold the same"
-                + " number of elements from 0 to " + MOST_ELEMENTS + " built as their types hold"
-                + " that many and the whole numbers it names outside a container are all one of ("
+    static CompositionRepertoire repertoireOf(PointSearchGoal.ByObservation goal) {
+        boolean sizes = !goal.lengths().isEmpty();
+        boolean values = !goal.values().isEmpty();
+        if (sizes && values) {
+            return CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES;
+        }
+        if (sizes) {
+            return CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES;
+        }
+        return values ? CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES
+                : CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_NO_PLACE;
+    }
+
+    /**
+     * What is said of the containers a candidate is written for. How an element is written is the
+     * type's own ({@code Witnesses}), so it is not said here. The figures of this and {@link
+     * #values} sit in no comma of their own, so a population stays one item in the
+     * comma-separated list of populations it is read among.
+     */
+    public static String sizes() {
+        return "the containers the comparison names each hold the same number of elements from 0 to "
+                + MOST_ELEMENTS + " built as their types hold that many";
+    }
+
+    /** What is said of the whole numbers outside a container a candidate is written for. */
+    public static String values() {
+        return "the whole numbers it names outside a container are all one of ("
                 + VALUES.stream().map(String::valueOf).collect(Collectors.joining(", ")) + ")";
+    }
+
+    /** The population a candidate is one of, said as what is not tried beyond it. */
+    public static String population(String candidates) {
+        return "the rows whose run works out a number at the item, other than a row in which "
+                + candidates;
     }
 
     /** Every candidate for {@code goal}, in the order they are tried, none of them empty. */
     static List<Map<RealizationTarget, Place>> candidates(PointSearchGoal.ByObservation goal) {
-        Set<Map<RealizationTarget, Place>> out = new LinkedHashSet<>();
         if (goal.lengths().isEmpty() && goal.values().isEmpty()) {
             return List.of();
         }
         int most = goal.lengths().isEmpty() ? 0 : MOST_ELEMENTS;
+        List<Long> values = goal.values().isEmpty() ? List.of(0L) : VALUES;
+        List<Map<RealizationTarget, Place>> out = new ArrayList<>();
         for (int size = 0; size <= most; size++) {
-            for (long value : VALUES) {
+            for (long value : values) {
                 Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
                 for (NumericTerm.FromOnePosition length : goal.lengths()) {
                     fixing.put(RealizationTarget.of(length), Count.of(size));
@@ -87,6 +111,6 @@ public final class RowsARunIsTriedFor {
                 out.add(fixing);
             }
         }
-        return List.copyOf(out);
+        return out;
     }
 }

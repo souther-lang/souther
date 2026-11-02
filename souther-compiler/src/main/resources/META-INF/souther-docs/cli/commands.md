@@ -542,14 +542,14 @@ obligation covered only by such rows carries `onlyWitnessedBy`.
 
 A number only a run works out, such as a sum over a list, has no rule saying where the input stands
 for the run to come to a point, so the compiler writes candidate rows, runs each and reads what the
-run came to. The candidates are the containers the comparison names (lists, sets, maps, strings)
-each holding the same number of elements from 0 to 6, built as their types hold that many, and the
-whole numbers it names outside a container all at one of (0, 1, -1, 2). A comparison that names no
-container has no sizes among its candidates, and one that names no such number has no values. The
-elements of a candidate list are alike, so their reach depends on their type: where the plain value
-of the element is 0, every candidate list sums to 0. When no candidate reaches the point, the report
-names this population, and a longer list, elements of other values or elements unlike one another
-may still reach it. That no candidate reached a point does not make it unreachable. If it is
+run came to. The candidates are the containers the comparison names each holding the same number
+of elements from 0 to 6, built as their types hold that many, and the whole numbers it names
+outside a container all at one of (0, 1, -1, 2). A comparison that names no container has no
+sizes among its candidates, and one that names no such number has no values; the report says which
+of these the point was tried at. The elements of a candidate list are alike, so their reach depends
+on their type: where the plain value of the element is 0, every candidate list sums to 0. When no
+candidate reaches the point, the report names this population, and a longer list, elements of other
+values or elements unlike one another may still reach it. That no candidate reached a point does not make it unreachable. If it is
 reachable, a row written by hand with such elements settles it; if it is not, what settles it is
 proving that from the model's declarations. Running the same search again does neither.
 

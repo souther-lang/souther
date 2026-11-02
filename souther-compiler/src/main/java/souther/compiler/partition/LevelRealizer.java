@@ -3046,7 +3046,7 @@ public final class LevelRealizer {
             }
         }
         return Realization.Unknown.searchLeftSomethingUntried(Set.of(),
-                Set.of(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR));
+                Set.of(RowsARunIsTriedFor.repertoireOf(goal)));
     }
 
     /**

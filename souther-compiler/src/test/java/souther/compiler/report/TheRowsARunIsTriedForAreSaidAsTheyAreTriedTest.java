@@ -25,60 +25,67 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class TheRowsARunIsTriedForAreSaidAsTheyAreTriedTest {
 
-    private static final String COMMANDS =
-            "/META-INF/souther-docs/cli/commands.md";
+    private static final String COMMANDS = "/META-INF/souther-docs/cli/commands.md";
 
     private static String said(CompositionRepertoire... these) {
         return Reasons.writes(PublicationOrders.COMPOSITION_REPERTOIRES.keep(Set.of(these)));
     }
 
+    /** A point is told only of the axes it was tried at. */
     @Test
-    void theReportSaysThePopulationTheSearchWrites() {
-        assertEquals(RowsARunIsTriedFor.population(),
-                said(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR));
+    void eachPopulationNamesTheAxesItWasTriedAt() {
+        String sizes = said(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES);
+        assertTrue(sizes.contains("from 0 to 6"), sizes);
+        assertFalse(sizes.contains("whole numbers"), sizes);
+
+        String values = said(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES);
+        assertTrue(values.contains("(0, 1, -1, 2)"), values);
+        assertFalse(values.contains("containers"), values);
+
+        String both = said(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES);
+        assertTrue(both.contains("from 0 to 6") && both.contains("(0, 1, -1, 2)"), both);
+
+        String none = said(CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_NO_PLACE);
+        assertTrue(none.contains("no place"), none);
+        assertFalse(none.contains("from 0 to") || none.contains("(0,"), none);
     }
 
-    /** The sentence names the edge and the values, and claims no element rule that only a list has. */
+    /** No sentence claims how a container's elements are written: that is the type's. */
     @Test
-    void thePopulationNamesItsFiguresAndNoRuleOfOneContainer() {
-        String said = RowsARunIsTriedFor.population();
-        assertTrue(said.contains("from 0 to 6"), said);
-        assertTrue(said.contains("(0, 1, -1, 2)"), said);
-        for (String kind : new String[] {"lists", "sets", "maps", "strings"}) {
-            assertTrue(said.contains(kind), kind + " in: " + said);
+    void noSentenceClaimsHowAnElementIsWritten() {
+        for (CompositionRepertoire each : CompositionRepertoire.values()) {
+            String said = said(each);
+            assertFalse(said.contains("copies"), said);
+            assertFalse(said.contains("plain value"), said);
         }
-        assertFalse(said.contains("copies"), said);
-        assertFalse(said.contains("plain value"), said);
     }
 
-    /**
-     * Read among other populations it is one item: past the comma every population of this kind
-     * has after what it is a population of, its own commas are inside the parentheses.
-     */
+    /** Read among other populations a sentence is one item: its figures' commas are in parentheses. */
     @Test
     void theSentenceIsOneItemOfACommaSeparatedList() {
-        String joined = said(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD,
-                CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR);
-        String ours = RowsARunIsTriedFor.population();
-        assertTrue(joined.endsWith(", " + ours), joined);
-        assertEquals(2, ours.replaceAll("\\([^)]*\\)", "").split(", ").length, ours);
+        for (CompositionRepertoire each : Set.of(
+                CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES,
+                CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES,
+                CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES)) {
+            String ours = said(each);
+            String joined = said(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD, each);
+            assertTrue(joined.endsWith(", " + ours), joined);
+            assertEquals(2, ours.replaceAll("\\([^)]*\\)", "").split(", ").length, ours);
+        }
     }
 
-    /** The command reference states the population the report does. */
+    /** The command reference states the figures the report does. */
     @Test
     void theCommandReferenceStatesThePopulation() throws IOException {
         try (InputStream in = getClass().getResourceAsStream(COMMANDS)) {
             assertNotNull(in, COMMANDS);
             String text = new String(in.readAllBytes(), StandardCharsets.UTF_8)
                     .replaceAll("\\s+", " ");
-            Matcher edge = Pattern.compile("from 0 to \\d+")
-                    .matcher(RowsARunIsTriedFor.population());
-            Matcher values = Pattern.compile("\\(\\d[^)]*\\)")
-                    .matcher(RowsARunIsTriedFor.population());
-            assertTrue(edge.find() && values.find(), RowsARunIsTriedFor.population());
+            Matcher edge = Pattern.compile("from 0 to \\d+").matcher(RowsARunIsTriedFor.sizes());
+            Matcher values = Pattern.compile("\\(\\d[^)]*\\)").matcher(RowsARunIsTriedFor.values());
+            assertTrue(edge.find() && values.find(), RowsARunIsTriedFor.sizes());
             assertTrue(text.contains(edge.group()), "the largest container: " + edge.group());
             assertTrue(text.contains(values.group()), "the whole numbers: " + values.group());
-            assertTrue(text.contains("lists, sets, maps, strings"), "the containers");
         }
     }
 }

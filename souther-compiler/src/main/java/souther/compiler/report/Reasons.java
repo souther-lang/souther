@@ -201,7 +201,16 @@ final class Reasons {
                 case MAPS_WRITTEN_WITH_ONE_ENTRY ->
                         "the maps whose values come to a total by more than one entry, and the"
                                 + " maps whose entries are asked to hold more than the number";
-                case ROWS_A_RUN_IS_TRIED_FOR -> RowsARunIsTriedFor.population();
+                case ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES ->
+                        RowsARunIsTriedFor.population(RowsARunIsTriedFor.sizes());
+                case ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES ->
+                        RowsARunIsTriedFor.population(RowsARunIsTriedFor.values());
+                case ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES ->
+                        RowsARunIsTriedFor.population(RowsARunIsTriedFor.sizes() + " and "
+                                + RowsARunIsTriedFor.values());
+                case ROWS_A_RUN_IS_TRIED_FOR_AT_NO_PLACE ->
+                        "the rows whose run works out a number at the item, none of which is"
+                                + " written since the comparison names no place to write one at";
             });
         }
         return String.join(", ", out);
