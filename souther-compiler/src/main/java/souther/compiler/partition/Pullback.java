@@ -1724,6 +1724,7 @@ final class Pullback {
                                                 boolean fixed, InputReads reads,
                                                 Once<AffineReading.OfAComparison> arithmetic) {
         AnEmptinessCheck.Checked checked = AnEmptinessCheck.checked(stated);
+        AnEmptinessCheck.Checked checkedSum = AnEmptinessCheck.checkedSum(stated);
         Asked emptiness = new Asked.OnASide(AnswerAspect.EMPTINESS);
         // Whether the arithmetic stops at a value to go into decides both of the last two rules:
         // the one goes in where it does, and the other takes the comparison only where it does
@@ -1734,9 +1735,8 @@ final class Pullback {
                 new Weighed(new Denotation(stated.right(), reads), ExactRatio.ONE.negated())),
                 Pullback::nothingElse, () -> false)));
         List<Supplier<Derivation>> rules = List.of(
-                () -> checked == null ? null : new Derivation.AnEmptinessCheck(at == null
-                        ? observe(checked.container(), emptiness, reads)
-                        : asking(at, () -> observe(checked.container(), emptiness, reads)),
+                () -> checked == null ? null : new Derivation.AnEmptinessCheck(
+                        holdingSomething(checked.containers().getFirst(), at, emptiness, reads),
                         checked.emptyWhereItHolds()),
                 () -> partOf(at, truthCompared(stated, reads)),
                 () -> heldAgainstAWrittenTruth(stated, reads),
@@ -1764,8 +1764,33 @@ final class Pullback {
                 },
                 () -> readingTheComparisonAgain(
                         throughWhatItStopsAt(stated, at, fixed, reads, wayIn.get())),
-                () -> partOf(at, ofBoundValues(stated, fixed, reads, wayIn.get())));
+                () -> partOf(at, ofBoundValues(stated, fixed, reads, wayIn.get())),
+                // Last, so that every rule reading the sizes as numbers of the input is asked
+                // first: a sum of sizes is read as one of the containers holding something only
+                // where none of them reads it whole.
+                () -> checkedSum == null ? null : new Derivation.AnEmptinessCheck(
+                        holdingSomethingOfAny(checkedSum.containers(), at, emptiness, reads),
+                        checkedSum.emptyWhereItHolds()));
         return rules;
+    }
+
+    /** Whether {@code container} holds anything, asked at {@code at} where the comparison is
+     *  read in a place. */
+    private Derivation holdingSomething(Core container, Denotation at, Asked emptiness,
+                                        InputReads reads) {
+        return at == null ? observe(container, emptiness, reads)
+                : asking(at, () -> observe(container, emptiness, reads));
+    }
+
+    /** Whether some one of {@code containers} holds anything. */
+    private Derivation holdingSomethingOfAny(List<Core> containers, Denotation at,
+                                             Asked emptiness, InputReads reads) {
+        Derivation some = holdingSomething(containers.getFirst(), at, emptiness, reads);
+        for (Core each : containers.subList(1, containers.size())) {
+            some = new Derivation.Joined(ConditionJoin.EITHER, some,
+                    holdingSomething(each, at, emptiness, reads));
+        }
+        return some;
     }
 
     /**

@@ -364,6 +364,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.Pullback.joined",
                     "the composition of what a condition states, joined as the proposition the"
                             + " two halves make"),
+            new Held("souther.compiler.partition.AnEmptinessCheck.sizesAdded",
+                    "names the addition, the one way of putting sizes together that is nought"
+                            + " exactly where each is and one or more exactly where one is"),
             new Held("souther.compiler.check.RemainderOfAShiftedValue.SumOrDifference.of",
                     "asks whether a value is a sum or a difference, as written or as the library's"
                             + " operation that computes the same, so a place moved by a number is"

@@ -10,7 +10,11 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.ValueName;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Whether a comparison is a size held against a number that parts nought from every size above it
@@ -32,24 +36,52 @@ final class AnEmptinessCheck {
     private AnEmptinessCheck() {}
 
     /**
-     * What a comparison says of whether a container holds anything.
+     * What a comparison says of whether containers hold anything.
      *
-     * @param container         the container whose size is held against nought
-     * @param emptyWhereItHolds whether the comparison holding is the container holding nothing
+     * @param containers        the containers whose sizes are added up and held against nought,
+     *                          one where a size alone is
+     * @param emptyWhereItHolds whether the comparison holding is the containers holding nothing
      */
-    record Checked(Core container, boolean emptyWhereItHolds) {}
+    record Checked(List<Core> containers, boolean emptyWhereItHolds) {
+
+        Checked {
+            containers = List.copyOf(containers);
+        }
+    }
 
     /**
-     * The emptiness {@code stated} checks, or null where it is no size held against a number that
-     * parts nought from every size above it.
+     * The emptiness {@code stated} checks of one container, or null where it is no size held
+     * against a number that parts nought from every size above it.
      */
     static Checked checked(StatedComparison stated) {
-        StatedComparison.Numbered<AnOperationApplied> size = stated.at(AnEmptinessCheck::aSize);
-        if (size == null
-                || !(Core.withoutStanding(size.other()) instanceof Core.Int against)) {
+        Checked all = checkedSizes(stated);
+        return all != null && all.containers().size() == 1 ? all : null;
+    }
+
+    /**
+     * The emptiness {@code stated} checks of several containers, where it is their sizes added up
+     * and held against a number that parts nought from every sum above it — or null where it is
+     * no such sum.
+     *
+     * <p>A size is no lower than nought, so a sum of them is nought exactly where every one is and
+     * is one or more exactly where some one is: the comparison holds exactly where some container
+     * holds something, or exactly where none does. Any other way of combining sizes — taking one
+     * from another, weighing one more than the rest — is a relation between them, and is not
+     * this.
+     */
+    static Checked checkedSum(StatedComparison stated) {
+        Checked all = checkedSizes(stated);
+        return all != null && all.containers().size() > 1 ? all : null;
+    }
+
+    private static Checked checkedSizes(StatedComparison stated) {
+        StatedComparison.Numbered<List<AnOperationApplied>> sizes =
+                stated.at(AnEmptinessCheck::sizesAdded);
+        if (sizes == null
+                || !(Core.withoutStanding(sizes.other()) instanceof Core.Int against)) {
             return null;
         }
-        Rel relation = size.claim().statedRelation();
+        Rel relation = sizes.claim().statedRelation();
         boolean atNought = relation.holds(Long.compare(0, against.value()));
         boolean above = relation.holds(1);
         if (atNought == above) {
@@ -59,9 +91,30 @@ final class AnEmptinessCheck {
         // whatever else is known of the size: it comes out one way at nought and the other way on
         // either side of it.
         boolean noughtAlone = against.value() == 0 && relation.holds(-1) == above;
-        return noughtAlone || partsNoughtFromEverySizeAbove(relation, against.value(),
-                        size.number().operation())
-                ? new Checked(size.number().args().getFirst(), atNought) : null;
+        if (!noughtAlone && !sizes.number().stream().allMatch(size ->
+                partsNoughtFromEverySizeAbove(relation, against.value(), size.operation()))) {
+            return null;
+        }
+        return new Checked(sizes.number().stream().map(size -> size.args().getFirst()).toList(),
+                atNought);
+    }
+
+    /**
+     * The sizes {@code e} adds up, or null where it is not sizes and nothing else added together.
+     */
+    private static List<AnOperationApplied> sizesAdded(Core e) {
+        if (Core.withoutStanding(e) instanceof Core.Binary sum && sum.op() == BinOp.ADD) {
+            List<AnOperationApplied> left = sizesAdded(sum.left());
+            List<AnOperationApplied> right = left == null ? null : sizesAdded(sum.right());
+            if (right == null) {
+                return null;
+            }
+            List<AnOperationApplied> both = new ArrayList<>(left);
+            both.addAll(right);
+            return both;
+        }
+        AnOperationApplied size = aSize(e);
+        return size == null ? null : List.of(size);
     }
 
     /**

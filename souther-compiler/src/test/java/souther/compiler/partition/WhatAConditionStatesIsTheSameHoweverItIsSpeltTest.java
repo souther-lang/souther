@@ -326,12 +326,15 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
         }
         // A walk adding one for every element counts them, and one adding two counts them twice;
         // so does a walk putting one more in what it carries, and one that doubles what it
-        // carries is no count of anything.
+        // carries is no count of anything — though whether it puts in any is, so held at least
+        // one it is whether the elements are there, and held beyond one it is unread.
         assertEquals(once, stated(
                 "List.fold((acc, e) -> acc + 1, 0, b.xs) + List.length(b.items) >= 1"));
         assertEquals(once, stated(sum.formatted("List.fold((acc, e) -> acc ++ [e], [], b.xs)")));
-        assertInstanceOf(Proposition.Unread.class,
-                stated(sum.formatted("List.fold((acc, e) -> acc ++ acc ++ [e], [], b.xs)")));
+        assertEquals(stated("List.length(b.xs) >= 1 || List.length(b.items) >= 1"), stated(
+                sum.formatted("List.fold((acc, e) -> acc ++ acc ++ [e], [], b.xs)")));
+        assertInstanceOf(Proposition.Unread.class, stated(sum.formatted(
+                "List.fold((acc, e) -> acc ++ acc ++ [e], [], b.xs)").replace(">= 1", ">= 2")));
         Proposition twice = stated(
                 "List.length(b.xs) + List.length(b.xs) + List.length(b.items) >= 1");
         assertEquals(twice, stated(
