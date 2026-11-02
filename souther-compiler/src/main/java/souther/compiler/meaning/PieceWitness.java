@@ -28,7 +28,19 @@ public record PieceWitness(int depth, Site site) {
 
             public Quantifier {
                 Objects.requireNonNull(call, "a quantifier is a call the source wrote");
+                if (!call.isWritten()) {
+                    throw new IllegalArgumentException(
+                            "a call the source did not write is every such call: " + call);
+                }
             }
+        }
+
+        /**
+         * The site of the quantifier {@code call}, or null where it is none the source wrote: the
+         * calls that were not are all one occurrence, which names no statement.
+         */
+        static Site quantifiedAt(ConstructOccurrence call) {
+            return call == null || !call.isWritten() ? null : new Quantifier(call);
         }
 
         /**

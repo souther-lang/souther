@@ -20,17 +20,13 @@ import java.util.Set;
  */
 final class PartedStringsOfThePieces {
 
-    static final PartedStringsOfThePieces NONE =
-            new PartedStringsOfThePieces(Map.of(), Set.of());
+    static final PartedStringsOfThePieces NONE = new PartedStringsOfThePieces(Map.of());
 
     private final Map<PieceWitness, Derivation.APieceInALanguage.PartedString> known;
-    private final Set<PieceWitness> contradicted;
 
     private PartedStringsOfThePieces(
-            Map<PieceWitness, Derivation.APieceInALanguage.PartedString> known,
-            Set<PieceWitness> contradicted) {
+            Map<PieceWitness, Derivation.APieceInALanguage.PartedString> known) {
         this.known = known;
-        this.contradicted = contradicted;
     }
 
     /** What the statements holding pieces to a language say of where the pieces come from. */
@@ -49,16 +45,11 @@ final class PartedStringsOfThePieces {
             }
         }
         known.keySet().removeAll(contradicted);
-        return new PartedStringsOfThePieces(Map.copyOf(known), Set.copyOf(contradicted));
+        return new PartedStringsOfThePieces(Map.copyOf(known));
     }
 
     /** The string {@code piece} is a piece of, where the statements agree on it. */
     Optional<Derivation.APieceInALanguage.PartedString> of(PieceWitness piece) {
         return Optional.ofNullable(known.get(piece));
-    }
-
-    /** Whether statements about {@code piece} disagree on where it comes from. */
-    boolean contradicts(PieceWitness piece) {
-        return contradicted.contains(piece);
     }
 }

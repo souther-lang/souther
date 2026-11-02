@@ -3215,7 +3215,7 @@ final class Pullback {
             case Core.Call plain -> plain.occurrence();
             default -> null;
         };
-        return occurrence == null ? null : new PieceWitness.Site.Quantifier(occurrence);
+        return PieceWitness.Site.quantifiedAt(occurrence);
     }
 
     /**

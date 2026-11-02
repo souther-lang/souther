@@ -24,20 +24,21 @@ import souther.compiler.query.Compilation;
 import souther.compiler.semantics.CaseMapping;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ValueName;
 
+import java.lang.reflect.RecordComponent;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * That some element of a list a closure wrote under one arm meets a statement is that the arm is
@@ -104,16 +105,35 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
      * The statements about some piece the pieces held to a language were read in, as each says
      * which it is, taken from the steps the reading met.
      */
-    private static Set<String> statementsAboutSomePiece(Pullback.Pulled pulled) {
-        Set<String> out = new LinkedHashSet<>();
-        Pattern said = Pattern.compile("within=(.*?), parted=");
+    private static Set<PieceWitness> statementsAboutSomePiece(Pullback.Pulled pulled) {
+        Set<PieceWitness> out = new LinkedHashSet<>();
         for (Pullback.Leaf leaf : pulled.leaves()) {
-            Matcher found = said.matcher(leaf.step().toString());
-            while (found.find()) {
-                out.add(found.group(1));
-            }
+            heldToALanguageIn(leaf.step(), out);
         }
         return out;
+    }
+
+    /**
+     * Every piece held to a language in {@code derivation}, however it is put together: found by
+     * what a step is, and not by how it prints or in which order it holds its parts.
+     */
+    private static void heldToALanguageIn(Object derivation, Set<PieceWitness> into) {
+        switch (derivation) {
+            case Derivation.APieceInALanguage held -> into.add(held.within());
+            case Record record -> {
+                for (RecordComponent component : record.getClass().getRecordComponents()) {
+                    try {
+                        component.getAccessor().setAccessible(true);
+                        heldToALanguageIn(component.getAccessor().invoke(record), into);
+                    } catch (ReflectiveOperationException broken) {
+                        throw new IllegalStateException(broken);
+                    }
+                }
+            }
+            case Iterable<?> parts -> parts.forEach(part -> heldToALanguageIn(part, into));
+            case Optional<?> maybe -> maybe.ifPresent(part -> heldToALanguageIn(part, into));
+            case null, default -> { }
+        }
     }
 
     /** One statement about some piece is one piece, however many parts it is read in. */
@@ -128,7 +148,7 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
      */
     @Test
     void twoQuantifiersOverOneSplitAreTwoStatementsAboutSomePiece() {
-        Set<String> statements = statementsAboutSomePiece(pulled(
+        Set<PieceWitness> statements = statementsAboutSomePiece(pulled(
                 counted("Letters", "n", "@", "s") + " && " + counted("Letters", "m", "@", "s")));
         assertEquals(2, statements.size(), statements::toString);
     }
@@ -136,7 +156,7 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
     /** And over two strings. */
     @Test
     void twoQuantifiersOverTwoStringsAreTwoStatementsAboutSomePiece() {
-        Set<String> statements = statementsAboutSomePiece(pulled(
+        Set<PieceWitness> statements = statementsAboutSomePiece(pulled(
                 counted("Letters", "n", "@", "s") + " && " + counted("Digits", "m", "#", "t")));
         assertEquals(2, statements.size(), statements::toString);
     }
@@ -146,9 +166,45 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
     void oneHelperAppliedTwiceIsTwoStatementsAboutSomePiece() {
         String helper = "let named (x: String, rs: List<Row>): Bool = "
                 + counted("Letters", "n", "@", "x", "rs") + "\n";
-        Set<String> statements = statementsAboutSomePiece(pulled(helper,
+        Set<PieceWitness> statements = statementsAboutSomePiece(pulled(helper,
                 "named(s, rows) && named(t, rows)"));
         assertEquals(2, statements.size(), statements::toString);
+    }
+
+    /**
+     * The closure parameter that stands for a piece is a different binding in each application of
+     * a helper, so the pieces of two applications are told apart by it where no quantifier call
+     * names them.
+     */
+    @Test
+    void theParameterOfAHelperIsAnotherBindingInEachApplication() {
+        String helper = "let named (x: String, rs: List<Row>): Bool = "
+                + counted("Letters", "n", "@", "x", "rs") + "\n";
+        Set<BindingId> bindings = new LinkedHashSet<>();
+        collectReadsNamed("d", analysisOf(helper, "named(s, rows) && named(t, rows)").core(),
+                bindings);
+        assertEquals(2, bindings.size(), bindings::toString);
+    }
+
+    private static void collectReadsNamed(String name, Core e, Set<BindingId> into) {
+        Core written = Core.withoutStanding(e);
+        if (written instanceof Core.Read read && read.name().equals(name)
+                && read.binding() != null) {
+            into.add(read.binding());
+        }
+        Core.forEachChild(written, child -> collectReadsNamed(name, child, into));
+    }
+
+    /**
+     * A call the source did not write is every such call, one occurrence that names no statement:
+     * it is no site, and a quantifier standing at it is not read.
+     */
+    @Test
+    void aQuantifierTheSourceDidNotWriteIsNoSite() {
+        assertEquals(null, PieceWitness.Site.quantifiedAt(ConstructOccurrence.unwritten()));
+        assertEquals(null, PieceWitness.Site.quantifiedAt(null));
+        assertThrows(IllegalArgumentException.class,
+                () -> new PieceWitness.Site.Quantifier(ConstructOccurrence.unwritten()));
     }
 
     /**
@@ -164,7 +220,6 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
         assertEquals(fromS.parted(), agreed.of(piece));
         PartedStringsOfThePieces disagreed = PartedStringsOfThePieces.of(List.of(fromS, fromT));
         assertEquals(Optional.empty(), disagreed.of(piece));
-        assertEquals(true, disagreed.contradicts(piece));
     }
 
     /** Pieces at one depth that are two statements' keep each its own string. */
@@ -221,6 +276,32 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
 
     /** What the condition of the fork on {@code truth} was read as, with {@code lets} before it. */
     private static Pullback.Pulled pulled(String lets, String truth) {
+        Compilation compilation = compiled(lets, truth);
+        AnalysisBody analysis = analysisOf(compilation);
+        RuleReadingSource rules = RuleReadings.of(compilation, "p");
+        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("p")).value().get("f");
+        InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
+                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
+                inputs.dependencies());
+        Core e = Core.withoutStanding(analysis.core());
+        while (e instanceof Core.LetIn let) {
+            reads = reads.and(let.binder(), let.value());
+            e = Core.withoutStanding(let.body());
+        }
+        Core.If fork = assertInstanceOf(Core.If.class, e, "the body is one fork");
+        return Pullback.ofATruth(fork.cond(), reads, inputs.reading(rules), Optional.empty());
+    }
+
+    private static AnalysisBody analysisOf(String lets, String truth) {
+        return analysisOf(compiled(lets, truth));
+    }
+
+    private static AnalysisBody analysisOf(Compilation compilation) {
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("p")).value();
+        return checked.analysisBodies().get("f");
+    }
+
+    private static Compilation compiled(String lets, String truth) {
         String source = """
                 module p
                 data Letters = String
@@ -243,19 +324,6 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
-        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("p")).value();
-        AnalysisBody analysis = checked.analysisBodies().get("f");
-        RuleReadingSource rules = RuleReadings.of(compilation, "p");
-        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("p")).value().get("f");
-        InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
-                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
-                inputs.dependencies());
-        Core e = Core.withoutStanding(analysis.core());
-        while (e instanceof Core.LetIn let) {
-            reads = reads.and(let.binder(), let.value());
-            e = Core.withoutStanding(let.body());
-        }
-        Core.If fork = assertInstanceOf(Core.If.class, e, "the body is one fork");
-        return Pullback.ofATruth(fork.cond(), reads, inputs.reading(rules), Optional.empty());
+        return compilation;
     }
 }
