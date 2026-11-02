@@ -4426,29 +4426,35 @@ public final class Adequacy {
         // has to hold, so a row composed for one item can stand where another item asks — and the
         // two went out as two pieces of work because nothing asked what an offered row settles.
         Settlements table = Settlements.of(db, composed);
-        Set<RowKey> kept = new LinkedHashSet<>(table.keeping());
+        Set<RowKey> covering = new LinkedHashSet<>(table.keeping());
+        Set<RowKey> kept = new LinkedHashSet<>(covering);
         // And the rows that try a behavior with what the rows of its callees are given. They are
         // composed for no item, so what the reduction keeps is what an item needs and these stay
         // beside it: the offering is the work the model is owed and the inputs its author has
-        // already reached for.
+        // already reached for. A seed the reduction kept anyway is owed, so only the ones it
+        // would have dropped are suggestions.
         Set<RowKey> seeded = composed.seeded();
         composed.rowsByBehavior().values().forEach(rows -> rows.stream()
                 .map(OfferedRow::key).filter(seeded::contains).forEach(kept::add));
+        Set<RowKey> suggestions = new LinkedHashSet<>(kept);
+        suggestions.removeAll(covering);
         // And what the rows that are left answer, which is what the block may not say nothing
         // offers. A row composed for one thing standing where another asks is the whole of this,
         // and a note printed over it would send a person after work that is already in front of
         // them.
         Set<ObligationIdentity> answered = new LinkedHashSet<>();
         for (ObligationIdentity item : table.requested()) {
-            if (kept.stream().anyMatch(row -> table.at(row, item).settles())) {
+            if (covering.stream().anyMatch(row -> table.at(row, item).settles())) {
                 answered.add(item);
             }
         }
         // And where the row a person is handed stands on each line it answers. Asked of the table
         // after the reduction, because that is when it is settled: a row that tells two lines apart
         // answers the line whoever it was composed for, so the row composed for it is not always
-        // the one that goes out.
-        return composed.keeping(kept, answered, table.shownFor(kept));
+        // the one that goes out. And of the rows that cover and not of all that go out: a
+        // suggestion owes nothing, so no line is shown at one, and the answer above is the same
+        // either way because the reduction keeps whatever settles.
+        return composed.keeping(kept, suggestions, answered, table.shownFor(covering));
     }
 
     /**

@@ -42,6 +42,7 @@ public final class Offering {
     private final SequencedMap<String, Adequacy.Filling> searched;
     private final BorderAccount account;
     private final Set<ObligationIdentity> answered;
+    private final Set<RowKey> suggestions;
     private final Map<ObligationIdentity, Settlements.Shown> shownAt;
     /** {@link #shownAt} read from each row's side, filed once so a block asking it a row at a time
      *  does not walk every line for every row. */
@@ -55,6 +56,9 @@ public final class Offering {
      * @param account every point of a line this request answers for, whosever it is — a body's own
      *                 and its declarations' alike — or null where the request asked for no boundary
      *                 rows, which is not the same as a request that asked and found none
+     * @param suggestions the rows here that the reduction would have dropped and that are offered
+     *                 for the inputs of called behaviors' rows alone; they owe nothing, and every
+     *                 one is a row of {@code rowsByBehavior}
      * @param answered what the rows here settle: every item one of them would answer if it were
      *                 written, whichever row it was composed for
      * @param shownAt  the row a person is handed for each line and the input it stands at there,
@@ -65,8 +69,22 @@ public final class Offering {
      */
     Offering(OfferingRequest request, SequencedMap<String, List<OfferedRow>> rowsByBehavior,
              SequencedMap<String, Adequacy.Filling> searched, BorderAccount account,
-             Set<ObligationIdentity> answered,
+             Set<RowKey> suggestions, Set<ObligationIdentity> answered,
              Map<ObligationIdentity, Settlements.Shown> shownAt) {
+        Set<RowKey> offered = new LinkedHashSet<>();
+        rowsByBehavior.values().forEach(rows -> rows.forEach(row -> offered.add(row.key())));
+        if (!offered.containsAll(suggestions)) {
+            throw new IllegalArgumentException("a suggestion is a row that is offered: "
+                    + suggestions);
+        }
+        for (Settlements.Shown shown : shownAt.values()) {
+            if (suggestions.contains(shown.rowKey())) {
+                throw new IllegalArgumentException(
+                        "a row that owes nothing is not the row a line is shown at: "
+                                + shown.rowKey());
+            }
+        }
+        this.suggestions = Collections.unmodifiableSet(new LinkedHashSet<>(suggestions));
         this.shownAt = Collections.unmodifiableMap(new LinkedHashMap<>(shownAt));
         Map<RowKey, List<ObligationIdentity>> over = new HashMap<>();
         this.shownAt.forEach((item, shown) -> {
@@ -141,8 +159,18 @@ public final class Offering {
         return shownOver.getOrDefault(row, List.of());
     }
 
-    /** How many pieces of work this offers, which is what a block says at the top of it. */
+    /** How many rows this offers, suggestions among them. */
     public int count() {
         return rowsByBehavior.values().stream().mapToInt(List::size).sum();
+    }
+
+    /** Whether {@code row} is offered only to try an input and owes the model nothing. */
+    public boolean isSuggestion(RowKey row) {
+        return suggestions.contains(row);
+    }
+
+    /** How many of the rows offered are suggestions; the rest are proposed for something owed. */
+    public int suggestionCount() {
+        return suggestions.size();
     }
 }

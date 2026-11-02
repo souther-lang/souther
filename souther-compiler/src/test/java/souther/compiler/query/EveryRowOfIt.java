@@ -22,7 +22,7 @@ public final class EveryRowOfIt {
                         .map(OfferedRow::key)
                         .collect(java.util.stream.Collectors.toCollection(
                                 java.util.LinkedHashSet::new)),
-                java.util.Set.of(), java.util.Map.of());
+                java.util.Set.of(), java.util.Set.of(), java.util.Map.of());
     }
 
     private EveryRowOfIt() {}
