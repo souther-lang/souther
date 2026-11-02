@@ -24,8 +24,7 @@ public final class Recognizer {
      * machine is the only expensive thing here. Keyed by the meaning, so two spellings of one
      * pattern are one machine.
      */
-    private static final Map<PatternMeaning, Optional<Recognizer>> BUILT =
-            new ConcurrentHashMap<>();
+    private static final Map<Object, Optional<Recognizer>> BUILT = new ConcurrentHashMap<>();
 
     private final Automaton machine;
 
@@ -39,8 +38,18 @@ public final class Recognizer {
      * fold may look at.
      */
     public static Optional<Boolean> recognizes(PatternMeaning meaning, String value) {
-        return BUILT.computeIfAbsent(meaning, each -> Optional.ofNullable(
-                        of(each, PatternPlan.Budget.OF_A_FOLD.meter())))
+        return recognizes(meaning, meaning, value);
+    }
+
+    /**
+     * The same, with the machine kept under {@code key} where hashing {@code meaning} for every
+     * string asked is a cost the asker can avoid: a meaning is a tree of records, hashed and
+     * compared in full, and a key that spells it once is hashed in a string's cached hash.
+     * Two keys that are equal stand for equal meanings.
+     */
+    public static Optional<Boolean> recognizes(Object key, PatternMeaning meaning, String value) {
+        return BUILT.computeIfAbsent(key, _ -> Optional.ofNullable(
+                        of(meaning, PatternPlan.Budget.OF_A_FOLD.meter())))
                 .flatMap(recognizer -> recognizer.accepts(value,
                         PatternPlan.Budget.OF_A_FOLD.meter()));
     }

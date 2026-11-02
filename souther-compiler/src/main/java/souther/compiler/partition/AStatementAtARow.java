@@ -1228,7 +1228,8 @@ final class AStatementAtARow {
                     StringsLanguage language, boolean holds, Spelling _) ->
                     heldAs(holds, ofItsValue(at, row, value -> value instanceof
                             ObservedValue.Text(String text)
-                            ? Recognizer.recognizes(language.meaning(), text).orElse(null)
+                            ? Recognizer.recognizes(language, language.meaning(), text)
+                                    .orElse(null)
                             : null));
             case Proposition.All all -> joined(all.parts().stream()
                     .map(each -> at(each, row, answered)).toList(), true);
