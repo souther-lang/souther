@@ -5,6 +5,7 @@ import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
+import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.NotOwedReason;
@@ -14,8 +15,10 @@ import souther.compiler.publish.PublicationOrders;
 
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Everything known about one of the four coverage items of a border.
@@ -454,6 +457,85 @@ public sealed interface ItemAssessment {
             permits Attempt.Certified, Attempt.Unverified, Attempt.Stopped,
                     Attempt.Unexhausted, Attempt.Limited, Attempt.Unplanned, Attempt.Unresolved,
                     Attempt.Unavailable {
+
+        /**
+         * {@code attempt}, said to be short as well of what {@code extra} says.
+         *
+         * <p><b>Total over the outcomes, and the one place that is.</b> A search that stopped, one
+         * that walked some of a population, one a figure limited and one that came to nothing each
+         * carry what they were short of in their own shape, and what a second stage of the same
+         * search was short of has to join it whichever shape it is in. Written by the caller for
+         * the shape it expected, an outcome of another shape took nothing and the stage's shortfall
+         * was lost without a word. A new outcome is a compile error here, and not a case that
+         * quietly keeps what it had.
+         *
+         * <p>Each vocabulary joins its own: the figures to the figures that stopped it, the
+         * populations to those it walked some of, the numbers it could not hold to the numbers it
+         * could not hold. An outcome that was not short of figures and is now becomes the one that
+         * was limited, since a figure is what a reader raises.
+         *
+         * <p>Rows and what was not searched are as they were: a row built is not made less by what
+         * a search beside it was short of, and an outcome that composed nothing was short of
+         * nothing a second stage could add to.
+         */
+        static Attempt alsoShortOf(Attempt attempt, CompositionShortfall extra) {
+            if (extra.nothing()) {
+                return attempt;
+            }
+            return switch (attempt) {
+                case Certified _, Unverified _, Unplanned _, Unavailable _ -> attempt;
+                case Unresolved it -> extra.figures().isEmpty()
+                        ? new Unexhausted(it.why(), it.way(), it.uncomposed(),
+                                PublicationOrders.COMPOSITION_REPERTOIRES.keep(extra.populations()),
+                                PublicationOrders.COMPOSITION_CAPACITIES.keep(extra.unheld()))
+                        : new Limited(it.why(), it.way(), it.uncomposed(),
+                                PublicationOrders.COMPOSITION_BUDGETS.keep(extra.figures()),
+                                PublicationOrders.COMPOSITION_REPERTOIRES.keep(extra.populations()),
+                                PublicationOrders.COMPOSITION_CAPACITIES.keep(extra.unheld()));
+                case Unexhausted it -> extra.figures().isEmpty()
+                        ? new Unexhausted(it.why(), it.way(), it.uncomposed(),
+                                PublicationOrders.COMPOSITION_REPERTOIRES.keep(
+                                        joined(it.notAllOf().written(), extra.populations())),
+                                PublicationOrders.COMPOSITION_CAPACITIES.keep(
+                                        joined(it.unheld().written(), extra.unheld())))
+                        : new Limited(it.why(), it.way(), it.uncomposed(),
+                                PublicationOrders.COMPOSITION_BUDGETS.keep(extra.figures()),
+                                PublicationOrders.COMPOSITION_REPERTOIRES.keep(
+                                        joined(it.notAllOf().written(), extra.populations())),
+                                PublicationOrders.COMPOSITION_CAPACITIES.keep(
+                                        joined(it.unheld().written(), extra.unheld())));
+                case Limited it -> new Limited(it.why(), it.way(), it.uncomposed(),
+                        PublicationOrders.COMPOSITION_BUDGETS.keep(
+                                joined(it.limitedBy().written(), extra.figures())),
+                        PublicationOrders.COMPOSITION_REPERTOIRES.keep(
+                                joined(it.notAllOf().written(), extra.populations())),
+                        PublicationOrders.COMPOSITION_CAPACITIES.keep(
+                                joined(it.unheld().written(), extra.unheld())));
+                case Stopped it -> {
+                    Set<CompositionBudget> figures =
+                            joined(it.stoppedBy().written(), extra.figures());
+                    // The word is the figures', and a stop by more of them says what the most
+                    // far-reaching of them says ({@code Stopped} checks the two agree).
+                    Generator.UnresolvedCombination said = new Generator.UnresolvedCombination(
+                            it.why().classes(),
+                            Generator.UnresolvedCombination.Reason.wordFor(figures),
+                            it.why().detail(), it.why().said(), it.why().alsoShort());
+                    yield new Stopped(said, it.way(), it.uncomposed(),
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(figures),
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(
+                                    joined(it.notAllOf().written(), extra.populations())),
+                            PublicationOrders.COMPOSITION_CAPACITIES.keep(
+                                    joined(it.unheld().written(), extra.unheld())));
+                }
+            };
+        }
+
+        private static <T> Set<T> joined(Collection<? extends T> held,
+                                         Collection<? extends T> more) {
+            Set<T> both = new LinkedHashSet<>(held);
+            both.addAll(more);
+            return both;
+        }
 
         /**
          * What a search of the region came to, whichever way it came out.

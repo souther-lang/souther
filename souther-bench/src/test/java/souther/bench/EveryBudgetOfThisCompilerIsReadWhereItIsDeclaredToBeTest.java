@@ -505,10 +505,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Iterator;",
                     "holds the values made of one type to the same figure, and says it was reached"
                             + " through the counter it is handed"),
-            Map.entry("souther.compiler.query.Coverages$2#endedBy("
+            Map.entry("souther.compiler.query.Coverages$2#endedAskingOf("
                             + "Lsouther/compiler/query/SearchOutcomes;"
-                            + "Lsouther/compiler/partition/Realization;"
-                            + "Lsouther/compiler/partition/CompositionShortfall;)"
+                            + "Lsouther/compiler/partition/Realization;)"
                             + "Lsouther/compiler/query/SearchOutcomes;",
                     "hands that figure on with the answer where the realizer had a value left to"
                             + " give, which is what says the answer is about fewer values than the"

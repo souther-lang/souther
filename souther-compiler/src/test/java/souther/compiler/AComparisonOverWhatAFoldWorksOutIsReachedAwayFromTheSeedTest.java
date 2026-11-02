@@ -33,6 +33,10 @@ class AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest {
     private static final Pattern OFFERED = Pattern.compile(
             "// fills (ON|OFF|OUT) point of comparison[^\\n]*\\n\\s*\\| \\((?:Hand\\()?\\[([^\\]]*)\\]");
 
+    private static final Pattern GUARDED = Pattern.compile(
+            "// fills (ON|OFF|OUT) point of comparison@\\d+:\\d+:(\\d+)\\n\\s*\\| \\(\\[([^\\]]*)\\],"
+                    + " (-?\\d+)\\)");
+
     private static final Pattern POINT = Pattern.compile("Points\\((\\d+)\\)");
 
     private static String scorer(String parameter, String list, int least, int target) {
@@ -176,6 +180,60 @@ class AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest {
                 AComparisonOverWhatAFoldWorksOutIsReachedAwayFromTheSeedTest::totalOf).toList();
         assertEquals(1, out.size(), out.toString());
         assertTrue(out.getFirst() > 21 && out.getFirst() <= 50, out.toString());
+    }
+
+    /**
+     * A comparison several conditions lead to is reached along either, and a row made beside one
+     * that ran may go in by the other. What makes it a row of the point is that its run came out
+     * at the level at the comparison, and not the way it went in: each row offered still comes
+     * out at its level by the model's own fold, and still goes through the guard.
+     */
+    @Test
+    void aRowBesideOneThatRanMayGoInByAnotherWayAndStillComesOutAtThePoint() {
+        String source = scorer(0, 20)
+                .replace("behavior reached : (ps: List<Points>) -> Bool",
+                        "behavior reached : (ps: List<Points>, n: Int) -> Bool")
+                .replace("let reached (ps) = total(ps).value == 20",
+                        "let reached (ps, n) = if n == 1 || n == 2 then total(ps).value == 20"
+                                + " else false")
+                .replace("| ([]) -> false", "| ([], 1) -> false");
+        Compilation compilation = measured(source);
+        String block = GeneratedRows.of(
+                Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("m")),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
+                compilation.db()).text();
+
+        // The guard is two comparisons of its own, with points of their own; the one the fold is
+        // compared at is the last in the line.
+        List<Matcher> rows = new ArrayList<>();
+        Matcher found = GUARDED.matcher(block);
+        while (found.find()) {
+            rows.add(GUARDED.matcher(found.group()));
+            rows.getLast().matches();
+        }
+        int foldColumn = rows.stream().mapToInt(each -> Integer.parseInt(each.group(2))).max()
+                .orElseThrow();
+        int seen = 0;
+        for (Matcher row : rows) {
+            if (Integer.parseInt(row.group(2)) != foldColumn) {
+                continue;
+            }
+            List<Integer> elements = new ArrayList<>();
+            Matcher point = POINT.matcher(row.group(3));
+            while (point.find()) {
+                elements.add(Integer.valueOf(point.group(1)));
+            }
+            int n = Integer.parseInt(row.group(4));
+            assertTrue(n == 1 || n == 2, "goes through the guard: " + row.group());
+            int total = totalOf(elements);
+            switch (row.group(1)) {
+                case "ON" -> assertEquals(20, total, row.group());
+                case "OFF" -> assertTrue(total == 19 || total == 21, row.group());
+                default -> assertTrue(total > 21 && total <= 50, row.group());
+            }
+            seen++;
+        }
+        assertEquals(4, seen, block);
     }
 
     /** A least of one for the element makes a total of eight a row of unlike elements too. */

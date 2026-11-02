@@ -2256,7 +2256,7 @@ final class Coverages {
                     Criterion criterion, String label, AnotherLineTheRowsAllow.Stands line,
                     UnaryOperator<SearchRegion> narrowing) {
                 Looked looked = looked(criterion, label, narrowing, toRows, Optional.empty());
-                return ARowTellingTheLinesApart.of(border, line, looked.composed(),
+                return ARowTellingTheLinesApart.of(border, line, looked.placement().orElse(null),
                         looked.outcomes());
             }
 
@@ -2430,22 +2430,24 @@ final class Coverages {
                 // handed on as the witness it is and without the assignment of the candidate it was
                 // made beside.
                 CompositionShortfall besideShort = CompositionShortfall.NONE;
+                SearchOutcomes notRead = SearchOutcomes.none();
                 if (besideRows.isPresent()
                         && quantity.searchGoalAt(criterion) instanceof PointSearchGoal.ByObservation) {
-                    Optional<ItemAssessment.Attempt.Certified> beside =
+                    BesideRows beside =
                             besideWhatRan(ranBefore, criterion, label, rows, besideRows.get());
-                    if (beside.isPresent()) {
-                        return new Looked(SearchOutcomes.of(beside.get()), null, beside);
+                    if (beside.witness().isPresent()) {
+                        return Looked.besideARun(beside.witness().get());
                     }
                     besideShort = besideRows.get().shortOf();
+                    notRead = beside.notRead();
                 }
                 if (shortAtEveryValue) {
-                    return new Looked(withWhatBesideWasShortOf(last, besideShort), first,
+                    return new Looked(last.alsoShortOf(besideShort).plus(notRead), first,
                             Optional.empty());
                 }
                 if (nothingMoreAsked != null) {
-                    return new Looked(endedBy(last, nothingMoreAsked, besideShort), first,
-                            Optional.empty());
+                    return new Looked(endedBy(last, nothingMoreAsked, besideShort).plus(notRead),
+                            first, Optional.empty());
                 }
                 // The count ran out, and whether that is what ended the asking is the realizer's to
                 // say. Asked once more and for nothing else: a figure reported where the values
@@ -2455,8 +2457,21 @@ final class Coverages {
                 //
                 // Nothing is put to the point here, so no value is tried and none is charged for.
                 return new Looked(endedBy(last, realized(criterion, rows, able, region, tried),
-                        besideShort), first, Optional.empty());
+                        besideShort).plus(notRead), first, Optional.empty());
             }
+
+            /**
+             * What looking beside the rows the candidates ran came to: the row that stands at the
+             * point where one did, and otherwise the first row that was built and could not be read
+             * back.
+             *
+             * <p>The second is kept and not left out, as it is for a candidate: a row whose run
+             * nothing could read is a row built that a search was unable to say anything of, and a
+             * point looked for with a hundred such rows has not been looked for as one with none.
+             * Only the first is kept, since the rest are the same news.
+             */
+            private record BesideRows(Optional<ItemAssessment.Attempt.Certified> witness,
+                                      SearchOutcomes notRead) {}
 
             /**
              * Where a row at {@code criterion} along {@code able} would stand, or why none is
@@ -2555,9 +2570,10 @@ final class Coverages {
              * neighbour at a time, so that a row a unit from the item is moved by one before the
              * rows far from it are grown. Ties go to the row with fewer elements.
              */
-            private Optional<ItemAssessment.Attempt.Certified> besideWhatRan(
+            private BesideRows besideWhatRan(
                     List<Ran> ran, Criterion criterion, String label,
                     StandingAtAPoint.AtALine rows, Generator.RowsBesideBudget spent) {
+                SearchOutcomes notRead = SearchOutcomes.none();
                 Set<Generator.GeneratedRow> met = new HashSet<>();
                 PriorityQueue<Open> waiting = new PriorityQueue<>(
                         Comparator.comparing(Open::key, Comparator.nullsLast(ExactRatio::compareTo))
@@ -2585,16 +2601,19 @@ final class Coverages {
                     Generator.BoundaryAttempt.Built built = new Generator.BoundaryAttempt.Built(
                             next, from.built().unrepresented(), false);
                     ReadBack back = standingThere(probe, rows, criterion, built);
-                    if (whatCameOfIt(built, label, within, () -> back)
-                            instanceof ItemAssessment.Attempt.Certified certified) {
-                        return Optional.of(certified);
+                    ItemAssessment.Attempt came = whatCameOfIt(built, label, within, () -> back);
+                    if (came instanceof ItemAssessment.Attempt.Certified certified) {
+                        return new BesideRows(Optional.of(certified), SearchOutcomes.none());
+                    }
+                    if (came instanceof ItemAssessment.Attempt.Unverified && notRead.made().isEmpty()) {
+                        notRead = SearchOutcomes.of(came);
                     }
                     if (back.read() != null) {
                         waiting.add(new Open(new Ran(built, back.read(),
                                 distanceFrom(criterion, back.read())), null));
                     }
                 }
-                return Optional.empty();
+                return new BesideRows(Optional.empty(), notRead);
             }
 
             /** A row waiting to have the rows beside it run, with those it has yet to give. */
@@ -2612,8 +2631,12 @@ final class Coverages {
              *
              * <p>The two together, because a caller shown one place and handed a row built at
              * another has been shown two answers about one search. {@code composed} is the
-             * realization the row in {@code outcomes} was built from, and is null exactly where no
-             * row was built.
+             * placement of numbers the rows in {@code outcomes} were built from, and it is absent
+             * where there is none: either no row was built, or the row is one found beside a row
+             * that ran ({@link #besideARun}), which was made of no placement. The second is told
+             * from the first by {@code witness} being present, and a caller that needs the place
+             * a row was composed at asks for {@link #placement} and is not handed the placement
+             * of another row.
              *
              * <p>{@code witness} is the row that ran and stood at the point, and is held as that row
              * and not as a flag beside {@code composed}: a realization is where the search placed
@@ -2621,7 +2644,19 @@ final class Coverages {
              * reached except a run that reached it.
              */
             private record Looked(SearchOutcomes outcomes, Realization.Found composed,
-                                  Optional<ItemAssessment.Attempt.Certified> witness) {}
+                                  Optional<ItemAssessment.Attempt.Certified> witness) {
+
+                /** The row that stands at the point, found beside a row that ran: it was made of
+                 *  no placement, and is not given that of the row it was made beside. */
+                static Looked besideARun(ItemAssessment.Attempt.Certified witness) {
+                    return new Looked(SearchOutcomes.of(witness), null, Optional.of(witness));
+                }
+
+                /** The placement the rows in the outcomes were composed from, where there is one. */
+                Optional<Realization.Found> placement() {
+                    return Optional.ofNullable(composed);
+                }
+            }
 
             /** A way no value takes, said in the word for what the model settled it by. */
             private static Looked noRowTakes(String label, WayToTheBorder within,
@@ -2652,40 +2687,28 @@ final class Coverages {
              */
             private SearchOutcomes endedBy(SearchOutcomes last, Realization ended,
                                            CompositionShortfall beside) {
+                // The rule above is about the asking of the candidates, and the second stage's
+                // shortfall is another thing: it joins what each outcome is short of whatever
+                // shape the outcome is in ({@link ItemAssessment.Attempt#alsoShortOf}), and is not
+                // held to the rule that only an outcome naming nothing is said to be short.
+                return endedAskingOf(last, ended).alsoShortOf(beside);
+            }
+
+            private SearchOutcomes endedAskingOf(SearchOutcomes last, Realization ended) {
                 if (ended instanceof Realization.Found) {
                     return overLessThanThePointHad(last,
-                            union(Set.of(CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH),
-                                    beside.figures()),
-                            beside.populations(), beside.unheld());
+                            Set.of(CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH), Set.of(),
+                            Set.of());
                 }
                 // A proof about what was left is no proof about the point: what it is a proof about
                 // is the question this narrowed by leaving values out.
                 if (ended instanceof Realization.Unknown left
                         && !(left.stoppedBy().isEmpty() && left.notAllOf().isEmpty()
                                 && left.unheld().isEmpty())) {
-                    return overLessThanThePointHad(last, union(left.stoppedBy(), beside.figures()),
-                            union(left.notAllOf(), beside.populations()),
-                            union(left.unheld(), beside.unheld()));
+                    return overLessThanThePointHad(last, left.stoppedBy(), left.notAllOf(),
+                            left.unheld());
                 }
-                return withWhatBesideWasShortOf(last, beside);
-            }
-
-            /**
-             * {@code outcomes}, said to be about less than the point had in whatever the rows made
-             * beside the ones run were short of — each vocabulary under its own name, and nothing
-             * where nothing stopped them.
-             */
-            private SearchOutcomes withWhatBesideWasShortOf(SearchOutcomes outcomes,
-                                                            CompositionShortfall beside) {
-                return beside.nothing() ? outcomes
-                        : overLessThanThePointHad(outcomes, beside.figures(), beside.populations(),
-                                beside.unheld());
-            }
-
-            private static <T> Set<T> union(Set<T> one, Set<T> other) {
-                Set<T> both = new LinkedHashSet<>(one);
-                both.addAll(other);
-                return both;
+                return last;
             }
 
             /**
@@ -2699,6 +2722,11 @@ final class Coverages {
              * two readings of a pair walk one order, and one may meet a figure while the other walks
              * some of a population or reaches a place it cannot hold; choosing one of them would
              * tell a reader to act on it alone.
+             *
+             * <p>For the asking of the candidates, which is why it leaves alone an outcome that
+             * already says what fell short. What a later stage of the same search was short of is
+             * not that: it is a second dimension, and joins what every outcome says whatever its
+             * shape ({@link ItemAssessment.Attempt#alsoShortOf}).
              */
             private SearchOutcomes overLessThanThePointHad(SearchOutcomes outcomes,
                     Set<CompositionBudget> budgets, Set<CompositionRepertoire> repertoires,

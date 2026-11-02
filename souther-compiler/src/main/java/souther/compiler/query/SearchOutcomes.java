@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.CompositionRepertoire;
+import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.ConditionGap;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.types.ModelOccurrences;
@@ -55,6 +56,17 @@ public record SearchOutcomes(List<Made> made) {
             Objects.requireNonNull(attempt, "a search came to something");
             Objects.requireNonNull(readAt, "where the reading was read, or nowhere yet");
         }
+    }
+
+    /**
+     * These searches, each said to be short as well of what {@code extra} says
+     * ({@link ItemAssessment.Attempt#alsoShortOf}), where they were made.
+     */
+    public SearchOutcomes alsoShortOf(CompositionShortfall extra) {
+        return extra.nothing() ? this : new SearchOutcomes(made.stream()
+                .map(one -> new Made(ItemAssessment.Attempt.alsoShortOf(one.attempt(), extra),
+                        one.readAt()))
+                .toList());
     }
 
     /** Nobody asked for a value to be built here. */
