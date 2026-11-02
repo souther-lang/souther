@@ -16,35 +16,40 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A remainder of a form of two numbers states nothing of either while the other is free to be
- * chosen, so a membership test on one of them, read beside it, is read at every value of the
+ * A remainder of a form of several numbers states nothing of one of them while another is free to
+ * be chosen, so a membership test on one of them, read beside it, is read at every value of the
  * elements.
  *
- * <p>A remainder of one number alone is another matter. {@code Int.floorMod(d, 7) >= 1} leaves
- * {@code d} off every seventh value, so an element at one of those never equals it and the elements
- * are not shown to reach every value.
+ * <p>Free is a claim about every value of the rest: for each, some value of the free number brings
+ * the form to a remainder every remainder statement of the way allows together, and the form is
+ * worked out there. A remainder of one number alone, {@code Int.floorMod(d, 7) >= 1}, leaves
+ * {@code d} off every seventh value, so an element at one of those never equals it.
  */
 class AMembershipBesideARemainderOfTwoDatesIsReadTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /** What the position is said when its elements are read: the relation leaves them undivided. */
+    private static final String READ = "rule_relating_two_values";
 
     private static final String NOT_SHOWN = "relation_not_shown_to_reach_every_value";
 
     /** The number the remainder is of beside {@code d} is free, so {@code d} runs over every value. */
     @Test
     void aNumberFreeBesideTheRemainderLeavesTheElementsReached() {
-        assertEquals(List.of(), reasonsAt("a: Int, d: Int, hs: Set<Int>",
+        assertEquals(List.of(READ), reasonsAt("a: Int, d: Int, hs: Set<Int>",
                 "Int.floorMod(a - d, 7) >= 1 && Bool.not(Set.contains(d, hs))", "hs[*]"));
-        assertEquals(List.of(), reasonsAt("a: Int, d: Int, hs: Set<Int>",
+        assertEquals(List.of(READ), reasonsAt("a: Int, d: Int, hs: Set<Int>",
                 "Int.floorMod(a - d, 7) >= 1 && Set.contains(d, hs)", "hs[*]"));
     }
 
     @Test
     void theDaysBetweenTwoDatesLeaveTheElementsReached() {
-        assertEquals(List.of(), reasonsAt("sun: Date, d: Date, hs: Set<Date>",
+        assertEquals(List.of(READ), reasonsAt("sun: Date, d: Date, hs: Set<Date>",
                 "Int.floorMod(Date.daysBetween(sun, d), 7) >= 1 && Bool.not(Set.contains(d, hs))",
                 "hs[*]"));
     }
@@ -52,7 +57,7 @@ class AMembershipBesideARemainderOfTwoDatesIsReadTest {
     /** The two ends of a weekday are two statements of one form, and say nothing of either date. */
     @Test
     void bothEndsOfARemainderAreOneStatement() {
-        assertEquals(List.of(), reasonsAt("sun: Date, d: Date, hs: Set<Date>",
+        assertEquals(List.of(READ), reasonsAt("sun: Date, d: Date, hs: Set<Date>",
                 "Int.floorMod(Date.daysBetween(sun, d), 7) >= 1"
                         + " && Int.floorMod(Date.daysBetween(sun, d), 7) <= 5"
                         + " && Bool.not(Set.contains(d, hs))", "hs[*]"));
@@ -60,24 +65,23 @@ class AMembershipBesideARemainderOfTwoDatesIsReadTest {
 
     @Test
     void theOrderTheConjunctsAreWrittenInChangesNothing() {
-        assertEquals(List.of(), reasonsAt("a: Int, d: Int, hs: Set<Int>",
+        assertEquals(List.of(READ), reasonsAt("a: Int, d: Int, hs: Set<Int>",
                 "Bool.not(Set.contains(d, hs)) && Int.floorMod(a - d, 7) >= 1", "hs[*]"));
     }
 
     /** Only {@code d} itself: an element a seventh value apart never equals it. */
     @Test
     void aRemainderOfTheDateAloneLeavesTheElementsUnshown() {
-        assertTrue(reasonsAt("d: Int, hs: Set<Int>",
-                "Int.floorMod(d, 7) >= 1 && Bool.not(Set.contains(d, hs))", "hs[*]")
-                .contains(NOT_SHOWN));
+        assertEquals(List.of(NOT_SHOWN), reasonsAt("d: Int, hs: Set<Int>",
+                "Int.floorMod(d, 7) >= 1 && Bool.not(Set.contains(d, hs))", "hs[*]"));
     }
 
     /** A number that is chosen for no one is held at a value by another statement of the way. */
     @Test
     void aNumberHeldAtOneValueIsNoNumberToChoose() {
-        assertTrue(reasonsAt("a: Int, d: Int, hs: Set<Int>",
+        assertEquals(List.of(NOT_SHOWN), reasonsAt("a: Int, d: Int, hs: Set<Int>",
                 "a == 0 && Int.floorMod(a - d, 7) >= 1 && Bool.not(Set.contains(d, hs))",
-                "hs[*]").contains(NOT_SHOWN));
+                "hs[*]"));
     }
 
     /**
@@ -87,33 +91,61 @@ class AMembershipBesideARemainderOfTwoDatesIsReadTest {
      */
     @Test
     void aNumberThatMovesTheRemainderOnlyToSomeOfThemIsNoNumberToChoose() {
-        assertTrue(reasonsAt("a: Int, d: Int, hs: Set<Int>",
-                "Int.floorMod(2 * a - d, 4) == 1 && Bool.not(Set.contains(d, hs))", "hs[*]")
-                .contains(NOT_SHOWN));
+        assertEquals(List.of(NOT_SHOWN), reasonsAt("a: Int, d: Int, hs: Set<Int>",
+                "Int.floorMod(2 * a - d, 4) == 1 && Bool.not(Set.contains(d, hs))", "hs[*]"));
     }
 
     /** The form is added up as the program adds it, which can stop a run where a number is large. */
     @Test
     void aFormTheProgramMayNotAddUpIsNotTakenAwayFromTheRun() {
-        assertTrue(reasonsAt("a: Int, b: Int, d: Int, hs: Set<Int>",
-                "Int.floorMod(a + b - d, 7) >= 1 && Bool.not(Set.contains(d, hs))", "hs[*]")
-                .contains(NOT_SHOWN));
+        assertEquals(List.of(NOT_SHOWN), reasonsAt("a: Int, b: Int, d: Int, hs: Set<Int>",
+                "Int.floorMod(a + b - d, 7) >= 1 && Bool.not(Set.contains(d, hs))", "hs[*]"));
     }
 
     /** Nor is a remainder taken away from a run that works the same numbers out otherwise. */
     @Test
     void aProductOfTheSameNumbersTheRunWorksOutKeepsTheirTie() {
-        assertTrue(reasonsAt("a: Int, d: Int, hs: Set<Int>",
+        assertEquals(List.of(NOT_SHOWN), reasonsAt("a: Int, d: Int, hs: Set<Int>",
                 "Int.floorMod(a - d, 7) >= 1 && a * d == 0 && Bool.not(Set.contains(d, hs))",
-                "hs[*]").contains(NOT_SHOWN));
+                "hs[*]"));
     }
 
-    /** Nor is one another statement of the way holds to a run: it is read as it was. */
+    /** Two remainders no one number brings about together are not taken away together. */
+    @Test
+    void remaindersNoOneNumberBringsAboutTogetherAreNotTakenAwayTogether() {
+        assertFalse(reasonsAt("a: Int, d: Int, hs: Set<Int>",
+                "Int.floorMod(a - d, 7) == 1 && Int.floorMod(a - d, 7) == 2"
+                        + " && Bool.not(Set.contains(d, hs))", "hs[*]").contains(READ));
+    }
+
+    /**
+     * The same form moved by another number is another remainder, and the two are asked of the
+     * number they share: choosing it for one is not choosing it for the other.
+     */
+    @Test
+    void remaindersOfTheSameFormMovedByDifferentNumbersAreNotOne() {
+        assertFalse(reasonsAt("a: Int, d: Int, hs: Set<Int>",
+                "Int.floorMod(a - d, 7) == 1 && Int.floorMod(a - d + 1, 7) == 1"
+                        + " && Bool.not(Set.contains(d, hs))", "hs[*]").contains(READ));
+    }
+
+    /**
+     * The dates are fewer than the divisor has remainders, so choosing one of them cannot bring the
+     * difference to each.
+     */
+    @Test
+    void aDivisorPastTheDaysThereAreIsNotReachedByChoosingADate() {
+        assertEquals(List.of(NOT_SHOWN), reasonsAt("sun: Date, d: Date, hs: Set<Date>",
+                "Int.floorMod(Date.daysBetween(sun, d), 1000000000000) == 1"
+                        + " && Bool.not(Set.contains(d, hs))", "hs[*]"));
+    }
+
+    /** Nor does a number held to a run another statement narrows. */
     @Test
     void aNumberAnotherStatementNarrowsIsNoNumberToChoose() {
-        assertTrue(reasonsAt("a: Int, d: Int, hs: Set<Int>",
+        assertEquals(List.of(NOT_SHOWN), reasonsAt("a: Int, d: Int, hs: Set<Int>",
                 "a >= 0 && a <= 3 && Int.floorMod(a - d, 7) >= 1"
-                        + " && Bool.not(Set.contains(d, hs))", "hs[*]").contains(NOT_SHOWN));
+                        + " && Bool.not(Set.contains(d, hs))", "hs[*]"));
     }
 
     /**
@@ -134,8 +166,8 @@ class AMembershipBesideARemainderOfTwoDatesIsReadTest {
                     if (attempt instanceof ItemAssessment.Attempt.Certified certified) {
                         List<String> inputs = certified.row().inputs().stream()
                                 .map(each -> each.text()).toList();
-                        long remainder = Math.floorMod(Long.parseLong(inputs.get(0))
-                                - Long.parseLong(inputs.get(1)), 7L);
+                        long remainder = Math.floorMod(Math.subtractExact(
+                                Long.parseLong(inputs.get(0)), Long.parseLong(inputs.get(1))), 7L);
                         certified.row().purposes().forEach(each -> each.labels().forEach(label -> {
                             if (label.startsWith("Int.floorMod(a - d, 7) = ")) {
                                 assertEquals(remainder, Long.parseLong(
@@ -151,10 +183,11 @@ class AMembershipBesideARemainderOfTwoDatesIsReadTest {
                 labels.stream().sorted().distinct().toList());
     }
 
+    /** Every reason the report gives {@code position}, each once. */
     private static List<String> reasonsAt(String parameters, String condition, String position) {
         List<String> out = new ArrayList<>();
         reasons(reportOf(compiled(parameters, condition)), position, out);
-        return out.stream().filter(NOT_SHOWN::equals).distinct().toList();
+        return out.stream().distinct().toList();
     }
 
     private static void reasons(JsonNode node, String position, List<String> out) {
