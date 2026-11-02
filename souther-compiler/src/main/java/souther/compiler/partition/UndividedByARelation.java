@@ -2380,7 +2380,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     taken.demand() instanceof RowDemand.Exists some ? some.ofAnElement() : null,
                     OnAWay.PartsLeftAlone.NONE,
                     taken.demand() instanceof RowDemand.ForTheRun run
-                            && run.partedStrings().isPresent() ? run : null));
+                            && run.partedStrings().isPresent() ? run : null,
+                    taken.demand() instanceof RowDemand.OnARemainder on ? on : null));
         });
         way.requirements().refinements().keySet()
                 .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
@@ -2439,27 +2440,32 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param ofThePieces the demand it is, where it holds a piece of a string to a language: what
      *                   says which piece of which string, and which language, so that the strings
      *                   of a relation over that piece are shown as that parts them
+     * @param onARemainder the remainder it holds a form of the input's numbers to, where it is
+     *                   that, so that what it leaves of the form's numbers can be asked of the
+     *                   remainder itself and not of the places it names
      */
     record OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                   TermPath elementsOf, RowDemand.AnElementMeets bySome,
-                  PartsLeftAlone leavesAlone, RowDemand.ForTheRun ofThePieces) {
+                  PartsLeftAlone leavesAlone, RowDemand.ForTheRun ofThePieces,
+                  RowDemand.OnARemainder onARemainder) {
 
         /** The parts of a date a statement of the other parts says nothing of. */
         enum PartsLeftAlone { NONE, YEARS, MONTHS_AND_DAYS }
 
         OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                TermPath elementsOf) {
-            this(positions, whatStands, relation, elementsOf, null, PartsLeftAlone.NONE, null);
+            this(positions, whatStands, relation, elementsOf, null, PartsLeftAlone.NONE, null,
+                    null);
         }
 
         OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                TermPath elementsOf, RowDemand.AnElementMeets bySome, PartsLeftAlone leavesAlone) {
-            this(positions, whatStands, relation, elementsOf, bySome, leavesAlone, null);
+            this(positions, whatStands, relation, elementsOf, bySome, leavesAlone, null, null);
         }
 
         OnAWay leavingAlone(PartsLeftAlone parts) {
             return new OnAWay(positions, whatStands, relation, elementsOf, bySome, parts,
-                    ofThePieces);
+                    ofThePieces, onARemainder);
         }
 
         /** Whether this says nothing of {@code term} because it is a part of a date this leaves
@@ -4714,6 +4720,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             freeToMeet(term, each, out, declined, past, read))) {
                 out.remove(each);
             }
+            RowDemand.OnARemainder on = each.onARemainder();
+            if (on != null && on.dividend().coefs().keySet().stream().anyMatch(term ->
+                    freeToMeet(term, each, out, declined, past, read))) {
+                out.removeIf(other -> heldToTheSameRemainder(each, other));
+            }
         }
         return out;
     }
@@ -4745,7 +4756,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         for (OnAWay other : conditions) {
-            if (!other.equals(statement) && touches(number, other.positions())) {
+            if (!other.equals(statement) && !heldToTheSameRemainder(statement, other)
+                    && touches(number, other.positions())) {
+                return false;
+            }
+            // A statement the run says whether it held names no place, and says nothing of which
+            // numbers it turns on: a remainder is taken away only where none such stands beside it.
+            if (statement.onARemainder() != null && !other.equals(statement)
+                    && !heldToTheSameRemainder(statement, other) && other.positions().isEmpty()
+                    && !other.whatStands()) {
                 return false;
             }
         }
@@ -4776,7 +4795,54 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         NumericDomain.Bounds takes = realized(number, source, left,
                 ofIt.isEmpty() ? Way.UNTOUCHED : Way.NARROWED);
+        if (statement.onARemainder() != null) {
+            RowDemand.OnARemainder on = statement.onARemainder();
+            // Moved by one, the number leaves each remainder; moved by a multiple of a factor of
+            // the divisor it leaves only some.
+            ExactRatio weight = on.dividend().coefs().get(number);
+            if (weight == null || !weight.isWhole() || !(weight.floor()
+                    instanceof ExactAnswer.Held<BigInteger>(BigInteger whole))
+                    || !whole.abs().gcd(on.remainder().divisor()).equals(BigInteger.ONE)) {
+                return false;
+            }
+            return takesEveryRemainder(takes, on.remainder().divisor())
+                    && workedOutBeside(new TakenConstraint.Affine(on.dividend(), Rel.EQ), number,
+                            takes, read);
+        }
         return takesTwoValues(takes) && workedOutBeside(statement.affine(), number, takes, read);
+    }
+
+    /** Whether {@code other} holds the same form to a remainder by the same divisor as
+     *  {@code statement} does, which says of the form's numbers what the two say together. */
+    private static boolean heldToTheSameRemainder(OnAWay statement, OnAWay other) {
+        return statement.onARemainder() != null && other.onARemainder() != null
+                && statement.onARemainder().remainder().divisor()
+                        .equals(other.onARemainder().remainder().divisor())
+                && statement.onARemainder().dividend().coefs()
+                        .equals(other.onARemainder().dividend().coefs());
+    }
+
+    /**
+     * Whether {@code run} holds as many whole values side by side as a division by
+     * {@code divisor} has remainders, so that a form moved by one of its numbers over the run
+     * leaves each remainder whatever the rest of the form comes to.
+     */
+    private static boolean takesEveryRemainder(NumericDomain.Bounds run, BigInteger divisor) {
+        if (run == null || !run.holdsAValue()) {
+            return false;
+        }
+        if (run.min() == null || run.max() == null) {
+            return true;
+        }
+        if (!(run.min().at() instanceof Count least) || !(run.max().at() instanceof Count most)) {
+            return false;
+        }
+        BigInteger low = run.min().inclusive() ? least.exactly().ceiling().orNull()
+                : least.exactly().floor().map(at -> at.add(BigInteger.ONE)).orNull();
+        BigInteger high = run.max().inclusive() ? most.exactly().floor().orNull()
+                : most.exactly().ceiling().map(at -> at.subtract(BigInteger.ONE)).orNull();
+        return low != null && high != null
+                && high.subtract(low).add(BigInteger.ONE).compareTo(divisor) >= 0;
     }
 
     /**
