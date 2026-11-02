@@ -22,7 +22,7 @@ final class OrderedTerms<A> implements Iterable<Map.Entry<A, ExactRatio>> {
     private final ExactRatio[] weights;
     private int size;
 
-    /** Room for {@code capacity} terms, which {@link #add} does not grow past. */
+    /** Room for {@code capacity} terms, which {@link #addUnlessNought} does not grow past. */
     OrderedTerms(int capacity) {
         this.positions = new Object[capacity];
         this.weights = new ExactRatio[capacity];
