@@ -9,6 +9,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.WhereTheReadingsDiffer;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -80,8 +81,11 @@ class TheLinesOfAComparisonAreNumberedByTheLinesAndNotByTheWalkTest {
     }
 
     private static List<String> wordsOfEachPoint(List<BorderAssessment> readings) {
-        return BorderObligationPointAssessment.across(readings, _ -> List.of()).stream()
-                .map(point -> point.point() + " = " + point.readingsSaid().stream()
+        List<BorderObligationPointAssessment> points =
+                BorderObligationPointAssessment.across(readings, _ -> List.of());
+        WhereTheReadingsDiffer apart = WhereTheReadingsDiffer.of(points);
+        return points.stream()
+                .map(point -> point.point() + " = " + point.readingsSaid(apart).stream()
                         .map(said -> said.at() + ": " + said.asks()).sorted()
                         .collect(Collectors.toList()))
                 .sorted().toList();
@@ -112,6 +116,24 @@ class TheLinesOfAComparisonAreNumberedByTheLinesAndNotByTheWalkTest {
     void theModelsUnderTestShareWordsSoTheOrderIsAskedOfSomething() {
         List<String> words = wordsOfEachPoint(readingsOf(CLAMPED).get("full"));
         assertTrue(words.stream().anyMatch(each -> each.contains("(line ")), words::toString);
+    }
+
+    /** What is held is compared by what it says: the same readings met in another order hold an
+     *  equal value, and a value that numbers lines differs from one that numbers none. */
+    @Test
+    void theValueIsEqualByWhatItHolds() {
+        List<BorderAssessment> readings = readingsOf(CLAMPED).get("full");
+        WhereTheReadingsDiffer met = WhereTheReadingsDiffer.of(
+                BorderObligationPointAssessment.across(readings, _ -> List.of()));
+        List<BorderAssessment> turned = new ArrayList<>(readings);
+        Collections.reverse(turned);
+        WhereTheReadingsDiffer other = WhereTheReadingsDiffer.of(
+                BorderObligationPointAssessment.across(turned, _ -> List.of()));
+
+        assertEquals(met, other);
+        assertEquals(met.hashCode(), other.hashCode());
+        assertNotEquals(WhereTheReadingsDiffer.NONE, met);
+        assertNotEquals(met, WhereTheReadingsDiffer.NONE);
     }
 
     /** Two lines of one comparison are never put together, and what puts one first puts the other

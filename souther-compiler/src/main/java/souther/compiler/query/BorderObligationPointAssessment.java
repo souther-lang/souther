@@ -86,8 +86,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                                               Optional<Demand> demand, ObligationAssessment item,
                                               java.util.SequencedMap<Reading, BorderAssessment>
                                                       met,
-                                              Map<Reading, ReadingSeat> seats,
-                                              WhereTheReadingsDiffer apart)
+                                              Map<Reading, ReadingSeat> seats)
         implements RuleCitations {
 
     /**
@@ -332,12 +331,9 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                 seats.get(each.point()).merge(where, each.seat(), ReadingSeat::closer);
             }
         }
-        // Held beside every point, since the readings that a report would say in the same words are
-        // of different points of one comparison.
-        WhereTheReadingsDiffer apart = WhereTheReadingsDiffer.of(byPoint, seats);
         List<BorderObligationPointAssessment> out = new ArrayList<>();
         byPoint.forEach((point, met) -> out.add(of(point, attribution.get(point), met,
-                seats.get(point), premisesOf, apart)));
+                seats.get(point), premisesOf)));
         return List.copyOf(out);
     }
 
@@ -359,13 +355,12 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
             souther.compiler.partition.PointAttribution attribution,
             java.util.SequencedMap<Reading, BorderAssessment> met,
             Map<Reading, ReadingSeat> seats,
-            Function<BorderAssessment, List<WhereNothingIsAnswered.Premise>> premisesOf,
-            WhereTheReadingsDiffer apart) {
+            Function<BorderAssessment, List<WhereNothingIsAnswered.Premise>> premisesOf) {
         List<BorderAssessment> readings = List.copyOf(met.values());
         Optional<Demand> asked = asked(point, met, seats);
         return new BorderObligationPointAssessment(point, attribution,
                 reachedBy(point, readings), asked,
-                came(met, seats, asked, premisesOf), met, seats, apart);
+                came(met, seats, asked, premisesOf), met, seats);
     }
 
     /**
@@ -803,7 +798,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * <p>All of them. Which to show is the surface's ({@link #READINGS_SAID}), so that what is left
      * out is a count the surface says rather than a reading this dropped.
      */
-    public List<ReadingSaid> readingsSaid() {
+    public List<ReadingSaid> readingsSaid(WhereTheReadingsDiffer apart) {
         List<ReadingSaid> out = new ArrayList<>();
         met.forEach((where, at) -> {
             DomainPoint asked = seats.get(where).asked();

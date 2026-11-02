@@ -72,7 +72,8 @@ class ADeclarationsPointIsWrittenFromTheDeclarationTest {
      */
     @Test
     void theTwoReadingsNameThePositionDifferently() {
-        List<String> at = measured().modules().get(0).debts().get(0).debt().readingsSaid().stream()
+        List<String> at = measured().modules().get(0).debts().get(0).debt()
+                .readingsSaid(WhereTheReadingsDiffer.NONE).stream()
                 .map(BorderObligationPointAssessment.ReadingSaid::at)
                 .distinct().sorted().toList();
 

@@ -125,6 +125,7 @@ import souther.compiler.query.RuleSettlement;
 import souther.compiler.query.SearchOutcomes;
 import souther.compiler.query.SettledAcross;
 import souther.compiler.query.SettledAt;
+import souther.compiler.query.WhereTheReadingsDiffer;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.WeakeningSet;
 import souther.compiler.observe.MeasurementStatus;
@@ -453,6 +454,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /**
      * What one module's compile came to, as this report says it.
      *
+     * @param apart              which lines of a comparison the points of the whole module say in
+     *                           the same words. The module's and not a view's: a report narrowed
+     *                           to some behaviors numbers the lines it shows as the whole does
      * @param owedByDeclarations what this module's declarations are owed and how far the reading it
      *                           was made from got. An account and not a list of debts: a module
      *                           whose lines nobody could read holds no debts anybody found, and read
@@ -462,7 +466,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     public record ModuleReport(String module, SourceId declaredIn,
                                List<BehaviorReport> behaviors,
                                List<ReportedFinding> declarations,
-                               DeclarationsShown owedByDeclarations) {
+                               DeclarationsShown owedByDeclarations,
+                               WhereTheReadingsDiffer apart) {
 
         /**
          * What the module is short of that is not any behavior's.
@@ -1166,7 +1171,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         conditionPlaces(compilation, name, declaredLines(declared), Map.of(),
                                 List.of()),
                         rulePlaces(compilation, citedByDeclarations(declared, owed)),
-                        rowPlaces));
+                        rowPlaces),
+                toldApart(compilation, name));
+    }
+
+    /**
+     * Which lines of a comparison the module's points say alike. A module with no points to ask
+     * about has no line to number, so nothing is consulted of the value it gets then.
+     */
+    private static WhereTheReadingsDiffer toldApart(Compilation compilation, String module) {
+        Answer<WhereTheReadingsDiffer> apart = compilation.db().ask(new Adequacy.ToldApart(
+                module, Adequacy.linesAskedOf(compilation.db())));
+        return apart.present() ? apart.value() : WhereTheReadingsDiffer.NONE;
     }
 
     /** The lines a module's declarations were read at, which is where the block about them looks
@@ -2268,7 +2284,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (Adequacy.DeclaredDebt each : account.refuted()) {
             out.append(String.format("      · %s%n", cannotBeWritten(pointOf(each,
                     RuleHandleProse.said(each.debt().describe(places), rendering, null)))));
-            readings(out, each.debt(), _ -> true, at -> whatWasTried(
+            readings(out, module.apart(), each.debt(),_ -> true, at -> whatWasTried(
                     each.debt().owedAt(at).searches(),
                     module.owedByDeclarations().conditionPlaces().along(at.saidOnTheWay()),
                     rendering, null),
@@ -2280,7 +2296,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             rendering, null)))) {
                 out.append(String.format("      ? %s%n", said));
             }
-            readings(out, each.debt(), _ -> true, at -> whatWasTried(
+            readings(out, module.apart(), each.debt(),_ -> true, at -> whatWasTried(
                     each.debt().owedAt(at).searches(),
                     module.owedByDeclarations().conditionPlaces().along(at.saidOnTheWay()),
                     rendering, null),
@@ -2390,7 +2406,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             : m.owedByDeclarations().owed().keptFor(names),
                             m.owedByDeclarations().conditionPlaces(),
                             m.owedByDeclarations().rulePlaces(),
-                            m.owedByDeclarations().rowPlaces()));
+                            m.owedByDeclarations().rowPlaces()),
+                    m.apart());
             kept.add(one);
             overall = overall.union(one.weakenedBy());
         }
@@ -2834,7 +2851,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (BorderObligationPointAssessment point : everyAssessedPoint()) {
             ModelOccurrences.Gathering readAt = gathering.computeIfAbsent(point.point(),
                     each -> new ModelOccurrences.Gathering());
-            point.readingsSaid().forEach(said -> readAt.add(said.readAt()));
+            point.met().values().forEach(reading -> readAt.add(reading.readAt()));
         }
         Map<BorderObligationPoint, ModelOccurrences> out = new LinkedHashMap<>();
         gathering.forEach((point, readAt) -> out.put(point, readAt.gathered()));
@@ -3132,7 +3149,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 signature(out, behavior);
                 // Read once for every section that marks what rests on rows that do not hold.
                 CoveredOnlyByRowsThatDoNotHold onlyBy = behavior.coveredOnlyByRowsThatDoNotHold();
-                partition(out, behavior, module.declaredIn(), rendering, behavior.rulePlace(),
+                partition(out, behavior, module.apart(), module.declaredIn(), rendering,
+                        behavior.rulePlace(),
                         onlyBy, marks);
                 branch(out, module.module(), behavior, module.declaredIn(), rendering, onlyBy,
                         marks);
@@ -3523,7 +3541,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>A boundary a guard drew is printed as not measured rather than as missed. Meeting it takes
      * more than writing the value — the comparison has to have run — and nothing counts that yet.
      */
-    private void partition(StringBuilder out, BehaviorReport behavior,
+    private void partition(StringBuilder out, BehaviorReport behavior, WhereTheReadingsDiffer apart,
                                   SourceId declaredIn, SourceRendering rendering,
                                   PublishedRuleHandle.WhereARuleIs places,
                                   CoveredOnlyByRowsThatDoNotHold onlyByRowsThatDoNotHold,
@@ -3775,7 +3793,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (BorderObligationPointAssessment point : owed.refuted()) {
             out.append(String.format("      · %s%n", cannotBeWritten(point.role() + " point ("
                     + RuleHandleProse.said(point.describe(places), rendering, declaredIn) + ")")));
-            readings(out, point, _ -> true, at -> whatWasTried(
+            readings(out, apart, point,_ -> true, at -> whatWasTried(
                     point.owedAt(at).searches(),
                     behavior.conditionPlaces().along(at.saidOnTheWay()), rendering, declaredIn),
                     behavior.conditionPlaces().copies(), rendering, declaredIn);
@@ -3786,7 +3804,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             + RuleHandleProse.said(point.describe(places), rendering, declaredIn) + ")")) {
                 out.append(String.format("      ? %s%n", said));
             }
-            readings(out, point, _ -> true, at -> whatWasTried(
+            readings(out, apart, point,_ -> true, at -> whatWasTried(
                     point.owedAt(at).searches(),
                     behavior.conditionPlaces().along(at.saidOnTheWay()), rendering, declaredIn),
                     behavior.conditionPlaces().copies(), rendering, declaredIn);
@@ -3830,7 +3848,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             mark(f), againstTheLine ? "the" : "an", point.role(),
                             point.whichSide(),
                             RuleHandleProse.said(point.describe(places), rendering, declaredIn)));
-                    readings(out, point, _ -> true, _ -> "",
+                    readings(out, apart, point,_ -> true, _ -> "",
                             behavior.conditionPlaces().copies(), rendering, declaredIn);
                 }
             }
@@ -3857,7 +3875,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 + " reading of the line%n",
                         point.role(),
                         RuleHandleProse.said(point.describe(places), rendering, declaredIn)));
-                readings(out, point, at -> !point.owedAt(at).hasRowWitness(), _ -> "",
+                readings(out, apart, point,at -> !point.owedAt(at).hasRowWitness(), _ -> "",
                         behavior.conditionPlaces().copies(), rendering, declaredIn);
             }
         }
@@ -3928,12 +3946,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * @param beside what to say after each, which is what that reading's search came to where one
      *               was made
      */
-    private static void readings(StringBuilder out, BorderObligationPointAssessment point,
+    private static void readings(StringBuilder out, WhereTheReadingsDiffer apart,
+                                 BorderObligationPointAssessment point,
                                  Predicate<BorderAssessment> shown,
                                  Function<BorderAssessment, String> beside,
                                  Map<ModelOccurrence, CopyShown> copies,
                                  SourceRendering rendering, SourceId declaredIn) {
-        List<BorderObligationPointAssessment.ReadingSaid> said = point.readingsSaid().stream()
+        List<BorderObligationPointAssessment.ReadingSaid> said = point.readingsSaid(apart).stream()
                 .filter(each -> shown.test(point.met().get(each.where()))).toList();
         int say = Math.min(said.size(), BorderObligationPointAssessment.READINGS_SAID);
         for (BorderObligationPointAssessment.ReadingSaid each : said.subList(0, say)) {
@@ -9581,7 +9600,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // the order is not a contract, and a consumer reads these as a bag: two entries that
             // print alike are two readings, so they may be counted and may not be merged.
             ArrayNode readings = o.putArray("readings");
-            for (BorderObligationPointAssessment.ReadingSaid said : point.readingsSaid()) {
+            for (BorderObligationPointAssessment.ReadingSaid said
+                    : point.readingsSaid(WhereTheReadingsDiffer.NONE)) {
                 BorderAssessment at = point.met().get(said.where());
                 ObjectNode r = readings.addObject();
                 r.put("behavior", said.where().behavior());
