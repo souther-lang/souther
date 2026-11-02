@@ -1976,14 +1976,11 @@ public final class LevelRealizer {
          * empty leaves it there, and a value that is first in the wider run and lies in the narrower
          * one is first in it — which is the value the walk takes.
          *
-         * <p>So this answers only where the region says the second, and where the whole assignment
-         * is not refused and the reading that says so is settled. Anywhere else it answers null
-         * with nothing changed, and the walk runs as it would have. The budgets are spent as the walk
-         * would have spent them, and a search that could not afford them all is left to the walk.
-         *
-         * <p>And only over the numbers the property of {@link SearchRegion#runsOnlyNarrowWhenFixed}
-         * is held for: a position's own value, and what a remainder or a size takes of one. Any
-         * other number in the form is left to the walk.
+         * <p>So this answers only where the region says the second of the numbers this fixes, and
+         * where the whole assignment is not refused and the reading that says so is settled.
+         * Anywhere else it answers null with nothing changed, and the walk runs as it would have.
+         * The budgets are spent as the walk would have spent them, and a search that could not
+         * afford them all is left to the walk.
          *
          * <p>What the walk meets at a narrower run that this does not is the arithmetic of the
          * same coefficients and amounts owed, so a value it cannot hold is one this cannot either,
@@ -1992,16 +1989,11 @@ public final class LevelRealizer {
         private Reached straightDescent(ExactRatio target) {
             int last = terms.size() - 1;
             if (last < 1
-                    || !within.runsOnlyNarrowWhenFixed()
                     || asked + last > HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN
-                    || steps.taken + terms.size() > STEPS_A_SEARCH_MAY_TAKE) {
+                    || steps.taken + terms.size() > STEPS_A_SEARCH_MAY_TAKE
+                    || !within.runsOnlyNarrowWhenFixed(
+                            terms.stream().map(each -> each.getKey().term()).toList())) {
                 return null;
-            }
-            for (Map.Entry<RealizationTarget.OfANumber, ExactRatio> each : terms) {
-                if (!(each.getKey().term() instanceof NumericTerm.ValueOf
-                        || each.getKey().term() instanceof NumericTerm.TakenOf)) {
-                    return null;
-                }
             }
             lastSaid = null;
             Set<CompositionCapacity> unheldBefore = new HashSet<>(unheld);

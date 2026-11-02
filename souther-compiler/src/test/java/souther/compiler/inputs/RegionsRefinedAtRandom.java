@@ -56,7 +56,7 @@ final class RegionsRefinedAtRandom {
             data Ok
 
             behavior read : (x: Small, y: Small, w: Small, e: Even, t: Thousands, s: Shape,
-                             xs: List<Small>) -> Ok
+                             xs: List<Small>, name: String, ns: List<Int>) -> Ok
             """;
 
     /** The numbers that are fixed and related, by where they stand. */
@@ -111,6 +111,34 @@ final class RegionsRefinedAtRandom {
                 READ.input().at(at).type(), READ.rules().inners(), READ.rules().symbols());
         if (made == null) {
             throw new AssertionError("no remainder by " + divisor + " of " + position);
+        }
+        return made;
+    }
+
+    /**
+     * Numbers taken of a position that no property here is held for: the sum of a list, a
+     * quotient, and the length of a string. A region is asked about them and says no.
+     */
+    static List<NumericTerm.FromOnePosition> notHeldFor() {
+        TermPath ns = TermPath.of("ns");
+        TermPath x = term("x").position();
+        TermPath name = term("name").position();
+        return List.of(
+                taken(souther.compiler.types.ValueName.Stdlib.operation("List", "sum"), ns,
+                        souther.compiler.semantics.TakenArguments.NONE),
+                taken(souther.compiler.types.ValueName.Stdlib.operation("Int", "truncatingDivide"),
+                        x, souther.compiler.semantics.TakenArguments.at(1, BigDecimal.valueOf(3))),
+                taken(souther.compiler.types.ValueName.Stdlib.operation("String", "length"), name,
+                        souther.compiler.semantics.TakenArguments.NONE));
+    }
+
+    private static NumericTerm.FromOnePosition taken(
+            souther.compiler.types.ValueName.Stdlib operation, TermPath at,
+            souther.compiler.semantics.TakenArguments arguments) {
+        NumericTerm.FromOnePosition made = NumericTerm.TakenOf.asItStands(operation, at, arguments,
+                READ.input().at(at).type(), READ.rules().inners(), READ.rules().symbols());
+        if (made == null) {
+            throw new AssertionError("no " + operation + " of " + at);
         }
         return made;
     }

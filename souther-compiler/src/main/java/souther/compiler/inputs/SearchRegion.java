@@ -384,7 +384,7 @@ public interface SearchRegion {
     }
 
     /**
-     * Whether fixing a position can only narrow where the other positions run and which values of
+     * Whether fixing any of {@code terms} can only narrow where the others run and which values of
      * their classes they may take, and never widen either.
      *
      * <p>A different thing from {@link #emptinessIsSettled}, which is about proofs: that a region
@@ -394,6 +394,11 @@ public interface SearchRegion {
      * is inside the wider one — and the narrower run is then the wider one cut, so a value that
      * is first in the wider run and lies in the narrower is first in it.
      *
+     * <p>Asked of the numbers a reader fixes and reads the runs of, and not of every number the
+     * region could be asked about, because a region can know the property for some kinds of
+     * number and not for others. A kind it has not been held for is one it answers false to, and
+     * the reader leaves the search to the walk.
+     *
      * <p>Of regions that are not shown empty. Where a region is, there is nowhere for a position to
      * run and what it answers about where is no run, so nothing is promised of it — a search asks
      * {@link #emptiness} first and does not read a run out of a region it shows empty.
@@ -402,7 +407,7 @@ public interface SearchRegion {
      * says they are held to this: a region may read a run one way before a position is fixed and
      * more coarsely after. False unless a region says otherwise.
      */
-    default boolean runsOnlyNarrowWhenFixed() {
+    default boolean runsOnlyNarrowWhenFixed(Collection<? extends NumericTerm> terms) {
         return false;
     }
 }

@@ -221,6 +221,19 @@ class AWalkWhoseFirstValuesAreTheOnesItSettlesOnReadsTheRulesOnceTest {
                 found(realizedAt(new LevelRealizer(), 6, ScriptedRegion.of(lying))));
     }
 
+    /**
+     * A region that says its runs only narrow, but not for a number the search holds, is one the
+     * descent is not taken over: the word is asked of the numbers the search fixes.
+     */
+    @Test
+    void aNumberTheRegionHasNotBeenHeldForLeavesTheSearchToTheWalk() {
+        Script script = widening().sayingTheyNarrow().notVouchingFor(term -> term.equals(Z));
+
+        assertEquals(assignment(0, 0, 6),
+                found(realizedAt(new LevelRealizer(), 6, ScriptedRegion.of(script))),
+                "the walk's, since the region does not vouch for z");
+    }
+
     private static Script widening() {
         return Script.refusingNothing().runningFromWithoutSayingTheyNarrow(
                 (standing, term) -> term == Y && standing.isEmpty()

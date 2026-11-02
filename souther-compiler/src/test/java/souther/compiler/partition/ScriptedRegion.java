@@ -13,6 +13,7 @@ import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -50,10 +51,18 @@ record ScriptedRegion(Counts counts, Map<NumericTerm, Place> standing, Script sc
      * @param settled    what the region says of its reading of a whole assignment
      * @param runs       where a position runs, given what stands fixed; null where nowhere
      * @param narrowing  what the region says of its runs: that fixing a position only narrows them
+     * @param unvouched  the numbers it has not been held for, which it answers no to whatever it
+     *                   says of the rest
      */
     record Script(Predicate<Map<NumericTerm, Place>> shownEmpty, boolean settled,
                   BiFunction<Map<NumericTerm, Place>, NumericTerm, NumericDomain.Bounds> runs,
-                  boolean narrowing) {
+                  boolean narrowing, Predicate<NumericTerm> unvouched) {
+
+        Script(Predicate<Map<NumericTerm, Place>> shownEmpty, boolean settled,
+               BiFunction<Map<NumericTerm, Place>, NumericTerm, NumericDomain.Bounds> runs,
+               boolean narrowing) {
+            this(shownEmpty, settled, runs, narrowing, term -> false);
+        }
 
         Script(Predicate<Map<NumericTerm, Place>> shownEmpty, boolean settled,
                BiFunction<Map<NumericTerm, Place>, NumericTerm, NumericDomain.Bounds> runs) {
@@ -69,23 +78,28 @@ record ScriptedRegion(Counts counts, Map<NumericTerm, Place> standing, Script sc
         }
 
         Script unsettled() {
-            return new Script(shownEmpty, false, runs, narrowing);
+            return new Script(shownEmpty, false, runs, narrowing, unvouched);
         }
 
         Script runningFrom(BiFunction<Map<NumericTerm, Place>, NumericTerm,
                 NumericDomain.Bounds> narrower) {
-            return new Script(shownEmpty, settled, narrower, narrowing);
+            return new Script(shownEmpty, settled, narrower, narrowing, unvouched);
         }
 
         /** The runs a script gives, which this region does not say only narrow. */
         Script runningFromWithoutSayingTheyNarrow(BiFunction<Map<NumericTerm, Place>, NumericTerm,
                 NumericDomain.Bounds> runs) {
-            return new Script(shownEmpty, settled, runs, false);
+            return new Script(shownEmpty, settled, runs, false, unvouched);
         }
 
         /** The same runs, said to only narrow. */
         Script sayingTheyNarrow() {
-            return new Script(shownEmpty, settled, runs, true);
+            return new Script(shownEmpty, settled, runs, true, unvouched);
+        }
+
+        /** The same, saying nothing for the numbers {@code unvouched} picks out. */
+        Script notVouchingFor(Predicate<NumericTerm> unvouched) {
+            return new Script(shownEmpty, settled, runs, narrowing, unvouched);
         }
     }
 
@@ -147,7 +161,7 @@ record ScriptedRegion(Counts counts, Map<NumericTerm, Place> standing, Script sc
     }
 
     @Override
-    public boolean runsOnlyNarrowWhenFixed() {
-        return script.narrowing();
+    public boolean runsOnlyNarrowWhenFixed(Collection<? extends NumericTerm> terms) {
+        return script.narrowing() && terms.stream().noneMatch(script.unvouched());
     }
 }

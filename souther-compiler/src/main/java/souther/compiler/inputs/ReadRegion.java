@@ -8,6 +8,8 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.TakenAs;
+import souther.compiler.types.ValueName;
 import souther.compiler.values.ValueSet;
 
 import java.util.Collection;
@@ -137,13 +139,31 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
      * reads — numbers of several classes, the cases of a sum, the elements and the size of a list,
      * a remainder — with a number fixed, a relation taken in, one number taken against a value, or
      * one held apart from a value, each said at random
-     * ({@code ARegionRunsNoWiderOnceMoreIsSaidTest}). A kind of number or of saying that test does
-     * not make is not covered by it; a search over such a number does not take the descent
-     * ({@code Search#straightDescent}).
+     * ({@code ARegionRunsNoWiderOnceMoreIsSaidTest}).
+     *
+     * <p>So only for the numbers that test makes: the value a position holds, a floor remainder of
+     * one, and the length of a list. What else is taken of a position — the sum of a list, a
+     * quotient, the parts of a date or a time, the length of a string, the size of a set — is a
+     * number it has not been held for, and a region asked about one of those says no.
      */
     @Override
-    public boolean runsOnlyNarrowWhenFixed() {
-        return true;
+    public boolean runsOnlyNarrowWhenFixed(Collection<? extends NumericTerm> terms) {
+        return terms.stream().allMatch(ReadRegion::heldFor);
+    }
+
+    private static final ValueName.Stdlib LIST_LENGTH = ValueName.Stdlib.operation("List", "length");
+
+    /** Whether {@link #runsOnlyNarrowWhenFixed} has been held for this kind of number. */
+    private static boolean heldFor(NumericTerm term) {
+        if (term instanceof NumericTerm.ValueOf) {
+            return true;
+        }
+        if (!(term instanceof NumericTerm.TakenOf taken)) {
+            return false;
+        }
+        return taken.takenAs() instanceof TakenAs.TheFloorRemainder
+                || (taken.takenAs() instanceof TakenAs.HowManyItHolds
+                        && LIST_LENGTH.equals(taken.operation()));
     }
 
     @Override
