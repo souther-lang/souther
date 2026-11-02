@@ -17,6 +17,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
@@ -294,7 +295,14 @@ final class DemandReading {
     /** The same, with where the reading of what the values it is over were made from stopped. */
     private static Read forTheRun(Proposition stated, RowDemand.NoComposer why,
                                   List<WhyUnread> past) {
-        return new Read.Demands(new RowDemand.ForTheRun(stated, why, past));
+        return forTheRun(stated, why, past, Optional.empty());
+    }
+
+    /** The same, over the pieces of the string {@code parted} says. */
+    private static Read forTheRun(Proposition stated, RowDemand.NoComposer why,
+                                  List<WhyUnread> past,
+                                  Optional<Derivation.APieceInALanguage.PartedString> parted) {
+        return new Read.Demands(new RowDemand.ForTheRun(stated, why, past, parted));
     }
 
     /**
@@ -501,15 +509,25 @@ final class DemandReading {
          *  {@link #byPart}'s answer about the statement and the same each time it is read: a
          *  statement of several asks one part at as many places as it is written. */
         private final Map<Proposition, ModelOccurrences> partsReadOff = new HashMap<>();
+        /** The string each piece held to a language was read as a piece of, and how its pieces
+         *  were taken, by the piece's number. */
+        private final Map<Integer, Derivation.APieceInALanguage.PartedString> partedStrings;
 
-        private Projection(Map<Spelling,ModelOccurrences> byPart, ModelOccurrences own) {
+        private Projection(Map<Spelling,ModelOccurrences> byPart, ModelOccurrences own,
+                           Map<Integer, Derivation.APieceInALanguage.PartedString> parted) {
             this.byPart = byPart;
             this.own = own;
+            this.partedStrings = parted;
+        }
+
+        /** The string the piece {@code within} is a piece of, where it is read to be of one. */
+        Optional<Derivation.APieceInALanguage.PartedString> partedStringOfThePiece(int within) {
+            return Optional.ofNullable(partedStrings.get(within));
         }
 
         /** A projection nothing says the parts of. */
         static Projection unplaced() {
-            return new Projection(Map.of(), ModelOccurrences.NONE);
+            return new Projection(Map.of(), ModelOccurrences.NONE, Map.of());
         }
 
         /** A projection of what {@code pulled} states, each part read off where it was, and what
@@ -530,7 +548,17 @@ final class DemandReading {
             }
             Map<Spelling,ModelOccurrences> byPart = new LinkedHashMap<>();
             found.forEach((key, copies) -> byPart.put(key, copies.gathered()));
-            return new Projection(byPart, own);
+            Map<Integer, Derivation.APieceInALanguage.PartedString> strings =
+                    new LinkedHashMap<>();
+            if (pulled != null) {
+                for (Pullback.Leaf leaf : pulled.leaves()) {
+                    if (leaf.step() instanceof Derivation.APieceInALanguage piece
+                            && piece.parted().isPresent()) {
+                        strings.putIfAbsent(piece.within(), piece.parted().get());
+                    }
+                }
+            }
+            return new Projection(byPart, own, strings);
         }
 
         /**
@@ -1345,6 +1373,12 @@ final class DemandReading {
                     List.of(new Read.Demands(RowDemand.OneValueAtBoth.of(one, other, holds)));
             case Proposition.SameValue _ ->
                     List.of(forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
+            // A piece held to a language depends on the string it is a piece of, which the
+            // proposition does not say and the way the piece was read does.
+            case Proposition.InTheStrings(
+                    Proposition.InTheStrings.Strings.OfAPiece(int within), var _, var _, var _) ->
+                    List.of(forTheRun(stated, RowDemand.NoComposer.A_STRING_IN_A_LANGUAGE,
+                            List.of(), projection.partedStringOfThePiece(within)));
             case Proposition.InTheStrings _ ->
                     List.of(forTheRun(stated, RowDemand.NoComposer.A_STRING_IN_A_LANGUAGE));
             case Proposition.StringInside _ ->
@@ -1789,8 +1823,8 @@ final class DemandReading {
                             ? AnElementsWay.ofTheRow(forTheRun(whole,
                                     RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE))
                             : AnElementsWay.ofTheRow(each));
-            case Read.Demands(RowDemand.ForTheRun(var _, var why, var past)) ->
-                    List.of(AnElementsWay.ofTheRow(forTheRun(whole, why, past)));
+            case Read.Demands(RowDemand.ForTheRun(var _, var why, var past, var parted)) ->
+                    List.of(AnElementsWay.ofTheRow(forTheRun(whole, why, past, parted)));
             // Each way of each alternative: one alternative a figure stopped is said to be, and
             // the others are the ways they are.
             case Read.OneOf oneOf -> {

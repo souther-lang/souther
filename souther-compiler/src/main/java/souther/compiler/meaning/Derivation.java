@@ -43,6 +43,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.ToIntFunction;
@@ -1223,6 +1224,10 @@ public sealed interface Derivation {
                     case SomePieceEqualling(Derivation ofThePiece, var _) ->
                             positionOf(some.container()) == null
                                     && reads(some.ofTheElement(), ofThePiece);
+                    case SomeElementEquallingSomePiece(var _, Derivation ofThePieces, var _,
+                                                       var _) ->
+                            positionOf(some.container()) == null
+                                    && reads(some.ofTheElement(), ofThePieces);
                     case SomePieceInALanguage(var _, var _, var _, var _, Derivation ofThePiece) ->
                             positionOf(some.container()) == null
                                     && reads(some.ofTheElement(), ofThePiece);
@@ -2812,6 +2817,69 @@ public sealed interface Derivation {
     }
 
     /**
+     * That some element of a container is one of the pieces of a string, as {@code ofThePieces}
+     * reads some piece being the same value as some element of it.
+     *
+     * <p>Some piece being the same value as some element is some element being one of the pieces:
+     * the container and the pieces are each walked once and neither turns on the other, which is
+     * what the value being a value of the input says ({@link Quantity.IsAmongThePieces}). What it
+     * concludes is that of the element, and the quantifier over the container is the one the
+     * reading met.
+     *
+     * <p>What else the piece was held to is held of the element that is the piece: some piece in a
+     * language and the same value as some element is some element that is one of the pieces and in
+     * that language, the value being the one thing both are of.
+     *
+     * @param container   the container whose elements are held to the pieces
+     * @param ofThePieces what was read of the pieces being the same as some element
+     * @param among       the element being one of the pieces
+     * @param alsoIn      the strings the piece was also held to be one of, and the position of
+     *                    the element that is the piece, where it was
+     */
+    record SomeElementEquallingSomePiece(DecisionSubject container, Derivation ofThePieces,
+                                         Quantity.IsAmongThePieces among,
+                                         Optional<InALanguage> alsoIn) implements Derivation {
+
+        /**
+         * The strings an element that is a piece was also held to be one of.
+         *
+         * @param at      the position of the element
+         * @param accepts the strings it is one of
+         */
+        public record InALanguage(TermPath at, StringsLanguage accepts) {
+
+            public InALanguage {
+                Objects.requireNonNull(at, "the element stands at some position");
+                Objects.requireNonNull(accepts, "the element is one of the strings of a language");
+            }
+        }
+
+        public SomeElementEquallingSomePiece {
+            Objects.requireNonNull(container, "an element is of a container");
+            Objects.requireNonNull(ofThePieces, "a piece is read as the same as something");
+            Objects.requireNonNull(among, "and the element is one of the pieces");
+            Objects.requireNonNull(alsoIn, "the piece was also held to a language or was not");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            Proposition one = Proposition.compared(new Relation.Affine(
+                    LinearForm.atomMinusConstant(among, ExactRatio.ONE), Rel.EQ), true);
+            return numbering.someElement(container, alsoIn
+                    .<Proposition>map(language -> Proposition.all(List.of(one,
+                            new Proposition.InTheStrings(
+                                    new Proposition.InTheStrings.Strings.AtAPosition(language.at()),
+                                    language.accepts(), true))))
+                    .orElse(one));
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(ofThePieces);
+        }
+    }
+
+    /**
      * That some piece of a string is the same value as a value of the input, as {@code ofThePiece}
      * reads one piece compared with it ({@link Quantity.APieceOf}).
      *
@@ -2865,14 +2933,39 @@ public sealed interface Derivation {
      * @param operation what the model calls the predicate, as an author writes it
      * @param written   the text the author wrote in it, which is what a class the statement makes
      *                  is called by
+     * @param parted    where the piece comes from, which the proposition about it does not say:
+     *                  the string it is a piece of, how it was parted and which of its pieces
+     *                  were held — or none where the string stands at no one position
      */
     record APieceInALanguage(StringsLanguage accepts, String operation, String written,
-                             int within) implements Derivation {
+                             int within, Optional<PartedString> parted)
+            implements Derivation {
+
+        /**
+         * The string a piece is a piece of, as the pieces of it were taken.
+         *
+         * @param string     the position of the string, or of the one it is made of
+         * @param conversion what the string is made of that one by, none where it is that one
+         * @param separator  the code point it is parted at
+         * @param from       the index of the first piece held
+         * @param until      the index the pieces held stop before, or none where they run to the
+         *                   last
+         */
+        public record PartedString(TermPath string, CaseMapping conversion, int separator,
+                                   long from, OptionalLong until) {
+
+            public PartedString {
+                Objects.requireNonNull(string, "the string stands at some position");
+                Objects.requireNonNull(conversion, "the string is converted or it is not");
+                Objects.requireNonNull(until, "the pieces stop somewhere or run to the last");
+            }
+        }
 
         public APieceInALanguage {
             Objects.requireNonNull(accepts, "a piece is held to some predicate");
             Objects.requireNonNull(operation, "the predicate was written as some operation");
             Objects.requireNonNull(written, "the predicate was written with some text");
+            Objects.requireNonNull(parted, "the string is parted or is at no one position");
             if (within < 0) {
                 throw new IllegalArgumentException(
                         "a piece is of a statement some number of statements in: " + within);
@@ -2883,6 +2976,45 @@ public sealed interface Derivation {
         public Proposition conclusion(Conclusion numbering) {
             return new Proposition.InTheStrings(
                     new Proposition.InTheStrings.Strings.OfAPiece(within), accepts, true);
+        }
+    }
+
+    /**
+     * The string at a position of the input held to a string predicate that {@code accepts}: the
+     * string being one of the strings the predicate holds of.
+     *
+     * <p>Said of the string at its position, which is what divides the position into classes,
+     * and so the same statement {@link SomePieceInALanguage} makes of the string its pieces are
+     * of, with the whole of the string in the language and not a piece of it.
+     *
+     * @param string    the position of the input the string stands at
+     * @param accepts   the strings the predicate holds of
+     * @param operation what the model calls the predicate, as an author writes it
+     * @param written   the text the author wrote in it
+     */
+    record AStringInALanguage(TermPath string, StringsLanguage accepts, String operation,
+                              String written) implements Derivation {
+
+        public AStringInALanguage {
+            Objects.requireNonNull(string, "a string stands at some position");
+            Objects.requireNonNull(accepts, "a string is held to some predicate");
+            Objects.requireNonNull(operation, "the predicate was written as some operation");
+            Objects.requireNonNull(written, "the predicate was written with some text");
+        }
+
+        /** Whether the string is an element of the container {@code container} holds. */
+        public boolean isAnElementOf(DecisionSubject container) {
+            return said().mayTurnOnAnElementOf(container);
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return said();
+        }
+
+        private Proposition said() {
+            return new Proposition.InTheStrings(
+                    new Proposition.InTheStrings.Strings.AtAPosition(string), accepts, true);
         }
     }
 

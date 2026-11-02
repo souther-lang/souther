@@ -318,6 +318,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/SidesBalanced", "stepsFrom",
                 "(" + core + "L" + c + "types/BindingId;)Ljava/util/List;", Reading.STRUCTURE,
                 "reads the run of fields taken off one binding, which the base answers");
+        row(out, c + "partition/WhatARunWorksOutBeforeACount", "addWorkedOut",
+                "(Ljava/util/List;" + core + core + ")V", Reading.STRUCTURE, EVALUATION);
         row(out, c + "partition/WhatARunWorksOutBeforeACount", "offTheParameter",
                 "(" + core + "L" + c + "types/BindingId;)Z", Reading.STRUCTURE,
                 "asks whether a value is a parameter or a run of fields read off one, which the"
@@ -589,6 +591,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "partition/ClosureApplications;L" + c
                 + "partition/LiveFlow;Ljava/util/List;ZLjava/util/List;Ljava/util/List;L" + c
                 + "partition/ConditionNumbering;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
+        row(out, c + "partition/ComparisonReadings", "comparisonsIn",
+                "(" + core + "Ljava/util/List;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
         // The way to a call of a helper that calls itself, whether a call stands somewhere, and
         // whether a body builds a value: each looks for a choice, a call or a build.
         row(out, c + "partition/ComparisonReadings", "wayTo", "(" + core + core + reads + "L" + c

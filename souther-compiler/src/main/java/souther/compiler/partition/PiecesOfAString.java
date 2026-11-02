@@ -17,8 +17,11 @@ import souther.compiler.meaning.Quantity;
  * @param separator the code point it is parted at
  * @param string    the string, a string of the input or what a case conversion answers of one
  * @param window    the indexes of the pieces
+ * @param within    which piece of a statement about some piece it is, or none where it is the one
+ *                  a lookup picked. Which statement it is read in is not which pieces they are,
+ *                  so it is no part of what makes two of these the same
  */
-record PiecesOfAString(int separator, Quantity string, PieceWindow window) {
+record PiecesOfAString(int separator, Quantity string, PieceWindow window, OptionalInt within) {
 
     PiecesOfAString {
         if (separator < 0 || string == null || window == null || window.isEmpty()) {
@@ -27,10 +30,22 @@ record PiecesOfAString(int separator, Quantity string, PieceWindow window) {
         }
     }
 
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof PiecesOfAString that && separator == that.separator
+                && string.equals(that.string) && window.equals(that.window);
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(separator, string, window);
+    }
+
     /** The piece at the index a lookup picked. */
     static PiecesOfAString of(Quantity.ThePieceAt piece) {
         return new PiecesOfAString(piece.separator(), piece.string(),
-                new PieceWindow(piece.index(), OptionalLong.of(piece.index() + 1L)));
+                new PieceWindow(piece.index(), OptionalLong.of(piece.index() + 1L)),
+                OptionalInt.empty());
     }
 
     /**
@@ -42,7 +57,8 @@ record PiecesOfAString(int separator, Quantity string, PieceWindow window) {
         PieceWindow window = new PieceWindow(piece.from(),
                 piece.among() > 0 ? OptionalLong.of(piece.among()) : OptionalLong.empty());
         return separator.isEmpty() || window.isEmpty() ? null
-                : new PiecesOfAString(separator.getAsInt(), piece.string(), window);
+                : new PiecesOfAString(separator.getAsInt(), piece.string(), window,
+                        OptionalInt.of(piece.within()));
     }
 
     /** The index of the first piece. */

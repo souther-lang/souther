@@ -4,6 +4,7 @@ import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.WhyUnread;
@@ -948,14 +949,28 @@ public sealed interface RowDemand {
      * @param why       which kind of statement no composer writes toward
      * @param past      where the reading of what the values it is over were made from stopped,
      *                  each once; empty where nothing of them was read to stop
+     * @param partedStrings the string a statement about a piece of one is over, and how its
+     *                  pieces were taken, where it is one: what it depends on, and not what it
+     *                  places — a composer places nothing for it
      */
-    record ForTheRun(Proposition statement, NoComposer why, List<WhyUnread> past)
+    record ForTheRun(Proposition statement, NoComposer why, List<WhyUnread> past,
+                     Optional<Derivation.APieceInALanguage.PartedString> partedStrings)
             implements OfACondition {
 
         public ForTheRun {
             Objects.requireNonNull(statement, "a statement about some value");
             Objects.requireNonNull(why, "a statement no composer writes is of some kind");
             past = List.copyOf(new LinkedHashSet<>(past));
+            Objects.requireNonNull(partedStrings, "a string it is over, or none");
+        }
+
+        public ForTheRun(Proposition statement, NoComposer why, List<WhyUnread> past) {
+            this(statement, why, past, Optional.empty());
+        }
+
+        /** The position of the string it is over, which it depends on and places nothing at. */
+        Set<TermPath> fromStringsAt() {
+            return partedStrings.map(parted -> Set.of(parted.string())).orElse(Set.of());
         }
 
         /** None: a composer places nothing for this, and the run says whether it held. */

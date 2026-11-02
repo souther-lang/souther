@@ -7487,7 +7487,7 @@ public final class Generator {
             }
             // A statement no composer writes toward: nothing is placed for it, and the run is what
             // says whether the row met it.
-            if (cut.demand() instanceof RowDemand.ForTheRun(var _, var why, var past)) {
+            if (cut.demand() instanceof RowDemand.ForTheRun(var _, var why, var past, var _)) {
                 gaps.add(new ReachabilityGap.Uncomposed(cut,
                         new ReachabilityGap.Why.NoComposerWritesIt(why, past)));
                 continue;

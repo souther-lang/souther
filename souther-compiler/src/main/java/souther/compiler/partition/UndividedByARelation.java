@@ -56,7 +56,9 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.PositionsAStatementReads;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
@@ -2367,7 +2369,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             TakenConstraint relation = taken.demand() instanceof RowDemand.Relational(
                     TakenConstraint constraint) ? constraint : null;
-            out.add(new OnAWay(taken.demand().positions(),
+            out.add(new OnAWay(positionsADemandTurnsOn(taken.demand()),
                     relation instanceof TakenConstraint.Affine(var form, var rel)
                             && rel != Rel.NE && form.coefs().size() == 1
                             && form.coefs().keySet().iterator().next()
@@ -2375,12 +2377,29 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             && count.takenAs() instanceof TakenAs.HowManyItHolds,
                     relation, elementsAsked(taken.demand()),
                     taken.demand() instanceof RowDemand.Exists some ? some.ofAnElement() : null,
-                    OnAWay.PartsLeftAlone.NONE));
+                    OnAWay.PartsLeftAlone.NONE,
+                    taken.demand() instanceof RowDemand.ForTheRun run
+                            && run.partedStrings().isPresent() ? run : null));
         });
         way.requirements().refinements().keySet()
                 .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
         way.requirements().atANameTheCasesShare()
                 .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
+        return out;
+    }
+
+    /**
+     * The positions {@code demand} turns on: the ones it places a row at, and the strings a
+     * statement about their pieces is made of. The second are what it depends on and not what a
+     * composer places, so a reader asking whether a statement reaches a place sees them, and the
+     * composer does not.
+     */
+    private static Set<TermPath> positionsADemandTurnsOn(RowDemand.OfACondition demand) {
+        if (!(demand instanceof RowDemand.ForTheRun run) || run.fromStringsAt().isEmpty()) {
+            return demand.positions();
+        }
+        Set<TermPath> out = new LinkedHashSet<>(demand.positions());
+        out.addAll(run.fromStringsAt());
         return out;
     }
 
@@ -2416,21 +2435,30 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   states months and days and some month and day it lets through stands in
      *                   every year alike, the months and days where it states years and the dates
      *                   have years that hold it together with the rest of the way
+     * @param ofThePieces the demand it is, where it holds a piece of a string to a language: what
+     *                   says which piece of which string, and which language, so that the strings
+     *                   of a relation over that piece are shown as that parts them
      */
     record OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                   TermPath elementsOf, RowDemand.AnElementMeets bySome,
-                  PartsLeftAlone leavesAlone) {
+                  PartsLeftAlone leavesAlone, RowDemand.ForTheRun ofThePieces) {
 
         /** The parts of a date a statement of the other parts says nothing of. */
         enum PartsLeftAlone { NONE, YEARS, MONTHS_AND_DAYS }
 
         OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                TermPath elementsOf) {
-            this(positions, whatStands, relation, elementsOf, null, PartsLeftAlone.NONE);
+            this(positions, whatStands, relation, elementsOf, null, PartsLeftAlone.NONE, null);
+        }
+
+        OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
+               TermPath elementsOf, RowDemand.AnElementMeets bySome, PartsLeftAlone leavesAlone) {
+            this(positions, whatStands, relation, elementsOf, bySome, leavesAlone, null);
         }
 
         OnAWay leavingAlone(PartsLeftAlone parts) {
-            return new OnAWay(positions, whatStands, relation, elementsOf, bySome, parts);
+            return new OnAWay(positions, whatStands, relation, elementsOf, bySome, parts,
+                    ofThePieces);
         }
 
         /** Whether this says nothing of {@code term} because it is a part of a date this leaves
@@ -2636,8 +2664,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (heldWhole && !overlapping(sides.get(0), sides.get(1))
                     && independent.between(0, 1)) {
                 Partnering partnering = stringsAPartnerCanHold(carriers, out, read, lengthsRoom,
-                        lengths -> getsPastExactlyOn(past, read, along, written, declined, true,
-                                lengths));
+                        written, lengths -> getsPastExactlyOn(past, read, along, written,
+                                declined, true, lengths));
                 shown = shown.partnered(partnering.strings());
                 accounted = partnering.accountedFor();
             }
@@ -2737,8 +2765,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Set<TermPath> accountedFor = Set.of();
         if (sides.size() == 2 && heldWhole && independent.between(0, 1)) {
             Partnering partnering = stringsAPartnerCanHold(carriers, out, read, lengthsRoom,
-                    lengths -> getsPastExactlyOn(past, read, along, written, declined, true,
-                            lengths));
+                    written, lengths -> getsPastExactlyOn(past, read, along, written, declined,
+                            true, lengths));
             shown = shown.partnered(partnering.strings());
             accountedFor = partnering.accountedFor();
         }
@@ -2795,7 +2823,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private Partnering stringsAPartnerCanHold(
             List<Carrier> carriers, Set<FilingCoordinate> shown, InputReading read,
-            RoomOnTheWay room,
+            RoomOnTheWay room, List<OnAWay> written,
             Function<Set<TermPath>, Optional<List<ConvertedOn>>> reachExactlyOn) {
         if (room == null) {
             return Partnering.NONE;
@@ -2845,8 +2873,32 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : there.piece() == null ? theirs.subjectPath().toString()
                     : there.piece().calledOver(theirs.subjectPath().toString());
             ValueSet mineHolds = stringsAtMostAt(mine.subjectPath(), read);
-            StringsAPartnerCanHold strings = partnerCanHold(at == 0, here, there, theirStrings,
+            // The pieces that reach the relation are those the way holds to a language, where it
+            // does: the strings are shown as that parts the pieces, and a string whose pieces are
+            // none of that language is not one the run gets to the relation with.
+            PiecesOfAString pieceOfTheWay = here.piece() != null ? here.piece() : there.piece();
+            boolean heldToALanguage = pieceOfTheWay != null && written.stream()
+                    .anyMatch(each -> holdsThePieceToALanguage(each, pieceOfTheWay));
+            Language ofThePieces = heldToALanguage
+                    ? theLanguageTheWayHoldsThePieceTo(written, pieceOfTheWay) : null;
+            if (heldToALanguage && ofThePieces == null) {
+                continue;
+            }
+            ValueSet partnerOfThis = theirStrings;
+            if (ofThePieces != null && here.piece() != null) {
+                Language partner = languageOf(theirStrings);
+                Language both = partner == null ? null : partner.and(ofThePieces,
+                        PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
+                if (both == null) {
+                    continue;
+                }
+                partnerOfThis = ValueSet.matching(both);
+            }
+            StringsAPartnerCanHold strings = partnerCanHold(at == 0, here, there, partnerOfThis,
                     mineHolds, called);
+            if (strings != null && ofThePieces != null) {
+                strings = heldTo(strings, ofThePieces, here.piece());
+            }
             if (room.counts() != null && room.counts().strings() == null) {
                 continue;
             }
@@ -3495,7 +3547,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                             ValueSet partner, ValueSet mineHolds,
                                                             String called) {
         ConvertedText whole = piece.whole();
-        if (whole == null || !(partner instanceof ValueSet.Matching(Language language))) {
+        Language language = languageOf(partner);
+        if (whole == null || language == null) {
             return null;
         }
         Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
@@ -3536,7 +3589,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                                  ValueSet whole, ValueSet mine,
                                                                  String called) {
         ConvertedText made = piece.whole();
-        if (made == null || !(whole instanceof ValueSet.Matching(Language language))) {
+        Language language = languageOf(whole);
+        if (made == null || language == null) {
             return null;
         }
         Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
@@ -3641,6 +3695,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             boolean saysNothingOfValues = each.whatStands() && each.relation() == null
                     && each.elementsOf() == null;
             if (!saysNothingOfValues && !holdsTheSeparatorsOf(each, piece)
+                    && !holdsThePieceToALanguage(each, piece)
                     && (reaches(each, mine) || reaches(each, theirs)
                     || each.elementsOf() != null)) {
                 return false;
@@ -3649,6 +3704,100 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return narrowing.stream().noneMatch(constraint -> constraint.terms().stream()
                 .anyMatch(term -> overlap(term.subjectPath(), mine)
                         || overlap(term.subjectPath(), theirs)));
+    }
+
+    /**
+     * Whether {@code statement} holds {@code piece}, the piece a relation is over, to a language
+     * and says nothing else: the same piece of the same string, parted the same way and in the
+     * same window, with the same case conversions done to the string, as the statement is of.
+     * Conversions are told apart as they are written, and one is never taken for another that
+     * comes to the same on some strings.
+     *
+     * <p>Such a statement does not leave the strings alone and is not read as if it did: it
+     * parts the pieces that reach the relation, and the strings are shown as that parts them
+     * ({@link #theLanguageTheWayHoldsThePieceTo}). It is one statement of one piece, so a
+     * statement about another piece of the same string, or another window of it, is not it.
+     */
+    private static boolean holdsThePieceToALanguage(OnAWay statement, PiecesOfAString piece) {
+        RowDemand.ForTheRun run = statement.ofThePieces();
+        if (run == null || piece == null || piece.within().isEmpty()
+                || run.partedStrings().isEmpty()
+                || !(run.statement() instanceof Proposition.InTheStrings(
+                        Proposition.InTheStrings.Strings.OfAPiece(int within), var _, var _, var _))
+                || within != piece.within().getAsInt()) {
+            return false;
+        }
+        Derivation.APieceInALanguage.PartedString parted = run.partedStrings().get();
+        ConvertedText whole = piece.whole();
+        return whole != null && whole.through().equals(parted.conversion())
+                && whole.place().subjectPath().equals(parted.string())
+                && piece.separator() == parted.separator()
+                && piece.window().from() == parted.from()
+                && piece.window().until().equals(parted.until());
+    }
+
+    /**
+     * {@code strings}, shown as the pieces that reach the relation being in {@code onThePieces}
+     * parts them — or null where that is not shown.
+     *
+     * <p>Of the side that is not the pieces, a string is the partner's only if it is a piece in
+     * the language and the equality is false at the others, which the language leaves out of both
+     * regions the strings were shown in. Of the string the pieces are of ({@code pieces}), a
+     * string with a piece in the language and the partner's is the partner's, and one with none of
+     * the language's is one the run gets to the relation with no piece of: it is shown neither
+     * way, and not as one the equality is false at.
+     */
+    private static StringsAPartnerCanHold heldTo(StringsAPartnerCanHold strings,
+                                                 Language onThePieces, PiecesOfAString pieces) {
+        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+        Language mayBe = languageOf(strings.mayBe());
+        if (mayBe == null) {
+            return null;
+        }
+        if (pieces == null) {
+            Language canBe = languageOf(strings.canBe());
+            Language canBeInIt = canBe == null ? null : canBe.and(onThePieces, meter);
+            Language mayBeInIt = mayBe.and(onThePieces, meter);
+            return canBeInIt == null || mayBeInIt == null ? null
+                    : strings.showing(ValueSet.matching(canBeInIt), ValueSet.matching(mayBeInIt),
+                            strings.upTo());
+        }
+        Language having = StringsOfAPiece.wholesWithAPieceInWindow(onThePieces,
+                pieces.separator(), pieces.window().from(), pieces.until(), meter);
+        // The pieces are the converted string's, so the strings with one in the language are the
+        // ones the conversion makes strings with one: those it is exactly a map on, and no more.
+        // Every other string is left in the open, where the conversion's image is not shown.
+        CaseMapping conversion = pieces.whole().through();
+        Language ofTheString = having == null ? null : conversion.equals(CaseMapping.NONE)
+                ? having : CaseMaps.of(conversion).stringsConvertedInto(having, meter);
+        Language reached = ofTheString == null ? null : ofTheString.not(meter);
+        Language open = reached == null ? null : mayBe.or(reached, meter);
+        return open == null ? null
+                : strings.showing(strings.canBe(), ValueSet.matching(open), strings.upTo());
+    }
+
+    /**
+     * The strings the pieces that reach the relation are, as the statements of the way that hold
+     * {@code piece} to a language have them — every string where it holds it to none, and null
+     * where the machine for them is more than a piece's allowance.
+     */
+    private static Language theLanguageTheWayHoldsThePieceTo(List<OnAWay> written,
+                                                             PiecesOfAString piece) {
+        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+        Language out = Language.EVERY_STRING;
+        for (OnAWay each : written) {
+            if (!holdsThePieceToALanguage(each, piece)) {
+                continue;
+            }
+            Proposition.InTheStrings said =
+                    (Proposition.InTheStrings) each.ofThePieces().statement();
+            Language compiled = Partitions.languageOf(said.accepts(), meter);
+            if (compiled != null && !said.holds()) {
+                compiled = compiled.not(meter);
+            }
+            out = compiled == null || out == null ? null : out.and(compiled, meter);
+        }
+        return out;
     }
 
     /**

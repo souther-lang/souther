@@ -265,7 +265,7 @@ final class WhatARunWorksOutBeforeACount {
                             break;
                         }
                         if (!onlyWhatAlwaysRuns || step instanceof Evaluated.Step.Always) {
-                            out.add(step.expression());
+                            addWorkedOut(out, node, step.expression());
                         }
                     }
                 }
@@ -273,6 +273,21 @@ final class WhatARunWorksOutBeforeACount {
         }
         out.add(comparison);
         return out;
+    }
+
+    /**
+     * {@code expression}, a step of {@code node} that runs before the part the way goes on to,
+     * added to {@code out} as what working it out is: for the construction an attempt tests, what
+     * it is built of and not the construction, which takes the other arm where it is refused and
+     * ends no run ({@link WhatARunMayEndFor#forEachWorkedOut}).
+     */
+    private static void addWorkedOut(List<Core> out, Core node, Core expression) {
+        if (Core.withoutStanding(node) instanceof Core.IfConstructed attempt
+                && expression == attempt.construct()) {
+            Core.forEachChild(expression, out::add);
+        } else {
+            out.add(expression);
+        }
     }
 
     /**
@@ -331,7 +346,7 @@ final class WhatARunWorksOutBeforeACount {
                             break;
                         }
                         if (step instanceof Evaluated.Step.Always) {
-                            out.add(step.expression());
+                            addWorkedOut(out, node, step.expression());
                         }
                     }
                 }

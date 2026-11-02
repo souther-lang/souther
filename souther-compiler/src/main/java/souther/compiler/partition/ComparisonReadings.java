@@ -24,6 +24,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -1694,8 +1695,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
         return switch (WhatAForkTests.partsRead(atom.value(),
                 WhatNamesStandFor.in(atom.at(), read))) {
-            case WhatAForkTests.PartsRead.Complete(var parts) ->
-                    new Atom(atom, unowned(parts, read, here), stoppedFor);
+            case WhatAForkTests.PartsRead.Complete(var parts, var pieces) ->
+                    new Atom(atom, unowned(parts, pieces, atom, read, here), stoppedFor);
             // A comparison states the atom, and its own reading was stopped at a figure: the
             // comparison reader says so, at the places the comparison names. The fork is offered
             // no part, because the parts of a proposition the figure cut depend on where it was
@@ -1710,11 +1711,55 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         };
     }
 
+    /**
+     * Whether {@code e} is a clause a declaration wrote — the rule a type states of its values,
+     * reached through an attempt to build one — and not a part of the body being read.
+     *
+     * <p>Such a clause is answered for already: by the declaration, which states it of the type,
+     * and by the attempt, whose two arms are the run that builds the value and the run that
+     * cannot. A fork over the attempt that kept the clause would state the same rule a second
+     * time, at the positions the clause was reached through. Nothing the examples owe is dropped
+     * here: what they owe of the arms is the arms' own.
+     */
+    private static boolean writtenByADeclaration(Core e) {
+        ConstructOccurrence written = switch (Core.withoutStanding(e)) {
+            case Core.Binary binary -> binary.occurrence();
+            case Core.PreservedCall call -> call.occurrence();
+            default -> null;
+        };
+        return written != null && written.isWritten()
+                && !(written.origin().owner() instanceof WrittenOwner.Body);
+    }
+
+    /** Every comparison the source wrote in {@code e}, into {@code into}. */
+    private static void comparisonsIn(Core e, List<Core> into) {
+        Core written = Core.withoutStanding(e);
+        if (written instanceof Core.Binary && BooleanMeaning.asAComparison(written).isPresent()) {
+            into.add(written);
+        }
+        Core.forEachChild(written, child -> comparisonsIn(child, into));
+    }
+
     /** The {@code parts} that none of the three readers answers for. */
-    private static List<Denotation> unowned(List<Denotation> parts, InputReading read,
-                                            StatedHere here) {
+    private static List<Denotation> unowned(List<Denotation> parts,
+                                            WhatAForkTests.ReadAsPieces pieces, Denotation atom,
+                                            InputReading read, StatedHere here) {
+        // The container of some piece being a value is stated by the comparisons written in the
+        // atom, where every one of them has its owner.
+        List<Core> comparisons = new ArrayList<>();
+        comparisonsIn(atom.value(), comparisons);
+        boolean piecesAreTheirs = !pieces.containers().isEmpty() && !comparisons.isEmpty()
+                && comparisons.stream().allMatch(comparison -> statedAt(comparison,
+                        () -> WhatNamesStandFor.in(atom.at(), read), here) != null);
         List<Denotation> left = new ArrayList<>();
         for (Denotation part : parts) {
+            if (writtenByADeclaration(part.value())) {
+                continue;
+            }
+            if (piecesAreTheirs && pieces.containers().stream()
+                    .anyMatch(container -> container.value() == part.value())) {
+                continue;
+            }
             // Which rule the part is, by the node; where it stands, in the reading it is written in.
             if (statedAt(part.value(), () -> WhatNamesStandFor.in(part.at(), read), here) == null
                     && !(part.at().pathOf(part.value(), read.rules().newtypes())

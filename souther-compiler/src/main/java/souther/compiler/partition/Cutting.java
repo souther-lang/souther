@@ -2203,7 +2203,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Truth truth -> truth.of() instanceof DecisionSubject.AnInput;
             case Proposition.Present present -> present.of() instanceof DecisionSubject.AnInput;
             case Proposition.Some some -> some.container() instanceof DecisionSubject.AnInput
-                    && statesNoRelation(some.ofTheElement());
+                    && (statesNoRelation(some.ofTheElement())
+                            || some.ofTheElement() instanceof Proposition.InTheStrings);
             case Proposition.All all -> all.parts().stream().allMatch(Cutting::statesNoRelation);
             case Proposition.Any any -> any.parts().stream().allMatch(Cutting::statesNoRelation);
             case Proposition.SoManyHold counted ->
