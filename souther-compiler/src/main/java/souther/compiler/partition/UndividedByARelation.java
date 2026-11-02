@@ -4784,8 +4784,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && touches(number, other.positions())) {
                 return false;
             }
-            // A statement the run says whether it held names no place, and says nothing of which
-            // numbers it turns on: a remainder is taken away only where none such stands beside it.
+            // A statement the run says whether it held names no place, though what it states is
+            // about numbers of the input ({@link RowDemand.ForTheRun}), so nothing here says which
+            // it turns on: a remainder is taken away only where none such stands beside it.
             if (statement.onARemainder() != null && !other.equals(statement)
                     && !sameRemainder(statement, other) && other.positions().isEmpty()
                     && !other.whatStands()) {
@@ -4887,7 +4888,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             lowest = lowest.add(by.multiply(by.signum() > 0 ? ends.low() : ends.high()));
             highest = highest.add(by.multiply(by.signum() > 0 ? ends.high() : ends.low()));
         }
-        // Moved the other way, the number is taken the other way round.
+        return windowHoldsEveryRemainder(weight, mine, lowest, highest, divisor, least, greatest);
+    }
+
+    /**
+     * Whether the values of a number ({@code mine}), moved by {@code weight} and added to a rest
+     * that comes to anything from {@code lowest} to {@code highest}, include as many whole values
+     * side by side as a division by {@code divisor} has remainders among those that keep the sum
+     * from {@code least} to {@code greatest}.
+     *
+     * <p>Asked at each end of the rest and nowhere between: the window of values that keep the sum
+     * inside is as wide whatever the rest comes to, and moves with it, so what it leaves of
+     * {@code mine} is least at one of the two ends. Moved by a weight below nought the number is
+     * taken the other way round.
+     */
+    static boolean windowHoldsEveryRemainder(BigInteger weight, WholeEnds mine,
+                                             BigInteger lowest, BigInteger highest,
+                                             BigInteger divisor, BigInteger least,
+                                             BigInteger greatest) {
         BigInteger by = weight.abs();
         BigInteger from = weight.signum() > 0 ? mine.low() : negated(mine.high());
         BigInteger to = weight.signum() > 0 ? mine.high() : negated(mine.low());
@@ -4904,7 +4922,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /** The whole values from {@code low} to {@code high}, either null where it has no end. */
-    private record WholeEnds(BigInteger low, BigInteger high) {}
+    record WholeEnds(BigInteger low, BigInteger high) {}
 
     /** {@code ratio} as a whole number, or null where it is none. */
     private static BigInteger wholeNumberOf(ExactRatio ratio) {
