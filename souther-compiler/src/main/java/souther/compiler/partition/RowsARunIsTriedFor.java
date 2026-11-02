@@ -34,7 +34,7 @@ import java.util.Map;
  * found by none of them. So running out of candidates leaves the item owed, with the population
  * said ({@link CompositionRepertoire#ROWS_A_RUN_IS_TRIED_FOR}), and never proves it empty.
  */
-final class RowsARunIsTriedFor {
+public final class RowsARunIsTriedFor {
 
     /** The values a whole number is written at, in the order they are tried. */
     private static final List<Long> VALUES = List.of(0L, 1L, -1L, 2L);
@@ -47,6 +47,16 @@ final class RowsARunIsTriedFor {
     private static final int MOST_ELEMENTS = 6;
 
     private RowsARunIsTriedFor() {}
+
+    /** The most elements a candidate holds a container of: the edge the report names. */
+    public static int mostElements() {
+        return MOST_ELEMENTS;
+    }
+
+    /** The values a whole number outside a container is written at, in the order tried. */
+    public static List<Long> values() {
+        return VALUES;
+    }
 
     /** Every candidate for {@code goal}, in the order they are tried, none of them empty. */
     static List<Map<RealizationTarget, Place>> candidates(PointSearchGoal.ByObservation goal) {

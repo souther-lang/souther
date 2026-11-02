@@ -540,6 +540,17 @@ counts. The last line says how many are marked, which is the one sign a report n
 In the JSON each behavior carries `rowsThatDoNotHold`, each row with its `failedAt`, and an
 obligation covered only by such rows carries `onlyWitnessedBy`.
 
+A number only a run works out, such as a sum over a list, has no rule saying where the input stands
+for the run to come to a point, so the compiler writes candidate rows, runs each and reads what the
+run came to. The candidates are a container holding 0 to 6 copies of one element, written at its
+type's plain value, and a whole number outside a container at 0, 1, -1 or 2. Every container among
+the places gets the same size and every such number the same value. Elements are not varied among
+themselves, and their reach depends on their type: with a plain value of 0 every candidate list sums
+to 0. When no candidate reaches the point, the report names this population, and a longer list,
+elements of other values or elements unlike one another may still reach it. A row written by hand
+with such elements is the way to settle it; no rerun does. That no candidate reached a point does not
+make it unreachable.
+
 A position nothing the behavior states reads — not its body and not a clause of it — is owed no row
 at any of its classes, since a row at one of them gives the answer a row at any other gives. Its
 classes stay in the count, and a `·` line says why none of them is asked for; in the JSON the

@@ -62,8 +62,8 @@ class EveryRowARunIsTriedForIsTriedTest {
         Set<List<Place>> pairs = new HashSet<>();
         candidates.forEach(each -> pairs.add(List.of(at(each, LENGTH), at(each, NUMBER))));
         assertEquals(candidates.size(), pairs.size(), "no candidate twice");
-        for (int size = 0; size <= 6; size++) {
-            for (long value : List.of(0L, 1L, -1L, 2L)) {
+        for (int size = 0; size <= RowsARunIsTriedFor.mostElements(); size++) {
+            for (long value : RowsARunIsTriedFor.values()) {
                 assertTrue(pairs.contains(List.of(Count.of(size), Count.of(value))),
                         size + " elements at " + value);
             }
