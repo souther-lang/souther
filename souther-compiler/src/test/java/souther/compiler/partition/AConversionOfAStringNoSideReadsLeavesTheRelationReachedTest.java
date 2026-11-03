@@ -42,6 +42,10 @@ class AConversionOfAStringNoSideReadsLeavesTheRelationReachedTest {
                 List.flatMap(d -> if Domain(d) as name then [ name ] else [],
                              String.split("@", String.lowercase(a.value)))
 
+            let upperOf (a: Address): List<Domain> =
+                List.flatMap(d -> if Domain(d) as name then [ name ] else [],
+                             String.split("@", String.uppercase(a.value)))
+
             let othersOf (s: String): List<Domain> =
                 List.flatMap(d -> if Domain(d) as name then [ name ] else [],
                              String.split("@", String.lowercase(s)))
@@ -61,6 +65,7 @@ class AConversionOfAStringNoSideReadsLeavesTheRelationReachedTest {
                 constructs Hit, Miss, Domain
             let f (i) = {
                 let xs = List.flatMap(d -> onDomain(d, i.accounts), domainsOf(i.lead.addr))
+                BEFORE
                 let ys = List.flatMap(d -> onDomain(d, i.accounts), othersOf(i.lead.other))
                 guard List.length(ys) >= 1 else Miss { n = 0 }
                 Hit { n = List.length(xs) }
@@ -68,8 +73,14 @@ class AConversionOfAStringNoSideReadsLeavesTheRelationReachedTest {
             """;
 
     private static String reasons(String address, String leadRule) {
+        return reasons(address, leadRule, "");
+    }
+
+    /** {@code before} is written between the first list and the second, so a run reaches the
+     *  second list's relation past it. */
+    private static String reasons(String address, String leadRule, String before) {
         Compilation compilation = Compilation.ofSource(DECLARATIONS.replace("ADDRESS", address)
-                .replace("LEADRULE", leadRule), "Main");
+                .replace("LEADRULE", leadRule).replace("BEFORE", before), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
@@ -91,6 +102,28 @@ class AConversionOfAStringNoSideReadsLeavesTheRelationReachedTest {
                 data Address = String
                     invariant String.matches("[İ]+", value)""", "");
         assertTrue(report.contains("relation_not_shown_to_reach_every_value"), report);
+    }
+
+    private static final String AND_UPPERCASED =
+            "let zs = List.flatMap(d -> onDomain(d, i.accounts), upperOf(i.lead.addr))";
+
+    /**
+     * Each conversion of one string has strings it is a map on, and a run gets past both only at
+     * strings that are among the strings of each: {@code ß} is a map of one code point under
+     * lowercase and becomes two under uppercase, {@code İ} the other way about.
+     */
+    @Test
+    void twoConversionsOfOneStringAreGotPastAtTheStringsBothAreAMapOn() {
+        String apart = reasons("""
+                data Address = String
+                    invariant String.matches("[ßİ]+", value)""", "", AND_UPPERCASED);
+        assertTrue(apart.contains("relation_not_shown_to_reach_every_value"), apart);
+
+        String alike = reasons("""
+                data Address = String
+                    invariant String.matches("[a-z]+", value)""", "", AND_UPPERCASED);
+        assertTrue(alike.contains("relation_shown_over_a_region"), alike);
+        assertFalse(alike.contains("relation_not_shown_to_reach_every_value"), alike);
     }
 
     @Test

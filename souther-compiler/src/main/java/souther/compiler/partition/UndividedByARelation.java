@@ -4135,8 +4135,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         }
                         exactOn.add(new ConvertedOn(place, text.conversion()));
                     } else if (standing.mayStandAt(place)
-                            && !witness.getsPastConversionAt(place, text.conversion(),
-                                    past.tied())) {
+                            && !witness.getsPastConversionAt(place, text.conversion(), past)) {
                         return true;
                     }
                 }
@@ -4378,36 +4377,49 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         private final Set<TermPath> heldToOne;
         private final Map<TermPath, Optional<BigInteger>> sizes = new HashMap<>();
         private final Set<TermPath> asked = new LinkedHashSet<>();
-        private final List<TermPath> converted = new ArrayList<>();
+        /** For each string converted on this run that no side reads, the strings it holds that
+         *  every conversion of it so far is a map on. */
+        private final Map<TermPath, Language> convertedExactly = new LinkedHashMap<>();
 
         /**
          * Whether a run gets past a conversion of the string at {@code place}, which no side of the
-         * relation reads, at every value the relation reads: the string is one of those the
-         * conversion is exactly a map on, so the conversion ends no run for it, and nothing relates
-         * it to what is read.
+         * relation reads, at every value the relation reads: the string is one of those every
+         * conversion of it on the run is exactly a map on, so none of them ends a run for it, and
+         * nothing relates it to what is read.
          *
          * <p>Nothing relates it where no rule ties it to a place read, or to another string
-         * converted on this run, where no statement of the way names it or may name any, and where
-         * no tie of the lengths touches it. The strings it holds are then chosen apart from the
-         * values read, and some of them are among those the conversion ends no run for. They are
-         * the strings the declarations are shown to leave it ({@link #stringsShownAt}), made of
-         * code points the conversion is a map on, and none is shown where that is not so.
+         * converted on this run, where nothing the way declined to read may name it, where no
+         * statement of the way or number the run narrows names it or may name any, and where no
+         * tie of the lengths touches it. The strings it holds are then chosen apart from the
+         * values read. They are the strings the declarations are shown to leave it
+         * ({@link #stringsShownAt}) made of code points that every conversion of it is a map on,
+         * which one run's conversions share only where that set is not empty: each having some
+         * string it is a map on does not give one that all have.
          */
         boolean getsPastConversionAt(TermPath place, CaseMapping conversion,
-                                     List<DemandReading.Tie> ties) {
+                                     DemandReading.Answered past) {
+            if (declined.isEmpty() || declined.get().contains(place.head())) {
+                return false;
+            }
             for (TermPath other : reads) {
                 if (overlap(other, place) || tiedByARule(place, other, read)) {
                     return false;
                 }
             }
-            for (TermPath other : converted) {
+            for (TermPath other : convertedExactly.keySet()) {
                 if (!other.equals(place) && (overlap(other, place)
                         || tiedByARule(place, other, read))) {
                     return false;
                 }
             }
-            for (DemandReading.Tie tie : ties) {
+            for (DemandReading.Tie tie : past.tied()) {
                 if (touchesAny(tie.places(), List.of(place))) {
+                    return false;
+                }
+            }
+            for (TakenConstraint narrowing : past.narrowing()) {
+                if (narrowing.terms().stream().anyMatch(term ->
+                        overlap(term.subjectPath(), place))) {
                     return false;
                 }
             }
@@ -4417,15 +4429,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     return false;
                 }
             }
-            ValueSet held = stringsShownAt(place, read);
-            Language shown = held == null ? null : languageOf(held);
-            Language exactly = shown == null ? null : shown.and(CaseMaps.of(conversion).strings(
-                    PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter()),
-                    PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
+            Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+            Language had = convertedExactly.get(place);
+            if (had == null) {
+                ValueSet held = stringsShownAt(place, read);
+                had = held == null ? null : languageOf(held);
+            }
+            Language exactly = had == null ? null
+                    : had.and(CaseMaps.of(conversion).strings(meter), meter);
             if (exactly == null || exactly.isEmpty()) {
                 return false;
             }
-            converted.add(place);
+            convertedExactly.put(place, exactly);
             return true;
         }
 

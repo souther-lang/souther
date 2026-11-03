@@ -714,11 +714,12 @@ sealed interface ComparisonAssessment {
         /**
          * Each string position some part shows parted by the strings its partner can hold, where
          * every part about its place that parts it shows it parted by the same strings, and every
-         * part is a relation to another value or a line the statement never turns on. A relation
-         * parts the strings of a position whichever case of the statement a row is in: what a case
-         * decides is which lines part what settles it. A part that leaves the place undivided, or
-         * is a line nothing turns on, parts it by nothing, and what the other parts part it by
-         * does not contradict that.
+         * part is a relation to another value or says nothing of any value. A relation parts the
+         * strings of a position whichever case of the statement a row is in: what a case decides
+         * is which lines part what settles it. A part that leaves the place undivided parts it by
+         * nothing, as does one that says nothing of any value — a line the statement never turns
+         * on, a relation no row takes the way to a case of, or a line or relation or stop no row
+         * arrives at — and what the other parts part it by does not contradict that.
          */
         Map<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold> partnered() {
             List<Set<FilingCoordinate>> about = new ArrayList<>();
@@ -737,7 +738,8 @@ sealed interface ComparisonAssessment {
                         undivided.add(across.left().undivided());
                         each.add(across.left().partnered());
                     }
-                    case TurnsNothing _ -> { }
+                    case TurnsNothing _, RelationTurnsNothing _, NothingArrivesAtItsLine _,
+                         NothingArrivesAtItsRelation _, NothingArrivesAtItsStop _ -> { }
                     default -> {
                         return Map.of();
                     }
