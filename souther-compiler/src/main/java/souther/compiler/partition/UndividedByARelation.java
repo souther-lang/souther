@@ -4580,13 +4580,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * again. Then a conversion of the string at every element converts the string the relation
          * reads, and no other.
          *
-         * <p>That holds where the list is the only container the place is inside, and holds an
-         * element over again, so a set does not. Nothing may keep its elements apart or say
-         * anything of an element's value, no rule of the declarations reads inside the elements,
-         * the relation holds no two elements against each other, and every side keeps its value
-         * where the list is filled with copies ({@link #keptCutDown}). The copies stop a conversion
-         * where the string the relation reads does, which {@link #getsPastConversionAt} and the
-         * exactness recorded for the place already say.
+         * <p>That holds where the list is the only container the place is inside, and a list of
+         * copies of one element is a row at some count ({@link #countsOfAListOfCopies}). The
+         * relation holds no two elements of the list against each other, and every side keeps its
+         * value where the list is filled with copies ({@link #keptCutDown}). The copies stop a
+         * conversion where the string the relation reads does, which
+         * {@link #getsPastConversionAt} and the exactness recorded for the place already say.
          */
         boolean copiesOfTheElementFillTheList(TermPath place) {
             List<TermPath> containers = place.containersHoldingIt();
@@ -4594,10 +4593,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return false;
             }
             TermPath list = containers.getFirst();
-            NumericTerm.ValueOf element = new NumericTerm.ValueOf(list.element());
-            if (!read.domain().holdsAnElementOverAgain(list, read.rules())
-                    || namedDownTo(list.element(), list.steps().size(), read, null) != Named.NOT
-                    || wayOf(element, statingAnythingOf(element, conditions)) != Way.UNTOUCHED) {
+            if (countsOfAListOfCopies(list, read, region, conditions) == null) {
                 return false;
             }
             for (FilingCoordinate each : amongThemselves) {
@@ -8570,17 +8566,32 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         TermPath list = containers.getFirst();
-        NumericTerm.ValueOf element = new NumericTerm.ValueOf(list.element());
-        if (!read.domain().holdsAnElementOverAgain(list, read.rules())
-                || namedDownTo(list.element(), list.steps().size(), read, null) != Named.NOT
-                || wayOf(element, statingAnythingOf(element, conditions)) != Way.UNTOUCHED) {
-            return null;
-        }
         for (TermPath inside : containers.subList(1, containers.size())) {
             NumericDomain.Bounds held = howManyAreHeld(inside, read, region);
             if (held == null || !held.admits(Count.of(1))) {
                 return null;
             }
+        }
+        return countsOfAListOfCopies(list, read, region, conditions);
+    }
+
+    /**
+     * The counts from one at which a list of that many copies of one element is a row, or null
+     * where none is shown.
+     *
+     * <p>The list holds an element over again, no rule of a value around it reads inside its
+     * elements, and nothing the way states touches them, so copies of an element that is a row's
+     * break nothing. How many of them the rules leave the list is {@link #howManyAreHeld}'s, and a
+     * set, which holds an element once, shows nothing here.
+     */
+    private static NumericDomain.Bounds countsOfAListOfCopies(TermPath list, InputReading read,
+                                                              SearchRegion region,
+                                                              List<OnAWay> conditions) {
+        NumericTerm.ValueOf element = new NumericTerm.ValueOf(list.element());
+        if (!read.domain().holdsAnElementOverAgain(list, read.rules())
+                || namedDownTo(list.element(), list.steps().size(), read, null) != Named.NOT
+                || wayOf(element, statingAnythingOf(element, conditions)) != Way.UNTOUCHED) {
+            return null;
         }
         NumericDomain.Bounds held = howManyAreHeld(list, read, region);
         NumericDomain.Bounds fromOne = held == null ? null : held.meet(
