@@ -1,8 +1,10 @@
 package souther.compiler.coverage;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.HelperEntry;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 
@@ -95,14 +97,14 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
      * that carry a rule.
      */
     public static DecisionSources of(
-            Map<souther.compiler.types.ReachName.Declaration,
-                    souther.compiler.check.HelperEntry> reachable,
-            Map<souther.compiler.types.ReachName.Declaration, Hir.FnDef> own) {
+            Map<ReachName.Declaration,
+                    HelperEntry> reachable,
+            Map<ReachName.Declaration, Hir.FnDef> own) {
         // Keyed by the reference a call reaches each by, which is what the forks below are looked
         // up by and what a call carries. Rendered into a string here, this would be a summary
         // joined to a call by a spelling, which is the join the reference exists to make
         // unnecessary.
-        Map<souther.compiler.types.ReachName.Declaration, Hir.FnDef> declarations =
+        Map<ReachName.Declaration, Hir.FnDef> declarations =
                 new LinkedHashMap<>();
         reachable.forEach((reference, entry) ->
                 declarations.put(reference, entry.definition()));
@@ -113,7 +115,7 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
         return new DecisionSources(byFork);
     }
 
-    private static void forks(souther.compiler.types.ReachName.Declaration declaration,
+    private static void forks(ReachName.Declaration declaration,
                               Hir.FnDef fn, AnswerDependencies answersOn,
                               Map<SourceConstructOrigin, DecisionSource> out) {
         if (!(fn.body() instanceof Hir.FnBody.Written written)) {
@@ -135,7 +137,7 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
      * answered, which a condition reading one is settled by the same as one applying the rule.
      */
     private static void forks(Hir.Expr e,
-                              souther.compiler.types.ReachName.Declaration declaration, Rules rules,
+                              ReachName.Declaration declaration, Rules rules,
                               AnswerDependencies answersOn, Map<BindingId, Set<Integer>> bound,
                               NamedCallables named, Set<BindingId> verdicts,
                               Map<SourceConstructOrigin, DecisionSource> out) {
@@ -183,7 +185,7 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
     }
 
     private static void said(SourceConstructOrigin fork, Hir.Expr cond,
-                             souther.compiler.types.ReachName.Declaration declaration, Rules rules,
+                             ReachName.Declaration declaration, Rules rules,
                              AnswerDependencies answersOn,
                              Map<BindingId, Set<Integer>> bound, NamedCallables named,
                              Set<BindingId> verdicts,
