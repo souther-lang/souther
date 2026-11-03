@@ -1432,11 +1432,7 @@ final class TermReading {
             return new Reading.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS);
         }
         java.time.LocalDate date = Dates.dateAt(moved);
-        return new Reading.Number(Count.of(switch (part) {
-            case YEAR -> date.getYear();
-            case MONTH -> date.getMonthValue();
-            case DAY -> date.getDayOfMonth();
-        }));
+        return new Reading.Number(Count.of(part.of(date)));
     }
 
     /**

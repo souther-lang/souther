@@ -2941,6 +2941,14 @@ public interface Hir {
             return new Apply(function, args, origin, applied, application, pos, region);
         }
 
+        /** The same application with {@code f} applied to each argument and to nothing else, or
+         *  this one where every argument answered itself, so a comparison of the result with what
+         *  was handed in stops at an application that was not changed. */
+        public Apply mapArgs(UnaryOperator<Expr> f) {
+            List<Expr> mapped = each(args, f);
+            return mapped == args ? this : withArgs(mapped);
+        }
+
         /**
          * The same application, of something else — the one rewrite that puts another thing in the
          * callee position of an application a source already wrote.

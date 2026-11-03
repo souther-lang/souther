@@ -85,6 +85,65 @@ public final class SyntaxNode implements SyntaxElement {
         return out;
     }
 
+    /** The direct child nodes of the given kind, in source order. */
+    public List<SyntaxNode> childNodes(SyntaxKind kind) {
+        List<SyntaxNode> out = new ArrayList<>();
+        for (SyntaxElement e : children()) {
+            if (e instanceof SyntaxNode n && n.kind() == kind) {
+                out.add(n);
+            }
+        }
+        return out;
+    }
+
+    /** The direct child nodes that are expressions, in source order. */
+    public List<SyntaxNode> expressionChildren() {
+        List<SyntaxNode> out = new ArrayList<>();
+        for (SyntaxElement e : children()) {
+            if (e instanceof SyntaxNode n && n.kind().isExpression()) {
+                out.add(n);
+            }
+        }
+        return out;
+    }
+
+    /** The first direct child that is an expression; throws when there is none. */
+    public SyntaxNode firstExpressionChild() {
+        return firstExpressionChildOpt().orElseThrow(
+                () -> new IndexOutOfBoundsException("no expression in " + kind()));
+    }
+
+    /** The first direct child that is an expression, if any. */
+    public Optional<SyntaxNode> firstExpressionChildOpt() {
+        for (SyntaxElement e : children()) {
+            if (e instanceof SyntaxNode n && n.kind().isExpression()) {
+                return Optional.of(n);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** The last direct child that is an expression; throws when there is none. */
+    public SyntaxNode lastExpressionChild() {
+        List<SyntaxElement> all = children();
+        for (int i = all.size() - 1; i >= 0; i--) {
+            if (all.get(i) instanceof SyntaxNode n && n.kind().isExpression()) {
+                return n;
+            }
+        }
+        throw new IndexOutOfBoundsException("no expression in " + kind());
+    }
+
+    /** The first direct child token that can be a binary operator. */
+    public SyntaxToken binaryOperatorToken() {
+        for (SyntaxElement e : children()) {
+            if (e instanceof SyntaxToken t && !t.isTrivia() && t.kind().isBinaryOperator()) {
+                return t;
+            }
+        }
+        throw new IllegalStateException("no operator in " + kind());
+    }
+
     /** The first child node of the given kind, if any. */
     public Optional<SyntaxNode> child(SyntaxKind kind) {
         for (SyntaxElement e : children()) {

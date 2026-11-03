@@ -283,6 +283,28 @@ public enum SyntaxKind {
         return this == IDENT || this == UNDERSCORE;
     }
 
+    /** Whether a node of this kind is an expression. A node kind added to the grammar that is an
+     * expression has to be listed here; the default arm answers {@code false}. */
+    public boolean isExpression() {
+        return switch (this) {
+            case LITERAL_EXPR, VAR_EXPR, FIELD_ACCESS, APPLY_EXPR, BINARY_EXPR,
+                 UNARY_EXPR, PIPE_EXPR, PAREN_EXPR, TUPLE_EXPR, LIST_EXPR, LIST_COMP, IF_EXPR,
+                 MATCH_EXPR, LAMBDA_EXPR, FIELD_GETTER, NEW_DATA_EXPR, BLOCK_EXPR,
+                 UNREACHABLE_EXPR -> true;
+            default -> false;
+        };
+    }
+
+    /** Whether a token of this kind can be the operator of a {@code BINARY_EXPR}. {@code MINUS}
+     * is also written as the unary operator, so this says what the token may be, not what it is
+     * where it stands. */
+    public boolean isBinaryOperator() {
+        return switch (this) {
+            case EQ, NE, LT, LE, GT, GE, AND, OR, PLUS, MINUS, STAR, SLASH, PLUSPLUS -> true;
+            default -> false;
+        };
+    }
+
     /** A reader-facing name for an "expected X but found Y" message. A kind that spells itself is
      * locale-neutral and shown as that spelling in backticks ({@code `:`}); a category (a name, a
      * literal, end of input) is language-dependent and returned as a {@link Localizable}, localized
