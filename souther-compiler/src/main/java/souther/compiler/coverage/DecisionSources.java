@@ -6,8 +6,10 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -134,7 +136,7 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
      */
     private static void forks(Hir.Expr e,
                               souther.compiler.types.ReachName.Declaration declaration, Rules rules,
-                              AnswerDependencies answersOn, Map<BindingId, Set<String>> bound,
+                              AnswerDependencies answersOn, Map<BindingId, Set<Integer>> bound,
                               NamedCallables named, Set<BindingId> verdicts,
                               Map<SourceConstructOrigin, DecisionSource> out) {
         switch (e) {
@@ -160,10 +162,10 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
                 }
             }
             case Hir.LetIn let when let.binder() != null && let.binder().binding() != null -> {
-                Set<String> holds = new LinkedHashSet<>();
+                Set<Integer> holds = new LinkedHashSet<>();
                 rules.restsOn(let.value(), answersOn, bound, named, holds);
                 forks(let.value(), declaration, rules, answersOn, bound, named, verdicts, out);
-                Map<BindingId, Set<String>> wider = new LinkedHashMap<>(bound);
+                Map<BindingId, Set<Integer>> wider = new LinkedHashMap<>(bound);
                 wider.put(let.binder().binding(), holds);
                 Set<BindingId> widerVerdicts = verdicts;
                 if (rules.isTheirVerdict(let.value(), verdicts)) {
@@ -183,40 +185,44 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
     private static void said(SourceConstructOrigin fork, Hir.Expr cond,
                              souther.compiler.types.ReachName.Declaration declaration, Rules rules,
                              AnswerDependencies answersOn,
-                             Map<BindingId, Set<String>> bound, NamedCallables named,
+                             Map<BindingId, Set<Integer>> bound, NamedCallables named,
                              Set<BindingId> verdicts,
                              Map<SourceConstructOrigin, DecisionSource> out) {
-        Set<String> on = new LinkedHashSet<>();
+        Set<Integer> on = new LinkedHashSet<>();
         rules.restsOn(cond, answersOn, bound, named, on);
         out.putIfAbsent(fork, on.isEmpty() ? DecisionSource.OWN
                 : new DecisionSource.Supplied(declaration, rules.inTheOrderDeclared(on),
                         rules.isTheirVerdict(cond, verdicts)));
     }
 
-    /** The rules one declaration was handed: its function parameters, by binding and by place. */
-    private record Rules(Map<BindingId, String> byBinding, java.util.List<String> inOrder) {
+    /**
+     * The rules one declaration was handed: its function parameters, by binding to the slot each
+     * stands at among all the parameters, and the names of all the parameters by slot.
+     */
+    private record Rules(Map<BindingId, Integer> byBinding, List<String> inOrder) {
 
-        /** {@code some} of these, in the order the declaration names them. */
-        java.util.List<String> inTheOrderDeclared(Set<String> some) {
-            java.util.List<String> out = new java.util.ArrayList<>();
-            for (String parameter : inOrder) {
-                if (some.contains(parameter)) {
-                    out.add(parameter);
+        /** The parameters at {@code slots}, named, in the order the declaration names them. */
+        List<String> inTheOrderDeclared(Set<Integer> slots) {
+            List<String> out = new ArrayList<>();
+            for (int slot = 0; slot < inOrder.size(); slot++) {
+                if (slots.contains(slot)) {
+                    out.add(inOrder.get(slot));
                 }
             }
             return out;
         }
 
         static Rules of(Hir.FnDef fn) {
-            Map<BindingId, String> byBinding = new LinkedHashMap<>();
-            java.util.List<String> inOrder = new java.util.ArrayList<>();
-            for (Hir.FnParam param : fn.params()) {
+            Map<BindingId, Integer> byBinding = new LinkedHashMap<>();
+            List<String> inOrder = new ArrayList<>();
+            for (int slot = 0; slot < fn.params().size(); slot++) {
+                Hir.FnParam param = fn.params().get(slot);
                 inOrder.add(param.name());
                 // A parameter of function type, and no other. What the caller hands to one is the
                 // rule this body decides by; what it hands to the rest is what that rule reads.
                 if (param.type() != null && param.type().asFn() != null
                         && param.binder() != null && param.binder().binding() != null) {
-                    byBinding.put(param.binder().binding(), param.name());
+                    byBinding.put(param.binder().binding(), slot);
                 }
             }
             return new Rules(byBinding, inOrder);
@@ -248,54 +254,17 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
         }
 
         /**
-         * Which of these rules the value of {@code e} rests on.
+         * The slots of these rules the value of {@code e} rests on.
          *
          * <p>Three ways a value can rest on one, and a reading short of all three calls a call
          * site's rule the declaration's own. It applies it; or it reads a name the rule was bound
          * to, which is followed; or it hands the rule to a helper whose answer it uses, which is
-         * followed through that helper's own summary.
+         * followed through that helper's own summary. All three are
+         * {@link AnswerDependencies#dependsOn}, read over the parameters that carry a rule.
          */
         void restsOn(Hir.Expr e, AnswerDependencies answersOn,
-                     Map<BindingId, Set<String>> bound, NamedCallables named, Set<String> out) {
-            switch (e) {
-                case Hir.Var.Denoting read when read.denotes() instanceof ValueName.Local local -> {
-                    String rule = byBinding.get(local.id());
-                    if (rule != null) {
-                        out.add(rule);
-                    }
-                    Set<String> held = bound.get(local.id());
-                    if (held != null) {
-                        out.addAll(held);
-                    }
-                }
-                case Hir.LetIn let when let.binder() != null && let.binder().binding() != null -> {
-                    Set<String> holds = new LinkedHashSet<>();
-                    restsOn(let.value(), answersOn, bound, named, holds);
-                    Map<BindingId, Set<String>> wider = new LinkedHashMap<>(bound);
-                    wider.put(let.binder().binding(), holds);
-                    restsOn(let.body(), answersOn, wider,
-                            named.and(let.binder().binding(), let.value()), out);
-                    return;
-                }
-                case Hir.Apply call when call.function() instanceof Hir.Var.Denoting callee -> {
-                    souther.compiler.types.ReachName.Declaration reaches = named.reached(callee);
-                    Set<Integer> uses = reaches == null ? null : answersOn.of(reaches);
-                    for (int i = 0; i < call.args().size(); i++) {
-                        // Only the arguments the callee's answer rests on. An argument it never
-                        // reads decides nothing about what this call comes to, whatever the rule
-                        // inside it would decide somewhere else — read for what it holds, a rule
-                        // wrapped in a lambda and handed to a helper that ignores it made every copy
-                        // of the fork above its own obligation.
-                        if (uses == null || uses.contains(i)) {
-                            restsOn(call.args().get(i), answersOn, bound, named, out);
-                        }
-                    }
-                    restsOn(call.function(), answersOn, bound, named, out);
-                    return;
-                }
-                default -> { }
-            }
-            Hir.forEachChild(e, child -> restsOn(child, answersOn, bound, named, out));
+                     Map<BindingId, Set<Integer>> bound, NamedCallables named, Set<Integer> out) {
+            AnswerDependencies.dependsOn(e, byBinding, answersOn::of, bound, named, out);
         }
     }
 }
