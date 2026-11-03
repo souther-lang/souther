@@ -190,6 +190,9 @@ final class PathCompletion {
     private Operated operated(Core standing, Denotations at) {
         Core e = Core.withoutStanding(standing);
         WhereAnOperatorAnswers where = whereItAnswers(e);
+        if (where == null) {
+            where = whereALibraryCallAnswers(standing, at);
+        }
         LinearForm<FactSubject> form = switch (where) {
             case WhereAnOperatorAnswers.WhereItsExactValueIsHeld _ ->
                     terms.affineOf(standing, at);
@@ -199,6 +202,26 @@ final class PathCompletion {
             case null, default -> null;
         };
         return new Operated(e, where, form);
+    }
+
+    /**
+     * Where the call of an operation of the library {@code standing} is answers, read as an
+     * operator's ({@link AffineForms#whereAFormItIsHandedAnswers}), where the arithmetic composes
+     * its answer as a form here. Null where it is no such call, which is read where it ends no run
+     * and nowhere else.
+     *
+     * <p>The one account of it for both readings here: what a run past the call holds
+     * ({@link #past}) and what working a part out needs ({@link #workedOut}).
+     */
+    private WhereAnOperatorAnswers.WhereItsExactValueIsHeld whereALibraryCallAnswers(
+            Core standing, Denotations at) {
+        Core e = Core.withoutStanding(standing);
+        if (!(e instanceof Core.PreservedCall || e instanceof Core.Call)) {
+            return null;
+        }
+        WhereAnOperatorAnswers.WhereItsExactValueIsHeld held =
+                AffineForms.whereAFormItIsHandedAnswers(e, terms.declarations());
+        return held == null || terms.affineOf(standing, at) == null ? null : held;
     }
 
     /** Where the operator {@code e} is answers, or null where {@code e} is no operator. */
@@ -385,10 +408,17 @@ final class PathCompletion {
                 for (Core argument : call.args()) {
                     past = workedOut(argument, past, at, asked, read);
                 }
-                // What the operation itself ends a run for is the library's to say, and nothing
-                // here says on which arguments.
-                read[0] &= WhatARunMayEndFor.itself(call).endsNone();
-                return past;
+                // What the operation itself ends a run for is the library's to say: on which
+                // arguments, where it says where its answer has no place; on none here otherwise.
+                if (whereALibraryCallAnswers(e, at) == null) {
+                    read[0] &= WhatARunMayEndFor.itself(call).endsNone();
+                    return past;
+                }
+            }
+            case Core.Call call when whereALibraryCallAnswers(e, at) != null -> {
+                for (Core argument : call.args()) {
+                    past = workedOut(argument, past, at, asked, read);
+                }
             }
             case Core.If branching -> {
                 past = workedOut(branching.cond(), past, at, asked, read);
