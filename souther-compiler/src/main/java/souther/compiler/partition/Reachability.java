@@ -607,17 +607,18 @@ public sealed interface Reachability {
     }
 
     /**
-     * The statements of numbers on the way weigh one form of terms alike and leave no point of the
-     * line in common, so no row takes it.
+     * The statements of numbers on the way leave no value in common, so no row takes it: relations
+     * that weigh one form of terms alike and leave no point of the line, or remainders of one form
+     * moved by numbers that leave no remainder of the form.
      *
      * <p>A fact about the model like {@link NothingReaches}, and not that: no position is asked
      * twice. The terms may be read from several positions, and it is the relation between them
      * that the statements contradict, so there is no position to name. What proves it is the
      * statements, which this carries.
      *
-     * @param statements the statements of the way, of which some one form is held to no point
+     * @param statements the statements of the way, of which some of one form leave nothing
      */
-    record NumbersLeaveNone(List<TakenConstraint.Affine> statements) implements Reachability {
+    record NumbersLeaveNone(List<RowDemand.OfACondition> statements) implements Reachability {
 
         public NumbersLeaveNone {
             if (statements == null || statements.isEmpty()) {
