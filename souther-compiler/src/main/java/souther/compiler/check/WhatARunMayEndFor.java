@@ -201,13 +201,11 @@ public final class WhatARunMayEndFor {
     /**
      * The operand of {@code e} that is the one it ends a run on alone, or null where {@code e} has
      * none: the divisor of a {@code floorMod}, whose dividend is no part of where it stops. From
-     * the owner of the operation, a kernel's in {@link KernelContracts} and a library operation's
-     * through {@link LibraryEndings}.
+     * the owner of the operation: a library operation's through {@link LibraryEndings}, which
+     * reads it off the kernel the operation is declared as ({@link KernelContracts}).
      */
     public static Core theOperandItAloneStopsOn(Core e) {
         return switch (Core.withoutStanding(e)) {
-            case Core.Call call when call.fn() instanceof Core.Reached.OfKernel kernel ->
-                    operandAt(call.args(), KernelContracts.theOperandItAloneStopsOn(kernel.kernel()));
             case Core.PreservedCall kept -> {
                 AnOperationApplied applied = AnOperationApplied.of(kept);
                 yield applied != null
