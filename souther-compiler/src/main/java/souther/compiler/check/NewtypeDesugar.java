@@ -106,14 +106,26 @@ public final class NewtypeDesugar {
             return Hir.NewData.fromApply(call, new Hir.Name.Denoting(wrote, built),
                     List.of(new Hir.FieldInit("value", args.get(0), call.pos())));
         }
-        return call.withArgs(args);
+        return args == call.args() ? call : call.withArgs(args);
     }
 
+    /**
+     * {@code es} with each rewritten, or {@code es} itself where none of them changed, so a node
+     * that rewrote nothing is the node it was handed and comparing the result with the input stops
+     * at it.
+     */
     private static List<Hir.Expr> mapExprs(List<Hir.Expr> es, DeclarationNewtypes newtypes) {
-        List<Hir.Expr> out = new ArrayList<>();
-        for (Hir.Expr e : es) {
-            out.add(go(e, newtypes));
+        List<Hir.Expr> out = null;
+        for (int i = 0; i < es.size(); i++) {
+            Hir.Expr e = es.get(i);
+            Hir.Expr rewritten = go(e, newtypes);
+            if (out == null && rewritten != e) {
+                out = new ArrayList<>(es.subList(0, i));
+            }
+            if (out != null) {
+                out.add(rewritten);
+            }
         }
-        return out;
+        return out == null ? es : out;
     }
 }
