@@ -2207,13 +2207,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Some some -> some.container() instanceof DecisionSubject.AnInput
                     && (statesNoRelation(some.ofTheElement())
                             || some.ofTheElement() instanceof Proposition.InTheStrings);
-            case Proposition.All all -> all.parts().stream().allMatch(Cutting::statesNoRelation);
-            case Proposition.Any any -> any.parts().stream().allMatch(Cutting::statesNoRelation);
-            case Proposition.SoManyHold counted ->
-                    counted.statements().stream().allMatch(Cutting::statesNoRelation);
-            case Proposition.WhereItAnswers where ->
-                    statesNoRelation(where.answers()) && statesNoRelation(where.states());
-            case Proposition.OfTheWays ways -> statesNoRelation(ways.written());
+            case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
+                 Proposition.WhereItAnswers _, Proposition.OfTheWays _ ->
+                    stated.partsHeld().stream().allMatch(Cutting::statesNoRelation);
             // Settled, a relation, two values being one, or something nobody read: each is read
             // as what it is ({@link #readOnce}). And which strings a string is one of, which is
             // read where the rules about a position's strings are, and is no line of numbers.

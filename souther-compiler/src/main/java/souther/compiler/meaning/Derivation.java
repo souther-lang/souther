@@ -2779,10 +2779,9 @@ public sealed interface Derivation {
                                                 Set<CodePointClass> named) {
             return switch (element) {
                 case Proposition.Always _ -> true;
-                case Proposition.All(List<Proposition> parts, var _) ->
-                        parts.stream().allMatch(part -> onlyOfACharacter(within, part, named));
-                case Proposition.Any(List<Proposition> parts, var _) ->
-                        parts.stream().allMatch(part -> onlyOfACharacter(within, part, named));
+                case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _ ->
+                        element.partsHeld().stream()
+                                .allMatch(part -> onlyOfACharacter(within, part, named));
                 case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, var _),
                                           var _, var _) -> {
                     for (Quantity each : form.coefs().keySet()) {
@@ -2794,8 +2793,6 @@ public sealed interface Derivation {
                     }
                     yield true;
                 }
-                case Proposition.SoManyHold counted -> counted.statements().stream()
-                        .allMatch(part -> onlyOfACharacter(within, part, named));
                 case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                      Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
                      Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
