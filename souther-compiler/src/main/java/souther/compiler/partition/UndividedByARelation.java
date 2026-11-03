@@ -1775,8 +1775,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                             Reachability.Reaching way) {
         List<OnAWay> written = conditionsOf(way, remainder);
         Optional<Set<String>> declined = parametersDeclined(way);
-        DemandReading.Answered past = new DemandReading.Answered(way.gotPast(), way.tied(),
-                way.unsaid(), way.owed(), way.before());
+        DemandReading.Answered past = way.gotPastAsAsked();
         if (!nothingUnreadBearsOnIt(way)
                 || mayStopOnWhatItReads(past, read, way.region(), written, declined, Set.of())) {
             return Map.of();
@@ -1872,8 +1871,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             List<OnAWay> conditions = conditionsOf(each, remainder);
             boolean heldWhole = nothingUnreadBearsOnIt(each);
             Optional<Set<String>> declined = parametersDeclined(each);
-            DemandReading.Answered past = new DemandReading.Answered(each.gotPast(), each.tied(),
-                    each.unsaid(), each.owed(), each.before());
+            DemandReading.Answered past = each.gotPastAsAsked();
             WhatItLeaves along = each.narrowedBy().isPresent()
                     ? alike.computeIfAbsent(new Along(each.narrowedBy().get(), conditions,
                             remainders, heldWhole, declined, past), _ -> leftAlong(read, sources,
@@ -2936,14 +2934,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         boolean sizesAreRowsComputed = operations.theSizesAreRowsComputed(terms, constant);
         if (!out.containsAll(places()) && !offItsLine) {
             out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole, read,
-                    declared, independent, operations, sizesAreRowsComputed, entire.narrowing()));
+                    declared, independent, operations, sizesAreRowsComputed, entire.onTheWay()));
         }
         // A side nothing above showed anything of is asked of the differences the two stand
         // apart by, each in the run the declarations leave it.
         if (!out.containsAll(places()) && !offItsLine) {
             List<WhatARelationLeavesUndivided.Leaves> apart =
                     leftByTheirDifference(sources, carriers, stating, heldWhole, read, along,
-                            independent, operations, sizesAreRowsComputed, entire.narrowing());
+                            independent, operations, sizesAreRowsComputed, entire.onTheWay());
             for (int at = 0; at < apart.size(); at++) {
                 if (leaves.get(at) != null || out.containsAll(sides.get(at).madeOf())) {
                     continue;
@@ -5463,12 +5461,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param declared  what the declarations leave, with what the run got past taken in
      * @param left      what the way states, the parts of a date it leaves alone marked
      * @param stating   what the way states of each side
-     * @param narrowing what the run narrows
+     * @param narrowing what the operators narrow, those of the run to the relation and of the
+     *                  relation's own working
+     * @param onTheWay  of that, what the run to the relation narrows: the relation's own working
+     *                  is told of by its {@code working}
      * @param others    the statements other elements meet, which say nothing of the sides
      */
     private record WayRead(SearchRegion along, SearchRegion declared, LeftToTheCalendar left,
                            List<List<OnAWay>> stating, List<TakenConstraint> narrowing,
-                           OthersMeet others) {
+                           List<TakenConstraint> onTheWay, OthersMeet others) {
 
         List<OnAWay> conditions() {
             return left.conditions();
@@ -5507,7 +5508,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : OthersMeet.NONE;
         return new WayRead(along, declared, left,
                 stating(sources, left.conditions(), heldWhole, read, others),
-                answered.narrowing(), others);
+                answered.narrowing(), answered.onTheWay(), others);
     }
 
     /**
@@ -6259,26 +6260,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * {@code run} with an end that lies past the order's own end put at that end. A run read off a
-     * region that ties several numbers to one another can reach past the ends of the type, where
-     * no value is; an end it does not reach past, or does not have, is left as it is.
+     * {@code run} with an end that lies past the order's own end put at that end
+     * ({@link NumericDomain.Bounds#noFurtherOutThan}). A run read off a region that ties several
+     * numbers to one another can reach past the ends of the type, where no value is; an end it
+     * does not reach past, or does not have, is left as it is.
      */
     private static NumericDomain.Bounds withinTheEnds(NumericDomain.Bounds run,
                                                       NumericDomain.Bounds runsTo) {
-        if (run == null || runsTo == null) {
-            return run;
-        }
-        Endpoint min = run.min() != null && runsTo.min() != null
-                && isBefore(run.min(), runsTo.min()) ? runsTo.min() : run.min();
-        Endpoint max = run.max() != null && runsTo.max() != null
-                && isBefore(runsTo.max(), run.max()) ? runsTo.max() : run.max();
-        return min == run.min() && max == run.max() ? run : new NumericDomain.Bounds(min, max);
-    }
-
-    /** Whether the value {@code one} is at lies below the value {@code other} is at. */
-    private static boolean isBefore(Endpoint one, Endpoint other) {
-        return one.at() instanceof Count mine && other.at() instanceof Count theirs
-                && mine.exactly().compareTo(theirs.exactly()) < 0;
+        return run == null || runsTo == null ? run : run.noFurtherOutThan(runsTo);
     }
 
     /**
@@ -7357,7 +7346,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                          WhatARelationLeavesUndivided.Operations
                                                                  operations,
                                                          boolean sizesAreRowsComputed,
-                                                         List<TakenConstraint> narrowedByTheRun) {
+                                                         List<TakenConstraint> onTheWay) {
         TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, region,
                 independent) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
@@ -7396,7 +7385,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     on.spacingBetweenValues(), on.whereItStops(), each.number()));
         }
         List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(pair,
-                stating, narrowedByTheRun);
+                stating, onTheWay);
         if (held == null) {
             return Set.of();
         }
@@ -7428,7 +7417,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             boolean heldWhole, InputReading read, SearchRegion along,
             WhatARelationLeavesUndivided.Independence independent,
             WhatARelationLeavesUndivided.Operations operations, boolean sizesAreRowsComputed,
-            List<TakenConstraint> narrowedByTheRun) {
+            List<TakenConstraint> onTheWay) {
         TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, along,
                 independent) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
@@ -7455,7 +7444,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     each.number()));
         }
         List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(pair,
-                stating, narrowedByTheRun);
+                stating, onTheWay);
         if (held == null) {
             return List.of();
         }
@@ -7539,16 +7528,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /** Everything a way states of each of the two sides {@code pair} asks about, and everything the
-     *  run narrows of them ({@code narrowedByTheRun}), held of them as statements about their
-     *  difference — or null where something it holds is not. A statement about both sides is in
-     *  each side's list; it is one statement.
+     *  operators of the run to the relation narrow of them ({@code onTheWay}), held of them as
+     *  statements about their difference — or null where something it holds is not. A statement
+     *  about both sides is in each side's list; it is one statement.
      *
      *  <p>What the run narrows is held to the same: an end on one side that an operator of the run
      *  puts on it keeps the other side from the values past it as a statement of the way does.
-     *  Where the relation works out something itself, what it narrows is that working's, which
-     *  {@code working} tells of apart, and the run's cannot be told from it. */
+     *  What the relation's own working narrows is not among it: the operations that working
+     *  carries are asked apart ({@code working}). */
     private List<WhatARelationLeavesUndivided.OnTheDifference> heldOfTheDifference(
-            TwoSides pair, List<List<OnAWay>> stating, List<TakenConstraint> narrowedByTheRun) {
+            TwoSides pair, List<List<OnAWay>> stating, List<TakenConstraint> onTheWay) {
         Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(pair.first()));
         aboutEither.addAll(stating.get(pair.second()));
         List<WhatARelationLeavesUndivided.OnTheDifference> held = new ArrayList<>();
@@ -7565,8 +7554,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             ofTheSides.add(sides.get(at).statedTerm());
             ofTheSides.add(sides.get(at).number());
         }
-        for (TakenConstraint each : working.operations().isEmpty() ? narrowedByTheRun
-                : List.<TakenConstraint>of()) {
+        for (TakenConstraint each : onTheWay) {
             if (each.terms().stream().noneMatch(ofTheSides::contains)) {
                 continue;
             }

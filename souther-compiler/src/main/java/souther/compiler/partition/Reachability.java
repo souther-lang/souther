@@ -301,6 +301,10 @@ public sealed interface Reachability {
      *                        say
      * @param gotPast         what the run to the border got past working out narrowed the region
      *                        by, which no condition of the way states
+     * @param gotPastOfTheRelation what the working out of the border's own relation narrowed the
+     *                        region by, kept apart from {@code gotPast} so that a reader holding
+     *                        the run against a statement of the way does not take the relation's
+     *                        working for the run's
      * @param tied            the places that run ties together, or may stop on where nothing says
      *                        when, which a region does not say
      * @param unsaid          whether that run may stop on something no place names, so that no
@@ -315,7 +319,8 @@ public sealed interface Reachability {
                     List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
                     List<OnTheWay.Declined> declined,
                     Optional<List<TakenConstraint>> narrowedBy,
-                    List<TakenConstraint> gotPast, List<DemandReading.Tie> tied, boolean unsaid,
+                    List<TakenConstraint> gotPast, List<TakenConstraint> gotPastOfTheRelation,
+                    List<DemandReading.Tie> tied, boolean unsaid,
                     List<Pullback.StopObligation> owed,
                     List<DemandReading.PriorApplications> before)
             implements Reachability {
@@ -323,6 +328,7 @@ public sealed interface Reachability {
         public Reaching {
             if (region == null || requirements == null || truths == null || ways == null
                     || declined == null || narrowedBy == null || gotPast == null
+                    || gotPastOfTheRelation == null
                     || tied == null || owed == null || before == null) {
                 throw new IllegalArgumentException(
                         "a way a row reaches leaves it somewhere and asks something of it");
@@ -331,6 +337,7 @@ public sealed interface Reachability {
             declined = List.copyOf(declined);
             narrowedBy = narrowedBy.map(List::copyOf);
             gotPast = List.copyOf(gotPast);
+            gotPastOfTheRelation = List.copyOf(gotPastOfTheRelation);
             tied = List.copyOf(tied);
             owed = List.copyOf(owed);
             before = List.copyOf(before);
@@ -342,7 +349,14 @@ public sealed interface Reachability {
                         List<OnTheWay.Declined> declined,
                         Optional<List<TakenConstraint>> narrowedBy) {
             this(region, requirements, truths, boundedOnTheWay, ways, declined, narrowedBy,
-                    List.of(), List.of(), false, List.of(), List.of());
+                    List.of(), List.of(), List.of(), false, List.of(), List.of());
+        }
+
+        /** What the run to the border asks of a row, as the readers of the relation there are
+         *  handed it: the narrowing of the run and of the relation's own working kept apart. */
+        DemandReading.Answered gotPastAsAsked() {
+            return new DemandReading.Answered(gotPast, gotPastOfTheRelation, tied, unsaid, owed,
+                    before);
         }
 
         /** The ways this is split into, each narrower than this one; none where it is not
@@ -395,7 +409,7 @@ public sealed interface Reachability {
          *  however it is split, so it is not worked out again. */
         Reaching splitAs(Ways split) {
             return new Reaching(region, requirements, truths, boundedOnTheWay, split, declined,
-                    narrowedBy, gotPast, tied, unsaid, owed, before);
+                    narrowedBy, gotPast, gotPastOfTheRelation, tied, unsaid, owed, before);
         }
 
         /** Whether every row of {@code region} meets {@code each}, shown by no row meeting its
@@ -464,12 +478,15 @@ public sealed interface Reachability {
             beforeNow.addAll(answered.before());
             if (past.leavesNone()) {
                 return new Reaching(region, requirements, truths, boundedOnTheWay, split,
-                        declined, narrowedBy, gotPast, ties, unsaidNow, owedNow, beforeNow);
+                        declined, narrowedBy, gotPast, gotPastOfTheRelation, ties, unsaidNow,
+                        owedNow, beforeNow);
             }
             List<TakenConstraint> gotPastNow = new ArrayList<>(gotPast);
-            gotPastNow.addAll(narrowing);
+            gotPastNow.addAll(past.onTheWay());
+            List<TakenConstraint> ofTheRelationNow = new ArrayList<>(gotPastOfTheRelation);
+            ofTheRelationNow.addAll(past.ofTheRelation());
             return new Reaching(narrowed, requirements, truths, boundedOnTheWay, split, declined,
-                    by, gotPastNow, ties, unsaidNow, owedNow, beforeNow);
+                    by, gotPastNow, ofTheRelationNow, ties, unsaidNow, owedNow, beforeNow);
         }
 
         /**
@@ -483,38 +500,62 @@ public sealed interface Reachability {
         static NarrowedPast narrowedPast(SearchRegion region, DemandReading.Answered answered) {
             // Only what narrows: a bound the region already holds is nothing a reader of this
             // way is to be told of.
-            List<TakenConstraint> narrowing = new ArrayList<>();
+            List<TakenConstraint> onTheWay = new ArrayList<>();
+            List<TakenConstraint> ofTheRelation = new ArrayList<>();
             SearchRegion narrowed = region;
-            for (TakenConstraint each : answered.narrowing()) {
-                SearchRegion next = each.narrowing(narrowed);
-                // One number that no run of moves is one the region already holds. Several say
-                // how they go together, which no run of one of them shows: a sum held below a
-                // greatest value leaves each its values and the pair fewer. Unless every row of
-                // the region meets it, which leaves them as they are.
-                boolean keeps = each.terms().size() > 1
-                        ? !heldAtEveryRow(each, region, narrowed) : movesAny(each, narrowed, next);
-                if (keeps) {
-                    narrowing.add(each);
-                    narrowed = next;
+            // The run's first, so that a constraint both the run and the relation's own working
+            // narrow by is the run's, and the relation's own is what the run did not already say.
+            for (boolean own : new boolean[] {false, true}) {
+                for (TakenConstraint each : own ? answered.ofTheRelation()
+                        : answered.onTheWay()) {
+                    SearchRegion next = each.narrowing(narrowed);
+                    // One number that no run of moves is one the region already holds. Several
+                    // say how they go together, which no run of one of them shows: a sum held
+                    // below a greatest value leaves each its values and the pair fewer. Unless
+                    // every row of the region meets it, which leaves them as they are.
+                    boolean keeps = each.terms().size() > 1
+                            ? !heldAtEveryRow(each, region, narrowed)
+                            : movesAny(each, narrowed, next);
+                    if (keeps) {
+                        (own ? ofTheRelation : onTheWay).add(each);
+                        narrowed = next;
+                    }
                 }
             }
             // A region nothing moved is the one the way already had, which is asked nothing again.
-            return new NarrowedPast(narrowing,
-                    narrowed, !narrowing.isEmpty() && narrowed.emptiness().isPresent());
+            return new NarrowedPast(onTheWay, ofTheRelation, narrowed,
+                    (!onTheWay.isEmpty() || !ofTheRelation.isEmpty())
+                            && narrowed.emptiness().isPresent());
         }
 
         /**
          * What a run's answers narrow a region by ({@link #narrowedPast}).
          *
-         * @param narrowing  the constraints that moved the region, in the order taken in
-         * @param narrowed   the region they leave
-         * @param leavesNone whether that is no input, which a way keeps its region for
+         * @param onTheWay      the constraints of the run to the relation that moved the region,
+         *                      in the order taken in
+         * @param ofTheRelation the constraints of the relation's own working that moved it after
+         *                      them
+         * @param narrowed      the region they leave
+         * @param leavesNone    whether that is no input, which a way keeps its region for
          */
-        record NarrowedPast(List<TakenConstraint> narrowing, SearchRegion narrowed,
-                            boolean leavesNone) {
+        record NarrowedPast(List<TakenConstraint> onTheWay, List<TakenConstraint> ofTheRelation,
+                            SearchRegion narrowed, boolean leavesNone) {
 
             NarrowedPast {
-                narrowing = List.copyOf(narrowing);
+                onTheWay = List.copyOf(onTheWay);
+                ofTheRelation = List.copyOf(ofTheRelation);
+            }
+
+            /** What moved the region, whichever it came of. */
+            NarrowedPast(List<TakenConstraint> narrowing, SearchRegion narrowed,
+                         boolean leavesNone) {
+                this(narrowing, List.of(), narrowed, leavesNone);
+            }
+
+            List<TakenConstraint> narrowing() {
+                List<TakenConstraint> both = new ArrayList<>(onTheWay);
+                both.addAll(ofTheRelation);
+                return both;
             }
         }
 

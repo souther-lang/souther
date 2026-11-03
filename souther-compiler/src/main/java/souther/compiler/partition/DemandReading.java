@@ -899,7 +899,16 @@ final class DemandReading {
     /**
      * What a run's working out the operators of a part asks of a row.
      *
-     * @param narrowing what the numbers of places outside a container say, which a region carries
+     * <p>What it narrows is of two kinds, told apart where it is asked and not worked out again
+     * from what the relation works out: what the run to the relation narrows, which any statement
+     * the way makes may be held beside; and what the relation's own working narrows, which the
+     * reader of the relation tells of by the operations it works out
+     * ({@link UndividedByARelation.Working}). {@link #narrowing} is both, for a region.
+     *
+     * @param onTheWay    what the operators of the run to the relation narrow: the numbers of
+     *                    places outside a container, which a region carries
+     * @param ofTheRelation what the operators of the relation itself narrow, as far as a region
+     *                    carries it ({@link #ofTheRelationItself})
      * @param tied      the conditions of more than one place, or one a region cannot carry, and the
      *                  places of the numbers an operator not said may stop the run on: places the
      *                  run no longer leaves free of one another, which a reader that takes two
@@ -913,16 +922,25 @@ final class DemandReading {
      *                  in work out, for each closure it is read in ({@link PriorApplications}):
      *                  until a reader shows a run with none, as much the run's as the above
      */
-    record Answered(List<TakenConstraint> narrowing, List<Tie> tied, boolean unsaid,
-                    List<Pullback.StopObligation> owed, List<PriorApplications> before) {
+    record Answered(List<TakenConstraint> onTheWay, List<TakenConstraint> ofTheRelation,
+                    List<Tie> tied, boolean unsaid, List<Pullback.StopObligation> owed,
+                    List<PriorApplications> before) {
 
         static final Answered NOTHING = new Answered(List.of(), List.of(), false);
 
         Answered {
-            narrowing = List.copyOf(narrowing);
+            onTheWay = List.copyOf(onTheWay);
+            ofTheRelation = List.copyOf(ofTheRelation);
             tied = List.copyOf(tied);
             owed = List.copyOf(owed);
             before = List.copyOf(before);
+        }
+
+        /** What the run to a relation asks of a row, with what the applications before it work
+         *  out. */
+        Answered(List<TakenConstraint> narrowing, List<Tie> tied, boolean unsaid,
+                 List<Pullback.StopObligation> owed, List<PriorApplications> before) {
+            this(narrowing, List.of(), tied, unsaid, owed, before);
         }
 
         /** What a run asks of a row with no application before it. */
@@ -934,6 +952,17 @@ final class DemandReading {
         /** What a run asks of a row with nothing owed beside it. */
         Answered(List<TakenConstraint> narrowing, List<Tie> tied, boolean unsaid) {
             this(narrowing, tied, unsaid, List.of());
+        }
+
+        /** Everything the operators narrow, which a region carries: the run's, then the
+         *  relation's own. */
+        List<TakenConstraint> narrowing() {
+            if (ofTheRelation.isEmpty()) {
+                return onTheWay;
+            }
+            List<TakenConstraint> both = new ArrayList<>(onTheWay);
+            both.addAll(ofTheRelation);
+            return both;
         }
 
         /** The places each of {@code tied} names, and each owed operator reads — those the
@@ -957,22 +986,29 @@ final class DemandReading {
         Answered after(PriorApplications prior) {
             List<PriorApplications> all = new ArrayList<>(before);
             all.add(prior);
-            return new Answered(narrowing, tied, unsaid, owed, all);
+            return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, all);
         }
 
         /**
-         * What the run narrows and nothing else it asks of a row: no tie, no operator left unsaid,
-         * no operator owed a proof, and none of what the applications before work out.
+         * What the operators narrow and nothing else it asks of a row: no tie, no operator left
+         * unsaid, no operator owed a proof, and none of what the applications before work out.
          */
         Answered whatItNarrows() {
-            return narrowing.isEmpty() ? NOTHING : new Answered(narrowing, List.of(), false);
+            return onTheWay.isEmpty() && ofTheRelation.isEmpty() ? NOTHING
+                    : new Answered(onTheWay, ofTheRelation, List.of(), false, List.of(), List.of());
         }
 
-        /** The same, without the statements of {@code met} among what the run narrows. */
+        /** The same, without the statements of {@code met} among what the operators narrow. */
         Answered without(Collection<TakenConstraint.Affine> met) {
-            return new Answered(narrowing.stream().filter(each ->
+            return new Answered(notAmong(onTheWay, met), notAmong(ofTheRelation, met), tied,
+                    unsaid, List.of(), List.of());
+        }
+
+        private static List<TakenConstraint> notAmong(List<TakenConstraint> narrowing,
+                                                      Collection<TakenConstraint.Affine> met) {
+            return narrowing.stream().filter(each ->
                     !(each instanceof TakenConstraint.Affine affine) || !met.contains(affine))
-                    .toList(), tied, unsaid);
+                    .toList();
         }
 
         /**
@@ -986,10 +1022,10 @@ final class DemandReading {
          * arrives is the walk's to prove.
          */
         SearchRegion leaving(SearchRegion declarations) {
-            if (narrowing.isEmpty()) {
+            if (onTheWay.isEmpty() && ofTheRelation.isEmpty()) {
                 return declarations;
             }
-            SearchRegion left = TakenConstraint.narrowedBy(narrowing, declarations);
+            SearchRegion left = TakenConstraint.narrowedBy(narrowing(), declarations);
             return left.emptiness().isPresent() ? declarations : left;
         }
 
@@ -1007,10 +1043,10 @@ final class DemandReading {
          * and the comparison's are its relation's.
          */
         Answered ofTheRelationItself(SearchRegion declarations) {
-            return new Answered(narrowing.stream()
+            return new Answered(List.of(), narrowing().stream()
                     .filter(each -> each.terms().size() == 1
                             || bindsInsideTheDeclaredRuns(each, declarations))
-                    .toList(), List.of(), false);
+                    .toList(), List.of(), false, List.of(), List.of());
         }
 
         /**
@@ -1046,15 +1082,18 @@ final class DemandReading {
 
         /** This and {@code other}, both. */
         Answered and(Answered other) {
-            List<TakenConstraint> narrows = new ArrayList<>(narrowing);
-            narrows.addAll(other.narrowing);
+            List<TakenConstraint> onTheWayBoth = new ArrayList<>(onTheWay);
+            onTheWayBoth.addAll(other.onTheWay);
+            List<TakenConstraint> ofTheRelationBoth = new ArrayList<>(ofTheRelation);
+            ofTheRelationBoth.addAll(other.ofTheRelation);
             List<Tie> places = new ArrayList<>(tied);
             places.addAll(other.tied);
             List<Pullback.StopObligation> both = new ArrayList<>(owed);
             both.addAll(other.owed);
             List<PriorApplications> priors = new ArrayList<>(before);
             priors.addAll(other.before);
-            return new Answered(narrows, places, unsaid || other.unsaid, both, priors);
+            return new Answered(onTheWayBoth, ofTheRelationBoth, places, unsaid || other.unsaid,
+                    both, priors);
         }
     }
 
