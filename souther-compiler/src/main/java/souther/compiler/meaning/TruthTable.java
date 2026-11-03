@@ -56,11 +56,9 @@ public final class TruthTable {
         return switch (stated) {
             case Proposition.Always _ -> true;
             case Proposition.Unread _ -> false;
-            case Proposition.All all -> all.parts().stream().allMatch(part -> partsOf(part, into));
-            case Proposition.Any any -> any.parts().stream().allMatch(part -> partsOf(part, into));
-            case Proposition.WhereItAnswers where ->
-                    partsOf(where.answers(), into) && partsOf(where.states(), into);
-            case Proposition.OfTheWays ways -> partsOf(ways.written(), into);
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.OfTheWays _ ->
+                    stated.partsHeld().stream().allMatch(part -> partsOf(part, into));
             // A count of statements is one part: what holds whichever way it comes out holds
             // whichever way its statements do.
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,

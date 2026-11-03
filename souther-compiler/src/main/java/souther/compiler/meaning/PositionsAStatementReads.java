@@ -89,15 +89,9 @@ public final class PositionsAStatementReads {
             case Proposition.SameValue same -> reads(same.one()) && reads(same.other());
             case Proposition.StringInside inside -> reads(inside.inner()) && reads(inside.outer());
             case Proposition.LastToHold last -> reads(last.container()) && reads(last.position());
-            case Proposition.All all -> all.parts().stream().allMatch(this::reads);
-            case Proposition.WhereItAnswers where ->
-                    reads(where.answers()) && reads(where.states());
-            case Proposition.Any any -> any.parts().stream().allMatch(this::reads);
-            case Proposition.OnAnApplication applications -> applications.each().stream()
-                    .allMatch(this::reads);
-            case Proposition.SoManyHold counted -> counted.statements().stream()
-                    .allMatch(this::reads);
-            case Proposition.OfTheWays ways -> reads(ways.written());
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.OnAnApplication _, Proposition.SoManyHold _,
+                 Proposition.OfTheWays _ -> stated.partsHeld().stream().allMatch(this::reads);
             case Proposition.Some some -> reads(some.container()) && reads(some.ofTheElement());
         };
     }

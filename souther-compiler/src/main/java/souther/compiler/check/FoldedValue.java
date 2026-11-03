@@ -58,7 +58,8 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
      *  compile-time constant. */
     public static <E, N extends ValueStanding.Names<E, N>> Optional<Object> of(
             Core e, E at, N names, Symbols symbols) {
-        return new FoldedValue<>(names, symbols, new IdentityHashMap<>()).eval(e, at);
+        // Most expressions read no name, or one standing: a table for a few, not for sixty-four.
+        return new FoldedValue<>(names, symbols, new IdentityHashMap<>(2)).eval(e, at);
     }
 
     /**

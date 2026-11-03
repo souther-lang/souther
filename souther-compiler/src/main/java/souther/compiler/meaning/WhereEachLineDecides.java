@@ -639,13 +639,11 @@ public final class WhereEachLineDecides {
          *  well: what saying a quantifier over it again writes out. */
         private static long placesIn(Proposition stated) {
             return switch (stated) {
-                case Proposition.All all -> all.parts().stream().mapToLong(Lifting::placesIn).sum();
-                case Proposition.Any any -> any.parts().stream().mapToLong(Lifting::placesIn).sum();
+                case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                     Proposition.OfTheWays _ ->
+                        stated.partsHeld().stream().mapToLong(Lifting::placesIn).sum();
                 case Proposition.Some some -> 1 + placesIn(some.ofTheElement());
-                case Proposition.WhereItAnswers where ->
-                        placesIn(where.answers()) + placesIn(where.states());
                 case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
-                case Proposition.OfTheWays ways -> placesIn(ways.written());
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
                      Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
@@ -1315,14 +1313,10 @@ public final class WhereEachLineDecides {
     private static boolean statesARelation(Proposition stated) {
         return switch (stated) {
             case Proposition.Compared _ -> true;
-            case Proposition.All all -> all.parts().stream()
-                    .anyMatch(WhereEachLineDecides::statesARelation);
-            case Proposition.Any any -> any.parts().stream()
+            case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
+                 Proposition.OfTheWays _ -> stated.partsHeld().stream()
                     .anyMatch(WhereEachLineDecides::statesARelation);
             case Proposition.WhereItAnswers where -> statesARelation(where.states());
-            case Proposition.SoManyHold counted -> counted.statements().stream()
-                    .anyMatch(WhereEachLineDecides::statesARelation);
-            case Proposition.OfTheWays ways -> statesARelation(ways.written());
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _, Proposition.StringInside _,
                  Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
@@ -1341,15 +1335,9 @@ public final class WhereEachLineDecides {
     private static void gather(Proposition stated, Map<Spelling, Proposition> parts,
                                Map<Spelling, Literal> leaves) {
         switch (stated) {
-            case Proposition.All all -> all.parts().forEach(part -> gather(part, parts, leaves));
-            case Proposition.Any any -> any.parts().forEach(part -> gather(part, parts, leaves));
-            case Proposition.WhereItAnswers where -> {
-                gather(where.answers(), parts, leaves);
-                gather(where.states(), parts, leaves);
-            }
-            case Proposition.SoManyHold counted ->
-                    counted.statements().forEach(part -> gather(part, parts, leaves));
-            case Proposition.OfTheWays ways -> gather(ways.written(), parts, leaves);
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.SoManyHold _, Proposition.OfTheWays _ ->
+                    stated.partsHeld().forEach(part -> gather(part, parts, leaves));
             case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
                  Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
@@ -1381,17 +1369,13 @@ public final class WhereEachLineDecides {
     private static void partsBy(Proposition stated, boolean answering,
                                 Map<Spelling, Proposition> where, Map<Spelling, Proposition> what) {
         switch (stated) {
-            case Proposition.All all ->
-                    all.parts().forEach(part -> partsBy(part, answering, where, what));
-            case Proposition.Any any ->
-                    any.parts().forEach(part -> partsBy(part, answering, where, what));
+            case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
+                 Proposition.OfTheWays _ ->
+                    stated.partsHeld().forEach(part -> partsBy(part, answering, where, what));
             case Proposition.WhereItAnswers inside -> {
                 partsBy(inside.answers(), true, where, what);
                 partsBy(inside.states(), answering, where, what);
             }
-            case Proposition.SoManyHold counted ->
-                    counted.statements().forEach(part -> partsBy(part, answering, where, what));
-            case Proposition.OfTheWays ways -> partsBy(ways.written(), answering, where, what);
             case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
                  Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
