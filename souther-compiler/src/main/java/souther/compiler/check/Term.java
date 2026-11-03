@@ -983,7 +983,7 @@ final class Term {
                 this.shape = shape;
                 this.of = of;
                 this.parts = parts;
-                int h = shape.ordinal() * MIX + Objects.hashCode(of);
+                int h = shape.name().hashCode() * MIX + Objects.hashCode(of);
                 for (int at = 0; at < parts.size(); at++) {
                     h = h * MIX + parts.get(at).hash;
                 }

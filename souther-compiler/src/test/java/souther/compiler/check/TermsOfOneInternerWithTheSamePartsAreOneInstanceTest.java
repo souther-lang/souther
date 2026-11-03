@@ -9,6 +9,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -59,8 +60,23 @@ class TermsOfOneInternerWithTheSamePartsAreOneInstanceTest {
         Term a = interned.written("Aa");
         Term b = interned.written("BB");
 
-        assertEquals("Aa".hashCode(), "BB".hashCode());
+        assertEquals(a.hashCode(), b.hashCode());
         assertNotEquals(a, b);
+    }
+
+    /** Parts of one hash, so that nothing but the parts themselves tells the two calls apart. */
+    @Test
+    void callsOverPartsOfOneHashAreTwoTermsUnlessThePartsAreOne() {
+        Term aa = interned.written("Aa");
+        Term bb = interned.written("BB");
+        Term first = interned.called(size, List.of(aa));
+        Term second = interned.called(size, List.of(bb));
+
+        assertEquals(first.hashCode(), second.hashCode());
+        assertNotEquals(first, second);
+        assertNotSame(first, second);
+        assertSame(first, interned.called(size, List.of(aa)));
+        assertSame(second, interned.called(size, List.of(bb)));
     }
 
     @Test
@@ -84,7 +100,7 @@ class TermsOfOneInternerWithTheSamePartsAreOneInstanceTest {
 
         assertSame(mine, fromOutside);
         assertSame(mine, interned.called(size, List.of(elsewhere.written(1L))));
-        assertEquals(1, interned.size() - 1, "one written value and one call, and no second call");
+        assertEquals(2, interned.size(), "one written value and one call, and no second call");
     }
 
     @Test
