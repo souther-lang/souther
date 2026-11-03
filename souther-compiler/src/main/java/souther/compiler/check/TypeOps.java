@@ -844,14 +844,7 @@ public final class TypeOps {
      * signature that could not be worked out, and reading it as the bottom would hide that.
      */
     public static Type toBottom(Type t) {
-        return switch (t) {
-            case Type.Var _ -> Type.NOTHING;
-            case Type.ListOf l -> Type.list(toBottom(l.element()));
-            case Type.MapOf m -> Type.map(toBottom(m.key()), toBottom(m.value()));
-            case Type.SetOf s -> Type.set(toBottom(s.element()));
-            case Type.OptionOf o -> Type.option(toBottom(o.element()));
-            default -> t;
-        };
+        return t instanceof Type.Var ? Type.NOTHING : Type.mapChildren(t, TypeOps::toBottom);
     }
 
     /** {@code t} with each variable a declaration wrote replaced by what {@code bindings} gives it,
@@ -862,54 +855,15 @@ public final class TypeOps {
 
     /** {@code t} with each variable of an application replaced by what {@code bindings} gives it. */
     public static Type substituteMetas(Type t, Map<Type.MetaVar, Type> bindings) {
-        return switch (t) {
-            case Type.MetaVar m -> bindings.getOrDefault(m, m);
-            case Type.ListOf l -> Type.list(substituteMetas(l.element(), bindings));
-            case Type.MapOf m -> Type.map(substituteMetas(m.key(), bindings),
-                    substituteMetas(m.value(), bindings));
-            case Type.SetOf s -> Type.set(substituteMetas(s.element(), bindings));
-            case Type.OptionOf o -> Type.option(substituteMetas(o.element(), bindings));
-            case Type.FnOf f -> {
-                List<Type> params = new ArrayList<>();
-                for (Type p : f.params()) {
-                    params.add(substituteMetas(p, bindings));
-                }
-                yield Type.fn(params, substituteMetas(f.result(), bindings));
-            }
-            case Type.TupleOf tup -> {
-                List<Type> es = new ArrayList<>();
-                for (Type e : tup.elements()) {
-                    es.add(substituteMetas(e, bindings));
-                }
-                yield Type.tuple(es);
-            }
-            default -> t;
-        };
+        return t instanceof Type.MetaVar m
+                ? bindings.getOrDefault(m, m)
+                : Type.mapChildren(t, child -> substituteMetas(child, bindings));
     }
 
     public static Type substitute(Type t, Map<String, Type> bindings) {
-        return switch (t) {
-            case Type.Var v -> bindings.getOrDefault(v.name(), v);
-            case Type.ListOf l -> Type.list(substitute(l.element(), bindings));
-            case Type.MapOf m -> Type.map(substitute(m.key(), bindings), substitute(m.value(), bindings));
-            case Type.SetOf s -> Type.set(substitute(s.element(), bindings));
-            case Type.OptionOf o -> Type.option(substitute(o.element(), bindings));
-            case Type.FnOf f -> {
-                List<Type> params = new ArrayList<>();
-                for (Type p : f.params()) {
-                    params.add(substitute(p, bindings));
-                }
-                yield Type.fn(params, substitute(f.result(), bindings));
-            }
-            case Type.TupleOf tup -> {
-                List<Type> es = new ArrayList<>();
-                for (Type e : tup.elements()) {
-                    es.add(substitute(e, bindings));
-                }
-                yield Type.tuple(es);
-            }
-            default -> t;
-        };
+        return t instanceof Type.Var v
+                ? bindings.getOrDefault(v.name(), v)
+                : Type.mapChildren(t, child -> substitute(child, bindings));
     }
 
     /**
