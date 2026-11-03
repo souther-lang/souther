@@ -1314,13 +1314,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
 
-        /** Whether {@code on} is a condition on this remainder: of the same form, moved by the
-         *  same number and divided by the same divisor. */
+        /** This remainder as one others are read as one with, or empty where none is. */
+        Optional<ARemainderMoved> moved() {
+            return ARemainderMoved.of(new LinearForm<>(ExactRatio.of(shift), dividend.coefs()),
+                    divisor);
+        }
+
+        /** Whether {@code on} is a condition on this remainder ({@link ARemainderMoved#leftBy}). */
         boolean isAskedBy(RowDemand.OnARemainder on) {
-            LinearForm<NumericTerm> asked = on.dividend();
-            return on.remainder().divisor().equals(divisor)
-                    && asked.coefs().equals(dividend.coefs())
-                    && asked.constant().equals(ExactRatio.of(shift));
+            return moved().flatMap(own -> own.leftBy(on)).isPresent();
         }
     }
 
@@ -2223,16 +2225,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * condition tying the numbers ({@link #conditionsOf}).
      */
     private WholeNumberRuns remaindersLeftAlong(Reachability.Reaching way) {
-        if (remainder == null) {
-            return null;
-        }
-        WholeNumberRuns out = null;
-        for (OnTheWay.TakenIn taken : way.boundedOnTheWay()) {
-            if (taken.demand() instanceof RowDemand.OnARemainder on && remainder.isAskedBy(on)) {
-                out = out == null ? on.leaves() : out.and(on.leaves());
-            }
-        }
-        return out;
+        return remainder == null ? null
+                : remainder.moved().flatMap(own -> own.leftAlong(way)).orElse(null);
     }
 
     /** What a way is read by: what narrowed its region, what it states, the remainders it leaves
@@ -5054,10 +5048,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * statements left, which do not read it.
      *
      * <p>A remainder is taken away the same way, and all its statements together: they are one
-     * remainder where they divide the same form, moved by the same number, by the same divisor,
-     * and a number free to meet each is free to meet all of them only where they leave a
-     * remainder between them ({@link #allowTogether}) and the number brings the form to each
-     * ({@link #choosesEveryRemainder}).
+     * remainder where they are of one remainder of a form, moved by whatever numbers
+     * ({@link #sameRemainder}), and a number free to meet each is free to meet all of them only
+     * where they leave a remainder of the form between them ({@link #allowTogether}) and the
+     * number brings the form to every remainder while it keeps the form, moved as each of them
+     * moves it, inside the {@code Int}s ({@link #choosesEveryRemainder}).
      */
     private List<OnAWay> withoutWhatAFreeNumberMeets(List<OnAWay> conditions,
                                                      Optional<Set<String>> declined,
@@ -5085,14 +5080,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether the statements of one remainder leave a remainder between them: free to choose is
-     * a claim about the statements together, and one that each could be met by does not make them
-     * met by a single choice.
+     * Whether the statements of one remainder leave a remainder of the form between them: free to
+     * choose is a claim about the statements together, and one that each could be met by does not
+     * make them met by a single choice. Each is read as what it leaves of the form unmoved
+     * ({@link ARemainderMoved#unmoved}), which is where statements moved by other numbers meet.
      */
     static boolean allowTogether(List<OnAWay> statements) {
         WholeNumberRuns between = null;
         for (OnAWay each : statements) {
-            WholeNumberRuns leaves = each.onARemainder().leaves();
+            if (!(ARemainderMoved.of(each.onARemainder()).orElse(null)
+                    instanceof ARemainderMoved stated)) {
+                return false;
+            }
+            WholeNumberRuns leaves = stated.unmoved(each.onARemainder().leaves());
             between = between == null ? leaves : between.and(leaves);
         }
         return between != null && !between.isNone();
@@ -5166,24 +5166,38 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NumericDomain.Bounds takes = realized(number, source, left,
                 ofIt.isEmpty() ? Way.UNTOUCHED : Way.NARROWED);
         if (statement.onARemainder() != null) {
-            return choosesEveryRemainder(number, statement.onARemainder(), takes, read);
+            List<RowDemand.OnARemainder> together = new ArrayList<>();
+            together.add(statement.onARemainder());
+            for (OnAWay other : conditions) {
+                if (!other.equals(statement) && sameRemainder(statement, other)) {
+                    together.add(other.onARemainder());
+                }
+            }
+            return choosesEveryRemainder(number, together, takes, read);
         }
         return takesTwoValues(takes) && workedOutBeside(statement.affine(), number, takes, read);
     }
 
-    /** Whether {@code other} holds the very remainder {@code statement} does: the same division of
-     *  the same form, moved by the same number. */
+    /** Whether {@code other} holds the remainder {@code statement} does: the same division of the
+     *  same form, moved by whatever numbers ({@link ARemainderMoved#leftBy}). */
     static boolean sameRemainder(OnAWay statement, OnAWay other) {
         return statement.onARemainder() != null && other.onARemainder() != null
-                && statement.onARemainder().remainder().equals(other.onARemainder().remainder());
+                && ARemainderMoved.of(statement.onARemainder())
+                        .flatMap(own -> own.leftBy(other.onARemainder())).isPresent();
     }
 
     /**
      * Whether choosing {@code free}, whatever the other numbers of the form stand at, brings the
-     * form {@code on} holds to a remainder to every remainder: the form is moved by the number
-     * with a weight prime to the divisor, the values of the number that keep the form inside what
-     * the program works it out in hold as many whole values side by side as there are remainders,
-     * and that holds at each end of what the rest of the form comes to.
+     * form the statements {@code together} hold to a remainder to every remainder: the form is
+     * moved by the number with a weight prime to the divisor, the values of the number that keep
+     * the form inside what the program works it out in, moved as each statement moves it, hold as
+     * many whole values side by side as there are remainders, and that holds at each end of what
+     * the rest of the form comes to.
+     *
+     * <p>The statements are of one remainder ({@link #sameRemainder}), so they weigh the numbers
+     * alike and differ only in what they move the form by. A choice that meets all of them keeps
+     * every one of the moved forms inside at once: the rest is taken from its least with the least
+     * move, and the window narrows by how far the greatest move is past the least.
      *
      * <p>The values of a number are those of its type and those the declarations and the run leave
      * it, and not whichever of the two a range written down happens to say: a range with no end is
@@ -5200,12 +5214,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * in and out of it, is no stop on the way, here as for every other statement of a way.
      */
     private static boolean choosesEveryRemainder(NumericTerm.FromOnePosition free,
-                                                 RowDemand.OnARemainder on,
+                                                 List<RowDemand.OnARemainder> together,
                                                  NumericDomain.Bounds takes, InputReading read) {
+        RowDemand.OnARemainder on = together.get(0);
         BigInteger divisor = on.remainder().divisor();
         LinearForm<NumericTerm> form = on.dividend();
         BigInteger weight = wholeNumberOf(form.coefs().get(free));
-        BigInteger rest = wholeNumberOf(form.constant());
+        BigInteger rest = null;
+        BigInteger greatestMove = null;
+        for (RowDemand.OnARemainder each : together) {
+            BigInteger move = wholeNumberOf(each.dividend().constant());
+            if (move == null) {
+                return false;
+            }
+            rest = rest == null ? move : rest.min(move);
+            greatestMove = greatestMove == null ? move : greatestMove.max(move);
+        }
         TermOrders freeOrders = read.quantities().ordersOf(free);
         if (takes == null || weight == null || rest == null || weight.signum() == 0
                 || freeOrders == null || !weight.abs().gcd(divisor).equals(BigInteger.ONE)) {
@@ -5237,14 +5261,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             lowest = lowest.add(by.multiply(by.signum() > 0 ? ends.low() : ends.high()));
             highest = highest.add(by.multiply(by.signum() > 0 ? ends.high() : ends.low()));
         }
-        return windowHoldsEveryRemainder(weight, mine, lowest, highest, divisor, least, greatest);
+        return windowHoldsEveryRemainder(weight, mine, lowest, highest,
+                greatestMove.subtract(rest), divisor, least, greatest);
     }
 
     /**
      * Whether the values of a number ({@code mine}), moved by {@code weight} and added to a rest
      * that comes to anything from {@code lowest} to {@code highest}, include as many whole values
-     * side by side as a division by {@code divisor} has remainders among those that keep the sum
-     * from {@code least} to {@code greatest}.
+     * side by side as a division by {@code divisor} has remainders among those that keep the sum,
+     * and the sum moved by anything up to {@code spread} more, from {@code least} to
+     * {@code greatest}.
      *
      * <p>Asked at each end of the rest and nowhere between: the window of values that keep the sum
      * inside is as wide whatever the rest comes to, and moves with it, so what it leaves of
@@ -5253,14 +5279,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     static boolean windowHoldsEveryRemainder(BigInteger weight, WholeEnds mine,
                                              BigInteger lowest, BigInteger highest,
-                                             BigInteger divisor, BigInteger least,
-                                             BigInteger greatest) {
+                                             BigInteger spread, BigInteger divisor,
+                                             BigInteger least, BigInteger greatest) {
         BigInteger by = weight.abs();
         BigInteger from = weight.signum() > 0 ? mine.low() : negated(mine.high());
         BigInteger to = weight.signum() > 0 ? mine.high() : negated(mine.low());
         for (BigInteger rests : List.of(lowest, highest)) {
             BigInteger windowFrom = ceilingOfQuotient(least.subtract(rests), by);
-            BigInteger windowTo = floorOfQuotient(greatest.subtract(rests), by);
+            BigInteger windowTo = floorOfQuotient(greatest.subtract(rests).subtract(spread), by);
             BigInteger low = from == null ? windowFrom : windowFrom.max(from);
             BigInteger high = to == null ? windowTo : windowTo.min(to);
             if (high.subtract(low).add(BigInteger.ONE).compareTo(divisor) < 0) {

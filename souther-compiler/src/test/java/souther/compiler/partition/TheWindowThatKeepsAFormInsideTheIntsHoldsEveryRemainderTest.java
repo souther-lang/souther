@@ -12,7 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A number moved by a weight and added to a rest brings the sum to every remainder by a divisor
  * where the values of it that keep the sum inside the Ints include as many side by side as there
- * are remainders, and that is least at one end of what the rest comes to or the other.
+ * are remainders, and that is least at one end of what the rest comes to or the other. Where the
+ * sum is moved by several numbers at once, the values have to keep every one of the sums inside.
  */
 class TheWindowThatKeepsAFormInsideTheIntsHoldsEveryRemainderTest {
 
@@ -54,6 +55,17 @@ class TheWindowThatKeepsAFormInsideTheIntsHoldsEveryRemainderTest {
         assertFalse(holds(1, new WholeEnds(null, null), 0, 0, GREATEST.shiftLeft(2)));
     }
 
+    /** Seven values below the greatest Int are left to a rest six below it, and moved one further
+     *  as well, only six of them keep both sums inside. */
+    @Test
+    void aSumMovedFurtherAsWellNarrowsTheWindowByHowFarItIsMoved() {
+        BigInteger rest = GREATEST.subtract(BigInteger.valueOf(6));
+        assertTrue(UndividedByARelation.windowHoldsEveryRemainder(BigInteger.ONE, ends(0, 100),
+                rest, rest, BigInteger.ZERO, SEVEN, LEAST, GREATEST));
+        assertFalse(UndividedByARelation.windowHoldsEveryRemainder(BigInteger.ONE, ends(0, 100),
+                rest, rest, BigInteger.ONE, SEVEN, LEAST, GREATEST));
+    }
+
     private static boolean holds(long weight, WholeEnds mine, long lowest, long highest,
                                  BigInteger divisor) {
         return holds(weight, mine, BigInteger.valueOf(lowest), BigInteger.valueOf(highest), divisor);
@@ -72,7 +84,7 @@ class TheWindowThatKeepsAFormInsideTheIntsHoldsEveryRemainderTest {
     private static boolean holds(long weight, WholeEnds mine, BigInteger lowest,
                                  BigInteger highest, BigInteger divisor) {
         return UndividedByARelation.windowHoldsEveryRemainder(BigInteger.valueOf(weight), mine,
-                lowest, highest, divisor, LEAST, GREATEST);
+                lowest, highest, BigInteger.ZERO, divisor, LEAST, GREATEST);
     }
 
     private static WholeEnds ends(long low, long high) {

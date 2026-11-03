@@ -119,11 +119,12 @@ class AMembershipBesideARemainderOfTwoDatesIsReadTest {
     }
 
     /**
-     * The same form moved by another number is another remainder, and the two are asked of the
-     * number they share: choosing it for one is not choosing it for the other.
+     * The same form moved by another number is the same remainder moved round the divisor: one of
+     * {@code a - d} and one of {@code a - d + 1} leave no remainder of {@code a - d} between them,
+     * so no one choice of {@code a} brings both about.
      */
     @Test
-    void remaindersOfTheSameFormMovedByDifferentNumbersAreNotOne() {
+    void remaindersOfTheSameFormMovedApartThatLeaveNoneBetweenThemAreNotTakenAway() {
         assertFalse(reasonsAt("a: Int, d: Int, hs: Set<Int>",
                 "Int.floorMod(a - d, 7) == 1 && Int.floorMod(a - d + 1, 7) == 1"
                         + " && Bool.not(Set.contains(d, hs))", "hs[*]").contains(READ));
