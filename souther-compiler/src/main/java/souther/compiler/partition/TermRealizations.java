@@ -4795,6 +4795,10 @@ final class TermRealizations {
             }
             long low = clamped(from + moved.offsetDays());
             long high = clamped(to + moved.offsetDays());
+            if (ask.part() == TakenAs.DatePart.DAY) {
+                cutsAtTheDaysOfTheMonthTurning(cuts, low, high, from, to);
+                return;
+            }
             boolean before = leaves.test(partOf(ask.part(), low));
             for (OptionalLong start = nextStartAfter(ask.part(), low);
                     start.isPresent() && start.getAsLong() <= high;
@@ -4807,15 +4811,60 @@ final class TermRealizations {
             }
         }
 
+        /**
+         * The cuts of a day of the month, for the moved days after {@code low} up to {@code high}:
+         * the days at which what the set leaves of the day differs from what it leaves of the day
+         * before. Within a month that is where the table turns between one number and the next, the
+         * same days in every month, and at the first of a month it is where the table turns between
+         * the last day of the month before and the first. A month is visited and not each of its
+         * days.
+         */
+        private void cutsAtTheDaysOfTheMonthTurning(SortedSet<Long> cuts, long low, long high,
+                long from, long to) {
+            if (low >= high) {
+                return;
+            }
+            boolean[] left = new boolean[DAYS_THE_LONGEST_MONTH_HAS + 1];
+            int[] turns = new int[DAYS_THE_LONGEST_MONTH_HAS];
+            int turning = 0;
+            for (int number = 1; number <= DAYS_THE_LONGEST_MONTH_HAS; number++) {
+                left[number] = leaves.test(number);
+                if (number > 1 && left[number] != left[number - 1]) {
+                    turns[turning++] = number;
+                }
+            }
+            long offset = ask.moved().offsetDays();
+            long monthFirst = low + 1 - LocalDate.ofEpochDay(low + 1).getDayOfMonth() + 1;
+            while (monthFirst <= high) {
+                int length = LocalDate.ofEpochDay(monthFirst).lengthOfMonth();
+                if (monthFirst > low
+                        && left[1] != left[LocalDate.ofEpochDay(monthFirst - 1).getDayOfMonth()]) {
+                    addIfBetween(cuts, monthFirst - offset, from, to);
+                }
+                for (int each = 0; each < turning && turns[each] <= length; each++) {
+                    long day = monthFirst + turns[each] - 1;
+                    if (day > high) {
+                        break;
+                    }
+                    if (day > low) {
+                        addIfBetween(cuts, day - offset, from, to);
+                    }
+                }
+                monthFirst += length;
+            }
+        }
+
         private static void addIfBetween(SortedSet<Long> cuts, long day, long from, long to) {
             if (from < day && day <= to) {
                 cuts.add(day);
             }
         }
 
-        private static long clamped(long day) {
-            return Math.max(LocalDate.MIN.toEpochDay(), Math.min(LocalDate.MAX.toEpochDay(), day));
-        }
+    }
+
+    /** The day {@code day} is, or the calendar's first or last where the calendar has none. */
+    private static long clamped(long day) {
+        return Math.max(LocalDate.MIN.toEpochDay(), Math.min(LocalDate.MAX.toEpochDay(), day));
     }
 
     /**
@@ -4851,9 +4900,7 @@ final class TermRealizations {
     /** The part of the date that {@code day} counts to, with a day the calendar does not have read
      *  as its first or last. */
     private static int partOf(TakenAs.DatePart part, long day) {
-        LocalDate date = LocalDate.ofEpochDay(Math.max(LocalDate.MIN.toEpochDay(),
-                Math.min(LocalDate.MAX.toEpochDay(), day)));
-        return part.of(date);
+        return part.of(LocalDate.ofEpochDay(clamped(day)));
     }
 
     /**
