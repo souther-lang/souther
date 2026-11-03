@@ -251,6 +251,19 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
     }
 
     /**
+     * A divisor that comes to 7 is no divisor that is nought, but the sum that writes it stops at
+     * {@code d} from 11 up: the remainder completes and the divisor does not, so a membership of
+     * {@code d} after it is not shown reached and one of {@code a} is.
+     */
+    @Test
+    void aDivisorThatComesToSevenStopsWhereTheSumThatWritesItDoes() {
+        String divisor = "d + " + FIRST_SUM + " - d - " + FIRST_SUM + " + 7";
+        String body = "{ let m = Int.floorMod(a, " + divisor + ")  Bool.not(Set.contains(%s, hs)) }";
+        assertEquals(List.of(NOT_SHOWN), reasonsAt(PARAMETERS, body.formatted("d"), "hs[*]"));
+        assertEquals(List.of(READ), reasonsAt(PARAMETERS, body.formatted("a"), "hs[*]"));
+    }
+
+    /**
      * One body states {@code a - d} and a sum that cancels to it, on the way to one membership. The
      * statement of the form the sum cancels to is no proof for the sum, whichever is written first:
      * the sum stops where the form does not, and the membership is not shown reached.
