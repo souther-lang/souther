@@ -960,6 +960,14 @@ final class DemandReading {
             return new Answered(narrowing, tied, unsaid, owed, all);
         }
 
+        /**
+         * What the run narrows and nothing else it asks of a row: no tie, no operator left unsaid,
+         * no operator owed a proof, and none of what the applications before work out.
+         */
+        Answered whatItNarrows() {
+            return narrowing.isEmpty() ? NOTHING : new Answered(narrowing, List.of(), false);
+        }
+
         /** The same, without the statements of {@code met} among what the run narrows. */
         Answered without(Collection<TakenConstraint.Affine> met) {
             return new Answered(narrowing.stream().filter(each ->

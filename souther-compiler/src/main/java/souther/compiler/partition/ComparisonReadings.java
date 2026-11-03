@@ -596,6 +596,24 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     }
 
     /**
+     * What the run to {@code e}, the node {@code statement} is stated at, asks of a row
+     * ({@link #gotPast}): all of it for a comparison, and for an application what the run
+     * narrows. A value an operator the run works out before an application stops on is a value no
+     * run reaches it at, and the region says so; what else it may stop on is asked of the
+     * witness a comparison's reader holds, which an application's reader does not hold.
+     */
+    private static DemandReading.Answered pastOf(Stated statement,
+                                                 BoundaryPolicy.Standing standing, Core e,
+                                                 Body in, InputReads reads) {
+        if (!(standing instanceof BoundaryPolicy.Standing.Admitted)
+                || !in.context().equals(CallContext.OF_THE_BODY)) {
+            return DemandReading.Answered.NOTHING;
+        }
+        DemandReading.Answered past = gotPast(e, in, reads);
+        return statement instanceof Stated.AComparison ? past : past.whatItNarrows();
+    }
+
+    /**
      * What a region can carry of every operator a run works out up to {@code comparison}
      * answering ({@link Reading#getsPast}), read of each part the run always works out, with the
      * names as they stand at the comparison.
@@ -876,10 +894,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             numbering), stopsWhere,
                     worksOutOnEach, stopsIn, onTheArms, applying.elementsMetOn(), stated.written(), in.context(),
                     numbering.saidOnTheWay(List.of(assumed)), witnesses,
-                    standing instanceof BoundaryPolicy.Standing.Admitted
-                            && stated.statement() instanceof Stated.AComparison
-                            && in.context().equals(CallContext.OF_THE_BODY)
-                            ? gotPast(e, in, reads) : DemandReading.Answered.NOTHING));
+                    pastOf(stated.statement(), standing, e, in, reads)));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.
