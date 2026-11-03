@@ -4254,11 +4254,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 for (TermPath place : text.places()) {
                     if (reads.contains(place)) {
                         // The string a side reads is exactly the string every application
-                        // converts only where the place is one value of the row. Under an element
-                        // an earlier application converts another element's string, which no
+                        // converts only where the place is one value of the row, or where the
+                        // witness writes the element over again. Under an element an earlier
+                        // application otherwise converts another element's string, which no
                         // class is drawn over.
                         if (exactOn == null || (earlier
-                                && !WhereARunReachingARelationStands.isOneValueOfARow(place))) {
+                                && !WhereARunReachingARelationStands.isOneValueOfARow(place)
+                                && !witness.copiesOfTheElementFillTheList(place))) {
                             return true;
                         }
                         exactOn.add(new ConvertedOn(place, text.conversion()));
@@ -4278,8 +4280,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 // What accounts for a place is a claim about the application the relation is
                 // reached in. An earlier application works out the same statements over values of
                 // its own, which that claim does not reach. Nor does the exactness of a
-                // conversion: the string an earlier application converts is another element's,
-                // at a place that reads alike, and it is no string the classes are drawn over.
+                // conversion, unless the place is one value of a row or the witness writes the
+                // other elements as copies of the one read: otherwise the string an earlier
+                // application converts is another element's, at a place that reads alike, and it
+                // is no string the classes are drawn over.
                 if (stopsOn(prior.workedOut(), reads, witness, true, read, exactOn, true,
                         Set.of())) {
                     return true;
@@ -4573,6 +4577,46 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /**
+         * Whether the string at {@code place}, an element's, is the same string at every element
+         * of the list the run walks: the witness writes the element the relation is read at over
+         * again. Then a conversion of the string at every element converts the string the relation
+         * reads, and no other.
+         *
+         * <p>That holds where the list is the only container the place is inside, and a list of
+         * copies of one element is a row at some count ({@link #countsOfAListOfCopies}). The
+         * relation holds no two elements of the list against each other, and every side keeps its
+         * value where the list is filled with copies ({@link #keptCutDown}). The copies stop a
+         * conversion where the string the relation reads does, which
+         * {@link #getsPastConversionAt} and the exactness recorded for the place already say.
+         */
+        boolean copiesOfTheElementFillTheList(TermPath place) {
+            List<TermPath> containers = place.containersHoldingIt();
+            if (containers.size() != 1 || declined.isEmpty()) {
+                return false;
+            }
+            TermPath list = containers.getFirst();
+            if (countsOfAListOfCopies(list, read, region, conditions) == null) {
+                return false;
+            }
+            for (FilingCoordinate each : amongThemselves) {
+                if (each.path().isAtOrUnder(list)) {
+                    return false;
+                }
+            }
+            for (Side side : sides) {
+                Optional<List<TermPath>> placesOfTheSide = placesRead(side);
+                if (placesOfTheSide.isEmpty()) {
+                    return false;
+                }
+                if (placesOfTheSide.get().stream().anyMatch(at -> overlap(at, list))
+                        && !keptByCopies(side)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /**
          * @param reads     the places the relation reads
          * @param read      the reading of the input
          * @param region    the region the relation is read over
@@ -4739,6 +4783,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         AT_ONE,
         /** Not shown to keep it. */
         NOT
+    }
+
+    /**
+     * Whether {@code side} keeps its value where the collection it is made of is filled with
+     * copies of the element it is read at. A string, or a piece of one, or a conversion of one, is
+     * the element's own and every copy holds it; anything else is asked as it is when the
+     * collection is cut down ({@link #keptCutDown}), which does not say what a string side keeps.
+     */
+    private static boolean keptByCopies(Side side) {
+        if (side.number() == null && side.along() == null
+                && (side.text() != null || side.piece() != null)) {
+            return true;
+        }
+        return keptCutDown(side) == CutDown.AT_ANY_SIZE;
     }
 
     /** How {@code side} keeps its value where a collection it is made of is cut down. */
@@ -8521,17 +8579,32 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         TermPath list = containers.getFirst();
-        NumericTerm.ValueOf element = new NumericTerm.ValueOf(list.element());
-        if (!read.domain().holdsAnElementOverAgain(list, read.rules())
-                || namedDownTo(list.element(), list.steps().size(), read, null) != Named.NOT
-                || wayOf(element, statingAnythingOf(element, conditions)) != Way.UNTOUCHED) {
-            return null;
-        }
         for (TermPath inside : containers.subList(1, containers.size())) {
             NumericDomain.Bounds held = howManyAreHeld(inside, read, region);
             if (held == null || !held.admits(Count.of(1))) {
                 return null;
             }
+        }
+        return countsOfAListOfCopies(list, read, region, conditions);
+    }
+
+    /**
+     * The counts from one at which a list of that many copies of one element is a row, or null
+     * where none is shown.
+     *
+     * <p>The list holds an element over again, no rule of a value around it reads inside its
+     * elements, and nothing the way states touches them, so copies of an element that is a row's
+     * break nothing. How many of them the rules leave the list is {@link #howManyAreHeld}'s, and a
+     * set, which holds an element once, shows nothing here.
+     */
+    private static NumericDomain.Bounds countsOfAListOfCopies(TermPath list, InputReading read,
+                                                              SearchRegion region,
+                                                              List<OnAWay> conditions) {
+        NumericTerm.ValueOf element = new NumericTerm.ValueOf(list.element());
+        if (!read.domain().holdsAnElementOverAgain(list, read.rules())
+                || namedDownTo(list.element(), list.steps().size(), read, null) != Named.NOT
+                || wayOf(element, statingAnythingOf(element, conditions)) != Way.UNTOUCHED) {
+            return null;
         }
         NumericDomain.Bounds held = howManyAreHeld(list, read, region);
         NumericDomain.Bounds fromOne = held == null ? null : held.meet(
