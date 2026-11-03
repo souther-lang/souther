@@ -7,7 +7,7 @@ import souther.compiler.check.OrderOfElements;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -373,22 +373,24 @@ final class BindingEnvironment {
     private Map<BindingId, Core> bound() {
         Map<BindingId, Core> made = boundAsATable;
         if (made == null) {
-            if (newest == null) {
-                made = table;
-            } else {
-                Map<BindingId, Core> wider = new LinkedHashMap<>(table);
-                List<Layer> oldestFirst = new ArrayList<>();
-                for (Layer layer = newest; layer != null; layer = layer.older()) {
-                    oldestFirst.add(layer);
-                }
-                for (int at = oldestFirst.size() - 1; at >= 0; at--) {
-                    wider.put(oldestFirst.get(at).binding(), oldestFirst.get(at).value());
-                }
-                made = Map.copyOf(wider);
-            }
+            made = newest == null ? table : written(table, newest);
             boundAsATable = made;
         }
         return made;
+    }
+
+    /**
+     * {@code table} with the bindings of {@code newest} and the layers older than it written into
+     * it, the nearest binding of a name winning. Sized for every binding it will hold and never
+     * written to once it is made.
+     */
+    private static Map<BindingId, Core> written(Map<BindingId, Core> table, Layer newest) {
+        Map<BindingId, Core> wider = HashMap.newHashMap(table.size() + newest.depth());
+        for (Layer layer = newest; layer != null; layer = layer.older()) {
+            wider.putIfAbsent(layer.binding(), layer.value());
+        }
+        table.forEach(wider::putIfAbsent);
+        return wider;
     }
 
     /**
@@ -524,9 +526,7 @@ final class BindingEnvironment {
             return new BindingEnvironment(roots, handed, table, inner, elements, values, heldHash,
                     callsStand, selected, opened, answered);
         }
-        BindingEnvironment written = new BindingEnvironment(roots, handed, table, inner, elements,
-                values, heldHash, callsStand, selected, opened, answered);
-        return new BindingEnvironment(roots, handed, written.bound(), null, elements, values,
+        return new BindingEnvironment(roots, handed, written(table, inner), null, elements, values,
                 heldHash, callsStand, selected, opened, answered);
     }
 

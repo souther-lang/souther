@@ -1139,7 +1139,7 @@ final class Pullback {
         if (kept != null && kept.working != null) {
             trial().working = kept.working;
         }
-        trial().restated.add(new Once<>(() -> workingOf(kept, arithmeticOf(stated, reads))));
+        trial().restatedAs(new Once<>(() -> workingOf(kept, arithmeticOf(stated, reads))));
         return new Derivation.Restated(read);
     }
 
@@ -1173,10 +1173,10 @@ final class Pullback {
                                                   InputReads reads, List<Core> operands,
                                                   Core operation) {
         Trial theRule = trial();
-        if (read != null && !theRule.restated.isEmpty()
+        if (read != null && !theRule.restated().isEmpty()
                 && besideTheOperandsNothingEndsARun(written, reads, operands, operation)) {
             theRule.working = UndividedByARelation.Working.together(
-                    theRule.restated.stream().map(Supplier::get).toList());
+                    theRule.restated().stream().map(Supplier::get).toList());
         }
         return read;
     }
@@ -1830,36 +1830,86 @@ final class Pullback {
         private Predicate<Core> answersFor;
         /** The expressions the rule read as the form of one operand of theirs, each with that
          *  operand ({@link AffineReading.WhatTheAnalysisAnswersFor#readByTheFormOf}). */
-        private final Map<Core, Core> readByTheFormOf = new IdentityHashMap<>();
+        private Map<Core, Core> readByTheFormOf;
         /** The remainders the rule read without saying their rows are made where the dividend is
          *  worked out, each with its dividend
          *  ({@link AffineReading.WhatTheAnalysisAnswersFor#dividendBesideTheRows}). */
-        private final Map<Core, Core> dividendBesideTheRows = new IdentityHashMap<>();
+        private Map<Core, Core> dividendBesideTheRows;
         /** The months a date at a place lands in moved by months, as the rule read them, each
          *  with the count of months the move comes to
          *  ({@link AffineReading.WhatTheAnalysisAnswersFor#landsInAMonth}). */
-        private final Map<Core, UndividedByARelation.IntOperation> landsInAMonth =
-                new IdentityHashMap<>();
+        private Map<Core, UndividedByARelation.IntOperation> landsInAMonth;
         /** What each relation read under an arm of a choice works out, off the comparison read
          *  with the choice standing as that arm ({@link Pullback#tellWhatItWorksOut}). */
         private Map<Relation, UndividedByARelation.Working> relations;
         /** What each comparison the rule read the written one as works out, asked only by a rule
          *  that says the written one works out the same ({@link #worksOutWhatItIsRestatedAs}). */
-        private final List<Supplier<UndividedByARelation.Working>> restated = new ArrayList<>();
+        private List<Supplier<UndividedByARelation.Working>> restated;
 
         /** What a run taking an arm of a choice works out there, by each relation the comparison
          *  was read as with the choice standing as that arm ({@link Pullback#readOnAnArm}). */
-        private final Map<Relation, List<Supplier<StopEvidence>>> onTheArms =
-                new LinkedHashMap<>();
+        private Map<Relation, List<Supplier<StopEvidence>>> onTheArms;
+
+        // The maps and lists of a candidate are made when the candidate first says something into
+        // them: most say nothing, and an identity map holds a table before it holds anything.
+
+        void readByTheFormOf(Core call, Core dividend) {
+            if (readByTheFormOf == null) {
+                readByTheFormOf = new IdentityHashMap<>();
+            }
+            readByTheFormOf.put(call, dividend);
+        }
+
+        Core readByTheFormOf(Core held) {
+            return readByTheFormOf == null ? null : readByTheFormOf.get(held);
+        }
+
+        void dividendBesideTheRows(Core call, Core dividend) {
+            if (dividendBesideTheRows == null) {
+                dividendBesideTheRows = new IdentityHashMap<>();
+            }
+            dividendBesideTheRows.put(call, dividend);
+        }
+
+        Core dividendBesideTheRows(Core held) {
+            return dividendBesideTheRows == null ? null : dividendBesideTheRows.get(held);
+        }
+
+        void landsInAMonth(Core node, UndividedByARelation.IntOperation count) {
+            if (landsInAMonth == null) {
+                landsInAMonth = new IdentityHashMap<>();
+            }
+            landsInAMonth.put(node, count);
+        }
+
+        UndividedByARelation.IntOperation landsInAMonth(Core held) {
+            return landsInAMonth == null ? null : landsInAMonth.get(held);
+        }
+
+        void restatedAs(Supplier<UndividedByARelation.Working> working) {
+            if (restated == null) {
+                restated = new ArrayList<>();
+            }
+            restated.add(working);
+        }
+
+        /** What the rule worked out of each comparison it read the written one as; none where it
+         *  read it as none. */
+        List<Supplier<UndividedByARelation.Working>> restated() {
+            return restated == null ? List.of() : restated;
+        }
 
         void readOnAnArm(Relation relation, Supplier<StopEvidence> stops) {
+            if (onTheArms == null) {
+                onTheArms = new LinkedHashMap<>();
+            }
             onTheArms.computeIfAbsent(relation, _ -> new ArrayList<>()).add(stops);
         }
 
         /** What runs taking the arms {@code relation} was read on work out there; none where it
          *  was read on no arm. */
         List<Supplier<StopEvidence>> onTheArms(Relation relation) {
-            return onTheArms.getOrDefault(relation, List.of());
+            return onTheArms == null ? List.of() : onTheArms.getOrDefault(relation, List.of());
         }
 
         void tell(Relation relation, UndividedByARelation.Working told) {
@@ -1883,8 +1933,10 @@ final class Pullback {
             if (kept.relations != null) {
                 kept.relations.forEach(this::tell);
             }
-            kept.onTheArms.forEach((relation, stops) -> stops.forEach(each ->
-                    readOnAnArm(relation, each)));
+            if (kept.onTheArms != null) {
+                kept.onTheArms.forEach((relation, stops) -> stops.forEach(each ->
+                        readOnAnArm(relation, each)));
+            }
         }
     }
 
@@ -1970,10 +2022,10 @@ final class Pullback {
         Predicate<Core> readAgain = theRule.answersFor;
         return stopped.worksOut(new AffineReading.WhatTheAnalysisAnswersFor(
                 readAgain == null ? _ -> false : readAgain,
-                held -> theRule.readByTheFormOf.get(Core.withoutStanding(held)),
-                held -> theRule.dividendBesideTheRows.get(Core.withoutStanding(held)),
+                held -> theRule.readByTheFormOf(Core.withoutStanding(held)),
+                held -> theRule.dividendBesideTheRows(Core.withoutStanding(held)),
                 this::boundValueOf,
-                held -> theRule.landsInAMonth.get(Core.withoutStanding(held))));
+                held -> theRule.landsInAMonth(Core.withoutStanding(held))));
     }
 
     /**
@@ -12267,7 +12319,7 @@ final class Pullback {
         }
         // A run works out the value moved, which the place's remainder is not: where it stops
         // in that is read off the call as it is written, and is nothing a row gets past.
-        trial().dividendBesideTheRows.put(Core.withoutStanding(shifted.moved()),
+        trial().dividendBesideTheRows(Core.withoutStanding(shifted.moved()),
                 shifted.moved().args().getFirst());
         return switch (shifted) {
             case RemainderOfAShiftedValue.Read.AgainstANumber<InputReads> number ->
@@ -12505,7 +12557,7 @@ final class Pullback {
         }
         // Its rows are made where the form is worked out, each sum on the way a part of it
         // ({@link UndividedByARelation}), and the divisor is a number above nought.
-        trial().readByTheFormOf.put(Core.withoutStanding(division.call()), division.dividend());
+        trial().readByTheFormOf(Core.withoutStanding(division.call()), division.dividend());
         return Quantity.RemainderOfADividend.ofTheInput(division.call().operation(),
                 new LinearForm<>(ExactRatio.of(constantOf(form).mod(division.divisor())),
                         form.coefs()), division.divisor());
@@ -12550,7 +12602,7 @@ final class Pullback {
         }
         UndividedByARelation.IntOperation count = monthsToWhereAMoveLands(step, month, moved.at());
         if (count != null) {
-            trial().landsInAMonth.put(Core.withoutStanding(node), count);
+            trial().landsInAMonth(Core.withoutStanding(node), count);
         }
         long movedBy = Math.floorMod(Math.floorMod(step.months(), CalendarMonths.A_YEAR)
                 - CalendarMonths.FIRST, CalendarMonths.A_YEAR);
@@ -12620,7 +12672,7 @@ final class Pullback {
                 return null;
             }
         }
-        trial().dividendBesideTheRows.put(Core.withoutStanding(division.call()),
+        trial().dividendBesideTheRows(Core.withoutStanding(division.call()),
                 division.dividend());
         return new Quantity.RemainderOfADividend(division.call().operation(),
                 new LinearForm<>(ExactRatio.of(constantOf(form).mod(division.divisor())),
