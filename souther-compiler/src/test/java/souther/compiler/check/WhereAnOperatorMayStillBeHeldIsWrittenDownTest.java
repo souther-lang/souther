@@ -286,8 +286,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " of its own"),
             new Held("souther.compiler.check.HelperInliner.rename",
                     "the same, under a renaming of what the body bound"),
-            new Held("souther.compiler.check.NewtypeDesugar.go",
-                    "copies it into the node a newtype's rule becomes"),
             new Held("souther.compiler.check.BinaryElaborator.arithmetic",
                     "writes it into the checked node, and into the one inside a construction where"
                             + " the answer is a newtype"),
