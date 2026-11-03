@@ -609,8 +609,25 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 || !in.context().equals(CallContext.OF_THE_BODY)) {
             return DemandReading.Answered.NOTHING;
         }
-        DemandReading.Answered past = gotPast(e, in, reads);
-        return statement instanceof Stated.AComparison ? past : past.whatItNarrows();
+        return statement instanceof Stated.AComparison ? gotPast(e, in, reads)
+                : narrowedOnTheWayTo(e, in, reads);
+    }
+
+    /**
+     * What the run to {@code application} narrows, as {@link #gotPast} says it of a comparison and
+     * without the rest of what that asks: the applications before are not walked, since what they
+     * work out is no narrowing of a row at this application, and nothing is tied.
+     */
+    private static DemandReading.Answered narrowedOnTheWayTo(Core application, Body in,
+                                                             InputReads reads) {
+        Set<Core> ofTheRelation = valuesTheComparisonReads(in.root(), application);
+        WhatARunWorksOutBeforeACount.FirstApplication first =
+                WhatARunWorksOutBeforeACount.workedOutAtTheFirstApplication(in.root(),
+                        application);
+        List<Core> parts = first == null || first.entered().isEmpty()
+                ? WhatARunWorksOutBeforeACount.alwaysWorkedOutUpTo(in.root(), application)
+                : first.parts();
+        return workedOut(parts, application, ofTheRelation, in, reads).whatItNarrows();
     }
 
     /**
