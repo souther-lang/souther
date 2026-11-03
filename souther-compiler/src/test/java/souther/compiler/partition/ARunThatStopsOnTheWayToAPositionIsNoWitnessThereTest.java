@@ -151,6 +151,30 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
                 readingsOf(PARAMETERS, withTheDifference));
     }
 
+    /**
+     * A comparison works out a sum, and where the sum is more than the form the comparison is
+     * about, it stops a run at an {@code a} the form has a row at: {@code a + K - K == b} is
+     * {@code a == b} to the form, and no run with {@code a} past 10 gets past the first sum. That
+     * is a line the model draws and is read as the guard that says the same is. A sum that is the
+     * form itself stops where the form's own addends pass the type, which is the representation
+     * running out for any {@code K}, and is read as {@code a + 1 == b} is.
+     */
+    @Test
+    void aSumBeyondTheFormAComparisonIsAboutStopsARunAtALineOfTheModel() {
+        String k = Long.toString(Long.MAX_VALUE - 10);
+        for (String beyond : List.of("a + K - K == b", "a + K - 100 == b", "a + K == b + 1")) {
+            String written = beyond.replace("K", k);
+            assertEquals(readingsOf(NUMBERS, "a <= 10 && " + written),
+                    readingsOf(NUMBERS, written), beyond);
+            assertEquals(List.of(NOT_SHOWN), reasonsAt(NUMBERS, written, "b"), beyond);
+        }
+        for (String theForm : List.of("a + K == b", "a + K - b > 0", "a + 1 == b",
+                "a < b + 1")) {
+            assertEquals(Map.of("a", List.of(READ), "b", List.of(READ)),
+                    readingsOf(NUMBERS, theForm.replace("K", k)), theForm);
+        }
+    }
+
     /** A form worked out wherever the rest stand keeps being read. */
     @Test
     void aFormThatIsWorkedOutEverywhereIsStillRead() {

@@ -2934,14 +2934,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         boolean sizesAreRowsComputed = operations.theSizesAreRowsComputed(terms, constant);
         if (!out.containsAll(places()) && !offItsLine) {
             out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole, read,
-                    declared, independent, operations, sizesAreRowsComputed, entire.onTheWay()));
+                    declared, independent, operations, sizesAreRowsComputed, entire));
         }
         // A side nothing above showed anything of is asked of the differences the two stand
         // apart by, each in the run the declarations leave it.
         if (!out.containsAll(places()) && !offItsLine) {
             List<WhatARelationLeavesUndivided.Leaves> apart =
                     leftByTheirDifference(sources, carriers, stating, heldWhole, read, along,
-                            independent, operations, sizesAreRowsComputed, entire.onTheWay());
+                            independent, operations, sizesAreRowsComputed, entire);
             for (int at = 0; at < apart.size(); at++) {
                 if (leaves.get(at) != null || out.containsAll(sides.get(at).madeOf())) {
                     continue;
@@ -5463,13 +5463,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param stating   what the way states of each side
      * @param narrowing what the operators narrow, those of the run to the relation and of the
      *                  relation's own working
-     * @param onTheWay  of that, what the run to the relation narrows: the relation's own working
-     *                  is told of by its {@code working}
+     * @param onTheWay  of that, what the run to the relation narrows
+     * @param ofTheRelation the rest, what the relation's own working narrows
      * @param others    the statements other elements meet, which say nothing of the sides
      */
     private record WayRead(SearchRegion along, SearchRegion declared, LeftToTheCalendar left,
                            List<List<OnAWay>> stating, List<TakenConstraint> narrowing,
-                           List<TakenConstraint> onTheWay, OthersMeet others) {
+                           List<TakenConstraint> onTheWay, List<TakenConstraint> ofTheRelation,
+                           OthersMeet others) {
 
         List<OnAWay> conditions() {
             return left.conditions();
@@ -5508,7 +5509,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : OthersMeet.NONE;
         return new WayRead(along, declared, left,
                 stating(sources, left.conditions(), heldWhole, read, others),
-                answered.narrowing(), answered.onTheWay(), others);
+                answered.narrowing(), answered.onTheWay(), answered.ofTheRelation(), others);
     }
 
     /**
@@ -7346,7 +7347,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                          WhatARelationLeavesUndivided.Operations
                                                                  operations,
                                                          boolean sizesAreRowsComputed,
-                                                         List<TakenConstraint> onTheWay) {
+                                                         WayRead way) {
         TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, region,
                 independent) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
@@ -7385,7 +7386,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     on.spacingBetweenValues(), on.whereItStops(), each.number()));
         }
         List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(pair,
-                stating, onTheWay);
+                stating, way, sizesAreRowsComputed);
         if (held == null) {
             return Set.of();
         }
@@ -7417,7 +7418,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             boolean heldWhole, InputReading read, SearchRegion along,
             WhatARelationLeavesUndivided.Independence independent,
             WhatARelationLeavesUndivided.Operations operations, boolean sizesAreRowsComputed,
-            List<TakenConstraint> onTheWay) {
+            WayRead way) {
         TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, along,
                 independent) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
@@ -7444,7 +7445,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     each.number()));
         }
         List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(pair,
-                stating, onTheWay);
+                stating, way, sizesAreRowsComputed);
         if (held == null) {
             return List.of();
         }
@@ -7528,16 +7529,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /** Everything a way states of each of the two sides {@code pair} asks about, and everything the
-     *  operators of the run to the relation narrow of them ({@code onTheWay}), held of them as
-     *  statements about their difference — or null where something it holds is not. A statement
-     *  about both sides is in each side's list; it is one statement.
+     *  operators of the run to the relation narrow of them, held of them as statements about their
+     *  difference — or null where something it holds is not. A statement about both sides is in
+     *  each side's list; it is one statement.
      *
      *  <p>What the run narrows is held to the same: an end on one side that an operator of the run
      *  puts on it keeps the other side from the values past it as a statement of the way does.
-     *  What the relation's own working narrows is not among it: the operations that working
-     *  carries are asked apart ({@code working}). */
+     *
+     *  <p>An end on one side that the relation's own working puts on it is the form's sizes
+     *  running out where every operation is a sum of the form's own terms
+     *  ({@code sizesAreRowsComputed}): the {@code a + K} that {@code a + K == b} works out stops
+     *  where the form's own addends pass the type, which is the representation running out. Where
+     *  an operation is more than that, its end is a line the form does not show — the
+     *  {@code a + K} of {@code a + K - K == b} stops at an {@code a} the form has a row at — and
+     *  is held as an end on one side is. What else that working narrows is asked through the
+     *  operations it carries. */
     private List<WhatARelationLeavesUndivided.OnTheDifference> heldOfTheDifference(
-            TwoSides pair, List<List<OnAWay>> stating, List<TakenConstraint> onTheWay) {
+            TwoSides pair, List<List<OnAWay>> stating, WayRead way, boolean sizesAreRowsComputed) {
+        List<TakenConstraint> onTheWay = way.onTheWay();
         Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(pair.first()));
         aboutEither.addAll(stating.get(pair.second()));
         List<WhatARelationLeavesUndivided.OnTheDifference> held = new ArrayList<>();
@@ -7565,6 +7574,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return null;
             }
             held.add(statement);
+        }
+        if (!sizesAreRowsComputed) {
+            for (TakenConstraint each : way.ofTheRelation()) {
+                if (each.terms().stream().anyMatch(ofTheSides::contains)) {
+                    return null;
+                }
+            }
         }
         return held;
     }
