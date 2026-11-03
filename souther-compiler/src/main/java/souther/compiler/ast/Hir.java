@@ -1397,16 +1397,13 @@ public interface Hir {
         }
     }
 
-    /** The kind of primitive Raw a single-value decoder reads / an encoder writes. */
-    enum RawKind { TEXT, INT, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT }
-
     // --- decoders ---
 
     sealed interface DecoderDef extends Hir permits PrimDecoder, ObjectDecoder, NewtypeDecoder {}
 
     /** A single-value decoder: reads one primitive {@code input} and constructs {@code result}
      *  from it. */
-    record PrimDecoder(RawKind from, Binder input, Construct result, SourcePos pos)
+    record PrimDecoder(LeafScalar from, Binder input, Construct result, SourcePos pos)
             implements DecoderDef {}
 
     /** {@code decoder from Object { <binds> <construct> }} (multi-field, accumulating). */

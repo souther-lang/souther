@@ -110,7 +110,7 @@ public final class Deriver {
         // with one field (spec §newtype).
         Map.Entry<String, CodecShape> single = bareField(d, shapes);
         if (single != null) {
-            Hir.RawKind kind = rawKind(((CodecShape.Scalar) single.getValue()).kind());
+            LeafScalar kind = ((CodecShape.Scalar) single.getValue()).kind();
             Hir.Binder input = binders.binder("__in", pos);
             Hir.Construct result = new Hir.Construct(self,
                     List.of(new Hir.FieldInit(single.getKey(), Hir.Var.local(input, pos), pos)), pos);
@@ -134,20 +134,6 @@ public final class Deriver {
             inits.add(new Hir.FieldInit(f.getKey(), Hir.Var.local(took, pos), pos));
         }
         return new Hir.ObjectDecoder(binds, new Hir.Construct(self, inits, pos), pos);
-    }
-
-    /** How a bare newtype's single scalar is read straight off the input. */
-    private static Hir.RawKind rawKind(LeafScalar kind) {
-        return switch (kind) {
-            case STRING -> Hir.RawKind.TEXT;
-            case BOOL -> Hir.RawKind.BOOL;
-            case DECIMAL -> Hir.RawKind.DECIMAL;
-            case DATE -> Hir.RawKind.DATE;
-            case TIME -> Hir.RawKind.TIME;
-            case DATETIME -> Hir.RawKind.DATETIME;
-            case INSTANT -> Hir.RawKind.INSTANT;
-            case INT -> Hir.RawKind.INT;
-        };
     }
 
     // --- lowering a shape to the decoder IR ---
