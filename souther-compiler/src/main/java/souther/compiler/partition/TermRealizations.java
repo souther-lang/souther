@@ -4853,11 +4853,7 @@ final class TermRealizations {
     private static int partOf(TakenAs.DatePart part, long day) {
         LocalDate date = LocalDate.ofEpochDay(Math.max(LocalDate.MIN.toEpochDay(),
                 Math.min(LocalDate.MAX.toEpochDay(), day)));
-        return switch (part) {
-            case YEAR -> date.getYear();
-            case MONTH -> date.getMonthValue();
-            case DAY -> date.getDayOfMonth();
-        };
+        return part.of(date);
     }
 
     /**

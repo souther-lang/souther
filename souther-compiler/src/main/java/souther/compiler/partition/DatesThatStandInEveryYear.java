@@ -56,11 +56,7 @@ final class DatesThatStandInEveryYear {
 
         /** What this part is of {@code date}. */
         int of(LocalDate date) {
-            return switch (which) {
-                case MONTH -> date.getMonthValue();
-                case DAY -> date.getDayOfMonth();
-                case YEAR -> throw new IllegalStateException("not a part of this kind");
-            };
+            return which.of(date);
         }
 
         /** How many numbers this part can be, which are one to that many. */
