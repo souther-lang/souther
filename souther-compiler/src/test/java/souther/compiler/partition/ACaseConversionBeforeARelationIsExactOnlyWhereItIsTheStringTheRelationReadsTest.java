@@ -100,13 +100,14 @@ class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationRead
     }
 
     /**
-     * A string the relation does not read, converted in the same walk over a list that the string
-     * it reads is converted in, is not a conversion owed before the relation: it feeds neither
-     * side. So it leaves the relation shown over a region whether the string is a short one a
-     * conversion cannot fail on, or any string at all.
+     * The walk over a list that converts the strings of every element is an application before the
+     * relation, which is reached at one element. What it converts of the others is no string the
+     * classes of the relation are drawn over, so it is a stop at values nothing says, whether or
+     * not it also converts a string no side reads, and whether that string is a short one a
+     * conversion cannot fail on or any string at all. The relation is not shown reached.
      */
     @Test
-    void aConversionOfAStringNoSideReadsLeavesTheRelationShownOverARegion() {
+    void aConversionOfOtherElementsStringsByAnEarlierWalkIsAStopTheRelationIsNotShownPast() {
         for (String tagType : List.of("data Tag = String\n    invariant String.matches(\"[a-z]{1,2}\", value)",
                 "data Tag = String")) {
             NavigableSet<String> reasons = reasons("""
@@ -127,7 +128,9 @@ class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationRead
                     let f (i) = List.any(k -> List.any(a -> String.contains(k.domain, a.domain),
                                                        i.accounts), keyed(i.ps))
                     """.formatted(tagType));
-            assertTrue(reasons.contains("relation_shown_over_a_region"),
+            assertTrue(reasons.contains("relation_not_shown_to_reach_every_value"),
+                    () -> tagType + " " + reasons);
+            assertFalse(reasons.contains("relation_shown_over_a_region"),
                     () -> tagType + " " + reasons);
         }
     }

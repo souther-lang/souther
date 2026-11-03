@@ -989,19 +989,11 @@ final class DemandReading {
             return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, all);
         }
 
-        /**
-         * What the operators narrow and nothing else it asks of a row: no tie, no operator left
-         * unsaid, no operator owed a proof, and none of what the applications before work out.
-         */
-        Answered whatItNarrows() {
-            return onTheWay.isEmpty() && ofTheRelation.isEmpty() ? NOTHING
-                    : new Answered(onTheWay, ofTheRelation, List.of(), false, List.of(), List.of());
-        }
-
-        /** The same, without the statements of {@code met} among what the operators narrow. */
+        /** The same, without the statements of {@code met} among what the operators narrow; what
+         *  the run is owed and what the applications before work out stay. */
         Answered without(Collection<TakenConstraint.Affine> met) {
             return new Answered(notAmong(onTheWay, met), notAmong(ofTheRelation, met), tied,
-                    unsaid, List.of(), List.of());
+                    unsaid, owed, before);
         }
 
         private static List<TakenConstraint> notAmong(List<TakenConstraint> narrowing,
