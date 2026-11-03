@@ -136,8 +136,8 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart) 
                 // Nothing of this month is held, so the walk goes to the first day of the next one,
                 // or the last day of the one before. The last month the calendar has has no next.
                 next = !upward ? date.withDayOfMonth(1).toEpochDay() - 1
-                        : date.getYear() == LocalDate.MAX.getYear()
-                                && date.getMonthValue() == 12 ? LAST_DAY + 1
+                        : TakenAs.DatePart.YEAR.of(date) == LocalDate.MAX.getYear()
+                                && TakenAs.DatePart.MONTH.of(date) == 12 ? LAST_DAY + 1
                         : date.withDayOfMonth(1).plusMonths(1).toEpochDay();
             } else {
                 if (leaves(TakenAs.DatePart.DAY, TakenAs.DatePart.DAY.of(date))) {

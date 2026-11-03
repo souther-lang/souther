@@ -4739,18 +4739,55 @@ final class TermRealizations {
         PutToTheDays putToTheDays(Carrier observed) {
             return switch (part) {
                 case YEAR -> new PutToTheDays(this,
-                        year -> wanted.holds(Count.of(year), observed), false);
-                case MONTH -> tabled(MONTHS_A_YEAR_HAS, observed);
-                case DAY -> tabled(DAYS_THE_LONGEST_MONTH_HAS, observed);
+                        year -> wanted.holds(Count.of(year), observed), false, List.of());
+                case MONTH, DAY -> PutToTheDays.tabled(this,
+                        value -> wanted.holds(Count.of(value), observed));
             };
         }
+    }
 
-        private PutToTheDays tabled(int most, Carrier observed) {
-            BitSet left = new BitSet(most + 1);
-            for (int value = 1; value <= most; value++) {
-                left.set(value, wanted.holds(Count.of(value), observed));
-            }
-            return new PutToTheDays(this, left::get, left.isEmpty());
+    /**
+     * The stretch of days a month or a day of the month goes round in: the months of a year, the
+     * days of a month. The numbers it takes run from one to {@link #numbers} and start again in
+     * the next round.
+     *
+     * @param part  the month or the day of the month
+     * @param first the first day of the round
+     */
+    private record Round(TakenAs.DatePart part, LocalDate first) {
+
+        /** How many numbers the part takes in any round, which is the most a round has. */
+        static int most(TakenAs.DatePart part) {
+            return part == TakenAs.DatePart.MONTH ? MONTHS_A_YEAR_HAS : DAYS_THE_LONGEST_MONTH_HAS;
+        }
+
+        /** The first day of the round that the day {@code day} is in. */
+        static long firstDayHolding(TakenAs.DatePart part, long day) {
+            LocalDate date = LocalDate.ofEpochDay(day);
+            return (part == TakenAs.DatePart.MONTH ? date.withDayOfYear(1) : date.withDayOfMonth(1))
+                    .toEpochDay();
+        }
+
+        /** How many numbers this round takes. */
+        int numbers() {
+            return part == TakenAs.DatePart.MONTH ? MONTHS_A_YEAR_HAS : first.lengthOfMonth();
+        }
+
+        /** How many days this round has. */
+        int days() {
+            return part == TakenAs.DatePart.MONTH ? first.lengthOfYear() : first.lengthOfMonth();
+        }
+
+        /** The first day on which the part takes {@code number}. */
+        long startOf(int number) {
+            return part == TakenAs.DatePart.MONTH ? first.withMonth(number).toEpochDay()
+                    : first.toEpochDay() + number - 1;
+        }
+
+        /** The number the part took on the day before this round, which is the last of the round
+         *  before it. */
+        int numberBefore() {
+            return part.of(first.minusDays(1));
         }
     }
 
@@ -4767,8 +4804,25 @@ final class TermRealizations {
      * @param leaves        whether the set leaves a value of the part
      * @param leavesNothing whether it leaves no value at all, which only a table can say before a
      *                      walk
+     * @param turns         the numbers of a table, ascending, that the set answers otherwise than
+     *                      the number before; none for a year, which has no table
      */
-    record PutToTheDays(DatePartAsk ask, IntPredicate leaves, boolean leavesNothing) {
+    record PutToTheDays(DatePartAsk ask, IntPredicate leaves, boolean leavesNothing,
+            List<Integer> turns) {
+
+        /** The table of a month or a day of the month: the set asked of each number once. */
+        static PutToTheDays tabled(DatePartAsk ask, IntPredicate asked) {
+            int most = Round.most(ask.part());
+            BitSet left = new BitSet(most + 1);
+            List<Integer> turns = new ArrayList<>();
+            for (int number = 1; number <= most; number++) {
+                left.set(number, asked.test(number));
+                if (number > 1 && left.get(number) != left.get(number - 1)) {
+                    turns.add(number);
+                }
+            }
+            return new PutToTheDays(ask, left::get, left.isEmpty(), List.copyOf(turns));
+        }
 
         /** Whether the date {@code day} counts to is one this admits: one the move is defined at,
          *  whose moved date has a part the rules leave. */
@@ -4833,48 +4887,24 @@ final class TermRealizations {
             if (low >= high) {
                 return;
             }
-            TakenAs.DatePart part = ask.part();
             long offset = ask.moved().offsetDays();
-            int most = part == TakenAs.DatePart.MONTH ? MONTHS_A_YEAR_HAS
-                    : DAYS_THE_LONGEST_MONTH_HAS;
-            boolean[] left = new boolean[most + 1];
-            int[] turns = new int[most];
-            int turning = 0;
-            for (int number = 1; number <= most; number++) {
-                left[number] = leaves.test(number);
-                if (number > 1 && left[number] != left[number - 1]) {
-                    turns[turning++] = number;
+            long firstDay = Round.firstDayHolding(ask.part(), low + 1);
+            while (firstDay <= high) {
+                Round round = new Round(ask.part(), LocalDate.ofEpochDay(firstDay));
+                if (firstDay > low && leaves.test(1) != leaves.test(round.numberBefore())) {
+                    addIfBetween(cuts, firstDay - offset, from, to);
                 }
-            }
-            long firstOfRound = firstOfTheRoundHolding(part, low + 1);
-            while (firstOfRound <= high) {
-                LocalDate first = LocalDate.ofEpochDay(firstOfRound);
-                if (firstOfRound > low && left[1] != left[part.of(first.minusDays(1))]) {
-                    addIfBetween(cuts, firstOfRound - offset, from, to);
-                }
-                int numbers = part == TakenAs.DatePart.MONTH ? MONTHS_A_YEAR_HAS
-                        : first.lengthOfMonth();
-                for (int each = 0; each < turning && turns[each] <= numbers; each++) {
-                    long start = part == TakenAs.DatePart.MONTH
-                            ? first.withMonth(turns[each]).toEpochDay()
-                            : firstOfRound + turns[each] - 1;
-                    if (start > high) {
+                for (int number : turns) {
+                    long start = round.startOf(number);
+                    if (number > round.numbers() || start > high) {
                         break;
                     }
                     if (start > low) {
                         addIfBetween(cuts, start - offset, from, to);
                     }
                 }
-                firstOfRound += part == TakenAs.DatePart.MONTH ? first.lengthOfYear()
-                        : first.lengthOfMonth();
+                firstDay += round.days();
             }
-        }
-
-        /** The first day of the year, or of the month, that the day {@code day} is in. */
-        private static long firstOfTheRoundHolding(TakenAs.DatePart part, long day) {
-            LocalDate date = LocalDate.ofEpochDay(day);
-            return (part == TakenAs.DatePart.MONTH ? date.withDayOfYear(1) : date.withDayOfMonth(1))
-                    .toEpochDay();
         }
 
         private static void addIfBetween(SortedSet<Long> cuts, long day, long from, long to) {

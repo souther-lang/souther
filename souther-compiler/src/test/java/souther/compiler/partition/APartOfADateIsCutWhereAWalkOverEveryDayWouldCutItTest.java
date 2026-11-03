@@ -8,6 +8,7 @@ import souther.compiler.semantics.TakenAs.DatePart;
 
 import java.time.LocalDate;
 import java.util.BitSet;
+import java.util.List;
 import java.util.Random;
 import java.util.SortedSet;
 import java.util.TreeSet;
@@ -29,7 +30,6 @@ class APartOfADateIsCutWhereAWalkOverEveryDayWouldCutItTest {
     private static final long FIRST_DAY = LocalDate.MIN.toEpochDay();
     private static final long LAST_DAY = LocalDate.MAX.toEpochDay();
     private static final long[] OFFSETS = {0, -1, 1, 17, -31, 400};
-    private static final int RANGES_A_SET_IS_ASKED_OVER = 40;
     private static final int SETS = 120;
 
     @Test
@@ -68,46 +68,62 @@ class APartOfADateIsCutWhereAWalkOverEveryDayWouldCutItTest {
         return left;
     }
 
+    /** Where a range lies against the calendar and against the dates the move is defined at. */
+    private enum Where {
+        FROM_THE_FIRST_DATE_THE_MOVE_IS_DEFINED_AT,
+        TO_THE_LAST_DATE_THE_MOVE_IS_DEFINED_AT,
+        AT_THE_END_OF_A_MONTH_IN_OUR_TIME,
+        SOON_AFTER_THE_FIRST_DATE,
+        PAST_THE_CALENDAR_ENDS
+    }
+
+    private static final int OF_EACH_KIND = 4;
+
     private static void cutsEverywhereAsTheWalkDoes(DatePart part, IntPredicate leaves, int set,
             int longest) {
         Random random = new Random(set);
-        for (int range = 0; range < RANGES_A_SET_IS_ASKED_OVER; range++) {
-            long offset = OFFSETS[random.nextInt(OFFSETS.length)];
-            DateTranslation moved = DateTranslation.none().thenAddDays(offset);
-            long from = startOf(random, range, moved);
-            long to = from + random.nextInt(1, longest);
-            if (range % 8 == 7) {
-                to = from + random.nextInt(1, 4);
+        for (Where where : Where.values()) {
+            for (int copy = 0; copy < OF_EACH_KIND; copy++) {
+                for (boolean aFewDays : new boolean[] {false, true}) {
+                    long offset = OFFSETS[random.nextInt(OFFSETS.length)];
+                    DateTranslation moved = DateTranslation.none().thenAddDays(offset);
+                    long from = startOf(random, where, moved);
+                    long to = from + (aFewDays ? random.nextInt(1, 4) : random.nextInt(1, longest));
+                    // A range past where the move is defined is one the cut is still asked over,
+                    // and its ends read as the calendar's first and last day.
+                    if (where != Where.PAST_THE_CALENDAR_ENDS) {
+                        to = Math.min(moved.last(), to);
+                    }
+                    assertEquals(walked(part, leaves, moved, from, to),
+                            asked(part, leaves, moved, from, to),
+                            part + " set " + set + " from " + from + " to " + to + " moved by "
+                                    + offset);
+                }
             }
-            // A range past where the move is defined is one the cut is still asked over, and its
-            // ends read as the calendar's first and last day.
-            if (range % 5 != 4) {
-                to = Math.min(moved.last(), to);
-            }
-            assertEquals(walked(part, leaves, moved, from, to), asked(part, leaves, moved, from, to),
-                    part + " set " + set + " from " + from + " to " + to + " moved by " + offset);
         }
     }
 
-    /** Ranges that begin at the start, the end and the middle of the calendar, and at month ends. */
-    private static long startOf(Random random, int range, DateTranslation moved) {
-        return switch (range % 5) {
-            case 0 -> moved.first();
-            case 1 -> Math.max(moved.first(), moved.last() - random.nextInt(0, 1200));
-            case 2 -> LocalDate.of(2000 + random.nextInt(60), 1 + random.nextInt(12), 28)
-                    .toEpochDay();
-            case 3 -> moved.first() + random.nextInt(0, 1200);
-            default -> random.nextBoolean() ? FIRST_DAY - random.nextInt(0, 40)
-                    : LAST_DAY - random.nextInt(0, 40);
+    private static long startOf(Random random, Where where, DateTranslation moved) {
+        return switch (where) {
+            case FROM_THE_FIRST_DATE_THE_MOVE_IS_DEFINED_AT -> moved.first();
+            case TO_THE_LAST_DATE_THE_MOVE_IS_DEFINED_AT ->
+                    Math.max(moved.first(), moved.last() - random.nextInt(0, 1200));
+            case AT_THE_END_OF_A_MONTH_IN_OUR_TIME ->
+                    LocalDate.of(2000 + random.nextInt(60), 1 + random.nextInt(12), 28)
+                            .toEpochDay();
+            case SOON_AFTER_THE_FIRST_DATE -> moved.first() + random.nextInt(0, 1200);
+            case PAST_THE_CALENDAR_ENDS -> random.nextBoolean()
+                    ? FIRST_DAY - random.nextInt(0, 40) : LAST_DAY - random.nextInt(0, 40);
         };
     }
 
     private static SortedSet<Long> asked(DatePart part, IntPredicate leaves, DateTranslation moved,
             long from, long to) {
         SortedSet<Long> cuts = new TreeSet<>();
-        new TermRealizations.PutToTheDays(
-                new TermRealizations.DatePartAsk(part, moved, new NumericSet.At(Count.of(1))),
-                leaves, false).cutsInto(cuts, from, to);
+        TermRealizations.DatePartAsk ask = new TermRealizations.DatePartAsk(part, moved,
+                new NumericSet.At(Count.of(1)));
+        (part == DatePart.YEAR ? new TermRealizations.PutToTheDays(ask, leaves, false, List.of())
+                : TermRealizations.PutToTheDays.tabled(ask, leaves)).cutsInto(cuts, from, to);
         return cuts;
     }
 
