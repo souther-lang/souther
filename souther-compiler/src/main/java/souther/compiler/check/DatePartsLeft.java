@@ -80,9 +80,9 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart) 
             return false;
         }
         LocalDate date = LocalDate.ofEpochDay(day);
-        return leaves(TakenAs.DatePart.YEAR, date.getYear())
-                && leaves(TakenAs.DatePart.MONTH, date.getMonthValue())
-                && leaves(TakenAs.DatePart.DAY, date.getDayOfMonth());
+        return leaves(TakenAs.DatePart.YEAR, TakenAs.DatePart.YEAR.of(date))
+                && leaves(TakenAs.DatePart.MONTH, TakenAs.DatePart.MONTH.of(date))
+                && leaves(TakenAs.DatePart.DAY, TakenAs.DatePart.DAY.of(date));
     }
 
     /** Whether some date the calendar has has parts these leave. */
@@ -131,16 +131,16 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart) 
             }
             LocalDate date = LocalDate.ofEpochDay(day);
             long next;
-            if (!leaves(TakenAs.DatePart.YEAR, date.getYear())
-                    || !leaves(TakenAs.DatePart.MONTH, date.getMonthValue())) {
+            if (!leaves(TakenAs.DatePart.YEAR, TakenAs.DatePart.YEAR.of(date))
+                    || !leaves(TakenAs.DatePart.MONTH, TakenAs.DatePart.MONTH.of(date))) {
                 // Nothing of this month is held, so the walk goes to the first day of the next one,
                 // or the last day of the one before. The last month the calendar has has no next.
                 next = !upward ? date.withDayOfMonth(1).toEpochDay() - 1
-                        : date.getYear() == LocalDate.MAX.getYear()
-                                && date.getMonthValue() == 12 ? LAST_DAY + 1
+                        : TakenAs.DatePart.YEAR.of(date) == LocalDate.MAX.getYear()
+                                && TakenAs.DatePart.MONTH.of(date) == 12 ? LAST_DAY + 1
                         : date.withDayOfMonth(1).plusMonths(1).toEpochDay();
             } else {
-                if (leaves(TakenAs.DatePart.DAY, date.getDayOfMonth())) {
+                if (leaves(TakenAs.DatePart.DAY, TakenAs.DatePart.DAY.of(date))) {
                     out.add(day);
                     unmet = 0;
                 }

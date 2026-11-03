@@ -425,7 +425,7 @@ public sealed interface TakenAs {
         /** What this part runs between over the dates from {@code first} to {@code last}. */
         private NumericDomain.Bounds over(LocalDate first, LocalDate last) {
             if (part == DatePart.YEAR) {
-                return run(first.getYear(), last.getYear());
+                return run(part.of(first), part.of(last));
             }
             if (last.toEpochDay() - first.toEpochDay() >= DAYS_A_YEAR_HOLDS_AT_LEAST) {
                 return NumericDomain.Bounds.OPEN;
@@ -439,10 +439,8 @@ public sealed interface TakenAs {
                 if (end.isAfter(last)) {
                     end = last;
                 }
-                least = Math.min(least, part == DatePart.MONTH ? at.getMonthValue()
-                        : at.getDayOfMonth());
-                most = Math.max(most, part == DatePart.MONTH ? end.getMonthValue()
-                        : end.getDayOfMonth());
+                least = Math.min(least, part.of(at));
+                most = Math.max(most, part.of(end));
                 if (end.equals(last)) {
                     return run(least, most);
                 }
@@ -470,7 +468,16 @@ public sealed interface TakenAs {
         MONTH,
 
         /** The day within that month, counted from one. */
-        DAY
+        DAY;
+
+        /** The number this part of {@code date} is. */
+        public int of(LocalDate date) {
+            return switch (this) {
+                case YEAR -> date.getYear();
+                case MONTH -> date.getMonthValue();
+                case DAY -> date.getDayOfMonth();
+            };
+        }
     }
 
     /** A part of a time of day, in the order the parts run. */

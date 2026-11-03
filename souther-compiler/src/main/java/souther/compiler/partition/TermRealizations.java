@@ -4739,18 +4739,55 @@ final class TermRealizations {
         PutToTheDays putToTheDays(Carrier observed) {
             return switch (part) {
                 case YEAR -> new PutToTheDays(this,
-                        year -> wanted.holds(Count.of(year), observed), false);
-                case MONTH -> tabled(MONTHS_A_YEAR_HAS, observed);
-                case DAY -> tabled(DAYS_THE_LONGEST_MONTH_HAS, observed);
+                        year -> wanted.holds(Count.of(year), observed), false, List.of());
+                case MONTH, DAY -> PutToTheDays.tabled(this,
+                        value -> wanted.holds(Count.of(value), observed));
             };
         }
+    }
 
-        private PutToTheDays tabled(int most, Carrier observed) {
-            BitSet left = new BitSet(most + 1);
-            for (int value = 1; value <= most; value++) {
-                left.set(value, wanted.holds(Count.of(value), observed));
-            }
-            return new PutToTheDays(this, left::get, left.isEmpty());
+    /**
+     * The stretch of days a month or a day of the month goes round in: the months of a year, the
+     * days of a month. The numbers it takes run from one to {@link #numbers} and start again in
+     * the next round.
+     *
+     * @param part  the month or the day of the month
+     * @param first the first day of the round
+     */
+    private record Round(TakenAs.DatePart part, LocalDate first) {
+
+        /** How many numbers the part takes in any round, which is the most a round has. */
+        static int most(TakenAs.DatePart part) {
+            return part == TakenAs.DatePart.MONTH ? MONTHS_A_YEAR_HAS : DAYS_THE_LONGEST_MONTH_HAS;
+        }
+
+        /** The first day of the round that the day {@code day} is in. */
+        static long firstDayHolding(TakenAs.DatePart part, long day) {
+            LocalDate date = LocalDate.ofEpochDay(day);
+            return (part == TakenAs.DatePart.MONTH ? date.withDayOfYear(1) : date.withDayOfMonth(1))
+                    .toEpochDay();
+        }
+
+        /** How many numbers this round takes. */
+        int numbers() {
+            return part == TakenAs.DatePart.MONTH ? MONTHS_A_YEAR_HAS : first.lengthOfMonth();
+        }
+
+        /** How many days this round has. */
+        int days() {
+            return part == TakenAs.DatePart.MONTH ? first.lengthOfYear() : first.lengthOfMonth();
+        }
+
+        /** The first day on which the part takes {@code number}. */
+        long startOf(int number) {
+            return part == TakenAs.DatePart.MONTH ? first.withMonth(number).toEpochDay()
+                    : first.toEpochDay() + number - 1;
+        }
+
+        /** The number the part took on the day before this round, which is the last of the round
+         *  before it. */
+        int numberBefore() {
+            return part.of(first.minusDays(1));
         }
     }
 
@@ -4767,8 +4804,25 @@ final class TermRealizations {
      * @param leaves        whether the set leaves a value of the part
      * @param leavesNothing whether it leaves no value at all, which only a table can say before a
      *                      walk
+     * @param turns         the numbers of a table, ascending, that the set answers otherwise than
+     *                      the number before; none for a year, which has no table
      */
-    record PutToTheDays(DatePartAsk ask, IntPredicate leaves, boolean leavesNothing) {
+    record PutToTheDays(DatePartAsk ask, IntPredicate leaves, boolean leavesNothing,
+            List<Integer> turns) {
+
+        /** The table of a month or a day of the month: the set asked of each number once. */
+        static PutToTheDays tabled(DatePartAsk ask, IntPredicate asked) {
+            int most = Round.most(ask.part());
+            BitSet left = new BitSet(most + 1);
+            List<Integer> turns = new ArrayList<>();
+            for (int number = 1; number <= most; number++) {
+                left.set(number, asked.test(number));
+                if (number > 1 && left.get(number) != left.get(number - 1)) {
+                    turns.add(number);
+                }
+            }
+            return new PutToTheDays(ask, left::get, left.isEmpty(), List.copyOf(turns));
+        }
 
         /** Whether the date {@code day} counts to is one this admits: one the move is defined at,
          *  whose moved date has a part the rules leave. */
@@ -4787,6 +4841,10 @@ final class TermRealizations {
          * answer turns only where the set's answer for the new value differs from its answer for
          * the old one, and those are the days cut at, so a set that leaves one day of the month
          * cuts a month in at most three and not in thirty-one.
+         *
+         * <p>A month and a day of the month take values from a table, so the numbers where the table
+         * turns are known and the days that start them are found a year or a month at a time. A
+         * year is asked of the set as it is reached, and is visited one at a time.
          */
         void cutsInto(SortedSet<Long> cuts, long from, long to) {
             DateTranslation moved = ask.moved();
@@ -4795,15 +4853,57 @@ final class TermRealizations {
             }
             long low = clamped(from + moved.offsetDays());
             long high = clamped(to + moved.offsetDays());
-            boolean before = leaves.test(partOf(ask.part(), low));
-            for (OptionalLong start = nextStartAfter(ask.part(), low);
+            if (ask.part() == TakenAs.DatePart.YEAR) {
+                cutsAtTheYearsTurning(cuts, low, high, from, to);
+            } else {
+                cutsAtTheNumbersWhereTheTableTurns(cuts, low, high, from, to);
+            }
+        }
+
+        private void cutsAtTheYearsTurning(SortedSet<Long> cuts, long low, long high, long from,
+                long to) {
+            boolean before = leaves.test(partOf(TakenAs.DatePart.YEAR, low));
+            for (OptionalLong start = nextYearStartAfter(low);
                     start.isPresent() && start.getAsLong() <= high;
-                    start = nextStartAfter(ask.part(), start.getAsLong())) {
-                boolean now = leaves.test(partOf(ask.part(), start.getAsLong()));
+                    start = nextYearStartAfter(start.getAsLong())) {
+                boolean now = leaves.test(partOf(TakenAs.DatePart.YEAR, start.getAsLong()));
                 if (now != before) {
-                    addIfBetween(cuts, start.getAsLong() - moved.offsetDays(), from, to);
+                    addIfBetween(cuts, start.getAsLong() - ask.moved().offsetDays(), from, to);
                 }
                 before = now;
+            }
+        }
+
+        /**
+         * The cuts of a month or a day of the month, for the moved days after {@code low} up to
+         * {@code high}. The numbers go round, the months in a year and the days in a month, and
+         * the set answers the same for a number whichever round it is in, so the days cut at are
+         * the starts of the numbers where the table turns from the number before, and the start of
+         * a round where it turns from the last number of the round before. A round is visited and
+         * not each of the days in it.
+         */
+        private void cutsAtTheNumbersWhereTheTableTurns(SortedSet<Long> cuts, long low, long high,
+                long from, long to) {
+            if (low >= high) {
+                return;
+            }
+            long offset = ask.moved().offsetDays();
+            long firstDay = Round.firstDayHolding(ask.part(), low + 1);
+            while (firstDay <= high) {
+                Round round = new Round(ask.part(), LocalDate.ofEpochDay(firstDay));
+                if (firstDay > low && leaves.test(1) != leaves.test(round.numberBefore())) {
+                    addIfBetween(cuts, firstDay - offset, from, to);
+                }
+                for (int number : turns) {
+                    long start = round.startOf(number);
+                    if (number > round.numbers() || start > high) {
+                        break;
+                    }
+                    if (start > low) {
+                        addIfBetween(cuts, start - offset, from, to);
+                    }
+                }
+                firstDay += round.days();
             }
         }
 
@@ -4813,51 +4913,34 @@ final class TermRealizations {
             }
         }
 
-        private static long clamped(long day) {
-            return Math.max(LocalDate.MIN.toEpochDay(), Math.min(LocalDate.MAX.toEpochDay(), day));
-        }
+    }
+
+    /** The day {@code day} is, or the calendar's first or last where the calendar has none. */
+    private static long clamped(long day) {
+        return Math.max(LocalDate.MIN.toEpochDay(), Math.min(LocalDate.MAX.toEpochDay(), day));
     }
 
     /**
-     * The first day after {@code day} at which {@code part} starts a new run — the first of a
-     * year, the first of a month, any day for the day of the month — or nothing where the calendar
+     * The first day after {@code day} that is the first of a year, or nothing where the calendar
      * has no such day.
      *
-     * <p>Total over the calendar. A walk that makes the next year or month and then asks whether it
-     * is still inside is one that makes a date the calendar does not have in the last month there
-     * is; this answers nothing there, and no caller makes the successor.
+     * <p>Total over the calendar. A walk that makes the next year and then asks whether it is
+     * still inside is one that makes a date the calendar does not have in the last year there is;
+     * this answers nothing there, and no caller makes the successor.
      */
-    private static OptionalLong nextStartAfter(TakenAs.DatePart part, long day) {
+    private static OptionalLong nextYearStartAfter(long day) {
         if (day >= LocalDate.MAX.toEpochDay()) {
             return OptionalLong.empty();
         }
-        return switch (part) {
-            case YEAR -> {
-                int year = LocalDate.ofEpochDay(day).getYear();
-                yield year == LocalDate.MAX.getYear() ? OptionalLong.empty()
-                        : OptionalLong.of(LocalDate.of(year + 1, 1, 1).toEpochDay());
-            }
-            case MONTH -> {
-                LocalDate date = LocalDate.ofEpochDay(day);
-                yield date.getYear() == LocalDate.MAX.getYear() && date.getMonthValue() == 12
-                        ? OptionalLong.empty()
-                        : OptionalLong.of(date.withDayOfMonth(1).plusMonths(1).toEpochDay());
-            }
-            // Every day starts a new day of its month, and which day that is needs no date made.
-            case DAY -> OptionalLong.of(day + 1);
-        };
+        int year = LocalDate.ofEpochDay(day).getYear();
+        return year == LocalDate.MAX.getYear() ? OptionalLong.empty()
+                : OptionalLong.of(LocalDate.of(year + 1, 1, 1).toEpochDay());
     }
 
     /** The part of the date that {@code day} counts to, with a day the calendar does not have read
      *  as its first or last. */
     private static int partOf(TakenAs.DatePart part, long day) {
-        LocalDate date = LocalDate.ofEpochDay(Math.max(LocalDate.MIN.toEpochDay(),
-                Math.min(LocalDate.MAX.toEpochDay(), day)));
-        return switch (part) {
-            case YEAR -> date.getYear();
-            case MONTH -> date.getMonthValue();
-            case DAY -> date.getDayOfMonth();
-        };
+        return part.of(LocalDate.ofEpochDay(clamped(day)));
     }
 
     /**
