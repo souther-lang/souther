@@ -200,6 +200,30 @@ class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationRead
         assertEquals(withoutOrdinals(direct), withoutOrdinals(walked));
     }
 
+    /**
+     * A relation of two elements of the list is not one element read: copies of one element would
+     * make the two the same string, which is a row of the relation at only some values.
+     */
+    @Test
+    void aRelationOfTwoElementsOfTheListIsNotReadAtCopiesOfOne() {
+        NavigableSet<String> reasons = reasons("""
+                module demo
+
+                data P = { name: String }
+                data Keyed = { domain: String }
+                data In = { ps: List<P> }
+
+                let keyed (ps: List<P>): List<Keyed> =
+                    List.map(p -> Keyed { domain = String.lowercase(p.name) }, ps)
+
+                behavior f : (i: In) -> Bool
+                let f (i) = List.any(a -> List.any(b -> String.contains(a.domain, b.domain),
+                                                   keyed(i.ps)), keyed(i.ps))
+                """);
+        assertFalse(reasons.contains("unsupported_syntax"), reasons::toString);
+        assertFalse(reasons.contains("relation_shown_over_a_region"), reasons::toString);
+    }
+
     private static String withoutOrdinals(String json) {
         return json.replaceAll("\"ordinal\"\\s*:\\s*\\d+", "\"ordinal\":0");
     }

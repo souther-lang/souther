@@ -4280,8 +4280,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 // What accounts for a place is a claim about the application the relation is
                 // reached in. An earlier application works out the same statements over values of
                 // its own, which that claim does not reach. Nor does the exactness of a
-                // conversion: the string an earlier application converts is another element's,
-                // at a place that reads alike, and it is no string the classes are drawn over.
+                // conversion, unless the place is one value of a row or the witness writes the
+                // other elements as copies of the one read: otherwise the string an earlier
+                // application converts is another element's, at a place that reads alike, and it
+                // is no string the classes are drawn over.
                 if (stopsOn(prior.workedOut(), reads, witness, true, read, exactOn, true,
                         Set.of())) {
                     return true;
@@ -4606,11 +4608,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 if (placesOfTheSide.isEmpty()) {
                     return false;
                 }
-                // A string, or a piece of one, is the element's own and is kept by its copies.
-                boolean ofTheElementsString = side.number() == null && side.along() == null
-                        && (side.text() != null || side.piece() != null);
                 if (placesOfTheSide.get().stream().anyMatch(at -> overlap(at, list))
-                        && !ofTheElementsString && keptCutDown(side) != CutDown.AT_ANY_SIZE) {
+                        && !keptByCopies(side)) {
                     return false;
                 }
             }
@@ -4784,6 +4783,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         AT_ONE,
         /** Not shown to keep it. */
         NOT
+    }
+
+    /**
+     * Whether {@code side} keeps its value where the collection it is made of is filled with
+     * copies of the element it is read at. A string, or a piece of one, or a conversion of one, is
+     * the element's own and every copy holds it; anything else is asked as it is when the
+     * collection is cut down ({@link #keptCutDown}), which does not say what a string side keeps.
+     */
+    private static boolean keptByCopies(Side side) {
+        if (side.number() == null && side.along() == null
+                && (side.text() != null || side.piece() != null)) {
+            return true;
+        }
+        return keptCutDown(side) == CutDown.AT_ANY_SIZE;
     }
 
     /** How {@code side} keeps its value where a collection it is made of is cut down. */
