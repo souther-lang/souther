@@ -114,15 +114,32 @@ class AMembershipOfANumberIsTheRelationAComparisonOfItStatesTest {
     }
 
     /**
-     * What a search finds first is drawn where the day it is at is open, with or without holidays
-     * beside the weekday: the same lines, each of them on the candidate a run reaches. A row at the
-     * line on a candidate is one that reaches it — every candidate before it closed, by the weekday
-     * or by a holiday the row's calendar holds — and whose weekday there is the line's.
+     * What a search finds first is drawn where the day it is at is open, each line on a candidate
+     * a run reaches. A row at the line on a candidate is one that reaches it — every candidate
+     * before it closed, by the weekday or by a holiday the row's calendar holds — and whose weekday
+     * there is the line's.
+     *
+     * <p>By the weekday alone no three days running are closed, so a run reaches only the first
+     * three candidates, and those are the only ones drawn on; with holidays beside it any candidate
+     * may be reached, and each is drawn on.
      */
     @Test
     void theLinesOfWhatASearchFindsFirstAreDrawnBesideAHoliday() {
         String withHolidays = FINDS.formatted(CALENDAR.formatted(NOT_A_HOLIDAY));
-        assertEquals(linesOf(FINDS.formatted(CALENDAR.formatted(""))), linesOf(withHolidays));
+        Set<String> everyCandidate = new TreeSet<>();
+        for (int j = 0; j < 7; j++) {
+            String day = j == 0 ? "d" : "d + " + j;
+            everyCandidate.add("Int.floorMod(-cal.aSunday + " + day + ", 7) 1");
+            everyCandidate.add("Int.floorMod(-cal.aSunday + " + day + ", 7) 5");
+        }
+        Set<String> theFirstThree = new TreeSet<>();
+        for (String each : everyCandidate) {
+            if (!each.matches(".*d \\+ [3-6], 7\\).*")) {
+                theFirstThree.add(each);
+            }
+        }
+        assertEquals(theFirstThree, linesOf(FINDS.formatted(CALENDAR.formatted(""))));
+        assertEquals(everyCandidate, linesOf(withHolidays));
         Pattern candidate = Pattern.compile(
                 "Int\\.floorMod\\(-cal\\.aSunday \\+ d(?: \\+ (\\d))?, 7\\) (\\d)");
         List<String> reachedPastAClosedDay = new ArrayList<>();

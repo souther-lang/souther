@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Three short ways in, each held against the long one. What the way to a point asks of a
  * remainder of the same form moved by a constant is turned back to the point's own remainder
- * ({@link Standing.OfARemainder#turnedBack}): a remainder is kept exactly where moving it by the
+ * ({@link ARemainderMoved#turnedBack}): a remainder is kept exactly where moving it by the
  * constant leaves one the way asks for. What a case leaves of a remainder, read once for the line
  * ({@link TheCaseALineDecidesIn}), is what reading the case leaves. And a case said to be one a row
  * can be asked at some element ({@link AStatementAtARow#askableAtSomeElement}), worked out part by
@@ -68,7 +68,7 @@ class WhatAPointIsSearchedAtIsWhatTheWayAndTheCaseLeaveTest {
                         BigInteger.valueOf(from + random.nextInt(divisor + 1))));
             }
             long moved = random.nextInt(4 * divisor + 1) - 2L * divisor;
-            WholeNumberRuns turned = Standing.OfARemainder.turnedBack(asked,
+            WholeNumberRuns turned = ARemainderMoved.turnedBack(asked,
                     BigInteger.valueOf(moved), BigInteger.valueOf(divisor));
             for (long r = -divisor; r < 2L * divisor; r++) {
                 boolean kept = r >= 0 && r < divisor

@@ -5,6 +5,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -284,7 +285,17 @@ final class WhatStatementsOfOneFormDecide {
     }
 
     static boolean outsideEveryContainer(TakenConstraint.Affine statement) {
-        for (NumericTerm each : statement.form().coefs().keySet()) {
+        return outsideEveryContainer(statement.form().coefs().keySet());
+    }
+
+    /**
+     * Whether each of {@code terms} is the number of one position outside every container, and so
+     * the same number in every statement that names it. A number at a position inside a container
+     * may be of another element in each, and every reader that holds two statements of numbers as
+     * statements of one asks this.
+     */
+    static boolean outsideEveryContainer(Collection<NumericTerm> terms) {
+        for (NumericTerm each : terms) {
             if (!(each instanceof NumericTerm.FromOnePosition one)
                     || one.position().insideAContainer()) {
                 return false;

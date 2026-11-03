@@ -15,6 +15,7 @@ import souther.compiler.partition.NotOwedReason;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.Reachability;
 import souther.compiler.partition.RepairShortfall;
+import souther.compiler.partition.RowDemand;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.query.ClaimAnnotations;
 import souther.compiler.query.RuleRequirement;
@@ -216,7 +217,8 @@ class WhatAReaderIsToldIsWhatTheStateSettlesTest {
                         null, false)),
                 new RuleRequirement.Excluded.TheNumbersOfTheWayLeaveNone(
                         new Reachability.NumbersLeaveNone(List.of(
-                                onX(-71, Rel.GE), onX(-70, Rel.LT)))));
+                                new RowDemand.Relational(onX(-71, Rel.GE)),
+                                new RowDemand.Relational(onX(-70, Rel.LT))))));
     }
 
     /** {@code x + constant} against nought. */

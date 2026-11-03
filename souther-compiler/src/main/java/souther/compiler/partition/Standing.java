@@ -3,8 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
-import souther.compiler.numeric.ExactAnswer;
-import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.WholeNumberRuns;
 
@@ -227,25 +225,14 @@ public sealed interface Standing {
          * {@link OfARemainderAndAForm#alongTheWay} narrows its own: a row composed at another is one
          * the way turns away.
          *
-         * <p>A remainder the way asks of a form that is this one moved by a constant, by the same
-         * divisor, is this remainder moved by the difference of the two constants, turned round the
-         * divisor; what that leaves of the way's remainders is what it leaves of this one. One by
-         * another divisor, or of another form, says nothing of this remainder alone and is left for
-         * the row to be read against.
+         * <p>Which statements of the way are of this remainder, and what each leaves of it, is
+         * {@link ARemainderMoved#leftAlong}. One by another divisor, or of another form, says
+         * nothing of this remainder alone and is left for the row to be read against.
          */
         @Override
         public Standing alongTheWay(Reachability.Reaching way) {
-            WholeNumberRuns left = remainders;
-            for (OnTheWay.TakenIn cut : way.boundedOnTheWay()) {
-                if (cut.demand() instanceof RowDemand.OnARemainder asked
-                        && asked.dividend().coefs().equals(dividend.coefs())
-                        && asked.remainder().divisor().equals(divisor)
-                        && asked.dividend().constant().isWhole() && dividend.constant().isWhole()) {
-                    BigInteger moved = whole(asked.dividend().constant())
-                            .subtract(whole(dividend.constant()));
-                    left = left.and(turnedBack(asked.leaves(), moved, divisor));
-                }
-            }
+            WholeNumberRuns left = ARemainderMoved.of(dividend, divisor)
+                    .flatMap(own -> own.leftAlong(way)).map(remainders::and).orElse(remainders);
             return left.equals(remainders) ? this
                     : new OfARemainder(dividend, on, levels, divisor, left, where);
         }
@@ -262,28 +249,6 @@ public sealed interface Standing {
                     : new OfARemainder(dividend, on, levels, divisor, left, where);
         }
 
-        /**
-         * The remainders of this form whose remainder moved by {@code moved} is among {@code runs}:
-         * each run turned back by {@code moved} round {@code divisor}, a run that crosses nought
-         * taken as the two it comes to.
-         */
-        static WholeNumberRuns turnedBack(WholeNumberRuns runs, BigInteger moved,
-                                          BigInteger divisor) {
-            WholeNumberRuns every = OfARemainderAndAForm.every(divisor);
-            WholeNumberRuns out = WholeNumberRuns.NONE;
-            for (WholeNumberRuns.Run run : runs.and(every).runs()) {
-                BigInteger from = run.from().subtract(moved).mod(divisor);
-                BigInteger to = run.to().subtract(moved).mod(divisor);
-                out = out.or(from.compareTo(to) <= 0 ? WholeNumberRuns.one(from, to)
-                        : WholeNumberRuns.one(from, divisor.subtract(BigInteger.ONE))
-                                .or(WholeNumberRuns.one(BigInteger.ZERO, to)));
-            }
-            return out;
-        }
-
-        private static BigInteger whole(ExactRatio ratio) {
-            return ((ExactAnswer.Held<BigInteger>) ratio.floor()).value();
-        }
     }
 
     /**
@@ -331,18 +296,13 @@ public sealed interface Standing {
         /**
          * At the remainders {@code way} leaves this remainder as well: a row composed at another
          * is one the way turns away, so a remainder the item may be at and the way may not is one
-         * no row along it is at.
+         * no row along it is at. Which statements are of this remainder is
+         * {@link ARemainderMoved#leftAlong}, as for {@link OfARemainder#alongTheWay}.
          */
         @Override
         public Standing alongTheWay(Reachability.Reaching way) {
-            WholeNumberRuns left = remainders;
-            for (OnTheWay.TakenIn cut : way.boundedOnTheWay()) {
-                if (cut.demand() instanceof RowDemand.OnARemainder asked
-                        && asked.dividend().equals(dividend)
-                        && asked.remainder().divisor().equals(divisor)) {
-                    left = left.and(asked.leaves());
-                }
-            }
+            WholeNumberRuns left = ARemainderMoved.of(dividend, divisor)
+                    .flatMap(own -> own.leftAlong(way)).map(remainders::and).orElse(remainders);
             return left.equals(remainders) ? this : new OfARemainderAndAForm(dividend, on, divisor,
                     left, added, addedOn, levels, where);
         }
