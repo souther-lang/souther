@@ -1775,8 +1775,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                             Reachability.Reaching way) {
         List<OnAWay> written = conditionsOf(way, remainder);
         Optional<Set<String>> declined = parametersDeclined(way);
-        DemandReading.Answered past = new DemandReading.Answered(way.gotPast(), way.tied(),
-                way.unsaid(), way.owed(), way.before());
+        DemandReading.Answered past = way.gotPastAsAsked();
         if (!nothingUnreadBearsOnIt(way)
                 || mayStopOnWhatItReads(past, read, way.region(), written, declined, Set.of())) {
             return Map.of();
@@ -1872,8 +1871,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             List<OnAWay> conditions = conditionsOf(each, remainder);
             boolean heldWhole = nothingUnreadBearsOnIt(each);
             Optional<Set<String>> declined = parametersDeclined(each);
-            DemandReading.Answered past = new DemandReading.Answered(each.gotPast(), each.tied(),
-                    each.unsaid(), each.owed(), each.before());
+            DemandReading.Answered past = each.gotPastAsAsked();
             WhatItLeaves along = each.narrowedBy().isPresent()
                     ? alike.computeIfAbsent(new Along(each.narrowedBy().get(), conditions,
                             remainders, heldWhole, declined, past), _ -> leftAlong(read, sources,
@@ -2933,16 +2931,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // on each side is shown by the sizes of the form's addends, which is so only where a row
         // within them is computed, asked of every side of the relation and not of the two. The
         // values a difference settles are asked of the operations as well, which check themselves.
-        boolean sizesAreRowsComputed = operations.theSizesAreRowsComputed(terms, constant);        if (!out.containsAll(places()) && !offItsLine) {
+        boolean sizesAreRowsComputed = operations.theSizesAreRowsComputed(terms, constant);
+        if (!out.containsAll(places()) && !offItsLine) {
             out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole, read,
-                    declared, independent, operations, sizesAreRowsComputed));
+                    declared, independent, operations, sizesAreRowsComputed, entire));
         }
         // A side nothing above showed anything of is asked of the differences the two stand
         // apart by, each in the run the declarations leave it.
         if (!out.containsAll(places()) && !offItsLine) {
             List<WhatARelationLeavesUndivided.Leaves> apart =
                     leftByTheirDifference(sources, carriers, stating, heldWhole, read, along,
-                            independent, operations, sizesAreRowsComputed);
+                            independent, operations, sizesAreRowsComputed, entire);
             for (int at = 0; at < apart.size(); at++) {
                 if (leaves.get(at) != null || out.containsAll(sides.get(at).madeOf())) {
                     continue;
@@ -5462,11 +5461,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param declared  what the declarations leave, with what the run got past taken in
      * @param left      what the way states, the parts of a date it leaves alone marked
      * @param stating   what the way states of each side
-     * @param narrowing what the run narrows
+     * @param narrowing what the operators narrow, those of the run to the relation and of the
+     *                  relation's own working
+     * @param onTheWay  of that, what the run to the relation narrows
+     * @param ofTheRelation the rest, what the relation's own working narrows
      * @param others    the statements other elements meet, which say nothing of the sides
      */
     private record WayRead(SearchRegion along, SearchRegion declared, LeftToTheCalendar left,
                            List<List<OnAWay>> stating, List<TakenConstraint> narrowing,
+                           List<TakenConstraint> onTheWay, List<TakenConstraint> ofTheRelation,
                            OthersMeet others) {
 
         List<OnAWay> conditions() {
@@ -5506,7 +5509,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : OthersMeet.NONE;
         return new WayRead(along, declared, left,
                 stating(sources, left.conditions(), heldWhole, read, others),
-                answered.narrowing(), others);
+                answered.narrowing(), answered.onTheWay(), answered.ofTheRelation(), others);
     }
 
     /**
@@ -6246,15 +6249,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : null;
             Takes takes = source != null && way == Way.UNTOUCHED
                     && each.number() instanceof NumericTerm.ValueOf ? source.takes() : null;
+            NumericDomain.Bounds runsTo = each.position() != null
+                    ? positionsOrderStops(each.position(), carriers.get(i))
+                    : whereItStops(carriers.get(i));
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
-                    realizes, takes, each.number() instanceof NumericTerm.ValueOf,
-                    spacingOf(carriers.get(i)),
-                    each.position() != null
-                            ? positionsOrderStops(each.position(), carriers.get(i))
-                            : whereItStops(carriers.get(i)),
-                    each.key()));
+                    withinTheEnds(realizes, runsTo), takes,
+                    each.number() instanceof NumericTerm.ValueOf, spacingOf(carriers.get(i)),
+                    runsTo, each.key()));
         }
         return terms;
+    }
+
+    /**
+     * {@code run} with an end that lies past the order's own end put at that end
+     * ({@link NumericDomain.Bounds#noFurtherOutThan}). A run read off a region that ties several
+     * numbers to one another can reach past the ends of the type, where no value is; an end it
+     * does not reach past, or does not have, is left as it is.
+     */
+    private static NumericDomain.Bounds withinTheEnds(NumericDomain.Bounds run,
+                                                      NumericDomain.Bounds runsTo) {
+        return run == null || runsTo == null ? run : run.noFurtherOutThan(runsTo);
     }
 
     /**
@@ -7332,7 +7346,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                                  independent,
                                                          WhatARelationLeavesUndivided.Operations
                                                                  operations,
-                                                         boolean sizesAreRowsComputed) {
+                                                         boolean sizesAreRowsComputed,
+                                                         WayRead way) {
         TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, region,
                 independent) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
@@ -7371,7 +7386,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     on.spacingBetweenValues(), on.whereItStops(), each.number()));
         }
         List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(pair,
-                stating);
+                stating, way, sizesAreRowsComputed);
         if (held == null) {
             return Set.of();
         }
@@ -7402,7 +7417,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             List<Source> sources, List<Carrier> carriers, List<List<OnAWay>> stating,
             boolean heldWhole, InputReading read, SearchRegion along,
             WhatARelationLeavesUndivided.Independence independent,
-            WhatARelationLeavesUndivided.Operations operations, boolean sizesAreRowsComputed) {
+            WhatARelationLeavesUndivided.Operations operations, boolean sizesAreRowsComputed,
+            WayRead way) {
         TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, along,
                 independent) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
@@ -7429,7 +7445,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     each.number()));
         }
         List<WhatARelationLeavesUndivided.OnTheDifference> held = heldOfTheDifference(pair,
-                stating);
+                stating, way, sizesAreRowsComputed);
         if (held == null) {
             return List.of();
         }
@@ -7512,11 +7528,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return null;
     }
 
-    /** Everything a way states of each of the two sides {@code pair} asks about, held of them as
-     *  statements about their difference — or null where something it holds is not. A statement
-     *  about both sides is in each side's list; it is one statement. */
+    /** Everything a way states of each of the two sides {@code pair} asks about, and everything the
+     *  operators of the run to the relation narrow of them, held of them as statements about their
+     *  difference — or null where something it holds is not. A statement about both sides is in
+     *  each side's list; it is one statement.
+     *
+     *  <p>What the run narrows is held to the same: an end on one side that an operator of the run
+     *  puts on it keeps the other side from the values past it as a statement of the way does.
+     *
+     *  <p>An end on one side that the relation's own working puts on it is the form's sizes
+     *  running out where every operation is a sum of the form's own terms
+     *  ({@code sizesAreRowsComputed}): the {@code a + K} that {@code a + K == b} works out stops
+     *  where the form's own addends pass the type, which is the representation running out. Where
+     *  an operation is more than that, its end is a line the form does not show — the
+     *  {@code a + K} of {@code a + K - K == b} stops at an {@code a} the form has a row at — and
+     *  is held as an end on one side is. What else that working narrows is asked through the
+     *  operations it carries. */
     private List<WhatARelationLeavesUndivided.OnTheDifference> heldOfTheDifference(
-            TwoSides pair, List<List<OnAWay>> stating) {
+            TwoSides pair, List<List<OnAWay>> stating, WayRead way, boolean sizesAreRowsComputed) {
+        List<TakenConstraint> onTheWay = way.onTheWay();
         Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(pair.first()));
         aboutEither.addAll(stating.get(pair.second()));
         List<WhatARelationLeavesUndivided.OnTheDifference> held = new ArrayList<>();
@@ -7527,6 +7557,30 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return null;
             }
             held.add(statement);
+        }
+        Set<NumericTerm> ofTheSides = new HashSet<>();
+        for (int at : List.of(pair.first(), pair.second())) {
+            ofTheSides.add(sides.get(at).statedTerm());
+            ofTheSides.add(sides.get(at).number());
+        }
+        for (TakenConstraint each : onTheWay) {
+            if (each.terms().stream().noneMatch(ofTheSides::contains)) {
+                continue;
+            }
+            WhatARelationLeavesUndivided.OnTheDifference statement =
+                    each instanceof TakenConstraint.Affine(var form, var rel)
+                    ? onTheDifference(form, rel, pair) : null;
+            if (statement == null) {
+                return null;
+            }
+            held.add(statement);
+        }
+        if (!sizesAreRowsComputed) {
+            for (TakenConstraint each : way.ofTheRelation()) {
+                if (each.terms().stream().anyMatch(ofTheSides::contains)) {
+                    return null;
+                }
+            }
         }
         return held;
     }

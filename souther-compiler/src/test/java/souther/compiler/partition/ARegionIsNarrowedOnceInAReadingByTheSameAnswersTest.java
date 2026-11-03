@@ -86,7 +86,7 @@ class ARegionIsNarrowedOnceInAReadingByTheSameAnswersTest {
         @Override
         public Reachability.Reaching.NarrowedPast get() {
             times++;
-            return new Reachability.Reaching.NarrowedPast(List.of(), region, false);
+            return new Reachability.Reaching.NarrowedPast(List.of(), List.of(), region, false);
         }
     }
 
