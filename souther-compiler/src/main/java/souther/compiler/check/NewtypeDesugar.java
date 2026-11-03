@@ -5,7 +5,6 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -85,7 +84,8 @@ public final class NewtypeDesugar {
         if (!(e instanceof Hir.Apply call)) {
             return Hir.mapChildren(e, child -> go(child, newtypes), name -> name);
         }
-        List<Hir.Expr> args = mapExprs(call.args(), newtypes);
+        Hir.Apply rewritten = call.mapArgs(arg -> go(arg, newtypes));
+        List<Hir.Expr> args = rewritten.args();
         // Whether this name is a type or something else was answered when the module's names
         // were resolved. Asking the type namespace again here would read a binding of the
         // same spelling as the type it shadows, and rewrite an application of it into a
@@ -106,26 +106,6 @@ public final class NewtypeDesugar {
             return Hir.NewData.fromApply(call, new Hir.Name.Denoting(wrote, built),
                     List.of(new Hir.FieldInit("value", args.get(0), call.pos())));
         }
-        return args == call.args() ? call : call.withArgs(args);
-    }
-
-    /**
-     * {@code es} with each rewritten, or {@code es} itself where none of them changed, so a node
-     * that rewrote nothing is the node it was handed and comparing the result with the input stops
-     * at it.
-     */
-    private static List<Hir.Expr> mapExprs(List<Hir.Expr> es, DeclarationNewtypes newtypes) {
-        List<Hir.Expr> out = null;
-        for (int i = 0; i < es.size(); i++) {
-            Hir.Expr e = es.get(i);
-            Hir.Expr rewritten = go(e, newtypes);
-            if (out == null && rewritten != e) {
-                out = new ArrayList<>(es.subList(0, i));
-            }
-            if (out != null) {
-                out.add(rewritten);
-            }
-        }
-        return out == null ? es : out;
+        return rewritten;
     }
 }

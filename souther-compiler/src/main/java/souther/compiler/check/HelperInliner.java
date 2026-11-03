@@ -1702,11 +1702,7 @@ public final class HelperInliner {
             // The callee names nothing, which was reported where it is written. No body stands
             // behind it, no library sugar reaches for it, and no parameter list holds its arguments
             // against anything — so the call stays as it is and only its arguments are expanded.
-            List<Hir.Expr> args = new ArrayList<>();
-            for (Hir.Expr a : rawCall.args()) {
-                args.add(inline(a));
-            }
-            return rawCall.withArgs(args);
+            return rawCall.mapArgs(this::inline);
         }
         checkFunctionArgumentPlacement(rawCall);
         Hir.Apply call = desugarNamedBlock(desugar(table.library(), rawCall));
