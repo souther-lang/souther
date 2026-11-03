@@ -3,7 +3,9 @@ package souther.compiler.check;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -48,6 +50,25 @@ public record PlacesTheRulesRead(Set<RuleKey> at) {
             readBy(product.name(), source, out);
         }
         return new PlacesTheRulesRead(out);
+    }
+
+    /**
+     * Whether no name {@code value} wears, nor the record it is, carries a rule: none was listed
+     * and none was left out ({@link DeclaredClauses.OnAName#carriesNone}).
+     *
+     * <p>Not whether a rule reads some place. A clause this compiler cannot read says nothing of
+     * the places it reads and is still a rule the value is held to, so a value is shown to hold
+     * nothing of its fields only by having no clause.
+     */
+    public static boolean carriesNoRule(Type value, RuleReadingSource source) {
+        TypeView view = TypeView.of(value, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        List<TypeSymbol> worn = new ArrayList<>(view.wrappers());
+        if (view.shape() instanceof Shape.Product product) {
+            worn.add(product.name());
+        }
+        return DeclaredClauses.of(worn, source).stream()
+                .allMatch(DeclaredClauses.OnAName::carriesNone);
     }
 
     /** Whether some clause reads a place strictly under {@code key}. */

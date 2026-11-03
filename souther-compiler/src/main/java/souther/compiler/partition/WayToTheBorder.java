@@ -6,6 +6,8 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.PositionsAStatementReads;
+import souther.compiler.meaning.PositionsAStatementReads.ReadSubject;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.partition.OneOfEach.Step;
@@ -532,8 +534,11 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
          */
         Step<HeldTogether, Reachability> leaving(RowDemand.OnARemainder added) {
             return switch (remainders.taking(added)) {
+                // Said in the statements that prove it: one that follows from statements only a
+                // run checks is said as those.
                 case RemaindersHeld.Taken.NoneLeft(var ofIt) -> new Step.Closed<>(
-                        new Reachability.NumbersLeaveNone(List.copyOf(ofIt)));
+                        new Reachability.NumbersLeaveNone(ofIt.stream()
+                                .flatMap(each -> each.provedBy().stream()).distinct().toList()));
                 case RemaindersHeld.Taken.Held(var held) -> new Step.Held<>(
                         new HeldTogether(requirements, truths, counts, numbers, held));
             };
@@ -645,17 +650,19 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
             };
 
     /**
-     * The positions whether {@code entries} hold together turns on, or null where one of them
-     * turns on something no position says.
+     * What whether {@code entries} hold together turns on — the positions, and the values bindings
+     * hold that a statement only a run checks reads — or null where one of them turns on
+     * something neither says.
      *
      * <p>What {@link OneOfEach} chooses apart by, asked of entries in any list. An entry that
      * places nothing is no entry that turns on nothing: a statement the run only checks places
-     * nowhere and may bear on any number, and a condition declined was not read, so neither is
-     * ever taken to leave a position alone. A choice among ways turns on the positions of all its
-     * ways.
+     * nowhere and turns on what it reads, which it says itself
+     * ({@link PositionsAStatementReads#everyPlaceAndValueOf}), and a condition declined was not
+     * read, so neither is ever taken to leave a position alone. A choice among ways turns on what
+     * all its ways turn on.
      */
-    static Set<TermPath> placesTurnedOn(List<OnTheWay> entries) {
-        Set<TermPath> out = new LinkedHashSet<>();
+    static Set<ReadSubject> placesTurnedOn(List<OnTheWay> entries) {
+        Set<ReadSubject> out = new LinkedHashSet<>();
         for (OnTheWay entry : entries) {
             if (!addPlacesTurnedOn(entry, out)) {
                 return null;
@@ -664,7 +671,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         return out;
     }
 
-    private static boolean addPlacesTurnedOn(OnTheWay entry, Set<TermPath> into) {
+    private static boolean addPlacesTurnedOn(OnTheWay entry, Set<ReadSubject> into) {
         if (entry instanceof OnTheWay.Settled) {
             return true;
         }
@@ -681,11 +688,21 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
             }
             return true;
         }
+        if (entry instanceof OnTheWay.TakenIn taken
+                && taken.demand() instanceof RowDemand.ForTheRun run) {
+            Optional<Set<ReadSubject>> read =
+                    PositionsAStatementReads.everyPlaceAndValueOf(run.statement());
+            if (read.isEmpty() || read.get().isEmpty()) {
+                return false;
+            }
+            into.addAll(read.get());
+            return true;
+        }
         Set<TermPath> at = ASKED_OF_A_ROW.positions(entry);
         if (at.isEmpty()) {
             return false;
         }
-        into.addAll(at);
+        at.forEach(path -> into.add(new ReadSubject.At(path)));
         return true;
     }
 

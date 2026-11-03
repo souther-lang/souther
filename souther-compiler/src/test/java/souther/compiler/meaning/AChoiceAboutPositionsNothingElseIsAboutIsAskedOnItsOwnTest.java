@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -67,7 +68,18 @@ class AChoiceAboutPositionsNothingElseIsAboutIsAskedOnItsOwnTest {
     }
 
     private CasesOfALineAsked.Bearings apart(Set<TermPath> held) {
-        return new CasesOfALineAsked.Bearings(positions::get, held);
+        return new CasesOfALineAsked.Bearings(condition -> placed(positions.get(condition)),
+                placed(held), (_, _) -> Optional.empty());
+    }
+
+    /** {@code at} as what a statement reads, or null where it is not known. */
+    private static Set<PositionsAStatementReads.ReadSubject> placed(Set<TermPath> at) {
+        if (at == null) {
+            return null;
+        }
+        Set<PositionsAStatementReads.ReadSubject> out = new HashSet<>();
+        at.forEach(path -> out.add(new PositionsAStatementReads.ReadSubject.At(path)));
+        return out;
     }
 
     /** Rows stand on both sides of the line in a condition unless it takes a blocked alternative. */
@@ -113,7 +125,8 @@ class AChoiceAboutPositionsNothingElseIsAboutIsAskedOnItsOwnTest {
         AtomicInteger calls = new AtomicInteger();
         CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(said, condition -> {
             calls.incrementAndGet();
-            return passes(condition, blocked);
+            return passes(condition, blocked) ? CasesOfALineAsked.Crossing.MAY_CROSS
+                    : CasesOfALineAsked.Crossing.CANNOT_CROSS;
         }, apart);
         return new Asked(found, calls.get());
     }
@@ -129,6 +142,26 @@ class AChoiceAboutPositionsNothingElseIsAboutIsAskedOnItsOwnTest {
         assertTrue(asked.found().notWorkedOut().isEmpty(), "none was given up for a figure");
         assertEquals(3 * 12 + 2, asked.calls(), "what holds, each alternative of each choice once,"
                 + " and the union of the cases");
+    }
+
+    /**
+     * Asked once of each alternative, a case with an alternative no row takes is not every case
+     * dividing rows: the case is not what it was said as, and the cases that divide are the same
+     * as where each is asked.
+     */
+    @Test
+    void anAlternativeNoRowIsInKeepsTheCaseFromBeingWhatItWasSaidAs() {
+        DecidingCase said = said(choices(4));
+        Proposition empty = truth("p1.c");
+        CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(said,
+                condition -> passes(condition, Set.of(empty)) ? CasesOfALineAsked.Crossing.MAY_CROSS
+                        : CasesOfALineAsked.Crossing.NO_ROWS, apart(Set.of()));
+
+        assertFalse(found.decidesIn().contains(said),
+                "a case it stands for holds no row, so it is not every case the line decides in");
+        assertEquals(leavesOf(asked(said, Set.of(empty), CasesOfALineAsked.Bearings.NEVER)
+                .found()), leavesOf(found));
+        assertTrue(found.notWorkedOut().isEmpty());
     }
 
     @Test

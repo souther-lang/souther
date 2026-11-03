@@ -2035,6 +2035,31 @@ public sealed interface BorderQuantity
         };
     }
 
+    /**
+     * The positions this quantity is about: those of every number of a row it is read from
+     * ({@link #numbers}), and, for a count, the container whose elements it counts, since which
+     * elements there are is what it counts. Null where it reads something no position says: a
+     * run, which a quantity compared on one reads and is read from no number of a row, or a
+     * number of no one position.
+     */
+    default Set<TermPath> positionsItIsAbout() {
+        if (this instanceof ComparedOnARun) {
+            return null;
+        }
+        Set<TermPath> out = new LinkedHashSet<>();
+        if (this instanceof HowMany count) {
+            out.add(count.container());
+        }
+        for (NumericTerm each : numbers()) {
+            NumericTerm.FromOnePosition at = each.atOnePosition();
+            if (at == null) {
+                return null;
+            }
+            out.add(at.position());
+        }
+        return out;
+    }
+
     /** What the rules leave this quantity: the least and most it comes to over the rows they
      *  admit. */
     default NumericDomain.Bounds runsWithin(Quantities quantities) {

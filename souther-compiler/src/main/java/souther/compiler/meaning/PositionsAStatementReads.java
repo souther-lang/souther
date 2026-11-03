@@ -3,6 +3,7 @@ package souther.compiler.meaning;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -30,10 +31,57 @@ public final class PositionsAStatementReads {
     private final Set<TermPath> out = new LinkedHashSet<>();
     private final boolean answersNameNothing;
     private final boolean everyPlace;
+    /** Whether a value a binding holds is read as itself rather than as nothing a place is. */
+    private final boolean valuesBound;
+    private final Set<Quantity.OfABinding> bound = new LinkedHashSet<>();
+    /** How many applications of a closure the part read is inside. */
+    private int insideAnApplication;
 
     private PositionsAStatementReads(boolean answersNameNothing, boolean everyPlace) {
+        this(answersNameNothing, everyPlace, false);
+    }
+
+    private PositionsAStatementReads(boolean answersNameNothing, boolean everyPlace,
+                                     boolean valuesBound) {
         this.answersNameNothing = answersNameNothing;
         this.everyPlace = everyPlace;
+        this.valuesBound = valuesBound;
+    }
+
+    /**
+     * What a statement reads: a place of the input, or a value a binding holds.
+     *
+     * <p>Which a statement names and nothing more. Two of these that are not equal are not shown
+     * to be two values: a value a binding holds may be a number some place holds, and the same
+     * binding may hold one value on one application and another on the next. Whether two of them
+     * are one value, or two, is asked of what they denote, and not of these.
+     */
+    public sealed interface ReadSubject {
+
+        /** A place of the input. */
+        record At(TermPath path) implements ReadSubject {}
+
+        /** A value a binding holds where the statement is read, outside every application of a
+         *  closure the statement is about. */
+        record Bound(Quantity.OfABinding value) implements ReadSubject {}
+    }
+
+    /**
+     * Every place {@code stated} is read off ({@link #everyPlaceOf}) and every value a binding
+     * holds that it reads outside every application of a closure it states something of — or
+     * empty where it reads anything else, a value bound inside one of those included: a name a
+     * closure binds holds what each application hands it, and is one value only on one
+     * application.
+     */
+    public static Optional<Set<ReadSubject>> everyPlaceAndValueOf(Proposition stated) {
+        PositionsAStatementReads reading = new PositionsAStatementReads(false, true, true);
+        if (!reading.reads(stated)) {
+            return Optional.empty();
+        }
+        Set<ReadSubject> out = new LinkedHashSet<>();
+        reading.out.forEach(path -> out.add(new ReadSubject.At(path)));
+        reading.bound.forEach(value -> out.add(new ReadSubject.Bound(value)));
+        return Optional.of(Collections.unmodifiableSet(out));
     }
 
     /** The positions {@code stated} reads, in the order it names them, or empty where it reads
@@ -89,8 +137,14 @@ public final class PositionsAStatementReads {
             case Proposition.SameValue same -> reads(same.one()) && reads(same.other());
             case Proposition.StringInside inside -> reads(inside.inner()) && reads(inside.outer());
             case Proposition.LastToHold last -> reads(last.container()) && reads(last.position());
+            case Proposition.OnAnApplication _ -> {
+                insideAnApplication++;
+                boolean read = stated.partsHeld().stream().allMatch(this::reads);
+                insideAnApplication--;
+                yield read;
+            }
             case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
-                 Proposition.OnAnApplication _, Proposition.SoManyHold _,
+                 Proposition.SoManyHold _,
                  Proposition.OfTheWays _ -> stated.partsHeld().stream().allMatch(this::reads);
             case Proposition.Some some -> reads(some.container()) && reads(some.ofTheElement());
         };
@@ -101,8 +155,9 @@ public final class PositionsAStatementReads {
             case DecisionAtom.OfTheInput(var term) -> reads(term);
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
                  DecisionAtom.ComputedOverAnAnswer _ -> answersNameNothing;
-            case Quantity.OfABinding _, Quantity.HowManyCarried _, Quantity.TheKeptTotal _ ->
-                    false;
+            case Quantity.OfABinding value -> valuesBound && insideAnApplication == 0
+                    && kept(value);
+            case Quantity.HowManyCarried _, Quantity.TheKeptTotal _ -> false;
             case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
                     .allMatch(this::reads);
             // A piece of a string is whatever the statement it is read inside says it is, and the
@@ -139,6 +194,12 @@ public final class PositionsAStatementReads {
             case Quantity.ProductOfTwo product -> product.factors().stream()
                     .allMatch(this::reads);
         };
+    }
+
+    /** {@code value} kept among what the statement reads, which is then read. */
+    private boolean kept(Quantity.OfABinding value) {
+        bound.add(value);
+        return true;
     }
 
     private boolean reads(NumericTerm term) {

@@ -39,7 +39,6 @@ import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -2298,11 +2297,7 @@ final class DemandReading {
      * The remainders {@code affine} coming out {@code met} leaves, where it holds what a division
      * leaves of a form against a number and nothing else — or null where it is no such relation,
      * where a number of the form is none a row writes at one place and counts, or where no
-     * remainder meets it.
-     *
-     * <p>Read off the relation as {@code w·r + c met 0} over the remainders a division by the
-     * divisor leaves, which is a run of them, its bounds turned over where the weight is below
-     * nought.
+     * remainder meets it ({@link RowDemand.OnARemainder#meeting}).
      */
     private static RowDemand.OnARemainder onARemainderAlone(Relation.Affine affine, Rel met,
                                                             InputReading read) {
@@ -2320,16 +2315,9 @@ final class DemandReading {
                 return null;
             }
         }
-        ExactRatio weight = affine.form().coefs().get(remainder);
-        if (!(affine.form().constant().negated().dividedBy(weight)
-                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio threshold))) {
-            return null;
-        }
-        WholeNumberRuns leaves = WholeNumberRuns.standing(
-                weight.signum() < 0 ? met.turned() : met, threshold)
-                .and(WholeNumberRuns.one(BigInteger.ZERO,
-                        remainder.divisor().subtract(BigInteger.ONE)));
-        return leaves.isNone() ? null : new RowDemand.OnARemainder(remainder, leaves);
+        WholeNumberRuns leaves = RowDemand.OnARemainder.meeting(affine, met);
+        return leaves == null || leaves.isNone() ? null
+                : new RowDemand.OnARemainder(remainder, leaves);
     }
 
     /**

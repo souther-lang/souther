@@ -802,7 +802,51 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             entries.add(onTheWay(at.occurrence(), at.anchor(), each.read(), read, each.readOff(),
                     by, Optional.empty()));
         }
-        return new Stating(entries, by.said());
+        // And what follows from its statements only a run checks, put by whoever put those.
+        List<OnTheWay> withWhatFollows = RemaindersOfAnElement.withWhatFollows(decides, entries);
+        if (withWhatFollows == entries) {
+            return new Stating(entries, by.said());
+        }
+        SaidOnTheWay said = by.said();
+        SaidOnTheWay.Filing following = new SaidOnTheWay.Filing();
+        following.all(said);
+        fileWhatFollows(withWhatFollows, entries, said, following);
+        return new Stating(withWhatFollows, following.said());
+    }
+
+    /**
+     * Who put each entry of {@code made} on the way that {@code stated} does not have, filed into
+     * {@code into}: an alternative's statement made again with what follows from it beside it is
+     * put by whoever put the one it was made from, and what follows by whoever put the statements
+     * it follows from ({@link RowDemand.OnARemainder#from}).
+     */
+    private static void fileWhatFollows(List<OnTheWay> made, List<OnTheWay> stated,
+                                        SaidOnTheWay said, SaidOnTheWay.Filing into) {
+        int at = 0;
+        for (OnTheWay each : made) {
+            OnTheWay was = at < stated.size() ? stated.get(at) : null;
+            if (each.equals(was)) {
+                at++;
+                continue;
+            }
+            if (each instanceof OnTheWay.OneOf several && was instanceof OnTheWay.OneOf before) {
+                into.alone(several, said.entries().getOrDefault(before, ModelOccurrences.NONE));
+                for (int way = 0; way < several.alternatives().size(); way++) {
+                    fileWhatFollows(several.alternatives().get(way),
+                            before.alternatives().get(way), said, into);
+                }
+                at++;
+                continue;
+            }
+            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.OnARemainder follows)) {
+                said.entries().forEach((entry, by) -> {
+                    if (entry instanceof OnTheWay.TakenIn(var _, RowDemand.ForTheRun run)
+                            && follows.from().contains(run)) {
+                        into.alone(each, by);
+                    }
+                });
+            }
+        }
     }
 
     /**

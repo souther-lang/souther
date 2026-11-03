@@ -5,6 +5,7 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.PlacesTheRulesRead;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.StatedComparison;
@@ -22,6 +23,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.RuleRoots;
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.RulesWithNoLine;
@@ -1714,6 +1716,17 @@ sealed interface ComparisonAssessment {
      * counted at its points. Counted for each such case on its own, so that what one case spent
      * decides nothing about another.
      */
+    private static boolean holdsNothing(InputReading reading, TermPath container) {
+        for (TermPath place : List.of(container, container.element())) {
+            for (RuleRoots.Naming each : reading.domain().ruleRoots().naming(place)) {
+                if (!PlacesTheRulesRead.carriesNoRule(each.value(), reading.rules())) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     private static CasesReached casesTurnedOn(Cutting cutting, List<DecidingCase> cases,
                                               WaysToACase wayToACase,
                                               List<ComparisonArrival> arrivals,
@@ -1723,17 +1736,18 @@ sealed interface ComparisonAssessment {
         Set<CompositionBudget> stoppedAt = EnumSet.noneOf(CompositionBudget.class);
         for (DecidingCase each : cases) {
             if (each.saidAlone()) {
-                if (wayToACase.crossed(cutting, each.condition(), reading, (toIt, keptTo) ->
-                        crossedAtSomePlace(cutting, toIt, arrivals, keptTo))) {
+                if (wayToACase.crossing(cutting, each.condition(), reading, (toIt, keptTo) ->
+                        crossedAtSomePlace(cutting, toIt, arrivals, keptTo))
+                        == CasesOfALineAsked.Crossing.MAY_CROSS) {
                     reached.add(each);
                     deciding.addAll(waysArrivedBy(wayToACase.apply(each.condition()), arrivals));
                 }
                 continue;
             }
             CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each, condition ->
-                    wayToACase.crossed(cutting, condition, reading, (toIt, keptTo) ->
+                    wayToACase.crossing(cutting, condition, reading, (toIt, keptTo) ->
                             crossedAtSomePlace(cutting, toIt, arrivals, keptTo)),
-                    wayToACase.bearingsFor(cutting));
+                    wayToACase.bearingsFor(cutting, at -> holdsNothing(reading, at)));
             for (DecidingCase one : found.decidesIn()) {
                 reached.add(one);
                 deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));
