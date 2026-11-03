@@ -4254,11 +4254,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 for (TermPath place : text.places()) {
                     if (reads.contains(place)) {
                         // The string a side reads is exactly the string every application
-                        // converts only where the place is one value of the row. Under an element
-                        // an earlier application converts another element's string, which no
+                        // converts only where the place is one value of the row, or where the
+                        // witness writes the element over again. Under an element an earlier
+                        // application otherwise converts another element's string, which no
                         // class is drawn over.
                         if (exactOn == null || (earlier
-                                && !WhereARunReachingARelationStands.isOneValueOfARow(place))) {
+                                && !WhereARunReachingARelationStands.isOneValueOfARow(place)
+                                && !witness.copiesOfTheElementFillTheList(place))) {
                             return true;
                         }
                         exactOn.add(new ConvertedOn(place, text.conversion()));
@@ -4569,6 +4571,53 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return false;
             }
             convertedExactly.put(place, exactly);
+            return true;
+        }
+
+        /**
+         * Whether the string at {@code place}, an element's, is the same string at every element
+         * of the list the run walks: the witness writes the element the relation is read at over
+         * again. Then a conversion of the string at every element converts the string the relation
+         * reads, and no other.
+         *
+         * <p>That holds where the list is the only container the place is inside, and holds an
+         * element over again, so a set does not. Nothing may keep its elements apart or say
+         * anything of an element's value, no rule of the declarations reads inside the elements,
+         * the relation holds no two elements against each other, and every side keeps its value
+         * where the list is filled with copies ({@link #keptCutDown}). The copies stop a conversion
+         * where the string the relation reads does, which {@link #getsPastConversionAt} and the
+         * exactness recorded for the place already say.
+         */
+        boolean copiesOfTheElementFillTheList(TermPath place) {
+            List<TermPath> containers = place.containersHoldingIt();
+            if (containers.size() != 1 || declined.isEmpty()) {
+                return false;
+            }
+            TermPath list = containers.getFirst();
+            NumericTerm.ValueOf element = new NumericTerm.ValueOf(list.element());
+            if (!read.domain().holdsAnElementOverAgain(list, read.rules())
+                    || namedDownTo(list.element(), list.steps().size(), read, null) != Named.NOT
+                    || wayOf(element, statingAnythingOf(element, conditions)) != Way.UNTOUCHED) {
+                return false;
+            }
+            for (FilingCoordinate each : amongThemselves) {
+                if (each.path().isAtOrUnder(list)) {
+                    return false;
+                }
+            }
+            for (Side side : sides) {
+                Optional<List<TermPath>> placesOfTheSide = placesRead(side);
+                if (placesOfTheSide.isEmpty()) {
+                    return false;
+                }
+                // A string, or a piece of one, is the element's own and is kept by its copies.
+                boolean ofTheElementsString = side.number() == null && side.along() == null
+                        && (side.text() != null || side.piece() != null);
+                if (placesOfTheSide.get().stream().anyMatch(at -> overlap(at, list))
+                        && !ofTheElementsString && keptCutDown(side) != CutDown.AT_ANY_SIZE) {
+                    return false;
+                }
+            }
             return true;
         }
 
