@@ -946,7 +946,7 @@ public final class DataChecker {
     private static void checkDecoder(Hir.DecoderDef dec, CheckContext ctx, Map<String, Type> fields) {
         switch (dec) {
             case Hir.PrimDecoder prim -> {
-                Type inputType = TypeOps.primType(prim.from());
+                Type inputType = prim.from().type();
                 checkConstruct(prim.result(), ctx, fields, Scope.NONE.with(prim.input(), inputType));
             }
             case Hir.ObjectDecoder obj -> {
@@ -966,7 +966,7 @@ public final class DataChecker {
     private static Type decRefType(Hir.DecRef ref, Symbols symbols) {
         return switch (ref) {
             case Hir.SetDecRef s -> Type.set(decRefType(s.element(), symbols));
-            case Hir.PrimDecRef p -> TypeOps.primType(p.kind());
+            case Hir.PrimDecRef p -> p.kind().type();
             // What a bind reads through is the named type, and that it is read at all is settled by
             // the stage that made this reference: a declaration that came out has a decoder, and a
             // reference to one is minted from the shape a declaration was found to have. Nothing is
@@ -1246,9 +1246,9 @@ public final class DataChecker {
     private static void checkEncElem(Hir.EncElem elem, Type elemType) {
         switch (elem) {
             case Hir.PrimEnc p -> {
-                if (!elemType.equals(TypeOps.primType(p.kind()))) {
+                if (!elemType.equals(p.kind().type())) {
                     throw derivedCodecDisagrees("the element encoder for "
-                            + Type.show(TypeOps.primType(p.kind())), elemType);
+                            + Type.show(p.kind().type()), elemType);
                 }
             }
             case Hir.DataEnc d -> {

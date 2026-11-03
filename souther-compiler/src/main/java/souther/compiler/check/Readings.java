@@ -186,21 +186,7 @@ final class Readings {
             following.remove(v);
             return through;
         }
-        return switch (t) {
-            case Type.ListOf l -> Type.list(settledSoFar(l.element(), following));
-            case Type.SetOf s -> Type.set(settledSoFar(s.element(), following));
-            case Type.OptionOf o -> Type.option(settledSoFar(o.element(), following));
-            case Type.MapOf m -> Type.map(settledSoFar(m.key(), following),
-                    settledSoFar(m.value(), following));
-            case Type.TupleOf tu -> {
-                List<Type> at = new ArrayList<>();
-                for (Type e : tu.elements()) {
-                    at.add(settledSoFar(e, following));
-                }
-                yield Type.tuple(at);
-            }
-            default -> t;
-        };
+        return Type.mapChildren(t, child -> settledSoFar(child, following));
     }
 
     private Type hold(java.util.function.UnaryOperator<Type> wrap, Type left, Type right) {

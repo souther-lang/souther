@@ -47,6 +47,32 @@ class TwoReadingsOfOneValueTest {
                 Readings.of(pair(v("a"), v("a")), pair(Type.INT, Type.INT)));
     }
 
+    /** A function type holds types too, so what a variable is settled to is written through it. */
+    @Test
+    void aSettledVariableInsideAFunctionIsWrittenThrough() {
+        assertEquals(pair(Type.INT, Type.fn(List.of(Type.INT), Type.INT)),
+                Readings.of(pair(v("e"), v("d")),
+                        pair(Type.INT, Type.fn(List.of(v("e")), Type.INT))));
+        assertEquals(pair(Type.INT, Type.list(Type.fn(List.of(Type.INT), Type.INT))),
+                Readings.of(pair(v("a"), v("c")),
+                        pair(Type.INT, Type.list(Type.fn(List.of(v("a")), Type.INT)))));
+    }
+
+    @Test
+    void everyPositionOfAFunctionHoldingTheSettledVariableIsWrittenThrough() {
+        Type a = v("a");
+        assertEquals(pair(Type.INT, Type.fn(List.of(Type.INT, Type.INT), Type.INT)),
+                Readings.of(pair(a, v("c")),
+                        pair(Type.INT, Type.fn(List.of(a, a), a))));
+    }
+
+    @Test
+    void aVariableCannotHoldAFunctionOfItself() {
+        Type a = v("a");
+        assertNull(Readings.of(a, Type.fn(List.of(a), Type.INT)));
+        assertNull(Readings.of(a, Type.list(Type.fn(List.of(Type.INT), a))));
+    }
+
     /** A variable's earlier reading is itself a reading, so the two are taken together rather than
      * compared: what one position said it holds answers the position that left it open. */
     @Test
