@@ -2,13 +2,17 @@ package souther.compiler.partition;
 
 import souther.compiler.collect.LatelyAsked;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.CasesOfALineAsked;
 import souther.compiler.meaning.Proposition;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
@@ -90,6 +94,51 @@ final class WaysToACase {
     /** The way to the comparison with {@code decides} taken in beside it. */
     Reachability apply(Proposition decides) {
         return ways.answer(decides, asked -> reading.apply(put.apply(asked)));
+    }
+
+    /**
+     * What the parts of the cases of a statement bear on when the line {@code cutting} is crossed
+     * in them: the positions the way to the comparison, what a run to it got past and the line
+     * are about, and the positions each condition turns on.
+     *
+     * <p>Nothing is told where any of those is not known: a line that is not a linear quantity of
+     * positions, an entry of the way that places nothing, or a run that may stop on something no
+     * position names or owes an operator a proof.
+     */
+    CasesOfALineAsked.Bearings bearingsFor(Cutting cutting) {
+        Set<TermPath> line = positionsOfTheLine(cutting);
+        Set<TermPath> onTheWay = WayToTheBorder.placesTurnedOn(way);
+        if (line == null || onTheWay == null
+                || !(reading.apply(way) instanceof Reachability.Reaching base)
+                || base.unsaid() || !base.owed().isEmpty()) {
+            return CasesOfALineAsked.Bearings.NEVER;
+        }
+        Set<TermPath> held = new LinkedHashSet<>(line);
+        held.addAll(onTheWay);
+        base.tied().forEach(tie -> held.addAll(tie.places()));
+        return new CasesOfALineAsked.Bearings(this::positionsOf, held);
+    }
+
+    /** The positions whether {@code condition} holds turns on, or null where it turns on
+     *  something no position says. */
+    private Set<TermPath> positionsOf(Proposition condition) {
+        return WayToTheBorder.placesTurnedOn(put.apply(condition));
+    }
+
+    /** The positions the line is about, or null where it is not a linear quantity of them. */
+    private static Set<TermPath> positionsOfTheLine(Cutting cutting) {
+        if (!(cutting.of() instanceof LinearQuantity linear)) {
+            return null;
+        }
+        Set<TermPath> out = new LinkedHashSet<>();
+        for (NumericTerm each : linear.terms()) {
+            NumericTerm.FromOnePosition at = each.atOnePosition();
+            if (at == null) {
+                return null;
+            }
+            out.add(at.position());
+        }
+        return out;
     }
 
     /**

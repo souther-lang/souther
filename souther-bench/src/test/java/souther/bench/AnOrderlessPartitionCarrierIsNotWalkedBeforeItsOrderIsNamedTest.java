@@ -53,12 +53,15 @@ class AnOrderlessPartitionCarrierIsNotWalkedBeforeItsOrderIsNamedTest {
      * without anybody having said where it went. The first two are the numbers of a condition and
      * of a rule a report is written from, and are read where the report is made. The third is the
      * numbers a comparison that cuts nothing was read over, which come back to the partition and are
-     * filed in the order their terms are named.
+     * filed in the order their terms are named. The fourth is the positions the way to a comparison
+     * and its line are about, which the cases of a line are asked beside: it is read only for
+     * whether a part chosen is about one of them, and no answer is made of its order.
      */
     private static final Set<String> WHERE_ITS_VALUES_LEAVE = Set.of(
             "souther.compiler.query.Coverages$Partitioned.conditionsMet",
             "souther.compiler.query.Coverages$Partitioned.rulesReachedAt",
-            "souther.compiler.meaning.Derivation$ACutThatCutsNothing.named");
+            "souther.compiler.meaning.Derivation$ACutThatCutsNothing.named",
+            "souther.compiler.meaning.CasesOfALineAsked$Bearings.held");
 
     private static final String HANDED_ON = "handed on to a field outside what is read: ";
 

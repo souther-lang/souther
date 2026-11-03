@@ -1732,7 +1732,8 @@ sealed interface ComparisonAssessment {
             }
             CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each, condition ->
                     wayToACase.crossed(cutting, condition, reading, (toIt, keptTo) ->
-                            crossedAtSomePlace(cutting, toIt, arrivals, keptTo)));
+                            crossedAtSomePlace(cutting, toIt, arrivals, keptTo)),
+                    wayToACase.bearingsFor(cutting));
             for (DecidingCase one : found.decidesIn()) {
                 reached.add(one);
                 deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));

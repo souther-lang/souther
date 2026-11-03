@@ -621,6 +621,51 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                 }
             };
 
+    /**
+     * The positions whether {@code entries} hold together turns on, or null where one of them
+     * turns on something no position says.
+     *
+     * <p>What {@link OneOfEach} chooses apart by, asked of entries in any list. An entry that
+     * places nothing is no entry that turns on nothing: a statement the run only checks places
+     * nowhere and may bear on any number, and a condition declined was not read, so neither is
+     * ever taken to leave a position alone. A choice among ways turns on the positions of all its
+     * ways.
+     */
+    static Set<TermPath> placesTurnedOn(List<OnTheWay> entries) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        for (OnTheWay entry : entries) {
+            if (!addPlacesTurnedOn(entry, out)) {
+                return null;
+            }
+        }
+        return out;
+    }
+
+    private static boolean addPlacesTurnedOn(OnTheWay entry, Set<TermPath> into) {
+        if (entry instanceof OnTheWay.Settled) {
+            return true;
+        }
+        if (entry instanceof OnTheWay.Declined) {
+            return false;
+        }
+        if (entry.ofSeveralWays()) {
+            for (List<OnTheWay> way : entry.alternatives()) {
+                for (OnTheWay each : way) {
+                    if (!addPlacesTurnedOn(each, into)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+        Set<TermPath> at = ASKED_OF_A_ROW.positions(entry);
+        if (at.isEmpty()) {
+            return false;
+        }
+        into.addAll(at);
+        return true;
+    }
+
     /** {@code so} with {@code entry} taken in as far as the cases, truths and counts it asks go;
      *  what its numbers say beside the others is {@link HeldTogether#relating}. */
     private static Step<HeldTogether, Reachability> takenIn(HeldTogether so, OnTheWay entry) {

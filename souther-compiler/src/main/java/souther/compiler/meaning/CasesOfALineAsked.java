@@ -1,15 +1,19 @@
 package souther.compiler.meaning;
 
+import souther.compiler.inputs.TermPath;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -95,7 +99,12 @@ public final class CasesOfALineAsked {
 
     private final Predicate<Proposition> crossedIn;
 
+    private final Bearings bearings;
+
     private int left = CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum();
+
+    /** What a walk remembers of the questions it has asked, or null where it remembers none. */
+    private Remembering remembering;
 
     /** Each case shown to divide rows, as the conjunction of what it chose. */
     private final Set<Proposition> dividing = new LinkedHashSet<>();
@@ -109,8 +118,9 @@ public final class CasesOfALineAsked {
     private final Map<DecidingCase.Cases, Set<CompositionBudget>> figuresOf =
             new IdentityHashMap<>();
 
-    private CasesOfALineAsked(Predicate<Proposition> crossedIn) {
+    private CasesOfALineAsked(Predicate<Proposition> crossedIn, Bearings bearings) {
         this.crossedIn = crossedIn;
+        this.bearings = bearings;
     }
 
     /**
@@ -126,7 +136,46 @@ public final class CasesOfALineAsked {
      *                  to it stand on each side of it
      */
     public static Found casesOf(DecidingCase said, Predicate<Proposition> crossedIn) {
-        return new CasesOfALineAsked(crossedIn).asked(said);
+        return casesOf(said, crossedIn, Bearings.NEVER);
+    }
+
+    /**
+     * {@link #casesOf(DecidingCase, Predicate)}, with the positions what is asked bears on told,
+     * so that a question is asked once of the parts that bear on it.
+     */
+    public static Found casesOf(DecidingCase said, Predicate<Proposition> crossedIn,
+                                Bearings bearings) {
+        return new CasesOfALineAsked(crossedIn, bearings).asked(said);
+    }
+
+    /**
+     * What a part chosen bears on, which is what lets a question be asked once however the parts
+     * that do not bear on it were chosen.
+     *
+     * <p>Whether rows stand on both sides of the line in a case turns on the positions its parts,
+     * the way to the comparison and the line itself are about, and on the parts that are about
+     * those in turn. A part about positions none of those are about holds wherever it was chosen
+     * and a row that takes it takes what is chosen next, so the question asked after it is the
+     * one asked without it. Asked once for the cases still to choose and the parts chosen that
+     * bear on them, the ways of choosing are as many as those and not as the product of the
+     * choices.
+     *
+     * <p>A part about a position that is not known is one that bears on everything, and nothing
+     * is remembered of the questions asked beside it.
+     *
+     * @param positionsOf the positions whether a condition holds turns on, or null where there
+     *                    is something it turns on that no position says
+     * @param held        the positions the way to the comparison and the line are about
+     */
+    public record Bearings(Function<Proposition, Set<TermPath>> positionsOf, Set<TermPath> held) {
+
+        /** Nothing is told, and every part chosen bears on every question. */
+        public static final Bearings NEVER = new Bearings(_ -> null, Set.of());
+
+        public Bearings {
+            Objects.requireNonNull(positionsOf, "a part is placed by what it is about");
+            held = Set.copyOf(held);
+        }
     }
 
     /**
@@ -171,7 +220,7 @@ public final class CasesOfALineAsked {
      * are counted as they are for {@link #casesOf}.
      */
     public static <T> Atoms<T> atomsOf(DecidingCase said, Function<Proposition, T> answer) {
-        return new CasesOfALineAsked(_ -> true).allAsked(said, answer);
+        return new CasesOfALineAsked(_ -> true, Bearings.NEVER).allAsked(said, answer);
     }
 
     private <T> Atoms<T> allAsked(DecidingCase said, Function<Proposition, T> answer) {
@@ -213,14 +262,202 @@ public final class CasesOfALineAsked {
         if (said.saidAlone()) {
             return new Found(List.of(said), Set.of());
         }
-        chosen(SoFar.NOTHING, List.of(heldFirst(said.standsFor())), crossedIn,
-                chosen -> dividing.add(chosen));
+        DecidingCase.Cases cases = heldFirst(said.standsFor());
+        if (everyCaseDivides(cases)) {
+            return new Found(List.of(said), Set.of());
+        }
+        chosen(SoFar.NOTHING, List.of(cases), crossedIn, chosen -> dividing.add(chosen));
         // Every case divides rows and every one was worked out: the case is what it was said as,
         // and saying it again would read the line under another condition for nothing.
         if (!dropped && stopped.isEmpty() && !dividing.isEmpty()) {
             return new Found(List.of(said), Set.of());
         }
         return new Found(dividing.stream().map(DecidingCase::alone).toList(), stopped);
+    }
+
+    /**
+     * Whether every case {@code cases} stands for holds a row on each side of the line, in which
+     * case the cases are what they were said as. False where that is not shown, and asking each
+     * case is what finds which of them do.
+     *
+     * <p>Chosen once, by a walk of its own, that remembers a question for the cases still to
+     * choose and the parts chosen that bear on them ({@link Bearings}) and stops at the first case
+     * no row is in. Anything not known — a position, cases nobody took apart, a step past the
+     * figure — is no answer, and the walk is the one that asks each case.
+     */
+    private boolean everyCaseDivides(DecidingCase.Cases cases) {
+        if (bearings == Bearings.NEVER || cases.waysOfChoosing(1) == 0) {
+            return false;
+        }
+        CasesOfALineAsked once = new CasesOfALineAsked(crossedIn, bearings);
+        once.remembering = once.new Remembering();
+        once.chosen(SoFar.NOTHING, List.of(cases), crossedIn, _ -> { });
+        return !once.dropped && once.stopped.isEmpty() && !once.remembering.unknown;
+    }
+
+    /**
+     * What a walk that asks a question once remembers: the cases still to choose with the parts
+     * chosen that bear on them have been walked, and no case among them was without a row on one
+     * side of the line.
+     */
+    private final class Remembering {
+
+        /** The cases still to choose, and the parts chosen that bear on them. */
+        private record Question(List<Node> toChoose, Set<Proposition> chosen) {}
+
+        /** A case, told from another by being the same one. */
+        private record Node(DecidingCase.Cases cases) {
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Node that && that.cases == cases;
+            }
+
+            @Override
+            public int hashCode() {
+                return System.identityHashCode(cases);
+            }
+        }
+
+        private final Set<Question> walked = new HashSet<>();
+        private final Map<DecidingCase.Cases, Set<TermPath>> placesOfCases = new IdentityHashMap<>();
+        private final Map<Proposition, Set<TermPath>> placesOfConditions = new HashMap<>();
+
+        /** Whether something was found that no position says, so nothing here is an answer. */
+        private boolean unknown;
+
+        /** The question asked of {@code toChoose} beside {@code chosen}, or null where it cannot
+         *  be told which parts bear on it. */
+        Question questionOf(SoFar chosen, List<DecidingCase.Cases> toChoose) {
+            Set<TermPath> reach = new LinkedHashSet<>(bearings.held());
+            for (DecidingCase.Cases each : toChoose) {
+                Set<TermPath> at = placesOf(each);
+                if (at == null) {
+                    unknown = true;
+                    return null;
+                }
+                reach.addAll(at);
+            }
+            List<Proposition> bearing = bearingOn(chosen, reach);
+            return unknown ? null
+                    : new Question(toChoose.stream().map(Node::new).toList(),
+                    new LinkedHashSet<>(bearing));
+        }
+
+        boolean walkedBefore(Question question) {
+            return walked.contains(question);
+        }
+
+        void walked(Question question) {
+            walked.add(question);
+        }
+
+        /** {@code chosen} with only the parts that bear on {@code condition}. */
+        SoFar bearingOn(SoFar chosen, Proposition condition) {
+            Set<TermPath> at = placesOf(condition);
+            if (at == null) {
+                unknown = true;
+                return chosen;
+            }
+            Set<TermPath> reach = new LinkedHashSet<>(bearings.held());
+            reach.addAll(at);
+            SoFar out = SoFar.NOTHING;
+            for (Proposition each : bearingOn(chosen, reach)) {
+                out = out.and(each);
+            }
+            return out;
+        }
+
+        /** The parts of {@code chosen} about a position in {@code reach}, or about a position
+         *  some such part is about in turn, in the order they were chosen. */
+        private List<Proposition> bearingOn(SoFar chosen, Set<TermPath> reach) {
+            Set<TermPath> bearsOn = new LinkedHashSet<>(reach);
+            List<Proposition> parts = chosen.parts();
+            boolean[] bears = new boolean[parts.size()];
+            boolean grew = true;
+            while (grew) {
+                grew = false;
+                for (int at = 0; at < parts.size(); at++) {
+                    if (bears[at]) {
+                        continue;
+                    }
+                    Set<TermPath> places = placesOf(parts.get(at));
+                    if (places == null) {
+                        unknown = true;
+                        return List.of();
+                    }
+                    if (!Collections.disjoint(places, bearsOn)) {
+                        bears[at] = true;
+                        bearsOn.addAll(places);
+                        grew = true;
+                    }
+                }
+            }
+            List<Proposition> out = new ArrayList<>();
+            for (int at = 0; at < parts.size(); at++) {
+                if (bears[at]) {
+                    out.add(parts.get(at));
+                }
+            }
+            return out;
+        }
+
+        private Set<TermPath> placesOf(Proposition condition) {
+            if (placesOfConditions.containsKey(condition)) {
+                return placesOfConditions.get(condition);
+            }
+            Set<TermPath> at = bearings.positionsOf().apply(condition);
+            placesOfConditions.put(condition, at);
+            return at;
+        }
+
+        /** The positions the conditions of {@code cases} are about, or null where there is one
+         *  no position is known of or cases nobody took apart. */
+        private Set<TermPath> placesOf(DecidingCase.Cases cases) {
+            if (placesOfCases.containsKey(cases)) {
+                return placesOfCases.get(cases);
+            }
+            Set<TermPath> out = cases.fold(new DecidingCase.Cases.Fold<Optional<Set<TermPath>>>() {
+
+                @Override
+                public Optional<Set<TermPath>> one(DecidingCase.Cases.One one) {
+                    return Optional.ofNullable(placesOf(one.condition()));
+                }
+
+                @Override
+                public Optional<Set<TermPath>> eachOf(DecidingCase.Cases.EachOf node,
+                                                      List<Optional<Set<TermPath>>> alternatives) {
+                    return union(alternatives);
+                }
+
+                @Override
+                public Optional<Set<TermPath>> together(DecidingCase.Cases.Together node,
+                                                        List<Optional<Set<TermPath>>> factors) {
+                    return union(factors);
+                }
+
+                @Override
+                public Optional<Set<TermPath>> notTakenApart(
+                        DecidingCase.Cases.NotTakenApart notTakenApart) {
+                    return Optional.empty();
+                }
+            }).orElse(null);
+            placesOfCases.put(cases, out);
+            return out;
+        }
+
+        /** The positions of all of {@code these}, or none where the positions of one are not
+         *  known. */
+        private static Optional<Set<TermPath>> union(List<Optional<Set<TermPath>>> these) {
+            Set<TermPath> out = new LinkedHashSet<>();
+            for (Optional<Set<TermPath>> each : these) {
+                if (each.isEmpty()) {
+                    return Optional.empty();
+                }
+                out.addAll(each.get());
+            }
+            return Optional.of(out);
+        }
     }
 
     /**
@@ -372,12 +609,26 @@ public final class CasesOfALineAsked {
      * <p>{@code chosen} is the one path walked, taken a part further on the way down, and written
      * out only for a case kept. {@code goesOn} says whether what has been chosen so far is walked
      * further, and {@code atEnd} takes each case chosen to the end.
+     *
+     * <p>Where this remembers ({@link Remembering}), it is the walk that stops at the first case
+     * no row is in, asks each part only beside the parts chosen that bear on it, and does not walk
+     * the cases still to choose again beside the parts that bear on them as they were.
      */
     private void chosen(SoFar chosen, List<DecidingCase.Cases> toChoose,
                         Predicate<Proposition> goesOn, Consumer<Proposition> atEnd) {
         if (toChoose.isEmpty()) {
             atEnd.accept(chosen.condition());
             return;
+        }
+        Remembering.Question question = null;
+        if (remembering != null) {
+            if (dropped || remembering.unknown) {
+                return;
+            }
+            question = remembering.questionOf(chosen, toChoose);
+            if (question == null || remembering.walkedBefore(question)) {
+                return;
+            }
         }
         List<DecidingCase.Cases> rest = toChoose.subList(1, toChoose.size());
         switch (toChoose.getFirst()) {
@@ -387,7 +638,11 @@ public final class CasesOfALineAsked {
                     return;
                 }
                 SoFar further = chosen.and(condition);
-                if (goesOn.test(further.condition())) {
+                // Asked beside the parts that bear on it, and carried on with all of them: a
+                // part that does not bear on this one may bear on one chosen later.
+                SoFar asked = remembering == null ? further
+                        : remembering.bearingOn(chosen, condition).and(condition);
+                if (goesOn.test(asked.condition())) {
                     chosen(further, rest, goesOn, atEnd);
                 } else {
                     dropped = true;
@@ -417,6 +672,9 @@ public final class CasesOfALineAsked {
             }
             // Nobody took them apart, and nothing asks them.
             case DecidingCase.Cases.NotTakenApart(var stoppedAt) -> stopped.add(stoppedAt);
+        }
+        if (question != null && !dropped && !remembering.unknown && stopped.isEmpty()) {
+            remembering.walked(question);
         }
     }
 
