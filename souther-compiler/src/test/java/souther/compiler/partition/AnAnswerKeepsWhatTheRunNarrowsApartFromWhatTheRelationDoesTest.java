@@ -15,7 +15,6 @@ import souther.compiler.numeric.Rel;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -106,18 +105,6 @@ class AnAnswerKeepsWhatTheRunNarrowsApartFromWhatTheRelationDoesTest {
         assertEquals(List.of(a, b), ofTheRelation(b).and(ofTheRun(a)).narrowing());
     }
 
-    @Test
-    void whatIsAskedOfOnlyWhatItNarrowsKeepsBothKinds() {
-        TakenConstraint a = atLeast("a");
-        TakenConstraint b = atLeast("b");
-        DemandReading.Answered narrows = ofTheRun(a).and(ofTheRelation(b))
-                .and(new DemandReading.Answered(List.of(), List.of(DemandReading.Tie.between(
-                        Set.of(TermPath.of("c")))), true)).whatItNarrows();
-        assertEquals(List.of(a), narrows.onTheWay());
-        assertEquals(List.of(b), narrows.ofTheRelation());
-        assertEquals(List.of(), narrows.tied());
-        assertEquals(false, narrows.unsaid());
-    }
 
     @Test
     void takingStatementsAwayTakesThemFromBothKinds() {
@@ -127,6 +114,14 @@ class AnAnswerKeepsWhatTheRunNarrowsApartFromWhatTheRelationDoesTest {
         DemandReading.Answered without = answered.without(List.of((TakenConstraint.Affine) a));
         assertEquals(List.of(b), without.onTheWay());
         assertEquals(List.of(b), without.ofTheRelation());
+    }
+
+    @Test
+    void takingStatementsAwayKeepsWhatTheApplicationsBeforeWorkOut() {
+        TakenConstraint a = atLeast("a");
+        DemandReading.Answered answered = ofTheRun(a).after(new DemandReading.PriorApplications(
+                Optional.empty(), DemandReading.Answered.NOTHING));
+        assertEquals(1, answered.without(List.of((TakenConstraint.Affine) a)).before().size());
     }
 
     @Test

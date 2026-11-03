@@ -46,6 +46,12 @@ class AClosureBesideAComparisonIsNotWorkedOutBeforeItTest {
         return measured(modelOf(body));
     }
 
+    /** The same, with {@code Past} refusing a date before the year 2000. */
+    private static PartitionEvidence evidenceOfAPastThatRefusesSome(String body) {
+        return measured(modelOf(body).replace("data Past = { requested: Date }",
+                "data Past = { requested: Date }\n    invariant Date.year(requested) >= 2000"));
+    }
+
     /** The rows of the examples, each as it was run and held to what it expects. */
     private static List<RowOutcome> rowsOf(String body) {
         Compilation compilation = Compilation.ofSource(modelOf(body), "Main");
@@ -229,22 +235,31 @@ class AClosureBesideAComparisonIsNotWorkedOutBeforeItTest {
 
     /**
      * The closure that builds the list the filter walks is applied before the filter's comparison,
-     * and the construction in it may stop a run on the dates it is handed. Bound by a {@code let}
-     * and handed to the call that makes the list, it is the same.
+     * and the construction in it may stop a run on the dates it is handed where {@code Past}
+     * refuses some. Bound by a {@code let} and handed to the call that makes the list, it is the
+     * same.
      */
     @Test
     void aClosureAppliedBeforeTheComparisonStillMayStopARunOnTheWayToIt() {
         List<String> both = List.of("request.convertedOn", "request.intent@Asked.closeDate");
-        PartitionEvidence written = evidenceOf("""
+        PartitionEvidence written = evidenceOfAPastThatRefusesSome("""
                 List.filter(p -> Date.daysBetween(request.convertedOn, p.requested) < 0,
                             List.map(d -> Past { requested = d }, asked(request.intent)))""");
         assertEquals(both, unreadAt(written), () -> written.notRead().toString());
-        PartitionEvidence bound = evidenceOf("""
+        PartitionEvidence bound = evidenceOfAPastThatRefusesSome("""
                 {
                     let project = d -> Past { requested = d }
                     List.filter(p -> Date.daysBetween(request.convertedOn, p.requested) < 0,
                                 List.map(project, asked(request.intent)))
                 }""");
         assertEquals(both, unreadAt(bound), () -> bound.notRead().toString());
+    }
+
+    /** A construction whose type states no clause refuses no run, however often it is applied. */
+    @Test
+    void aClosureAppliedBeforeTheComparisonThatRefusesNothingStopsNoRun() {
+        assertEquals(List.of(), unreadAt(evidenceOf("""
+                List.filter(p -> Date.daysBetween(request.convertedOn, p.requested) < 0,
+                            List.map(d -> Past { requested = d }, asked(request.intent)))""")));
     }
 }

@@ -184,6 +184,16 @@ final class LibraryEndings {
         return found;
     }
 
+    /**
+     * Which operand of a call of {@code operation}, counted from nought, is the one it ends a run
+     * on alone, or -1 where there is none: the operation's kernel says
+     * ({@link KernelContracts#theOperandItAloneStopsOn}).
+     */
+    int theOperandItAloneStopsOn(ValueName.Stdlib.Operation operation) {
+        Stdlib.Intrinsic intrinsic = library.intrinsicOf(operation);
+        return intrinsic == null ? -1 : KernelContracts.theOperandItAloneStopsOn(intrinsic.kernel());
+    }
+
     /** The shipped library's, which is the same for every compilation. */
     static LibraryEndings shipped() {
         return Shipped.ENDINGS;

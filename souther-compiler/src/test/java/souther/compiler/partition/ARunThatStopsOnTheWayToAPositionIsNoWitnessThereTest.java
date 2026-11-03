@@ -37,7 +37,9 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
 
     private static final String NOT_SHOWN = "relation_not_shown_to_reach_every_value";
 
-    private static final String PARAMETERS = "a: Int, d: Int, hs: Set<Int>";
+    private static final String NOT_SHOWN_REACHED = "relation_not_shown_reached_at_every_value";
+
+    private static final String PARAMETERS ="a: Int, d: Int, hs: Set<Int>";
 
     private static final String MEMBERSHIP = "Bool.not(Set.contains(a, hs))";
 
@@ -95,13 +97,36 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
     }
 
     /**
-     * The sum is worked out only on the runs where {@code d} is above nought, and the membership is
-     * reached on the others without it, so no sum stops a run there.
+     * The sum stops the same wherever it is written on the way: bound by a {@code let}, in the
+     * body of a closure the membership is inside of, or before a walk over a list. What the sum
+     * stops on is {@code a} and {@code d}, so a membership of one of them is not shown reached
+     * and a membership of an element of a list, which the sum does not tie to, is.
      */
     @Test
-    void aSumWorkedOutInAnArmTheMembershipIsReachedWithoutIsNoStop() {
+    void aSumStopsTheRunWhereverItIsWrittenOnTheWayToTheMembership() {
+        String stop = "a + " + FIRST_SUM + " - d >= 0";
+        assertEquals(List.of(NOT_SHOWN), reasonsAt(PARAMETERS,
+                "{ let s = a + " + FIRST_SUM + " - d  s >= 0 && " + MEMBERSHIP + " }", "hs[*]"));
+        assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(NUMBERS,
+                "List.any(x -> x + " + FIRST_SUM + " - d >= 0 && Bool.not(Set.contains(x, hs)), xs)",
+                "hs[*]"));
+        assertEquals(List.of(READ), reasonsAt(NUMBERS,
+                stop + " && List.all(x -> Bool.not(Set.contains(x, hs)), xs)", "hs[*]"));
+    }
+
+    /**
+     * The sum is worked out only on the runs where {@code d} is above nought, and the membership is
+     * reached on the others without it. A run that works it out and stops is no run of the
+     * membership, and which values that is the path does not say: it ties {@code a} and
+     * {@code d} as the left arm of a choice does, and the membership is not shown reached, as
+     * a comparison in its place is not.
+     */
+    @Test
+    void aSumWorkedOutInAnArmTheMembershipIsReachedWithoutIsAStopTheMembershipIsNotShownPast() {
         String condition = "(d > 0 && a + " + FIRST_SUM + " - d >= 0) || " + MEMBERSHIP;
-        assertEquals(List.of(READ), reasonsAt(PARAMETERS, condition, "hs[*]"));
+        assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(PARAMETERS, condition, "hs[*]"));
+        assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(NUMBERS,
+                "(d > 0 && a + " + FIRST_SUM + " - d >= 0) || a - b > 0", "b"));
     }
 
     /** The same sum as the left arm of a choice, worked out on every run before the membership. */
@@ -173,6 +198,102 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
             assertEquals(Map.of("a", List.of(READ), "b", List.of(READ)),
                     readingsOf(NUMBERS, theForm.replace("K", k)), theForm);
         }
+    }
+
+    /**
+     * Two programs read in one compilation whose statements are the same form: {@code a - d} and
+     * {@code a + greatest - greatest - d} stop at different inputs, so what is proved of the one is
+     * no proof of the other, whichever is asked first.
+     */
+    @Test
+    void aFormAndASumThatCancelsToItShareNoProofInOneCompilation() {
+        String plain = "Int.floorMod(a - d, 7) >= 1 && " + MEMBERSHIP;
+        for (List<String> order : List.of(List.of("plain", "cancelled"),
+                List.of("cancelled", "plain"))) {
+            StringBuilder model = new StringBuilder("module demo\n");
+            for (String behavior : order) {
+                String condition = behavior.equals("plain") ? plain
+                        : THE_SUM_CANCELLING_TO_THE_FORM;
+                model.append("""
+
+                        behavior NAME : (a: Int, d: Int, hs: Set<Int>) -> Bool
+                        let NAME (a, d, hs) = CONDITION
+                        """.replace("NAME", behavior).replace("CONDITION", condition));
+            }
+            Compilation compilation = Compilation.ofSource(model.toString(), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors());
+            JsonNode report = reportOf(compilation);
+            assertEquals(List.of(READ), reasonsOfBehavior(report, "plain", "hs[*]"), order::toString);
+            assertEquals(List.of(NOT_SHOWN), reasonsOfBehavior(report, "cancelled", "hs[*]"),
+                    order::toString);
+        }
+    }
+
+    /**
+     * A remainder stops a run only where its divisor is nought, and a divisor is a number however it
+     * is written: {@code 0} and {@code d - d} are nought on every run, so none reaches the
+     * membership after them, and {@code 7} is nought on none. What the operation says of a divisor
+     * that names no place is not that it stops no run.
+     */
+    @Test
+    void aRemainderByANoughtStopsEveryRunWhateverTheDivisorIsWrittenAs() {
+        for (String divisor : List.of("0", "d - d", "7 - 7", "d * 0")) {
+            String condition = "{ let m = Int.floorMod(a, " + divisor + ")  " + MEMBERSHIP + " }";
+            assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(PARAMETERS, condition, "hs[*]"),
+                    divisor);
+        }
+        for (String divisor : List.of("7", "2 + 5", "d - d + 7")) {
+            String condition = "{ let m = Int.floorMod(a, " + divisor + ")  " + MEMBERSHIP + " }";
+            assertEquals(List.of(READ), reasonsAt(PARAMETERS, condition, "hs[*]"), divisor);
+        }
+    }
+
+    /**
+     * A divisor that comes to 7 is no divisor that is nought, but the sum that writes it stops at
+     * {@code d} from 11 up: the remainder completes and the divisor does not, so a membership of
+     * {@code d} after it is not shown reached and one of {@code a} is.
+     */
+    @Test
+    void aDivisorThatComesToSevenStopsWhereTheSumThatWritesItDoes() {
+        String divisor = "d + " + FIRST_SUM + " - d - " + FIRST_SUM + " + 7";
+        String body = "{ let m = Int.floorMod(a, " + divisor + ")  Bool.not(Set.contains(%s, hs)) }";
+        assertEquals(List.of(NOT_SHOWN), reasonsAt(PARAMETERS, body.formatted("d"), "hs[*]"));
+        assertEquals(List.of(READ), reasonsAt(PARAMETERS, body.formatted("a"), "hs[*]"));
+    }
+
+    /**
+     * One body states {@code a - d} and a sum that cancels to it, on the way to one membership. The
+     * statement of the form the sum cancels to is no proof for the sum, whichever is written first:
+     * the sum stops where the form does not, and the membership is not shown reached.
+     */
+    @Test
+    void aFormAndASumThatCancelsToItInOneBodyShareNoProof() {
+        String plain = "Int.floorMod(a - d, 7) >= 1";
+        String cancelled = "Int.floorMod(a + 9223372036854775807 - 9223372036854775807 - d, 7) >= 1";
+        assertEquals(List.of(READ), reasonsAt(PARAMETERS, plain + " && " + MEMBERSHIP, "hs[*]"));
+        assertEquals(List.of(NOT_SHOWN), reasonsAt(PARAMETERS,
+                plain + " && " + cancelled + " && " + MEMBERSHIP, "hs[*]"));
+        assertEquals(List.of(NOT_SHOWN), reasonsAt(PARAMETERS,
+                cancelled + " && " + plain + " && " + MEMBERSHIP, "hs[*]"));
+    }
+
+    private static List<String> reasonsOfBehavior(JsonNode report, String behavior,
+                                                  String position) {
+        Set<String> found = new TreeSet<>();
+        collectOfBehavior(report, behavior, position, found);
+        return List.copyOf(found);
+    }
+
+    private static void collectOfBehavior(JsonNode node, String behavior, String position,
+                                          Set<String> out) {
+        if (node.isObject() && node.has("ruleId") && node.has("reason") && node.has("position")
+                && node.path("ruleId").path("behavior").asString().equals(behavior)
+                && node.path("position").asString().equals(position)) {
+            out.add(node.path("reason").asString());
+        }
+        node.forEach(child -> collectOfBehavior(child, behavior, position, out));
     }
 
     /** A form worked out wherever the rest stand keeps being read. */

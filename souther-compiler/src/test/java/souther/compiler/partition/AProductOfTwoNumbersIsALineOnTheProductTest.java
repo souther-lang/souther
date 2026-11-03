@@ -680,6 +680,12 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
      * the rows written under it, if any.
      */
     private static Compilation aRefundPlanWith(String restockingFee, String examples) {
+        return aRefundPlanOf("agreedValue(reconciliation, unitPrices)", restockingFee, examples);
+    }
+
+    /** The same, with {@code total} the whole number the gross is made of. */
+    private static Compilation aRefundPlanOf(String total, String restockingFee,
+                                             String examples) {
         Compilation compilation = Compilation.ofSource("""
                 module demo
 
@@ -726,7 +732,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                     constructs RefundPlan, Refund
                 let f (accepted, reconciliation, unitPrices, invoiceNo, invoicedGross,
                        restockingRate, history, previousSkus) = {
-                    let gross = Decimal.fromInt(agreedValue(reconciliation, unitPrices))
+                    let gross = Decimal.fromInt(TOTAL)
                     let fee = Decimal.multiply(gross, restockingRate)
                     let net = Decimal.max(0.0m, Decimal.subtract(gross, fee))
                     RefundPlan {
@@ -740,7 +746,8 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                         recentRmas = List.take(3, List.reverse(history))
                     }
                 }
-                """.replace("RESTOCKING_FEE", restockingFee) + examples, "Main");
+                """.replace("TOTAL", total).replace("RESTOCKING_FEE", restockingFee) + examples,
+                "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
@@ -753,18 +760,31 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 .contains(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE);
     }
 
-    /** The refund held at nought or above by the maximum stops no run, so nothing in the plan
-     *  keeps the comparison from being shown reached. */
+    /** The refund held at nought or above by the maximum stops no run, so with a total that stops
+     *  none either nothing in the plan keeps the comparison from being shown reached. */
     @Test
     void aRefundPlanWhoseOnlyRefundIsHeldAtNoughtKeepsNoRunFromTheComparison() {
-        assertTrue(!aPlanStopsABorderRunsThrough(aRefundPlanWith("0.0m", "")));
+        assertTrue(!aPlanStopsABorderRunsThrough(
+                aRefundPlanOf("Map.size(unitPrices)", "0.0m", "")));
+    }
+
+    /**
+     * The total of the agreed lines is a call whose stops nothing says: its sums can pass the
+     * greatest {@code Int}. A membership after it is reached by a run only if that total comes
+     * out, and a row of the unit prices the total stops at is no witness there. It is what keeps
+     * the comparison from being shown reached.
+     */
+    @Test
+    void aTotalWhoseStopsNothingSaysKeepsTheMembershipAfterItFromBeingShownReached() {
+        assertTrue(aPlanStopsABorderRunsThrough(aRefundPlanWith("0.0m", "")));
     }
 
     /** The second refund, the lesser of the fee and the gross, is refused for a negative rate, and
      *  that alone is what keeps the comparison from being shown reached. */
     @Test
     void aRefundPlanIsStoppedByTheLesserOfTheFeeAndTheGrossForANegativeRate() {
-        assertTrue(aPlanStopsABorderRunsThrough(aRefundPlanWith("Decimal.min(fee, gross)", "")));
+        assertTrue(aPlanStopsABorderRunsThrough(
+                aRefundPlanOf("Map.size(unitPrices)", "Decimal.min(fee, gross)", "")));
     }
 
     /**

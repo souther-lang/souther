@@ -166,6 +166,15 @@ public final class KernelContracts {
         };
     }
 
+    /**
+     * Which operand, counted from nought, is the one {@code kernel} ends a run on alone, or -1
+     * where there is none: {@code floorMod} ends a run only where its divisor is nought, and what
+     * it divides is no part of that.
+     */
+    public static int theOperandItAloneStopsOn(Kernel kernel) {
+        return kernel == Kernel.INT_FLOOR_MOD ? 1 : -1;
+    }
+
     private static GetsPast fits(GetsPast.AnswerSize answer) {
         return new GetsPast.WhereTheAnswerFits(answer);
     }

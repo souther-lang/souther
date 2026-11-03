@@ -1518,7 +1518,9 @@ final class Pullback {
      * as that ({@link StopObligation}) and ties nothing: a reader shows some run gets past it, or
      * holds the places it reads as ones it may stop on.
      *
-     * <p>Nothing in a closure no run applies ({@link Operators#neverApplied}): it ends no run.
+     * <p>Nothing in a closure no run applies ({@link Operators#neverApplied}): it ends no run. Nor
+     * does a construction that no clause of its type refuses a run of
+     * ({@link WorkedOutToReachIt#aConstructionEndsNoRun}).
      */
     private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads, Bound bound) {
         Core e = Core.withoutStanding(standing);
@@ -1526,21 +1528,34 @@ final class Pullback {
             return;
         }
         operated.readsAt.putIfAbsent(e, reads);
-        GetsPast completion = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
+        GetsPast completion = e instanceof Core.Construct made
+                && WorkedOutToReachIt.of(read).aConstructionEndsNoRun(made, reads)
+                ? new GetsPast.Always()
+                : WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
         if (!operated.nodes.contains(e) && !operated.nodes.contains(standing)
                 && !(completion instanceof GetsPast.Always)) {
             operated.beginGroup();
             boolean[] hasOperands = {false};
             boolean elsewhereBefore = operated.unsaidElsewhere;
-            // A quotient stops where its divisor is nought, and what it divides is no part of it.
+            // A quotient or a remainder stops where its divisor is nought, and what it divides is
+            // no part of it.
+            Core divisor = theDivisorItAloneStopsOn(e);
             Core.forEachChild(e, operand -> {
-                if (isWhatADivisorAloneStopsOnDividing(e, operand)) {
+                if (divisor != null && operand != divisor) {
                     return;
                 }
                 hasOperands[0] = true;
                 leaveUnsaidOverWhatItReads(operand, reads, bound);
             });
             if (!hasOperands[0]) {
+                operated.leaveUnsaidOverUnreadOperands();
+            }
+            // What stops no run is said by its owner, and a place that is not named is not that: an
+            // operation nothing says completes, reading no place, may still stop a run on a
+            // number no place holds — a divisor that is nought however it is written.
+            if (completion instanceof GetsPast.NotKnown && operated.unsaidAt.isEmpty()
+                    && operated.unsaidElsewhere == elsewhereBefore
+                    && !isProvenToComplete(e, divisor, reads)) {
                 operated.leaveUnsaidOverUnreadOperands();
             }
             if (operated.within != null && !(completion instanceof GetsPast.NotKnown)) {
@@ -1565,16 +1580,35 @@ final class Pullback {
     }
 
     /**
-     * Whether {@code e} stops a run on its divisor alone and {@code operand} is what it divides,
-     * as the operator's own account says ({@link WhereAnOperatorAnswers}): a quotient that stops
-     * where its divisor is nought, and not one that may stop on its operands' sizes.
+     * The operand {@code e} stops a run on alone, or null where it has none, as the owner's own
+     * account says: the divisor of a quotient that stops where it is nought, and not of one that
+     * may stop on its operands' sizes ({@link WhereAnOperatorAnswers}), and of a remainder
+     * ({@link WhatARunMayEndFor#theOperandItAloneStopsOn}).
      */
-    private static boolean isWhatADivisorAloneStopsOnDividing(Core e, Core operand) {
-        return Core.withoutStanding(e) instanceof Core.Binary quotient
-                && quotient.op() == BinOp.DIV && operand != quotient.right()
-                && WhereAnOperatorAnswers.ofAnOperator(quotient.op(), quotient.type(),
-                        List.of(quotient.left().type(), quotient.right().type()))
-                        instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought;
+    private static Core theDivisorItAloneStopsOn(Core e) {
+        return switch (Core.withoutStanding(e)) {
+            case Core.Binary quotient -> quotient.op() == BinOp.DIV
+                    && WhereAnOperatorAnswers.ofAnOperator(quotient.op(), quotient.type(),
+                            List.of(quotient.left().type(), quotient.right().type()))
+                            instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought
+                    ? quotient.right() : null;
+            default -> WhatARunMayEndFor.theOperandItAloneStopsOn(e);
+        };
+    }
+
+    /**
+     * Whether {@code e}, an operation that reads no place, is shown to stop no run: it is a
+     * constant the fold reaches, which the fold does not where the run time aborts
+     * ({@link ConstantAlgebra}), or it stops a run on {@code divisor} alone and the divisor is a
+     * number whatever expression came to it, and not nought.
+     */
+    private boolean isProvenToComplete(Core e, Core divisor, InputReads reads) {
+        if (folded(e, reads).isPresent()) {
+            return true;
+        }
+        return divisor != null && AffineForms.outcome(divisor, reads, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)
+                && form.coefs().isEmpty() && !form.constant().isZero();
     }
 
     /**
