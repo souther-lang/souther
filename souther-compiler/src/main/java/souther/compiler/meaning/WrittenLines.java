@@ -333,7 +333,7 @@ public final class WrittenLines {
             known = new LinkedHashSet<>();
             Proposition out = concluded.of(step);
             conclusions.put(step, out);
-            gather(out, known);
+            gather(out, known, stated);
             made.put(step, known);
         }
         return known;
@@ -345,18 +345,23 @@ public final class WrittenLines {
         return conclusions.get(step);
     }
 
-    private void gather(Proposition stated, Set<Spelling> into) {
+    /**
+     * Each relation {@code stated} holds, spelled into {@code into} in the order it is met and
+     * kept as it was met in {@code found}, the first of those spelled alike.
+     */
+    static void gather(Proposition stated, Set<Spelling> into,
+                       Map<Spelling, Proposition.Compared> found) {
         switch (stated) {
             case Proposition.Compared compared -> {
                 into.add(compared.heldSpelling());
-                this.stated.putIfAbsent(compared.heldSpelling(), compared);
+                found.putIfAbsent(compared.heldSpelling(), compared);
             }
-            // The relations its statements hold, each one way round whichever way a choice of
-            // them holds it.
+            // The relations of a compound are those of the parts it holds, each one way round
+            // whichever way a choice of them holds it.
             case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
                  Proposition.Some _, Proposition.OnAnApplication _, Proposition.SoManyHold _,
                  Proposition.OfTheWays _, Proposition.SomeReachable _ ->
-                    stated.partsHeld().forEach(each -> gather(each, into));
+                    stated.partsHeld().forEach(each -> gather(each, into, found));
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
                  Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _,
