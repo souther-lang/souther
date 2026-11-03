@@ -273,7 +273,7 @@ public final class AstBuilder {
     private ExposingClause.Written readExposing(SyntaxNode clause,
                                                 Map<String, Ast.RetType> outputs) {
         List<String> names = new ArrayList<>();
-        for (SyntaxNode entry : childNodes(clause, SyntaxKind.EXPOSED_ENTRY)) {
+        for (SyntaxNode entry : clause.childNodes(SyntaxKind.EXPOSED_ENTRY)) {
             String name = qualifiedNameText(entry.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
             names.add(name);
             entry.child(SyntaxKind.RET_TYPE).ifPresent(rt -> outputs.put(name, retType(rt)));
@@ -671,7 +671,7 @@ public final class AstBuilder {
             // (spec §an-invariant-is-declared-where-a-construction-owes-it). Refused where the
             // clause is still in hand: `Ast.SumData` has no slot for one, and past this point what
             // was written and what was dropped read alike.
-            for (SyntaxNode clause : childNodes(n, SyntaxKind.INVARIANT_CLAUSE)) {
+            for (SyntaxNode clause : n.childNodes(SyntaxKind.INVARIANT_CLAUSE)) {
                 throw CompileException.of(Diagnostic
                         .at(pos(clause))
                         .hint(new InvariantMessage.WriteItOnACaseOrOnANewtypeOverTheSum(name))
@@ -697,7 +697,7 @@ public final class AstBuilder {
         // §unit-data). The parser takes an `invariant` clause after any data, so this is where a
         // clause that has nothing to constrain is refused — reaching `Ast.UnitData`, which has no
         // slot for one, would silently drop it and with it any error inside it.
-        for (SyntaxNode clause : childNodes(n, SyntaxKind.INVARIANT_CLAUSE)) {
+        for (SyntaxNode clause : n.childNodes(SyntaxKind.INVARIANT_CLAUSE)) {
             throw CompileException.of(Diagnostic
                             .at(pos(clause)).say(new InvariantMessage.AUnitDataHasNothingToObserve(name)).build());
         }
@@ -714,8 +714,8 @@ public final class AstBuilder {
     private List<Ast.InvariantClause> invariants(SyntaxNode dataDef, String typeName) {
         List<Ast.InvariantClause> out = new ArrayList<>();
         Set<String> named = new HashSet<>();
-        for (SyntaxNode clause : childNodes(dataDef, SyntaxKind.INVARIANT_CLAUSE)) {
-            Ast.Expr expr = expr(onlyExpr(clause));
+        for (SyntaxNode clause : dataDef.childNodes(SyntaxKind.INVARIANT_CLAUSE)) {
+            Ast.Expr expr = expr(clause.firstExpressionChild());
             Optional<String> name = Optional.empty();
             if (clause.token(SyntaxKind.ASSIGN).isPresent()) {
                 SyntaxToken label = identTokens(clause).get(0);
@@ -756,7 +756,7 @@ public final class AstBuilder {
             List<Ast.Param> params = new ArrayList<>();
             List<SyntaxToken> paramNames = new ArrayList<>();
             s.child(SyntaxKind.PARAM_LIST).ifPresent(pl -> {
-                for (SyntaxNode p : childNodes(pl, SyntaxKind.PARAM)) {
+                for (SyntaxNode p : pl.childNodes(SyntaxKind.PARAM)) {
                     paramNames.add(firstIdentToken(p));
                     params.add(new Ast.Param(nameOf(firstIdentToken(p)),
                             retType(p.child(SyntaxKind.RET_TYPE).orElseThrow())));
@@ -805,7 +805,7 @@ public final class AstBuilder {
                     .say(new BehaviorMessage.ACompositionCarriesAnEnsures(declared.canonical())).build());
         }
         List<Ast.Var> stages = new ArrayList<>();
-        for (SyntaxNode st : childNodes(pipe, SyntaxKind.STAGE)) {
+        for (SyntaxNode st : pipe.childNodes(SyntaxKind.STAGE)) {
             stages.add(Ast.Var.written(qualifiedNameOf(st), reference()));
         }
         Ast.RetType declaredOut = pipe.child(SyntaxKind.RET_TYPE).map(AstBuilder.this::retType).orElse(null);
@@ -818,15 +818,15 @@ public final class AstBuilder {
             name = Optional.of(ident(identTokens(clause).get(0)));
         }
         List<Ast.EnsuresArm> arms = new ArrayList<>();
-        for (SyntaxNode arm : childNodes(clause, SyntaxKind.ENSURES_ARM)) {
+        for (SyntaxNode arm : clause.childNodes(SyntaxKind.ENSURES_ARM)) {
             List<Ast.Name> cases = new ArrayList<>();
-            for (SyntaxNode qn : childNodes(arm, SyntaxKind.QUALIFIED_NAME)) {
+            for (SyntaxNode qn : arm.childNodes(SyntaxKind.QUALIFIED_NAME)) {
                 cases.add(Ast.Name.written(qualifiedNameOf(qn)));
             }
-            arms.add(new Ast.EnsuresArm(cases, expr(onlyExpr(arm)), pos(arm), region(arm)));
+            arms.add(new Ast.EnsuresArm(cases, expr(arm.firstExpressionChild()), pos(arm), region(arm)));
         }
         if (arms.isEmpty()) {
-            Ast.Expr condition = expr(onlyExpr(clause));
+            Ast.Expr condition = expr(clause.firstExpressionChild());
             arms.add(new Ast.EnsuresArm(List.of(), condition, pos(clause), region(clause)));
         }
         return new Ast.EnsuresClause(name, List.copyOf(arms), pos(clause), region(clause));
@@ -841,7 +841,7 @@ public final class AstBuilder {
         List<SyntaxNode> paramPatterns = new ArrayList<>();
         List<SyntaxToken> paramNames = new ArrayList<>();
         n.child(SyntaxKind.FN_PARAM_LIST).ifPresent(pl -> {
-            for (SyntaxNode p : childNodes(pl, SyntaxKind.FN_PARAM)) {
+            for (SyntaxNode p : pl.childNodes(SyntaxKind.FN_PARAM)) {
                 SyntaxNode pat = optionalPatternChild(p);
                 paramPatterns.add(pat);
                 params.add(fnParam(p, pat));
@@ -873,7 +873,7 @@ public final class AstBuilder {
             return new Ast.FnDef(declared, moduleName, params, declaredReturn,
                     new Ast.FnBody.Intrinsic(key), modifiers, pos);
         }
-        SyntaxNode bodyNode = onlyExpr(n);
+        SyntaxNode bodyNode = n.firstExpressionChild();
         Ast.Expr body = expr(bodyNode);
         // `let f = (x) -> e` is the parameter-list form written the other way round: the parameters
         // move to the left of `=` and the two spellings settle to one definition. A definition that
@@ -966,7 +966,7 @@ public final class AstBuilder {
             case PIPE_EXPR -> pipe(n);
             // The parentheses are dropped from the tree and not from the file: what stands here is
             // the expression inside them, written over the whole of what the author bracketed.
-            case PAREN_EXPR -> Ast.withRegion(expr(onlyExpr(n)), region(n));
+            case PAREN_EXPR -> Ast.withRegion(expr(n.firstExpressionChild()), region(n));
             case TUPLE_EXPR -> new Ast.Tuple(exprList(n), pos(n), region(n));
             case LIST_EXPR -> new Ast.ListLit(exprList(n), construct(SourceConstruct.COLLECTION_LITERAL),
                     pos(n), region(n));
@@ -985,9 +985,9 @@ public final class AstBuilder {
     /** A minus before the magnitude of the least {@code Int}, which no integer literal holds alone,
      * is that {@code Int}. Every other negation keeps the operand it was written with. */
     private Ast.Expr negation(SyntaxNode n) {
-        SyntaxNode operand = onlyExpr(n);
+        SyntaxNode operand = n.firstExpressionChild();
         while (operand.kind() == SyntaxKind.PAREN_EXPR) {
-            operand = onlyExpr(operand);
+            operand = operand.firstExpressionChild();
         }
         if (operand.kind() == SyntaxKind.LITERAL_EXPR) {
             SyntaxToken t = firstMeaningfulToken(operand);
@@ -996,7 +996,7 @@ public final class AstBuilder {
                 return new Ast.IntLit(Long.MIN_VALUE, pos(n), region(n));
             }
         }
-        return new Ast.Neg(expr(onlyExpr(n)), pos(n), region(n));
+        return new Ast.Neg(expr(n.firstExpressionChild()), pos(n), region(n));
     }
 
     private Ast.Expr literal(SyntaxNode n) {
@@ -1024,7 +1024,7 @@ public final class AstBuilder {
 
     /** {@code unreachable "reason"} — the reason is the literal the parser required beside it. */
     private Ast.Expr unreachable(SyntaxNode n) {
-        Ast.Expr reason = expr(firstExprChild(n));
+        Ast.Expr reason = expr(n.firstExpressionChild());
         if (!(reason instanceof Ast.StringLit lit)) {
             throw error(pos(n), new ParseMessage.UnreachableStatesItsReasonAsAString());
         }
@@ -1032,7 +1032,7 @@ public final class AstBuilder {
     }
 
     private Ast.Expr fieldAccess(SyntaxNode n) {
-        Ast.Expr target = expr(firstExprChild(n));
+        Ast.Expr target = expr(n.firstExpressionChild());
         SyntaxToken field = lastIdentToken(n);
         return new Ast.FieldAccess(target, nameOf(field), posOf(field), region(n));
     }
@@ -1046,10 +1046,10 @@ public final class AstBuilder {
      * length from there, running past the end of what was written.
      */
     private Ast.Expr apply(SyntaxNode n) {
-        SyntaxNode callee = exprChildren(n).get(0);
+        SyntaxNode callee = n.expressionChildren().get(0);
         List<Ast.Expr> args = new ArrayList<>();
         n.child(SyntaxKind.ARG_LIST).ifPresent(list -> {
-            for (SyntaxNode arg : exprChildren(list)) {
+            for (SyntaxNode arg : list.expressionChildren()) {
                 args.add(expr(arg));
             }
         });
@@ -1058,8 +1058,8 @@ public final class AstBuilder {
     }
 
     private Ast.Expr binary(SyntaxNode n) {
-        List<SyntaxNode> operands = exprChildren(n);
-        SyntaxToken op = operatorToken(n);
+        List<SyntaxNode> operands = n.expressionChildren();
+        SyntaxToken op = n.binaryOperatorToken();
         // Anchored at the operator, which is what a report about the operation is about, and written
         // over both operands, which is what the operation is.
         return new Ast.Binary(binOp(op.kind()), expr(operands.get(0)), expr(operands.get(1)),
@@ -1088,7 +1088,7 @@ public final class AstBuilder {
     /** {@code e |> f(a)} → {@code f(a, e)}; {@code e |> f} → {@code f(e)}; {@code e |> Mod.name}
      * → {@code Mod.name(e)} (spec §pipe). */
     private Ast.Expr pipe(SyntaxNode n) {
-        List<SyntaxNode> operands = exprChildren(n);
+        List<SyntaxNode> operands = n.expressionChildren();
         Ast.Expr left = expr(operands.get(0));
         Ast.Expr right = expr(operands.get(1));
         // The application this becomes is anchored where the callee is written, which is where a
@@ -1119,7 +1119,7 @@ public final class AstBuilder {
     }
 
     private Ast.Expr listComp(SyntaxNode n) {
-        List<SyntaxNode> exprs = exprChildren(n);
+        List<SyntaxNode> exprs = n.expressionChildren();
         Ast.Expr element = expr(exprs.get(0));
         List<Ast.Expr> guards = new ArrayList<>();
         for (int i = 1; i < exprs.size(); i++) {
@@ -1130,7 +1130,7 @@ public final class AstBuilder {
     }
 
     private Ast.Expr ifExpr(SyntaxNode n) {
-        List<SyntaxNode> exprs = exprChildren(n);
+        List<SyntaxNode> exprs = n.expressionChildren();
         SyntaxToken as = attemptBinder(n);
         String binder = as == null ? null : ident(as);
         List<Ast.ElseArm> arms = elseArms(n, binder);
@@ -1166,14 +1166,14 @@ public final class AstBuilder {
         }
         List<Ast.ElseArm> arms = new ArrayList<>();
         Set<String> answered = new HashSet<>();
-        for (SyntaxNode arm : childNodes(node.get(), SyntaxKind.ELSE_ARM)) {
+        for (SyntaxNode arm : node.get().childNodes(SyntaxKind.ELSE_ARM)) {
             SyntaxToken label = identTokens(arm).get(0);
             if (!answered.add(ident(label))) {
                 throw CompileException.of(Diagnostic.at(posOf(label))
                         .say(new AttemptMessage.TheClauseIsAnsweredTwice(ident(label)))
                         .build());
             }
-            Ast.Expr body = expr(onlyExpr(arm));
+            Ast.Expr body = expr(arm.firstExpressionChild());
             arms.add(ident(label).equals("_")
                     ? Ast.ElseArm.any(body)
                     : new Ast.ElseArm(Optional.of(ident(label)), body, posOf(label)));
@@ -1216,7 +1216,7 @@ public final class AstBuilder {
                     ? binderOf(p)
                     : Ast.Binder.desugared("$p" + (patternCounter++), pos(p)));
         }
-        SyntaxNode bodyNode = lastExprChild(n);
+        SyntaxNode bodyNode = n.lastExpressionChild();
         Ast.Expr body = expr(bodyNode);
         Region bodyRegion = region(bodyNode);
         for (int i = pats.size() - 1; i >= 0; i--) {
@@ -1276,7 +1276,7 @@ public final class AstBuilder {
                 }
             } else if (c.kind() == SyntaxKind.FIELD_INIT) {
                 WrittenName field = nameOf(firstIdentToken(c));
-                Optional<SyntaxNode> value = firstExprChildOpt(c);
+                Optional<SyntaxNode> value = c.firstExpressionChildOpt();
                 // shorthand `field` means `field = field`, and the one name is both
                 Ast.Expr v = value.isPresent() ? expr(value.get()) : Ast.Var.written(field, reference());
                 inits.add(new Ast.FieldInit(field, v));
@@ -1292,10 +1292,10 @@ public final class AstBuilder {
     }
 
     private Ast.Expr matchExpr(SyntaxNode n) {
-        List<SyntaxNode> exprs = exprChildren(n);
+        List<SyntaxNode> exprs = n.expressionChildren();
         Ast.Expr scrutinee = expr(exprs.get(0));
         List<Ast.Case> cases = new ArrayList<>();
-        for (SyntaxNode c : childNodes(n, SyntaxKind.MATCH_CASE)) {
+        for (SyntaxNode c : n.childNodes(SyntaxKind.MATCH_CASE)) {
             cases.add(matchCase(c));
         }
         return new Ast.Match(scrutinee, cases, construct(SourceConstruct.MATCH), pos(n),
@@ -1414,7 +1414,7 @@ public final class AstBuilder {
         }
         eachNameOnce(armNames, "one `match` arm");
         // skip the arrow, then the body is the trailing expression node
-        SyntaxNode bodyNode = lastExprChild(n);
+        SyntaxNode bodyNode = n.lastExpressionChild();
         Ast.Expr body = expr(bodyNode);
         // What the pattern lowers to holds the arm's body, so that is what those bindings are
         // written over. The reads they bind are the lowering's own and were written nowhere.
@@ -1495,7 +1495,7 @@ public final class AstBuilder {
         int stepsBefore = 0;
         int most = 0;
         for (SyntaxNode stmt : stmts) {
-            for (SyntaxNode held : exprChildren(stmt)) {
+            for (SyntaxNode held : stmt.expressionChildren()) {
                 most = Math.max(most, stepsBefore + 1 + stepsHeldBy(held));
             }
             stepsBefore += stepsTakenBy(stmt);
@@ -1570,7 +1570,7 @@ public final class AstBuilder {
         return switch (s.kind()) {
             case LET_STMT -> {
                 Ast.RetType annotation = s.child(SyntaxKind.RET_TYPE).map(AstBuilder.this::retType).orElse(null);
-                Ast.Expr value = expr(onlyExpr(s));
+                Ast.Expr value = expr(s.firstExpressionChild());
                 Ast.Expr rest = foldStatements(stmts, index + 1, result);
                 // The statement starts at its keyword and the binding is written after it. A reader
                 // asking what a cursor is on has only the name to compare against.
@@ -1580,7 +1580,7 @@ public final class AstBuilder {
                         : Ast.LetIn.annotated(bound, value, annotation, rest, pos, held);
             }
             case GUARD_STMT -> {
-                List<SyntaxNode> exprs = exprChildren(s);
+                List<SyntaxNode> exprs = s.expressionChildren();
                 SyntaxToken as = attemptBinder(s);
                 String binder = as == null ? null : ident(as);
                 Ast.Expr rest = foldStatements(stmts, index + 1, result);
@@ -1603,7 +1603,7 @@ public final class AstBuilder {
                 List<SyntaxToken> names = new ArrayList<>();
                 namesBoundBy(pat, names);
                 eachNameOnce(names, "one pattern");
-                yield bindPattern(pat, expr(onlyExpr(s)),
+                yield bindPattern(pat, expr(s.firstExpressionChild()),
                         foldStatements(stmts, index + 1, result), pos(pat), held);
             }
             default -> throw error(pos, new ParseMessage.AStatementWasExpected());
@@ -1626,7 +1626,7 @@ public final class AstBuilder {
             }
             case PATTERN_CTOR -> namesBoundBy(patternChild(pat), out);
             case PATTERN_RECORD -> {
-                for (SyntaxNode field : childNodes(pat, SyntaxKind.PATTERN_FIELD)) {
+                for (SyntaxNode field : pat.childNodes(SyntaxKind.PATTERN_FIELD)) {
                     out.add(boundByField(field));
                 }
             }
@@ -1680,7 +1680,7 @@ public final class AstBuilder {
                 yield bindings;
             }
             case PATTERN_CTOR -> 1 + bindingsIntroducedBy(patternChild(pat));
-            case PATTERN_RECORD -> 1 + childNodes(pat, SyntaxKind.PATTERN_FIELD).size();
+            case PATTERN_RECORD -> 1 + pat.childNodes(SyntaxKind.PATTERN_FIELD).size();
             default -> 1;
         };
     }
@@ -1720,7 +1720,7 @@ public final class AstBuilder {
             case PATTERN_RECORD -> {
                 String whole = "$r" + (patternCounter++);
                 Ast.Expr body = rest;
-                List<SyntaxNode> fields = childNodes(pat, SyntaxKind.PATTERN_FIELD);
+                List<SyntaxNode> fields = pat.childNodes(SyntaxKind.PATTERN_FIELD);
                 for (int k = fields.size() - 1; k >= 0; k--) {
                     String field = ident(identTokens(fields.get(k)).get(0));
                     body = new Ast.LetIn(binderOf(boundByField(fields.get(k))),
@@ -1735,7 +1735,7 @@ public final class AstBuilder {
 
     private List<Ast.Expr> exprList(SyntaxNode n) {
         List<Ast.Expr> out = new ArrayList<>();
-        for (SyntaxNode c : exprChildren(n)) {
+        for (SyntaxNode c : n.expressionChildren()) {
             out.add(expr(c));
         }
         return out;
@@ -1749,7 +1749,7 @@ public final class AstBuilder {
     private Ast.Example example(SyntaxNode n, SyntaxToken target, String named) {
         SourcePos pos = target == null ? pos(n) : posOf(target);
         List<Ast.ExampleRow> rows = new ArrayList<>();
-        for (SyntaxNode row : childNodes(n, SyntaxKind.EXAMPLE_ROW)) {
+        for (SyntaxNode row : n.childNodes(SyntaxKind.EXAMPLE_ROW)) {
             rows.add(exampleRow(row));
         }
         return new Ast.Example(named, rows, pos);
@@ -1764,14 +1764,14 @@ public final class AstBuilder {
         RowIdentity identity = RowIdentity.of(written, ++rowCounter);
         List<Ast.Expr> inputs = new ArrayList<>();
         n.child(SyntaxKind.ARG_LIST).ifPresent(list -> {
-            for (SyntaxNode a : exprChildren(list)) {
+            for (SyntaxNode a : list.expressionChildren()) {
                 inputs.add(expr(a));
             }
         });
         List<Ast.With> withs = new ArrayList<>();
         n.child(SyntaxKind.WITH_CLAUSE).ifPresent(clause -> {
-            for (SyntaxNode b : childNodes(clause, SyntaxKind.WITH_BINDING)) {
-                withs.add(new Ast.With(behaviorNameIn(b), expr(firstExprChild(b)), pos(b)));
+            for (SyntaxNode b : clause.childNodes(SyntaxKind.WITH_BINDING)) {
+                withs.add(new Ast.With(behaviorNameIn(b), expr(b.firstExpressionChild()), pos(b)));
             }
         });
         return new Ast.ExampleRow(identity, inputs, withs, expected(n), pos(n));
@@ -1790,7 +1790,7 @@ public final class AstBuilder {
         if (owed.isPresent()) {
             return new Ast.Expected.Unanswered(posOf(owed.get()));
         }
-        List<SyntaxNode> written = exprChildren(n);
+        List<SyntaxNode> written = n.expressionChildren();
         return written.isEmpty() ? new Ast.Expected.Unwritten(pos(n))
                 : new Ast.Expected.Asserted(expr(written.get(0)));
     }
@@ -1799,7 +1799,7 @@ public final class AstBuilder {
     private Ast.Fake fake(SyntaxNode n) {
         Ast.Var target = behaviorNameIn(n);
         List<Ast.FakeRow> rows = new ArrayList<>();
-        for (SyntaxNode row : childNodes(n, SyntaxKind.FAKE_ROW)) {
+        for (SyntaxNode row : n.childNodes(SyntaxKind.FAKE_ROW)) {
             rows.add(fakeRow(row));
         }
         return new Ast.Fake(target, rows, target.pos());
@@ -1810,11 +1810,11 @@ public final class AstBuilder {
         Optional<SyntaxNode> args = n.child(SyntaxKind.ARG_LIST);
         List<Ast.Expr> inputs = new ArrayList<>();
         args.ifPresent(list -> {
-            for (SyntaxNode a : exprChildren(list)) {
+            for (SyntaxNode a : list.expressionChildren()) {
                 inputs.add(expr(a));
             }
         });
-        List<SyntaxNode> exprs = exprChildren(n);   // the output (not inside ARG_LIST)
+        List<SyntaxNode> exprs = n.expressionChildren();   // the output (not inside ARG_LIST)
         Ast.Expr output = exprs.isEmpty() ? null : expr(exprs.get(0));
         return new Ast.FakeRow(args.isEmpty() ? new Ast.Matched.Anything()
                 : new Ast.Matched.Arguments(inputs), output, pos(n));
@@ -1847,57 +1847,6 @@ public final class AstBuilder {
     }
 
     // --- CST navigation helpers ---
-
-    /** The direct child nodes that are expressions, in order. */
-    private List<SyntaxNode> exprChildren(SyntaxNode n) {
-        List<SyntaxNode> out = new ArrayList<>();
-        for (SyntaxNode c : n.childNodes()) {
-            if (isExprKind(c.kind())) {
-                out.add(c);
-            }
-        }
-        return out;
-    }
-
-    private SyntaxNode firstExprChild(SyntaxNode n) {
-        return exprChildren(n).get(0);
-    }
-
-    private Optional<SyntaxNode> firstExprChildOpt(SyntaxNode n) {
-        List<SyntaxNode> c = exprChildren(n);
-        return c.isEmpty() ? Optional.empty() : Optional.of(c.get(0));
-    }
-
-    private SyntaxNode lastExprChild(SyntaxNode n) {
-        List<SyntaxNode> c = exprChildren(n);
-        return c.get(c.size() - 1);
-    }
-
-    /** The single expression child of a node that wraps exactly one (a block statement, an invariant,
-     * a unary/fn body). */
-    private SyntaxNode onlyExpr(SyntaxNode n) {
-        return firstExprChild(n);
-    }
-
-    private static boolean isExprKind(SyntaxKind k) {
-        return switch (k) {
-            case LITERAL_EXPR, VAR_EXPR, FIELD_ACCESS, APPLY_EXPR, BINARY_EXPR,
-                 UNARY_EXPR, PIPE_EXPR,
-                 PAREN_EXPR, TUPLE_EXPR, LIST_EXPR, LIST_COMP, IF_EXPR, MATCH_EXPR, LAMBDA_EXPR,
-                 FIELD_GETTER, NEW_DATA_EXPR, BLOCK_EXPR, UNREACHABLE_EXPR -> true;
-            default -> false;
-        };
-    }
-
-    private List<SyntaxNode> childNodes(SyntaxNode n, SyntaxKind kind) {
-        List<SyntaxNode> out = new ArrayList<>();
-        for (SyntaxNode c : n.childNodes()) {
-            if (c.kind() == kind) {
-                out.add(c);
-            }
-        }
-        return out;
-    }
 
     /** The direct IDENT tokens of a node, in order (skipping keywords, punctuation, and trivia). */
     private static List<SyntaxToken> identTokens(SyntaxNode n) {
@@ -1953,22 +1902,6 @@ public final class AstBuilder {
             }
         }
         return last;
-    }
-
-    private SyntaxToken operatorToken(SyntaxNode n) {
-        for (SyntaxElement e : n.children()) {
-            if (e instanceof SyntaxToken t && !t.isTrivia() && isBinaryOperator(t.kind())) {
-                return t;
-            }
-        }
-        throw new IllegalStateException("no operator in " + n.kind());
-    }
-
-    private static boolean isBinaryOperator(SyntaxKind k) {
-        return switch (k) {
-            case EQ, NE, LT, LE, GT, GE, AND, OR, PLUS, MINUS, STAR, SLASH, PLUSPLUS -> true;
-            default -> false;
-        };
     }
 
     private SyntaxNode typeChild(SyntaxNode n) {

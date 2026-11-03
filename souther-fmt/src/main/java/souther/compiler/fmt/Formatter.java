@@ -798,7 +798,7 @@ public final class Formatter {
         List<SyntaxToken> ids = idents(n);
         String target = ids.isEmpty() ? "" : ids.getFirst().text();
         List<TokenDoc> rows = new ArrayList<>();
-        for (SyntaxNode row : childNodes(n, SyntaxKind.EXAMPLE_ROW)) {
+        for (SyntaxNode row : n.childNodes(SyntaxKind.EXAMPLE_ROW)) {
             Place r = places.under(at, row.kind(),
                     Opening.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN),
                     Written.of(row));
@@ -840,7 +840,7 @@ public final class Formatter {
             Place ofTheWith = places.under(ofTheInput, with.get().kind(), Opening.NONE,
                     Written.of(with.get()));
             List<Member> binds = new ArrayList<>();
-            for (SyntaxNode b : childNodes(with.get(), SyntaxKind.WITH_BINDING)) {
+            for (SyntaxNode b : with.get().childNodes(SyntaxKind.WITH_BINDING)) {
                 // the first binding is written after the `with` on its line, so nothing opens one
                 Place bind = binds.isEmpty()
                         ? places.under(ofTheWith, b.kind(), Opening.NONE, Written.of(b))
@@ -848,7 +848,7 @@ public final class Formatter {
                 // The dependency, which is a name and may be written through its module.
                 binds.add(member(bind, TokenDoc.node(b.kind(), concat(dottedName(idents(b)), GAP,
                         ASSIGN, GAP,
-                        childAt(bind, firstExprChildOpt(b).orElseThrow(), Opening.NONE)))));
+                        childAt(bind, b.firstExpressionChildOpt().orElseThrow(), Opening.NONE)))));
             }
             // The `with` is the clause's own, as a product block's braces are, so the place is
             // what it wrote and not what its bindings cover.
@@ -867,7 +867,7 @@ public final class Formatter {
             head = argList.isEmpty() ? new Member(TokenDoc.at(ofTheHead, input), TokenDoc.NIL)
                     : head(ofTheHead, input);
         }
-        List<SyntaxNode> expected = exprChildren(n);   // the row's expr child that is not the ARG_LIST
+        List<SyntaxNode> expected = n.expressionChildren();   // the row's expr child that is not the ARG_LIST
         SyntaxNode gives = expected.isEmpty() ? null : expected.get(0);
         Place ofTheExpected = segmentPlace(at, ARROW, gives);
         // What the row put where its answer goes: the expression it wrote, the mark that says the
@@ -886,7 +886,7 @@ public final class Formatter {
         List<SyntaxToken> ids = idents(n);
         TokenDoc target = ids.isEmpty() ? TokenDoc.NIL : dottedName(ids);
         List<TokenDoc> rows = new ArrayList<>();
-        for (SyntaxNode row : childNodes(n, SyntaxKind.FAKE_ROW)) {
+        for (SyntaxNode row : n.childNodes(SyntaxKind.FAKE_ROW)) {
             Place r = places.under(at, row.kind(),
                     Opening.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN),
                     Written.of(row));
@@ -907,7 +907,7 @@ public final class Formatter {
         } else {
             input = ident("_");   // the default row
         }
-        List<SyntaxNode> outs = exprChildren(n);
+        List<SyntaxNode> outs = n.expressionChildren();
         // the input opens the row, so the head carries what was written above and beside it
         Member head = args.isPresent() ? head(ofTheInput, input)
                 : new Member(TokenDoc.at(ofTheInput, input), TokenDoc.NIL);
@@ -929,7 +929,7 @@ public final class Formatter {
     private TokenDoc exposing(SyntaxNode clause, Place at) {
         Place run = places.under(at, clause.kind(), Opening.NONE, Written.of(clause));
         List<Member> entries = new ArrayList<>();
-        for (SyntaxNode e : childNodes(clause, SyntaxKind.EXPOSED_ENTRY)) {
+        for (SyntaxNode e : clause.childNodes(SyntaxKind.EXPOSED_ENTRY)) {
             Place entry = memberPlace(run, e);
             TokenDoc name = qualifiedName(e.child(SyntaxKind.QUALIFIED_NAME).orElseThrow(), entry);
             entries.add(member(entry, TokenDoc.node(e.kind(), e.child(SyntaxKind.RET_TYPE)
@@ -972,7 +972,7 @@ public final class Formatter {
     private TokenDoc dataDef(SyntaxNode n, Place at) {
         String name = firstIdent(n);
         List<TokenDoc> invariants = new ArrayList<>();
-        for (SyntaxNode inv : childNodes(n, SyntaxKind.INVARIANT_CLAUSE)) {
+        for (SyntaxNode inv : n.childNodes(SyntaxKind.INVARIANT_CLAUSE)) {
             // A named clause keeps its name: it is what an attempt's arm and a boundary issue call it.
             TokenDoc label = inv.token(SyntaxKind.ASSIGN).isPresent()
                     ? concat(ident(firstIdent(inv)), GAP, ASSIGN, GAP) : TokenDoc.NIL;
@@ -981,7 +981,7 @@ public final class Formatter {
                     Written.of(inv));
             invariants.add(TokenDoc.at(clause, concat(TokenDoc.node(inv.kind(),
                             concat(TokenDoc.token(SyntaxKind.INVARIANT_KW, "invariant"), GAP, label,
-                                    childAt(clause, onlyExpr(inv), Opening.NONE))),
+                                    childAt(clause, inv.firstExpressionChild(), Opening.NONE))),
                             TokenDoc.endsTheLineOf(clause))));
         }
 
@@ -1175,7 +1175,7 @@ public final class Formatter {
         }
         SyntaxNode pipe = n.child(SyntaxKind.PIPE_BEHAVIOR).orElseThrow();
         Place ofThePipe = places.under(at, pipe.kind(), Opening.NONE, Written.of(pipe));
-        List<SyntaxNode> stages = childNodes(pipe, SyntaxKind.STAGE);
+        List<SyntaxNode> stages = pipe.childNodes(SyntaxKind.STAGE);
         TokenDoc declaredOut = pipe.child(SyntaxKind.RET_TYPE)
                 .map(rt -> concat(GAP, ARROW, GAP, retType(rt, ofThePipe))).orElse(TokenDoc.NIL);
         List<TokenDoc> parts = new ArrayList<>();
@@ -1203,18 +1203,18 @@ public final class Formatter {
     private TokenDoc ensuresClause(SyntaxNode clause, Place at) {
         TokenDoc label = clause.token(SyntaxKind.ASSIGN).isPresent()
                 ? concat(ident(firstIdent(clause)), GAP, ASSIGN, GAP) : TokenDoc.NIL;
-        List<SyntaxNode> arms = childNodes(clause, SyntaxKind.ENSURES_ARM);
+        List<SyntaxNode> arms = clause.childNodes(SyntaxKind.ENSURES_ARM);
         if (arms.isEmpty()) {
             return TokenDoc.node(clause.kind(), concat(
                     TokenDoc.token(SyntaxKind.ENSURES_KW, "ensures"), GAP, label,
-                    childAt(at, onlyExpr(clause), Opening.NONE)));
+                    childAt(at, clause.firstExpressionChild(), Opening.NONE)));
         }
         List<TokenDoc> written = new ArrayList<>();
         for (int i = 0; i < arms.size(); i++) {
             SyntaxNode arm = arms.get(i);
             Place armPlace = places.under(at, arm.kind(), Opening.NONE, Written.of(arm));
             List<TokenDoc> cases = new ArrayList<>();
-            for (SyntaxNode name : childNodes(arm, SyntaxKind.QUALIFIED_NAME)) {
+            for (SyntaxNode name : arm.childNodes(SyntaxKind.QUALIFIED_NAME)) {
                 if (!cases.isEmpty()) {
                     cases.add(concat(GAP, PIPE, GAP));
                 }
@@ -1225,7 +1225,7 @@ public final class Formatter {
                     : concat(GAP, PIPE, GAP);
             written.add(concat(prefix, TokenDoc.at(armPlace, TokenDoc.node(arm.kind(),
                     concat(concat(cases), GAP, ARROW, GAP,
-                            childAt(armPlace, onlyExpr(arm), Opening.NONE))))));
+                            childAt(armPlace, arm.firstExpressionChild(), Opening.NONE))))));
         }
         return TokenDoc.node(clause.kind(), concat(written));
     }
@@ -1257,7 +1257,7 @@ public final class Formatter {
     private TokenDoc paramList(SyntaxNode n, Place at) {
         Place run = places.under(at, n.kind(), Opening.NONE, Written.of(n));
         List<Member> params = new ArrayList<>();
-        for (SyntaxNode p : childNodes(n, SyntaxKind.PARAM)) {
+        for (SyntaxNode p : n.childNodes(SyntaxKind.PARAM)) {
             Place param = memberPlace(run, p);
             params.add(member(param, TokenDoc.node(p.kind(),
                     concat(ident(firstIdent(p)), GAP, COLON, GAP,
@@ -1329,11 +1329,11 @@ public final class Formatter {
         // Each modifier is written at the head of the definition's own line, so that is where it is
         // written and there is no place of its own to record.
         List<TokenDoc> modifiers = new ArrayList<>();
-        for (SyntaxNode modifier : childNodes(n, SyntaxKind.PRIVATE_MODIFIER)) {
+        for (SyntaxNode modifier : n.childNodes(SyntaxKind.PRIVATE_MODIFIER)) {
             places.within(modifier, at);
             modifiers.add(concat(keyword(ContextualWord.PRIVATE), GAP));
         }
-        for (SyntaxNode modifier : childNodes(n, SyntaxKind.PARTIAL_MODIFIER)) {
+        for (SyntaxNode modifier : n.childNodes(SyntaxKind.PARTIAL_MODIFIER)) {
             places.within(modifier, at);
             modifiers.add(concat(keyword(ContextualWord.PARTIAL), GAP));
         }
@@ -1366,7 +1366,7 @@ public final class Formatter {
         // parameter list on the left stands for the lambda itself. Both are written down here
         // because here is where they are known: asked of the source tree afterwards, the answer for
         // either is the lambda, and the canonical form has a lambda at neither position.
-        SyntaxNode body = lifted == null ? onlyExpr(n) : lastExprChild(lifted);
+        SyntaxNode body = lifted == null ? n.firstExpressionChild() : lifted.lastExpressionChild();
         Place ofTheBody = places.under(at, body.kind(), Opening.breaks(TokenDoc.Break.MAY),
                 Written.of(body));
         return TokenDoc.node(n.kind(),
@@ -1388,7 +1388,7 @@ public final class Formatter {
         if (writesAFunctionType(n)) {
             return null;
         }
-        SyntaxNode body = onlyExpr(n);
+        SyntaxNode body = n.firstExpressionChild();
         return body.kind() == SyntaxKind.LAMBDA_EXPR ? body : null;
     }
 
@@ -1445,7 +1445,7 @@ public final class Formatter {
     private TokenDoc fnParamList(SyntaxNode n, Place at) {
         Place run = places.under(at, n.kind(), Opening.NONE, Written.of(n));
         List<Member> params = new ArrayList<>();
-        for (SyntaxNode p : childNodes(n, SyntaxKind.FN_PARAM)) {
+        for (SyntaxNode p : n.childNodes(SyntaxKind.FN_PARAM)) {
             Place param = memberPlace(run, p);
             SyntaxNode pat = optionalPatternChild(p);
             TokenDoc d = pat == null ? ident(firstIdent(p)) : pattern(pat, param);
@@ -1567,17 +1567,17 @@ public final class Formatter {
             case LITERAL_EXPR -> token(firstMeaningfulToken(n));
             case VAR_EXPR -> ident(firstIdent(n));
             case FIELD_ACCESS -> TokenDoc.node(n.kind(),
-                    concat(childAt(at, firstExprChild(n), Opening.NONE), GAP, DOT, GAP,
+                    concat(childAt(at, n.firstExpressionChild(), Opening.NONE), GAP, DOT, GAP,
                             ident(lastIdent(n))));
             case FIELD_GETTER -> TokenDoc.node(n.kind(), concat(DOT, GAP, ident(lastIdent(n))));
             case APPLY_EXPR -> apply(n, at);
             case BINARY_EXPR -> binary(n, at);
             case UNARY_EXPR -> TokenDoc.node(n.kind(),
                     concat(TokenDoc.token(SyntaxKind.MINUS, "-"), GAP,
-                            childAt(at, onlyExpr(n), Opening.NONE)));
+                            childAt(at, n.firstExpressionChild(), Opening.NONE)));
             case PIPE_EXPR -> pipe(n, at);
             case PAREN_EXPR -> TokenDoc.node(n.kind(),
-                    concat(LPAREN, GAP, childAt(at, onlyExpr(n), Opening.NONE), GAP, RPAREN));
+                    concat(LPAREN, GAP, childAt(at, n.firstExpressionChild(), Opening.NONE), GAP, RPAREN));
             case TUPLE_EXPR -> tuple(n, at);
             case LIST_EXPR -> list(n, at);
             case LIST_COMP -> listComp(n, at);
@@ -1588,7 +1588,7 @@ public final class Formatter {
             case BLOCK_EXPR -> block(n, at);
             case UNREACHABLE_EXPR -> TokenDoc.node(n.kind(), concat(
                     TokenDoc.token(SyntaxKind.UNREACHABLE_KW, "unreachable"), GAP,
-                    childAt(at, onlyExpr(n), Opening.NONE)));
+                    childAt(at, n.firstExpressionChild(), Opening.NONE)));
             default -> throw new IllegalStateException("no case writes " + n.kind());
         };
     }
@@ -1616,12 +1616,12 @@ public final class Formatter {
      */
     private TokenDoc apply(SyntaxNode n, Place at) {
         return TokenDoc.node(n.kind(),
-                concat(childAt(at, firstExprChild(n), Opening.NONE), GAP, arguments(n, at)));
+                concat(childAt(at, n.firstExpressionChild(), Opening.NONE), GAP, arguments(n, at)));
     }
 
     /** The bracketed argument list of a call or an application. */
     private TokenDoc arguments(SyntaxNode n, Place at) {
-        List<SyntaxNode> args = n.child(SyntaxKind.ARG_LIST).map(Formatter::exprChildren).orElse(List.of());
+        List<SyntaxNode> args = n.child(SyntaxKind.ARG_LIST).map(SyntaxNode::expressionChildren).orElse(List.of());
         SyntaxNode argList = n.child(SyntaxKind.ARG_LIST).orElse(null);
         Place run = places.under(at, SyntaxKind.ARG_LIST, Opening.NONE, Written.of(argList));
         if (args.isEmpty()) {
@@ -1655,7 +1655,7 @@ public final class Formatter {
      */
     private TokenDoc collectChain(SyntaxNode n, Place at, int level, List<TokenDoc> segs,
             boolean last) {
-        List<SyntaxNode> ops = exprChildren(n);
+        List<SyntaxNode> ops = n.expressionChildren();
         SyntaxNode left = ops.get(0);
         TokenDoc head;
         Place opensAt;
@@ -1668,7 +1668,7 @@ public final class Formatter {
             head = TokenDoc.at(ofTheLeft, concat(expr(left, ofTheLeft), TokenDoc.endsTheLineOf(ofTheLeft)));
         }
         SyntaxNode right = ops.get(1);
-        Place ofTheRight = segmentPlace(at, token(operatorToken(n)), right);
+        Place ofTheRight = segmentPlace(at, token(n.binaryOperatorToken()), right);
         segs.add(last ? lastOfARun(ofTheRight, expr(right, ofTheRight))
                 : segment(ofTheRight, right, expr(right, ofTheRight)));
         // What the parser read as one operand of the level above is written here as a run of
@@ -1707,7 +1707,7 @@ public final class Formatter {
     /** Flattens a left-nested {@code |>} chain: returns the head doc and fills {@code stages} with each
      * right-hand stage in source order. */
     private TokenDoc collectPipe(SyntaxNode n, Place at, List<TokenDoc> stages, boolean last) {
-        List<SyntaxNode> ops = exprChildren(n);
+        List<SyntaxNode> ops = n.expressionChildren();
         SyntaxNode left = ops.get(0);
         SyntaxNode right = ops.get(1);
         TokenDoc head;
@@ -1741,7 +1741,7 @@ public final class Formatter {
 
     private TokenDoc listComp(SyntaxNode n, Place at) {
         Place run = places.under(at, n.kind(), Opening.NONE, Written.of(n));
-        List<SyntaxNode> children = exprChildren(n);
+        List<SyntaxNode> children = n.expressionChildren();
         // The element is written after the `[` on its line, so nothing opens one for it; each guard
         // after the `|` has a line the layout may open.
         List<Member> parts = new ArrayList<>();
@@ -1767,7 +1767,7 @@ public final class Formatter {
      * boundary the layout can break, so it opens no line; the two branches each open one.
      */
     private TokenDoc ifExpr(SyntaxNode n, Place at) {
-        List<SyntaxNode> parts = exprChildren(n);
+        List<SyntaxNode> parts = n.expressionChildren();
         Place condition = places.under(at, parts.get(0).kind(), Opening.NONE,
                 Written.of(parts.get(0)));
         Place then = places.under(at, parts.get(1).kind(), Opening.breaks(TokenDoc.Break.MAY),
@@ -1799,13 +1799,13 @@ public final class Formatter {
         Place run = places.under(at, arms.get().kind(), Opening.NONE, Written.of(arms.get()));
         List<TokenDoc> lines = new ArrayList<>();
         lines.add(headerLine(run, n.token(SyntaxKind.ELSE_KW)));
-        for (SyntaxNode arm : childNodes(arms.get(), SyntaxKind.ELSE_ARM)) {
+        for (SyntaxNode arm : arms.get().childNodes(SyntaxKind.ELSE_ARM)) {
             Place place = places.under(run, arm.kind(),
                     Opening.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN),
                     Written.of(arm));
             lines.add(TokenDoc.at(place, concat(TokenDoc.node(arm.kind(),
                             concat(PIPE, GAP, ident(firstIdent(arm)), GAP, ARROW, GAP,
-                                    childAt(place, onlyExpr(arm), Opening.NONE))),
+                                    childAt(place, arm.firstExpressionChild(), Opening.NONE))),
                             TokenDoc.endsTheLineOf(place))));
         }
         lines.add(TokenDoc.carries(run, Carrier.AT_END));
@@ -1828,11 +1828,11 @@ public final class Formatter {
     }
 
     private TokenDoc matchExpr(SyntaxNode n, Place at) {
-        SyntaxNode scrutinee = exprChildren(n).get(0);
+        SyntaxNode scrutinee = n.expressionChildren().get(0);
         Place ofTheScrutinee = places.under(at, scrutinee.kind(), Opening.NONE,
                 Written.of(scrutinee));
         List<TokenDoc> cases = new ArrayList<>();
-        for (SyntaxNode c : childNodes(n, SyntaxKind.MATCH_CASE)) {
+        for (SyntaxNode c : n.childNodes(SyntaxKind.MATCH_CASE)) {
             Place place = places.under(at, c.kind(),
                     Opening.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN),
                     Written.of(c));
@@ -1912,7 +1912,7 @@ public final class Formatter {
         TokenDoc paramsDoc = n.token(SyntaxKind.LPAREN).isPresent()
                 ? delimited(run, SyntaxKind.LAMBDA_EXPR, LPAREN, withEndComments(run, params), RPAREN)
                 : concat(params.get(0).doc(), params.get(0).trailing());
-        SyntaxNode body = lastExprChild(n);
+        SyntaxNode body = n.lastExpressionChild();
         Place ofTheBody = places.under(at, body.kind(), Opening.NONE, Written.of(body));
         return TokenDoc.node(n.kind(), concat(TokenDoc.at(run, paramsDoc), GAP, ARROW, GAP,
                 TokenDoc.at(ofTheBody, expr(body, ofTheBody))));
@@ -1936,7 +1936,7 @@ public final class Formatter {
                         TokenDoc.token(SyntaxKind.SPREAD, "..."), GAP,
                         dottedName(idents(c))));
             } else {
-                var value = firstExprChildOpt(c);
+                var value = c.firstExpressionChildOpt();
                 written = TokenDoc.node(c.kind(),
                         value.map(v -> concat(ident(firstIdent(c)), GAP, ASSIGN, GAP,
                                         childAt(place, v, Opening.NONE)))
@@ -1974,10 +1974,10 @@ public final class Formatter {
             TokenDoc d = switch (c.kind()) {
                 case LET_STMT -> TokenDoc.node(c.kind(), concat(TokenDoc.token(SyntaxKind.LET_KW, "let"), GAP, ident(firstIdent(c)),
                         writtenType(c, place), GAP, ASSIGN, GAP,
-                        childAt(place, onlyExpr(c), Opening.NONE)));
+                        childAt(place, c.firstExpressionChild(), Opening.NONE)));
                 case LET_DESTRUCTURE -> TokenDoc.node(c.kind(), concat(TokenDoc.token(SyntaxKind.LET_KW, "let"), GAP,
                         pattern(patternChild(c), place), GAP, ASSIGN, GAP,
-                        childAt(place, onlyExpr(c), Opening.NONE)));
+                        childAt(place, c.firstExpressionChild(), Opening.NONE)));
                 case GUARD_STMT -> guardStmt(c, place);
                 default -> expr(c, place);   // the result expression
             };
@@ -2059,7 +2059,7 @@ public final class Formatter {
     }
 
     private TokenDoc guardStmt(SyntaxNode n, Place at) {
-        List<SyntaxNode> exprs = exprChildren(n);
+        List<SyntaxNode> exprs = n.expressionChildren();
         Place ofTheTest = places.under(at, exprs.get(0).kind(), Opening.NONE,
                 Written.of(exprs.get(0)));
         TokenDoc departures = elseArms(n, at);
@@ -2313,7 +2313,7 @@ public final class Formatter {
             // as a comment about the whole guard, so the first one had already moved it.
             case ELSE_KW -> t.parent().kind() == SyntaxKind.GUARD_STMT
                     && t.parent().child(SyntaxKind.ELSE_ARMS).isEmpty();
-            default -> isBinaryOperator(t.kind());
+            default -> t.kind().isBinaryOperator();
         };
     }
 
@@ -2761,59 +2761,11 @@ public final class Formatter {
 
     private List<Member> exprDocs(SyntaxNode n, Place run) {
         List<Member> out = new ArrayList<>();
-        for (SyntaxNode c : exprChildren(n)) {
+        for (SyntaxNode c : n.expressionChildren()) {
             Place at = memberPlace(run, c);
             out.add(member(at, expr(c, at)));
         }
         return withEndComments(run, out);
-    }
-
-    private static List<SyntaxNode> exprChildren(SyntaxNode n) {
-        List<SyntaxNode> out = new ArrayList<>();
-        for (SyntaxNode c : n.childNodes()) {
-            if (isExprKind(c.kind())) {
-                out.add(c);
-            }
-        }
-        return out;
-    }
-
-    private static SyntaxNode firstExprChild(SyntaxNode n) {
-        return exprChildren(n).get(0);
-    }
-
-    private Optional<SyntaxNode> firstExprChildOpt(SyntaxNode n) {
-        List<SyntaxNode> c = exprChildren(n);
-        return c.isEmpty() ? Optional.empty() : Optional.of(c.get(0));
-    }
-
-    private SyntaxNode lastExprChild(SyntaxNode n) {
-        List<SyntaxNode> c = exprChildren(n);
-        return c.get(c.size() - 1);
-    }
-
-    private static SyntaxNode onlyExpr(SyntaxNode n) {
-        return firstExprChild(n);
-    }
-
-    private static boolean isExprKind(SyntaxKind k) {
-        return switch (k) {
-            case LITERAL_EXPR, VAR_EXPR, FIELD_ACCESS, APPLY_EXPR, BINARY_EXPR,
-                 UNARY_EXPR, PIPE_EXPR, PAREN_EXPR, TUPLE_EXPR, LIST_EXPR, LIST_COMP, IF_EXPR,
-                 MATCH_EXPR, LAMBDA_EXPR, FIELD_GETTER, NEW_DATA_EXPR, BLOCK_EXPR,
-                 UNREACHABLE_EXPR -> true;
-            default -> false;
-        };
-    }
-
-    private List<SyntaxNode> childNodes(SyntaxNode n, SyntaxKind kind) {
-        List<SyntaxNode> out = new ArrayList<>();
-        for (SyntaxNode c : n.childNodes()) {
-            if (c.kind() == kind) {
-                out.add(c);
-            }
-        }
-        return out;
     }
 
     private List<SyntaxToken> idents(SyntaxNode n) {
@@ -2846,23 +2798,7 @@ public final class Formatter {
     }
 
     private SyntaxKind operatorKind(SyntaxNode n) {
-        return operatorToken(n).kind();
-    }
-
-    private SyntaxToken operatorToken(SyntaxNode n) {
-        for (SyntaxElement e : n.children()) {
-            if (e instanceof SyntaxToken t && !t.isTrivia() && isBinaryOperator(t.kind())) {
-                return t;
-            }
-        }
-        throw new IllegalStateException("no operator in " + n.kind());
-    }
-
-    private static boolean isBinaryOperator(SyntaxKind k) {
-        return switch (k) {
-            case EQ, NE, LT, LE, GT, GE, AND, OR, PLUS, MINUS, STAR, SLASH, PLUSPLUS -> true;
-            default -> false;
-        };
+        return n.binaryOperatorToken().kind();
     }
 
     private SyntaxNode typeChild(SyntaxNode n) {
