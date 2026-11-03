@@ -173,10 +173,10 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                                         new NoInputTakesIt.Clash.TwoAtOnce(what);
                                 case Reachability.NothingComesOutThatWay(var condition) ->
                                         new NoInputTakesIt.Clash.NeverComesOutSo(condition);
-                                case Reachability.Reaching _, Reachability.NumbersLeaveNone _ ->
-                                        throw new IllegalStateException(
-                                        "a way taken in closes on why nothing reaches it, and"
-                                                + " not on its numbers, which the region says");
+                                case Reachability.NumbersLeaveNone numbers ->
+                                        new NoInputTakesIt.Clash.RemaindersLeaveNone(numbers);
+                                case Reachability.Reaching _ -> throw new IllegalStateException(
+                                        "a way taken in closes on why nothing reaches it");
                             }));
                     case Step.Held<HeldTogether, Reachability>(var held) -> {
                         SearchRegion region = ofOnePosition(entry) && takesIn.getAsBoolean()
@@ -507,16 +507,36 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * @param counts what is left of each count asked, by its spelling
      * @param numbers the relations of numbers it has taken in, which statements of one form
      *                leave no point of the line in common
+     * @param remainders the remainders it has taken in, which statements of one remainder leave
+     *                   none of in common
      */
     private record HeldTogether(Requirements requirements, List<RowDemand.ATruth> truths,
-                                Map<String, LevelRegion> counts, FormsHeld numbers) {
+                                Map<String, LevelRegion> counts, FormsHeld numbers,
+                                RemaindersHeld remainders) {
 
         HeldTogether withRequirements(Requirements required) {
-            return new HeldTogether(required, truths, counts, numbers);
+            return new HeldTogether(required, truths, counts, numbers, remainders);
         }
 
         HeldTogether withTruths(List<RowDemand.ATruth> asked) {
-            return new HeldTogether(requirements, asked, counts, numbers);
+            return new HeldTogether(requirements, asked, counts, numbers, remainders);
+        }
+
+        /**
+         * These with what {@code added} leaves of its remainder held against what the others
+         * did, or why no row is where that leaves it none.
+         *
+         * <p>Asked where cases and truths are, by the way's own reading and by the search for
+         * what no input takes alike: a region holds no class a remainder leaves, so the
+         * declarations' region says nothing of these, and this is the one place that does.
+         */
+        Step<HeldTogether, Reachability> leaving(RowDemand.OnARemainder added) {
+            return switch (remainders.taking(added)) {
+                case RemaindersHeld.Taken.NoneLeft(var ofIt) -> new Step.Closed<>(
+                        new Reachability.NumbersLeaveNone(List.copyOf(ofIt)));
+                case RemaindersHeld.Taken.Held(var held) -> new Step.Held<>(
+                        new HeldTogether(requirements, truths, counts, numbers, held));
+            };
         }
 
         /**
@@ -538,9 +558,11 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
             // open, so only the statements of this one's form can newly be proved to.
             return switch (numbers.taking(affine)) {
                 case FormsHeld.Taken.NoPointLeft(var ofItsForm) ->
-                        new Step.Closed<>(new Reachability.NumbersLeaveNone(ofItsForm));
+                        new Step.Closed<>(new Reachability.NumbersLeaveNone(ofItsForm.stream()
+                                .<RowDemand.OfACondition>map(RowDemand.Relational::new)
+                                .toList()));
                 case FormsHeld.Taken.Held(var forms) -> new Step.Held<>(
-                        new HeldTogether(requirements, truths, counts, forms));
+                        new HeldTogether(requirements, truths, counts, forms, remainders));
             };
         }
 
@@ -557,7 +579,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
             }
             Map<String, LevelRegion> out = new LinkedHashMap<>(counts);
             out.put(spelled, left);
-            return new Step.Held<>(new HeldTogether(requirements, truths, out, numbers));
+            return new Step.Held<>(new HeldTogether(requirements, truths, out, numbers,
+                    remainders));
         }
     }
 
@@ -604,7 +627,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                 @Override
                 public HeldTogether nothing() {
                     return new HeldTogether(Requirements.NONE, List.of(), Map.of(),
-                            FormsHeld.NONE);
+                            FormsHeld.NONE, RemaindersHeld.NONE);
                 }
 
                 /** {@code so} with {@code entry} taken in, or why no row takes them together. */
@@ -696,6 +719,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                     so.counting(every.counted().get(), NONE);
             case OnTheWay.TakenIn(var _, RowDemand.SoMany many) when !many.againstNumbers() ->
                     so.counting(many.count(), many.counts().values());
+            case OnTheWay.TakenIn(var _, RowDemand.OnARemainder remainder) ->
+                    so.leaving(remainder);
             // A relation over a number written under a case is a relation of a value that is
             // that case: the number is nowhere else.
             case OnTheWay.TakenIn(var _, RowDemand.Relational relation) -> {

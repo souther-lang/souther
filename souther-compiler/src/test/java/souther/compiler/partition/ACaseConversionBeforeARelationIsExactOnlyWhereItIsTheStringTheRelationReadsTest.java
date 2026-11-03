@@ -85,12 +85,16 @@ class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationRead
                              domainsOf(reach))
             """;
 
-    private static NavigableSet<String> reasons(String source) {
+    private static String report(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        String json = AdequacyReport.of(compilation)
+        return AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+    }
+
+    private static NavigableSet<String> reasons(String source) {
+        String json = report(source);
         NavigableSet<String> out = new TreeSet<>();
         Matcher found = Pattern.compile("\"reason\"\\s*:\\s*\"([a-z_]+)\"").matcher(json);
         while (found.find()) {
@@ -102,12 +106,13 @@ class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationRead
     /**
      * The walk over a list that converts the strings of every element is an application before the
      * relation, which is reached at one element. What it converts of the others is no string the
-     * classes of the relation are drawn over, so it is a stop at values nothing says, whether or
-     * not it also converts a string no side reads, and whether that string is a short one a
-     * conversion cannot fail on or any string at all. The relation is not shown reached.
+     * classes of the relation are drawn over, but the list holds the element the relation is read
+     * at over again, and its copies convert as it does. So the relation is shown over a region,
+     * whether or not the walk also converts a string no side reads, and whether that string is a
+     * short one a conversion cannot fail on or any string at all.
      */
     @Test
-    void aConversionOfOtherElementsStringsByAnEarlierWalkIsAStopTheRelationIsNotShownPast() {
+    void aConversionOfOtherElementsStringsByAnEarlierWalkIsPastWhereTheListHoldsTheElementOverAgain() {
         for (String tagType : List.of("data Tag = String\n    invariant String.matches(\"[a-z]{1,2}\", value)",
                 "data Tag = String")) {
             NavigableSet<String> reasons = reasons("""
@@ -128,11 +133,146 @@ class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationRead
                     let f (i) = List.any(k -> List.any(a -> String.contains(k.domain, a.domain),
                                                        i.accounts), keyed(i.ps))
                     """.formatted(tagType));
-            assertTrue(reasons.contains("relation_not_shown_to_reach_every_value"),
-                    () -> tagType + " " + reasons);
-            assertFalse(reasons.contains("relation_shown_over_a_region"),
+            assertTrue(reasons.contains("relation_shown_over_a_region"),
                     () -> tagType + " " + reasons);
         }
+    }
+
+    private static final String KEYED_LIST = """
+            module demo
+
+            data P = { name: String }
+            data Acc = { domain: String }
+            data Keyed = { domain: String }
+            DECLARED
+
+            let keyed (ps: List<P>): List<Keyed> =
+                List.map(p -> Keyed { domain = String.lowercase(p.name) }, ps)
+
+            behavior f : (i: In) -> Bool
+            let f (i) = List.any(k -> List.any(a -> String.contains(k.domain, a.domain),
+                                               i.accounts), keyed(i.ps))
+            """;
+
+    /**
+     * The conversion of every element's string before the relation reads one element's is let go
+     * of where the witness writes that element over again: the copies convert as it does. A list
+     * that keeps its elements apart cannot be written over again, so the other elements' strings
+     * are other strings and the relation is not shown to be reached.
+     */
+    @Test
+    void theOtherElementsStringsAreTheOneTheRelationReadsWhereTheListHoldsItOverAgain() {
+        NavigableSet<String> repeating = reasons(KEYED_LIST.replace("DECLARED",
+                "data In = { ps: List<P>, accounts: List<Acc> }"));
+        assertTrue(repeating.contains("relation_shown_over_a_region"), repeating::toString);
+
+        NavigableSet<String> apart = reasons(KEYED_LIST.replace("DECLARED",
+                "data In = { ps: List<P>, accounts: List<Acc> }\n"
+                        + "    invariant List.allDistinctBy(.name, ps)"));
+        assertFalse(apart.contains("relation_shown_over_a_region"), apart::toString);
+        assertTrue(apart.contains("relation_not_shown_to_reach_every_value"), apart::toString);
+    }
+
+    /**
+     * What the relation is shown over is the same whether the strings are converted by a walk
+     * before the relation or by the relation itself at the element it reads. The copies only let
+     * the other elements' conversions go; the strings the conversion is exact on, and so the
+     * classes the relation is drawn over, are what the single conversion gives. The reports differ
+     * only in the number each position is given.
+     */
+    @Test
+    void theConversionsOfOtherElementsLeaveTheClassesTheElementsOwnConversionGives() {
+        String walked = report(KEYED_LIST.replace("DECLARED",
+                "data In = { ps: List<P>, accounts: List<Acc> }"));
+        String direct = report("""
+                module demo
+
+                data P = { name: String }
+                data Acc = { domain: String }
+                data In = { ps: List<P>, accounts: List<Acc> }
+
+                behavior f : (i: In) -> Bool
+                let f (i) = List.any(p -> List.any(a -> String.contains(String.lowercase(p.name),
+                                                                         a.domain), i.accounts),
+                                     i.ps)
+                """);
+        assertTrue(walked.contains("relation_shown_over_a_region"), walked);
+        assertEquals(withoutOrdinals(direct), withoutOrdinals(walked));
+    }
+
+    /**
+     * A relation of two elements of the list is not one element read: copies of one element would
+     * make the two the same string, which is a row of the relation at only some values.
+     */
+    @Test
+    void aRelationOfTwoElementsOfTheListIsNotReadAtCopiesOfOne() {
+        NavigableSet<String> reasons = reasons("""
+                module demo
+
+                data P = { name: String }
+                data Keyed = { domain: String }
+                data In = { ps: List<P> }
+
+                let keyed (ps: List<P>): List<Keyed> =
+                    List.map(p -> Keyed { domain = String.lowercase(p.name) }, ps)
+
+                behavior f : (i: In) -> Bool
+                let f (i) = List.any(a -> List.any(b -> String.contains(a.domain, b.domain),
+                                                   keyed(i.ps)), keyed(i.ps))
+                """);
+        assertFalse(reasons.contains("unsupported_syntax"), reasons::toString);
+        assertFalse(reasons.contains("relation_shown_over_a_region"), reasons::toString);
+    }
+
+    private static String withoutOrdinals(String json) {
+        return json.replaceAll("\"ordinal\"\\s*:\\s*\\d+", "\"ordinal\":0");
+    }
+
+    /**
+     * A rule tying how many the list holds to how many accounts the relation reads does not keep
+     * copies from being a row: they are written at the count the accounts are, whatever it is. So
+     * the tie leaves the relation shown, as the list without it is.
+     */
+    @Test
+    void aListWhoseSizeIsTiedToAnotherListIsStillWrittenOverAgain() {
+        NavigableSet<String> reasons = reasons(KEYED_LIST.replace("DECLARED",
+                "data In = { ps: List<P>, accounts: List<Acc> }\n"
+                        + "    invariant List.length(ps) == List.length(accounts)"));
+        assertFalse(reasons.contains("unsupported_syntax"), reasons::toString);
+        assertTrue(reasons.contains("relation_shown_over_a_region"), reasons::toString);
+    }
+
+    private static final String KEYED_FROM_A_CONTAINER = """
+            module demo
+
+            data P = { name: String }
+            data Acc = { domain: String }
+            data Keyed = { domain: String }
+            data In = { ps: CONTAINER<P>, accounts: List<Acc> }
+
+            let keyed (ps: List<P>): List<Keyed> =
+                List.map(p -> Keyed { domain = String.lowercase(p.name) }, ps)
+
+            behavior f : (i: In) -> Bool
+            let f (i) = List.any(k -> List.any(a -> String.contains(k.domain, a.domain),
+                                               i.accounts), keyed(WALKED))
+            """;
+
+    /**
+     * The same program over a list and over a set made into a list. The set holds an element
+     * once, so the witness cannot write the other positions as copies of the one the relation is
+     * read at; the list is the control that is shown. The two differ in the container and in
+     * nothing else, so a set that is not shown is not shown for the copies.
+     */
+    @Test
+    void aSetIsNotWrittenOverAgainWhereTheListIs() {
+        NavigableSet<String> list = reasons(KEYED_FROM_A_CONTAINER
+                .replace("CONTAINER", "List").replace("WALKED", "i.ps"));
+        NavigableSet<String> set = reasons(KEYED_FROM_A_CONTAINER
+                .replace("CONTAINER", "Set").replace("WALKED", "Set.toList(i.ps)"));
+        assertTrue(list.contains("relation_shown_over_a_region"), list::toString);
+        assertFalse(set.contains("unsupported_syntax"), set::toString);
+        assertFalse(set.contains("relation_shown_over_a_region"), set::toString);
     }
 
     /**

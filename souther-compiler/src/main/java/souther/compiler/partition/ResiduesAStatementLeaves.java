@@ -40,10 +40,12 @@ final class ResiduesAStatementLeaves {
     private ResiduesAStatementLeaves() {
     }
 
-    /** The remainders by {@code divisor} of {@code dividend} at which {@code stated} may hold. */
+    /** The remainders by {@code divisor} of {@code dividend} at which {@code stated} may hold:
+     *  every one where the remainder is none another is read as one with
+     *  ({@link ARemainderMoved#of}). */
     static WholeNumberRuns of(Proposition stated, LinearForm<NumericTerm> dividend,
                               BigInteger divisor) {
-        if (!dividend.constant().isWhole()) {
+        if (ARemainderMoved.of(dividend, divisor).isEmpty()) {
             return WholeNumberRuns.EVERY;
         }
         return new Reading(dividend, divisor, turnIn(stated, divisor), new IdentityHashMap<>())
@@ -152,7 +154,7 @@ final class ResiduesAStatementLeaves {
             }
             WholeNumberRuns left = (compared.holds() ? standing : standing.others())
                     .and(Standing.OfARemainderAndAForm.every(divisor));
-            return Standing.OfARemainder.turnedBack(left, moved, divisor);
+            return ARemainderMoved.turnedBack(left, moved, divisor);
         }
 
         /**

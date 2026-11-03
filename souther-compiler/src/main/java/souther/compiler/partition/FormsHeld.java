@@ -35,10 +35,11 @@ final class FormsHeld {
         record NoPointLeft(List<TakenConstraint.Affine> statements) implements Taken {}
     }
 
+    /** The groups, a list made for these alone and never changed once made. */
     private final List<Group> groups;
 
     private FormsHeld(List<Group> groups) {
-        this.groups = List.copyOf(groups);
+        this.groups = groups;
     }
 
     /** These with {@code added} taken in, or the statements of its form where they leave no point
