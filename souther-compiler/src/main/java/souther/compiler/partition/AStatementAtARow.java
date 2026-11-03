@@ -150,20 +150,18 @@ final class AStatementAtARow {
             return had;
         }
         boolean out = switch (stated) {
-            case Proposition.All all ->
-                    all.parts().stream().allMatch(each -> askableAt(each, element, asked));
-            case Proposition.Any any ->
-                    any.parts().stream().allMatch(each -> askableAt(each, element, asked));
-            case Proposition.WhereItAnswers where -> askableAt(where.answers(), element, asked)
-                    && askableAt(where.states(), element, asked);
-            case Proposition.SoManyHold counted -> counted.statements().stream()
-                    .allMatch(each -> askableAt(each, element, asked));
-            case Proposition.OfTheWays ways -> askableAt(ways.written(), element, asked);
-            case Proposition.Some some -> askableAt(some.ofTheElement(), element, asked);
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.SoManyHold _, Proposition.OfTheWays _, Proposition.Some _ ->
+                    stated.partsHeld().stream()
+                            .allMatch(each -> askableAt(each, element, asked));
             case Proposition.Compared compared -> OnOneElement.at(compared, element,
                     LinearForm.constant(ExactRatio.ZERO)) instanceof Proposition there
                     && askable(there);
-            default -> askable(stated);
+            case Proposition.Always _, Proposition.Truth _, Proposition.Present _,
+                 Proposition.InCases _, Proposition.InTheStrings _, Proposition.SameValue _,
+                 Proposition.StringInside _, Proposition.LastToHold _, Proposition.Unread _,
+                 Proposition.Carried _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _ -> askable(stated);
         };
         asked.put(stated, out);
         return out;
@@ -213,19 +211,10 @@ final class AStatementAtARow {
             case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtAPosition _,
                                           StringsLanguage _, boolean _, Spelling _) -> true;
             case Proposition.LastToHold _ -> true;
-            case Proposition.All all -> all.parts().stream()
-                    .allMatch(each -> askable(each, besideItsRelations, besideItsStops));
-            case Proposition.Any any -> any.parts().stream()
-                    .allMatch(each -> askable(each, besideItsRelations, besideItsStops));
-            case Proposition.WhereItAnswers where ->
-                    askable(where.answers(), besideItsRelations, besideItsStops)
-                            && askable(where.states(), besideItsRelations, besideItsStops);
-            case Proposition.SoManyHold counted -> counted.statements().stream()
-                    .allMatch(each -> askable(each, besideItsRelations, besideItsStops));
-            case Proposition.OfTheWays ways ->
-                    askable(ways.written(), besideItsRelations, besideItsStops);
-            case Proposition.Some some ->
-                    askable(some.ofTheElement(), besideItsRelations, besideItsStops);
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.SoManyHold _, Proposition.OfTheWays _, Proposition.Some _ ->
+                    stated.partsHeld().stream()
+                            .allMatch(each -> askable(each, besideItsRelations, besideItsStops));
             case Proposition.Compared compared -> besideItsRelations
                     || switch (compared.relation()) {
                 case Relation.Affine affine ->
@@ -538,16 +527,9 @@ final class AStatementAtARow {
 
     private static void gatherNumbers(Proposition stated, Set<NumericTerm> into) {
         switch (stated) {
-            case Proposition.All all -> all.parts().forEach(part -> gatherNumbers(part, into));
-            case Proposition.Any any -> any.parts().forEach(part -> gatherNumbers(part, into));
-            case Proposition.WhereItAnswers where -> {
-                gatherNumbers(where.answers(), into);
-                gatherNumbers(where.states(), into);
-            }
-            case Proposition.SoManyHold counted ->
-                    counted.statements().forEach(part -> gatherNumbers(part, into));
-            case Proposition.OfTheWays ways -> gatherNumbers(ways.written(), into);
-            case Proposition.Some some -> gatherNumbers(some.ofTheElement(), into);
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.SoManyHold _, Proposition.OfTheWays _, Proposition.Some _ ->
+                    stated.partsHeld().forEach(part -> gatherNumbers(part, into));
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
                     && countIn(affine) instanceof Quantity count ->

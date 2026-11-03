@@ -351,23 +351,12 @@ public final class WrittenLines {
                 into.add(compared.heldSpelling());
                 this.stated.putIfAbsent(compared.heldSpelling(), compared);
             }
-            case Proposition.All all -> all.parts().forEach(each -> gather(each, into));
-            case Proposition.Any any -> any.parts().forEach(each -> gather(each, into));
-            case Proposition.WhereItAnswers where -> {
-                gather(where.answers(), into);
-                gather(where.states(), into);
-            }
-            case Proposition.Some some -> gather(some.ofTheElement(), into);
-            case Proposition.OnAnApplication each -> each.each().forEach(one -> gather(one, into));
             // The relations its statements hold, each one way round whichever way a choice of
             // them holds it.
-            case Proposition.SoManyHold counted ->
-                    counted.statements().forEach(one -> gather(one, into));
-            case Proposition.OfTheWays ways -> gather(ways.written(), into);
-            case Proposition.SomeReachable reachable -> {
-                gather(reachable.atANode(), into);
-                reachable.noneBelow().ifPresent(none -> gather(none, into));
-            }
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.Some _, Proposition.OnAnApplication _, Proposition.SoManyHold _,
+                 Proposition.OfTheWays _, Proposition.SomeReachable _ ->
+                    stated.partsHeld().forEach(each -> gather(each, into));
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
                  Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _,
