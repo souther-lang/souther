@@ -118,11 +118,37 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
      */
     @Test
     void aRelationAfterASumThatTiesTwoNumbersIsReadWhereTheTypeEnds() {
-        for (String target : List.of("a - b > 0", "a == b", "a * b >= 0", MEMBERSHIP,
-                "Int.floorMod(a, b) == 0")) {
-            String condition = "(a + " + FIRST_SUM + " - d >= 0 || d > 0) && " + target;
-            assertFalse(readingsOf(NUMBERS, condition).isEmpty(), condition);
-        }
+        String choice = "(a + " + FIRST_SUM + " - d >= 0 || d > 0) && ";
+        assertEquals(Map.of("a", List.of(READ), "d", List.of(READ)),
+                readingsOf(NUMBERS, choice + "a - b > 0"));
+        assertEquals(Map.of("a", List.of(READ), "d", List.of(READ), "b", List.of(NOT_SHOWN)),
+                readingsOf(NUMBERS, choice + "a == b"));
+        assertEquals(Map.of("a", List.of(NOT_SHOWN, READ), "d", List.of(READ)),
+                readingsOf(NUMBERS, choice + "a * b >= 0"));
+        assertEquals(Map.of("a", List.of(READ), "d", List.of(READ), "hs[*]", List.of(NOT_SHOWN)),
+                readingsOf(NUMBERS, choice + MEMBERSHIP));
+        assertEquals(Map.of("a", List.of(NOT_SHOWN, READ), "d", List.of(READ)),
+                readingsOf(NUMBERS, choice + "Int.floorMod(a, b) == 0"));
+    }
+
+    /**
+     * Worked out as the program does, {@code a + K - K} stops at {@code a} from 11 up; as a form it
+     * is {@code a}. The membership of the one is not the membership of the other, and reads as the
+     * guard keeping {@code a} to 10 or less does: what the argument works out is the relation's
+     * own, and the region it narrows is what the reader of the relation is handed.
+     */
+    @Test
+    void aSumAnArgumentStopsAtIsNotTheArgumentItIsAsAForm() {
+        String written = "Bool.not(Set.contains(a + " + FIRST_SUM + " - " + FIRST_SUM + ", hs))";
+        assertEquals(List.of(READ), reasonsAt(PARAMETERS, MEMBERSHIP, "hs[*]"));
+        assertEquals(Map.of("a", List.of(NOT_SHOWN), "hs[*]", List.of(NOT_SHOWN)),
+                readingsOf(PARAMETERS, written));
+        assertEquals(readingsOf(PARAMETERS, "a <= 10 && " + written),
+                readingsOf(PARAMETERS, written));
+        String withTheDifference = "Bool.not(Set.contains(a + " + FIRST_SUM + " - " + FIRST_SUM
+                + " - d, hs))";
+        assertEquals(readingsOf(PARAMETERS, "a <= 10 && Bool.not(Set.contains(a - d, hs))"),
+                readingsOf(PARAMETERS, withTheDifference));
     }
 
     /** A form worked out wherever the rest stand keeps being read. */
