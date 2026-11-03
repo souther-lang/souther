@@ -138,7 +138,7 @@ final class WorkedOutToReachIt {
      * ({@link ClausesInOrder}), working it out ends no run, and it folds to true with its fields
      * standing for what {@code made} hands them. What cannot be shown is not held.
      */
-    private boolean aConstructionEndsNoRun(Core.Construct made, InputReads at) {
+    boolean aConstructionEndsNoRun(Core.Construct made, InputReads at) {
         if (read.rules().declarations().published().of(made.typeName().key())
                 instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Product product)
                 && product.clauses().isEmpty() && product.includes().isEmpty()) {

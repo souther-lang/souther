@@ -231,6 +231,41 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
         }
     }
 
+    /**
+     * A remainder stops a run only where its divisor is nought, and a divisor is a number however it
+     * is written: {@code 0} and {@code d - d} are nought on every run, so none reaches the
+     * membership after them, and {@code 7} is nought on none. What the operation says of a divisor
+     * that names no place is not that it stops no run.
+     */
+    @Test
+    void aRemainderByANoughtStopsEveryRunWhateverTheDivisorIsWrittenAs() {
+        for (String divisor : List.of("0", "d - d", "7 - 7", "d * 0")) {
+            String condition = "{ let m = Int.floorMod(a, " + divisor + ")  " + MEMBERSHIP + " }";
+            assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(PARAMETERS, condition, "hs[*]"),
+                    divisor);
+        }
+        for (String divisor : List.of("7", "2 + 5", "d - d + 7")) {
+            String condition = "{ let m = Int.floorMod(a, " + divisor + ")  " + MEMBERSHIP + " }";
+            assertEquals(List.of(READ), reasonsAt(PARAMETERS, condition, "hs[*]"), divisor);
+        }
+    }
+
+    /**
+     * One body states {@code a - d} and a sum that cancels to it, on the way to one membership. The
+     * statement of the form the sum cancels to is no proof for the sum, whichever is written first:
+     * the sum stops where the form does not, and the membership is not shown reached.
+     */
+    @Test
+    void aFormAndASumThatCancelsToItInOneBodyShareNoProof() {
+        String plain = "Int.floorMod(a - d, 7) >= 1";
+        String cancelled = "Int.floorMod(a + 9223372036854775807 - 9223372036854775807 - d, 7) >= 1";
+        assertEquals(List.of(READ), reasonsAt(PARAMETERS, plain + " && " + MEMBERSHIP, "hs[*]"));
+        assertEquals(List.of(NOT_SHOWN), reasonsAt(PARAMETERS,
+                plain + " && " + cancelled + " && " + MEMBERSHIP, "hs[*]"));
+        assertEquals(List.of(NOT_SHOWN), reasonsAt(PARAMETERS,
+                cancelled + " && " + plain + " && " + MEMBERSHIP, "hs[*]"));
+    }
+
     private static List<String> reasonsOfBehavior(JsonNode report, String behavior,
                                                   String position) {
         Set<String> found = new TreeSet<>();

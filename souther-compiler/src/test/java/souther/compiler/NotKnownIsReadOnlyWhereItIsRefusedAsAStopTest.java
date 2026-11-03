@@ -31,9 +31,10 @@ class NotKnownIsReadOnlyWhereItIsRefusedAsAStopTest {
     private static final Map<String, Integer> READERS = Map.of(
             // The cases of a completion in a switch over it: not known is not an answer on a run.
             "check/ContainerSizesUnderAWitness.java", 1,
-            // An operator not known to complete is left unsaid and owed no proof, and an
+            // An operator not known to complete is left unsaid and owed no proof, one that read no
+            // place is left unsaid on what no place holds unless it is shown to stop none, and an
             // obligation is refused the completion.
-            "partition/Pullback.java", 2);
+            "partition/Pullback.java", 3);
 
     @Test
     void theseAreTheOnlyPlacesThatAskWhetherACompletionIsNotKnown() throws IOException {
