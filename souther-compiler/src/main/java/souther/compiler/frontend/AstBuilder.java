@@ -1046,7 +1046,7 @@ public final class AstBuilder {
      * length from there, running past the end of what was written.
      */
     private Ast.Expr apply(SyntaxNode n) {
-        SyntaxNode callee = n.expressionChildren().get(0);
+        SyntaxNode callee = n.firstExpressionChild();
         List<Ast.Expr> args = new ArrayList<>();
         n.child(SyntaxKind.ARG_LIST).ifPresent(list -> {
             for (SyntaxNode arg : list.expressionChildren()) {

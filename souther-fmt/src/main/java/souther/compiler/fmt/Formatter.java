@@ -1828,7 +1828,7 @@ public final class Formatter {
     }
 
     private TokenDoc matchExpr(SyntaxNode n, Place at) {
-        SyntaxNode scrutinee = n.expressionChildren().get(0);
+        SyntaxNode scrutinee = n.firstExpressionChild();
         Place ofTheScrutinee = places.under(at, scrutinee.kind(), Opening.NONE,
                 Written.of(scrutinee));
         List<TokenDoc> cases = new ArrayList<>();
