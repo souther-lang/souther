@@ -111,6 +111,20 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
         assertEquals(List.of(NOT_SHOWN), reasonsAt(PARAMETERS, condition, "hs[*]"));
     }
 
+    /**
+     * A choice whose left arm is a sum tying two numbers narrows both on the way it is not taken,
+     * and a run read off that region can reach past the ends of the type. A relation after it is
+     * read all the same, whether a comparison or a membership.
+     */
+    @Test
+    void aRelationAfterASumThatTiesTwoNumbersIsReadWhereTheTypeEnds() {
+        for (String target : List.of("a - b > 0", "a == b", "a * b >= 0", MEMBERSHIP,
+                "Int.floorMod(a, b) == 0")) {
+            String condition = "(a + " + FIRST_SUM + " - d >= 0 || d > 0) && " + target;
+            assertFalse(readingsOf(NUMBERS, condition).isEmpty(), condition);
+        }
+    }
+
     /** A form worked out wherever the rest stand keeps being read. */
     @Test
     void aFormThatIsWorkedOutEverywhereIsStillRead() {

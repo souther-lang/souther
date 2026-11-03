@@ -547,11 +547,6 @@ public sealed interface Reachability {
             }
 
             /** What moved the region, whichever it came of. */
-            NarrowedPast(List<TakenConstraint> narrowing, SearchRegion narrowed,
-                         boolean leavesNone) {
-                this(narrowing, List.of(), narrowed, leavesNone);
-            }
-
             List<TakenConstraint> narrowing() {
                 List<TakenConstraint> both = new ArrayList<>(onTheWay);
                 both.addAll(ofTheRelation);

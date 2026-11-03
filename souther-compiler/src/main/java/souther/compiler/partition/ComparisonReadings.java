@@ -599,8 +599,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * What the run to {@code e}, the node {@code statement} is stated at, asks of a row
      * ({@link #gotPast}): all of it for a comparison, and for an application what the run
      * narrows. A value an operator the run works out before an application stops on is a value no
-     * run reaches it at, and the region says so; what else it may stop on is asked of the
-     * witness a comparison's reader holds, which an application's reader does not hold.
+     * run reaches it at, and the region says so. What else the run may stop on, its ties, the
+     * operators left unsaid and owed, and what the applications before work out, is not carried to
+     * an application's reader, which takes the absence of it for no stop on the way.
      */
     private static DemandReading.Answered pastOf(Stated statement,
                                                  BoundaryPolicy.Standing standing, Core e,
@@ -609,25 +610,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 || !in.context().equals(CallContext.OF_THE_BODY)) {
             return DemandReading.Answered.NOTHING;
         }
-        return statement instanceof Stated.AComparison ? gotPast(e, in, reads)
-                : narrowedOnTheWayTo(e, in, reads);
-    }
-
-    /**
-     * What the run to {@code application} narrows, as {@link #gotPast} says it of a comparison and
-     * without the rest of what that asks: the applications before are not walked, since what they
-     * work out is no narrowing of a row at this application, and nothing is tied.
-     */
-    private static DemandReading.Answered narrowedOnTheWayTo(Core application, Body in,
-                                                             InputReads reads) {
-        Set<Core> ofTheRelation = valuesTheComparisonReads(in.root(), application);
-        WhatARunWorksOutBeforeACount.FirstApplication first =
-                WhatARunWorksOutBeforeACount.workedOutAtTheFirstApplication(in.root(),
-                        application);
-        List<Core> parts = first == null || first.entered().isEmpty()
-                ? WhatARunWorksOutBeforeACount.alwaysWorkedOutUpTo(in.root(), application)
-                : first.parts();
-        return workedOut(parts, application, ofTheRelation, in, reads).whatItNarrows();
+        return gotPast(e, in, reads, !(statement instanceof Stated.AComparison));
     }
 
     /**
@@ -642,18 +625,29 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * carries only what the run up to the application narrows: what only the applications before
      * narrow holds of a run that makes them and of no other, so it is owed with them as a stop on
      * the places it names.
+     *
+     * @param onlyWhatItNarrows whether only what the run narrows is wanted, so that nothing is
+     *                          tied and the applications before are not walked
      */
-    private static DemandReading.Answered gotPast(Core comparison, Body in, InputReads reads) {
+    private static DemandReading.Answered gotPast(Core comparison, Body in, InputReads reads,
+                                                  boolean onlyWhatItNarrows) {
         Set<Core> ofTheRelation = valuesTheComparisonReads(in.root(), comparison);
-        List<Core> whole = WhatARunWorksOutBeforeACount.alwaysWorkedOutUpTo(in.root(), comparison);
         WhatARunWorksOutBeforeACount.FirstApplication first =
                 WhatARunWorksOutBeforeACount.workedOutAtTheFirstApplication(in.root(), comparison);
-        if (first == null || first.entered().isEmpty()) {
-            return workedOut(whole, comparison, ofTheRelation, in, reads);
+        boolean afterApplications = first != null && !first.entered().isEmpty();
+        List<Core> whole = afterApplications && onlyWhatItNarrows ? List.of()
+                : WhatARunWorksOutBeforeACount.alwaysWorkedOutUpTo(in.root(), comparison);
+        if (!afterApplications) {
+            DemandReading.Answered all = workedOut(whole, comparison, ofTheRelation, in, reads);
+            return onlyWhatItNarrows ? all.whatItNarrows() : all;
         }
-        DemandReading.Answered before = workedOut(whole, comparison, ofTheRelation, in, reads);
         DemandReading.Answered upTo = workedOut(first.parts(), comparison, ofTheRelation, in,
                 reads);
+        if (onlyWhatItNarrows) {
+            // What the applications before work out is no narrowing of a row at this one.
+            return upTo.whatItNarrows();
+        }
+        DemandReading.Answered before = workedOut(whole, comparison, ofTheRelation, in, reads);
         List<DemandReading.Tie> ties = new ArrayList<>(before.tied());
         for (TakenConstraint each : before.narrowing()) {
             if (!upTo.narrowing().contains(each)) {
