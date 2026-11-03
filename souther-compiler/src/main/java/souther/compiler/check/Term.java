@@ -758,7 +758,22 @@ final class Term {
         if (term == this) {
             return true;
         }
-        return !differsOnItsFace(this, term) && same(this, term, new IdentityHashMap<>());
+        if (differsOnItsFace(this, term)) {
+            return false;
+        }
+        // Terms one interner made out of the same parts hold those parts as the same instances, so
+        // there is nothing for a table of pairs to remember. A term with no parts is the commonest.
+        return hasTheSamePartsAs(term) || same(this, term, new IdentityHashMap<>());
+    }
+
+    /** Whether each part of this is the very instance at its place in {@code other}. */
+    private boolean hasTheSamePartsAs(Term other) {
+        for (int at = 0; at < parts.size(); at++) {
+            if (parts.get(at) != other.parts.get(at)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Whether two terms are told apart by what each carries, without looking at their parts. */
@@ -1111,7 +1126,7 @@ final class Term {
          */
         Term calledIfBuilt(ValueName operation, List<Term> args) {
             Term made = new Term(Shape.CALLED, operation, args);
-            return shared.containsKey(made) ? made : null;
+            return shared.get(made);
         }
 
         /** A value given to an optional position. */
