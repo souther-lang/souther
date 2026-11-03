@@ -108,7 +108,7 @@
         <junit.version>6.1.3</junit.version>
         <!-- Named rather than written where it is used: `souther init` writes a project whose own
              tests are run by Surefire, and what it hands that project is this number. -->
-        <surefire.version>3.6.0</surefire.version>
+        <surefire.version>3.6.1</surefire.version>
         <!-- The coverage agent a run under `-Pcoverage-by-class` carries. Named once because two
              places need the same number: the profile that starts the agent and the test-support
              module that compiles against its runtime. -->
@@ -156,7 +156,7 @@
              release and of a snapshot alike. -->
         <souther.publish.skip>false</souther.publish.skip>
         <!-- The Enforcer the release and snapshot profiles check with. -->
-        <enforcer.version>3.6.3</enforcer.version>
+        <enforcer.version>3.7.0</enforcer.version>
         <!-- What the build copies into an artifact from outside every module's own src, as paths
              from the root. A publication refuses an ignored file in any of them, as each module
              refuses one in its src (bin/require-clean-checkout.sh), because a copy would carry it
