@@ -109,19 +109,29 @@ public final class SyntaxNode implements SyntaxElement {
 
     /** The first direct child that is an expression; throws when there is none. */
     public SyntaxNode firstExpressionChild() {
-        return expressionChildren().get(0);
+        return firstExpressionChildOpt().orElseThrow(
+                () -> new IndexOutOfBoundsException("no expression in " + kind()));
     }
 
     /** The first direct child that is an expression, if any. */
     public Optional<SyntaxNode> firstExpressionChildOpt() {
-        List<SyntaxNode> expressions = expressionChildren();
-        return expressions.isEmpty() ? Optional.empty() : Optional.of(expressions.get(0));
+        for (SyntaxElement e : children()) {
+            if (e instanceof SyntaxNode n && n.kind().isExpression()) {
+                return Optional.of(n);
+            }
+        }
+        return Optional.empty();
     }
 
     /** The last direct child that is an expression; throws when there is none. */
     public SyntaxNode lastExpressionChild() {
-        List<SyntaxNode> expressions = expressionChildren();
-        return expressions.get(expressions.size() - 1);
+        List<SyntaxElement> all = children();
+        for (int i = all.size() - 1; i >= 0; i--) {
+            if (all.get(i) instanceof SyntaxNode n && n.kind().isExpression()) {
+                return n;
+            }
+        }
+        throw new IndexOutOfBoundsException("no expression in " + kind());
     }
 
     /** The first direct child token that can be a binary operator. */
