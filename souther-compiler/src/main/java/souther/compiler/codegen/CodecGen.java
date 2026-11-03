@@ -1379,29 +1379,14 @@ final class CodecGen {
     private void emitPrimDecode(CodeBuilder code, AstExpressions gen, Hir.PrimDecoder prim,
                                 SequencedMap<String, Type> fields, Src src,
                                 List<ValueShape.Invariant> invariants) {
-        Type inputType = TypeOps.primType(prim.from());
-        ClassDesc leaf = srcLeafOwner(src);
+        Type inputType = prim.from().type();
         Carrier carrier = switch (prim.from()) {
-            case TEXT -> Carrier.STRING;
+            case STRING -> Carrier.STRING;
             case INT -> Carrier.LONG;
             case DECIMAL -> Carrier.DECIMAL;
             case BOOL, DATE, TIME, DATETIME, INSTANT -> Carrier.PLAIN;
         };
-        switch (prim.from()) {
-            // Canonicalized before the constraints below read it, as a field's string is — a newtype
-            // over Text is the other place text enters, and the two must agree or the same value
-            // would be one length in a field and another on its own.
-            case TEXT -> {
-                emitStringLeaf(code, leaf);
-            }
-            case INT -> emitNumberLeaf(code, leaf, BareScalar.INT);
-            case BOOL -> code.invokestatic(leaf, "bool", MTD_leafBool);
-            case DECIMAL -> emitNumberLeaf(code, leaf, BareScalar.DECIMAL);
-            case DATE -> emitTemporalLeaf(code, src, Type.Prim.DATE);
-            case TIME -> emitTemporalLeaf(code, src, Type.Prim.TIME);
-            case DATETIME -> emitTemporalLeaf(code, src, Type.Prim.DATETIME);
-            case INSTANT -> emitTemporalLeaf(code, src, Type.Prim.INSTANT);
-        }
+        emitLeafDecoder(code, prim.from(), src);
         emitInvariantConstraints(code, inputType, carrier, invariants);
         code.aload(1);                                                 // in (bare value)
         code.aload(2);                                                 // path
@@ -1614,7 +1599,7 @@ final class CodecGen {
 
     private Type bindType(Hir.DecRef ref) {
         return switch (ref) {
-            case Hir.PrimDecRef p -> TypeOps.primType(p.kind());
+            case Hir.PrimDecRef p -> p.kind().type();
             case Hir.DataDecRef d -> Type.ref(Backend.names(d.typeName()));
             case Hir.ListDecRef l -> Type.list(bindType(l.element()));
             case Hir.SetDecRef s -> Type.set(bindType(s.element()));

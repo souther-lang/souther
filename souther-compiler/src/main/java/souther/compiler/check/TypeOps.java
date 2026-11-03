@@ -1979,32 +1979,6 @@ public final class TypeOps {
         return inner == Type.INT || inner == Type.DECIMAL ? inner : null;
     }
 
-    public static Type primType(Hir.RawKind kind) {
-        return switch (kind) {
-            case TEXT -> Type.STRING;
-            case INT -> Type.INT;
-            case BOOL -> Type.BOOL;
-            case DECIMAL -> Type.DECIMAL;
-            case DATE -> Type.DATE;
-            case TIME -> Type.TIME;
-            case DATETIME -> Type.DATETIME;
-            case INSTANT -> Type.INSTANT;
-        };
-    }
-
-    public static Type primType(LeafScalar kind) {
-        return switch (kind) {
-            case STRING -> Type.STRING;
-            case INT -> Type.INT;
-            case BOOL -> Type.BOOL;
-            case DECIMAL -> Type.DECIMAL;
-            case DATE -> Type.DATE;
-            case TIME -> Type.TIME;
-            case DATETIME -> Type.DATETIME;
-            case INSTANT -> Type.INSTANT;
-        };
-    }
-
     /**
      * A reference whose parts have been resolved and whose own type has not been decided yet.
      *
