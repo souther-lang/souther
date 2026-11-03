@@ -476,18 +476,11 @@ final class AStatementAtARow {
         }
         switch (stated) {
             case Proposition.Always _, Proposition.LastToHold _ -> { }
-            case Proposition.All all -> all.parts().forEach(part ->
-                    gather(part, behavior, quantities, reading, into, elements, positions));
-            case Proposition.Any any -> any.parts().forEach(part ->
-                    gather(part, behavior, quantities, reading, into, elements, positions));
-            case Proposition.WhereItAnswers where -> {
-                gather(where.answers(), behavior, quantities, reading, into, elements, positions);
-                gather(where.states(), behavior, quantities, reading, into, elements, positions);
-            }
-            case Proposition.SoManyHold counted -> counted.statements().forEach(part ->
-                    gather(part, behavior, quantities, reading, into, elements, positions));
-            case Proposition.OfTheWays ways -> gather(ways.written(), behavior, quantities,
-                    reading, into, elements, positions);
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.SoManyHold _, Proposition.OfTheWays _ ->
+                    stated.partsHeld().forEach(part ->
+                            gather(part, behavior, quantities, reading, into, elements,
+                                    positions));
             case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
                     _ -> new OverTheElements(some.container().inputPosition(),
                             readBy(some.ofTheElement(), behavior, quantities, reading),
@@ -620,13 +613,9 @@ final class AStatementAtARow {
                     cases.atoms().stream().allMatch(Refinement.SumCase.class::isInstance);
             case Proposition.SameValue(DecisionSubject.AnInput _, DecisionSubject.AnInput _,
                                        boolean _, Spelling _) -> true;
-            case Proposition.All all -> all.parts().stream()
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.OfTheWays _ -> stated.partsHeld().stream()
                     .allMatch(AStatementAtARow::madeOfFormsAndPositions);
-            case Proposition.Any any -> any.parts().stream()
-                    .allMatch(AStatementAtARow::madeOfFormsAndPositions);
-            case Proposition.WhereItAnswers where -> madeOfFormsAndPositions(where.answers())
-                    && madeOfFormsAndPositions(where.states());
-            case Proposition.OfTheWays ways -> madeOfFormsAndPositions(ways.written());
             case Proposition.Compared(Relation.Affine affine, boolean _, Spelling _) ->
                     countIn(affine) == null && productIn(affine) == null
                             && remainderByAnInputIn(affine) == null
@@ -1327,15 +1316,9 @@ final class AStatementAtARow {
             return true;
         }
         return switch (stated) {
-            case Proposition.All all ->
-                    all.parts().stream().allMatch(part -> readsOf(part, about, read));
-            case Proposition.Any any ->
-                    any.parts().stream().allMatch(part -> readsOf(part, about, read));
-            case Proposition.WhereItAnswers where -> readsOf(where.answers(), about, read)
-                    && readsOf(where.states(), about, read);
-            case Proposition.SoManyHold counted ->
-                    counted.statements().stream().allMatch(part -> readsOf(part, about, read));
-            case Proposition.OfTheWays ways -> readsOf(ways.written(), about, read);
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.SoManyHold _, Proposition.OfTheWays _ ->
+                    stated.partsHeld().stream().allMatch(part -> readsOf(part, about, read));
             case Proposition.Some some -> overElementsOf(some.container().inputPosition(), about,
                     read) && readsOf(some.ofTheElement(), about, read);
             case Proposition.Compared compared

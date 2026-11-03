@@ -306,18 +306,10 @@ final class Pullback {
             switch (stated) {
                 case Proposition.Always _ -> { }
                 case Proposition.Unread unread when unread.fixed() -> { }
-                case Proposition.All all -> all.parts().forEach(part -> partsOf(part, into));
-                case Proposition.Any any -> any.parts().forEach(part -> partsOf(part, into));
-                case Proposition.OnAnApplication applications ->
-                        applications.each().forEach(each -> partsOf(each, into));
-                case Proposition.SoManyHold counted ->
-                        counted.statements().forEach(each -> partsOf(each, into));
-                case Proposition.Some some -> partsOf(some.ofTheElement(), into);
-                case Proposition.OfTheWays ways -> partsOf(ways.written(), into);
-                case Proposition.WhereItAnswers where -> {
-                    partsOf(where.answers(), into);
-                    partsOf(where.states(), into);
-                }
+                case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
+                     Proposition.SoManyHold _, Proposition.Some _, Proposition.OfTheWays _,
+                     Proposition.WhereItAnswers _ ->
+                        stated.partsHeld().forEach(part -> partsOf(part, into));
                 case Proposition.Unread _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
                      Proposition.SameValue _, Proposition.StringInside _,
