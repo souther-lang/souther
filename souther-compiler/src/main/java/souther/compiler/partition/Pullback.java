@@ -1527,7 +1527,8 @@ final class Pullback {
      * holds the places it reads as ones it may stop on.
      *
      * <p>Nothing in a closure no run applies ({@link Operators#neverApplied}): it ends no run. Nor
-     * does a construction of a type whose clauses govern nothing ({@link ClausesInOrder}).
+     * does a construction that no clause of its type refuses a run of
+     * ({@link WorkedOutToReachIt#aConstructionEndsNoRun}).
      */
     private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads, Bound bound) {
         Core e = Core.withoutStanding(standing);
@@ -1536,7 +1537,7 @@ final class Pullback {
         }
         operated.readsAt.putIfAbsent(e, reads);
         GetsPast completion = e instanceof Core.Construct made
-                && ClausesInOrder.at(made, read.rules()).governsNothing()
+                && WorkedOutToReachIt.of(read).aConstructionEndsNoRun(made, reads)
                 ? new GetsPast.Always()
                 : WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
         if (!operated.nodes.contains(e) && !operated.nodes.contains(standing)
@@ -1606,17 +1607,12 @@ final class Pullback {
     /**
      * Whether {@code e}, an operation that reads no place, is shown to stop no run: it is a
      * constant the fold reaches, which the fold does not where the run time aborts
-     * ({@link ConstantAlgebra}), or it is a construction that the clauses of its type refuse no
-     * run of ({@link WorkedOutToReachIt#aConstructionEndsNoRun}), or it stops a run on
-     * {@code divisor} alone and the divisor is a number whatever expression came to it, and not
-     * nought.
+     * ({@link ConstantAlgebra}), or it stops a run on {@code divisor} alone and the divisor is a
+     * number whatever expression came to it, and not nought.
      */
     private boolean isProvenToComplete(Core e, Core divisor, InputReads reads) {
         if (folded(e, reads).isPresent()) {
             return true;
-        }
-        if (e instanceof Core.Construct made) {
-            return WorkedOutToReachIt.of(read).aConstructionEndsNoRun(made, reads);
         }
         return divisor != null && AffineForms.outcome(divisor, reads, quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)
