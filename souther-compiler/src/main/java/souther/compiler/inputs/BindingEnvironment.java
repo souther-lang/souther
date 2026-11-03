@@ -7,6 +7,7 @@ import souther.compiler.check.OrderOfElements;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -381,8 +382,8 @@ final class BindingEnvironment {
 
     /**
      * {@code table} with the bindings of {@code newest} and the layers older than it written into
-     * it, the nearest binding of a name winning. Sized for every binding it will hold and never
-     * written to once it is made.
+     * it, the nearest binding of a name winning. Sized for every binding it will hold, and
+     * handed out unmodifiable: every environment made from this one shares it.
      */
     private static Map<BindingId, Core> written(Map<BindingId, Core> table, Layer newest) {
         Map<BindingId, Core> wider = HashMap.newHashMap(table.size() + newest.depth());
@@ -390,7 +391,7 @@ final class BindingEnvironment {
             wider.putIfAbsent(layer.binding(), layer.value());
         }
         table.forEach(wider::putIfAbsent);
-        return wider;
+        return Collections.unmodifiableMap(wider);
     }
 
     /**
