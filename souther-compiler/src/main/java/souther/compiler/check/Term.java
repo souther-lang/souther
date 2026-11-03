@@ -758,7 +758,22 @@ final class Term {
         if (term == this) {
             return true;
         }
-        return !differsOnItsFace(this, term) && same(this, term, new IdentityHashMap<>());
+        if (differsOnItsFace(this, term)) {
+            return false;
+        }
+        // Terms one interner made out of the same parts hold those parts as the same instances, so
+        // there is nothing for a table of pairs to remember. A term with no parts is the commonest.
+        return hasTheSamePartsAs(term) || same(this, term, new IdentityHashMap<>());
+    }
+
+    /** Whether each part of this is the very instance at its place in {@code other}. */
+    private boolean hasTheSamePartsAs(Term other) {
+        for (int at = 0; at < parts.size(); at++) {
+            if (parts.get(at) != other.parts.get(at)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Whether two terms are told apart by what each carries, without looking at their parts. */
@@ -921,10 +936,82 @@ final class Term {
 
         private final Map<Term, Term> shared = new HashMap<>();
 
+        /**
+         * The term {@link #shared} holds for a shape, what it carries and parts that are these very
+         * instances, so that a question asked again in the same words is answered without making
+         * the term to look it up by.
+         *
+         * <p>Only an accelerator. A question it does not know — parts that are equal and not the
+         * same, an equality with its sides the other way round — is answered by {@link #shared},
+         * which is where the term stands for its value, and then remembered here.
+         */
+        private final Map<AsAsked, Term> asked = new HashMap<>();
+
         private Term of(Shape shape, Object of, List<Term> parts) {
+            AsAsked question = new AsAsked(shape, of, parts);
+            Term known = asked.get(question);
+            if (known != null) {
+                return known;
+            }
             Term made = new Term(shape, of, parts);
             Term had = shared.putIfAbsent(made, made);
-            return had != null ? had : made;
+            Term answer = had != null ? had : made;
+            asked.put(new AsAsked(shape, of, made.parts), answer);
+            return answer;
+        }
+
+        /**
+         * A shape, what it carries and its parts, told apart from another by the very instances the
+         * parts are.
+         *
+         * <p>The hash is taken from the hashes the parts already carry, and from the carried value's
+         * own, which agrees with the equality that is read of it. It is not the hash of a term and
+         * nothing is ordered by it: it places a question in a table that is looked into and never
+         * walked.
+         */
+        private static final class AsAsked {
+
+            private final Shape shape;
+
+            private final Object of;
+
+            private final List<Term> parts;
+
+            private final int hash;
+
+            AsAsked(Shape shape, Object of, List<Term> parts) {
+                this.shape = shape;
+                this.of = of;
+                this.parts = parts;
+                int h = shape.name().hashCode() * MIX + Objects.hashCode(of);
+                for (int at = 0; at < parts.size(); at++) {
+                    h = h * MIX + parts.get(at).hash;
+                }
+                this.hash = h;
+            }
+
+            @Override
+            public int hashCode() {
+                return hash;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                if (!(other instanceof AsAsked question)) {
+                    return false;
+                }
+                if (question.hash != hash || question.shape != shape
+                        || !Objects.equals(question.of, of)
+                        || question.parts.size() != parts.size()) {
+                    return false;
+                }
+                for (int at = 0; at < parts.size(); at++) {
+                    if (question.parts.get(at) != parts.get(at)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
         }
 
         /** The place {@code where} is. */
@@ -1110,8 +1197,11 @@ final class Term {
          * about where an answer was expected.
          */
         Term calledIfBuilt(ValueName operation, List<Term> args) {
-            Term made = new Term(Shape.CALLED, operation, args);
-            return shared.containsKey(made) ? made : null;
+            Term known = asked.get(new AsAsked(Shape.CALLED, operation, args));
+            if (known != null) {
+                return known;
+            }
+            return shared.get(new Term(Shape.CALLED, operation, args));
         }
 
         /** A value given to an optional position. */
