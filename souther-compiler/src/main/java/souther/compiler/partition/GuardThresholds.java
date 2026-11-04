@@ -295,10 +295,17 @@ public final class GuardThresholds {
                     // statement are asked over the same parts, a case kept is one that was asked
                     // while it was chosen, and its way is filed under it after that. Kept as the
                     // ways to the cases are, while it is among those asked last.
+                    // And what each part asks, once however many cases chosen past it ask it.
                     LatelyAsked<Proposition, ReachingCuts.Stating> putOnTheWay =
                             new LatelyAsked<>(WaysToACase.CASES_KEPT);
+                    LatelyAsked<Proposition, ReachingCuts.Stating> partsAsked =
+                            new LatelyAsked<>(WaysToACase.CASES_KEPT);
+                    Function<Proposition, ReachingCuts.Stating> aPart = part -> partsAsked
+                            .answer(part, asked -> each.aPartAsked(asked, read));
+                    RemaindersOfAnElement.Kept followed = new RemaindersOfAnElement.Kept();
                     Function<Proposition, ReachingCuts.Stating> aCase = decides -> putOnTheWay
-                            .answer(decides, asked -> each.aCasePutOnTheWay(asked, read));
+                            .answer(decides, asked -> each.aCasePutOnTheWay(asked, read, aPart,
+                                    followed));
                     switch (each.standing()) {
                         case BoundaryPolicy.Standing.Admitted admitted -> {
                             // The same reading on the narrower region a row at the line is in:

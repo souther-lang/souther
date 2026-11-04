@@ -18,6 +18,7 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
@@ -26,6 +27,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -36,6 +38,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiPredicate;
+import java.util.function.Function;
 
 /**
  * What a row has already had to satisfy by the time it arrives at one comparison.
@@ -793,6 +796,46 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * reaches for it.
      */
     static Stating whereItDecides(Condition at, Proposition decides, InputReading read) {
+        return withWhatFollows(decides, asked(at, decides, read), new RemaindersOfAnElement.Kept());
+    }
+
+    /**
+     * {@link #whereItDecides(Condition, Proposition, InputReading)}, with what each part of a
+     * conjunction asks taken from {@code eachPart} ({@link #asked}), and what follows from a
+     * statement at the members of a class from {@code followed} where a case read it before.
+     *
+     * <p>The same entries: a conjunction asks what each of its parts asks, in the order they are
+     * written ({@link DemandReading#askedAt}), and each is read off what that part turns on. So a
+     * case chosen a part further asks what the case before it asked and what the part asks, and
+     * the parts asked before are not read again. Where writing out its counts changes the
+     * conjunction, it asks what it is written out as, and is read whole; what follows from its
+     * statements is read of the whole either way, since it is read off statements put beside each
+     * other.
+     */
+    static Stating whereItDecides(Condition at, Proposition decides, InputReading read,
+                                  Function<Proposition, Stating> eachPart,
+                                  RemaindersOfAnElement.Kept followed) {
+        if (!(decides instanceof Proposition.All all)
+                || !(CountsWrittenOut.outsideElementsOf(decides)
+                        instanceof CountsWrittenOut.Written(Proposition written))
+                || written != decides) {
+            return withWhatFollows(decides, asked(at, decides, read), followed);
+        }
+        List<OnTheWay> entries = new ArrayList<>();
+        SaidOnTheWay.Filing by = new SaidOnTheWay.Filing();
+        for (Proposition part : all.parts()) {
+            Stating asked = eachPart.apply(part);
+            entries.addAll(asked.entries());
+            by.all(asked.by());
+        }
+        return withWhatFollows(decides, new Stating(entries, by.said()), followed);
+    }
+
+    /**
+     * What {@code decides} asks of a row put on the way at the comparison {@code at}, and nothing
+     * of what follows from it.
+     */
+    static Stating asked(Condition at, Proposition decides, InputReading read) {
         // Read off the parts of the comparison's own statement: where a line decides is a fact of
         // the comparison, over the values it reads.
         List<OnTheWay> entries = new ArrayList<>();
@@ -802,26 +845,45 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             entries.add(onTheWay(at.occurrence(), at.anchor(), each.read(), read, each.readOff(),
                     by, Optional.empty()));
         }
-        // And what follows from its statements only a run checks, put by whoever put those.
-        List<OnTheWay> withWhatFollows = RemaindersOfAnElement.withWhatFollows(decides, entries);
+        return new Stating(entries, by.said());
+    }
+
+    /** {@code stated}, with what follows from its statements only a run checks, put by whoever
+     *  put those. */
+    private static Stating withWhatFollows(Proposition decides, Stating stated,
+                                           RemaindersOfAnElement.Kept followed) {
+        List<OnTheWay> entries = stated.entries();
+        List<OnTheWay> withWhatFollows =
+                RemaindersOfAnElement.withWhatFollows(decides, entries, followed);
         if (withWhatFollows == entries) {
-            return new Stating(entries, by.said());
+            return stated;
         }
-        SaidOnTheWay said = by.said();
+        SaidOnTheWay said = stated.by();
         SaidOnTheWay.Filing following = new SaidOnTheWay.Filing();
         following.all(said);
-        fileWhatFollows(withWhatFollows, entries, said, following);
+        List<PutBy> runs = new ArrayList<>();
+        said.entries().forEach((entry, by) -> {
+            if (entry instanceof OnTheWay.TakenIn(var _, RowDemand.ForTheRun run)) {
+                runs.add(new PutBy(run, by));
+            }
+        });
+        fileWhatFollows(withWhatFollows, entries, said, runs, following);
         return new Stating(withWhatFollows, following.said());
     }
+
+    /** A statement only a run checks, and who put it on the way. */
+    private record PutBy(RowDemand.ForTheRun run, ModelOccurrences by) {}
 
     /**
      * Who put each entry of {@code made} on the way that {@code stated} does not have, filed into
      * {@code into}: an alternative's statement made again with what follows from it beside it is
      * put by whoever put the one it was made from, and what follows by whoever put the statements
-     * it follows from ({@link RowDemand.OnARemainder#from}).
+     * it follows from ({@link RowDemand.OnARemainder#from}), each of {@code runs} in the order
+     * {@code said} has them.
      */
     private static void fileWhatFollows(List<OnTheWay> made, List<OnTheWay> stated,
-                                        SaidOnTheWay said, SaidOnTheWay.Filing into) {
+                                        SaidOnTheWay said, List<PutBy> runs,
+                                        SaidOnTheWay.Filing into) {
         int at = 0;
         for (OnTheWay each : made) {
             OnTheWay was = at < stated.size() ? stated.get(at) : null;
@@ -833,18 +895,18 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                 into.alone(several, said.entries().getOrDefault(before, ModelOccurrences.NONE));
                 for (int way = 0; way < several.alternatives().size(); way++) {
                     fileWhatFollows(several.alternatives().get(way),
-                            before.alternatives().get(way), said, into);
+                            before.alternatives().get(way), said, runs, into);
                 }
                 at++;
                 continue;
             }
             if (each instanceof OnTheWay.TakenIn(var _, RowDemand.OnARemainder follows)) {
-                said.entries().forEach((entry, by) -> {
-                    if (entry instanceof OnTheWay.TakenIn(var _, RowDemand.ForTheRun run)
-                            && follows.from().contains(run)) {
-                        into.alone(each, by);
+                Set<RowDemand.ForTheRun> from = new HashSet<>(follows.from());
+                for (PutBy put : runs) {
+                    if (from.contains(put.run())) {
+                        into.alone(each, put.by());
                     }
-                });
+                }
             }
         }
     }

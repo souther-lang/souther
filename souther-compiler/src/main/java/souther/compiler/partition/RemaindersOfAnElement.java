@@ -15,7 +15,9 @@ import souther.compiler.types.Type;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -58,11 +60,36 @@ final class RemaindersOfAnElement {
      * The entries themselves where {@code decides} weighs no one element.
      */
     static List<OnTheWay> withWhatFollows(Proposition decides, List<OnTheWay> entries) {
+        return withWhatFollows(decides, entries, new Kept());
+    }
+
+    /**
+     * {@link #withWhatFollows(Proposition, List)}, with what a statement put at the members of a
+     * class leaves taken from {@code kept} where it was read for a case before.
+     */
+    static List<OnTheWay> withWhatFollows(Proposition decides, List<OnTheWay> entries, Kept kept) {
         Optional<Quantity.OfABinding> element = OnOneElement.theElementOf(decides);
         if (element.isEmpty()) {
             return entries;
         }
-        return along(entries, element.get(), null, List.of());
+        return along(entries, element.get(), null, List.of(), kept);
+    }
+
+    /**
+     * What each statement put at the members of a class leaves of a remainder of the input's
+     * numbers, kept for the cases that put it there again: that is read off the statement, the
+     * element and the class, and not off what else a case put beside it.
+     */
+    static final class Kept {
+
+        private final Map<AtTheMembers, Optional<Left>> left = new HashMap<>();
+
+        /** A statement put at the members of a class of an element. */
+        private record AtTheMembers(Proposition.Compared stated, Quantity.OfABinding element,
+                                    Congruences members) {}
+
+        /** What a statement put at the members leaves of a remainder of the input's numbers. */
+        private record Left(Quantity.RemainderOfADividend remainder, WholeNumberRuns leaves) {}
     }
 
     /**
@@ -71,7 +98,8 @@ final class RemaindersOfAnElement {
      * null.
      */
     private static List<OnTheWay> along(List<OnTheWay> entries, Quantity.OfABinding element,
-                                        Congruences members, List<RowDemand.ForTheRun> holding) {
+                                        Congruences members, List<RowDemand.ForTheRun> holding,
+                                        Kept kept) {
         List<RowDemand.ForTheRun> held = new ArrayList<>(holding);
         Congruences in = members;
         for (OnTheWay entry : entries) {
@@ -93,14 +121,15 @@ final class RemaindersOfAnElement {
         for (OnTheWay entry : entries) {
             out.add(entry);
             if (entry instanceof OnTheWay.TakenIn(var anchor, RowDemand.ForTheRun run)
-                    && putAt(run, element, in, held) instanceof RowDemand.OnARemainder follows) {
+                    && putAt(run, element, in, held, kept)
+                            instanceof RowDemand.OnARemainder follows) {
                 out.add(new OnTheWay.TakenIn(anchor, follows));
                 changed = true;
             } else if (entry instanceof OnTheWay.OneOf several) {
                 List<List<OnTheWay>> ways = new ArrayList<>();
                 boolean inside = false;
                 for (List<OnTheWay> way : several.alternatives()) {
-                    List<OnTheWay> each = along(way, element, in, held);
+                    List<OnTheWay> each = along(way, element, in, held, kept);
                     inside |= each != way;
                     ways.add(each);
                 }
@@ -150,10 +179,29 @@ final class RemaindersOfAnElement {
     private static RowDemand.OnARemainder putAt(RowDemand.ForTheRun run,
                                                 Quantity.OfABinding element,
                                                 Congruences members,
-                                                List<RowDemand.ForTheRun> holding) {
-        if (holding.contains(run)
-                || !(run.statement() instanceof Proposition.Compared stated)
-                || !(TheElementComesRound.inItsRemainders(stated).orElse(null)
+                                                List<RowDemand.ForTheRun> holding, Kept kept) {
+        if (holding.contains(run) || !(run.statement() instanceof Proposition.Compared stated)) {
+            return null;
+        }
+        Optional<Kept.Left> left = kept.left.computeIfAbsent(
+                new Kept.AtTheMembers(stated, element, members),
+                _ -> Optional.ofNullable(leftAt(stated, element, members)));
+        if (left.isEmpty()) {
+            return null;
+        }
+        List<RowDemand.ForTheRun> from = new ArrayList<>(holding);
+        from.add(run);
+        return new RowDemand.OnARemainder(left.get().remainder(), left.get().leaves(), from);
+    }
+
+    /**
+     * What {@code stated} leaves of a remainder of the input's numbers alone with
+     * {@code element} at the members of {@code members}, or null where it is no such statement
+     * there, or leaves none.
+     */
+    private static Kept.Left leftAt(Proposition.Compared stated, Quantity.OfABinding element,
+                                    Congruences members) {
+        if (!(TheElementComesRound.inItsRemainders(stated).orElse(null)
                         instanceof TheElementComesRound round)
                 || !round.element().equals(element)
                 || members.modulus().mod(round.every()).signum() != 0) {
@@ -173,9 +221,7 @@ final class RemaindersOfAnElement {
         if (leaves == null || leaves.isNone()) {
             return null;
         }
-        List<RowDemand.ForTheRun> from = new ArrayList<>(holding);
-        from.add(run);
-        return new RowDemand.OnARemainder(remainder, leaves, from);
+        return new Kept.Left(remainder, leaves);
     }
 
     /** {@code ratio} as a whole number, or null where it is none. */
