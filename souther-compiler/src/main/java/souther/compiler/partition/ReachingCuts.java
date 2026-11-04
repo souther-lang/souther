@@ -477,14 +477,18 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
 
         private final List<OnTheWay> entries;
 
-        /** Who put each entry, once worked out; worked out by {@link #filing} until then. */
+        /** What works out who put each entry: the same answer whenever it is asked, and asked
+         *  once. Final, so that every thread a stating is handed to sees it. */
+        private final Supplier<SaidOnTheWay> filing;
+
+        /** Who put each entry, once worked out; read and written only under this stating's
+         *  lock. */
         private SaidOnTheWay by;
 
-        private Supplier<SaidOnTheWay> filing;
-
         Stating(List<OnTheWay> entries, SaidOnTheWay by) {
+            Objects.requireNonNull(by, "which copies each entry was read off, or none");
             this.entries = List.copyOf(entries);
-            this.by = Objects.requireNonNull(by, "which copies each entry was read off, or none");
+            this.filing = () -> by;
         }
 
         private Stating(List<OnTheWay> entries, Supplier<SaidOnTheWay> filing) {
@@ -509,7 +513,6 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             if (by == null) {
                 by = Objects.requireNonNull(filing.get(),
                         "which copies each entry was read off, or none");
-                filing = null;
             }
             return by;
         }
