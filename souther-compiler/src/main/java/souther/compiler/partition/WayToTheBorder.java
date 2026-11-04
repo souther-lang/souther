@@ -196,33 +196,23 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     }
 
     /**
-     * Each way {@code way} is split into, as {@link Reachability#of} splits it and in that order,
-     * taken in over {@code declarations} and ready to be asked what more beside it would leave — an
-     * empty one where the walk left some of its conditions unchosen there, and nothing at all where
-     * it is not split into ways.
+     * Each way {@code able} is split into ({@link Reachability.Reaching#along}), at the same place,
+     * its conditions as the walk chose them ({@link Reachability.Ways#chosenAs}) taken in over
+     * {@code declarations}, the declarations {@code able} was read over, and ready to be asked
+     * what more beside it would leave: an empty one where the walk left some of its conditions
+     * unchosen there.
      *
      * <p>Worked out once for the way and asked as often as anyone likes: each question takes what
      * it asks in beside what the way already took in, and leaves that as it was.
      */
-    public static Optional<List<Optional<Assuming>>> assumingAlong(WayToTheBorder way,
-                                                                   SearchRegion declarations) {
-        if (way.severalWays().isEmpty()
-                || !(way.along() instanceof OneOfEach.Walked.Open<OnTheWay, Reachability>(
-                        var ways, var _))) {
-            return Optional.empty();
-        }
+    public static List<Optional<Assuming>> assumingAlong(Reachability.Reaching able,
+                                                         SearchRegion declarations) {
         OneOfEach.Vocabulary<OnTheWay, Numbered, NoInputTakesIt> vocabulary =
                 numbered(declarations, () -> true);
-        List<Optional<Assuming>> out = new ArrayList<>();
-        for (OneOfEach.Way<OnTheWay> one : ways) {
-            out.add(switch (one) {
-                case OneOfEach.Way.Chosen<OnTheWay>(var entries, var _) -> Optional.of(
-                        new Assuming(vocabulary, Assuming.taken(vocabulary,
-                                vocabulary.nothing(), entries)));
-                case OneOfEach.Way.LeftUnchosen<OnTheWay> _ -> Optional.empty();
-            });
-        }
-        return Optional.of(List.copyOf(out));
+        return able.ways().chosenAs().stream()
+                .map(chosen -> chosen.map(entries -> new Assuming(vocabulary,
+                        Assuming.taken(vocabulary, vocabulary.nothing(), entries))))
+                .toList();
     }
 
     /**

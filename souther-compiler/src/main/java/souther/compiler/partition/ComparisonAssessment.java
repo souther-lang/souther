@@ -1749,11 +1749,15 @@ sealed interface ComparisonAssessment {
 
     /**
      * What keeps the values of {@code cutting}'s line in a case of {@code said}, for a line on a
-     * quantity every region leaves the same values ({@link BorderQuantity#leftAlikeByEveryRegion}):
+     * quantity whose readings no region changes ({@link BorderQuantity#leftAlikeByEveryRegion}):
      * the statements on that quantity the case holds ({@link Cutting#leftBy}), and nothing else in
-     * it. So whether rows of a case with a row in it stand on each side is what those statements
-     * leave of the values, asked of the regions of any way a row takes — the way to the cases
-     * {@code said} stands for, read the first time it is asked.
+     * it. Whether a case divides is asked, case by case, of what {@link Cutting#keptTo} leaves of
+     * the values over the regions of the way to it ({@link #crossedAtSomePlace}); for such a
+     * quantity those regions are read no differently, and what the case's other parts say comes
+     * to no statement on the quantity, so that question comes out as it does asked of those
+     * statements alone over the regions of any way a row takes — the way to the cases
+     * {@code said} stands for, read the first time it is asked. It is the case-by-case question
+     * answered once, and claims no more of the rows than that question does.
      */
     private static CasesOfALineAsked.KeptByItsStatements keptByItsStatements(
             Cutting cutting, DecidingCase said, WaysToACase wayToACase,

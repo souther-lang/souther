@@ -84,7 +84,10 @@ public sealed interface Standing {
      * What every row leaving {@code remainders} of {@code dividend} by {@code divisor} makes of
      * {@code part}: that it fails where no such remainder is one it may hold at, and that it holds
      * where none is one its denial may hold at ({@link ResiduesAStatementLeaves}, which reads
-     * either as holding wherever it does not read it exactly).
+     * either as holding wherever it does not read it exactly). The second only of a part whose
+     * denial holds wherever it fails ({@link Proposition#deniedWhereverItFails}): a statement read
+     * where an operation answers holds on no row it answers nothing on, and neither does its
+     * denial, so that its denial holds nowhere here says nothing of whether it holds.
      */
     private static Optional<Boolean> madeAtTheRemainders(Proposition part,
                                                          LinearForm<NumericTerm> dividend,
@@ -94,8 +97,9 @@ public sealed interface Standing {
                 .isEmpty()) {
             return Optional.of(false);
         }
-        if (remainders.and(ResiduesAStatementLeaves.of(part.denied(), dividend, divisor)).runs()
-                .isEmpty()) {
+        if (Proposition.deniedWhereverItFails(part)
+                && remainders.and(ResiduesAStatementLeaves.of(part.denied(), dividend, divisor))
+                .runs().isEmpty()) {
             return Optional.of(true);
         }
         return Optional.empty();

@@ -2238,7 +2238,7 @@ final class Coverages {
             /** Each way the way to the border is split into, taken in once, asked what a part
              *  of where the line decides leaves; read the first time a point is looked along
              *  them. */
-            private Optional<List<Optional<WayToTheBorder.Assuming>>> assumingAlong;
+            private List<Optional<WayToTheBorder.Assuming>> assumingAlong;
 
             @Override
             public boolean classLiesOutsideTheCase(Criterion criterion) {
@@ -2345,7 +2345,7 @@ final class Coverages {
                     // A way the case shows no row of at the point along is one no value of it
                     // stands at: said so without building anything, as a point no remainder of
                     // the way is left at is.
-                    if (!mayBeInTheCase(criterion, rows, at, able.along().size(), along)) {
+                    if (!mayBeInTheCase(criterion, rows, able, at)) {
                         alongEach = alongEach.plus(noRowTakes(label, within,
                                 Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE)
                                 .outcomes());
@@ -2371,33 +2371,33 @@ final class Coverages {
             }
 
             /**
-             * Whether a row at {@code criterion} along {@code along}, the {@code at}th of the
-             * {@code ways} the way to the border is split into, may be in the case the line
-             * decides in: false only where the case is refuted there
-             * ({@link TheCaseALineDecidesIn#possibilityAt}), and true wherever nothing was asked —
-             * a line decided by no case, a way the walk left a choice of, or a point no
-             * constraint stands for.
+             * Whether a row at {@code criterion} along the {@code at}th way {@code able} is split
+             * into may be in the case the line decides in: false only where the case is refuted
+             * there ({@link TheCaseALineDecidesIn#possibilityAt}), asked of the conditions that way
+             * was chosen as, and true wherever nothing was asked — a line decided by no case, a
+             * way the walk left a choice of, or a point no constraint stands for.
              */
             private boolean mayBeInTheCase(Criterion criterion, StandingAtAPoint.AtALine rows,
-                                           int at, int ways, Reachability.Reaching along) {
+                                           Reachability.Reaching able, int at) {
                 Optional<TheCaseALineDecidesIn> decides = rows.caseItDecidesIn();
                 if (decides.isEmpty()) {
                     return true;
                 }
-                List<Optional<WayToTheBorder.Assuming>> each = assuming().orElse(null);
-                if (each == null || each.size() != ways || each.get(at).isEmpty()) {
-                    return true;
-                }
-                return !(quantity.searchGoalAt(criterion).alongTheWay(along).inTheCase(decides)
-                        instanceof PointSearchGoal.ByConstraints(Standing point))
-                        || !(decides.get().possibilityAt(point, each.get(at).get(), says)
+                Optional<WayToTheBorder.Assuming> chosen = assuming(able).get(at);
+                return chosen.isEmpty()
+                        || !(quantity.searchGoalAt(criterion).alongTheWay(able.along().get(at))
+                                .inTheCase(decides)
+                                instanceof PointSearchGoal.ByConstraints(Standing point))
+                        || !(decides.get().possibilityAt(point, chosen.get(), says)
                                 instanceof TheCaseALineDecidesIn.CasePossibility.Refuted);
             }
 
-            /** Each way the way to the border is split into, taken in, worked out once. */
-            private synchronized Optional<List<Optional<WayToTheBorder.Assuming>>> assuming() {
+            /** Each way {@code able}, the way this search reaches the border along, is split
+             *  into, taken in, worked out once. */
+            private synchronized List<Optional<WayToTheBorder.Assuming>> assuming(
+                    Reachability.Reaching able) {
                 if (assumingAlong == null) {
-                    assumingAlong = WayToTheBorder.assumingAlong(within, rules.region());
+                    assumingAlong = WayToTheBorder.assumingAlong(able, rules.region());
                 }
                 return assumingAlong;
             }

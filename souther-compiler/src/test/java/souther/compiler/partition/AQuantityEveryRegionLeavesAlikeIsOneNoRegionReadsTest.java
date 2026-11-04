@@ -25,10 +25,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Which quantities every region leaves the same values ({@link BorderQuantity#leftAlikeByEveryRegion})
- * is what no region is read for: a remainder of a form over numbers of two positions, whose values
- * together no region reads ({@link ReadingsOfEachValue#of}), and not a remainder over one position,
- * whose values a region admits, nor a form, which a region leaves its terms.
+ * Which quantities are read the same values whatever the region
+ * ({@link BorderQuantity#leftAlikeByEveryRegion}) is what no region is read for: a remainder of a
+ * form over numbers of two positions, whose values together no region reads
+ * ({@link ReadingsOfEachValue#of}), and not a remainder over one position, whose values a region
+ * admits, nor a form, which a region leaves its terms.
  */
 class AQuantityEveryRegionLeavesAlikeIsOneNoRegionReadsTest {
 

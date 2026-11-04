@@ -6521,8 +6521,9 @@ public final class Generator {
             Reachability.Reaching thisWay = new Reachability.Reaching(reaching.region(),
                     way.taken(), truths, reaching.boundedOnTheWay(),
                     reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure,
-                            var _, var from)
-                            ? new Reachability.Ways.Whole(unsplit, figure, List.of(), from)
+                            var _, var _, var from)
+                            ? new Reachability.Ways.Whole(unsplit, figure, List.of(), List.of(),
+                                    from)
                             : Reachability.Ways.ONE, reaching.declined(), reaching.narrowedBy());
             WalkedInOrder came = new InOrder(subject, order, composed, standing, writes,
                     settled, thisWay, check, way.contents(), taking)
@@ -7429,7 +7430,7 @@ public final class Generator {
         // their own way. Any other says so: along one of its ways the row would be composed
         // against more.
         if (reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure, var _,
-                var _)) {
+                var _, var _)) {
             for (OnTheWay each : unsplit) {
                 Optional<RealizationTarget.ElementsMeetingTogether> stated =
                         RealizationTarget.ElementsMeetingTogether.of(subject.behavior(), each);
