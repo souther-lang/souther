@@ -136,8 +136,6 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "ILjava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;)V",
                     THE_NAMES),
             row(CHECK + "NewtypeInners", "terminal", "(" + TYPE + ")" + TYPE, THE_SPINE),
-            row(CHECK + "PlacesTheRulesRead", "carriesNoRule", "(" + TYPE + SOURCE + ")Z",
-                    THE_POSITION),
             row(CHECK + "PlacesTheRulesRead", "of",
                     "(" + TYPE + SOURCE + ")L" + CHECK + "PlacesTheRulesRead;", THE_POSITION),
             row(CHECK + "SidesBalanced", "elementsStandAlone",

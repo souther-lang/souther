@@ -15,7 +15,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 
 /**
@@ -106,7 +105,7 @@ final class WaysToACase {
      * position says, an entry of the way that places nothing, or a run that may stop on something
      * no position names or owes an operator a proof.
      */
-    CasesOfALineAsked.Bearings bearingsFor(Cutting cutting, Predicate<TermPath> holdsNothing) {
+    CasesOfALineAsked.Bearings bearingsFor(Cutting cutting) {
         Set<TermPath> line = cutting.of().positionsItIsAbout();
         Set<ReadSubject> onTheWay = WayToTheBorder.placesTurnedOn(way);
         if (line == null || onTheWay == null
@@ -119,8 +118,7 @@ final class WaysToACase {
         held.addAll(onTheWay);
         base.tied().forEach(tie -> tie.places()
                 .forEach(path -> held.add(new ReadSubject.At(path))));
-        return new CasesOfALineAsked.Bearings(this::positionsOf, held, (chosen, remaining) ->
-                ResidualState.of(chosen, remaining, this::positionsOf, held, holdsNothing));
+        return new CasesOfALineAsked.Bearings(this::positionsOf, held);
     }
 
     /** What whether {@code condition} holds turns on, or null where it turns on something no

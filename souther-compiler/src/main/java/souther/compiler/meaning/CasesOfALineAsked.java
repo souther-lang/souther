@@ -15,7 +15,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -201,22 +200,14 @@ public final class CasesOfALineAsked {
      *                    PositionsAStatementReads.ReadSubject}) — or null where there is
      *                    something it turns on that neither says
      * @param held        what the way to the comparison and the line are about
-     * @param stateOf     what the parts chosen that bear on the cases still to choose come to for
-     *                    them, as a value that two histories share when they leave the same
-     *                    question — none where the parts chosen are the only thing that says it.
-     *                    Given the parts chosen and the conditions of the cases still to choose
      */
-    public record Bearings(Function<Proposition, Set<ReadSubject>> positionsOf, Set<ReadSubject> held,
-                           BiFunction<List<Proposition>, List<Proposition>,
-                                   Optional<Set<Object>>> stateOf) {
+    public record Bearings(Function<Proposition, Set<ReadSubject>> positionsOf, Set<ReadSubject> held) {
 
         /** Nothing is told, and every part chosen bears on every question. */
-        public static final Bearings NEVER =
-                new Bearings(_ -> null, Set.of(), (_, _) -> Optional.empty());
+        public static final Bearings NEVER = new Bearings(_ -> null, Set.of());
 
         public Bearings {
             Objects.requireNonNull(positionsOf, "a part is placed by what it is about");
-            Objects.requireNonNull(stateOf, "what the parts chosen come to is told or is none");
             held = Set.copyOf(held);
         }
     }
@@ -350,7 +341,7 @@ public final class CasesOfALineAsked {
     private final class Remembering {
 
         /** The cases still to choose, and the parts chosen that bear on them. */
-        private record Question(List<Node> toChoose, Set<Object> chosen) {}
+        private record Question(List<Node> toChoose, Set<Proposition> chosen) {}
 
         /** A case, told from another by being the same one. */
         private record Node(DecidingCase.Cases cases) {
@@ -369,8 +360,6 @@ public final class CasesOfALineAsked {
         private final Set<Question> walked = new HashSet<>();
         private final Map<DecidingCase.Cases, Set<ReadSubject>> placesOfCases = new IdentityHashMap<>();
         private final Map<Proposition, Set<ReadSubject>> placesOfConditions = new HashMap<>();
-        private final Map<DecidingCase.Cases, Set<Proposition>> conditionsOfCases =
-                new IdentityHashMap<>();
 
         /** Whether something was found that no position says, so nothing here is an answer. */
         private boolean unknown;
@@ -391,50 +380,8 @@ public final class CasesOfALineAsked {
             if (unknown) {
                 return null;
             }
-            Set<Object> parts = bearings.stateOf().apply(bearing, conditionsOf(toChoose))
-                    .orElseGet(() -> new LinkedHashSet<>(bearing));
-            return new Question(toChoose.stream().map(Node::new).toList(), parts);
-        }
-
-        /** Every condition of {@code toChoose}. */
-        private List<Proposition> conditionsOf(List<DecidingCase.Cases> toChoose) {
-            Set<Proposition> out = new LinkedHashSet<>();
-            for (DecidingCase.Cases each : toChoose) {
-                conditionsOf(each, out);
-            }
-            return List.copyOf(out);
-        }
-
-        private void conditionsOf(DecidingCase.Cases cases, Set<Proposition> out) {
-            out.addAll(conditionsOfCases.computeIfAbsent(cases, at -> {
-                Set<Proposition> own = new LinkedHashSet<>();
-                at.fold(new DecidingCase.Cases.Fold<Boolean>() {
-
-                    @Override
-                    public Boolean one(DecidingCase.Cases.One one) {
-                        own.add(one.condition());
-                        return true;
-                    }
-
-                    @Override
-                    public Boolean eachOf(DecidingCase.Cases.EachOf node,
-                                          List<Boolean> alternatives) {
-                        return true;
-                    }
-
-                    @Override
-                    public Boolean together(DecidingCase.Cases.Together node,
-                                            List<Boolean> factors) {
-                        return true;
-                    }
-
-                    @Override
-                    public Boolean notTakenApart(DecidingCase.Cases.NotTakenApart notTakenApart) {
-                        return true;
-                    }
-                });
-                return own;
-            }));
+            return new Question(toChoose.stream().map(Node::new).toList(),
+                    new LinkedHashSet<>(bearing));
         }
 
         boolean walkedBefore(Question question) {

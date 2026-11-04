@@ -12,7 +12,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
@@ -72,7 +71,7 @@ class AChoiceAboutPositionsNothingElseIsAboutIsAskedOnItsOwnTest {
 
     private CasesOfALineAsked.Bearings apart(Set<TermPath> held) {
         return new CasesOfALineAsked.Bearings(condition -> placed(positions.get(condition)),
-                placed(held), (_, _) -> Optional.empty());
+                placed(held));
     }
 
     /** {@code at} as what a statement reads, or null where it is not known. */
