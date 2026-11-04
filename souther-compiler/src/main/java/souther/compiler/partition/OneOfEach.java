@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -65,8 +66,11 @@ final class OneOfEach {
      * What the walk needs to know of an entry, and how what is taken in so far stands.
      *
      * @param <E> an entry of what is asked
-     * @param <S> what the entries taken in so far come to, as far as whether they hold together
-     * @param <R> why entries do not hold together, as the reader of the walk says it
+     * @param <S> what the entries taken in so far come to, as far as whether they hold together;
+     *            any value, null among them, since the walk carries it in a step and never asks
+     *            it for anything
+     * @param <R> why entries do not hold together, as the reader of the walk says it; never
+     *            null ({@link Step.Closed})
      */
     interface Vocabulary<E, S, R> {
 
@@ -118,24 +122,53 @@ final class OneOfEach {
         record Held<S, R>(S so) implements Step<S, R> {}
 
         /**
-         * They do not, for {@link #why}, which {@code because} works out where it is read: a walk
+         * They do not, for {@link #why}: some reason, never none. A value — equal to a closing
+         * for an equal reason — whose reason may be worked out where it is first read: a walk
          * reads why of the first way that closes, and of every other only that it closed.
          */
-        record Closed<S, R>(Supplier<R> because) implements Step<S, R> {
+        final class Closed<S, R> implements Step<S, R> {
+
+            private Supplier<R> because;
+            private R why;
+
+            private Closed(Supplier<R> because, R why) {
+                this.because = because;
+                this.why = why;
+            }
 
             /** They do not, for {@code why}. */
             public Closed(R why) {
-                this(() -> why);
+                this(null, Objects.requireNonNull(why, "a closing is for some reason"));
             }
 
-            /** They do not, for what {@code why} works out where it is read. */
+            /** They do not, for what {@code why} works out where it is first read. */
             public static <S, R> Closed<S, R> workedOut(Supplier<R> why) {
-                return new Closed<S, R>(why);
+                return new Closed<>(Objects.requireNonNull(why), null);
             }
 
             /** Why they do not hold together. */
             public R why() {
-                return because.get();
+                if (why == null) {
+                    why = Objects.requireNonNull(because.get(), "a closing is for some reason");
+                    because = null;
+                }
+                return why;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return this == other
+                        || (other instanceof Closed<?, ?> that && why().equals(that.why()));
+            }
+
+            @Override
+            public int hashCode() {
+                return why().hashCode();
+            }
+
+            @Override
+            public String toString() {
+                return "Closed[why=" + why() + "]";
             }
         }
     }
@@ -690,27 +723,33 @@ final class OneOfEach {
 
     /**
      * A choice as the condition it is, wherever it stands: equal to the condition of an equal
-     * entry. The entry's hash is asked once, where the place is made, so that what the walk asks
-     * of a condition for every alternative it owes costs what the entry's hash does once.
+     * entry. The entry's hash is asked where the condition is first asked for its own, and once:
+     * a walk that hands on every way never asks whether an alternative is owed, and one that does
+     * asks it of a condition for every alternative it owes.
      */
     private static final class Condition<E> {
 
         private final E entry;
-        private final int hash;
+        private int hash;
+        private boolean hashed;
 
         Condition(E entry) {
             this.entry = entry;
-            this.hash = entry.hashCode();
         }
 
         @Override
         public boolean equals(Object other) {
-            return this == other || (other instanceof Condition<?> that && hash == that.hash
+            return this == other || (other instanceof Condition<?> that
+                    && hashCode() == that.hashCode()
                     && (entry == that.entry || entry.equals(that.entry)));
         }
 
         @Override
         public int hashCode() {
+            if (!hashed) {
+                hash = entry.hashCode();
+                hashed = true;
+            }
             return hash;
         }
     }
@@ -812,33 +851,49 @@ final class OneOfEach {
         }
 
         /**
+         * {@code so} with what alternative {@code which} of {@code place} asks that is no choice
+         * taken in, in the order it asks it: held, or the first step that closed. The one taking
+         * in of an alternative, of what the walk takes and of what it carries ahead alike.
+         */
+        private Step<S, R> withWhatItAsks(S so, Place<E> place, int which) {
+            List<E> asks = place.alternatives.get(which);
+            List<Place<E>> standing = place.inside(which);
+            S taken = so;
+            for (int at = 0; at < asks.size(); at++) {
+                if (standing.get(at) != null) {
+                    continue;
+                }
+                switch (vocabulary.with(taken, asks.get(at))) {
+                    case Step.Held<S, R>(S more) -> taken = more;
+                    case Step.Closed<S, R> closed -> {
+                        return closed;
+                    }
+                }
+            }
+            return new Step.Held<>(taken);
+        }
+
+        /**
          * {@code so} with what every way this walk hands on takes in — what the alternatives it is
-         * held to ask that is no choice, in the order they hold each other — or null where that
-         * closes beside it, and so no way past {@code so} is handed on.
+         * held to ask that is no choice, in the order they hold each other — or where that closes
+         * beside it, and so no way past {@code so} is handed on, the step that closed.
          *
          * <p>What the walk carries beside what it takes, for a vocabulary that answers alone: a
          * walk held to an alternative that closes beside what an early choice took finds it
          * there, and not once for every way of the choices between. Each entry the walk takes
          * after is taken in beside this as well, once, where the walk takes it.
          */
-        private S withWhatItIsHeldTo(S so) {
+        private Step<S, R> withWhatItIsHeldTo(S so) {
             S ahead = so;
             for (Map.Entry<Place<E>, Integer> each : pinned.entrySet()) {
-                List<E> asks = each.getKey().alternatives.get(each.getValue());
-                List<Place<E>> standing = each.getKey().inside(each.getValue());
-                for (int at = 0; at < asks.size(); at++) {
-                    if (standing.get(at) != null) {
-                        continue;
-                    }
-                    switch (vocabulary.with(ahead, asks.get(at))) {
-                        case Step.Held<S, R>(S taken) -> ahead = taken;
-                        case Step.Closed<S, R> _ -> {
-                            return null;
-                        }
+                switch (withWhatItAsks(ahead, each.getKey(), each.getValue())) {
+                    case Step.Held<S, R>(S taken) -> ahead = taken;
+                    case Step.Closed<S, R> closed -> {
+                        return closed;
                     }
                 }
             }
-            return ahead;
+            return new Step.Held<>(ahead);
         }
 
         /**
@@ -865,12 +920,9 @@ final class OneOfEach {
             }
             Group<E, S, R> past = new Group<>(vocabulary, looking, handing, left,
                     holdingIt(choice, alternative));
-            S ahead = null;
-            if (vocabulary.answersAlone()) {
-                ahead = past.withWhatItIsHeldTo(base);
-                if (ahead == null) {
-                    return null;
-                }
+            Step<S, R> ahead = vocabulary.answersAlone() ? past.withWhatItIsHeldTo(base) : null;
+            if (ahead instanceof Step.Closed) {
+                return null;
             }
             past.from(new ArrayDeque<>(group), new HashMap<>(), base, ahead);
             for (Place<E> each : past.met) {
@@ -904,11 +956,14 @@ final class OneOfEach {
         }
 
         /**
-         * @param ahead {@code so} with what every way this walk hands on takes in
-         *              ({@link #withWhatItIsHeldTo}), or null where the walk asks nothing ahead
+         * @param ahead {@code so} with what every way this walk hands on takes in, held
+         *              ({@link #withWhatItIsHeldTo}), or null where the walk carries nothing
+         *              ahead. The step it came to, and never the state alone, so that what a
+         *              vocabulary holds is never taken for there being nothing.
          * @return whether the walk may go on
          */
-        boolean from(Deque<Place<E>> pending, Map<Place<E>, Integer> chosen, S so, S ahead) {
+        boolean from(Deque<Place<E>> pending, Map<Place<E>, Integer> chosen, S so,
+                     Step<S, R> ahead) {
             Place<E> next = pending.pollFirst();
             if (next == null) {
                 if (!takesWhatItIsHeldTo(chosen)) {
@@ -936,46 +991,35 @@ final class OneOfEach {
                 }
                 left[0]--;
                 chosen.put(next, which);
-                S here = so;
-                Step.Closed<S, R> closedBy = null;
-                Deque<Place<E>> after = new ArrayDeque<>(pending);
-                List<Place<E>> nested = new ArrayList<>();
-                List<E> asks = next.alternatives.get(which);
-                List<Place<E>> standing = next.inside(which);
-                for (int at = 0; at < asks.size(); at++) {
-                    if (standing.get(at) != null) {
-                        nested.add(standing.get(at));
-                    } else if (closedBy == null) {
-                        switch (vocabulary.with(here, asks.get(at))) {
-                            case Step.Held<S, R>(S taken) -> here = taken;
-                            case Step.Closed<S, R> closed -> closedBy = closed;
-                        }
-                    }
-                }
+                Step<S, R> taken = withWhatItAsks(so, next, which);
                 // What an alternative the walk is held to asks is in what it carries ahead
                 // already.
-                S furtherAhead = ahead;
-                for (int at = 0; held == null && furtherAhead != null && closedBy == null
-                        && at < asks.size(); at++) {
-                    if (standing.get(at) == null) {
-                        furtherAhead = switch (vocabulary.with(furtherAhead, asks.get(at))) {
-                            case Step.Held<S, R>(S taken) -> taken;
-                            case Step.Closed<S, R> _ -> null;
-                        };
-                    }
+                Step<S, R> furtherAhead = ahead;
+                if (held == null && taken instanceof Step.Held
+                        && ahead instanceof Step.Held<S, R>(S carried)) {
+                    furtherAhead = withWhatItAsks(carried, next, which);
                 }
-                if (closedBy != null) {
-                    if (firstClosed == null) {
-                        firstClosed = new HashMap<>(chosen);
-                        firstWhy = closedBy.why();
+                switch (taken) {
+                    case Step.Closed<S, R> closed -> {
+                        if (firstClosed == null) {
+                            firstClosed = new HashMap<>(chosen);
+                            firstWhy = closed.why();
+                        }
                     }
-                } else if (ahead == null || furtherAhead != null) {
-                    for (int each = nested.size() - 1; each >= 0; each--) {
-                        after.addFirst(nested.get(each));
-                    }
-                    if (!from(after, chosen, here, furtherAhead)) {
-                        chosen.remove(next);
-                        return false;
+                    case Step.Held<S, R>(S here) -> {
+                        if (!(furtherAhead instanceof Step.Closed)) {
+                            Deque<Place<E>> after = new ArrayDeque<>(pending);
+                            List<Place<E>> standing = next.inside(which);
+                            for (int at = standing.size() - 1; at >= 0; at--) {
+                                if (standing.get(at) != null) {
+                                    after.addFirst(standing.get(at));
+                                }
+                            }
+                            if (!from(after, chosen, here, furtherAhead)) {
+                                chosen.remove(next);
+                                return false;
+                            }
+                        }
                     }
                 }
                 chosen.remove(next);

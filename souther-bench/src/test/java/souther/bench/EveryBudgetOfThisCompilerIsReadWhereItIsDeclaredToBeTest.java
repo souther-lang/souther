@@ -254,7 +254,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " in what it comes back with"),
             Map.entry("souther.compiler.partition.OneOfEach$Group#from("
                             + "Ljava/util/Deque;Ljava/util/Map;Ljava/lang/Object;"
-                            + "Ljava/lang/Object;)Z",
+                            + "Lsouther/compiler/partition/OneOfEach$Step;)Z",
                     "stops a group's walk at the choices looked at or at the ways handed on, and"
                             + " records which, which the walk says in what it comes back with"),
             // A way past the figure read again for a relation: a choice whose alternatives, taken
