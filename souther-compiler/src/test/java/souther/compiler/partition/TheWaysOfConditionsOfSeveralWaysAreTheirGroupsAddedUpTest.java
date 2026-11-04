@@ -127,6 +127,82 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
                 () -> "a way takes the two apart, either way round: " + taken);
     }
 
+    /**
+     * One choice standing at two places is two choices, as two alike are: which object an entry
+     * is says nothing of where it stands, since a value made again may be handed out as the one
+     * made before.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void oneChoiceAtTwoPlacesIsTwoChoicesAsTwoAlikeAre() {
+        Choice twice = oneOf(ask(X, 1, 2), ask(X, 2, 3));
+        List<List<Integer>> taken = new ArrayList<>();
+        for (OneOfEach.Way<Entry> way : open(walked(twice, twice)).ways()) {
+            OneOfEach.Way.Chosen<Entry> chosen = assertInstanceOf(OneOfEach.Way.Chosen.class, way);
+            assertEquals(2, chosen.choices().size(), () -> "both places are said: " + chosen);
+            taken.add(chosen.choices().stream().map(OneOfEach.Choice::alternative).toList());
+        }
+        assertEquals(Set.of(List.of(0, 0), List.of(0, 1), List.of(1, 0), List.of(1, 1)),
+                new HashSet<>(taken), () -> "every way of the two places: " + taken);
+    }
+
+    /**
+     * The way of an alternative of a nested choice that stands in two alternatives is looked for
+     * through the place it stands at, and found where only the second place leads to it: held to
+     * the first place's alternative, the looking would find that no way takes it there and leave
+     * it out.
+     */
+    @Test
+    void aNestedChoiceAtTwoPlacesHasTheWayOfEachAlternativeAtEitherLookedFor() {
+        TermPath w = TermPath.of("w");
+        TermPath v = TermPath.of("v");
+        Ask third = ask(w, 3);
+        Choice nested = oneOf(ask(w, 1, 2, 3), third);
+        Choice first = new Choice(List.of(List.of(ask(w, 1), nested), List.of(ask(v, 1))));
+        Choice second = new Choice(List.of(List.of(nested), List.of(ask(v, 2))));
+        List<Entry> entries = new ArrayList<>(List.of(first, second));
+        for (int each = 0; each < 5; each++) {
+            entries.add(oneOf(ask(w, 1, 2, 3), ask(w, 1, 2, 3, 4)));
+        }
+        Walked.Open<Entry, TermPath> walked = open(walked(entries.toArray(Entry[]::new)));
+
+        assertFalse(walked.everyWay(), () -> "more ways than are looked along: " + walked);
+        assertTrue(chosen(walked).stream().anyMatch(way -> way.contains(third)),
+                () -> "the nested choice's second alternative, past the second place: " + walked);
+    }
+
+    /**
+     * Where the figure leaves room for a way per alternative of each condition and no more, a
+     * condition standing at two places is owed its alternatives once: a way taking one at either
+     * place takes it, and the room it would spend at the second goes to another condition's.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aConditionAtTwoPlacesIsOwedEachAlternativeOnceWhereTheFigureIsTight() {
+        Choice twice = oneOf(ask(X, 1, 2), ask(X, 1, 2, 3));
+        List<Entry> entries = new ArrayList<>(List.of(twice, twice));
+        int room = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum();
+        // The first way, one for the second alternative of the condition at two places, and one
+        // for each other condition's: the figure exactly.
+        for (int each = 0; each < room - 2; each++) {
+            entries.add(oneOf(ask(X, 1, 2, 3), ask(X, 1, 2, 3, 10 + each)));
+        }
+        Walked.Open<Entry, TermPath> walked = open(walked(entries.toArray(Entry[]::new)));
+
+        assertFalse(walked.everyWay(), () -> "more ways than are looked along: " + walked);
+        Set<List<Object>> taken = new HashSet<>();
+        for (OneOfEach.Way<Entry> way : walked.ways()) {
+            OneOfEach.Way.Chosen<Entry> chosen = assertInstanceOf(OneOfEach.Way.Chosen.class, way);
+            chosen.choices().forEach(each -> taken.add(List.of(each.entry(), each.alternative())));
+        }
+        for (Entry each : entries) {
+            for (int alternative = 0; alternative < 2; alternative++) {
+                List<Object> owed = List.of(each, alternative);
+                assertTrue(taken.contains(owed), () -> "a way takes " + owed + ": " + taken);
+            }
+        }
+    }
+
     /** Two conditions on two positions, every combination within the figure: each of them,
      *  since a row past both is along one. */
     @Test
