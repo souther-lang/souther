@@ -1732,13 +1732,9 @@ sealed interface ComparisonAssessment {
                 }
                 continue;
             }
-            Function<Proposition, CasesOfALineAsked.Crossing> crossing = condition ->
+            CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each, condition ->
                     wayToACase.crossing(cutting, condition, reading, (toIt, keptTo) ->
-                            crossedAtSomePlace(cutting, toIt, arrivals, keptTo));
-            CasesOfALineAsked.Found found = cutting.of().leftAlikeByEveryRegion()
-                    ? CasesOfALineAsked.casesOf(each, crossing,
-                            keptByItsStatements(cutting, each, wayToACase, arrivals, reading))
-                    : CasesOfALineAsked.casesOf(each, crossing);
+                            crossedAtSomePlace(cutting, toIt, arrivals, keptTo)));
             for (DecidingCase one : found.decidesIn()) {
                 reached.add(one);
                 deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));
@@ -1746,45 +1742,6 @@ sealed interface ComparisonAssessment {
             stoppedAt.addAll(found.notWorkedOut());
         }
         return new CasesReached(reached, deciding, stoppedAt);
-    }
-
-    /**
-     * What keeps the values of {@code cutting}'s line in a case of {@code said}, for a line on a
-     * quantity whose readings no region changes ({@link BorderQuantity#leftAlikeByEveryRegion}):
-     * the statements on that quantity the case holds ({@link Cutting#leftBy}), and nothing else in
-     * it. Whether a case divides is asked, case by case, of what {@link Cutting#keptTo} leaves of
-     * the values over the regions of the way to it ({@link #crossedAtSomePlace}); for such a
-     * quantity those regions are read no differently, and what the case's other parts say comes
-     * to no statement on the quantity, so that question comes out as it does asked of those
-     * statements alone over the regions of any way a row takes — the way to the cases
-     * {@code said} stands for, read the first time it is asked. It is the case-by-case question
-     * answered once, and claims no more of the rows than that question does.
-     */
-    private static CasesOfALineAsked.KeptByItsStatements keptByItsStatements(
-            Cutting cutting, DecidingCase said, WaysToACase wayToACase,
-            List<ComparisonArrival> arrivals, InputReading reading) {
-        return new CasesOfALineAsked.KeptByItsStatements() {
-
-            private Reachability toAll;
-
-            @Override
-            public CasesOfALineAsked.Keeping keeping(Proposition part) {
-                if (part instanceof Proposition.Compared && cutting.leftBy(part, reading) != null) {
-                    return CasesOfALineAsked.Keeping.ITSELF;
-                }
-                return cutting.saysOfItsValuesInside(part, reading)
-                        ? CasesOfALineAsked.Keeping.INSIDE : CasesOfALineAsked.Keeping.NOTHING;
-            }
-
-            @Override
-            public boolean divides(Proposition statements) {
-                if (toAll == null) {
-                    toAll = wayToACase.apply(said.condition());
-                }
-                return crossedAtSomePlace(cutting, toAll, arrivals,
-                        cutting.keptTo(statements, reading));
-            }
-        };
     }
 
     /**

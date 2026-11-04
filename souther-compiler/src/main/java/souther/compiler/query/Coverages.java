@@ -98,6 +98,7 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.PriorityQueue;
@@ -2235,10 +2236,11 @@ final class Coverages {
         souther.compiler.partition.WitnessSearch looking = input.witnessSearch();
         return new OneSearchOfABorder() {
 
-            /** Each way the way to the border is split into, taken in once, asked what a part
-             *  of where the line decides leaves; read the first time a point is looked along
-             *  them. */
-            private List<Optional<WayToTheBorder.Assuming>> assumingAlong;
+            /** For each way a point is looked along, each way it is split into, taken in once,
+             *  asked what a part of where the line decides leaves; read the first time a point is
+             *  looked along them. Kept by the way itself: a way is never read as another. */
+            private final Map<Reachability.Reaching, List<Optional<WayToTheBorder.Assuming>>>
+                    assumingAlong = new IdentityHashMap<>();
 
             @Override
             public boolean classLiesOutsideTheCase(Criterion criterion) {
@@ -2392,14 +2394,11 @@ final class Coverages {
                                 instanceof TheCaseALineDecidesIn.CasePossibility.Refuted);
             }
 
-            /** Each way {@code able}, the way this search reaches the border along, is split
-             *  into, taken in, worked out once. */
+            /** Each way {@code able} is split into, taken in, worked out once for it. */
             private synchronized List<Optional<WayToTheBorder.Assuming>> assuming(
                     Reachability.Reaching able) {
-                if (assumingAlong == null) {
-                    assumingAlong = WayToTheBorder.assumingAlong(able, rules.region());
-                }
-                return assumingAlong;
+                return assumingAlong.computeIfAbsent(able,
+                        way -> WayToTheBorder.assumingAlong(way, rules.region()));
             }
 
             /** What looking for a row at {@code criterion} along {@code able} came to. */

@@ -820,15 +820,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " are kept as nobody taking them apart, naming the figure that"
                             + " stopped it"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#<init>("
-                            + "Ljava/util/function/Function;"
-                            + "Lsouther/compiler/meaning/CasesOfALineAsked$KeptByItsStatements;)V",
+                            + "Ljava/util/function/Function;)V",
                     "how many times the cases one case was said for are asked, which every"
                             + " question spends"),
-            Map.entry("souther.compiler.meaning.CasesOfALineAsked#everyCaseWithARowDivides("
-                            + "Lsouther/compiler/meaning/DecidingCase;)Z",
-                    "how many sets of the statements on a line's values are asked, no more than"
-                            + " the steps its cases are asked in, past which the cases are chosen"
-                            + " instead"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#asked("
                             + "Lsouther/compiler/meaning/DecidingCase;)"
                             + "Lsouther/compiler/meaning/CasesOfALineAsked$Found;",
@@ -836,7 +830,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " figure, more cases than are taken apart, and none is asked"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#allAsked("
                             + "Lsouther/compiler/meaning/DecidingCase;"
-                            + "Ljava/util/function/Function;)"
+                            + "Ljava/util/function/Function;Z)"
                             + "Lsouther/compiler/meaning/CasesOfALineAsked$Atoms;",
                     "how many ways of choosing a case are asked, counted before any is: past the"
                             + " figure, more cases than are taken apart, and none is asked"),
