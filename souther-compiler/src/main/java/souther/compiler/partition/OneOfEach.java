@@ -13,6 +13,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * The ways a list of things asked of a row comes to where some of them are one of several things:
@@ -98,8 +99,27 @@ final class OneOfEach {
         /** They hold together, as {@code so}. */
         record Held<S, R>(S so) implements Step<S, R> {}
 
-        /** They do not, for {@code why}. */
-        record Closed<S, R>(R why) implements Step<S, R> {}
+        /**
+         * They do not, for {@link #why}, which {@code because} works out where it is read: a walk
+         * reads why of the first way that closes, and of every other only that it closed.
+         */
+        record Closed<S, R>(Supplier<R> because) implements Step<S, R> {
+
+            /** They do not, for {@code why}. */
+            public Closed(R why) {
+                this(() -> why);
+            }
+
+            /** They do not, for what {@code why} works out where it is read. */
+            public static <S, R> Closed<S, R> workedOut(Supplier<R> why) {
+                return new Closed<S, R>(why);
+            }
+
+            /** Why they do not hold together. */
+            public R why() {
+                return because.get();
+            }
+        }
     }
 
     /**
@@ -249,9 +269,9 @@ final class OneOfEach {
             }
             switch (vocabulary.with(base, entries.get(at))) {
                 case Step.Held<S, R>(S so) -> base = so;
-                case Step.Closed<S, R>(R why) -> {
+                case Step.Closed<S, R> closed -> {
                     return new Walked.Closed<>(rebuilt(entries, places, Map.of(), null, null),
-                            why);
+                            closed.why());
                 }
             }
         }
@@ -432,7 +452,7 @@ final class OneOfEach {
         List<Map<Place<E>, Integer>> out = new ArrayList<>();
         Map<Place<E>, Integer> firsts = firstsOf(walked, live);
         out.add(firsts);
-        Map<E, Set<Integer>> covered = new HashMap<>();
+        Map<Condition<E>, Set<Integer>> covered = new HashMap<>();
         noteCovered(covered, firsts);
         AlternativeOrder<Looked<E>> order = new AlternativeOrder<>();
         for (int at : live) {
@@ -443,7 +463,7 @@ final class OneOfEach {
         for (AlternativeOrder.Target<Looked<E>> target = order.next();
                 target != null && out.size() < most; target = order.next()) {
             Place<E> choice = target.choice().choice();
-            if (covered.getOrDefault(choice.entry, Set.of()).contains(target.alternative())) {
+            if (covered.getOrDefault(choice.condition, Set.of()).contains(target.alternative())) {
                 continue;
             }
             int at = target.choice().group();
@@ -499,10 +519,10 @@ final class OneOfEach {
         return out;
     }
 
-    private static <E> void noteCovered(Map<E, Set<Integer>> covered,
+    private static <E> void noteCovered(Map<Condition<E>, Set<Integer>> covered,
                                         Map<Place<E>, Integer> way) {
         way.forEach((choice, which) ->
-                covered.computeIfAbsent(choice.entry, _ -> new HashSet<>()).add(which));
+                covered.computeIfAbsent(choice.condition, _ -> new HashSet<>()).add(which));
     }
 
     /**
@@ -654,6 +674,33 @@ final class OneOfEach {
     }
 
     /**
+     * A choice as the condition it is, wherever it stands: equal to the condition of an equal
+     * entry. The entry's hash is asked once, where the place is made, so that what the walk asks
+     * of a condition for every alternative it owes costs what the entry's hash does once.
+     */
+    private static final class Condition<E> {
+
+        private final E entry;
+        private final int hash;
+
+        Condition(E entry) {
+            this.entry = entry;
+            this.hash = entry.hashCode();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof Condition<?> that && hash == that.hash
+                    && (entry == that.entry || entry.equals(that.entry)));
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+    }
+
+    /**
      * A choice where it stands: the entry, and the alternative of the choice it stands in, or
      * none for one written among the entries walked. What the walk files a choice under, equal
      * only to itself, so that one entry at two places is two of these.
@@ -665,6 +712,7 @@ final class OneOfEach {
     private static final class Place<E> {
 
         private final E entry;
+        private final Condition<E> condition;
         private final List<List<E>> alternatives;
         private final Vocabulary<E, ?, ?> vocabulary;
         /** The choice this stands in an alternative of, or null for one among the entries. */
@@ -675,6 +723,7 @@ final class OneOfEach {
         private Place(E entry, List<List<E>> alternatives, Vocabulary<E, ?, ?> vocabulary,
                       Place<E> in, int inAlternative) {
             this.entry = entry;
+            this.condition = new Condition<>(entry);
             this.alternatives = alternatives;
             this.vocabulary = vocabulary;
             this.in = in;
@@ -881,7 +930,7 @@ final class OneOfEach {
                 left[0]--;
                 chosen.put(next, which);
                 S here = so;
-                R closedBy = null;
+                Step.Closed<S, R> closedBy = null;
                 Deque<Place<E>> after = new ArrayDeque<>(pending);
                 List<Place<E>> nested = new ArrayList<>();
                 List<E> asks = next.alternatives.get(which);
@@ -892,14 +941,14 @@ final class OneOfEach {
                     } else if (closedBy == null) {
                         switch (vocabulary.with(here, asks.get(at))) {
                             case Step.Held<S, R>(S taken) -> here = taken;
-                            case Step.Closed<S, R>(R why) -> closedBy = why;
+                            case Step.Closed<S, R> closed -> closedBy = closed;
                         }
                     }
                 }
                 if (closedBy != null) {
                     if (firstClosed == null) {
                         firstClosed = new HashMap<>(chosen);
-                        firstWhy = closedBy;
+                        firstWhy = closedBy.why();
                     }
                 } else if (!closesAhead(here, chosen)) {
                     for (int each = nested.size() - 1; each >= 0; each--) {

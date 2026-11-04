@@ -169,8 +169,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                     return CountedWays.admits(this, so, counted);
                 }
                 return switch (takenIn(so.held(), entry)) {
-                    case Step.Closed<HeldTogether, Reachability>(var why) ->
-                            new Step.Closed<>(new NoInputTakesIt.TheConditionsClash(switch (why) {
+                    case Step.Closed<HeldTogether, Reachability> closed -> Step.Closed.workedOut(
+                            () -> new NoInputTakesIt.TheConditionsClash(switch (closed.why()) {
                                 case Reachability.NothingReaches(var what) ->
                                         new NoInputTakesIt.Clash.TwoAtOnce(what);
                                 case Reachability.NothingComesOutThatWay(var condition) ->
@@ -540,8 +540,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
             return switch (remainders.taking(added)) {
                 // Said in the statements that prove it: one that follows from statements only a
                 // run checks is said as those.
-                case RemaindersHeld.Taken.NoneLeft(var ofIt) -> new Step.Closed<>(
-                        new Reachability.NumbersLeaveNone(ofIt.stream()
+                case RemaindersHeld.Taken.NoneLeft(var ofIt) -> Step.Closed.workedOut(
+                        () -> new Reachability.NumbersLeaveNone(ofIt.stream()
                                 .flatMap(each -> each.provedBy().stream()).distinct().toList()));
                 case RemaindersHeld.Taken.Held(var held) -> new Step.Held<>(
                         new HeldTogether(requirements, truths, counts, numbers, held));
