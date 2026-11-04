@@ -52,6 +52,14 @@ final class RemaindersHeld {
         record NoneLeft(List<RowDemand.OnARemainder> statements) implements Taken {}
     }
 
+    /** What the statements of each remainder leave of it, without the statements: two of these
+     *  leaving the same are the same to whatever is taken in next. */
+    Map<ARemainderMoved.Unmoved, WholeNumberRuns> left() {
+        Map<ARemainderMoved.Unmoved, WholeNumberRuns> out = new HashMap<>();
+        held.forEach((of, each) -> out.put(of, each.remainders()));
+        return Collections.unmodifiableMap(out);
+    }
+
     /** These with {@code added} taken in, or the statements of its remainder where they leave
      *  none of it. */
     Taken taking(RowDemand.OnARemainder added) {

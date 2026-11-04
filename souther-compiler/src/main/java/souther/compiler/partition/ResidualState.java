@@ -9,11 +9,9 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.ExactRatio;
-import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.WholeNumberRuns;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -28,30 +26,37 @@ import java.util.function.Predicate;
  * What the parts chosen come to for the cases still to choose, as a value two histories share
  * when they leave the same question.
  *
- * <p>Two things about the parts chosen are told apart from the history that chose them.
+ * <p>Two things about the parts chosen are told apart from the history that chose them, and each
+ * is replaced only by what leaves every case still to choose the same question it left: what
+ * stands in for a part is exact, never what holds wherever the part does.
  *
  * <p>The remainders of one form by one divisor, moved by constants, are one fact about the
- * remainder of the form: the remainders it can have after all of them
- * ({@link ResiduesAStatementLeaves}), whichever of them said it. Held as the parts, the same
- * remainders left by different histories are different questions.
+ * remainder of the form: the remainders of the form unmoved they leave, whichever of them said it,
+ * as the way holds them ({@link RemaindersHeld}, {@link ARemainderMoved}). A statement the owner
+ * of remainders does not read as one stands as it was said: held as the remainders it may leave,
+ * it would be every remainder, and two that say different things would be one state.
  *
  * <p>That some element of a container is a date, or none is, is a fact about that date alone when
  * the container is held to nothing and the date is none that anything still to choose, or the
  * line, asks of it. Then the container can be made to hold the dates said to be in it and none of
  * those said not to be, whatever else is chosen, so the fact is eliminated, and what it leaves
- * behind is that a date said to be in it is a date: the farthest of those from the base is kept.
- * Anything this cannot show is no fact eliminated, and the parts stand as they were chosen.
+ * behind is that each date said to be in it is a date. The dates are one base moved by numbers,
+ * so that is the base moved by the least and by the greatest of them being dates: both ends are
+ * kept. Anything this cannot show is no fact eliminated, and the parts stand as they were chosen.
  */
 final class ResidualState {
 
     private ResidualState() {
     }
 
-    /** The remainders of one form by one divisor the parts chosen leave. */
-    record Residues(LinearForm<NumericTerm> form, BigInteger divisor, WholeNumberRuns left) {}
+    /** What the parts chosen leave of each remainder of a form unmoved ({@link
+     *  RemaindersHeld#left}). */
+    record Residues(Map<ARemainderMoved.Unmoved, WholeNumberRuns> left) {}
 
-    /** The farthest of the dates said to be in a container, of one base. */
-    record Farthest(TermPath container, Map<Quantity, ExactRatio> base, ExactRatio at) {}
+    /** The nearest and the farthest the dates said to be in a container are moved from one base,
+     *  as the constants {@code element + base + at == 0} holds them with. */
+    record Ends(TermPath container, Map<Quantity, ExactRatio> base, ExactRatio least,
+                ExactRatio greatest) {}
 
     /** That some element of {@code container} is the date {@code base} moved by {@code at}, or
      *  that none is. */
@@ -70,15 +75,20 @@ final class ResidualState {
     static Optional<Set<Object>> of(List<Proposition> bearing, List<Proposition> remaining,
                                     Function<Proposition, Set<ReadSubject>> positionsOf,
                                     Set<ReadSubject> held, Predicate<TermPath> holdsNothing) {
-        Map<ResidueKey, WholeNumberRuns> residues = new LinkedHashMap<>();
+        RemaindersHeld residues = RemaindersHeld.NONE;
         List<Member> chosen = new ArrayList<>();
         Set<Object> out = new LinkedHashSet<>();
         TermPath container = null;
         for (Proposition part : bearing) {
-            ResidueKey key = residueKeyOf(part);
-            if (key != null) {
-                WholeNumberRuns runs = ResiduesAStatementLeaves.of(part, key.form(), key.divisor());
-                residues.merge(key, runs, WholeNumberRuns::and);
+            RowDemand.OnARemainder remainder = remainderOf(part);
+            if (remainder != null) {
+                switch (residues.taking(remainder)) {
+                    case RemaindersHeld.Taken.Held(var taken) -> residues = taken;
+                    // No row meets the parts chosen; nothing is shared with such a history.
+                    case RemaindersHeld.Taken.NoneLeft _ -> {
+                        return Optional.empty();
+                    }
+                }
                 continue;
             }
             Member member = memberOf(part);
@@ -92,21 +102,26 @@ final class ResidualState {
             }
             out.add(part);
         }
-        residues.forEach((key, runs) -> out.add(new Residues(key.form(), key.divisor(), runs)));
+        if (!residues.left().isEmpty()) {
+            out.add(new Residues(residues.left()));
+        }
         if (chosen.isEmpty()) {
             return Optional.of(out);
         }
         if (!eliminated(container, chosen, out, remaining, positionsOf, held, holdsNothing)) {
             return Optional.empty();
         }
-        Member farthest = null;
+        ExactRatio least = null;
+        ExactRatio greatest = null;
         for (Member each : chosen) {
-            if (each.holds() && (farthest == null || each.at().compareTo(farthest.at()) < 0)) {
-                farthest = each;
+            if (each.holds()) {
+                least = least == null || each.at().compareTo(least) < 0 ? each.at() : least;
+                greatest = greatest == null || each.at().compareTo(greatest) > 0 ? each.at()
+                        : greatest;
             }
         }
-        if (farthest != null) {
-            out.add(new Farthest(container, farthest.base(), farthest.at()));
+        if (least != null) {
+            out.add(new Ends(container, chosen.getFirst().base(), least, greatest));
         }
         return Optional.of(out);
     }
@@ -146,45 +161,43 @@ final class ResidualState {
         return true;
     }
 
-    /**
-     * Whether {@code places} are not known, or one is the container or at or under it — or is a
-     * value a binding holds, which may be one an element of the container was worked into, and
-     * is not shown to be anything else.
-     */
+    /** Whether what {@code places} reads may say something of the container ({@link
+     *  ReadSubject#bearOnEachOther}). */
     private static boolean touches(Set<ReadSubject> places, TermPath container) {
-        if (places == null) {
-            return true;
-        }
-        for (ReadSubject each : places) {
-            if (!(each instanceof ReadSubject.At(TermPath path)) || path.isAtOrUnder(container)) {
-                return true;
-            }
-        }
-        return false;
+        return ReadSubject.bearOnEachOther(places, Set.of(new ReadSubject.At(container)));
     }
 
-    private record ResidueKey(LinearForm<NumericTerm> form, BigInteger divisor) {}
-
-    /** The form and divisor of a part that is a comparison of one remainder of a form of the
-     *  input's numbers, or null where it is not. */
-    private static ResidueKey residueKeyOf(Proposition part) {
+    /**
+     * {@code part} as the statement of a remainder of a form of the input's numbers it is — what
+     * it leaves of that remainder — where the owner of remainders reads it as one
+     * ({@link ARemainderMoved#of(RowDemand.OnARemainder)}), or null where it is no such statement.
+     */
+    private static RowDemand.OnARemainder remainderOf(Proposition part) {
         if (!(part instanceof Proposition.Compared compared)
                 || !(compared.relation() instanceof Relation.Affine affine)
                 || affine.form().coefs().size() != 1
                 || !(affine.form().coefs().keySet().iterator().next()
-                        instanceof Quantity.RemainderOfADividend remainder)) {
+                        instanceof Quantity.RemainderOfADividend remainder)
+                || remainder.overTheInput() == null) {
             return null;
         }
-        LinearForm<NumericTerm> over = remainder.overTheInput();
-        if (over == null || !over.constant().isWhole()) {
+        WholeNumberRuns leaves = RowDemand.OnARemainder.meeting(affine,
+                compared.holds() ? affine.proposition() : affine.proposition().denied());
+        if (leaves == null) {
             return null;
         }
-        return new ResidueKey(new LinearForm<>(ExactRatio.ZERO, over.coefs()),
-                remainder.divisor());
+        RowDemand.OnARemainder stated = new RowDemand.OnARemainder(remainder, leaves);
+        return ARemainderMoved.of(stated).isPresent() ? stated : null;
     }
 
-    /** The date a part says some element of a container is, or none is — or null where it says
-     *  something else. */
+    /**
+     * The date a part says some element of a container is, or none is — or null where it says
+     * something else.
+     *
+     * <p>As {@code element + base + at == 0} whichever way round the form was written: the form
+     * of an equality is put the way its terms are ordered, so the element may stand in it
+     * weighed by minus one, and is then read off the form turned over.
+     */
     private static Member memberOf(Proposition part) {
         if (!(part instanceof Proposition.Some some)
                 || !(some.container() instanceof DecisionSubject.AnInput)
@@ -198,21 +211,33 @@ final class ResidualState {
         if (container == null) {
             return null;
         }
-        Map<Quantity, ExactRatio> base = new LinkedHashMap<>();
-        int elements = 0;
+        ExactRatio weight = null;
         for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
-            if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term)
-                    && term.atOnePosition() != null
-                    && term.atOnePosition().position().equals(container.element())) {
-                if (!ExactRatio.ONE.equals(each.getValue())) {
+            if (isTheElement(each.getKey(), container)) {
+                if (weight != null) {
                     return null;
                 }
-                elements++;
-            } else {
-                base.put(each.getKey(), each.getValue());
+                weight = each.getValue();
             }
         }
-        return elements == 1 ? new Member(container, base, affine.form().constant(), some.holds())
-                : null;
+        boolean turned = ExactRatio.ONE.negated().equals(weight);
+        if (!ExactRatio.ONE.equals(weight) && !turned) {
+            return null;
+        }
+        Map<Quantity, ExactRatio> base = new LinkedHashMap<>();
+        for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
+            if (!isTheElement(each.getKey(), container)) {
+                base.put(each.getKey(), turned ? each.getValue().negated() : each.getValue());
+            }
+        }
+        ExactRatio at = affine.form().constant();
+        return new Member(container, base, turned ? at.negated() : at, some.holds());
+    }
+
+    /** Whether {@code term} is the value of an element of {@code container}. */
+    private static boolean isTheElement(Quantity term, TermPath container) {
+        return term instanceof DecisionAtom.OfTheInput(NumericTerm value)
+                && value.atOnePosition() != null
+                && value.atOnePosition().position().equals(container.element());
     }
 }
