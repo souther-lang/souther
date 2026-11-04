@@ -678,6 +678,24 @@ final class DemandReading {
     }
 
     /**
+     * The parts {@code stated} is asked by, each asked by itself ({@link #askedAt}) and in the
+     * order written, or none where it is not asked so.
+     *
+     * <p>A conjunction asks what each of its parts asks, in order ({@link #projected}), and
+     * nothing besides. Each part's reads are made of that part, and what one projection keeps
+     * across the parts is the same whichever part asks it: what some element meeting a statement
+     * asks is kept by the statement, and which copies a read was read off is told of that read by
+     * the statement it was made of. So what the conjunction asks at a condition is what each part
+     * asks there, joined in order, and a reader may ask each part once. Where writing out its
+     * counts changes the conjunction ({@link CountsWrittenOut#writesNothingOutOf}), it asks what it
+     * is written out as, and is asked whole.
+     */
+    static Optional<List<Proposition>> askedPartByPart(Proposition stated) {
+        return stated instanceof Proposition.All all && CountsWrittenOut.writesNothingOutOf(stated)
+                ? Optional.of(all.parts()) : Optional.empty();
+    }
+
+    /**
      * What {@code stated} asks of a row, each thing put at {@code at} and read off the parts of
      * {@code at}'s statement it turns on — a proposition no condition of the shape states, such
      * as where a line of a statement of several decides.
@@ -1431,6 +1449,8 @@ final class DemandReading {
             case Proposition.Unread unread -> List.of(new Read.Unread(
                     new WhyNotTaken.MeaningUnread(unread.why())));
             case Proposition.Carried carried -> throw carried.handedToAReader();
+            // What each part asks, joined in order and nothing besides: a conjunction is asked
+            // part by part on that ({@link #askedPartByPart}).
             case Proposition.All all -> {
                 List<Read> out = new ArrayList<>();
                 all.parts().forEach(part -> out.addAll(projected(part, read, projection)));

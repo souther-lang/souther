@@ -18,7 +18,6 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
@@ -846,26 +845,23 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * conjunction asks taken from {@code eachPart} ({@link #asked}), and what follows from a
      * statement at the members of a class from {@code followed} where a case read it before.
      *
-     * <p>The same entries: a conjunction asks what each of its parts asks, in the order they are
-     * written ({@link DemandReading#askedAt}), and each is read off what that part turns on. So a
-     * case chosen a part further asks what the case before it asked and what the part asks, and
-     * the parts asked before are not read again. Where writing out its counts changes the
-     * conjunction, it asks what it is written out as, and is read whole; what follows from its
-     * statements is read of the whole either way, since it is read off statements put beside each
-     * other.
+     * <p>The same entries, where the conjunction is asked part by part as
+     * {@link DemandReading#askedPartByPart} says: each part is read off what that part turns on,
+     * and filed by whoever put it. So a case chosen a part further asks what the case before it
+     * asked and what the part asks, and the parts asked before are not read again. Otherwise it is
+     * read whole. What follows from its statements is read of the whole either way, since it is
+     * read off statements put beside each other.
      */
     static Stating whereItDecides(Condition at, Proposition decides, InputReading read,
                                   Function<Proposition, Stating> eachPart,
                                   RemaindersOfAnElement.Kept followed) {
-        if (!(decides instanceof Proposition.All all)
-                || !(CountsWrittenOut.outsideElementsOf(decides)
-                        instanceof CountsWrittenOut.Written(Proposition written))
-                || written != decides) {
+        Optional<List<Proposition>> parts = DemandReading.askedPartByPart(decides);
+        if (parts.isEmpty()) {
             return withWhatFollows(decides, asked(at, decides, read), followed);
         }
         List<OnTheWay> entries = new ArrayList<>();
-        List<Stating> asked = new ArrayList<>(all.parts().size());
-        for (Proposition part : all.parts()) {
+        List<Stating> asked = new ArrayList<>(parts.get().size());
+        for (Proposition part : parts.get()) {
             Stating one = eachPart.apply(part);
             asked.add(one);
             entries.addAll(one.entries());

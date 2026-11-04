@@ -41,8 +41,7 @@ import java.util.Optional;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -226,9 +225,11 @@ class WhatACaseChosenPartByPartPutsOnTheWayIsWhatItPutsWholeTest {
                         new Proposition.Truth(new DecisionSubject.AnInput(XS.element()), true)),
                         List.of(1, 1), List.of(1)), true);
         Proposition decides = Proposition.all(List.of(inAnElement, atLeast(READ.a(), 2)));
-        CountsWrittenOut.Written written = assertInstanceOf(CountsWrittenOut.Written.class,
-                CountsWrittenOut.outsideElementsOf(decides));
-        assertNotSame(decides, written.stated(), "writing out the count changes the conjunction");
+        assertFalse(CountsWrittenOut.writesNothingOutOf(decides),
+                "writing out the count changes the conjunction");
+        assertTrue(CountsWrittenOut.writesNothingOutOf(
+                Proposition.all(List.of(atLeast(READ.a(), 1), atLeast(READ.a(), 2)))),
+                "and writes nothing out of one without a count in an element");
         assertEquals(0, assertPutAsWhole(decides).partsRead());
     }
 
