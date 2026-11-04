@@ -1666,15 +1666,19 @@ public sealed interface NumericTerm
         }
 
         /**
-         * Whether the key is a field the number is made of, or one around or inside it, narrowings
-         * to cases aside ({@link TermPath#bearsOn}): every element of the key holds the key there,
-         * so each contributes it and the number is the elements' share of that one value.
+         * Whether the key is a field the number is made of, or one around or inside it: every
+         * element of the key holds the key there, so each contributes it and the number is the
+         * elements' share of that one value.
+         *
+         * <p>Of the key and the number being one value, and not of their bearing on each other
+         * ({@link TermPath#bearsOn}): two cases of one value bear on each other and hold no value
+         * in common.
          */
         public boolean keyIsWhatIsAdded() {
             TermPath keyAt = key().from(gathered.elements());
             for (ElementProjection read : gathered.value().reads()) {
                 TermPath readAt = read.from(gathered.elements());
-                if (readAt.bearsOn(keyAt)) {
+                if (readAt.isAtOrUnder(keyAt) || keyAt.isAtOrUnder(readAt)) {
                     return true;
                 }
             }
