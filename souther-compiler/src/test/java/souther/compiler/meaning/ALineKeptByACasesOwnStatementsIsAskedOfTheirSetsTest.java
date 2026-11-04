@@ -13,6 +13,7 @@ import java.util.Random;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -256,6 +257,36 @@ class ALineKeptByACasesOwnStatementsIsAskedOfTheirSetsTest {
         assertTrue(finer > 0, "no world had a part chosen so far on one side with no row past it");
     }
 
+    /**
+     * A row where a statement keeping the values to one side holds is no row of a case holding
+     * that statement: it may be a row of another case, which says nothing of them. So the cases
+     * holding it are asked, and not the cases said with it beside them.
+     */
+    @Test
+    void aRowMeetingAStatementInACaseThatDoesNotHoldItIsNoRowOfTheCasesHoldingIt() {
+        // k1 holds the values at six and above. The one row holds k1 and o1, and not o0: it is a
+        // row of the case o1, which holds no statement on the values, and of no case holding k1.
+        Proposition k1AndO0 = Proposition.all(List.of(truth("k1", true), truth("o0", true)));
+        Proposition o1 = truth("o1", true);
+        DecidingCase.Cases cases = new DecidingCase.Cases.EachOf(List.of(
+                new DecidingCase.Cases.One(k1AndO0), new DecidingCase.Cases.One(o1)));
+        World world = new World(List.of(
+                Map.of("k0", false, "k1", true, "k2", false, "o0", false, "o1", true,
+                        "o2", false)));
+        DecidingCase said = new DecidingCase(cases.holdingInSome(1 << 20).orElseThrow(), cases);
+        assertNotEquals(CasesOfALineAsked.Crossing.NO_ROWS,
+                world.crossing(Proposition.all(List.of(said.condition(), truth("k1", true)))),
+                "the cases said, with k1 beside them, hold the row");
+        List<Proposition> asked = new ArrayList<>();
+
+        CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(said,
+                recording(world, asked), world.kept());
+
+        assertEquals(List.of(said), found.decidesIn());
+        assertEquals(List.of(said.condition(), k1AndO0), asked,
+                "the cases holding, and the one case holding k1, which no row is in");
+    }
+
     private static Function<Proposition, CasesOfALineAsked.Crossing> recording(
             World world, List<Proposition> asked) {
         return condition -> {
@@ -292,7 +323,8 @@ class ALineKeptByACasesOwnStatementsIsAskedOfTheirSetsTest {
         }, world.kept());
 
         assertEquals(List.of(said), found.decidesIn());
-        assertEquals(List.of(said.condition(), Proposition.all(List.of(said.condition(), k1))),
-                asked, "the cases holding, and k1 alone, which keeps the values above the line");
+        assertEquals(List.of(said.condition(), k1), asked, "the cases holding, and the cases"
+                + " holding k1, which keeps the values above the line, asked once where they"
+                + " begin alike and left there");
     }
 }

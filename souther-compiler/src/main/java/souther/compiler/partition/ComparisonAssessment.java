@@ -73,6 +73,7 @@ import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
@@ -1830,15 +1831,20 @@ sealed interface ComparisonAssessment {
                                             arrivals, line.cutting().keptTo(condition, reading)))
                                     .toList());
                 });
-        return partsOfARelation(part, against, inCase);
+        return partsOfARelation(part, against, inCase,
+                condition -> wayToACase.apply(condition) instanceof Reachability.Reaching);
     }
 
     /**
      * The parts a relation to another value comes to, given what it parts in each case:
-     * {@code inCase} is asked of every condition a case is taken apart into.
+     * {@code inCase} is asked of every condition a case is taken apart into that
+     * {@code reachable} does not show no row takes the way to. A case no row takes is no case of
+     * the statement, and a narrower one is taken by no more rows, so a part chosen so far that no
+     * row takes leaves every case past it out unasked.
      */
     static List<Several.Part> partsOfARelation(Several.Part part, AgainstAnotherValue against,
-                                               Function<Proposition, InACase> inCase) {
+                                               Function<Proposition, InACase> inCase,
+                                               Predicate<Proposition> reachable) {
         // Each case is taken apart to the end and asked by itself: the lines of a narrower case
         // are not the lines of a wider one, so no case is given up or said for several before
         // its own lines are known. Cases are said for several only past that, where they part the
@@ -1847,7 +1853,8 @@ sealed interface ComparisonAssessment {
         Set<CompositionBudget> stoppedAt = EnumSet.noneOf(CompositionBudget.class);
         boolean someCaseLeftUndrawn = part.cases().isEmpty();
         for (DecidingCase each : part.cases()) {
-            CasesOfALineAsked.Atoms<InACase> atoms = CasesOfALineAsked.atomsOf(each, inCase);
+            CasesOfALineAsked.Atoms<InACase> atoms =
+                    CasesOfALineAsked.atomsOf(each, inCase, reachable);
             stoppedAt.addAll(atoms.notWorkedOut());
             for (CasesOfALineAsked.Atom<InACase> atom : atoms.each()) {
                 // A case no row takes is no case of the statement.

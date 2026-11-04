@@ -145,7 +145,7 @@ public final class TheCaseALineDecidesIn {
             }
             // Where the way and the point settle a part apart, no row is both along the way and
             // at this way of standing at the point.
-            if (agree && !new Choosing(parts.asked(), truths).refuted(decides, 0)) {
+            if (agree && !noTruthMakesItHold(decides, parts.asked(), truths)) {
                 return CasePossibility.NOT_REFUTED;
             }
         }
@@ -282,6 +282,18 @@ public final class TheCaseALineDecidesIn {
         return out;
     }
 
+    /**
+     * Whether no truth of the questions {@code truths} leaves unsettled makes {@code stated} hold:
+     * {@code asked} is each part of it by identity, as the place of its question in
+     * {@code truths}, negated for a denial and nought for a part that is no question. False
+     * wherever more truths were to be tried than {@link #TRUTHS_TRIED}. {@code truths} is as it
+     * was afterwards.
+     */
+    static boolean noTruthMakesItHold(Proposition stated, Map<Proposition, Integer> asked,
+                                      Boolean[] truths) {
+        return new Choosing(asked, truths).refuted(stated);
+    }
+
     /** The truths of the parts, some unsettled, and how many of them were tried. */
     private static final class Choosing {
 
@@ -289,35 +301,41 @@ public final class TheCaseALineDecidesIn {
         private final Boolean[] truths;
         private int tried;
 
+        /** The first question met unsettled while working {@code stated} out, signed as it is
+         *  held there; nought where none was. */
+        private int firstOpen;
+
         Choosing(Map<Proposition, Integer> asked, Boolean[] truths) {
             this.asked = asked;
             this.truths = truths;
         }
 
         /**
-         * Whether no truth of the unsettled parts from {@code from} on makes {@code stated} hold.
-         * Refuted where it fails under the truths settled; not where it holds, where nothing is
-         * left to choose and it is still not settled, or past {@link #TRUTHS_TRIED}; and otherwise
-         * where the next part open is refuted holding and refuted failing.
+         * Whether no truth of the unsettled parts makes {@code stated} hold. Refuted where it
+         * fails under the truths settled; not where it holds, where it is still not settled with
+         * no question left open in it, or past {@link #TRUTHS_TRIED}; and otherwise where a
+         * question it leaves open is refuted holding and refuted failing.
+         *
+         * <p>The question chosen is the first one working it out met unsettled, and it is tried
+         * first the way it is held there: a question working it out never meets is one no truth
+         * of which settles it, and held that way the first one met goes the way that may make it
+         * hold. Which is chosen decides how soon a truth making it hold is found, and not what is
+         * refuted: a choice is refuted only where both ways of it are.
          */
-        boolean refuted(Proposition stated, int from) {
+        boolean refuted(Proposition stated) {
+            firstOpen = 0;
             Boolean now = valueOf(stated, new IdentityHashMap<>());
             if (now != null) {
                 return !now;
             }
-            if (++tried > TRUTHS_TRIED) {
+            if (++tried > TRUTHS_TRIED || firstOpen == 0) {
                 return false;
             }
-            int at = from;
-            while (at < truths.length && truths[at] != null) {
-                at++;
-            }
-            if (at == truths.length) {
-                return false;
-            }
-            for (Boolean truth : List.of(Boolean.TRUE, Boolean.FALSE)) {
+            int at = Math.abs(firstOpen) - 1;
+            Boolean held = firstOpen > 0;
+            for (Boolean truth : List.of(held, !held)) {
                 truths[at] = truth;
-                boolean refuted = refuted(stated, at + 1);
+                boolean refuted = refuted(stated);
                 truths[at] = null;
                 if (!refuted) {
                     return false;
@@ -378,6 +396,9 @@ public final class TheCaseALineDecidesIn {
                         yield null;
                     }
                     Boolean truth = truths[Math.abs(signed) - 1];
+                    if (truth == null && firstOpen == 0) {
+                        firstOpen = signed;
+                    }
                     yield truth == null ? null : truth == signed > 0;
                 }
             };
