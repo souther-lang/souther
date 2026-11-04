@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import net.unit8.notation199x.pattern.CodePoints;
 
+import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.GetsPast;
 import souther.compiler.check.ARecursion;
 import souther.compiler.check.AddsWhatItDoesNotHold;
@@ -1429,8 +1430,12 @@ final class Pullback {
      * library adds up exactly and holds to its type as a sum is held
      * ({@link GetsPast.WhereTheTotalFits}), and a number rounded to a whole one, held to the ends
      * of what the rounding answers
-     * ({@link RoundedToAWholeNumber#whereTheRoundedNumberIsHeld}). The operations of what it is
-     * handed are told by the walk into its parts.
+     * ({@link RoundedToAWholeNumber#whereTheRoundedNumberIsHeld}), and an operation whose answer
+     * the arithmetic composes as a form of what it is handed and which ends a run only where that
+     * answer has no place, held to the ends of the type it answers
+     * ({@link AffineForms#whereTheLibraryAnswers}) — a date moved by a count of days answers where
+     * the date and the days added is a date. The operations of what it is handed are told by the
+     * walk into its parts.
      */
     private void oneOperationOfTheLibrary(Core.PreservedCall call, InputReads reads) {
         if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
@@ -1448,6 +1453,15 @@ final class Pullback {
                         read.rules().declarations());
         if (ends != null) {
             operated.tell(call, new Answers.Rounded(rounding.before(), rounding.way(), ends));
+            return;
+        }
+        WhereAnOperatorAnswers.WhereItsExactValueIsHeld held =
+                AffineForms.whereAFormItIsHandedAnswers(call, read.rules().declarations());
+        if (held != null) {
+            LinearForm<Quantity> form = composedAs(call, reads);
+            if (form != null) {
+                operated.tell(call, new Answers.AsAnOperator(form, held));
+            }
         }
     }
 
@@ -1606,6 +1620,17 @@ final class Pullback {
         if (folded(e, reads).isPresent()) {
             return true;
         }
+        // An operation that ends a run only where its answer has no place, whose answer is a
+        // container written out: the walk writes out no more elements than a walk is bounded to,
+        // which is a long way under what a container holds.
+        if (WhatARunMayEndFor.itself(e) instanceof WhatARunMayEndFor.Endings.Known(var kinds)
+                && !kinds.kinds().isEmpty()
+                && kinds.kinds().stream().allMatch(kind -> kind == AbortKind.REQUIRED_FORM_HAS_NO_PLACE)
+                && WrittenOutElements.sizeOf(reads.standing(e, read.rules().symbols(),
+                        read.rules().newtypes()), read.rules().symbols(),
+                        read.rules().newtypes()).isPresent()) {
+            return true;
+        }
         return divisor != null && AffineForms.outcome(divisor, reads, quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)
                 && form.coefs().isEmpty() && !form.constant().isZero();
@@ -1710,6 +1735,15 @@ final class Pullback {
                     leaveUnsaidOverWhereItStands(part, reads, bound);
                 });
                 if (!hasParts[0] && Core.withoutStanding(operand) instanceof Core.Read name) {
+                    // A name stands for the value it was bound to, and a run that works the name
+                    // out stops on what that value is made of.
+                    Core standsFor = Core.withoutStanding(reads.standing(operand,
+                            read.rules().symbols(), read.rules().newtypes()).value());
+                    if (!(standsFor instanceof Core.Read same
+                            && same.binding().equals(name.binding()))) {
+                        leaveUnsaidOverWhereItStands(standsFor, reads, bound);
+                        return;
+                    }
                     operated.leaveUnsaidOver(bound != null && !bound.names().contains(name.binding())
                             ? reads.namedBy(name.binding()) : name.binding(), bound);
                 }
@@ -10134,6 +10168,15 @@ final class Pullback {
                                     LinearForm<Quantity> value) {
                 if (asked != null && Core.withoutStanding(construct) == asked) {
                     composedAs.accept(value);
+                }
+            }
+
+            @Override
+            public void answeredByTheLibrary(Core call, LinearForm<Quantity> form,
+                                             WhereAnOperatorAnswers where) {
+                AffineForms.Reading.super.answeredByTheLibrary(call, form, where);
+                if (asked != null && Core.withoutStanding(call) == asked) {
+                    composedAs.accept(form);
                 }
             }
 

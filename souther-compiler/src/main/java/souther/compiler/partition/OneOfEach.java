@@ -515,8 +515,9 @@ final class OneOfEach {
 
     /**
      * {@code choices} parted into groups no two of which turn on a position in common, each in the
-     * order the choices came — a position counting as in common with any position above or below
-     * it, since what is asked of a value is asked of what is inside it.
+     * order the choices came — a position counting as in common with any it bears on
+     * ({@link TermPath#bearsOn}): what is asked of a value is asked of what is inside it, and of
+     * the value narrowed to a case.
      */
     private static <E, S, R> List<List<E>> groups(List<E> choices,
                                                   Vocabulary<E, S, R> vocabulary) {
@@ -575,7 +576,7 @@ final class OneOfEach {
     private static boolean sharesAPosition(Set<TermPath> one, Set<TermPath> other) {
         for (TermPath a : one) {
             for (TermPath b : other) {
-                if (a.isAtOrUnder(b) || b.isAtOrUnder(a)) {
+                if (a.bearsOn(b)) {
                     return true;
                 }
             }

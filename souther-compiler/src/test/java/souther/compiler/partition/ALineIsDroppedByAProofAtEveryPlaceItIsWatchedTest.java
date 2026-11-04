@@ -129,6 +129,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     /**
      * The ways to cases that come to what {@code wayTo} says of each condition: each case puts a
      * condition of its own on the way, settled, which asks nothing of a row and is no other case's.
+     * The way to the comparison, with no case on it, is nothing on the way.
      */
     private static WaysToACase waysTo(Function<Proposition, Reachability> wayTo) {
         Map<Proposition, List<OnTheWay>> put = new LinkedHashMap<>();
@@ -137,7 +138,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
             List<OnTheWay> its = List.of(settled(put.size()));
             putBy.put(its, decides);
             return its;
-        }), onTheWay -> wayTo.apply(putBy.get(onTheWay)));
+        }), onTheWay -> onTheWay.isEmpty() ? untouched() : wayTo.apply(putBy.get(onTheWay)));
     }
 
     /** The condition numbered {@code ordinal}, settled the way the walk went. */

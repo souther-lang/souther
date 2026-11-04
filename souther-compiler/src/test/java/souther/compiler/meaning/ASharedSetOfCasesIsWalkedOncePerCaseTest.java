@@ -272,7 +272,8 @@ class ASharedSetOfCasesIsWalkedOncePerCaseTest {
             DecidingCase said = new DecidingCase(truth("said"), cases);
             CasesOfALineAsked.Found found = assertTimeoutPreemptively(
                     LONG_ENOUGH_FOR_A_VISIT_TO_EACH_CASE,
-                    () -> CasesOfALineAsked.casesOf(said, _ -> true));
+                    () -> CasesOfALineAsked.casesOf(said,
+                            _ -> CasesOfALineAsked.Crossing.MAY_CROSS));
             assertTrue(found.notWorkedOut().contains(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN),
                     found.notWorkedOut().toString());
         }

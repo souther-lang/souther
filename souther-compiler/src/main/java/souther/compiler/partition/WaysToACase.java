@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.collect.LatelyAsked;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.CasesOfALineAsked;
 import souther.compiler.meaning.Proposition;
 
 import java.util.ArrayList;
@@ -90,6 +91,24 @@ final class WaysToACase {
     /** The way to the comparison with {@code decides} taken in beside it. */
     Reachability apply(Proposition decides) {
         return ways.answer(decides, asked -> reading.apply(put.apply(asked)));
+    }
+
+    /**
+     * What rows reaching {@code cutting} with {@code decides} taken in come to: none at all where
+     * the whole way to the comparison with every condition the case puts on it is shown to be one
+     * no row takes, and otherwise whether they may stand on each side of it ({@link #crossed}).
+     *
+     * <p>Asked of the whole way and never of what the regions are asked: that leaves out some of
+     * what the case puts on, so it may be open where the way is not, and its being open says
+     * nothing of the way.
+     */
+    CasesOfALineAsked.Crossing crossing(Cutting cutting, Proposition decides, InputReading read,
+                                        BiPredicate<Reachability, UnaryOperator<Border.Values>> asked) {
+        if (!apply(decides).leavesARow()) {
+            return CasesOfALineAsked.Crossing.NO_ROWS;
+        }
+        return crossed(cutting, decides, read, asked) ? CasesOfALineAsked.Crossing.MAY_CROSS
+                : CasesOfALineAsked.Crossing.CANNOT_CROSS;
     }
 
     /**

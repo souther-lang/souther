@@ -1266,6 +1266,36 @@ public final class AffineForms {
 
     private static <A, E> WhereAnOperatorAnswers whereTheLibraryAnswers(Core call,
                                                                        Reading<A, E> reading) {
+        return whereTheLibraryAnswers(call, reading.declarations());
+    }
+
+    /**
+     * Where {@code call} answers, where it is an operation the library says answers a form of what
+     * it is handed ({@link BoundOperationFacts#answersAFormOfItsArguments}) and that ends a run only
+     * where that answer has no place: between the ends of the type it answers. Null for any other
+     * call, which says nothing here of the arguments it ends a run on.
+     *
+     * <p>The one account of such a call for every reading that holds a run to where its operators
+     * answer, so that the place a run stops at is the same whichever reading asks.
+     */
+    public static WhereAnOperatorAnswers.WhereItsExactValueIsHeld whereAFormItIsHandedAnswers(
+            Core call, DeclarationAccess declarations) {
+        AnOperationApplied applied = AnOperationApplied.of(call);
+        if (applied == null || DefaultBoundOperationFacts.get()
+                .answersAFormOfItsArguments(applied.operation()) == null) {
+            return null;
+        }
+        return whereTheLibraryAnswers(call, declarations)
+                instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held ? held : null;
+    }
+
+    /**
+     * Where {@code call}, an operation of the library, answers: everywhere where it ends no run,
+     * between the ends of the type it answers where its owners say it ends one only where its
+     * answer has no place, and otherwise not stated.
+     */
+    public static WhereAnOperatorAnswers whereTheLibraryAnswers(Core call,
+                                                               DeclarationAccess declarations) {
         WhatARunMayEndFor.Endings own = WhatARunMayEndFor.itself(call);
         if (own.endsNone()) {
             return new WhereAnOperatorAnswers.Everywhere();
@@ -1276,7 +1306,7 @@ public final class AffineForms {
             return new WhereAnOperatorAnswers.NotStated("its owners say more than its answer"
                     + " having no place ends a run");
         }
-        Carrier answered = Carrier.ofValue(call.type(), reading.declarations());
+        Carrier answered = Carrier.ofValue(call.type(), declarations);
         OrderedInterval ends = answered == null ? null : answered.extent();
         BigInteger least = ends == null ? null : WholeUnitsBetween.wholeNumberOf(ends.low());
         BigInteger greatest = ends == null ? null : WholeUnitsBetween.wholeNumberOf(ends.high());

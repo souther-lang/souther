@@ -13,7 +13,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Predicate;
 
 /**
  * Which of the cases a condition was said for a line decides in, asked a case at a time.
@@ -93,15 +92,42 @@ public final class CasesOfALineAsked {
 
     private static final Found IN_NONE = new Found(List.of(), Set.of());
 
-    private final Predicate<Proposition> crossedIn;
+    /**
+     * What asking a case comes to for the line: three answers, of which only one walks the case
+     * further.
+     *
+     * <p>None of them says a row is there. A way is read as an inclusion, so that rows may stand
+     * on each side is what is left where neither of the others was shown, and is all that walks on.
+     * The two others both leave the case out, and neither lets the case asked be said as it was,
+     * since a case it stands for is then not one the line decides in. They are told apart because
+     * they are different facts: one is about the line, the other about whether any row is in the
+     * case at all.
+     */
+    public enum Crossing {
+
+        /** That rows reaching the line in the case stand on each side of it is not shown not to
+         *  be so. */
+        MAY_CROSS,
+
+        /** Rows may reach the line in the case, but are shown not to stand on each side of it. */
+        CANNOT_CROSS,
+
+        /** The whole way to the line with the case taken in is shown to be one no row takes. */
+        NO_ROWS
+    }
+
+    private final Function<Proposition, Crossing> crossedIn;
 
     private int left = CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum();
 
     /** Each case shown to divide rows, as the conjunction of what it chose. */
     private final Set<Proposition> dividing = new LinkedHashSet<>();
 
-    /** Whether some case was shown to divide no rows. */
-    private boolean dropped;
+    /** Whether some case was shown to hold rows that do not stand on each side of the line. */
+    private boolean droppedNonDividing;
+
+    /** Whether some case was shown to be one no row is in. */
+    private boolean prunedNoRows;
 
     private final Set<CompositionBudget> stopped = EnumSet.noneOf(CompositionBudget.class);
 
@@ -109,8 +135,14 @@ public final class CasesOfALineAsked {
     private final Map<DecidingCase.Cases, Set<CompositionBudget>> figuresOf =
             new IdentityHashMap<>();
 
-    private CasesOfALineAsked(Predicate<Proposition> crossedIn) {
+    private CasesOfALineAsked(Function<Proposition, Crossing> crossedIn) {
         this.crossedIn = crossedIn;
+    }
+
+    /** Whether some case was left out, for either reason: the case asked is then not every case
+     *  it stands for being one the line decides in. */
+    private boolean leftSomeOut() {
+        return droppedNonDividing || prunedNoRows;
     }
 
     /**
@@ -122,10 +154,10 @@ public final class CasesOfALineAsked {
      * says where some one holds only as far as it was said the same way; where they were not, the
      * condition is all that says it.
      *
-     * @param crossedIn whether rows that reach the line with a condition taken in beside the way
-     *                  to it stand on each side of it
+     * @param crossedIn what rows that reach the line with a condition taken in beside the way to
+     *                  it come to ({@link Crossing})
      */
-    public static Found casesOf(DecidingCase said, Predicate<Proposition> crossedIn) {
+    public static Found casesOf(DecidingCase said, Function<Proposition, Crossing> crossedIn) {
         return new CasesOfALineAsked(crossedIn).asked(said);
     }
 
@@ -171,7 +203,7 @@ public final class CasesOfALineAsked {
      * are counted as they are for {@link #casesOf}.
      */
     public static <T> Atoms<T> atomsOf(DecidingCase said, Function<Proposition, T> answer) {
-        return new CasesOfALineAsked(_ -> true).allAsked(said, answer);
+        return new CasesOfALineAsked(_ -> Crossing.MAY_CROSS).allAsked(said, answer);
     }
 
     private <T> Atoms<T> allAsked(DecidingCase said, Function<Proposition, T> answer) {
@@ -190,7 +222,7 @@ public final class CasesOfALineAsked {
             return new Atoms<>(List.of(), stopped);
         }
         List<Atom<T>> out = new ArrayList<>();
-        chosen(SoFar.NOTHING, List.of(heldFirst(said.standsFor())), _ -> true,
+        chosen(SoFar.NOTHING, List.of(heldFirst(said.standsFor())), _ -> Crossing.MAY_CROSS,
                 chosen -> out.add(new Atom<>(chosen, answer.apply(chosen))));
         return new Atoms<>(out, stopped);
     }
@@ -207,17 +239,20 @@ public final class CasesOfALineAsked {
         // since a prefix with no row on one side of the line leaves every case past it unasked,
         // and the steps bound the rest.
         long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
-        if (!crossedIn.test(said.standsFor().holdingInSome(most).orElse(said.condition()))) {
+        if (crossedIn.apply(said.standsFor().holdingInSome(most).orElse(said.condition()))
+                != Crossing.MAY_CROSS) {
             return IN_NONE;
         }
         if (said.saidAlone()) {
             return new Found(List.of(said), Set.of());
         }
-        chosen(SoFar.NOTHING, List.of(heldFirst(said.standsFor())), crossedIn,
-                chosen -> dividing.add(chosen));
+        DecidingCase.Cases cases = heldFirst(said.standsFor());
+        chosen(SoFar.NOTHING, List.of(cases), crossedIn, chosen -> dividing.add(chosen));
         // Every case divides rows and every one was worked out: the case is what it was said as,
-        // and saying it again would read the line under another condition for nothing.
-        if (!dropped && stopped.isEmpty() && !dividing.isEmpty()) {
+        // and saying it again would read the line under another condition for nothing. A case no
+        // row is in is no case the line decides in either, so one of those left out is a case
+        // said for one the line does not decide in, as much as a case that holds rows on one side.
+        if (!leftSomeOut() && stopped.isEmpty() && !dividing.isEmpty()) {
             return new Found(List.of(said), Set.of());
         }
         return new Found(dividing.stream().map(DecidingCase::alone).toList(), stopped);
@@ -372,9 +407,14 @@ public final class CasesOfALineAsked {
      * <p>{@code chosen} is the one path walked, taken a part further on the way down, and written
      * out only for a case kept. {@code goesOn} says whether what has been chosen so far is walked
      * further, and {@code atEnd} takes each case chosen to the end.
+     *
+     * <p>Each prefix is asked with every part chosen. A part about places nothing else asked is
+     * about still bears on the answer through whatever the way, the line and the declarations
+     * hold of those places together — a relation of the line, a rule of a value around them, a
+     * tie a run makes — so the question asked beside it is no question asked without it.
      */
     private void chosen(SoFar chosen, List<DecidingCase.Cases> toChoose,
-                        Predicate<Proposition> goesOn, Consumer<Proposition> atEnd) {
+                        Function<Proposition, Crossing> goesOn, Consumer<Proposition> atEnd) {
         if (toChoose.isEmpty()) {
             atEnd.accept(chosen.condition());
             return;
@@ -387,10 +427,12 @@ public final class CasesOfALineAsked {
                     return;
                 }
                 SoFar further = chosen.and(condition);
-                if (goesOn.test(further.condition())) {
-                    chosen(further, rest, goesOn, atEnd);
-                } else {
-                    dropped = true;
+                // A prefix no row is in leaves no row in any case past it, so none of those is
+                // walked or said as one not worked out.
+                switch (goesOn.apply(further.condition())) {
+                    case MAY_CROSS -> chosen(further, rest, goesOn, atEnd);
+                    case CANNOT_CROSS -> droppedNonDividing = true;
+                    case NO_ROWS -> prunedNoRows = true;
                 }
             }
             // Every alternative: one that divides rows is no answer about another. Each taken is

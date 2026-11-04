@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -63,19 +64,71 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     private static final CasesOfALineAsked.Found IN_NONE =
             new CasesOfALineAsked.Found(List.of(), Set.of());
 
-    /** Asks, answering each condition by {@code crossed} and keeping what was asked. */
-    private record Asking(Predicate<Proposition> crossed, List<Proposition> asked) {
+    /** Asks, answering each condition by {@code crossing} and keeping what was asked. */
+    private record Asking(Function<Proposition, CasesOfALineAsked.Crossing> crossing,
+                          List<Proposition> asked) {
 
+        /** Each condition {@code crossed} holds of may be crossed, and the others hold rows on
+         *  one side alone. */
         Asking(Predicate<Proposition> crossed) {
-            this(crossed, new ArrayList<>());
+            this(condition -> crossed.test(condition) ? CasesOfALineAsked.Crossing.MAY_CROSS
+                    : CasesOfALineAsked.Crossing.CANNOT_CROSS, new ArrayList<>());
         }
 
         CasesOfALineAsked.Found of(DecidingCase.Cases cases) {
             return CasesOfALineAsked.casesOf(new DecidingCase(SAID, cases), condition -> {
                 asked.add(condition);
-                return crossed.test(condition);
+                return crossing.apply(condition);
             });
         }
+    }
+
+    /** {@code noRows} are shown to hold no row, and the rest may be crossed. */
+    private static Asking noRowsIn(Set<Proposition> noRows) {
+        return new Asking(condition -> noRows.contains(condition)
+                ? CasesOfALineAsked.Crossing.NO_ROWS : CasesOfALineAsked.Crossing.MAY_CROSS,
+                new ArrayList<>());
+    }
+
+    /**
+     * A prefix no row is in leaves none in any case past it: nothing past it is asked, nor said
+     * as not worked out, and the cases past the other prefixes are asked as they were.
+     */
+    @Test
+    void aPrefixNoRowIsInIsNotWalkedPast() {
+        Asking asking = noRowsIn(Set.of(A));
+
+        CasesOfALineAsked.Found found = asking.of(FOUR);
+        assertEquals(List.of(DecidingCase.alone(both(B, C)), DecidingCase.alone(both(B, D))),
+                found.decidesIn(), "the cases of b, each by itself, and none of a");
+        assertEquals(Set.of(), found.notWorkedOut(), "a case no row is in is worked out");
+        assertEquals(List.of(SOME_OF_FOUR, A, B, both(B, C), both(B, D)), asking.asked(),
+                "nothing past a");
+    }
+
+    /**
+     * Every case with a row in it dividing rows does not make the case what it was said as: one
+     * it stands for holds no row, and is not a case the line decides in. So the cases that divide
+     * are said each by itself, as where one holds rows on one side alone.
+     */
+    @Test
+    void aCaseNoRowIsInIsNotOneTheCaseIsSaidAsBeside() {
+        CasesOfALineAsked.Found found = noRowsIn(Set.of(both(A, D))).of(FOUR);
+
+        assertEquals(List.of(DecidingCase.alone(both(A, C)), DecidingCase.alone(both(B, C)),
+                DecidingCase.alone(both(B, D))), found.decidesIn(),
+                "the three with rows in them, each by itself, and not the four as said");
+        assertEquals(Set.of(), found.notWorkedOut());
+    }
+
+    /** Where some one of the cases holding is shown to hold no row, none does, and that one
+     *  question settles all of them as it does where no row is on one side. */
+    @Test
+    void whereSomeOneHoldingHoldsNoRowNoneIsAsked() {
+        Asking asking = noRowsIn(Set.of(SOME_OF_FOUR));
+
+        assertEquals(IN_NONE, asking.of(FOUR));
+        assertEquals(List.of(SOME_OF_FOUR), asking.asked());
     }
 
     /**

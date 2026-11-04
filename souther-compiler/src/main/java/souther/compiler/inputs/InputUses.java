@@ -82,7 +82,7 @@ public record InputUses(List<TermPath> decided, List<TermPath> whole, boolean kn
             }
         }
         for (TermPath each : whole) {
-            if (each.isAtOrUnder(asked) || asked.isAtOrUnder(each)) {
+            if (each.bearsOn(asked)) {
                 return new InputUse.Read();
             }
         }

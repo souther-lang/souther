@@ -7,6 +7,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -883,17 +884,29 @@ public sealed interface RowDemand {
      * the form in the class of a remainder this leaves and placing the form's numbers to come to
      * it, as a point of the remainder's border is placed ({@link LevelRealizer}).
      *
+     * <p>Stated by a condition, or following from statements only a run checks
+     * ({@link RemaindersOfAnElement}): those stay on the way beside it, still the run's to check,
+     * and this is only what every run passing them leaves.
+     *
      * @param remainder the remainder, with the form it is of and what that is divided by: a form
      *                  of the input's numbers alone, since a row is asked to put its numbers at it
      * @param leaves    the remainders a row passing the condition may leave, none below nought and
      *                  none as large as the divisor
+     * @param from      the statements this follows from, which are what proves it; none where a
+     *                  condition states it
      */
-    record OnARemainder(Quantity.RemainderOfADividend remainder, WholeNumberRuns leaves)
-            implements OfACondition {
+    record OnARemainder(Quantity.RemainderOfADividend remainder, WholeNumberRuns leaves,
+                        List<ForTheRun> from) implements OfACondition {
+
+        /** Stated by a condition. */
+        public OnARemainder(Quantity.RemainderOfADividend remainder, WholeNumberRuns leaves) {
+            this(remainder, leaves, List.of());
+        }
 
         public OnARemainder {
             Objects.requireNonNull(remainder, "a remainder of some form");
             Objects.requireNonNull(leaves, "the remainders the condition leaves");
+            from = List.copyOf(from);
             if (remainder.overTheInput() == null) {
                 throw new IllegalArgumentException("a row puts its numbers at a remainder of a"
                         + " form of them: " + remainder);
@@ -906,9 +919,41 @@ public sealed interface RowDemand {
             }
         }
 
+        /**
+         * The remainders a division leaves that meet {@code affine} coming out {@code met}, where
+         * it holds one remainder against a number and nothing else — or null where it is no such
+         * relation. None where no remainder meets it.
+         *
+         * <p>Read off the relation as {@code w·r + c met 0} over the remainders the divisor
+         * leaves, which is a run of them, its bounds turned over where the weight is below
+         * nought. Whatever the remainder is a form of: what the form is over is the reader's to
+         * ask.
+         */
+        static WholeNumberRuns meeting(Relation.Affine affine, Rel met) {
+            if (affine.form().coefs().size() != 1
+                    || !(affine.form().coefs().keySet().iterator().next()
+                            instanceof Quantity.RemainderOfADividend remainder)) {
+                return null;
+            }
+            ExactRatio weight = affine.form().coefs().get(remainder);
+            if (!(affine.form().constant().negated().dividedBy(weight)
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio threshold))) {
+                return null;
+            }
+            return WholeNumberRuns.standing(weight.signum() < 0 ? met.turned() : met, threshold)
+                    .and(WholeNumberRuns.one(BigInteger.ZERO,
+                            remainder.divisor().subtract(BigInteger.ONE)));
+        }
+
         /** The form the remainder is of, over the input's numbers. */
         public LinearForm<NumericTerm> dividend() {
             return remainder.overTheInput();
+        }
+
+        /** What proves this: the statements it follows from, or itself where a condition states
+         *  it. */
+        List<OfACondition> provedBy() {
+            return from.isEmpty() ? List.of(this) : List.copyOf(from);
         }
 
         /** The numbers of the form. */

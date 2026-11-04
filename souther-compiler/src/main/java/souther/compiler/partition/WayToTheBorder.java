@@ -6,6 +6,8 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.PositionsAStatementReads;
+import souther.compiler.meaning.PositionsAStatementReads.ReadSubject;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.partition.OneOfEach.Step;
@@ -406,17 +408,22 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     }
 
     /**
-     * The positions what {@code entry} asks of a row turns on: the one account of them, which the
-     * walk of a way groups its choices by and a reader asking what holding a row to it writes asks
-     * as well.
+     * The positions what {@code entry} asks of a row places: what the walk of a way groups its
+     * choices by, and a reader asking what holding a row to it writes asks as well.
+     *
+     * <p>Places only. A condition this reading has no words for, a choice inside a count, and a
+     * value a binding holds that a statement only a run checks reads place nothing here, though
+     * each may turn on anything; a group of choices put apart on that is only read less closely.
+     * Whether an entry is shown to have nothing to do with something is {@link #turnsOn}'s.
      */
     static Set<TermPath> positionsOf(OnTheWay entry) {
         return ASKED_OF_A_ROW.positions(entry);
     }
 
     /**
-     * The positions what {@code entry} asks of a row turns on ({@link #positionsOf}), inside every
-     * alternative it leaves a row and every statement it counts as well.
+     * The positions what {@code entry} asks of a row places ({@link #positionsOf}), inside every
+     * alternative it leaves a row and every statement it counts as well — places only, as
+     * {@link #positionsOf} says.
      */
     static Set<TermPath> positionsInside(OnTheWay entry) {
         Set<TermPath> out = new LinkedHashSet<>();
@@ -425,16 +432,15 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     }
 
     /**
-     * Whether {@code entry} is shown to ask nothing of the value at {@code at}: what it asks of a
-     * row, inside it as well, turns on no position at {@code at}, under it or around it
-     * ({@link #positionsInside}). Not shown where a condition inside it is one this reading has no
-     * words for, which may ask anything.
+     * Whether {@code entry} is shown to ask nothing of the value at {@code at}: what it turns on
+     * ({@link #turnsOn}) is known and does not bear on {@code at}
+     * ({@link ReadSubject#bearOnEachOther}). Not shown where a condition inside it is one this
+     * reading has no words for, or a statement only a run checks reads a value a binding holds,
+     * either of which may ask anything.
      */
     static boolean asksNothingOf(TermPath at, OnTheWay entry) {
-        List<OnTheWay> inside = everyOneInside(entry);
-        return inside.stream().noneMatch(OnTheWay.Declined.class::isInstance)
-                && inside.stream().flatMap(one -> positionsOf(one).stream())
-                        .noneMatch(one -> one.isAtOrUnder(at) || at.isAtOrUnder(one));
+        Set<ReadSubject> on = turnsOn(entry);
+        return on != null && !ReadSubject.bearOnEachOther(on, Set.of(new ReadSubject.At(at)));
     }
 
     /** {@code entry}, and every condition inside the alternatives it leaves a row and the
@@ -532,8 +538,11 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
          */
         Step<HeldTogether, Reachability> leaving(RowDemand.OnARemainder added) {
             return switch (remainders.taking(added)) {
+                // Said in the statements that prove it: one that follows from statements only a
+                // run checks is said as those.
                 case RemaindersHeld.Taken.NoneLeft(var ofIt) -> new Step.Closed<>(
-                        new Reachability.NumbersLeaveNone(List.copyOf(ofIt)));
+                        new Reachability.NumbersLeaveNone(ofIt.stream()
+                                .flatMap(each -> each.provedBy().stream()).distinct().toList()));
                 case RemaindersHeld.Taken.Held(var held) -> new Step.Held<>(
                         new HeldTogether(requirements, truths, counts, numbers, held));
             };
@@ -569,15 +578,16 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         /** These with the count {@code counted}, one {@link AStatementAtARow#countIn} answers,
          *  asked to be in {@code region}, or why no row is where that leaves it none. */
         Step<HeldTogether, Reachability> counting(Quantity counted, LevelRegion region) {
-            LevelRegion left = counts.containsKey(counted.spelled())
-                    ? counts.get(counted.spelled()).meet(region) : region;
+            String spelled = counted.spelled();
+            LevelRegion before = counts.get(spelled);
+            LevelRegion left = before == null ? region : before.meet(region);
             if (left.parts().isEmpty()) {
                 return new Step.Closed<>(new Reachability.NothingReaches(
                         new Reachability.TwoAtOnce.Counts(AStatementAtARow.elementsOf(counted)
                                 .container().inputPosition())));
             }
             Map<String, LevelRegion> out = new LinkedHashMap<>(counts);
-            out.put(counted.spelled(), left);
+            out.put(spelled, left);
             return new Step.Held<>(new HeldTogether(requirements, truths, out, numbers,
                     remainders));
         }
@@ -642,6 +652,72 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                     };
                 }
             };
+
+    /**
+     * What whether {@code entry} holds turns on — the positions, and the values bindings hold that
+     * a statement only a run checks reads — or null where it turns on something neither says: the
+     * one account of what an entry depends on, inside every alternative it leaves a row and every
+     * statement it counts, on either side, however deep. A reader that asks a question without an
+     * entry, as one the entry has nothing to do with, asks it here.
+     *
+     * <p>An entry that places nothing is no entry that turns on nothing: a statement the run only
+     * checks places nowhere and turns on what it reads, which it says itself
+     * ({@link PositionsAStatementReads#everyPlaceAndValueOf}), and a condition declined was not
+     * read, so neither is ever taken to leave a position alone. A choice among ways turns on what
+     * all its ways turn on.
+     */
+    static Set<ReadSubject> turnsOn(OnTheWay entry) {
+        Set<ReadSubject> out = new LinkedHashSet<>();
+        return addPlacesTurnedOn(entry, out) ? out : null;
+    }
+
+    private static boolean addPlacesTurnedOn(OnTheWay entry, Set<ReadSubject> into) {
+        if (entry instanceof OnTheWay.Settled) {
+            return true;
+        }
+        if (entry instanceof OnTheWay.Declined) {
+            return false;
+        }
+        if (entry.ofSeveralWays()) {
+            for (List<OnTheWay> way : entry.alternatives()) {
+                for (OnTheWay each : way) {
+                    if (!addPlacesTurnedOn(each, into)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+        // A count turns on what each statement it counts turns on, held or failing: what it
+        // places is not all a statement of it may read.
+        if (entry instanceof OnTheWay.Counted counted) {
+            if (counted.parts().isEmpty()) {
+                return false;
+            }
+            for (OnTheWay each : counted.parts()) {
+                if (!addPlacesTurnedOn(each, into)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (entry instanceof OnTheWay.TakenIn taken
+                && taken.demand() instanceof RowDemand.ForTheRun run) {
+            Optional<Set<ReadSubject>> read =
+                    PositionsAStatementReads.everyPlaceAndValueOf(run.statement());
+            if (read.isEmpty() || read.get().isEmpty()) {
+                return false;
+            }
+            into.addAll(read.get());
+            return true;
+        }
+        Set<TermPath> at = ASKED_OF_A_ROW.positions(entry);
+        if (at.isEmpty()) {
+            return false;
+        }
+        at.forEach(path -> into.add(new ReadSubject.At(path)));
+        return true;
+    }
 
     /** {@code so} with {@code entry} taken in as far as the cases, truths and counts it asks go;
      *  what its numbers say beside the others is {@link HeldTogether#relating}. */

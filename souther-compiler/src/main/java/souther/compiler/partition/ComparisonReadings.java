@@ -52,6 +52,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -374,10 +375,32 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
          * @param read the reading of the input this comparison was read against
          */
         ReachingCuts.Stating aCasePutOnTheWay(Proposition decides, InputReading read) {
-            Condition statedAt = statedAsACondition.orElseThrow(() -> new IllegalArgumentException(
+            return ReachingCuts.whereItDecides(statedAt(decides), decides, read);
+        }
+
+        /**
+         * {@link #aCasePutOnTheWay(Proposition, InputReading)}, with what each part of a case
+         * chosen part by part asks taken from {@code eachPart} ({@link #aPartAsked}), and what
+         * follows from a statement at the members of a class from {@code followed} where a case
+         * read it before.
+         */
+        ReachingCuts.Stating aCasePutOnTheWay(Proposition decides, InputReading read,
+                                              Function<Proposition, ReachingCuts.Stating> eachPart,
+                                              RemaindersOfAnElement.Kept followed) {
+            return ReachingCuts.whereItDecides(statedAt(decides), decides, read, eachPart,
+                    followed);
+        }
+
+        /** What {@code part}, a part of a case, asks of a row put on the way at this comparison,
+         *  and nothing of what follows from it. */
+        ReachingCuts.Stating aPartAsked(Proposition part, InputReading read) {
+            return ReachingCuts.asked(statedAt(part), part, read);
+        }
+
+        private Condition statedAt(Proposition decides) {
+            return statedAsACondition.orElseThrow(() -> new IllegalArgumentException(
                     "this comparison is one line no run stops in, and nothing of where one decides"
                             + " is put on the way at it: " + decides));
-            return ReachingCuts.whereItDecides(statedAt, decides, read);
         }
     }
 

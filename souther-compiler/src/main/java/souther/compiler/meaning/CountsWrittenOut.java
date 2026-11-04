@@ -85,6 +85,19 @@ public final class CountsWrittenOut {
         return of(stated, true, HANDED_OUTSIDE_ELEMENTS);
     }
 
+    /**
+     * Whether writing out {@code stated} as {@link #outsideElementsOf} does leaves it as it is: no
+     * count in it is written out, so what it is handed as is what it says.
+     *
+     * <p>Told by what it is handed as being {@code stated} itself. Writing out hands back each
+     * proposition it changes nothing in, and kept answers hand back the one asked, so a
+     * proposition handed back as another is one something was written out of.
+     */
+    public static boolean writesNothingOutOf(Proposition stated) {
+        return outsideElementsOf(stated) instanceof Written(Proposition written)
+                && written == stated;
+    }
+
     private static Handed of(Proposition stated, boolean leavingCounts,
                              Map<Proposition, Optional<Handed>> handedBefore) {
         synchronized (handedBefore) {

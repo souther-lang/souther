@@ -1723,15 +1723,16 @@ sealed interface ComparisonAssessment {
         Set<CompositionBudget> stoppedAt = EnumSet.noneOf(CompositionBudget.class);
         for (DecidingCase each : cases) {
             if (each.saidAlone()) {
-                if (wayToACase.crossed(cutting, each.condition(), reading, (toIt, keptTo) ->
-                        crossedAtSomePlace(cutting, toIt, arrivals, keptTo))) {
+                if (wayToACase.crossing(cutting, each.condition(), reading, (toIt, keptTo) ->
+                        crossedAtSomePlace(cutting, toIt, arrivals, keptTo))
+                        == CasesOfALineAsked.Crossing.MAY_CROSS) {
                     reached.add(each);
                     deciding.addAll(waysArrivedBy(wayToACase.apply(each.condition()), arrivals));
                 }
                 continue;
             }
             CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each, condition ->
-                    wayToACase.crossed(cutting, condition, reading, (toIt, keptTo) ->
+                    wayToACase.crossing(cutting, condition, reading, (toIt, keptTo) ->
                             crossedAtSomePlace(cutting, toIt, arrivals, keptTo)));
             for (DecidingCase one : found.decidesIn()) {
                 reached.add(one);
