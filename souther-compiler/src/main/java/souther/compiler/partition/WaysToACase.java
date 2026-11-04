@@ -4,15 +4,12 @@ import souther.compiler.collect.LatelyAsked;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.CasesOfALineAsked;
-import souther.compiler.meaning.PositionsAStatementReads.ReadSubject;
 import souther.compiler.meaning.Proposition;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
@@ -94,37 +91,6 @@ final class WaysToACase {
     /** The way to the comparison with {@code decides} taken in beside it. */
     Reachability apply(Proposition decides) {
         return ways.answer(decides, asked -> reading.apply(put.apply(asked)));
-    }
-
-    /**
-     * What the parts of the cases of a statement bear on when the line {@code cutting} is crossed
-     * in them: the positions the way to the comparison, what a run to it got past and the line
-     * are about, and the positions each condition turns on.
-     *
-     * <p>Nothing is told where any of those is not known: a line whose quantity reads something no
-     * position says, an entry of the way that places nothing, or a run that may stop on something
-     * no position names or owes an operator a proof.
-     */
-    CasesOfALineAsked.Bearings bearingsFor(Cutting cutting) {
-        Set<TermPath> line = cutting.of().positionsItIsAbout();
-        Set<ReadSubject> onTheWay = WayToTheBorder.placesTurnedOn(way);
-        if (line == null || onTheWay == null
-                || !(reading.apply(way) instanceof Reachability.Reaching base)
-                || base.unsaid() || !base.owed().isEmpty()) {
-            return CasesOfALineAsked.Bearings.NEVER;
-        }
-        Set<ReadSubject> held = new LinkedHashSet<>();
-        line.forEach(path -> held.add(new ReadSubject.At(path)));
-        held.addAll(onTheWay);
-        base.tied().forEach(tie -> tie.places()
-                .forEach(path -> held.add(new ReadSubject.At(path))));
-        return new CasesOfALineAsked.Bearings(this::positionsOf, held);
-    }
-
-    /** What whether {@code condition} holds turns on, or null where it turns on something no
-     *  position or value bound says ({@link WayToTheBorder#placesTurnedOn}). */
-    private Set<ReadSubject> positionsOf(Proposition condition) {
-        return WayToTheBorder.placesTurnedOn(put.apply(condition));
     }
 
     /**

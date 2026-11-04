@@ -74,7 +74,6 @@ class WhatAnEntryTurnsOnIsReadInsideEveryCountAndChoiceTest {
 
     private static void assertNotKnown(OnTheWay entry) {
         assertEquals(null, WayToTheBorder.turnsOn(entry), entry::toString);
-        assertEquals(null, WayToTheBorder.placesTurnedOn(List.of(entry)));
         assertFalse(WayToTheBorder.asksNothingOf(B, entry));
     }
 

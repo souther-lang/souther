@@ -654,36 +654,21 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
             };
 
     /**
-     * What whether {@code entries} hold together turns on — the positions, and the values bindings
-     * hold that a statement only a run checks reads — or null where one of them turns on
-     * something neither says.
+     * What whether {@code entry} holds turns on — the positions, and the values bindings hold that
+     * a statement only a run checks reads — or null where it turns on something neither says: the
+     * one account of what an entry depends on, inside every alternative it leaves a row and every
+     * statement it counts, on either side, however deep. A reader that asks a question without an
+     * entry, as one the entry has nothing to do with, asks it here.
      *
-     * <p>What {@link OneOfEach} chooses apart by, asked of entries in any list. An entry that
-     * places nothing is no entry that turns on nothing: a statement the run only checks places
-     * nowhere and turns on what it reads, which it says itself
+     * <p>An entry that places nothing is no entry that turns on nothing: a statement the run only
+     * checks places nowhere and turns on what it reads, which it says itself
      * ({@link PositionsAStatementReads#everyPlaceAndValueOf}), and a condition declined was not
      * read, so neither is ever taken to leave a position alone. A choice among ways turns on what
      * all its ways turn on.
      */
-    static Set<ReadSubject> placesTurnedOn(List<OnTheWay> entries) {
-        Set<ReadSubject> out = new LinkedHashSet<>();
-        for (OnTheWay entry : entries) {
-            if (!addPlacesTurnedOn(entry, out)) {
-                return null;
-            }
-        }
-        return out;
-    }
-
-    /**
-     * What whether {@code entry} holds turns on ({@link #placesTurnedOn}), or null where it turns
-     * on something neither a position nor a value bound says: the one account of what an entry
-     * depends on, inside every alternative it leaves a row and every statement it counts, on
-     * either side, however deep. A reader that asks a question without an entry, as one the entry
-     * has nothing to do with, asks it here.
-     */
     static Set<ReadSubject> turnsOn(OnTheWay entry) {
-        return placesTurnedOn(List.of(entry));
+        Set<ReadSubject> out = new LinkedHashSet<>();
+        return addPlacesTurnedOn(entry, out) ? out : null;
     }
 
     private static boolean addPlacesTurnedOn(OnTheWay entry, Set<ReadSubject> into) {

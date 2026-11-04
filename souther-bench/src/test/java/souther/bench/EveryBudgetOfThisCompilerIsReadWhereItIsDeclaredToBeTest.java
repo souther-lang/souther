@@ -819,8 +819,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " are kept as nobody taking them apart, naming the figure that"
                             + " stopped it"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#<init>("
-                            + "Ljava/util/function/Function;"
-                            + "Lsouther/compiler/meaning/CasesOfALineAsked$Bearings;)V",
+                            + "Ljava/util/function/Function;)V",
                     "how many times the cases one case was said for are asked, which every"
                             + " question spends"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#asked("
