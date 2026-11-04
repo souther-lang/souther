@@ -39,6 +39,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * What a row has already had to satisfy by the time it arrives at one comparison.
@@ -469,15 +470,53 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * helper worked out asks what that call's fork decided, and the halves of a joined condition
      * may stand in two calls.
      *
-     * @param entries what was put on the way, in order
-     * @param by      which copies each entry and each entry inside an alternative of one was read
-     *                off
+     * <p>What was put on the way is the {@link #entries}, in order; which copies each entry and
+     * each entry inside an alternative of one was read off is {@link #by}.
      */
-    record Stating(List<OnTheWay> entries, SaidOnTheWay by) {
+    static final class Stating {
 
-        Stating {
-            entries = List.copyOf(entries);
-            Objects.requireNonNull(by, "which copies each entry was read off, or none");
+        private final List<OnTheWay> entries;
+
+        /** Who put each entry, once worked out; worked out by {@link #filing} until then. */
+        private SaidOnTheWay by;
+
+        private Supplier<SaidOnTheWay> filing;
+
+        Stating(List<OnTheWay> entries, SaidOnTheWay by) {
+            this.entries = List.copyOf(entries);
+            this.by = Objects.requireNonNull(by, "which copies each entry was read off, or none");
+        }
+
+        private Stating(List<OnTheWay> entries, Supplier<SaidOnTheWay> filing) {
+            this.entries = List.copyOf(entries);
+            this.filing = filing;
+        }
+
+        /**
+         * {@code entries}, with who put each worked out by {@code filing} the first time it is
+         * asked: the cases of a line are asked of their entries as they are chosen, and who put
+         * them is read only of the cases the line is read in.
+         */
+        static Stating filedWhenAsked(List<OnTheWay> entries, Supplier<SaidOnTheWay> filing) {
+            return new Stating(entries, Objects.requireNonNull(filing, "who put them is told"));
+        }
+
+        List<OnTheWay> entries() {
+            return entries;
+        }
+
+        synchronized SaidOnTheWay by() {
+            if (by == null) {
+                by = Objects.requireNonNull(filing.get(),
+                        "which copies each entry was read off, or none");
+                filing = null;
+            }
+            return by;
+        }
+
+        @Override
+        public String toString() {
+            return "Stating" + entries;
         }
 
         /** {@code entries}, every one of them and of their alternatives read off
@@ -822,13 +861,20 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             return withWhatFollows(decides, asked(at, decides, read), followed);
         }
         List<OnTheWay> entries = new ArrayList<>();
-        SaidOnTheWay.Filing by = new SaidOnTheWay.Filing();
+        List<Stating> asked = new ArrayList<>(all.parts().size());
         for (Proposition part : all.parts()) {
-            Stating asked = eachPart.apply(part);
-            entries.addAll(asked.entries());
-            by.all(asked.by());
+            Stating one = eachPart.apply(part);
+            asked.add(one);
+            entries.addAll(one.entries());
         }
-        return withWhatFollows(decides, new Stating(entries, by.said()), followed);
+        List<OnTheWay> joined = List.copyOf(entries);
+        List<OnTheWay> made = RemaindersOfAnElement.withWhatFollows(decides, joined, followed);
+        return Stating.filedWhenAsked(made, () -> {
+            SaidOnTheWay.Filing by = new SaidOnTheWay.Filing();
+            asked.forEach(one -> by.all(one.by()));
+            SaidOnTheWay said = by.said();
+            return made == joined ? said : filedWithWhatFollows(made, joined, said);
+        });
     }
 
     /**
@@ -858,7 +904,14 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         if (withWhatFollows == entries) {
             return stated;
         }
-        SaidOnTheWay said = stated.by();
+        return new Stating(withWhatFollows, filedWithWhatFollows(withWhatFollows, entries,
+                stated.by()));
+    }
+
+    /** Who put each of {@code withWhatFollows}, {@code entries} with what follows from them,
+     *  where {@code said} says who put {@code entries}. */
+    private static SaidOnTheWay filedWithWhatFollows(List<OnTheWay> withWhatFollows,
+                                                     List<OnTheWay> entries, SaidOnTheWay said) {
         SaidOnTheWay.Filing following = new SaidOnTheWay.Filing();
         following.all(said);
         List<PutBy> runs = new ArrayList<>();
@@ -868,7 +921,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             }
         });
         fileWhatFollows(withWhatFollows, entries, said, runs, following);
-        return new Stating(withWhatFollows, following.said());
+        return following.said();
     }
 
     /** A statement only a run checks, and who put it on the way. */

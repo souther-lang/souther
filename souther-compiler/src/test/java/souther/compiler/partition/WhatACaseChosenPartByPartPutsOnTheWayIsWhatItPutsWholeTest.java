@@ -24,6 +24,12 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.WrittenOwner;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -120,6 +126,41 @@ class WhatACaseChosenPartByPartPutsOnTheWayIsWhatItPutsWholeTest {
         }
         assertTrue(follows >= 0 && follows < put.size() - 1,
                 () -> "what follows is put between the parts: " + put);
+    }
+
+    /**
+     * What follows from two statements put by two copies of the model's code is put by both, in
+     * the order the statements were put, and each statement by its own copy alone.
+     */
+    @Test
+    void whatFollowsIsPutByEveryCopyThatPutAStatementItFollowsFrom() {
+        Proposition weighing = remainderOf(1, READ.a(), 0, 7, 0);
+        Proposition turn = remainderOf(1, null, 3, 7, 0);
+        Map<Proposition, ModelOccurrence> copies = Map.of(weighing, copy(1), turn, copy(2));
+        ReachingCuts.Stating put = READ.comparison().aCasePutOnTheWay(
+                Proposition.all(List.of(weighing, turn)), READ.reading(),
+                part -> ReachingCuts.Stating.of(
+                        READ.comparison().aPartAsked(part, READ.reading()).entries(),
+                        ModelOccurrences.of(copies.get(part))),
+                new RemaindersOfAnElement.Kept());
+        List<ModelOccurrence> follows = null;
+        for (OnTheWay entry : put.entries()) {
+            List<ModelOccurrence> by = put.by().entries().get(entry).inOrder();
+            switch (entry) {
+                case OnTheWay.TakenIn(var _, RowDemand.OnARemainder _) -> follows = by;
+                case OnTheWay.TakenIn(var _, RowDemand.ForTheRun(var stated, var _, var _, var _))
+                        when copies.containsKey(stated) ->
+                        assertEquals(List.of(copies.get(stated)), by, stated::toString);
+                default -> { }
+            }
+        }
+        assertEquals(List.of(copy(1), copy(2)), follows, put::toString);
+    }
+
+    /** A copy of the model's code, told from another by {@code at}. */
+    private static ModelOccurrence copy(int at) {
+        return new ModelOccurrence(new SourceConstructOrigin(new WrittenOwner.Body("w1", "m"), at,
+                at, SourceConstruct.IF), ExpansionLineage.ORIGINAL);
     }
 
     /** A part chosen again as what the parts beside it leave of it is another part, and is read;
