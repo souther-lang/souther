@@ -651,6 +651,13 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                         case Step.Closed<HeldTogether, Reachability> closed -> closed;
                     };
                 }
+
+                /** What is held is a value, and a count is looked into with steps of its own
+                 *  ({@link CountedWays#admits}). */
+                @Override
+                public boolean answersAlone() {
+                    return true;
+                }
             };
 
     /**
