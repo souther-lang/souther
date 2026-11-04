@@ -8,11 +8,11 @@ import souther.compiler.partition.OneOfEach.Walked;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -220,10 +220,10 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
         }
     }
 
-    /** {@link #VALUES}, answering alone where {@code alone} says, and counting what it is asked
-     *  in {@code asked}. */
+    /** {@link #VALUES}, answering alone where {@code alone} says, and counting in {@code asked}
+     *  the times it is asked each entry. */
     private static OneOfEach.Vocabulary<Entry, Map<TermPath, Set<Integer>>, TermPath> counting(
-            boolean alone, int[] asked) {
+            boolean alone, Map<Entry, Integer> asked) {
         return new OneOfEach.Vocabulary<>() {
 
             @Override
@@ -244,7 +244,7 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
             @Override
             public Step<Map<TermPath, Set<Integer>>, TermPath> with(
                     Map<TermPath, Set<Integer>> so, Entry entry) {
-                asked[0]++;
+                asked.merge(entry, 1, Integer::sum);
                 return VALUES.with(so, entry);
             }
 
@@ -255,75 +255,75 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
         };
     }
 
-    /**
-     * An alternative that closes beside what the first choice took is looked for past it without
-     * walking every way of the choices between: of a vocabulary that answers alone, what the way
-     * has to take in is asked beside the first choice where it is taken, and the looking left
-     * finds the way past the first choice's other alternative. Of one that does not, the walk asks
-     * nothing ahead of where it stands, and the choices between use the looking up.
-     */
-    @Test
-    void anAlternativeClosingBesideAnEarlyChoiceIsFoundPastItWhereTheVocabularyAnswersAlone() {
-        TermPath w = TermPath.of("w");
-        Ask past = ask(w, 2, 5);
-        List<Entry> entries = new ArrayList<>();
-        entries.add(oneOf(ask(w, 1), ask(w, 2)));
-        // Between them, more ways than the looking reaches: every one open, and every one closing
-        // where the last choice is taken past the first's first alternative.
-        for (int each = 0; each < 12; each++) {
-            entries.add(oneOf(ask(w, 1, 2, 3), ask(w, 1, 2, 3, 4)));
-        }
-        entries.add(oneOf(ask(w, 1, 2), past));
-
-        Walked.Open<Entry, TermPath> alone = open(OneOfEach.walk(entries,
-                counting(true, new int[1]), CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+    /** The walk of {@code entries} with {@link #counting}, and what it asked of each entry put
+     *  in {@code asked}. */
+    private static Walked.Open<Entry, TermPath> walkedCounting(List<Entry> entries, boolean alone,
+                                                               Map<Entry, Integer> asked) {
+        return open(OneOfEach.walk(entries, counting(alone, asked),
+                CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
                 CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG));
-        assertTrue(chosen(alone).stream().anyMatch(way -> way.contains(past)),
-                () -> "the last choice's second alternative, past the first's second: " + alone);
-
-        Walked.Open<Entry, TermPath> asked = open(walked(entries.toArray(Entry[]::new)));
-        assertFalse(chosen(asked).stream().anyMatch(way -> way.contains(past)),
-                () -> "nothing is asked ahead of a vocabulary that does not answer alone: "
-                        + asked);
     }
 
     /**
-     * What is asked ahead costs no more than the walk's own asking and what the way is held to,
-     * once: each entry the walk takes is taken in beside what it carries ahead once, where the
-     * walk takes it. Where nothing closes, the walk takes the same ways either way, so asking
-     * ahead adds that and no more — and not what the way is held to again at every choice the
-     * walk comes to on the way to it.
+     * An alternative that closes beside what the first choice took is looked for past it, and
+     * not once for every way of the choices between: of a vocabulary that answers alone, it is
+     * asked as often whatever the choices between, since what the way has to take in closes
+     * where the first choice is taken. Of one that does not, the walk asks nothing ahead, and it
+     * is asked again for each more way between.
      */
     @Test
-    void whatIsAskedAheadCostsNoMoreThanTheWalksOwnAskingAndWhatTheWayIsHeldToOnce() {
-        TermPath w = TermPath.of("w");
-        TermPath v = TermPath.of("v");
-        List<Entry> heavy = new ArrayList<>();
-        heavy.add(ask(w, 1, 2, 3, 4, 5));
-        for (int each = 0; each < 1000; each++) {
-            heavy.add(ask(v, 1, 2));
+    void anAlternativeClosingBesideAnEarlyChoiceIsAskedAsOftenWhateverTheChoicesBetween() {
+        Ask past = ask(X, 2, 5);
+        Map<Boolean, List<Integer>> pastAsked = new HashMap<>();
+        for (int between = 5; between <= 6; between++) {
+            List<Entry> entries = new ArrayList<>();
+            entries.add(oneOf(ask(X, 1), ask(X, 2)));
+            for (int each = 0; each < between; each++) {
+                entries.add(oneOf(ask(X, 1, 2, 3), ask(X, 1, 2, 3, 4)));
+            }
+            entries.add(oneOf(ask(X, 1, 2), past));
+            for (boolean alone : new boolean[] {false, true}) {
+                Map<Entry, Integer> asked = new HashMap<>();
+                Walked.Open<Entry, TermPath> walked = walkedCounting(entries, alone, asked);
+                assertTrue(chosen(walked).stream().anyMatch(way -> way.contains(past)),
+                        () -> "past the first's second alternative: " + walked);
+                pastAsked.computeIfAbsent(alone, _ -> new ArrayList<>()).add(asked.get(past));
+            }
         }
-        // First, so that the first ways all take its other alternative, and the way of this one
-        // is looked for past every choice after it.
+        List<Integer> plain = pastAsked.get(false);
+        List<Integer> alone = pastAsked.get(true);
+        assertEquals(alone.get(0), alone.get(1), () -> "asked ahead: " + alone);
+        assertTrue(plain.get(1) > plain.get(0), () -> "not asked ahead: " + plain);
+    }
+
+    /**
+     * What a way is held to is asked ahead once, where the walk held to it starts, and not again
+     * at every choice the walk comes to before it: where nothing closes, the walk asking ahead
+     * asks it once more than the one that does not, which asks it where it takes it.
+     */
+    @Test
+    void whatTheWayIsHeldToIsAskedAheadOnceAndNotAtEveryChoiceBeforeIt() {
+        Ask heldTo = ask(Y, 1, 2);
         List<Entry> entries = new ArrayList<>();
-        entries.add(new Choice(List.of(List.of(ask(w, 1, 2)), heavy)));
-        for (int each = 0; each < 30; each++) {
-            entries.add(oneOf(ask(w, 1, 2, 3), ask(w, 1, 2, 3, 4)));
+        for (int each = 0; each < 3; each++) {
+            entries.add(oneOf(ask(X, 1, 2, 3), ask(X, 1, 2, 3, 4)));
         }
+        // Its other alternative is the one every first way takes: the four after it make the
+        // ways the figure hands on first.
+        entries.add(new Choice(List.of(List.of(ask(X, 1, 2)), List.of(ask(X, 1, 2, 3), heldTo))));
+        for (int each = 0; each < 4; each++) {
+            entries.add(oneOf(ask(X, 1, 2, 3), ask(X, 1, 2, 3, 5)));
+        }
+        Map<Entry, Integer> plain = new HashMap<>();
+        Walked.Open<Entry, TermPath> asked = walkedCounting(entries, false, plain);
+        Map<Entry, Integer> ahead = new HashMap<>();
+        Walked.Open<Entry, TermPath> alone = walkedCounting(entries, true, ahead);
 
-        int[] plain = {0};
-        Walked.Open<Entry, TermPath> asked = open(OneOfEach.walk(entries, counting(false, plain),
-                CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
-                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG));
-        int[] ahead = {0};
-        Walked.Open<Entry, TermPath> alone = open(OneOfEach.walk(entries, counting(true, ahead),
-                CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
-                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG));
-
-        assertFalse(alone.everyWay(), () -> "more ways than are looked along: " + alone);
+        assertFalse(alone.everyWay(), () -> "more ways than are handed on: " + alone);
         assertEquals(asked.ways(), alone.ways(), "nothing closes, so the same ways either way");
-        assertTrue(ahead[0] <= 2 * plain[0] + heavy.size(),
-                () -> "asked " + ahead[0] + " times asking ahead, against " + plain[0]);
+        assertEquals(plain.get(heldTo) + 1, ahead.get(heldTo),
+                () -> "asked " + ahead.get(heldTo) + " times ahead, " + plain.get(heldTo)
+                        + " not");
     }
 
     /**
@@ -411,79 +411,52 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
     }
 
     /**
-     * Held to the ways of every input of a few small choices, written out one by one: whatever
-     * the walk hands on is a way along which what is asked holds together, every alternative of
-     * every condition that some such way takes is taken by one handed on, and where none holds
-     * together the walk says so — of a vocabulary asked ahead and of one that is not alike.
-     *
-     * <p>The choices are on one position or two, nested in each other, asking what others close
-     * beside, and one standing at two places; few enough that the looking never runs out and
-     * every alternative fits in the figure beside the first way, so that what is owed is all of
-     * it. That the asking ahead is put to the test is counted: inputs where the ways are more
-     * than are handed on, and where asking ahead left a branch the walk would have looked along —
-     * those where the walk asking ahead asked less than the one that does not, which it can only
-     * where it left one, since otherwise it takes the same ways and asks ahead beside them.
+     * What a walk asking ahead hands on is held to every way written out, at each thing what it
+     * carries ahead meets: an alternative closing beside an early choice, one standing inside an
+     * alternative that holds it, a choice standing at two places, and an alternative held to that
+     * holds a choice of its own — which is not chosen ahead for it. Each beside a choice of more
+     * ways than the figure together, so that every alternative of the rest is looked for, and of
+     * few enough alternatives that all of them fit in it: what is handed on holds together and
+     * takes every alternative some way holding together takes, asked ahead or not.
      */
     @Test
     @SuppressWarnings("unchecked")
-    void whatTheWalkHandsOnIsHeldToEveryWayWrittenOutAskedAheadOrNot() {
-        Random random = new Random(3028);
-        int beyondTheFigure = 0;
-        int leftByAsking = 0;
-        for (int input = 0; input < 3000; input++) {
-            List<Choice> made = new ArrayList<>();
-            List<Entry> entries = new ArrayList<>();
-            int length = 3 + random.nextInt(4);
-            for (int each = 0; each < length; each++) {
-                entries.add(random.nextInt(4) == 0 ? someAsk(random)
-                        : someChoice(random, made, 1));
-            }
-            if (placesIn(entries) > 6 || owedIn(made) > 15) {
-                continue;
-            }
+    void whatAWalkAskingAheadHandsOnIsHeldToEveryWayWrittenOut() {
+        Choice twice = oneOf(ask(X, 1), ask(X, 2));
+        Map<String, List<Entry>> cases = new LinkedHashMap<>();
+        cases.put("closing beside an early choice",
+                List.of(oneOf(ask(X, 1), ask(X, 2)), oneOf(ask(X, 1, 2), ask(X, 2))));
+        cases.put("inside the alternative holding it", List.of(oneOf(ask(X, 1), ask(X, 2)),
+                new Choice(List.of(List.of(ask(X, 1, 2), oneOf(ask(X, 1, 2), ask(X, 2))),
+                        List.of(ask(X, 1))))));
+        cases.put("at two places", List.of(twice, twice));
+        cases.put("holding a choice of its own", List.of(oneOf(ask(X, 1), ask(X, 1, 2)),
+                new Choice(List.of(List.of(ask(X, 1, 2)),
+                        List.of(ask(X, 2), oneOf(ask(X, 1), ask(X, 1, 2)))))));
+        cases.forEach((name, those) -> {
+            List<Entry> entries = new ArrayList<>(those);
+            entries.add(alternativesOn(X, 100, 9));
             Set<List<Object>> written = new HashSet<>();
-            boolean anyHolds = false;
             for (WrittenOut way : writtenOut(entries)) {
                 if (holdsTogether(way.asks())) {
-                    anyHolds = true;
                     written.addAll(way.taken());
                 }
             }
-            int[] plain = {0};
-            int[] ahead = {0};
             for (boolean alone : new boolean[] {false, true}) {
-                Walked<Entry, TermPath> walked = OneOfEach.walk(entries,
-                        counting(alone, alone ? ahead : plain),
-                        CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
-                        CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
-                String said = entries + (alone ? " asked ahead" : "") + ": " + walked;
-                if (!anyHolds) {
-                    assertInstanceOf(Walked.Closed.class, walked, said);
-                    continue;
-                }
-                Walked.Open<Entry, TermPath> open = assertInstanceOf(Walked.Open.class, walked,
-                        said);
+                Walked.Open<Entry, TermPath> open = walkedCounting(entries, alone, new HashMap<>());
+                String said = name + (alone ? ", asked ahead: " : ": ") + open;
+                assertFalse(open.everyWay(), () -> "more ways than are handed on, " + said);
                 Set<List<Object>> handed = new HashSet<>();
+                for (List<Entry> way : chosen(open)) {
+                    assertTrue(holdsTogether(way), () -> "holds together, " + said);
+                }
                 for (OneOfEach.Way<Entry> way : open.ways()) {
-                    OneOfEach.Way.Chosen<Entry> chosen =
-                            assertInstanceOf(OneOfEach.Way.Chosen.class, way, said);
-                    assertTrue(holdsTogether(chosen.entries()), () -> "holds together: " + said);
-                    chosen.choices().forEach(each ->
+                    ((OneOfEach.Way.Chosen<Entry>) way).choices().forEach(each ->
                             handed.add(List.of(each.entry(), each.alternative())));
                 }
-                assertEquals(written, handed, () -> "every alternative a way takes: " + said);
-                if (alone && !open.everyWay()) {
-                    beyondTheFigure++;
-                }
+                assertEquals(written, handed, () -> "every alternative a way takes, " + said);
             }
-            if (ahead[0] < plain[0]) {
-                leftByAsking++;
-            }
-        }
-        int beyond = beyondTheFigure;
-        int left = leftByAsking;
-        assertTrue(beyond > 200, () -> "inputs beyond the figure: " + beyond);
-        assertTrue(left > 20, () -> "inputs where asking ahead left a branch: " + left);
+        });
     }
 
     /** One way of some entries written out: what it asks, and each choice it took as which. */
@@ -539,60 +512,6 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
         return true;
     }
 
-    private static Ask someAsk(Random random) {
-        Set<Integer> values = new HashSet<>();
-        for (int value = 1; value <= 3; value++) {
-            if (random.nextInt(3) > 0) {
-                values.add(value);
-            }
-        }
-        values.add(1 + random.nextInt(3));
-        return new Ask(random.nextBoolean() ? X : Y, values);
-    }
-
-    /** A choice of two alternatives of an entry or two, nested as deep as {@code depth} says —
-     *  or, now and then, one made before, standing at another place. */
-    private static Choice someChoice(Random random, List<Choice> made, int depth) {
-        if (!made.isEmpty() && random.nextInt(5) == 0) {
-            return made.get(random.nextInt(made.size()));
-        }
-        List<List<Entry>> alternatives = new ArrayList<>();
-        for (int which = 0; which < 2; which++) {
-            List<Entry> alternative = new ArrayList<>();
-            int size = 1 + random.nextInt(2);
-            for (int each = 0; each < size; each++) {
-                alternative.add(depth > 0 && random.nextInt(4) == 0
-                        ? someChoice(random, made, depth - 1) : someAsk(random));
-            }
-            alternatives.add(alternative);
-        }
-        Choice out = new Choice(alternatives);
-        made.add(out);
-        return out;
-    }
-
-    /** How many places choices stand at in {@code entries}, nested ones among them. */
-    private static int placesIn(List<Entry> entries) {
-        int out = 0;
-        for (Entry each : entries) {
-            if (each instanceof Choice choice) {
-                out++;
-                for (List<Entry> alternative : choice.alternatives()) {
-                    out += placesIn(alternative);
-                }
-            }
-        }
-        return out;
-    }
-
-    /** How many alternatives the conditions {@code made} have, each condition once. */
-    private static int owedIn(List<Choice> made) {
-        int out = 0;
-        for (Choice each : new HashSet<>(made)) {
-            out += each.alternatives().size();
-        }
-        return out;
-    }
 
     /** Two conditions on two positions, every combination within the figure: each of them,
      *  since a row past both is along one. */
@@ -964,17 +883,21 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
      * alternatives of all the choices, one way each beside the firsts, fit in the figure, every
      * alternative up to that number has a way.
      *
-     * <p>Over every shape of three choices with up to nine alternatives each, on one position and
-     * on two, so that the shapes where the ways are more than the figure and the ones where they
-     * are fewer are both there.
+     * <p>Over three choices on one position and on two, each of a size that tells the shapes
+     * apart: one alternative, which owes nothing; two, which owes one; five, where three of them
+     * together are more ways than the figure and owe more than it at some number; and nine, which
+     * alone owes more than the figure leaves beside the others. Every shape of those: the ways
+     * within the figure and past it, the alternatives all fitting and cut at a number, and a large
+     * choice beside small ones that must not be passed over for it.
      */
     @Test
     void whateverTheShapeTheWaysAreWithinTheFigureOnceAndFairToTheAlternatives() {
         int limit = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum();
+        int[] sizesTold = {1, 2, 5, 9};
         for (int onTwo = 0; onTwo < 2; onTwo++) {
-            for (int a = 1; a <= 9; a++) {
-                for (int b = 1; b <= 9; b++) {
-                    for (int c = 1; c <= 9; c++) {
+            for (int a : sizesTold) {
+                for (int b : sizesTold) {
+                    for (int c : sizesTold) {
                         int[] sizes = {a, b, c};
                         TermPath[] ats = {X, onTwo == 1 ? Y : X, X};
                         int[] froms = {10, 110, 210};
