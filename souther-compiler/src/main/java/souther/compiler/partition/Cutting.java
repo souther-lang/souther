@@ -2866,6 +2866,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * Whether some statement {@code stated} holds as a part, at any depth below itself, is a
+     * relation on this line's own quantity that {@link #leftBy} reads.
+     */
+    boolean saysOfItsValuesInside(Proposition stated, InputReading read) {
+        for (Proposition part : stated.partsHeld()) {
+            if ((part instanceof Proposition.Compared && leftBy(part, read) != null)
+                    || saysOfItsValuesInside(part, read)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * What {@code parts} leave this quantity together: what every one of them leaves where
      * {@code every}, and what any one leaves where not — null where they leave it whatever it had.
      */

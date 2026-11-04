@@ -195,6 +195,108 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         };
     }
 
+    /**
+     * Each way {@code way} is split into, as {@link Reachability#of} splits it and in that order,
+     * taken in over {@code declarations} and ready to be asked what more beside it would leave — an
+     * empty one where the walk left some of its conditions unchosen there, and nothing at all where
+     * it is not split into ways.
+     *
+     * <p>Worked out once for the way and asked as often as anyone likes: each question takes what
+     * it asks in beside what the way already took in, and leaves that as it was.
+     */
+    public static Optional<List<Optional<Assuming>>> assumingAlong(WayToTheBorder way,
+                                                                   SearchRegion declarations) {
+        if (way.severalWays().isEmpty()
+                || !(way.along() instanceof OneOfEach.Walked.Open<OnTheWay, Reachability>(
+                        var ways, var _))) {
+            return Optional.empty();
+        }
+        OneOfEach.Vocabulary<OnTheWay, Numbered, NoInputTakesIt> vocabulary =
+                numbered(declarations, () -> true);
+        List<Optional<Assuming>> out = new ArrayList<>();
+        for (OneOfEach.Way<OnTheWay> one : ways) {
+            out.add(switch (one) {
+                case OneOfEach.Way.Chosen<OnTheWay>(var entries, var _) -> Optional.of(
+                        new Assuming(vocabulary, Assuming.taken(vocabulary,
+                                vocabulary.nothing(), entries)));
+                case OneOfEach.Way.LeftUnchosen<OnTheWay> _ -> Optional.empty();
+            });
+        }
+        return Optional.of(List.copyOf(out));
+    }
+
+    /**
+     * One way chosen to the end, taken in, asked what more beside it would leave.
+     *
+     * <p>Held for as long as a question about the way is being asked, and kept by nothing that is
+     * an answer: what it holds is how far a walk got, which no answer is about.
+     */
+    public static final class Assuming {
+
+        private final OneOfEach.Vocabulary<OnTheWay, Numbered, NoInputTakesIt> vocabulary;
+
+        /** What the way took in, or null where taking it in left no row. */
+        private final Numbered taken;
+
+        private Assuming(OneOfEach.Vocabulary<OnTheWay, Numbered, NoInputTakesIt> vocabulary,
+                         Numbered taken) {
+            this.vocabulary = vocabulary;
+            this.taken = taken;
+        }
+
+        /** {@code entries} taken in after {@code so}, or null where some of them leave no row. */
+        private static Numbered taken(OneOfEach.Vocabulary<OnTheWay, Numbered, NoInputTakesIt>
+                                              vocabulary, Numbered so, List<OnTheWay> entries) {
+            Numbered at = so;
+            for (OnTheWay entry : entries) {
+                if (!(vocabulary.with(at, entry)
+                        instanceof Step.Held<Numbered, NoInputTakesIt>(var held))) {
+                    return null;
+                }
+                at = held;
+            }
+            return at;
+        }
+
+        /**
+         * Whether {@code more}, taken in beside the way, is shown to leave no row: a proof where
+         * true, and nothing at all where false. A choice among them leaves none only where every
+         * way of it leaves none.
+         *
+         * <p>True only on a proof that no input takes them together: cases or truths asked two
+         * ways, counts or remainders that leave nothing, or a region of the declarations shown
+         * empty. A count whose choices were not walked to the end is taken in as leaving rows
+         * ({@link CountedWays#admits}), and an entry nothing here reads leaves the way as it was,
+         * so running out of a figure, or not reading something, is never a proof here.
+         */
+        public boolean leavesNone(List<OnTheWay> more) {
+            return taken == null || leavesNone(taken, more);
+        }
+
+        private boolean leavesNone(Numbered so, List<OnTheWay> more) {
+            if (more.isEmpty()) {
+                return false;
+            }
+            OnTheWay first = more.getFirst();
+            List<OnTheWay> rest = more.subList(1, more.size());
+            List<List<OnTheWay>> ways = vocabulary.alternatives(first);
+            if (ways != null) {
+                for (List<OnTheWay> one : ways) {
+                    List<OnTheWay> along = new ArrayList<>(one);
+                    along.addAll(rest);
+                    if (!leavesNone(so, along)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            return switch (vocabulary.with(so, first)) {
+                case Step.Closed<Numbered, NoInputTakesIt> _ -> true;
+                case Step.Held<Numbered, NoInputTakesIt>(var held) -> leavesNone(held, rest);
+            };
+        }
+    }
+
     /** Whether every position {@code entry} asks about is one value of a run's own, outside every
      *  container. */
     static boolean ofOnePosition(OnTheWay entry) {

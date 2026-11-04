@@ -381,7 +381,7 @@ public final class GuardThresholds {
                                                             new WayToTheBorder(each.wayToACase(
                                                                     aCase.apply(decides))),
                                                             read.quantities().region())));
-                            reached(cuts, stated, each, readingsOf(arrived), aCase);
+                            reached(cuts, stated, each, readingsOf(arrived), aCase, aPart);
                             lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
                                             called -> plan.runsOnce(called, emitted))),
@@ -392,7 +392,7 @@ public final class GuardThresholds {
                         // the reasons refused it ({@link NotABoundary}), so there is nothing for a
                         // report to say of it.
                         case BoundaryPolicy.Standing.Refused _ ->
-                                reached(cuts, stated, each, List.of(), aCase);
+                                reached(cuts, stated, each, List.of(), aCase, aPart);
                     }
                 }
             }
@@ -455,15 +455,30 @@ public final class GuardThresholds {
      * filed under the reading it was drawn in; the way to it is looked up by that reading
      * ({@link ReachingCuts#wayTo}), so the two are filed from the one answer.
      *
+     * <p>And what each part of where a line decides asks of a row, coming out each way, once for
+     * the comparison however many of its lines decide on it: a search asks it of a way and a
+     * point without reading it again ({@link ReachingCuts#saysOf}).
+     *
      * @param aCase what a case puts on the way at {@code each}, as the line was asked it
+     * @param aPart what one part asks at {@code each}, and nothing of what follows from it
      */
     private static void reached(ReachingCuts.Collected cuts, ModelOccurrence stated,
                                 ComparisonReadings.Reading each,
                                 List<WhereAPartDecides> readings,
-                                Function<Proposition, ReachingCuts.Stating> aCase) {
+                                Function<Proposition, ReachingCuts.Stating> aCase,
+                                Function<Proposition, ReachingCuts.Stating> aPart) {
         Map<WhereAPartDecides, ReachingCuts.Stating> decides = new LinkedHashMap<>();
         readings.forEach(reading -> decides.put(reading, aCase.apply(reading.decides())));
         cuts.reached(stated, each.assumed(), decides, each.saidOnTheWay());
+        Set<Proposition> asked = new HashSet<>();
+        for (WhereAPartDecides reading : readings) {
+            for (Proposition atom : WhereAPartDecides.atomsOf(reading.decides())) {
+                if (asked.add(atom)) {
+                    cuts.asks(stated, atom, new ReachingCuts.WhatAnAtomSays(
+                            aPart.apply(atom).entries(), aPart.apply(atom.denied()).entries()));
+                }
+            }
+        }
     }
 
     /** Each reading of each line of {@code assessed}, where it is a statement of several. */

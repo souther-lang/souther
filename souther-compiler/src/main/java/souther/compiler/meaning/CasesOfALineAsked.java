@@ -75,7 +75,8 @@ public final class CasesOfALineAsked {
      * What asking found.
      *
      * @param decidesIn  the cases shown to hold a row on each side of the line, each by itself; the
-     *                   case asked, as it was said, where every case it stands for is one of them.
+     *                   case asked, as it was said, where every case it stands for is one of them
+     *                   or holds no row.
      *                   How many of them a line is read in one by one is the line's to say, over
      *                   every case it holds ({@link DecidingCase#saidInAsFewAsMay})
      * @param notWorkedOut every figure some case was stopped at, where some was: which way those
@@ -98,10 +99,11 @@ public final class CasesOfALineAsked {
      *
      * <p>None of them says a row is there. A way is read as an inclusion, so that rows may stand
      * on each side is what is left where neither of the others was shown, and is all that walks on.
-     * The two others both leave the case out, and neither lets the case asked be said as it was,
-     * since a case it stands for is then not one the line decides in. They are told apart because
-     * they are different facts: one is about the line, the other about whether any row is in the
-     * case at all.
+     * The two others both leave the case out. A case whose rows are on one side lets the case
+     * asked be said as it was no more, since its rows are rows of the case asked that the line
+     * turns nothing between; a case no row is in still lets it, since it adds no row to where
+     * the case asked holds. They are told apart because they are different facts: one is about the
+     * line, the other about whether any row is in the case at all.
      */
     public enum Crossing {
 
@@ -116,18 +118,53 @@ public final class CasesOfALineAsked {
         NO_ROWS
     }
 
+    /**
+     * A line whose values in a case are what the case's own statements on them keep them to, and
+     * nothing else in the case: a line on a quantity every region leaves the same values. Whether
+     * rows in a case stand on both sides of it then turns on two things only, whether a row is in
+     * the case and what those statements keep, which asking a case by its statements says
+     * ({@link #everyCaseWithARowDivides}).
+     */
+    public interface KeptByItsStatements {
+
+        /** What {@code part}, one part a case holds, says of the line's values. */
+        Keeping keeping(Proposition part);
+
+        /**
+         * Whether rows stand on each side of the line in a case that holds a row and whose
+         * statements on the line's values are {@code statements}, each of the parts joined a part
+         * it holds ({@link Keeping#ITSELF}): what {@link Crossing#MAY_CROSS} says of such a case.
+         */
+        boolean divides(Proposition statements);
+    }
+
+    /** What one part of a case says of the line's values. */
+    public enum Keeping {
+
+        /** Nothing: no statement inside it is about them. */
+        NOTHING,
+
+        /** It is a statement on them, which keeps them to the side it holds on. */
+        ITSELF,
+
+        /** Some statement inside it is, held with others, which choices may leave standing as a
+         *  part of its own. */
+        INSIDE
+    }
+
     private final Function<Proposition, Crossing> crossedIn;
+
+    /** What keeps the line's values in a case, where its statements alone do; null otherwise. */
+    private final KeptByItsStatements kept;
 
     private int left = CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum();
 
     /** Each case shown to divide rows, as the conjunction of what it chose. */
     private final Set<Proposition> dividing = new LinkedHashSet<>();
 
-    /** Whether some case was shown to hold rows that do not stand on each side of the line. */
+    /** Whether some case was shown to hold rows that do not stand on each side of the line: the
+     *  case asked is then not what the line decides in, as it was said. */
     private boolean droppedNonDividing;
-
-    /** Whether some case was shown to be one no row is in. */
-    private boolean prunedNoRows;
 
     private final Set<CompositionBudget> stopped = EnumSet.noneOf(CompositionBudget.class);
 
@@ -135,15 +172,12 @@ public final class CasesOfALineAsked {
     private final Map<DecidingCase.Cases, Set<CompositionBudget>> figuresOf =
             new IdentityHashMap<>();
 
-    private CasesOfALineAsked(Function<Proposition, Crossing> crossedIn) {
+    private CasesOfALineAsked(Function<Proposition, Crossing> crossedIn,
+                              KeptByItsStatements kept) {
         this.crossedIn = crossedIn;
+        this.kept = kept;
     }
 
-    /** Whether some case was left out, for either reason: the case asked is then not every case
-     *  it stands for being one the line decides in. */
-    private boolean leftSomeOut() {
-        return droppedNonDividing || prunedNoRows;
-    }
 
     /**
      * Which of the cases {@code said} stands for the line decides in.
@@ -158,7 +192,17 @@ public final class CasesOfALineAsked {
      *                  it come to ({@link Crossing})
      */
     public static Found casesOf(DecidingCase said, Function<Proposition, Crossing> crossedIn) {
-        return new CasesOfALineAsked(crossedIn).asked(said);
+        return new CasesOfALineAsked(crossedIn, null).asked(said);
+    }
+
+    /**
+     * The same, of a line whose values in a case are what the case's own statements on them keep
+     * them to ({@link KeptByItsStatements}): where every case with a row in it is shown to hold one
+     * on each side, the case is what it was said as, and no case is chosen.
+     */
+    public static Found casesOf(DecidingCase said, Function<Proposition, Crossing> crossedIn,
+                                KeptByItsStatements kept) {
+        return new CasesOfALineAsked(crossedIn, Objects.requireNonNull(kept)).asked(said);
     }
 
     /**
@@ -203,7 +247,7 @@ public final class CasesOfALineAsked {
      * are counted as they are for {@link #casesOf}.
      */
     public static <T> Atoms<T> atomsOf(DecidingCase said, Function<Proposition, T> answer) {
-        return new CasesOfALineAsked(_ -> Crossing.MAY_CROSS).allAsked(said, answer);
+        return new CasesOfALineAsked(_ -> Crossing.MAY_CROSS, null).allAsked(said, answer);
     }
 
     private <T> Atoms<T> allAsked(DecidingCase said, Function<Proposition, T> answer) {
@@ -246,16 +290,123 @@ public final class CasesOfALineAsked {
         if (said.saidAlone()) {
             return new Found(List.of(said), Set.of());
         }
+        if (kept != null && everyCaseWithARowDivides(said)) {
+            return new Found(List.of(said), Set.of());
+        }
         DecidingCase.Cases cases = heldFirst(said.standsFor());
         chosen(SoFar.NOTHING, List.of(cases), crossedIn, chosen -> dividing.add(chosen));
-        // Every case divides rows and every one was worked out: the case is what it was said as,
-        // and saying it again would read the line under another condition for nothing. A case no
-        // row is in is no case the line decides in either, so one of those left out is a case
-        // said for one the line does not decide in, as much as a case that holds rows on one side.
-        if (!leftSomeOut() && stopped.isEmpty() && !dividing.isEmpty()) {
+        // Every case with a row in it divides rows and every one was worked out: the case is what
+        // it was said as, and saying it again would read the line under another condition for
+        // nothing. A case no row is in adds no row to where it holds, so the rows it holds are
+        // the rows of the cases the line decides in; one with rows on one side would add rows the
+        // line turns nothing between.
+        if (!droppedNonDividing && stopped.isEmpty() && !dividing.isEmpty()) {
             return new Found(List.of(said), Set.of());
         }
         return new Found(dividing.stream().map(DecidingCase::alone).toList(), stopped);
+    }
+
+    /**
+     * Whether every case {@code said} stands for that holds a row holds one on each side of the
+     * line, shown without choosing the cases, for a line whose values in a case are what the
+     * case's own statements on them keep ({@link KeptByItsStatements}).
+     *
+     * <p>A case chosen to the end holds, of those statements, the ones the cases it chose hold as
+     * parts, less any of them its other choices settle. Nothing else in it says anything of the
+     * values: no case holds such a statement inside another statement, which the other choices
+     * could leave standing as a part. Fewer statements keep the values to no fewer, so a case
+     * whose statements are a set that keeps rows on both sides is one the line decides in wherever
+     * a row is in it. A case whose statements keep them to one side holds every statement of a
+     * smallest set that does, and so holds no row where the cases said, with that set taken in,
+     * hold none. Each smallest such set is asked that once.
+     *
+     * <p>Where some set is not shown to leave no row, a statement is held inside another, or the
+     * sets of the statements are more than the steps a line is asked in
+     * ({@link CompositionBudget#CASES_A_LINE_IS_ASKED_IN}), the cases are chosen instead, with
+     * every step still theirs.
+     */
+    private boolean everyCaseWithARowDivides(DecidingCase said) {
+        List<Proposition> keeping = statementsKeepingTheLine(said.standsFor());
+        if (keeping == null || keeping.size() >= Integer.SIZE - 1 || 1 << keeping.size()
+                > CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum()) {
+            return false;
+        }
+        int sets = 1 << keeping.size();
+        List<Integer> oneSided = new ArrayList<>();
+        for (int size = 0; size <= keeping.size(); size++) {
+            for (int set = 0; set < sets; set++) {
+                if (Integer.bitCount(set) != size || holdsOneOf(set, oneSided)) {
+                    continue;
+                }
+                List<Proposition> these = new ArrayList<>();
+                for (int at = 0; at < keeping.size(); at++) {
+                    if ((set & 1 << at) != 0) {
+                        these.add(keeping.get(at));
+                    }
+                }
+                if (kept.divides(Proposition.all(these))) {
+                    continue;
+                }
+                oneSided.add(set);
+                List<Proposition> withThem = new ArrayList<>(List.of(said.condition()));
+                withThem.addAll(these);
+                if (crossedIn.apply(Proposition.all(withThem)) != Crossing.NO_ROWS) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /** Whether the set {@code set} holds every statement of one of {@code sets}. */
+    private static boolean holdsOneOf(int set, List<Integer> sets) {
+        for (int each : sets) {
+            if ((set & each) == each) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Every statement on the line's values a case of {@code cases} holds as a part, each once —
+     * or null where a case holds one inside another statement, or was never taken apart.
+     */
+    private List<Proposition> statementsKeepingTheLine(DecidingCase.Cases cases) {
+        Set<Proposition> out = new LinkedHashSet<>();
+        boolean asParts = cases.fold(new DecidingCase.Cases.Fold<Boolean>() {
+
+            @Override
+            public Boolean one(DecidingCase.Cases.One one) {
+                for (Proposition part : one.condition() instanceof Proposition.All all
+                        ? all.parts() : List.of(one.condition())) {
+                    Keeping keeps = kept.keeping(part);
+                    if (keeps == Keeping.INSIDE) {
+                        return false;
+                    }
+                    if (keeps == Keeping.ITSELF) {
+                        out.add(part);
+                    }
+                }
+                return true;
+            }
+
+            @Override
+            public Boolean eachOf(DecidingCase.Cases.EachOf node, List<Boolean> alternatives) {
+                return !alternatives.contains(false);
+            }
+
+            @Override
+            public Boolean together(DecidingCase.Cases.Together node, List<Boolean> factors) {
+                return !factors.contains(false);
+            }
+
+            @Override
+            public Boolean notTakenApart(DecidingCase.Cases.NotTakenApart notTakenApart) {
+                return false;
+            }
+        });
+        return asParts ? List.copyOf(out) : null;
     }
 
     /**
@@ -432,7 +583,7 @@ public final class CasesOfALineAsked {
                 switch (goesOn.apply(further.condition())) {
                     case MAY_CROSS -> chosen(further, rest, goesOn, atEnd);
                     case CANNOT_CROSS -> droppedNonDividing = true;
-                    case NO_ROWS -> prunedNoRows = true;
+                    case NO_ROWS -> { }
                 }
             }
             // Every alternative: one that divides rows is no answer about another. Each taken is

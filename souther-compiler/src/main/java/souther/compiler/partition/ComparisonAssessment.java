@@ -1731,9 +1731,13 @@ sealed interface ComparisonAssessment {
                 }
                 continue;
             }
-            CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each, condition ->
+            Function<Proposition, CasesOfALineAsked.Crossing> crossing = condition ->
                     wayToACase.crossing(cutting, condition, reading, (toIt, keptTo) ->
-                            crossedAtSomePlace(cutting, toIt, arrivals, keptTo)));
+                            crossedAtSomePlace(cutting, toIt, arrivals, keptTo));
+            CasesOfALineAsked.Found found = cutting.of().leftAlikeByEveryRegion()
+                    ? CasesOfALineAsked.casesOf(each, crossing,
+                            keptByItsStatements(cutting, each, wayToACase, arrivals, reading))
+                    : CasesOfALineAsked.casesOf(each, crossing);
             for (DecidingCase one : found.decidesIn()) {
                 reached.add(one);
                 deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));
@@ -1741,6 +1745,41 @@ sealed interface ComparisonAssessment {
             stoppedAt.addAll(found.notWorkedOut());
         }
         return new CasesReached(reached, deciding, stoppedAt);
+    }
+
+    /**
+     * What keeps the values of {@code cutting}'s line in a case of {@code said}, for a line on a
+     * quantity every region leaves the same values ({@link BorderQuantity#leftAlikeByEveryRegion}):
+     * the statements on that quantity the case holds ({@link Cutting#leftBy}), and nothing else in
+     * it. So whether rows of a case with a row in it stand on each side is what those statements
+     * leave of the values, asked of the regions of any way a row takes — the way to the cases
+     * {@code said} stands for, read the first time it is asked.
+     */
+    private static CasesOfALineAsked.KeptByItsStatements keptByItsStatements(
+            Cutting cutting, DecidingCase said, WaysToACase wayToACase,
+            List<ComparisonArrival> arrivals, InputReading reading) {
+        return new CasesOfALineAsked.KeptByItsStatements() {
+
+            private Reachability toAll;
+
+            @Override
+            public CasesOfALineAsked.Keeping keeping(Proposition part) {
+                if (part instanceof Proposition.Compared && cutting.leftBy(part, reading) != null) {
+                    return CasesOfALineAsked.Keeping.ITSELF;
+                }
+                return cutting.saysOfItsValuesInside(part, reading)
+                        ? CasesOfALineAsked.Keeping.INSIDE : CasesOfALineAsked.Keeping.NOTHING;
+            }
+
+            @Override
+            public boolean divides(Proposition statements) {
+                if (toAll == null) {
+                    toAll = wayToACase.apply(said.condition());
+                }
+                return crossedAtSomePlace(cutting, toAll, arrivals,
+                        cutting.keptTo(statements, reading));
+            }
+        };
     }
 
     /**

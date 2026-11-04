@@ -4,6 +4,7 @@ import souther.compiler.check.CoverageObligation;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ModelOccurrences;
 import souther.compiler.coverage.ComparisonEmissionIndex;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.partition.CountWitnesses;
 import souther.compiler.diag.Citation;
@@ -64,6 +65,8 @@ import souther.compiler.partition.ThresholdOfADerivedValue;
 import souther.compiler.partition.Level;
 import souther.compiler.partition.LevelRealizer;
 import souther.compiler.partition.PointSearchGoal;
+import souther.compiler.partition.Standing;
+import souther.compiler.partition.TheCaseALineDecidesIn;
 import souther.compiler.partition.Realization;
 import souther.compiler.partition.RealizationTarget;
 import souther.compiler.partition.CompositionBudget;
@@ -1258,8 +1261,10 @@ final class Coverages {
             WayToTheBorder way = wayTo(border.border(), reaching);
             StandingAtAPoint.OtherReadings otherReadings =
                     otherReadingsOfTheComparison(everyLine, border.border(), lines);
+            Function<Proposition, Optional<ReachingCuts.WhatAnAtomSays>> says =
+                    atom -> reaching.saysOf(border.border().origin(), atom);
             OneSearchOfABorder search = searching(border.border(), read, input, probe,
-                    realizer, way, otherReadings);
+                    realizer, way, otherReadings, says);
             // A class the line cuts that lies wholly outside the case the line decides in is
             // looked for along the way to the comparison, and a row is read back against it by the
             // answer the comparison came out with, among the rows in no other reading's case.
@@ -1285,7 +1290,7 @@ final class Coverages {
                             overTheComparison = searching(border.border(), read, input, probe,
                                     realizer,
                                     reaching.wayToTheComparison(border.border().origin()),
-                                    otherReadings);
+                                    otherReadings, says);
                         }
                         looking = overTheComparison;
                     }
@@ -2199,12 +2204,17 @@ final class Coverages {
      *
      * @param within the way rows are composed along: what a row has to do to arrive, which is a
      *               region to look in and says nothing of what makes a row a witness of a point
+     * @param says   what each part of where the line decides was read to ask of a row, each way
+     *               ({@link ReachingCuts#saysOf})
      */
     private static OneSearchOfABorder searching(Border border, MeasuredInput.BorderReading line,
                                                 MeasuredInput input,
                                                 Probe probe, LevelRealizer realizer,
                                                 souther.compiler.partition.WayToTheBorder within,
-                                                StandingAtAPoint.OtherReadings otherReadings) {
+                                                StandingAtAPoint.OtherReadings otherReadings,
+                                                Function<Proposition,
+                                                        Optional<ReachingCuts.WhatAnAtomSays>>
+                                                        says) {
         souther.compiler.inputs.Quantities rules = input.quantities();
         BorderQuantity quantity = line.quantity();
         List<ConditionOutcomeSite> site =
@@ -2224,6 +2234,11 @@ final class Coverages {
         // walks every position of the input at every point a row is searched for.
         souther.compiler.partition.WitnessSearch looking = input.witnessSearch();
         return new OneSearchOfABorder() {
+
+            /** Each way the way to the border is split into, taken in once, asked what a part
+             *  of where the line decides leaves; read the first time a point is looked along
+             *  them. */
+            private Optional<List<Optional<WayToTheBorder.Assuming>>> assumingAlong;
 
             @Override
             public boolean classLiesOutsideTheCase(Criterion criterion) {
@@ -2325,7 +2340,17 @@ final class Coverages {
                     }
                 }
                 SearchOutcomes alongEach = SearchOutcomes.none();
-                for (Reachability.Reaching along : able.along()) {
+                for (int at = 0; at < able.along().size(); at++) {
+                    Reachability.Reaching along = able.along().get(at);
+                    // A way the case shows no row of at the point along is one no value of it
+                    // stands at: said so without building anything, as a point no remainder of
+                    // the way is left at is.
+                    if (!mayBeInTheCase(criterion, rows, at, able.along().size(), along)) {
+                        alongEach = alongEach.plus(noRowTakes(label, within,
+                                Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE)
+                                .outcomes());
+                        continue;
+                    }
                     Looked one = lookedAlong(criterion, label, narrowing, rows, along,
                             besideRows);
                     if (one.witness().isPresent()) {
@@ -2343,6 +2368,38 @@ final class Coverages {
                 }
                 return whole != null ? whole
                         : lookedAlong(criterion, label, narrowing, rows, able, besideRows);
+            }
+
+            /**
+             * Whether a row at {@code criterion} along {@code along}, the {@code at}th of the
+             * {@code ways} the way to the border is split into, may be in the case the line
+             * decides in: false only where the case is refuted there
+             * ({@link TheCaseALineDecidesIn#possibilityAt}), and true wherever nothing was asked —
+             * a line decided by no case, a way the walk left a choice of, or a point no
+             * constraint stands for.
+             */
+            private boolean mayBeInTheCase(Criterion criterion, StandingAtAPoint.AtALine rows,
+                                           int at, int ways, Reachability.Reaching along) {
+                Optional<TheCaseALineDecidesIn> decides = rows.caseItDecidesIn();
+                if (decides.isEmpty()) {
+                    return true;
+                }
+                List<Optional<WayToTheBorder.Assuming>> each = assuming().orElse(null);
+                if (each == null || each.size() != ways || each.get(at).isEmpty()) {
+                    return true;
+                }
+                return !(quantity.searchGoalAt(criterion).alongTheWay(along).inTheCase(decides)
+                        instanceof PointSearchGoal.ByConstraints(Standing point))
+                        || !(decides.get().possibilityAt(point, each.get(at).get(), says)
+                                instanceof TheCaseALineDecidesIn.CasePossibility.Refuted);
+            }
+
+            /** Each way the way to the border is split into, taken in, worked out once. */
+            private synchronized Optional<List<Optional<WayToTheBorder.Assuming>>> assuming() {
+                if (assumingAlong == null) {
+                    assumingAlong = WayToTheBorder.assumingAlong(within, rules.region());
+                }
+                return assumingAlong;
             }
 
             /** What looking for a row at {@code criterion} along {@code able} came to. */

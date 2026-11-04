@@ -7,6 +7,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.ReadingsOfEachValue;
 import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
@@ -2168,6 +2169,39 @@ public sealed interface BorderQuantity
                     values -> OrderedAffineBoundary.productAt(product.terms(), values));
             case HowMany _, ComparedOnARun _ -> HeldValues.NONE;
         };
+    }
+
+    /**
+     * Whether every region leaves this quantity the same values: what it runs between
+     * ({@link #projectedIn}) and what it is held to ({@link #heldIn}) are read of no region.
+     *
+     * <p>So of a count of elements and of a difference a run works out, which no relation a region
+     * holds is about and no position's values say. And of a remainder of a form over numbers of more
+     * than one position: it stays below its divisor whatever the rules leave the form, and what the
+     * values of positions come to together is read only of one position
+     * ({@link ReadingsOfEachValue#of}). Not of a remainder of a form over one position, which is held
+     * to what that position's values come to and so to what a region admits of them; nor of a form,
+     * a remainder by a number of the input or a product, which are what a region leaves their terms.
+     */
+    default boolean leftAlikeByEveryRegion() {
+        return switch (this) {
+            case HowMany _, ComparedOnARun _ -> true;
+            case RemainderOfAForm remainder -> !ofOnePosition(remainder.allNumbers());
+            case LinearQuantity _, RemainderOfAPair _, ProductOfAPair _ -> false;
+        };
+    }
+
+    /** Whether every one of {@code terms} is a number of one position, the same one. */
+    private static boolean ofOnePosition(List<NumericTerm> terms) {
+        TermPath first = null;
+        for (NumericTerm each : terms) {
+            NumericTerm.FromOnePosition one = each.atOnePosition();
+            if (one == null || (first != null && !first.equals(one.position()))) {
+                return false;
+            }
+            first = one.position();
+        }
+        return true;
     }
 
     /**
