@@ -672,6 +672,46 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
+     * Whether what is asked of the value at this path can say something of the value at
+     * {@code other}: one stands at, under or around the other, each narrowing to cases set aside.
+     *
+     * <p>A narrowing says which case the value is, and leaves it the same value: a name read at a
+     * sum is the name read at each case holding it, and two narrowings of one value to different
+     * cases bear on each other by excluding each other. So the steps are matched as the value is
+     * reached, the narrowings skipped, and the two bear on each other where one runs out within
+     * the other. This is the one answer to whether two things asked of the input are apart; a
+     * reader that sets them apart, to ask one without the other, asks it here.
+     */
+    public boolean bearsOn(TermPath other) {
+        if (!head.equals(other.head)) {
+            return false;
+        }
+        int here = 0;
+        int there = 0;
+        while (true) {
+            here = pastNarrowings(steps, here);
+            there = pastNarrowings(other.steps, there);
+            if (here == steps.size() || there == other.steps.size()) {
+                return true;
+            }
+            if (!steps.get(here).equals(other.steps.get(there))) {
+                return false;
+            }
+            here++;
+            there++;
+        }
+    }
+
+    /** The first of {@code steps} from {@code from} on that is no narrowing to cases. */
+    private static int pastNarrowings(List<Step> steps, int from) {
+        int at = from;
+        while (at < steps.size() && steps.get(at) instanceof Step.Refine) {
+            at++;
+        }
+        return at;
+    }
+
+    /**
      * Whether {@code other} is this path or a path below it.
      *
      * <p>Asked of the steps and never of how they are written. A rendering runs the steps together

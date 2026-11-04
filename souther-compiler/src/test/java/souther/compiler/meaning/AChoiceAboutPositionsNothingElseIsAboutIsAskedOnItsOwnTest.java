@@ -2,6 +2,8 @@ package souther.compiler.meaning;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.Case;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.partition.CompositionBudget;
 
@@ -13,6 +15,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -331,6 +334,82 @@ class AChoiceAboutPositionsNothingElseIsAboutIsAskedOnItsOwnTest {
         assertEquals(leavesOf(every.found()), leavesOf(apart.found()));
         assertFalse(apart.found().notWorkedOut().isEmpty());
         assertEquals(every.calls(), apart.calls());
+    }
+
+    /**
+     * A choice about a container and one about its elements bear on each other: what is chosen of
+     * one may leave no row with an alternative of the other, so the second is asked again for each
+     * alternative of the first, and the cases are the ones asking each case gives.
+     */
+    @Test
+    void aChoiceAboutAContainerAndOneAboutItsElementsAreAskedTogether() {
+        TermPath items = TermPath.of("r").then("items");
+        assertAskedTogether(items, items.element());
+        assertAskedTogether(items.element(), items);
+    }
+
+    /** The same for a value and the value narrowed to a case: a name read at a sum is the name
+     *  read at each of its cases. */
+    @Test
+    void aChoiceAboutAValueAndOneAboutItNarrowedToACaseAreAskedTogether() {
+        TermPath x = TermPath.of("x");
+        assertAskedTogether(x.then("code"),
+                x.refine(Refinement.of(new Case.Presence(true))).then("code"));
+    }
+
+    /** No row in a case taking {@code a.b} beside {@code b.c}, where {@code a} is about
+     *  {@code one} and {@code b} about {@code other}. */
+    private void assertAskedTogether(TermPath one, TermPath other) {
+        DecidingCase said = said(List.of(choiceAt("a", one), choiceAt("b", other)));
+        Set<Proposition> pair = Set.of(truth("a.b"), truth("b.c"));
+        Function<Proposition, CasesOfALineAsked.Crossing> crossedIn =
+                condition -> waysOf(condition).stream().allMatch(way -> way.containsAll(pair))
+                        ? CasesOfALineAsked.Crossing.NO_ROWS
+                        : CasesOfALineAsked.Crossing.MAY_CROSS;
+        CasesOfALineAsked.Found apart = CasesOfALineAsked.casesOf(said, crossedIn,
+                apart(Set.of()));
+        CasesOfALineAsked.Found every = CasesOfALineAsked.casesOf(said, crossedIn,
+                CasesOfALineAsked.Bearings.NEVER);
+        assertFalse(apart.decidesIn().contains(said), "a case it stands for holds no row");
+        assertEquals(leavesOf(every), leavesOf(apart));
+    }
+
+    /** The truths each way through {@code condition} takes. */
+    private static List<Set<Proposition>> waysOf(Proposition condition) {
+        return switch (condition) {
+            case Proposition.All all -> {
+                List<Set<Proposition>> out = List.of(Set.of());
+                for (Proposition part : all.parts()) {
+                    List<Set<Proposition>> next = new ArrayList<>();
+                    for (Set<Proposition> before : out) {
+                        for (Set<Proposition> after : waysOf(part)) {
+                            Set<Proposition> both = new HashSet<>(before);
+                            both.addAll(after);
+                            next.add(both);
+                        }
+                    }
+                    out = next;
+                }
+                yield out;
+            }
+            case Proposition.Any any -> any.parts().stream()
+                    .flatMap(part -> waysOf(part).stream()).toList();
+            case Proposition.Truth truth -> List.of(Set.of(truth));
+            case Proposition.Always always -> always.holds() ? List.of(Set.of()) : List.of();
+            default -> throw new IllegalArgumentException("a truth, or truths put together: "
+                    + condition);
+        };
+    }
+
+    /** A choice of three alternatives, each a truth named {@code name} about {@code at}. */
+    private DecidingCase.Cases choiceAt(String name, TermPath at) {
+        List<DecidingCase.Cases> alternatives = new ArrayList<>();
+        for (String each : List.of("a", "b", "c")) {
+            Proposition alternative = truth(name + "." + each);
+            positions.put(alternative, Set.of(at));
+            alternatives.add(new DecidingCase.Cases.One(alternative));
+        }
+        return new DecidingCase.Cases.EachOf(alternatives);
     }
 
     @Test

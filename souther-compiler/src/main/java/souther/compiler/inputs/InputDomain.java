@@ -1045,14 +1045,15 @@ public final class InputDomain {
             return enumerating || demands(seed.address().root(), seed.address().key());
         }
 
-        /** Whether a path the naming reaches is at, under or above the place {@code key} calls. */
+        /** Whether a path the naming reaches is at, under or above the place {@code key} calls,
+         *  narrowings to cases aside ({@link TermPath#bearsOn}). */
         private boolean demands(TermPath root, RuleKey key) {
             TermPath place = root;
             for (String step : key.steps()) {
                 place = place.then(step);
             }
             for (TermPath each : demanded) {
-                if (each.isAtOrUnder(place) || place.isAtOrUnder(each)) {
+                if (each.bearsOn(place)) {
                     return true;
                 }
             }

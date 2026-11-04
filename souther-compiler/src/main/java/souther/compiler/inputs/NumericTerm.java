@@ -1666,15 +1666,15 @@ public sealed interface NumericTerm
         }
 
         /**
-         * Whether the key is a field the number is made of, or one around or inside it: every
-         * element of the key holds the key there, so each contributes it and the number is the
-         * elements' share of that one value.
+         * Whether the key is a field the number is made of, or one around or inside it, narrowings
+         * to cases aside ({@link TermPath#bearsOn}): every element of the key holds the key there,
+         * so each contributes it and the number is the elements' share of that one value.
          */
         public boolean keyIsWhatIsAdded() {
             TermPath keyAt = key().from(gathered.elements());
             for (ElementProjection read : gathered.value().reads()) {
                 TermPath readAt = read.from(gathered.elements());
-                if (readAt.isAtOrUnder(keyAt) || keyAt.isAtOrUnder(readAt)) {
+                if (readAt.bearsOn(keyAt)) {
                     return true;
                 }
             }
@@ -2275,8 +2275,9 @@ public sealed interface NumericTerm
     }
 
     /**
-     * Whether this number and {@code other} are read off a place in common, or one is read off a
-     * place inside a place the other is.
+     * Whether this number and {@code other} are read off places that bear on each other
+     * ({@link TermPath#bearsOn}): a place in common, one inside the other, or one value narrowed
+     * to a case.
      *
      * <p>What two numbers being apart comes to, asked of every place each is read off and not of
      * the place a report files it under ({@link #subjectPath}): a count of the times a value
@@ -2287,7 +2288,7 @@ public sealed interface NumericTerm
     default boolean sharesAPlaceWith(NumericTerm other) {
         for (TermPath here : placesReadOff()) {
             for (TermPath there : other.placesReadOff()) {
-                if (here.isAtOrUnder(there) || there.isAtOrUnder(here)) {
+                if (here.bearsOn(there)) {
                     return true;
                 }
             }

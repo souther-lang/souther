@@ -64,6 +64,35 @@ public final class PositionsAStatementReads {
         /** A value a binding holds where the statement is read, outside every application of a
          *  closure the statement is about. */
         record Bound(Quantity.OfABinding value) implements ReadSubject {}
+
+        /**
+         * Whether something asked of what {@code one} reads can say something of what
+         * {@code other} reads — the one answer to whether two of them are apart.
+         *
+         * <p>Where either is not known (null) it may read anything. A value a binding holds is
+         * about every place: what it is held to — the list it is an element of, the places it was
+         * worked out of — is nothing a statement need say. Two places bear on each other where
+         * one stands at, under or around the other, narrowings to cases aside
+         * ({@link TermPath#bearsOn}).
+         */
+        static boolean bearOnEachOther(Set<ReadSubject> one, Set<ReadSubject> other) {
+            if (one == null || other == null) {
+                return true;
+            }
+            if (one.stream().anyMatch(Bound.class::isInstance)
+                    || other.stream().anyMatch(Bound.class::isInstance)) {
+                return true;
+            }
+            for (ReadSubject here : one) {
+                for (ReadSubject there : other) {
+                    if (here instanceof At(TermPath at) && there instanceof At(TermPath to)
+                            && at.bearsOn(to)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
     }
 
     /**

@@ -88,7 +88,7 @@ public sealed interface RunSource {
     static RunSource overTheLineDown(TermPath root, String through, List<String> matchAt,
                                      TermPath key) {
         return root != null && key != null && oneTreeStandsAt(root) && !key.insideAContainer()
-                && !root.isAtOrUnder(key) && !key.isAtOrUnder(root)
+                && !root.bearsOn(key)
                 ? new SearchedLine(root, through, matchAt, key) : null;
     }
 
@@ -409,7 +409,7 @@ public sealed interface RunSource {
                 throw new IllegalArgumentException("`" + root + "` stands inside a container, and"
                         + " which of its trees a search went down is not said by it");
             }
-            if (key.insideAContainer() || root.isAtOrUnder(key) || key.isAtOrUnder(root)) {
+            if (key.insideAContainer() || root.bearsOn(key)) {
                 throw new IllegalArgumentException("the value searched for stands at `" + key
                         + "`, which is not one place apart from the tree at `" + root + "`");
             }

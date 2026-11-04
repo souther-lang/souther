@@ -463,12 +463,10 @@ public final class CasesOfALineAsked {
 
         /**
          * The parts of {@code chosen} about a position in {@code reach}, or about a position
-         * some such part is about in turn, in the order they were chosen.
-         *
-         * <p>A value a binding holds is about every position: what it is held to — the list it is
-         * an element of, the places it was worked out of — is nothing a part chosen need say, so a
-         * part about one, or a question about one, is never shown to be about nothing the other
-         * is about.
+         * some such part is about in turn, in the order they were chosen — about it as
+         * {@link ReadSubject#bearOnEachOther} says, and never by a rule of this walk's own: a part
+         * taken to be apart from a question when it is not leaves the question asked once for
+         * histories that ask it differently.
          */
         private List<Proposition> bearingOn(SoFar chosen, Set<ReadSubject> reach) {
             Set<ReadSubject> bearsOn = new LinkedHashSet<>(reach);
@@ -486,8 +484,7 @@ public final class CasesOfALineAsked {
                         unknown = true;
                         return List.of();
                     }
-                    if (aboutAValueBound(places) || aboutAValueBound(bearsOn)
-                            || !Collections.disjoint(places, bearsOn)) {
+                    if (ReadSubject.bearOnEachOther(places, bearsOn)) {
                         bears[at] = true;
                         bearsOn.addAll(places);
                         grew = true;
@@ -501,10 +498,6 @@ public final class CasesOfALineAsked {
                 }
             }
             return out;
-        }
-
-        private static boolean aboutAValueBound(Set<ReadSubject> subjects) {
-            return subjects.stream().anyMatch(ReadSubject.Bound.class::isInstance);
         }
 
         private Set<ReadSubject> placesOf(Proposition condition) {

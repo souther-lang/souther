@@ -428,15 +428,15 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
 
     /**
      * Whether {@code entry} is shown to ask nothing of the value at {@code at}: what it asks of a
-     * row, inside it as well, turns on no position at {@code at}, under it or around it
-     * ({@link #positionsInside}). Not shown where a condition inside it is one this reading has no
-     * words for, which may ask anything.
+     * row, inside it as well, turns on no position that bears on {@code at}
+     * ({@link TermPath#bearsOn}, {@link #positionsInside}). Not shown where a condition inside it
+     * is one this reading has no words for, which may ask anything.
      */
     static boolean asksNothingOf(TermPath at, OnTheWay entry) {
         List<OnTheWay> inside = everyOneInside(entry);
         return inside.stream().noneMatch(OnTheWay.Declined.class::isInstance)
                 && inside.stream().flatMap(one -> positionsOf(one).stream())
-                        .noneMatch(one -> one.isAtOrUnder(at) || at.isAtOrUnder(one));
+                        .noneMatch(one -> one.bearsOn(at));
     }
 
     /** {@code entry}, and every condition inside the alternatives it leaves a row and the
