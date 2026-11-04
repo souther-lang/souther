@@ -32,9 +32,15 @@ import java.util.function.Supplier;
  * combination of them. Those are handed on where the figure lets them all be, and then a row past
  * the choices is along one of them — which is what a reader concluding something of every row
  * from what holds along each of them needs. Where they are more, a way is handed on for each
- * alternative of each choice, beside the first open way of every other group, in the order of
+ * alternative of each condition, beside the first open way of every other group, in the order of
  * {@link AlternativeOrder}: enough for each alternative to be composed along as far as the figure
  * lets, and never said to be every way a row takes ({@link Walked.Open#stoppedBy}).
+ *
+ * <p>An alternative is owed per condition, and not per place: a way is read as what it asks — its
+ * entries, or its choices by condition ({@link HeldOutcome#byCondition}) — and an entry taken as
+ * one alternative asks the same at any place it stands. So a way taking it at one place composes
+ * along what a way taking it at another would, and a way owed for the second would spend the
+ * figure on nothing a reader has not been handed.
  *
  * <p><b>A proof only from a group walked to the end.</b> Where every way of one group closes, no
  * row is past the choices, whatever the others hold — and the way that closed first, with what
@@ -80,9 +86,14 @@ final class OneOfEach {
         /**
          * Whether {@link #with} does nothing but answer: asking it spends nothing that a later
          * answer turns on. A walk looking for the way of one alternative asks such a vocabulary
-         * ahead of where it stands, whether what that way has to take in holds beside what is
-         * taken so far. Of a vocabulary whose answers spend something — steps or conditions it
-         * takes in, shared with what asks it next — the walk asks only what it takes.
+         * beside what it takes, as well, whether what that way has to take in closes with what is
+         * taken so far, and leaves the branch where it does. Of a vocabulary whose answers spend
+         * something — steps or conditions it takes in, shared with what asks it next — the walk
+         * asks only what it takes.
+         *
+         * <p>That leaving the branch loses no way is what {@link Step.Closed} says of every
+         * vocabulary, and is nothing this adds. That the asking costs no more than the walk's own
+         * is the walk's: it asks each entry beside what it takes once, where it takes it.
          */
         default boolean answersAlone() {
             return false;
@@ -93,6 +104,13 @@ final class OneOfEach {
      * What taking one more entry in came to: what the entries hold together as, or why they do
      * not. The one judge of it, so that what a walk found closed is said in the words of what
      * closed it and is never worked out again by a reader with fewer of them.
+     *
+     * <p>Closed says the entries taken in have no way together: taken in any order, and with
+     * anything more beside them, none is one the reader would be handed. The walk rests on it
+     * wherever it leaves a branch — past an alternative that closed, and past what a way held to
+     * an alternative would have to take in where that closes — and a group whose every way closed
+     * is said to have none ({@link Walked.Closed}). Held says less: entries held together may still
+     * have no way, where the vocabulary could not tell.
      */
     sealed interface Step<S, R> {
 
@@ -285,7 +303,7 @@ final class OneOfEach {
         List<Group<E, S, R>> walkedGroups = new ArrayList<>();
         for (List<Place<E>> group : groups) {
             Group<E, S, R> walked = new Group<>(vocabulary, looking, handing, left);
-            walked.from(new ArrayDeque<>(group), new HashMap<>(), base);
+            walked.from(new ArrayDeque<>(group), new HashMap<>(), base, null);
             if (walked.open.isEmpty() && walked.stoppedBy == null) {
                 return new Walked.Closed<>(
                         rebuilt(entries, places, walked.firstClosed, null, null),
@@ -429,11 +447,8 @@ final class OneOfEach {
      * at a time.
      *
      * <p>Whether a way before takes an alternative is asked of the condition, the entry as what it
-     * is: a choice equal to one at another place has its alternative taken by a way taking it at
-     * either. A reader composes along an alternative of a condition, which it reads off the ways
-     * by condition ({@link HeldOutcome#byCondition}), so a way owed again for the second place
-     * would spend the figure on an alternative already composed along, and leave another
-     * condition's without one.
+     * is, as the alternatives are owed: a choice equal to one at another place has its alternative
+     * taken by a way taking it at either.
      *
      * <p>A group that did not go to its end is looked in for the way of an alternative it has
      * none for ({@code Group.wayTaking}), with what the walks of all the groups left of the
@@ -772,9 +787,6 @@ final class OneOfEach {
         /** The alternatives a way must take for this walk to hand it on: the one it looks for the
          *  way of, and those of the choices holding it. Empty for a walk that takes any way. */
         private final Map<Place<E>, Integer> pinned;
-        /** What each alternative this walk is held to asks that is no choice, by the place
-         *  whose alternative it is: what a way it hands on takes in, whatever else it chooses. */
-        private final Map<Place<E>, List<E>> held = new LinkedHashMap<>();
         private final List<Map<Place<E>, Integer>> open = new ArrayList<>();
         /** Every choice the walk came to, in the order it came to them. */
         private final List<Place<E>> met = new ArrayList<>();
@@ -797,49 +809,36 @@ final class OneOfEach {
             this.handing = handing;
             this.left = left;
             this.pinned = pinned;
-            pinned.forEach((place, which) -> {
-                List<E> asks = place.alternatives.get(which);
-                List<Place<E>> standing = place.inside(which);
-                List<E> takes = new ArrayList<>();
-                for (int at = 0; at < asks.size(); at++) {
-                    if (standing.get(at) == null) {
-                        takes.add(asks.get(at));
-                    }
-                }
-                held.put(place, takes);
-            });
         }
 
         /**
-         * Whether no way past {@code chosen}, standing as {@code so}, takes what this walk is held
-         * to: what the alternatives it is held to ask, of those not taken yet, does not hold
-         * beside {@code so}. Asked only of a vocabulary that answers alone; of any other, never.
+         * {@code so} with what every way this walk hands on takes in — what the alternatives it is
+         * held to ask that is no choice, in the order they hold each other — or null where that
+         * closes beside it, and so no way past {@code so} is handed on.
          *
-         * <p>A way handed on takes every alternative it is held to, so it takes in what each of
-         * them asks beside everything else it takes; where what they ask closes beside part of
-         * that, no row is along the way, whatever comes after. So a walk held to an alternative
-         * that closes beside what an early choice took finds it there, and not once for every
-         * way of the choices between.
+         * <p>What the walk carries beside what it takes, for a vocabulary that answers alone: a
+         * walk held to an alternative that closes beside what an early choice took finds it
+         * there, and not once for every way of the choices between. Each entry the walk takes
+         * after is taken in beside this as well, once, where the walk takes it.
          */
-        private boolean closesAhead(S so, Map<Place<E>, Integer> chosen) {
-            if (held.isEmpty() || !vocabulary.answersAlone()) {
-                return false;
-            }
-            S probe = so;
-            for (Map.Entry<Place<E>, List<E>> each : held.entrySet()) {
-                if (chosen.containsKey(each.getKey())) {
-                    continue;
-                }
-                for (E entry : each.getValue()) {
-                    switch (vocabulary.with(probe, entry)) {
-                        case Step.Held<S, R>(S taken) -> probe = taken;
+        private S withWhatItIsHeldTo(S so) {
+            S ahead = so;
+            for (Map.Entry<Place<E>, Integer> each : pinned.entrySet()) {
+                List<E> asks = each.getKey().alternatives.get(each.getValue());
+                List<Place<E>> standing = each.getKey().inside(each.getValue());
+                for (int at = 0; at < asks.size(); at++) {
+                    if (standing.get(at) != null) {
+                        continue;
+                    }
+                    switch (vocabulary.with(ahead, asks.get(at))) {
+                        case Step.Held<S, R>(S taken) -> ahead = taken;
                         case Step.Closed<S, R> _ -> {
-                            return true;
+                            return null;
                         }
                     }
                 }
             }
-            return false;
+            return ahead;
         }
 
         /**
@@ -866,10 +865,14 @@ final class OneOfEach {
             }
             Group<E, S, R> past = new Group<>(vocabulary, looking, handing, left,
                     holdingIt(choice, alternative));
-            if (past.closesAhead(base, Map.of())) {
-                return null;
+            S ahead = null;
+            if (vocabulary.answersAlone()) {
+                ahead = past.withWhatItIsHeldTo(base);
+                if (ahead == null) {
+                    return null;
+                }
             }
-            past.from(new ArrayDeque<>(group), new HashMap<>(), base);
+            past.from(new ArrayDeque<>(group), new HashMap<>(), base, ahead);
             for (Place<E> each : past.met) {
                 if (metSet.add(each)) {
                     met.add(each);
@@ -900,8 +903,12 @@ final class OneOfEach {
             return true;
         }
 
-        /** @return whether the walk may go on */
-        boolean from(Deque<Place<E>> pending, Map<Place<E>, Integer> chosen, S so) {
+        /**
+         * @param ahead {@code so} with what every way this walk hands on takes in
+         *              ({@link #withWhatItIsHeldTo}), or null where the walk asks nothing ahead
+         * @return whether the walk may go on
+         */
+        boolean from(Deque<Place<E>> pending, Map<Place<E>, Integer> chosen, S so, S ahead) {
             Place<E> next = pending.pollFirst();
             if (next == null) {
                 if (!takesWhatItIsHeldTo(chosen)) {
@@ -945,16 +952,28 @@ final class OneOfEach {
                         }
                     }
                 }
+                // What an alternative the walk is held to asks is in what it carries ahead
+                // already.
+                S furtherAhead = ahead;
+                for (int at = 0; held == null && furtherAhead != null && closedBy == null
+                        && at < asks.size(); at++) {
+                    if (standing.get(at) == null) {
+                        furtherAhead = switch (vocabulary.with(furtherAhead, asks.get(at))) {
+                            case Step.Held<S, R>(S taken) -> taken;
+                            case Step.Closed<S, R> _ -> null;
+                        };
+                    }
+                }
                 if (closedBy != null) {
                     if (firstClosed == null) {
                         firstClosed = new HashMap<>(chosen);
                         firstWhy = closedBy.why();
                     }
-                } else if (!closesAhead(here, chosen)) {
+                } else if (ahead == null || furtherAhead != null) {
                     for (int each = nested.size() - 1; each >= 0; each--) {
                         after.addFirst(nested.get(each));
                     }
-                    if (!from(after, chosen, here)) {
+                    if (!from(after, chosen, here, furtherAhead)) {
                         chosen.remove(next);
                         return false;
                     }

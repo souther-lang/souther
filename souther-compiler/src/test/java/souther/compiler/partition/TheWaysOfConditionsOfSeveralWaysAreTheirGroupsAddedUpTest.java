@@ -266,6 +266,80 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
                         + asked);
     }
 
+    /** {@link #VALUES}, answering alone where {@code alone} says, and counting what it is asked
+     *  in {@code asked}. */
+    private static OneOfEach.Vocabulary<Entry, Map<TermPath, Set<Integer>>, TermPath> counting(
+            boolean alone, int[] asked) {
+        return new OneOfEach.Vocabulary<>() {
+
+            @Override
+            public List<List<Entry>> alternatives(Entry entry) {
+                return VALUES.alternatives(entry);
+            }
+
+            @Override
+            public Set<TermPath> positions(Entry entry) {
+                return VALUES.positions(entry);
+            }
+
+            @Override
+            public Map<TermPath, Set<Integer>> nothing() {
+                return VALUES.nothing();
+            }
+
+            @Override
+            public Step<Map<TermPath, Set<Integer>>, TermPath> with(
+                    Map<TermPath, Set<Integer>> so, Entry entry) {
+                asked[0]++;
+                return VALUES.with(so, entry);
+            }
+
+            @Override
+            public boolean answersAlone() {
+                return alone;
+            }
+        };
+    }
+
+    /**
+     * What is asked ahead costs no more than the walk's own asking and what the way is held to,
+     * once: each entry the walk takes is taken in beside what it carries ahead once, where the
+     * walk takes it. Where nothing closes, the walk takes the same ways either way, so asking
+     * ahead adds that and no more — and not what the way is held to again at every choice the
+     * walk comes to on the way to it.
+     */
+    @Test
+    void whatIsAskedAheadCostsNoMoreThanTheWalksOwnAskingAndWhatTheWayIsHeldToOnce() {
+        TermPath w = TermPath.of("w");
+        TermPath v = TermPath.of("v");
+        List<Entry> heavy = new ArrayList<>();
+        heavy.add(ask(w, 1, 2, 3, 4, 5));
+        for (int each = 0; each < 1000; each++) {
+            heavy.add(ask(v, 1, 2));
+        }
+        // First, so that the first ways all take its other alternative, and the way of this one
+        // is looked for past every choice after it.
+        List<Entry> entries = new ArrayList<>();
+        entries.add(new Choice(List.of(List.of(ask(w, 1, 2)), heavy)));
+        for (int each = 0; each < 30; each++) {
+            entries.add(oneOf(ask(w, 1, 2, 3), ask(w, 1, 2, 3, 4)));
+        }
+
+        int[] plain = {0};
+        Walked.Open<Entry, TermPath> asked = open(OneOfEach.walk(entries, counting(false, plain),
+                CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG));
+        int[] ahead = {0};
+        Walked.Open<Entry, TermPath> alone = open(OneOfEach.walk(entries, counting(true, ahead),
+                CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG));
+
+        assertFalse(alone.everyWay(), () -> "more ways than are looked along: " + alone);
+        assertEquals(asked.ways(), alone.ways(), "nothing closes, so the same ways either way");
+        assertTrue(ahead[0] <= 2 * plain[0] + heavy.size(),
+                () -> "asked " + ahead[0] + " times asking ahead, against " + plain[0]);
+    }
+
     /** Two conditions on two positions, every combination within the figure: each of them,
      *  since a row past both is along one. */
     @Test
