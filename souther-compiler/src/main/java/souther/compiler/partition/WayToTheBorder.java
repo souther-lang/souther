@@ -408,17 +408,22 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     }
 
     /**
-     * The positions what {@code entry} asks of a row turns on: the one account of them, which the
-     * walk of a way groups its choices by and a reader asking what holding a row to it writes asks
-     * as well.
+     * The positions what {@code entry} asks of a row places: what the walk of a way groups its
+     * choices by, and a reader asking what holding a row to it writes asks as well.
+     *
+     * <p>Places only. A condition this reading has no words for, a choice inside a count, and a
+     * value a binding holds that a statement only a run checks reads place nothing here, though
+     * each may turn on anything; a group of choices put apart on that is only read less closely.
+     * Whether an entry is shown to have nothing to do with something is {@link #turnsOn}'s.
      */
     static Set<TermPath> positionsOf(OnTheWay entry) {
         return ASKED_OF_A_ROW.positions(entry);
     }
 
     /**
-     * The positions what {@code entry} asks of a row turns on ({@link #positionsOf}), inside every
-     * alternative it leaves a row and every statement it counts as well.
+     * The positions what {@code entry} asks of a row places ({@link #positionsOf}), inside every
+     * alternative it leaves a row and every statement it counts as well — places only, as
+     * {@link #positionsOf} says.
      */
     static Set<TermPath> positionsInside(OnTheWay entry) {
         Set<TermPath> out = new LinkedHashSet<>();
@@ -427,16 +432,15 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     }
 
     /**
-     * Whether {@code entry} is shown to ask nothing of the value at {@code at}: what it asks of a
-     * row, inside it as well, turns on no position that bears on {@code at}
-     * ({@link TermPath#bearsOn}, {@link #positionsInside}). Not shown where a condition inside it
-     * is one this reading has no words for, which may ask anything.
+     * Whether {@code entry} is shown to ask nothing of the value at {@code at}: what it turns on
+     * ({@link #turnsOn}) is known and does not bear on {@code at}
+     * ({@link ReadSubject#bearOnEachOther}). Not shown where a condition inside it is one this
+     * reading has no words for, or a statement only a run checks reads a value a binding holds,
+     * either of which may ask anything.
      */
     static boolean asksNothingOf(TermPath at, OnTheWay entry) {
-        List<OnTheWay> inside = everyOneInside(entry);
-        return inside.stream().noneMatch(OnTheWay.Declined.class::isInstance)
-                && inside.stream().flatMap(one -> positionsOf(one).stream())
-                        .noneMatch(one -> one.bearsOn(at));
+        Set<ReadSubject> on = turnsOn(entry);
+        return on != null && !ReadSubject.bearOnEachOther(on, Set.of(new ReadSubject.At(at)));
     }
 
     /** {@code entry}, and every condition inside the alternatives it leaves a row and the
@@ -671,6 +675,17 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         return out;
     }
 
+    /**
+     * What whether {@code entry} holds turns on ({@link #placesTurnedOn}), or null where it turns
+     * on something neither a position nor a value bound says: the one account of what an entry
+     * depends on, inside every alternative it leaves a row and every statement it counts, on
+     * either side, however deep. A reader that asks a question without an entry, as one the entry
+     * has nothing to do with, asks it here.
+     */
+    static Set<ReadSubject> turnsOn(OnTheWay entry) {
+        return placesTurnedOn(List.of(entry));
+    }
+
     private static boolean addPlacesTurnedOn(OnTheWay entry, Set<ReadSubject> into) {
         if (entry instanceof OnTheWay.Settled) {
             return true;
@@ -684,6 +699,19 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                     if (!addPlacesTurnedOn(each, into)) {
                         return false;
                     }
+                }
+            }
+            return true;
+        }
+        // A count turns on what each statement it counts turns on, held or failing: what it
+        // places is not all a statement of it may read.
+        if (entry instanceof OnTheWay.Counted counted) {
+            if (counted.parts().isEmpty()) {
+                return false;
+            }
+            for (OnTheWay each : counted.parts()) {
+                if (!addPlacesTurnedOn(each, into)) {
+                    return false;
                 }
             }
             return true;

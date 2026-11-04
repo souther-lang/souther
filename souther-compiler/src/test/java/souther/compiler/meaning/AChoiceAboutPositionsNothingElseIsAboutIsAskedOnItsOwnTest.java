@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
@@ -398,6 +399,76 @@ class AChoiceAboutPositionsNothingElseIsAboutIsAskedOnItsOwnTest {
             default -> throw new IllegalArgumentException("a truth, or truths put together: "
                     + condition);
         };
+    }
+
+    /**
+     * Over cases drawn at random from choices about containers, their elements, values and the
+     * values narrowed to a case, the cases asked once per question are the cases asking each one
+     * gives — which, the case said where every one divides rows, and the figures not worked out.
+     * Truths conflict only where their places bear on each other, which is what asking a part apart
+     * from a question rests on; where they bear, any pair of them may.
+     */
+    @Test
+    void casesDrawnAtRandomAreFoundAsAskingEachFindsThem() {
+        TermPath r = TermPath.of("r");
+        TermPath x = TermPath.of("x");
+        List<TermPath> places = List.of(r.then("items"), r.then("items").element(),
+                r.then("items").element().then("p"), r.then("total"), x.then("code"),
+                x.refine(Refinement.of(new Case.Presence(true))).then("code"),
+                x.refine(Refinement.of(new Case.Presence(false))), TermPath.of("s"));
+        Random random = new Random(2994);
+        for (int trial = 0; trial < 300; trial++) {
+            positions.clear();
+            List<DecidingCase.Cases> choices = new ArrayList<>();
+            List<Proposition> truths = new ArrayList<>();
+            int count = 2 + random.nextInt(3);
+            for (int each = 0; each < count; each++) {
+                List<DecidingCase.Cases> alternatives = new ArrayList<>();
+                int ways = 2 + random.nextInt(2);
+                for (int way = 0; way < ways; way++) {
+                    Proposition alternative = truth("c" + each + "." + way);
+                    positions.put(alternative,
+                            Set.of(places.get(random.nextInt(places.size()))));
+                    truths.add(alternative);
+                    alternatives.add(new DecidingCase.Cases.One(alternative));
+                }
+                choices.add(new DecidingCase.Cases.EachOf(alternatives));
+            }
+            Set<Set<Proposition>> conflicts = new HashSet<>();
+            Set<Proposition> oneSide = new HashSet<>();
+            for (int one = 0; one < truths.size(); one++) {
+                if (random.nextInt(8) == 0) {
+                    oneSide.add(truths.get(one));
+                }
+                for (int other = one + 1; other < truths.size(); other++) {
+                    TermPath at = positions.get(truths.get(one)).iterator().next();
+                    TermPath to = positions.get(truths.get(other)).iterator().next();
+                    if (at.bearsOn(to) && random.nextInt(3) == 0) {
+                        conflicts.add(Set.of(truths.get(one), truths.get(other)));
+                    }
+                }
+            }
+            DecidingCase said = said(choices);
+            Function<Proposition, CasesOfALineAsked.Crossing> crossedIn = condition -> {
+                List<Set<Proposition>> ways = waysOf(condition);
+                if (ways.stream().allMatch(way -> conflicts.stream().anyMatch(way::containsAll))) {
+                    return CasesOfALineAsked.Crossing.NO_ROWS;
+                }
+                return ways.stream().allMatch(way -> way.stream().anyMatch(oneSide::contains))
+                        ? CasesOfALineAsked.Crossing.CANNOT_CROSS
+                        : CasesOfALineAsked.Crossing.MAY_CROSS;
+            };
+            CasesOfALineAsked.Found apart = CasesOfALineAsked.casesOf(said, crossedIn,
+                    apart(Set.of()));
+            CasesOfALineAsked.Found every = CasesOfALineAsked.casesOf(said, crossedIn,
+                    CasesOfALineAsked.Bearings.NEVER);
+            String drawn = "trial " + trial + ": " + positions + " conflicts " + conflicts
+                    + " one side " + oneSide;
+            assertEquals(every.notWorkedOut(), apart.notWorkedOut(), drawn);
+            assertEquals(every.decidesIn().contains(said), apart.decidesIn().contains(said),
+                    drawn);
+            assertEquals(leavesOf(every), leavesOf(apart), drawn);
+        }
     }
 
     /** A choice of three alternatives, each a truth named {@code name} about {@code at}. */

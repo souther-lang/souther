@@ -38,12 +38,15 @@ class WhatIsAskedOfOnePlaceBearsOnAnotherAsTheValueIsReachedTest {
         assertBoth(true, R.then("code"), PRESENT.then("code"));
         assertBoth(true, PRESENT.then("code"), ABSENT, "two cases of one value exclude each other");
         assertBoth(true, PRESENT, R.then("code"));
+        assertBoth(true, PRESENT.then("a"), ABSENT.then("b"),
+                "what is asked under two cases of one value excludes each other");
     }
 
     @Test
     void placesApartAsTheValueIsReachedDoNot() {
         assertBoth(false, R.then("a"), R.then("b"));
         assertBoth(false, PRESENT.then("a"), R.then("b"));
+        assertBoth(false, PRESENT.then("a"), PRESENT.then("b"));
         assertBoth(false, ITEMS.element(), R.then("total"));
         assertBoth(false, R, TermPath.of("s"));
     }

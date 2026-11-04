@@ -677,10 +677,12 @@ public record TermPath(String head, List<Step> steps) {
      *
      * <p>A narrowing says which case the value is, and leaves it the same value: a name read at a
      * sum is the name read at each case holding it, and two narrowings of one value to different
-     * cases bear on each other by excluding each other. So the steps are matched as the value is
-     * reached, the narrowings skipped, and the two bear on each other where one runs out within
-     * the other. This is the one answer to whether two things asked of the input are apart; a
-     * reader that sets them apart, to ask one without the other, asks it here.
+     * cases bear on each other by excluding each other, whatever is asked under each. So the steps
+     * are matched as the value is reached: a narrowing on one side only is skipped, narrowings on
+     * both sides that differ bear on each other there, and otherwise the two bear on each other
+     * where one runs out within the other. This is the one answer to whether two things asked of
+     * the input are apart; a reader that sets them apart, to ask one without the other, asks it
+     * here.
      */
     public boolean bearsOn(TermPath other) {
         if (!head.equals(other.head)) {
@@ -689,8 +691,15 @@ public record TermPath(String head, List<Step> steps) {
         int here = 0;
         int there = 0;
         while (true) {
-            here = pastNarrowings(steps, here);
-            there = pastNarrowings(other.steps, there);
+            int hereNarrowed = pastNarrowings(steps, here);
+            int thereNarrowed = pastNarrowings(other.steps, there);
+            if (hereNarrowed > here && thereNarrowed > there
+                    && !steps.subList(here, hereNarrowed)
+                            .equals(other.steps.subList(there, thereNarrowed))) {
+                return true;
+            }
+            here = hereNarrowed;
+            there = thereNarrowed;
             if (here == steps.size() || there == other.steps.size()) {
                 return true;
             }
