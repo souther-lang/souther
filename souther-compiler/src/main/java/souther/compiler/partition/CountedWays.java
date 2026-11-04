@@ -276,8 +276,8 @@ final class CountedWays {
                 for (List<OnTheWay> side : List.of(each.holding(), each.failing())) {
                     for (OnTheWay entry : side) {
                         if (entry instanceof OnTheWay.Settled settled && !settled.thisWay()
-                                && asked.with(start, entry) instanceof Step.Closed<S, R>(R closed)) {
-                            return closed;
+                                && asked.with(start, entry) instanceof Step.Closed<S, R> closed) {
+                            return closed.why();
                         }
                     }
                 }
@@ -326,9 +326,9 @@ final class CountedWays {
                     }
                     switch (asked.with(here, entry)) {
                         case Step.Held<S, R>(S held) -> here = held;
-                        case Step.Closed<S, R>(R because) -> {
+                        case Step.Closed<S, R> because -> {
                             if (why == null) {
-                                why = because;
+                                why = because.why();
                             }
                             closed = true;
                         }
@@ -461,8 +461,8 @@ final class CountedWays {
                 }
                 switch (metered.with(so, entry)) {
                     case Step.Held<S, R>(S held) -> so = held;
-                    case Step.Closed<S, R>(R closed) -> {
-                        closedBy(closed);
+                    case Step.Closed<S, R> closed -> {
+                        closedBy(closed.why());
                         return;
                     }
                 }

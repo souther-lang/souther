@@ -4,15 +4,17 @@ import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * The ways a list of things asked of a row comes to where some of them are one of several things:
@@ -31,9 +33,15 @@ import java.util.Set;
  * combination of them. Those are handed on where the figure lets them all be, and then a row past
  * the choices is along one of them — which is what a reader concluding something of every row
  * from what holds along each of them needs. Where they are more, a way is handed on for each
- * alternative of each choice, beside the first open way of every other group, in the order of
+ * alternative of each condition, beside the first open way of every other group, in the order of
  * {@link AlternativeOrder}: enough for each alternative to be composed along as far as the figure
  * lets, and never said to be every way a row takes ({@link Walked.Open#stoppedBy}).
+ *
+ * <p>An alternative is owed per condition, and not per place: a way is read as what it asks — its
+ * entries, or its choices by condition ({@link HeldOutcome#byCondition}) — and an entry taken as
+ * one alternative asks the same at any place it stands. So a way taking it at one place composes
+ * along what a way taking it at another would, and a way owed for the second would spend the
+ * figure on nothing a reader has not been handed.
  *
  * <p><b>A proof only from a group walked to the end.</b> Where every way of one group closes, no
  * row is past the choices, whatever the others hold — and the way that closed first, with what
@@ -41,6 +49,13 @@ import java.util.Set;
  *
  * <p>Nested choices — an alternative asking one of several things itself — are chosen where they
  * stand, in the group of the choice they are inside.
+ *
+ * <p><b>A choice is the place it stands at.</b> An entry is a value, and a value made again may be
+ * handed out as the one made before ({@link OnTheWay.OneOf#of}), so which object an entry is says
+ * nothing of where it stands. One entry standing at two places — two alternatives holding the same
+ * nested choice, or the same choice asked twice along a way — is two choices, each taken its own
+ * way, as two entries alike are ({@link Choice}). The walk files what it chose under the place,
+ * never under the entry.
  */
 final class OneOfEach {
 
@@ -51,8 +66,11 @@ final class OneOfEach {
      * What the walk needs to know of an entry, and how what is taken in so far stands.
      *
      * @param <E> an entry of what is asked
-     * @param <S> what the entries taken in so far come to, as far as whether they hold together
-     * @param <R> why entries do not hold together, as the reader of the walk says it
+     * @param <S> what the entries taken in so far come to, as far as whether they hold together;
+     *            any value, null among them, since the walk carries it in a step and never asks
+     *            it for anything
+     * @param <R> why entries do not hold together, as the reader of the walk says it; never
+     *            null ({@link Step.Closed})
      */
     interface Vocabulary<E, S, R> {
 
@@ -68,20 +86,91 @@ final class OneOfEach {
 
         /** {@code so} with {@code entry} taken in, or why the two cannot hold together. */
         Step<S, R> with(S so, E entry);
+
+        /**
+         * Whether {@link #with} does nothing but answer: asking it spends nothing that a later
+         * answer turns on. A walk looking for the way of one alternative asks such a vocabulary
+         * beside what it takes, as well, whether what that way has to take in closes with what is
+         * taken so far, and leaves the branch where it does. Of a vocabulary whose answers spend
+         * something — steps or conditions it takes in, shared with what asks it next — the walk
+         * asks only what it takes.
+         *
+         * <p>That leaving the branch loses no way is what {@link Step.Closed} says of every
+         * vocabulary, and is nothing this adds. That the asking costs no more than the walk's own
+         * is the walk's: it asks each entry beside what it takes once, where it takes it.
+         */
+        default boolean answersAlone() {
+            return false;
+        }
     }
 
     /**
      * What taking one more entry in came to: what the entries hold together as, or why they do
      * not. The one judge of it, so that what a walk found closed is said in the words of what
      * closed it and is never worked out again by a reader with fewer of them.
+     *
+     * <p>Closed says the entries taken in have no way together: taken in any order, and with
+     * anything more beside them, none is one the reader would be handed. The walk rests on it
+     * wherever it leaves a branch — past an alternative that closed, and past what a way held to
+     * an alternative would have to take in where that closes — and a group whose every way closed
+     * is said to have none ({@link Walked.Closed}). Held says less: entries held together may still
+     * have no way, where the vocabulary could not tell.
      */
     sealed interface Step<S, R> {
 
         /** They hold together, as {@code so}. */
         record Held<S, R>(S so) implements Step<S, R> {}
 
-        /** They do not, for {@code why}. */
-        record Closed<S, R>(R why) implements Step<S, R> {}
+        /**
+         * They do not, for {@link #why}: some reason, never none. A value — equal to a closing
+         * for an equal reason — whose reason may be worked out where it is first read: a walk
+         * reads why of the first way that closes, and of every other only that it closed.
+         */
+        final class Closed<S, R> implements Step<S, R> {
+
+            private Supplier<R> because;
+            private R why;
+
+            private Closed(Supplier<R> because, R why) {
+                this.because = because;
+                this.why = why;
+            }
+
+            /** They do not, for {@code why}. */
+            public Closed(R why) {
+                this(null, Objects.requireNonNull(why, "a closing is for some reason"));
+            }
+
+            /** They do not, for what {@code why} works out where it is first read. */
+            public static <S, R> Closed<S, R> workedOut(Supplier<R> why) {
+                return new Closed<>(Objects.requireNonNull(why), null);
+            }
+
+            /** Why they do not hold together. */
+            public R why() {
+                if (why == null) {
+                    why = Objects.requireNonNull(because.get(), "a closing is for some reason");
+                    because = null;
+                }
+                return why;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return this == other
+                        || (other instanceof Closed<?, ?> that && why().equals(that.why()));
+            }
+
+            @Override
+            public int hashCode() {
+                return why().hashCode();
+            }
+
+            @Override
+            public String toString() {
+                return "Closed[why=" + why() + "]";
+            }
+        }
     }
 
     /**
@@ -101,8 +190,8 @@ final class OneOfEach {
          * @param choices each choice taken and the alternative it was taken as, where it stands
          *                and in the order the way holds them: the way's identity among the ways of
          *                the same entries, which {@code entries} does not say where two
-         *                alternatives ask alike. Every one of them — two entries alike are two
-         *                choices the walk made apart, as it walks them apart
+         *                alternatives ask alike. Every one of them — two entries alike, or one entry
+         *                at two places, are two choices the walk made apart, as it walks them apart
          */
         record Chosen<E>(List<E> entries, List<Choice<E>> choices) implements Way<E> {
 
@@ -136,9 +225,9 @@ final class OneOfEach {
      * alternatives the way took.
      *
      * <p>The entry where it stood, which is what the walk chooses by: two entries alike standing
-     * at two places are two choices, and each may be taken another way. What is said by them
-     * together — that a row along the way meets both alternatives — is for a reader of the way to
-     * say.
+     * at two places, or one entry standing at two, are two choices, and each may be taken another
+     * way. What is said by them together — that a row along the way meets both alternatives — is
+     * for a reader of the way to say.
      */
     record Choice<E>(E entry, int alternative) {
 
@@ -221,18 +310,19 @@ final class OneOfEach {
     static <E, S, R> Walked<E, R> walk(List<E> entries, Vocabulary<E, S, R> asked,
                                        CompositionBudget looking, CompositionBudget handing) {
         Vocabulary<E, S, R> vocabulary = new Once<>(asked);
+        List<Place<E>> places = Place.of(entries, vocabulary, null, 0);
         S base = vocabulary.nothing();
-        List<E> choices = new ArrayList<>();
-        for (E each : entries) {
-            if (vocabulary.alternatives(each) != null) {
-                choices.add(each);
+        List<Place<E>> choices = new ArrayList<>();
+        for (int at = 0; at < entries.size(); at++) {
+            if (places.get(at) != null) {
+                choices.add(places.get(at));
                 continue;
             }
-            switch (vocabulary.with(base, each)) {
+            switch (vocabulary.with(base, entries.get(at))) {
                 case Step.Held<S, R>(S so) -> base = so;
-                case Step.Closed<S, R>(R why) -> {
-                    return new Walked.Closed<>(rebuilt(entries, vocabulary, Map.of(), null),
-                            why);
+                case Step.Closed<S, R> closed -> {
+                    return new Walked.Closed<>(rebuilt(entries, places, Map.of(), null, null),
+                            closed.why());
                 }
             }
         }
@@ -241,14 +331,15 @@ final class OneOfEach {
         }
         int[] left = {looking.maximum()};
         CompositionBudget stoppedBy = null;
-        List<List<Map<E, Integer>>> open = new ArrayList<>();
-        List<List<E>> groups = groups(choices, vocabulary);
+        List<List<Map<Place<E>, Integer>>> open = new ArrayList<>();
+        List<List<Place<E>>> groups = groups(choices, vocabulary);
         List<Group<E, S, R>> walkedGroups = new ArrayList<>();
-        for (List<E> group : groups) {
+        for (List<Place<E>> group : groups) {
             Group<E, S, R> walked = new Group<>(vocabulary, looking, handing, left);
-            walked.from(new ArrayDeque<>(group), new IdentityHashMap<>(), base);
+            walked.from(new ArrayDeque<>(group), new HashMap<>(), base, null);
             if (walked.open.isEmpty() && walked.stoppedBy == null) {
-                return new Walked.Closed<>(rebuilt(entries, vocabulary, walked.firstClosed, null),
+                return new Walked.Closed<>(
+                        rebuilt(entries, places, walked.firstClosed, null, null),
                         walked.firstWhy);
             }
             walkedGroups.add(walked);
@@ -267,21 +358,21 @@ final class OneOfEach {
         if (open.isEmpty()) {
             return new Walked.Stopped<>(stoppedBy);
         }
-        List<Map<E, Integer>> handedOn;
+        List<Map<Place<E>, Integer>> handedOn;
         if (stoppedBy == null && noMoreThan(handing.maximum(), open)) {
             handedOn = everyCombination(open);
         } else {
-            handedOn = fairly(vocabulary, groups, walkedGroups, base, handing.maximum());
+            handedOn = fairly(groups, walkedGroups, base, handing.maximum());
             stoppedBy = stoppedBy == null ? handing : stoppedBy;
         }
         List<Way<E>> ways = new ArrayList<>();
-        for (Map<E, Integer> chosen : handedOn) {
+        for (Map<Place<E>, Integer> chosen : handedOn) {
             if (ways.size() == handing.maximum()) {
                 break;
             }
             List<E> unchosen = new ArrayList<>();
             List<Choice<E>> made = new ArrayList<>();
-            List<E> taken = rebuilt(entries, vocabulary, chosen, unchosen, made);
+            List<E> taken = rebuilt(entries, places, chosen, unchosen, made);
             ways.add(unchosen.isEmpty() ? new Way.Chosen<>(taken, made)
                     : new Way.LeftUnchosen<>(taken, unchosen));
         }
@@ -346,9 +437,9 @@ final class OneOfEach {
     }
 
     /** Whether the combinations of one open way of each group are no more than {@code most}. */
-    private static <E> boolean noMoreThan(int most, List<List<Map<E, Integer>>> open) {
+    private static <E> boolean noMoreThan(int most, List<List<Map<Place<E>, Integer>>> open) {
         long out = 1;
-        for (List<Map<E, Integer>> group : open) {
+        for (List<Map<Place<E>, Integer>> group : open) {
             out *= group.size();
             if (out > most) {
                 return false;
@@ -359,15 +450,15 @@ final class OneOfEach {
 
     /** Every combination of one open way of each group, the first group's ways turning
      *  slowest. */
-    private static <E> List<Map<E, Integer>> everyCombination(
-            List<List<Map<E, Integer>>> open) {
-        List<Map<E, Integer>> out = new ArrayList<>();
-        out.add(new IdentityHashMap<>());
-        for (List<Map<E, Integer>> group : open) {
-            List<Map<E, Integer>> wider = new ArrayList<>();
-            for (Map<E, Integer> before : out) {
-                for (Map<E, Integer> way : group) {
-                    Map<E, Integer> both = new IdentityHashMap<>(before);
+    private static <E> List<Map<Place<E>, Integer>> everyCombination(
+            List<List<Map<Place<E>, Integer>>> open) {
+        List<Map<Place<E>, Integer>> out = new ArrayList<>();
+        out.add(new HashMap<>());
+        for (List<Map<Place<E>, Integer>> group : open) {
+            List<Map<Place<E>, Integer>> wider = new ArrayList<>();
+            for (Map<Place<E>, Integer> before : out) {
+                for (Map<Place<E>, Integer> way : group) {
+                    Map<Place<E>, Integer> both = new HashMap<>(before);
                     both.putAll(way);
                     wider.add(both);
                 }
@@ -378,7 +469,7 @@ final class OneOfEach {
     }
 
     /** A choice and the group of the walk that came to it. */
-    private record Looked<E>(int group, E choice) {}
+    private record Looked<E>(int group, Place<E> choice) {}
 
     /**
      * The ways handed on where those of the groups together are more than {@code most}, or any
@@ -388,44 +479,47 @@ final class OneOfEach {
      * alternative has its way, the ways the groups found after their first, a way of each group
      * at a time.
      *
+     * <p>Whether a way before takes an alternative is asked of the condition, the entry as what it
+     * is, as the alternatives are owed: a choice equal to one at another place has its alternative
+     * taken by a way taking it at either.
+     *
      * <p>A group that did not go to its end is looked in for the way of an alternative it has
      * none for ({@code Group.wayTaking}), with what the walks of all the groups left of the
      * looking. Every group has been walked as far as it was going to be before any of them is
      * asked for another way, so that the alternatives of one are never bought with the looking of
      * another.
      */
-    private static <E, S, R> List<Map<E, Integer>> fairly(
-            Vocabulary<E, S, R> vocabulary, List<List<E>> groups, List<Group<E, S, R>> walked,
-            S base, int most) {
+    private static <E, S, R> List<Map<Place<E>, Integer>> fairly(
+            List<List<Place<E>>> groups, List<Group<E, S, R>> walked, S base, int most) {
         List<Integer> live = new ArrayList<>();
         for (int at = 0; at < walked.size(); at++) {
             if (!walked.get(at).open.isEmpty()) {
                 live.add(at);
             }
         }
-        List<Map<E, Integer>> out = new ArrayList<>();
-        Map<E, Integer> firsts = firstsOf(walked, live);
+        List<Map<Place<E>, Integer>> out = new ArrayList<>();
+        Map<Place<E>, Integer> firsts = firstsOf(walked, live);
         out.add(firsts);
-        Map<E, Set<Integer>> covered = new IdentityHashMap<>();
+        Map<Condition<E>, Set<Integer>> covered = new HashMap<>();
         noteCovered(covered, firsts);
         AlternativeOrder<Looked<E>> order = new AlternativeOrder<>();
         for (int at : live) {
-            for (E choice : walked.get(at).met) {
-                order.met(new Looked<>(at, choice), vocabulary.alternatives(choice).size());
+            for (Place<E> choice : walked.get(at).met) {
+                order.met(new Looked<>(at, choice), choice.alternatives.size());
             }
         }
         for (AlternativeOrder.Target<Looked<E>> target = order.next();
                 target != null && out.size() < most; target = order.next()) {
-            E choice = target.choice().choice();
-            if (covered.getOrDefault(choice, Set.of()).contains(target.alternative())) {
+            Place<E> choice = target.choice().choice();
+            if (covered.getOrDefault(choice.condition, Set.of()).contains(target.alternative())) {
                 continue;
             }
             int at = target.choice().group();
-            List<E> newlyMet = new ArrayList<>();
-            Map<E, Integer> way = walked.get(at).wayTaking(choice, target.alternative(),
+            List<Place<E>> newlyMet = new ArrayList<>();
+            Map<Place<E>, Integer> way = walked.get(at).wayTaking(choice, target.alternative(),
                     groups.get(at), base, newlyMet);
-            for (E each : newlyMet) {
-                order.met(new Looked<>(at, each), vocabulary.alternatives(each).size());
+            for (Place<E> each : newlyMet) {
+                order.met(new Looked<>(at, each), each.alternatives.size());
             }
             if (way == null) {
                 continue;
@@ -436,10 +530,10 @@ final class OneOfEach {
         for (int number = 1; out.size() < most; number++) {
             boolean more = false;
             for (int at : live) {
-                List<Map<E, Integer>> found = walked.get(at).open;
+                List<Map<Place<E>, Integer>> found = walked.get(at).open;
                 if (number < found.size()) {
                     more = true;
-                    Map<E, Integer> one = together(walked, live, at, found.get(number));
+                    Map<Place<E>, Integer> one = together(walked, live, at, found.get(number));
                     if (out.size() < most && !out.contains(one)) {
                         out.add(one);
                     }
@@ -453,9 +547,9 @@ final class OneOfEach {
     }
 
     /** The first way of every group in {@code live}. */
-    private static <E, S, R> Map<E, Integer> firstsOf(List<Group<E, S, R>> walked,
-                                                      List<Integer> live) {
-        Map<E, Integer> out = new IdentityHashMap<>();
+    private static <E, S, R> Map<Place<E>, Integer> firstsOf(List<Group<E, S, R>> walked,
+                                                             List<Integer> live) {
+        Map<Place<E>, Integer> out = new HashMap<>();
         for (int at : live) {
             out.putAll(walked.get(at).open.getFirst());
         }
@@ -463,51 +557,47 @@ final class OneOfEach {
     }
 
     /** The first way of every group in {@code live}, but {@code way} for {@code group}. */
-    private static <E, S, R> Map<E, Integer> together(List<Group<E, S, R>> walked,
-                                                      List<Integer> live, int group,
-                                                      Map<E, Integer> way) {
-        Map<E, Integer> out = new IdentityHashMap<>();
+    private static <E, S, R> Map<Place<E>, Integer> together(List<Group<E, S, R>> walked,
+                                                             List<Integer> live, int group,
+                                                             Map<Place<E>, Integer> way) {
+        Map<Place<E>, Integer> out = new HashMap<>();
         for (int at : live) {
             out.putAll(at == group ? way : walked.get(at).open.getFirst());
         }
         return out;
     }
 
-    private static <E> void noteCovered(Map<E, Set<Integer>> covered, Map<E, Integer> way) {
+    private static <E> void noteCovered(Map<Condition<E>, Set<Integer>> covered,
+                                        Map<Place<E>, Integer> way) {
         way.forEach((choice, which) ->
-                covered.computeIfAbsent(choice, _ -> new HashSet<>()).add(which));
+                covered.computeIfAbsent(choice.condition, _ -> new HashSet<>()).add(which));
     }
 
     /**
-     * {@code entries} with each choice {@code chosen} names replaced where it stands by the
-     * entries of its alternative, and each it does not name left out — and added to
-     * {@code unchosen}, where that is given.
+     * {@code entries}, standing at {@code places}, with each choice {@code chosen} names replaced
+     * where it stands by the entries of its alternative, and each it does not name left out — and
+     * added to {@code unchosen}, where that is given — and each choice taken, where it stands,
+     * added to {@code taken} where that is given.
      */
-    private static <E, S, R> List<E> rebuilt(List<E> entries, Vocabulary<E, S, R> vocabulary,
-                                             Map<E, Integer> chosen, List<E> unchosen) {
-        return rebuilt(entries, vocabulary, chosen, unchosen, null);
-    }
-
-    /** The same, and each choice taken, where it stands, added to {@code taken} where that is
-     *  given. */
-    private static <E, S, R> List<E> rebuilt(List<E> entries, Vocabulary<E, S, R> vocabulary,
-                                             Map<E, Integer> chosen, List<E> unchosen,
-                                             List<Choice<E>> taken) {
+    private static <E> List<E> rebuilt(List<E> entries, List<Place<E>> places,
+                                       Map<Place<E>, Integer> chosen, List<E> unchosen,
+                                       List<Choice<E>> taken) {
         List<E> out = new ArrayList<>();
-        for (E each : entries) {
-            List<List<E>> alternatives = vocabulary.alternatives(each);
-            if (alternatives == null) {
-                out.add(each);
+        for (int at = 0; at < entries.size(); at++) {
+            Place<E> place = places.get(at);
+            if (place == null) {
+                out.add(entries.get(at));
                 continue;
             }
-            Integer which = chosen.get(each);
+            Integer which = chosen.get(place);
             if (which != null) {
                 if (taken != null) {
-                    taken.add(new Choice<>(each, which));
+                    taken.add(new Choice<>(place.entry, which));
                 }
-                out.addAll(rebuilt(alternatives.get(which), vocabulary, chosen, unchosen, taken));
+                out.addAll(rebuilt(place.alternatives.get(which), place.inside(which), chosen,
+                        unchosen, taken));
             } else if (unchosen != null) {
-                unchosen.add(each);
+                unchosen.add(place.entry);
             }
         }
         return out;
@@ -519,12 +609,12 @@ final class OneOfEach {
      * ({@link TermPath#bearsOn}): what is asked of a value is asked of what is inside it, and of
      * the value narrowed to a case.
      */
-    private static <E, S, R> List<List<E>> groups(List<E> choices,
-                                                  Vocabulary<E, S, R> vocabulary) {
+    private static <E, S, R> List<List<Place<E>>> groups(List<Place<E>> choices,
+                                                         Vocabulary<E, S, R> vocabulary) {
         List<Set<TermPath>> turnsOn = new ArrayList<>();
-        for (E each : choices) {
+        for (Place<E> each : choices) {
             Set<TermPath> positions = new LinkedHashSet<>();
-            allPositions(each, vocabulary, positions);
+            allPositions(each.entry, vocabulary, positions);
             turnsOn.add(positions);
         }
         int[] groupOf = new int[choices.size()];
@@ -542,7 +632,7 @@ final class OneOfEach {
                 }
             }
         }
-        Map<Integer, List<E>> byRoot = new LinkedHashMap<>();
+        Map<Integer, List<Place<E>>> byRoot = new LinkedHashMap<>();
         for (int each = 0; each < choices.size(); each++) {
             byRoot.computeIfAbsent(root(groupOf, each), _ -> new ArrayList<>())
                     .add(choices.get(each));
@@ -587,11 +677,9 @@ final class OneOfEach {
     /**
      * {@code asked}, answering each entry's alternatives once.
      *
-     * <p>A choice is filed under the entry it is, by identity, from the walk to the ways handed
-     * on: a choice nested in an alternative is an entry of that alternative, and a vocabulary
-     * making the alternatives afresh each time it is asked hands back another entry equal to it,
-     * under which nothing was filed — so the nested choice would be left out of the way. Answered
-     * once, the alternatives are the one tree the walk and the ways are both read off.
+     * <p>A vocabulary may make the alternatives afresh each time it is asked, as another list of
+     * entries equal to the last. Answered once, every place an entry stands at reads its
+     * alternatives off the one answer, and an entry met again costs nothing to ask.
      */
     private static final class Once<E, S, R> implements Vocabulary<E, S, R> {
 
@@ -626,10 +714,104 @@ final class OneOfEach {
         public Step<S, R> with(S so, E entry) {
             return asked.with(so, entry);
         }
+
+        @Override
+        public boolean answersAlone() {
+            return asked.answersAlone();
+        }
     }
 
-    /** The alternative of a choice that a choice nested in it stands in. */
-    private record Held<E>(E choice, int alternative) {}
+    /**
+     * A choice as the condition it is, wherever it stands: equal to the condition of an equal
+     * entry. The entry's hash is asked where the condition is first asked for its own, and once:
+     * a walk that hands on every way never asks whether an alternative is owed, and one that does
+     * asks it of a condition for every alternative it owes.
+     */
+    private static final class Condition<E> {
+
+        private final E entry;
+        private int hash;
+        private boolean hashed;
+
+        Condition(E entry) {
+            this.entry = entry;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof Condition<?> that
+                    && hashCode() == that.hashCode()
+                    && (entry == that.entry || entry.equals(that.entry)));
+        }
+
+        @Override
+        public int hashCode() {
+            if (!hashed) {
+                hash = entry.hashCode();
+                hashed = true;
+            }
+            return hash;
+        }
+    }
+
+    /**
+     * A choice where it stands: the entry, and the alternative of the choice it stands in, or
+     * none for one written among the entries walked. What the walk files a choice under, equal
+     * only to itself, so that one entry at two places is two of these.
+     *
+     * <p>The places inside an alternative are made when it is first taken and are the same every
+     * time after, so that the ways of one walk, and the looking for an alternative's way after
+     * it, name the one place.
+     */
+    private static final class Place<E> {
+
+        private final E entry;
+        private final Condition<E> condition;
+        private final List<List<E>> alternatives;
+        private final Vocabulary<E, ?, ?> vocabulary;
+        /** The choice this stands in an alternative of, or null for one among the entries. */
+        private final Place<E> in;
+        private final int inAlternative;
+        private final List<List<Place<E>>> inside;
+
+        private Place(E entry, List<List<E>> alternatives, Vocabulary<E, ?, ?> vocabulary,
+                      Place<E> in, int inAlternative) {
+            this.entry = entry;
+            this.condition = new Condition<>(entry);
+            this.alternatives = alternatives;
+            this.vocabulary = vocabulary;
+            this.in = in;
+            this.inAlternative = inAlternative;
+            this.inside = new ArrayList<>(alternatives.size());
+            for (int each = 0; each < alternatives.size(); each++) {
+                inside.add(null);
+            }
+        }
+
+        /** The place of each of {@code entries}, standing in alternative {@code inAlternative} of
+         *  {@code in}: null for an entry that is no choice. */
+        static <E> List<Place<E>> of(List<E> entries, Vocabulary<E, ?, ?> vocabulary,
+                                     Place<E> in, int inAlternative) {
+            List<Place<E>> out = new ArrayList<>(entries.size());
+            for (E each : entries) {
+                List<List<E>> alternatives = vocabulary.alternatives(each);
+                out.add(alternatives == null ? null
+                        : new Place<>(each, alternatives, vocabulary, in, inAlternative));
+            }
+            return out;
+        }
+
+        /** The place of each entry of alternative {@code which}, null for one that is no
+         *  choice. */
+        List<Place<E>> inside(int which) {
+            List<Place<E>> out = inside.get(which);
+            if (out == null) {
+                out = of(alternatives.get(which), vocabulary, this, which);
+                inside.set(which, out);
+            }
+            return out;
+        }
+    }
 
     /**
      * The walk over one group: each choice in turn, each of its alternatives taken in beside what
@@ -643,15 +825,13 @@ final class OneOfEach {
         private final int[] left;
         /** The alternatives a way must take for this walk to hand it on: the one it looks for the
          *  way of, and those of the choices holding it. Empty for a walk that takes any way. */
-        private final Map<E, Integer> pinned;
-        private final List<Map<E, Integer>> open = new ArrayList<>();
+        private final Map<Place<E>, Integer> pinned;
+        private final List<Map<Place<E>, Integer>> open = new ArrayList<>();
         /** Every choice the walk came to, in the order it came to them. */
-        private final List<E> met = new ArrayList<>();
-        private final Set<E> metSet = Collections.newSetFromMap(new IdentityHashMap<>());
-        /** The alternative of a choice that a choice nested in it stands in. */
-        private final Map<E, Held<E>> holding = new IdentityHashMap<>();
+        private final List<Place<E>> met = new ArrayList<>();
+        private final Set<Place<E>> metSet = new HashSet<>();
         /** The first way that closed, and what closed it. */
-        private Map<E, Integer> firstClosed;
+        private Map<Place<E>, Integer> firstClosed;
         private R firstWhy;
         /** The figure that stopped this group's walk, or null where it was walked to the end. */
         private CompositionBudget stoppedBy;
@@ -662,12 +842,58 @@ final class OneOfEach {
         }
 
         private Group(Vocabulary<E, S, R> vocabulary, CompositionBudget looking,
-                      CompositionBudget handing, int[] left, Map<E, Integer> pinned) {
+                      CompositionBudget handing, int[] left, Map<Place<E>, Integer> pinned) {
             this.vocabulary = vocabulary;
             this.looking = looking;
             this.handing = handing;
             this.left = left;
             this.pinned = pinned;
+        }
+
+        /**
+         * {@code so} with what alternative {@code which} of {@code place} asks that is no choice
+         * taken in, in the order it asks it: held, or the first step that closed. The one taking
+         * in of an alternative, of what the walk takes and of what it carries ahead alike.
+         */
+        private Step<S, R> withWhatItAsks(S so, Place<E> place, int which) {
+            List<E> asks = place.alternatives.get(which);
+            List<Place<E>> standing = place.inside(which);
+            S taken = so;
+            for (int at = 0; at < asks.size(); at++) {
+                if (standing.get(at) != null) {
+                    continue;
+                }
+                switch (vocabulary.with(taken, asks.get(at))) {
+                    case Step.Held<S, R>(S more) -> taken = more;
+                    case Step.Closed<S, R> closed -> {
+                        return closed;
+                    }
+                }
+            }
+            return new Step.Held<>(taken);
+        }
+
+        /**
+         * {@code so} with what every way this walk hands on takes in — what the alternatives it is
+         * held to ask that is no choice, in the order they hold each other — or where that closes
+         * beside it, and so no way past {@code so} is handed on, the step that closed.
+         *
+         * <p>What the walk carries beside what it takes, for a vocabulary that answers alone: a
+         * walk held to an alternative that closes beside what an early choice took finds it
+         * there, and not once for every way of the choices between. Each entry the walk takes
+         * after is taken in beside this as well, once, where the walk takes it.
+         */
+        private Step<S, R> withWhatItIsHeldTo(S so) {
+            S ahead = so;
+            for (Map.Entry<Place<E>, Integer> each : pinned.entrySet()) {
+                switch (withWhatItAsks(ahead, each.getKey(), each.getValue())) {
+                    case Step.Held<S, R>(S taken) -> ahead = taken;
+                    case Step.Closed<S, R> closed -> {
+                        return closed;
+                    }
+                }
+            }
+            return new Step.Held<>(ahead);
         }
 
         /**
@@ -682,9 +908,9 @@ final class OneOfEach {
          *
          * @param newlyMet the choices the search came to that this walk had not, added to
          */
-        Map<E, Integer> wayTaking(E choice, int alternative, List<E> group, S base,
-                                  List<E> newlyMet) {
-            for (Map<E, Integer> each : open) {
+        Map<Place<E>, Integer> wayTaking(Place<E> choice, int alternative, List<Place<E>> group,
+                                         S base, List<Place<E>> newlyMet) {
+            for (Map<Place<E>, Integer> each : open) {
                 if (Integer.valueOf(alternative).equals(each.get(choice))) {
                     return each;
                 }
@@ -694,10 +920,12 @@ final class OneOfEach {
             }
             Group<E, S, R> past = new Group<>(vocabulary, looking, handing, left,
                     holdingIt(choice, alternative));
-            past.holding.putAll(holding);
-            past.from(new ArrayDeque<>(group), new IdentityHashMap<>(), base);
-            past.holding.forEach(holding::putIfAbsent);
-            for (E each : past.met) {
+            Step<S, R> ahead = vocabulary.answersAlone() ? past.withWhatItIsHeldTo(base) : null;
+            if (ahead instanceof Step.Closed) {
+                return null;
+            }
+            past.from(new ArrayDeque<>(group), new HashMap<>(), base, ahead);
+            for (Place<E> each : past.met) {
                 if (metSet.add(each)) {
                     met.add(each);
                     newlyMet.add(each);
@@ -707,19 +935,19 @@ final class OneOfEach {
         }
 
         /** The alternative {@code which} of {@code choice}, with the alternatives of the choices
-         *  it stands in that lead to it. */
-        private Map<E, Integer> holdingIt(E choice, int which) {
-            Map<E, Integer> out = new IdentityHashMap<>();
+         *  it stands in that lead to it, from it outward. */
+        private static <E> Map<Place<E>, Integer> holdingIt(Place<E> choice, int which) {
+            Map<Place<E>, Integer> out = new LinkedHashMap<>();
             out.put(choice, which);
-            for (Held<E> in = holding.get(choice); in != null; in = holding.get(in.choice())) {
-                out.put(in.choice(), in.alternative());
+            for (Place<E> at = choice; at.in != null; at = at.in) {
+                out.put(at.in, at.inAlternative);
             }
             return out;
         }
 
         /** Whether the way {@code chosen} takes every alternative this walk is held to. */
-        private boolean takesWhatItIsHeldTo(Map<E, Integer> chosen) {
-            for (Map.Entry<E, Integer> each : pinned.entrySet()) {
+        private boolean takesWhatItIsHeldTo(Map<Place<E>, Integer> chosen) {
+            for (Map.Entry<Place<E>, Integer> each : pinned.entrySet()) {
                 if (!each.getValue().equals(chosen.get(each.getKey()))) {
                     return false;
                 }
@@ -727,12 +955,16 @@ final class OneOfEach {
             return true;
         }
 
-        /** @return whether the walk may go on */
-        boolean from(Deque<E> pending, Map<E, Integer> chosen, S so) {
-            E next = pending.pollFirst();
-            while (next != null && chosen.containsKey(next)) {
-                next = pending.pollFirst();
-            }
+        /**
+         * @param ahead {@code so} with what every way this walk hands on takes in, held
+         *              ({@link #withWhatItIsHeldTo}), or null where the walk carries nothing
+         *              ahead. The step it came to, and never the state alone, so that what a
+         *              vocabulary holds is never taken for there being nothing.
+         * @return whether the walk may go on
+         */
+        boolean from(Deque<Place<E>> pending, Map<Place<E>, Integer> chosen, S so,
+                     Step<S, R> ahead) {
+            Place<E> next = pending.pollFirst();
             if (next == null) {
                 if (!takesWhatItIsHeldTo(chosen)) {
                     return true;
@@ -741,16 +973,16 @@ final class OneOfEach {
                     stoppedBy = handing;
                     return false;
                 }
-                open.add(new IdentityHashMap<>(chosen));
+                open.add(new HashMap<>(chosen));
                 // The way held to an alternative is the first open past it, and no more.
                 return pinned.isEmpty();
             }
             if (metSet.add(next)) {
                 met.add(next);
             }
-            List<List<E>> alternatives = vocabulary.alternatives(next);
-            for (int which = 0; which < alternatives.size(); which++) {
-                if (pinned.containsKey(next) && pinned.get(next) != which) {
+            Integer held = pinned.get(next);
+            for (int which = 0; which < next.alternatives.size(); which++) {
+                if (held != null && held != which) {
                     continue;
                 }
                 if (left[0] == 0) {
@@ -759,33 +991,35 @@ final class OneOfEach {
                 }
                 left[0]--;
                 chosen.put(next, which);
-                S here = so;
-                R closedBy = null;
-                Deque<E> after = new ArrayDeque<>(pending);
-                List<E> nested = new ArrayList<>();
-                for (E each : alternatives.get(which)) {
-                    if (vocabulary.alternatives(each) != null) {
-                        nested.add(each);
-                        holding.putIfAbsent(each, new Held<>(next, which));
-                    } else if (closedBy == null) {
-                        switch (vocabulary.with(here, each)) {
-                            case Step.Held<S, R>(S held) -> here = held;
-                            case Step.Closed<S, R>(R why) -> closedBy = why;
+                Step<S, R> taken = withWhatItAsks(so, next, which);
+                // What an alternative the walk is held to asks is in what it carries ahead
+                // already.
+                Step<S, R> furtherAhead = ahead;
+                if (held == null && taken instanceof Step.Held
+                        && ahead instanceof Step.Held<S, R>(S carried)) {
+                    furtherAhead = withWhatItAsks(carried, next, which);
+                }
+                switch (taken) {
+                    case Step.Closed<S, R> closed -> {
+                        if (firstClosed == null) {
+                            firstClosed = new HashMap<>(chosen);
+                            firstWhy = closed.why();
                         }
                     }
-                }
-                if (closedBy != null) {
-                    if (firstClosed == null) {
-                        firstClosed = new IdentityHashMap<>(chosen);
-                        firstWhy = closedBy;
-                    }
-                } else {
-                    for (int each = nested.size() - 1; each >= 0; each--) {
-                        after.addFirst(nested.get(each));
-                    }
-                    if (!from(after, chosen, here)) {
-                        chosen.remove(next);
-                        return false;
+                    case Step.Held<S, R>(S here) -> {
+                        if (!(furtherAhead instanceof Step.Closed)) {
+                            Deque<Place<E>> after = new ArrayDeque<>(pending);
+                            List<Place<E>> standing = next.inside(which);
+                            for (int at = standing.size() - 1; at >= 0; at--) {
+                                if (standing.get(at) != null) {
+                                    after.addFirst(standing.get(at));
+                                }
+                            }
+                            if (!from(after, chosen, here, furtherAhead)) {
+                                chosen.remove(next);
+                                return false;
+                            }
+                        }
                     }
                 }
                 chosen.remove(next);
