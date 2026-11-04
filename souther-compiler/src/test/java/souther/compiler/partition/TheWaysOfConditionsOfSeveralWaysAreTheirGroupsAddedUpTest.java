@@ -203,69 +203,6 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
         }
     }
 
-    /** {@link #VALUES}, saying that it does nothing but answer. */
-    private static final OneOfEach.Vocabulary<Entry, Map<TermPath, Set<Integer>>, TermPath>
-            ANSWERING_ALONE = new OneOfEach.Vocabulary<>() {
-
-                @Override
-                public List<List<Entry>> alternatives(Entry entry) {
-                    return VALUES.alternatives(entry);
-                }
-
-                @Override
-                public Set<TermPath> positions(Entry entry) {
-                    return VALUES.positions(entry);
-                }
-
-                @Override
-                public Map<TermPath, Set<Integer>> nothing() {
-                    return VALUES.nothing();
-                }
-
-                @Override
-                public Step<Map<TermPath, Set<Integer>>, TermPath> with(
-                        Map<TermPath, Set<Integer>> so, Entry entry) {
-                    return VALUES.with(so, entry);
-                }
-
-                @Override
-                public boolean answersAlone() {
-                    return true;
-                }
-            };
-
-    /**
-     * An alternative that closes beside what the first choice took is looked for past it without
-     * walking every way of the choices between: of a vocabulary that answers alone, what the way
-     * has to take in is asked beside the first choice where it is taken, and the looking left
-     * finds the way past the first choice's other alternative. Of one that does not, the walk asks
-     * nothing ahead of where it stands, and the choices between use the looking up.
-     */
-    @Test
-    void anAlternativeClosingBesideAnEarlyChoiceIsFoundPastItWhereTheVocabularyAnswersAlone() {
-        TermPath w = TermPath.of("w");
-        Ask past = ask(w, 2, 5);
-        List<Entry> entries = new ArrayList<>();
-        entries.add(oneOf(ask(w, 1), ask(w, 2)));
-        // Between them, more ways than the looking reaches: every one open, and every one closing
-        // where the last choice is taken past the first's first alternative.
-        for (int each = 0; each < 12; each++) {
-            entries.add(oneOf(ask(w, 1, 2, 3), ask(w, 1, 2, 3, 4)));
-        }
-        entries.add(oneOf(ask(w, 1, 2), past));
-
-        Walked.Open<Entry, TermPath> alone = open(OneOfEach.walk(entries, ANSWERING_ALONE,
-                CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
-                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG));
-        assertTrue(chosen(alone).stream().anyMatch(way -> way.contains(past)),
-                () -> "the last choice's second alternative, past the first's second: " + alone);
-
-        Walked.Open<Entry, TermPath> asked = open(walked(entries.toArray(Entry[]::new)));
-        assertFalse(chosen(asked).stream().anyMatch(way -> way.contains(past)),
-                () -> "nothing is asked ahead of a vocabulary that does not answer alone: "
-                        + asked);
-    }
-
     /** {@link #VALUES}, answering alone where {@code alone} says, and counting what it is asked
      *  in {@code asked}. */
     private static OneOfEach.Vocabulary<Entry, Map<TermPath, Set<Integer>>, TermPath> counting(
@@ -299,6 +236,38 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
                 return alone;
             }
         };
+    }
+
+    /**
+     * An alternative that closes beside what the first choice took is looked for past it without
+     * walking every way of the choices between: of a vocabulary that answers alone, what the way
+     * has to take in is asked beside the first choice where it is taken, and the looking left
+     * finds the way past the first choice's other alternative. Of one that does not, the walk asks
+     * nothing ahead of where it stands, and the choices between use the looking up.
+     */
+    @Test
+    void anAlternativeClosingBesideAnEarlyChoiceIsFoundPastItWhereTheVocabularyAnswersAlone() {
+        TermPath w = TermPath.of("w");
+        Ask past = ask(w, 2, 5);
+        List<Entry> entries = new ArrayList<>();
+        entries.add(oneOf(ask(w, 1), ask(w, 2)));
+        // Between them, more ways than the looking reaches: every one open, and every one closing
+        // where the last choice is taken past the first's first alternative.
+        for (int each = 0; each < 12; each++) {
+            entries.add(oneOf(ask(w, 1, 2, 3), ask(w, 1, 2, 3, 4)));
+        }
+        entries.add(oneOf(ask(w, 1, 2), past));
+
+        Walked.Open<Entry, TermPath> alone = open(OneOfEach.walk(entries,
+                counting(true, new int[1]), CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG));
+        assertTrue(chosen(alone).stream().anyMatch(way -> way.contains(past)),
+                () -> "the last choice's second alternative, past the first's second: " + alone);
+
+        Walked.Open<Entry, TermPath> asked = open(walked(entries.toArray(Entry[]::new)));
+        assertFalse(chosen(asked).stream().anyMatch(way -> way.contains(past)),
+                () -> "nothing is asked ahead of a vocabulary that does not answer alone: "
+                        + asked);
     }
 
     /**
