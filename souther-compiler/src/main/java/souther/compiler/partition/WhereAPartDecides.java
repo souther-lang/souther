@@ -46,7 +46,7 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
     /**
      * The parts of {@code decides} no conjunction or alternative is made of, each once, in the
      * order they are met: what a row is asked part by part where whether it is in the case is
-     * asked of what each part comes to ({@link TheCaseALineDecidesIn#holdsAt}), and what each is
+     * asked of what each part comes to ({@link TheCaseALineDecidesIn#possibilityAt}), and what each is
      * read to ask of a row once for the comparison.
      */
     static List<Proposition> atomsOf(Proposition decides) {
