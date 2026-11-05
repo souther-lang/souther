@@ -1151,8 +1151,9 @@ final class AStatementAtARow {
                 byObject.put(part, first);
                 return;
             }
-            bySpelling.put(part.spelling(), bySpelling.size());
-            byObject.put(part, bySpelling.get(part.spelling()));
+            int number = bySpelling.size();
+            bySpelling.put(part.spelling(), number);
+            byObject.put(part, number);
             switch (part) {
                 case Proposition.All all -> all.parts().forEach(this::number);
                 case Proposition.Any any -> any.parts().forEach(this::number);
