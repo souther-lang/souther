@@ -808,19 +808,15 @@ public final class InputReads {
         if (handed.isEmpty()) {
             return new Applications.NoneHanded();
         }
-        List<Applications.Made> applications =
-                List.of(new Applications.Made(this, List.of(), Map.of()));
+        List<Applications.Made> applications = List.of(new Applications.Made(this, List.of()));
         for (int at = 0; at < handed.size(); at++) {
-            BindingId parameter = handed.get(at).binding();
             List<Applications.Made> wider = new ArrayList<>();
             for (Applications.Made each : applications) {
                 for (ReadMeaning.Occurrence occurrence : occurrencesOf.get(at)) {
                     List<ReadMeaning.Occurrence.Kept> keptBy = new ArrayList<>(each.keptWhere());
                     keptBy.addAll(occurrence.keptWhere());
-                    Map<BindingId, Denotation> given = new LinkedHashMap<>(each.handed());
-                    given.put(parameter, occurrence.value());
                     wider.add(new Applications.Made(each.reads().handing(
-                            parameter, occurrence.value(), newtypes), keptBy, given));
+                            handed.get(at).binding(), occurrence.value(), newtypes), keptBy));
                 }
             }
             applications = wider;
@@ -832,7 +828,7 @@ public final class InputReads {
         }
         List<Applications.Made> each = applications.stream()
                 .map(one -> new Applications.Made(one.reads().readAsApplication(counted, through),
-                        one.keptWhere(), one.handed()))
+                        one.keptWhere()))
                 .toList();
         // An operation applying its closure to one element at most picks it out by something else
         // it was handed, and one applying it to some of them says not which; and applications made
@@ -1190,18 +1186,12 @@ public final class InputReads {
          * container to hold the element it is handed — every truth the element was kept by, for
          * each parameter handed one ({@link ReadMeaning.Occurrence}). An application handed an
          * element a filter dropped is one no run makes.
-         *
-         * <p>And the value it hands each parameter it hands one, in the order of the parameters: a
-         * reader that reads names in an environment of its own enters each name as the value it
-         * was entered as here, and does not work one out for itself.
          */
-        record Made(InputReads reads, List<ReadMeaning.Occurrence.Kept> keptWhere,
-                    Map<BindingId, Denotation> handed) {
+        record Made(InputReads reads, List<ReadMeaning.Occurrence.Kept> keptWhere) {
 
             public Made {
                 Objects.requireNonNull(reads, "an application is read in some names");
                 keptWhere = List.copyOf(keptWhere);
-                handed = Collections.unmodifiableMap(new LinkedHashMap<>(handed));
             }
         }
 

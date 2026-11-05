@@ -109,6 +109,113 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
         assertTrue(nothingArrivesAbout(report, "b"), report);
     }
 
+    /**
+     * What the step is handed is the same values however they reach it: a list given a name, an
+     * element given a name, and a step given a name are the list, the element and the step
+     * written out.
+     */
+    @Test
+    void aListAnElementAndAStepGivenANameStopTheRunAsTheyDoWrittenOut() {
+        for (String moved : List.of(
+                "let xs = [0, 1, 2]\n    let ys = List.map(k -> Date.addDays(k * n, d), xs)",
+                "let one = 1\n    let ys = List.map(k -> Date.addDays(k * n, d), [0, one])",
+                "let shift = k -> Date.addDays(k * n, d)\n    let ys = List.map(shift, [0, 1, 2])",
+                "let shift = k -> Date.addDays(k * n, d)\n    let ys = List.map(shift, [0, 1, 2])"
+                        + "\n    let zs = List.map(shift, [0])")) {
+            String report = report("""
+                        guard n == %s else No
+                        %s
+                        guard b > 3 else No""".formatted(GREATEST, moved));
+            assertTrue(nothingArrivesAbout(report, "b"), moved + "\n" + report);
+        }
+    }
+
+    /**
+     * An element handed on an application of another closure is the value that application
+     * handed it: on the outer application to {@code 1}, the inner one is handed {@code 1} too.
+     */
+    @Test
+    void anElementAnOuterApplicationHandsIsWhatItHandsOnThatApplication() {
+        String report = report("""
+                    guard n == %s else No
+                    let ys = List.map(j -> List.map(k -> Date.addDays(k * n, d), [j]), [0, 1])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(report, "b"), report);
+    }
+
+    /**
+     * An element is read where the list was written, which need not be where the step is applied:
+     * a list a helper makes of what it is handed holds that value under the helper's own name.
+     */
+    @Test
+    void anElementIsReadWhereTheListHoldingItWasWritten() {
+        Compilation compilation = Compilation.ofSource("""
+                module w1
+                let pair (x: Int): List<Int> = [0, x]
+                behavior f : (n: Int, d: Date, b: Int, size: Int) -> Ok | No
+                let f (n, d, b, size) = {
+                    guard n == %s else No
+                    let ys = List.map(k -> Date.addDays(k * n, d), pair(1))
+                    guard b > 3 else No
+                    Ok
+                }
+                """.formatted(GREATEST), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertTrue(nothingArrivesAbout(report, "b"), report);
+    }
+
+    /**
+     * Each application is shown to stop on its own or not at all. Here the one on {@code 1} gets
+     * past where {@code b} is below nought and the one on {@code -1} where it is not, so no run
+     * gets past both — and that is not shown: the line after them stays drawn. Alone, the first
+     * is shown to stop where {@code b} is not below nought.
+     */
+    @Test
+    void aStopOnlyTheApplicationsTogetherLeaveIsNotShown() {
+        assertFalse(nothingArrivesAbout(report("""
+                    guard n == %s else No
+                    let ys = List.map(k -> b + k * n + k, [1, -1])
+                    guard size > 3 else No""".formatted(GREATEST)), "size"));
+        assertTrue(nothingArrivesAbout(report("""
+                    guard n == %s else No
+                    guard b >= 0 else No
+                    let ys = List.map(k -> b + k * n + k, [1])
+                    guard size > 3 else No""".formatted(GREATEST)), "size"));
+    }
+
+    /**
+     * A list another walk made is one the tree that runs holds as that walk's build, and no
+     * reading writes the elements of a build out, so the applications over it are not walked and
+     * the line after them stays drawn.
+     */
+    @Test
+    void aListAnotherWalkMadeIsNotWrittenOutAndTheLineAfterItStays() {
+        String report = report("""
+                    guard n == %s else No
+                    let xs = List.map(x -> x, [0, 1, 2])
+                    let ys = List.map(k -> Date.addDays(k * n, d), xs)
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertFalse(nothingArrivesAbout(report, "b"), report);
+    }
+
+    /**
+     * A condition in the step is what the model's condition means, which says what it states on
+     * each application without saying which application states which; a path takes in what must
+     * hold, so a fork the handed value decides is not decided by these walks, and the line after
+     * stays drawn.
+     */
+    @Test
+    void aForkTheHandedValueDecidesIsNotDecidedOnTheApplication() {
+        String report = report("""
+                    guard n == %s else No
+                    let ys = List.map(k -> if k > 0 then Date.addDays(n, d) else d, [0, 1])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertFalse(nothingArrivesAbout(report, "b"), report);
+    }
+
     /** A filter hands its step every element as a map does, and a step that stops on one stops
      *  the run. */
     @Test

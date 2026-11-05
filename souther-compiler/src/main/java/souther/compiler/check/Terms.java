@@ -988,6 +988,17 @@ final class Terms {
                 new ElementsWrittenOut.Stood<>(written.value(), written.at()), elements);
     }
 
+    /**
+     * Every element {@code container}, read in {@code at} and followed through the names it was
+     * given, holds on every run, each with where it is read ({@link #writtenElements}) — or null
+     * where it is not written out, or one of them is kept on a condition.
+     */
+    List<ElementsWrittenOut.Stood<Denotations>> elementsOnEveryRun(Core container,
+                                                                   Denotations at) {
+        Given written = given(container, at);
+        return writtenElements(written.value(), written.at());
+    }
+
     /** How a walk of the elements of a container ({@link ElementsWrittenOut}) reads names here. */
     ElementsWrittenOut.Reading<Denotations> elementsReading() {
         return elements;
