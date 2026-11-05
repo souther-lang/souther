@@ -3,21 +3,27 @@ package souther.compiler.partition;
 import souther.compiler.inputs.SearchRegion;
 
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
  * What one reading of a body's guards works out once and hands back to whoever asks the same
- * again while the reading lasts: the walk of a way ({@link WayToTheBorder#along}), and what a run's
- * answers narrow a region by ({@link Reachability.Reaching#narrowedPast}).
+ * again while the reading lasts: the walk of a way ({@link WayToTheBorder#along}), what a run's
+ * answers narrow a region by ({@link Reachability.Reaching#narrowedPast}), and what a statement
+ * says of its remainder ({@link ARemainderMoved#saidBy}).
  *
  * <p>A reading reads one way over many regions and for many relations, each building the way afresh
  * from the same conditions; and it takes the way to each case, and each way that is split into,
  * past what the run to the border got past working out, where ways that differ only in what no
- * region says — truths, cases — share one region. Both are functions of what they are asked alone.
- * A walk is of the conditions on the way: one vocabulary reads them and constants stop it, and the
- * declarations do not enter it. A narrowing is of the region and the answers.
+ * region says — truths, cases — share one region. And the walks of those ways take each statement
+ * of a remainder in along every way of the choices before it, and the readers that hold one
+ * statement of a remainder against another ask it of each pair. All are functions of what they are
+ * asked alone. A walk is of the conditions on the way: one vocabulary reads them and constants
+ * stop it, and the declarations do not enter it. A narrowing is of the region and the answers.
+ * What a statement says of its remainder is of the statement.
  *
  * <p><b>The same things, and not equal ones.</b> Asked by identity. What a walk hands back names
  * the choices it made by the entry they were made at, and its readers look them up by identity, so
@@ -38,6 +44,8 @@ final class OneReading {
     private final Map<Conditions, OneOfEach.Walked<OnTheWay, Reachability>> walked =
             new HashMap<>();
     private final Map<RegionPast, Reachability.Reaching.NarrowedPast> narrowed = new HashMap<>();
+    private final Map<RowDemand.OnARemainder, Optional<ARemainderMoved.Said>> remaindersSaid =
+            new IdentityHashMap<>();
 
     private OneReading() {
     }
@@ -64,6 +72,15 @@ final class OneReading {
         return READING.isBound()
                 ? kept(READING.get().narrowed, new RegionPast(region, answered), narrowing)
                 : narrowing.get();
+    }
+
+    /** What {@code statement} says of its remainder: as this reading read it already, or
+     *  {@code reading}'s, now. */
+    static Optional<ARemainderMoved.Said> remainderSaidBy(
+            RowDemand.OnARemainder statement, Supplier<Optional<ARemainderMoved.Said>> reading) {
+        return READING.isBound()
+                ? kept(READING.get().remaindersSaid, statement, reading)
+                : reading.get();
     }
 
     /** The answer kept in {@code in} for {@code asked}, or {@code working}'s, kept from now on.

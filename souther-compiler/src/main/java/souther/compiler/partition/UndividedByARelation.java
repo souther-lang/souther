@@ -1320,9 +1320,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     divisor);
         }
 
-        /** Whether {@code on} is a condition on this remainder ({@link ARemainderMoved#leftBy}). */
+        /** Whether {@code on} is a condition on this remainder
+         *  ({@link ARemainderMoved#isStatedBy}). */
         boolean isAskedBy(RowDemand.OnARemainder on) {
-            return moved().flatMap(own -> own.leftBy(on)).isPresent();
+            return moved().filter(own -> own.isStatedBy(on)).isPresent();
         }
     }
 
@@ -5088,11 +5089,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     static boolean allowTogether(List<OnAWay> statements) {
         WholeNumberRuns between = null;
         for (OnAWay each : statements) {
-            if (!(ARemainderMoved.of(each.onARemainder()).orElse(null)
-                    instanceof ARemainderMoved stated)) {
+            if (!(ARemainderMoved.saidBy(each.onARemainder()).orElse(null)
+                    instanceof ARemainderMoved.Said said)) {
                 return false;
             }
-            WholeNumberRuns leaves = stated.unmoved(each.onARemainder().leaves());
+            WholeNumberRuns leaves = said.unmoved();
             between = between == null ? leaves : between.and(leaves);
         }
         return between != null && !between.isNone();
@@ -5179,11 +5180,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /** Whether {@code other} holds the remainder {@code statement} does: the same division of the
-     *  same form, moved by whatever numbers ({@link ARemainderMoved#leftBy}). */
+     *  same form, moved by whatever numbers ({@link ARemainderMoved#ofOneRemainder}). */
     static boolean sameRemainder(OnAWay statement, OnAWay other) {
         return statement.onARemainder() != null && other.onARemainder() != null
-                && ARemainderMoved.of(statement.onARemainder())
-                        .flatMap(own -> own.leftBy(other.onARemainder())).isPresent();
+                && ARemainderMoved.ofOneRemainder(statement.onARemainder(), other.onARemainder());
     }
 
     /**
