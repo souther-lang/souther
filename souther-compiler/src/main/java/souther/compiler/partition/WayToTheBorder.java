@@ -745,7 +745,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                 @Override
                 public HeldTogether nothing() {
                     return new HeldTogether(Requirements.NONE, SharingMap.empty(),
-                            SharingMap.empty(), FormsHeld.NONE, RemaindersHeld.none());
+                            SharingMap.empty(), FormsHeld.NONE, RemaindersHeld.NONE);
                 }
 
                 /** {@code so} with {@code entry} taken in, or why no row takes them together. */

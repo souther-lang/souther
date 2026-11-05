@@ -7,10 +7,12 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
 
 import java.math.BigInteger;
+import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -41,11 +43,6 @@ final class FormsHeld {
 
     /** How many groups are told against one by one before they are filed by their form. */
     private static final int LOOKED_THROUGH = 16;
-
-    /** Where a test in this package counts the groups a statement is told against, and null
-     *  everywhere else. Which groups were told against is the same answer whichever were, so how
-     *  many has nowhere else to be read. */
-    static long[] COUNTING_TOLD;
 
     /** What taking a statement in came to. */
     sealed interface Taken {
@@ -80,14 +77,9 @@ final class FormsHeld {
         if (coefs.isEmpty() || !WhatStatementsOfOneFormDecide.outsideEveryContainer(added)) {
             return new Taken.Held(this);
         }
-        boolean byForm = made > LOOKED_THROUGH;
-        Optional<UpToAFactor> form = byForm ? UpToAFactor.of(coefs) : Optional.empty();
-        for (int at : byForm ? filed.mayBeOfTheForm(form, made) : every(made)) {
+        Telling telling = telling(coefs);
+        for (int at : telling.groups()) {
             Group group = groups.get(at);
-            long[] counting = COUNTING_TOLD;
-            if (counting != null) {
-                counting[0]++;
-            }
             ExactRatio factor = WhatStatementsOfOneFormDecide.factorBetween(group.weighing, coefs);
             if (factor != null) {
                 Group joined = group.with(added, factor);
@@ -105,8 +97,8 @@ final class FormsHeld {
         }
         SharingMap<Integer, Group> wider = groups.with(made, joined);
         Filed refiled = filed;
-        if (byForm) {
-            refiled = filed.with(made, form);
+        if (made > LOOKED_THROUGH) {
+            refiled = filed.with(made, telling.form());
         } else if (made + 1 > LOOKED_THROUGH) {
             for (int at = 0; at <= made; at++) {
                 refiled = refiled.with(at, UpToAFactor.of(wider.get(at).weighing));
@@ -115,12 +107,41 @@ final class FormsHeld {
         return new Taken.Held(new FormsHeld(wider, made + 1, refiled));
     }
 
-    private static List<Integer> every(int made) {
-        List<Integer> out = new ArrayList<>(made);
-        for (int at = 0; at < made; at++) {
-            out.add(at);
+    /**
+     * The groups a statement of {@code coefs} is told against for the one it joins, in the order
+     * they were made: every group up to {@link #LOOKED_THROUGH}, and past it the groups filed
+     * under its form ({@link Filed#mayBeOfTheForm}).
+     */
+    List<Integer> toldAgainst(Map<NumericTerm, ExactRatio> coefs) {
+        return telling(coefs).groups();
+    }
+
+    /** The groups a statement is told against, and its form up to a factor where they were found
+     *  by it: empty below the groups told against one by one. */
+    private record Telling(List<Integer> groups, Optional<UpToAFactor> form) {}
+
+    private Telling telling(Map<NumericTerm, ExactRatio> coefs) {
+        if (made <= LOOKED_THROUGH) {
+            return new Telling(every(made), Optional.empty());
         }
-        return out;
+        Optional<UpToAFactor> form = UpToAFactor.of(coefs);
+        return new Telling(filed.mayBeOfTheForm(form, made), form);
+    }
+
+    /** The groups from nought to one short of {@code made}, worked out as they are read. */
+    private static List<Integer> every(int made) {
+        return new AbstractList<>() {
+
+            @Override
+            public Integer get(int at) {
+                return Objects.checkIndex(at, made);
+            }
+
+            @Override
+            public int size() {
+                return made;
+            }
+        };
     }
 
     /**

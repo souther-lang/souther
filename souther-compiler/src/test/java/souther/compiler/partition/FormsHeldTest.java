@@ -12,6 +12,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -173,11 +174,41 @@ class FormsHeldTest {
             bothAt(Long.MIN_VALUE, Long.MAX_VALUE), bothAt(Long.MAX_VALUE, Long.MIN_VALUE),
             bothAt(0, 0));
 
+    private static ExactRatio over(long numerator, long denominator) {
+        return new ExactRatio(BigInteger.valueOf(numerator), BigInteger.valueOf(denominator));
+    }
+
+    /** {@code weight·x + weightOfY·y}, its terms put in the order {@code yFirst} says, so that the
+     *  order a form's terms are handed over in is no part of what it is filed under. */
+    private static Map<NumericTerm, ExactRatio> form(ExactRatio weight, ExactRatio weightOfY,
+                                                     boolean yFirst) {
+        Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>();
+        if (yFirst) {
+            out.put(Y, weightOfY);
+        }
+        out.put(X, weight);
+        if (!yFirst) {
+            out.put(Y, weightOfY);
+        }
+        return out;
+    }
+
+    /**
+     * {@code f = x/3 + 2y/7}, {@code 11f/13} and {@code -5f/3}: weights over denominators of other
+     * primes, numerators with a factor in common, and a factor below nought — each a number times
+     * the others, and each read up to that number from its fractions.
+     */
+    private static final List<Map<NumericTerm, ExactRatio>> FRACTIONS = List.of(
+            form(over(1, 3), over(2, 7), false),
+            form(over(11, 39), over(22, 91), true),
+            form(over(-5, 9), over(-10, 21), false));
+
     /**
      * Forms over two terms, each a number times some of the others, of either sign, and not of the
-     * rest; two whose weights are past sixty-four bits apart; and {@link #AT_THE_ENDS}. Each list
-     * is of forms a number times each other, and there are more lists than the groups told
-     * against one by one, so that a sequence of them is filed by its forms.
+     * rest; two whose weights are past sixty-four bits apart; {@link #AT_THE_ENDS}; and
+     * {@link #FRACTIONS}. Each list is of forms a number times each other, and there are more
+     * lists than the groups told against one by one, so that a sequence of them is filed by its
+     * forms.
      */
     private static final List<List<Map<NumericTerm, ExactRatio>>> FORMS = forms();
 
@@ -187,7 +218,7 @@ class FormsHeldTest {
                 List.of(Map.of(X, twoTo(Long.MAX_VALUE), Y, twoTo(Long.MIN_VALUE)),
                         Map.of(X, twoTo(Long.MAX_VALUE).negated(),
                                 Y, twoTo(Long.MIN_VALUE).negated())),
-                AT_THE_ENDS));
+                AT_THE_ENDS, FRACTIONS));
         for (long weight = -12; weight <= 12; weight++) {
             if (weight != 0) {
                 out.add(List.of(Map.of(X, ExactRatio.of(1), Y, ExactRatio.of(weight)),
@@ -264,9 +295,9 @@ class FormsHeldTest {
 
     /**
      * Past the groups told against one by one, a statement is told against the groups of its form
-     * up to a factor and no others: none where no group is of its form, and no more than four
-     * where its form is a number times theirs past what the arithmetic holds — the four ends of
-     * {@link #AT_THE_ENDS}, opened first so that each is a group of its own.
+     * up to a factor and no others: its own where it was opened, none where no group is of its
+     * form, and the four ends of {@link #AT_THE_ENDS} — opened first, so that each is a group of
+     * its own, the most one form up to a factor holds — for each of those ends.
      */
     @Test
     void pastTheGroupsToldOneByOneAStatementIsToldAgainstTheGroupsOfItsFormAlone() {
@@ -274,27 +305,60 @@ class FormsHeldTest {
         for (long weight = 2; weight <= 40; weight++) {
             opened.add(Map.of(X, ExactRatio.of(1), Y, ExactRatio.of(weight)));
         }
-        List<Map<NumericTerm, ExactRatio>> asked = new ArrayList<>(opened);
-        for (long weight = 41; weight <= 80; weight++) {
-            asked.add(Map.of(X, ExactRatio.of(-2), Y, ExactRatio.of(-2 * weight)));
+        FormsHeld held = FormsHeld.NONE;
+        for (Map<NumericTerm, ExactRatio> each : opened) {
+            held = ((FormsHeld.Taken.Held) held.taking(nought(each))).forms();
         }
-        long[] counting = {0};
-        FormsHeld.COUNTING_TOLD = counting;
-        try {
-            FormsHeld held = FormsHeld.NONE;
-            for (Map<NumericTerm, ExactRatio> each : opened) {
-                held = ((FormsHeld.Taken.Held) held.taking(nought(each))).forms();
+        for (Map<NumericTerm, ExactRatio> end : AT_THE_ENDS) {
+            assertEquals(List.of(0, 1, 2, 3), held.toldAgainst(end), end::toString);
+        }
+        // The four ends are the first four groups, the fifth of them joins one, and x + k·y is
+        // the group after.
+        for (long weight = 2; weight <= 40; weight++) {
+            assertEquals(List.of((int) weight + 2),
+                    held.toldAgainst(Map.of(X, ExactRatio.of(-2), Y, ExactRatio.of(-2 * weight))));
+        }
+        for (long weight = 41; weight <= 80; weight++) {
+            assertEquals(List.of(),
+                    held.toldAgainst(Map.of(X, ExactRatio.of(1), Y, ExactRatio.of(weight))));
+        }
+    }
+
+    /**
+     * {@code f >= 0} leaves no point beside {@code 11f/13 < 0}, nor beside {@code -5f/3 > 0}:
+     * each is of the group of {@code f}, found by its fractions, whether every group is told
+     * against or they are filed by their forms behind more groups than are told one by one. And
+     * filed so, {@code x/3 + 2y/11}, weighed by powers as {@code f} is, is told against none.
+     */
+    @Test
+    void aFormOfFractionsIsFoundAsTheFormItIsANumberTimes() {
+        FormsHeld opened = FormsHeld.NONE;
+        for (long weight = 2; weight <= 20; weight++) {
+            opened = ((FormsHeld.Taken.Held) opened.taking(nought(
+                    Map.of(X, ExactRatio.of(1), Y, ExactRatio.of(weight))))).forms();
+        }
+        for (FormsHeld before : List.of(FormsHeld.NONE, opened)) {
+            FormsHeld held = ((FormsHeld.Taken.Held) before.taking(nought(FRACTIONS.get(0))))
+                    .forms();
+            List<Integer> ofF = held.toldAgainst(FRACTIONS.get(0));
+            for (Map<NumericTerm, ExactRatio> each : FRACTIONS) {
+                assertEquals(ofF, held.toldAgainst(each), each::toString);
             }
-            for (Map<NumericTerm, ExactRatio> each : asked) {
-                long before = counting[0];
-                held = assertInstanceOf(FormsHeld.Taken.Held.class,
-                        held.taking(nought(each))).forms();
-                long told = counting[0] - before;
-                assertTrue(told <= 4, () -> each + " was told against " + told + " groups");
+            if (before == opened) {
+                // Weighed by powers alike and by other fractions, so another form up to a factor.
+                assertEquals(List.of(),
+                        held.toldAgainst(form(over(1, 3), over(2, 11), false)));
             }
-            assertTrue(counting[0] > 0, "the groups told against are counted");
-        } finally {
-            FormsHeld.COUNTING_TOLD = null;
+            List<TakenConstraint.Affine> below = List.of(nought(FRACTIONS.get(0)),
+                    new TakenConstraint.Affine(new LinearForm<>(ExactRatio.ZERO,
+                            FRACTIONS.get(1)), Rel.LT));
+            assertEquals(below, assertInstanceOf(FormsHeld.Taken.NoPointLeft.class,
+                    held.taking(below.get(1))).statements());
+            List<TakenConstraint.Affine> above = List.of(nought(FRACTIONS.get(0)),
+                    new TakenConstraint.Affine(new LinearForm<>(ExactRatio.ZERO,
+                            FRACTIONS.get(2)), Rel.GT));
+            assertEquals(above, assertInstanceOf(FormsHeld.Taken.NoPointLeft.class,
+                    held.taking(above.get(1))).statements());
         }
     }
 
