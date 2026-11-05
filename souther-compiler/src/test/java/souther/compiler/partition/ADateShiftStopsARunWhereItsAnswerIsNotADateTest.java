@@ -2,8 +2,13 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.Compiler;
 import souther.compiler.check.PathReachability;
+import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.LabeledRegion;
+import souther.compiler.diag.Note;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.diag.msg.DeadBranchMessage;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.reach.ComparisonArrival;
@@ -53,6 +58,13 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                 && line.contains("about `" + about + "`"));
     }
 
+    /** Whether the report says a run arrives at the comparison about {@code about}: a line is
+     *  drawn there, so the comparison was read and is not one said to be out of reach. */
+    private static boolean aRunArrivesAbout(String report, String about) {
+        return !nothingArrivesAbout(report, about)
+                && report.lines().anyMatch(line -> line.contains("read as f/" + about + ":"));
+    }
+
     @Test
     void aShiftByACountNoDateIsMovedByStopsTheRunsAfterIt() {
         String report = report("""
@@ -68,7 +80,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                     guard n == 0 else No
                     let moved = Date.addDays(n, d)
                     guard b > 3 else No""");
-        assertFalse(nothingArrivesAbout(report, "b"), report);
+        assertTrue(aRunArrivesAbout(report, "b"), report);
     }
 
     /** A name is the value it was bound to, however long the chain of names to it. */
@@ -91,7 +103,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                     let twice = once
                     let moved = Date.addDays(twice, d)
                     guard b > 3 else No""");
-        assertFalse(nothingArrivesAbout(report, "b"), report);
+        assertTrue(aRunArrivesAbout(report, "b"), report);
     }
 
     /**
@@ -183,7 +195,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                     let total = List.fold((acc, k) -> { let moved = Date.addDays(acc * n, d)
                         acc }, 0, [1, 2])
                     guard b > 3 else No""".formatted(GREATEST));
-        assertFalse(nothingArrivesAbout(carried, "b"), carried);
+        assertTrue(aRunArrivesAbout(carried, "b"), carried);
         String element = report("""
                     guard n == %s else No
                     let total = List.fold((acc, k) -> { let moved = Date.addDays(k * n, d)
@@ -237,10 +249,11 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
      */
     @Test
     void aStopOnlyTheApplicationsTogetherLeaveIsNotShown() {
-        assertFalse(nothingArrivesAbout(report("""
+        String report = report("""
                     guard n == %s else No
                     let ys = List.map(k -> b + k * n + k, [1, -1])
-                    guard size > 3 else No""".formatted(GREATEST)), "size"));
+                    guard size > 3 else No""".formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(report, "size"), report);
         assertTrue(nothingArrivesAbout(report("""
                     guard n == %s else No
                     guard b >= 0 else No
@@ -260,7 +273,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                     let xs = List.map(x -> x, [0, 1, 2])
                     let ys = List.map(k -> Date.addDays(k * n, d), xs)
                     guard b > 3 else No""".formatted(GREATEST));
-        assertFalse(nothingArrivesAbout(report, "b"), report);
+        assertTrue(aRunArrivesAbout(report, "b"), report);
     }
 
     /**
@@ -275,7 +288,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                     guard n == %s else No
                     let ys = List.map(k -> if k > 0 then Date.addDays(n, d) else d, [0, 1])
                     guard b > 3 else No""".formatted(GREATEST));
-        assertFalse(nothingArrivesAbout(report, "b"), report);
+        assertTrue(aRunArrivesAbout(report, "b"), report);
     }
 
     /** A filter hands its step every element as a map does, and a step that stops on one stops
@@ -295,7 +308,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                     guard n == 0 else No
                     let kept = List.filter(k -> Date.addDays(k * n, d) == d, [0, 1, 2])
                     guard b > 3 else No""");
-        assertFalse(nothingArrivesAbout(report, "b"), report);
+        assertTrue(aRunArrivesAbout(report, "b"), report);
     }
 
     /**
@@ -309,7 +322,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                     guard n == %s else No
                     let any = List.any(k -> Date.addDays(k * n, d) == d, [0, 1, 2])
                     guard b > 3 else No""".formatted(GREATEST));
-        assertFalse(nothingArrivesAbout(report, "b"), report);
+        assertTrue(aRunArrivesAbout(report, "b"), report);
     }
 
     /**
@@ -323,7 +336,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                     guard n == %s else No
                     let moved = List.map(k -> Date.addDays(n, d), if size > 3 then [0, 1] else [])
                     guard b > 3 else No""".formatted(GREATEST));
-        assertFalse(nothingArrivesAbout(report, "b"), report);
+        assertTrue(aRunArrivesAbout(report, "b"), report);
     }
 
     /** What the reading of where a run arrives answers about {@code body}, read whole: every
@@ -395,7 +408,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                         |> List.find(x -> x == d)
                         |> Option.withDefault(d)
                     guard b > 3 else No""");
-        assertFalse(nothingArrivesAbout(report, "b"), report);
+        assertTrue(aRunArrivesAbout(report, "b"), report);
     }
 
     /** A list whose ends are not written out is not shown to be made, so nothing is said of what
@@ -409,7 +422,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                         |> List.find(x -> x == d)
                         |> Option.withDefault(d)
                     guard b > 3 else No""");
-        assertFalse(nothingArrivesAbout(report, "b"), report);
+        assertTrue(aRunArrivesAbout(report, "b"), report);
     }
 
     @Test
@@ -433,6 +446,60 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                         |> List.find(x -> x == d)
                         |> Option.withDefault(d)
                     guard b > 3 else No""".formatted(GREATEST));
-        assertFalse(nothingArrivesAbout(report, "b"), report);
+        assertTrue(aRunArrivesAbout(report, "b"), report);
+    }
+
+    /** The reports that nothing reaches an arm of {@code body}. */
+    private static List<Diagnostic> deadBranches(String body) {
+        return Compiler.compileWithWarnings("""
+                module w1
+
+                data Ok
+                data No
+                data Answer = Ok | No
+
+                behavior f : (n: Int, d: Date, b: Int) -> Answer
+                let f (n, d, b) = {
+                %s
+                    if b > 3 then Ok else No
+                }
+                """.formatted(body)).warnings().stream()
+                .filter(each -> each.code().equals("E1327")).toList();
+    }
+
+    /**
+     * Why no run gets past the call is said as the application no run gets past, the element it
+     * is handed among what it says: what it marks inside the step holds on the application to
+     * another element, and the first element is not the one nothing gets past. A shift written
+     * outside a step is said as the way here alone.
+     */
+    @Test
+    void whyNoRunGetsPastTheCallIsSaidAsTheApplicationNoRunGetsPast() {
+        for (Map.Entry<String, Integer> each : Map.of("[0, 1, 2]", 1, "[0, 0, 1]", 2)
+                .entrySet()) {
+            List<Diagnostic> dead = deadBranches("""
+                        guard n == %s else No
+                        let ys = List.map(k -> Date.addDays(k * n, d), %s)"""
+                    .formatted(GREATEST, each.getKey()));
+            assertFalse(dead.isEmpty(), each.getKey());
+            for (Diagnostic one : dead) {
+                assertEquals(List.of(new DeadBranchMessage.NoRunGetsPastOneOfItsApplications(
+                                each.getValue())),
+                        one.notes().stream().map(Note::said).filter(
+                                DeadBranchMessage.NoRunGetsPastOneOfItsApplications.class::isInstance)
+                                .toList(), each.getKey());
+                assertTrue(one.secondary().stream().map(LabeledRegion::said).anyMatch(
+                        DeadBranchMessage.ThisAppliesAFunctionToEveryElement.class::isInstance),
+                        each.getKey());
+            }
+        }
+        List<Diagnostic> outside = deadBranches("""
+                    guard n == %s else No
+                    let moved = Date.addDays(n, d)""".formatted(GREATEST));
+        assertFalse(outside.isEmpty());
+        for (Diagnostic one : outside) {
+            assertTrue(one.notes().stream().map(Note::said).noneMatch(
+                    DeadBranchMessage.NoRunGetsPastOneOfItsApplications.class::isInstance));
+        }
     }
 }

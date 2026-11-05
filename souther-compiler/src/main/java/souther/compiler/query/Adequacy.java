@@ -2132,6 +2132,17 @@ public final class Adequacy {
             }
 
             @Override
+            public Diagnostic.Builder noRunGetsPastOneOfItsApplications(SourcePos call,
+                                                                        int element,
+                    souther.compiler.reach.Proof inner) {
+                return new DeadBranchProofWords(said
+                        .hint(new DeadBranchMessage.NoRunGetsPastOneOfItsApplications(element))
+                        .secondary(Region.point(call),
+                                new DeadBranchMessage.ThisAppliesAFunctionToEveryElement()))
+                        .of(inner);
+            }
+
+            @Override
             public souther.compiler.diag.Diagnostic.Builder everyWayInIsRuledOut(
                     List<souther.compiler.reach.Proof> each) {
                 souther.compiler.diag.Diagnostic.Builder out =

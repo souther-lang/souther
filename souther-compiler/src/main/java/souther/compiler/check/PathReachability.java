@@ -712,7 +712,7 @@ public final class PathReachability {
      * gets past, which is what every application is taken to be without the walking, so what
      * follows the call stays where the one walk of the body left it.
      */
-    private static final int APPLICATIONS_WALKED_ONE_BY_ONE = 1024;
+    static final int APPLICATIONS_WALKED_ONE_BY_ONE = 1024;
     /** How many more applications this reading of the body may walk one at a time. */
     private final int[] applicationsLeft;
     /**
@@ -1145,6 +1145,12 @@ public final class PathReachability {
      * the next would carry what it says of the closure's own names, which the next is handed anew,
      * and nothing here takes those out of a state.
      *
+     * <p>Why no run gets past is said as that application's
+     * ({@link Proof#noRunGetsPastOneOfItsApplications}), and the steps past the call are the ones
+     * on the way to it. What the walk of the application took in was taken in with the closure
+     * handed that element, which nothing on the way to the call says: the same conditions read as
+     * the way here would hold on the application to another element.
+     *
      * <p>Only what arrives is read off these walks. Where a comparison in the body arrives is the
      * one walk of the body's to say, made under no element in particular, so what one application
      * finds is not filed under a place every application shares. Only a closure the one walk of
@@ -1177,16 +1183,20 @@ public final class PathReachability {
             InputReads inside = reads.entering(new ScopeStep.Block(block), symbols, newtypes);
             Walked from = new Walked(operands.known(), operands.decided(), operands.mayStop(),
                     false, true, WhyNone.BY_THE_WAY, false);
-            for (ElementsWrittenOut.Stood<Denotations> each : elements) {
+            for (int i = 0; i < elements.size(); i++) {
                 if (applicationsLeft[0]-- <= 0) {
                     return null;
                 }
                 Walked body = new PathReachability(this).walk(block.body(), from,
-                        engine.terms().elementsReading().handing(at, element, each), inside);
+                        engine.terms().elementsReading().handing(at, element, elements.get(i)),
+                        inside);
                 if (body.known().reachesNothing()) {
-                    return new Walked(operands.known().reachingNothing(), body.decided(),
+                    int handed = i;
+                    return new Walked(operands.known().reachingNothing(), operands.decided(),
                             operands.mayStop(), false, false,
-                            body.whyNothingArrives().<WhyNone>map(WhyNone.Because::new)
+                            body.whyNothingArrives().<WhyNone>map(why -> new WhyNone.Because(
+                                            Proof.noRunGetsPastOneOfItsApplications(
+                                                    call.pos(), handed, why)))
                                     .orElse(new WhyNone.Unsaid()),
                             false);
                 }
