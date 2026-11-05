@@ -830,7 +830,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " figure, more cases than are taken apart, and none is asked"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#allAsked("
                             + "Lsouther/compiler/meaning/DecidingCase;"
-                            + "Ljava/util/function/Function;)"
+                            + "Ljava/util/function/Function;Z)"
                             + "Lsouther/compiler/meaning/CasesOfALineAsked$Atoms;",
                     "how many ways of choosing a case are asked, counted before any is: past the"
                             + " figure, more cases than are taken apart, and none is asked"),
@@ -862,7 +862,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.ComparisonAssessment#partsOfARelation("
                             + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
                             + "Lsouther/compiler/partition/ComparisonAssessment$AgainstAnotherValue;"
-                            + "Ljava/util/function/Function;)"
+                            + "Ljava/util/function/Function;Ljava/util/function/Predicate;)"
                             + "Ljava/util/List;",
                     "hands the figure the asking stopped at to the relation, as one where it"
                             + " decides in those cases was not worked out"),

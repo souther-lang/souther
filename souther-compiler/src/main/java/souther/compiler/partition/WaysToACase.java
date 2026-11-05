@@ -94,6 +94,39 @@ final class WaysToACase {
     }
 
     /**
+     * Whether the way to the comparison with {@code decides} taken in is one a row may take: not
+     * one some two conditions on it close, and not one whose numbers leave nothing
+     * ({@link Reachability.Reaching}).
+     */
+    boolean reaches(Proposition decides) {
+        return reached(decides).reaching();
+    }
+
+    /**
+     * How the way to the comparison with {@code decides} taken in came out, kept for as long as
+     * the comparison is read and not only while the way is among those asked last: a case chosen
+     * part by part asks it of every part chosen so far, and a way let go is a reading of the whole
+     * region again for an answer of two truths.
+     *
+     * @param reaching   whether it is a way a row may take ({@link Reachability.Reaching})
+     * @param leavesARow whether some region it holds every row in is not shown empty
+     *                   ({@link Reachability#leavesARow})
+     */
+    private record Reached(boolean reaching, boolean leavesARow) {}
+
+    private final Map<Proposition, Reached> reached = new HashMap<>();
+
+    private Reached reached(Proposition decides) {
+        Reached had = reached.get(decides);
+        if (had == null) {
+            Reachability way = apply(decides);
+            had = new Reached(way instanceof Reachability.Reaching, way.leavesARow());
+            reached.put(decides, had);
+        }
+        return had;
+    }
+
+    /**
      * What rows reaching {@code cutting} with {@code decides} taken in come to: none at all where
      * the whole way to the comparison with every condition the case puts on it is shown to be one
      * no row takes, and otherwise whether they may stand on each side of it ({@link #crossed}).
@@ -104,7 +137,7 @@ final class WaysToACase {
      */
     CasesOfALineAsked.Crossing crossing(Cutting cutting, Proposition decides, InputReading read,
                                         BiPredicate<Reachability, UnaryOperator<Border.Values>> asked) {
-        if (!apply(decides).leavesARow()) {
+        if (!reached(decides).leavesARow()) {
             return CasesOfALineAsked.Crossing.NO_ROWS;
         }
         return crossed(cutting, decides, read, asked) ? CasesOfALineAsked.Crossing.MAY_CROSS

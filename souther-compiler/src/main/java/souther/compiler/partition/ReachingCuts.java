@@ -78,10 +78,12 @@ import java.util.function.Supplier;
 public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                            Lookup<ALine, SaidOnTheWay> saidByLine,
                            Lookup<ModelOccurrence, List<ConditionOnTheWay>> byOutcome,
-                           Lookup<ModelOccurrence, ConditionOnTheWay> byFork) {
+                           Lookup<ModelOccurrence, ConditionOnTheWay> byFork,
+                           Lookup<AnAtomOfACase, WhatAnAtomSays> byAtom) {
 
     public static final ReachingCuts NONE = new ReachingCuts(Lookup.built(_ -> { }),
-            Lookup.built(_ -> { }), Lookup.built(_ -> { }), Lookup.built(_ -> { }));
+            Lookup.built(_ -> { }), Lookup.built(_ -> { }), Lookup.built(_ -> { }),
+            Lookup.built(_ -> { }));
 
     public ReachingCuts {
         Objects.requireNonNull(byLine, "what a walk collected, line by line");
@@ -89,6 +91,53 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         Objects.requireNonNull(byOutcome,
                 "what a walk collected, truth by truth and comparison by comparison");
         Objects.requireNonNull(byFork, "what a walk collected, fork by fork");
+        Objects.requireNonNull(byAtom, "what each part of where a line decides asks of a row");
+    }
+
+    /**
+     * One part of where a line of the comparison stated at {@code states} decides, a part no
+     * conjunction or alternative is made of.
+     *
+     * <p>Keyed by the comparison and not by the line: what a part asks of a row is read off the
+     * comparison's own statement ({@link DemandReading#askedAt}), so every line of one comparison
+     * asks it the same, and two comparisons may ask one part differently.
+     */
+    public record AnAtomOfACase(ModelOccurrence states, Proposition atom) {
+
+        public AnAtomOfACase {
+            Objects.requireNonNull(states, "a part of where a line of some comparison decides");
+            Objects.requireNonNull(atom, "a part is some statement");
+        }
+    }
+
+    /**
+     * What a part of where a line decides asks of a row, coming out each way: what it holding puts
+     * on the way, and what its denial does.
+     *
+     * <p>Each an inclusion, as every reading of a way is: a row the part holds of meets what
+     * {@code holding} asks, and maybe rows it does not. So a way that cannot take {@code holding}
+     * in holds no row the part holds of, and one that cannot take {@code failing} in holds no row
+     * it fails of; neither says anything where the way takes it in.
+     *
+     * @param holding what the part holding asks
+     * @param failing what its denial asks
+     */
+    public record WhatAnAtomSays(List<OnTheWay> holding, List<OnTheWay> failing) {
+
+        public WhatAnAtomSays {
+            holding = List.copyOf(holding);
+            failing = List.copyOf(failing);
+        }
+    }
+
+    /** What {@code atom}, a part of where a line of the comparison {@code origin} draws decides,
+     *  asks of a row each way, where it was read. */
+    public Optional<WhatAnAtomSays> saysOf(LineOrigin origin, Proposition atom) {
+        if (!(origin instanceof LineOrigin.ComparisonOrigin comparison)) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(byAtom.get(
+                new AnAtomOfACase(comparison.read().states(), atom)));
     }
 
     /**
@@ -1050,6 +1099,21 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         private final Map<ModelOccurrence, List<ConditionOnTheWay>> byOutcome =
                 new LinkedHashMap<>();
         private final Map<ModelOccurrence, ConditionOnTheWay> byFork = new LinkedHashMap<>();
+        private final Map<AnAtomOfACase, WhatAnAtomSays> byAtom = new LinkedHashMap<>();
+
+        /**
+         * What {@code atom}, a part of where a line of the comparison stated at {@code states}
+         * decides, asks of a row each way, as one copy of the comparison read it.
+         *
+         * <p>What every copy asks, where several read it: a row at the line comes through one of
+         * them, so what the part asks of it is what all of them ask, kept as the way to a line is
+         * ({@link #commonTo}).
+         */
+        void asks(ModelOccurrence states, Proposition atom, WhatAnAtomSays says) {
+            byAtom.merge(new AnAtomOfACase(states, atom), says, (one, other) ->
+                    new WhatAnAtomSays(commonTo(one.holding(), other.holding()),
+                            commonTo(one.failing(), other.failing())));
+        }
 
         /**
          * The truth or the comparison the construct {@code answers} answers, met as {@code met}
@@ -1140,7 +1204,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                     Lookup.built(put -> saidByLine.forEach(put::put)),
                     Lookup.built(put -> byOutcome.forEach((at, copies) ->
                             put.put(at, List.copyOf(copies)))),
-                    Lookup.built(put -> byFork.forEach(put::put)));
+                    Lookup.built(put -> byFork.forEach(put::put)),
+                    Lookup.built(put -> byAtom.forEach(put::put)));
         }
     }
 }

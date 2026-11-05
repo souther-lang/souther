@@ -60,6 +60,28 @@ class AWayThatLeftAChoiceUnchosenSaysItWasNotSplitAtItTest {
             assertEquals(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT, left.figure());
             assertEquals(List.of(), left.along());
         }
+        assertEquals(whole.along().stream().map(_ -> Optional.<List<OnTheWay>>empty()).toList(),
+                whole.chosenAs(), "a way a choice was left on was chosen as no conditions");
+    }
+
+    /** Each way a way is split into is the one the conditions beside it were chosen as: read
+     *  again from them, it is that way, at the same place. */
+    @Test
+    void eachWayItIsSplitIntoIsWhatItWasChosenAs() {
+        InputReading reading = reading();
+        List<OnTheWay> onTheWay = List.of(
+                oneOf(1, List.of(truth("q1", true)), List.of(truth("q2", true))),
+                oneOf(2, List.of(truth("q3", true)), List.of(truth("q1", false))));
+        Reachability.Reaching reaching = assertInstanceOf(Reachability.Reaching.class,
+                Reachability.of(new WayToTheBorder(onTheWay), reading.quantities().region()));
+        Reachability.Ways.Each each = assertInstanceOf(Reachability.Ways.Each.class,
+                reaching.ways());
+        assertEquals(3, each.along().size(), () -> "q1 asked both ways closes one: " + each);
+        for (int at = 0; at < each.along().size(); at++) {
+            List<OnTheWay> chosen = each.chosenAs().get(at).orElseThrow();
+            assertEquals(each.along().get(at), Reachability.of(new WayToTheBorder(chosen),
+                    reading.quantities().region()), "way " + at);
+        }
     }
 
     @Test

@@ -78,26 +78,31 @@ public sealed interface Reachability {
         return switch (way.along()) {
             case OneOfEach.Walked.Closed<OnTheWay, Reachability>(var _, var why) -> why;
             case OneOfEach.Walked.Stopped<OnTheWay, Reachability>(var figure) ->
-                    whole.splitAs(new Ways.Whole(way.severalWays(), figure, List.of(),
+                    whole.splitAs(new Ways.Whole(way.severalWays(), figure, List.of(), List.of(),
                             new ReadFrom(way, declarations)));
             case OneOfEach.Walked.Open<OnTheWay, Reachability> _
                     when way.severalWays().isEmpty() -> whole;
             case OneOfEach.Walked.Open<OnTheWay, Reachability>(var ways, var stoppedBy) -> {
                 List<Reaching> along = new ArrayList<>();
+                List<Optional<List<OnTheWay>>> chosenAs = new ArrayList<>();
                 for (OneOfEach.Way<OnTheWay> one : ways) {
-                    along.add(switch (one) {
-                        case OneOfEach.Way.Chosen<OnTheWay>(var entries, var _) ->
-                                reaching(new WayToTheBorder(entries), declarations);
+                    switch (one) {
+                        case OneOfEach.Way.Chosen<OnTheWay>(var entries, var _) -> {
+                            along.add(reaching(new WayToTheBorder(entries), declarations));
+                            chosenAs.add(Optional.of(entries));
+                        }
                         // A condition the walk left as it stands is one this way was not split
                         // at past the figure, and is said as one, so that a row composed along
                         // it is not taken to have met it.
-                        case OneOfEach.Way.LeftUnchosen<OnTheWay>(var chosen, var unchosen) ->
-                                reaching(new WayToTheBorder(chosen), declarations).splitAs(
-                                        new Ways.Whole(unchosen, stoppedBy, List.of(),
-                                                new ReadFrom(new WayToTheBorder(Stream.concat(
-                                                        chosen.stream(), unchosen.stream())
-                                                        .toList()), declarations)));
-                    });
+                        case OneOfEach.Way.LeftUnchosen<OnTheWay>(var chosen, var unchosen) -> {
+                            along.add(reaching(new WayToTheBorder(chosen), declarations).splitAs(
+                                    new Ways.Whole(unchosen, stoppedBy, List.of(), List.of(),
+                                            new ReadFrom(new WayToTheBorder(Stream.concat(
+                                                    chosen.stream(), unchosen.stream())
+                                                    .toList()), declarations))));
+                            chosenAs.add(Optional.empty());
+                        }
+                    }
                 }
                 // Every way a row takes is among them, so a search looking along each looks
                 // along every row past the way, and what all of them state the way states.
@@ -105,8 +110,8 @@ public sealed interface Reachability {
                 // them the way is looked along whole — which every row past it is on, so none of
                 // them being closed proves nothing — and the conditions it was not looked along
                 // each way of say so.
-                yield whole.splitAs(stoppedBy == null ? new Ways.Each(along)
-                        : new Ways.Whole(way.severalWays(), stoppedBy, along,
+                yield whole.splitAs(stoppedBy == null ? new Ways.Each(along, chosenAs)
+                        : new Ways.Whole(way.severalWays(), stoppedBy, along, chosenAs,
                                 new ReadFrom(way, declarations)));
             }
         };
@@ -180,6 +185,16 @@ public sealed interface Reachability {
             return List.of();
         }
 
+        /**
+         * The conditions the walk chose for each of {@link #along}, the way at the same place:
+         * none for a way it left some of them unchosen on. Kept beside the ways they were read
+         * from, out of the one walk, so that a question asked of the conditions of a way is asked
+         * of that way.
+         */
+        default List<Optional<List<OnTheWay>>> chosenAs() {
+            return List.of();
+        }
+
         /** Not split, and nothing in it to split at. */
         record One() implements Ways {}
 
@@ -193,15 +208,18 @@ public sealed interface Reachability {
          * the way states, and what one states is no more than one way's. Where the figure left
          * some combination out, the way is not this but {@link Whole}.
          *
-         * @param along one or more
+         * @param along    one or more
+         * @param chosenAs the conditions each of them was chosen as ({@link Ways#chosenAs})
          */
-        record Each(List<Reaching> along) implements Ways {
+        record Each(List<Reaching> along, List<Optional<List<OnTheWay>>> chosenAs)
+                implements Ways {
 
             public Each {
                 along = List.copyOf(along);
-                if (along.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "a way split is split into the ways some row may take, and has one");
+                chosenAs = List.copyOf(chosenAs);
+                if (along.isEmpty() || chosenAs.size() != along.size()) {
+                    throw new IllegalArgumentException("a way split is split into the ways some"
+                            + " row may take, and has one, each with what it was chosen as");
                 }
             }
         }
@@ -217,19 +235,22 @@ public sealed interface Reachability {
          * way not among them.
          *
          * @param unsplit the conditions of several ways on it, in the order the walk met them
-         * @param along   the ways the figure let through that some row may take, looked along
-         *                before the way whole; none where every one of them was closed
-         * @param from    what the way was read from, which a reader asking about some of its
-         *                places reads again with each choice as it shows it comes to for them
+         * @param along    the ways the figure let through that some row may take, looked along
+         *                 before the way whole; none where every one of them was closed
+         * @param chosenAs the conditions each of them was chosen as ({@link Ways#chosenAs})
+         * @param from     what the way was read from, which a reader asking about some of its
+         *                 places reads again with each choice as it shows it comes to for them
          */
         record Whole(List<OnTheWay> unsplit, CompositionBudget figure, List<Reaching> along,
-                     ReadFrom from)
+                     List<Optional<List<OnTheWay>>> chosenAs, ReadFrom from)
                 implements Ways {
 
             public Whole {
                 unsplit = List.copyOf(unsplit);
                 along = List.copyOf(along);
+                chosenAs = List.copyOf(chosenAs);
                 if (unsplit.isEmpty() || figure == null || from == null
+                        || chosenAs.size() != along.size()
                         || !unsplit.stream().allMatch(OnTheWay::splitsTheWay)) {
                     throw new IllegalArgumentException("a way looked along whole past a figure has"
                             + " a condition of several ways on it, a figure it met, and an account"
@@ -462,11 +483,12 @@ public sealed interface Reachability {
             Ways split = switch (ways) {
                 case Ways.One one -> one;
                 case Ways.Each each -> new Ways.Each(each.along().stream()
-                        .map(one -> one.gettingPast(answered)).toList());
+                        .map(one -> one.gettingPast(answered)).toList(), each.chosenAs());
                 // Read again from the declarations narrowed by what the run got past, so that a
                 // reader reading the way again is as narrow as this one.
                 case Ways.Whole whole -> new Ways.Whole(whole.unsplit(), whole.figure(),
                         whole.along().stream().map(one -> one.gettingPast(answered)).toList(),
+                        whole.chosenAs(),
                         new ReadFrom(whole.from().way(),
                                 TakenConstraint.narrowedBy(narrowing,
                                         whole.from().declarations())));

@@ -13,6 +13,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Which of the cases a condition was said for a line decides in, asked a case at a time.
@@ -48,11 +49,14 @@ import java.util.function.Function;
  * pays for asking it: a condition every case holds, decided by what each case chose, is asked as
  * what the case leaves undecided of it, and a case whose choices decide it is asked without it.
  *
- * <p><b>As many cases as are taken apart, and no more.</b> How many ways there are of choosing a
- * case is counted off the choices before any is asked ({@link DecidingCase.Cases#waysOfChoosing}),
- * and past {@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO} none is asked: those are
- * more cases than are taken apart, whether they were written out or said as choices, and the line
- * is not worked out in them at that figure.
+ * <p><b>As many cases as are taken apart, and no more.</b> Where every case is answered, with
+ * nothing to leave a case out by, how many ways there are of choosing one is counted off the
+ * choices before any is asked ({@link DecidingCase.Cases#waysOfChoosing}), and past
+ * {@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO} none is asked: those are more cases
+ * than are taken apart, whether they were written out or said as choices, and the line is not
+ * worked out in them at that figure. Where a part chosen so far that no row is in leaves the cases
+ * past it out — asking where a line decides, and asking the cases some row may be in — the ways
+ * are not counted: most of them are past such a part, and the steps bound the rest.
  *
  * <p><b>Counted by the step, and stopped short as a stop.</b> Every step of the choosing is counted
  * against {@link CompositionBudget#CASES_A_LINE_IS_ASKED_IN} for the one case they were said as:
@@ -75,7 +79,8 @@ public final class CasesOfALineAsked {
      * What asking found.
      *
      * @param decidesIn  the cases shown to hold a row on each side of the line, each by itself; the
-     *                   case asked, as it was said, where every case it stands for is one of them.
+     *                   case asked, as it was said, where every case it stands for is one of them
+     *                   or holds no row.
      *                   How many of them a line is read in one by one is the line's to say, over
      *                   every case it holds ({@link DecidingCase#saidInAsFewAsMay})
      * @param notWorkedOut every figure some case was stopped at, where some was: which way those
@@ -98,10 +103,11 @@ public final class CasesOfALineAsked {
      *
      * <p>None of them says a row is there. A way is read as an inclusion, so that rows may stand
      * on each side is what is left where neither of the others was shown, and is all that walks on.
-     * The two others both leave the case out, and neither lets the case asked be said as it was,
-     * since a case it stands for is then not one the line decides in. They are told apart because
-     * they are different facts: one is about the line, the other about whether any row is in the
-     * case at all.
+     * The two others both leave the case out. A case whose rows are on one side lets the case
+     * asked be said as it was no more, since its rows are rows of the case asked that the line
+     * turns nothing between; a case no row is in still lets it, since it adds no row to where
+     * the case asked holds. They are told apart because they are different facts: one is about the
+     * line, the other about whether any row is in the case at all.
      */
     public enum Crossing {
 
@@ -123,11 +129,9 @@ public final class CasesOfALineAsked {
     /** Each case shown to divide rows, as the conjunction of what it chose. */
     private final Set<Proposition> dividing = new LinkedHashSet<>();
 
-    /** Whether some case was shown to hold rows that do not stand on each side of the line. */
+    /** Whether some case was shown to hold rows that do not stand on each side of the line: the
+     *  case asked is then not what the line decides in, as it was said. */
     private boolean droppedNonDividing;
-
-    /** Whether some case was shown to be one no row is in. */
-    private boolean prunedNoRows;
 
     private final Set<CompositionBudget> stopped = EnumSet.noneOf(CompositionBudget.class);
 
@@ -137,12 +141,6 @@ public final class CasesOfALineAsked {
 
     private CasesOfALineAsked(Function<Proposition, Crossing> crossedIn) {
         this.crossedIn = crossedIn;
-    }
-
-    /** Whether some case was left out, for either reason: the case asked is then not every case
-     *  it stands for being one the line decides in. */
-    private boolean leftSomeOut() {
-        return droppedNonDividing || prunedNoRows;
     }
 
     /**
@@ -203,26 +201,50 @@ public final class CasesOfALineAsked {
      * are counted as they are for {@link #casesOf}.
      */
     public static <T> Atoms<T> atomsOf(DecidingCase said, Function<Proposition, T> answer) {
-        return new CasesOfALineAsked(_ -> Crossing.MAY_CROSS).allAsked(said, answer);
+        return new CasesOfALineAsked(_ -> Crossing.MAY_CROSS).allAsked(said, answer, true);
     }
 
-    private <T> Atoms<T> allAsked(DecidingCase said, Function<Proposition, T> answer) {
+    /**
+     * The same, of the cases some row may be in, chosen as {@link #casesOf} chooses them: a part
+     * chosen so far that {@code mayHoldARow} shows no row to be in leaves every case past it out,
+     * neither walked nor answered, since a case chosen further holds no more rows. So it is the
+     * steps and not the ways of choosing that bound the asking, and the cases {@code each} leaves
+     * out are those no row is in and those past the steps, which {@code notWorkedOut} says.
+     *
+     * @param mayHoldARow false only where no row is in the case, and so in none narrower
+     */
+    public static <T> Atoms<T> atomsOf(DecidingCase said, Function<Proposition, T> answer,
+                                       Predicate<Proposition> mayHoldARow) {
+        return new CasesOfALineAsked(
+                condition -> mayHoldARow.test(condition) ? Crossing.MAY_CROSS : Crossing.NO_ROWS)
+                .allAsked(said, answer, false);
+    }
+
+    /**
+     * Each case of {@code said} no part chosen so far of which {@link #crossedIn} shows no row to
+     * be in, with what {@code answer} comes to there; none past
+     * {@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO} ways of choosing one where
+     * {@code waysCounted}, nothing being there to leave a case out by.
+     */
+    private <T> Atoms<T> allAsked(DecidingCase said, Function<Proposition, T> answer,
+                                  boolean waysCounted) {
         if (!aStepIsLeft()) {
             pastTheSteps(List.of(said.standsFor()));
             return new Atoms<>(List.of(), stopped);
         }
         if (said.saidAlone()) {
-            return new Atoms<>(List.of(new Atom<>(said.condition(), answer.apply(said.condition()))),
+            return new Atoms<>(crossedIn.apply(said.condition()) == Crossing.NO_ROWS ? List.of()
+                    : List.of(new Atom<>(said.condition(), answer.apply(said.condition()))),
                     Set.of());
         }
         long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
-        if (said.standsFor().waysOfChoosing(most) > most) {
+        if (waysCounted && said.standsFor().waysOfChoosing(most) > most) {
             stopped.add(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
             addFiguresNotTakenApart(said.standsFor());
             return new Atoms<>(List.of(), stopped);
         }
         List<Atom<T>> out = new ArrayList<>();
-        chosen(SoFar.NOTHING, List.of(heldFirst(said.standsFor())), _ -> Crossing.MAY_CROSS,
+        chosen(SoFar.NOTHING, List.of(heldFirst(said.standsFor())), crossedIn,
                 chosen -> out.add(new Atom<>(chosen, answer.apply(chosen))));
         return new Atoms<>(out, stopped);
     }
@@ -248,11 +270,12 @@ public final class CasesOfALineAsked {
         }
         DecidingCase.Cases cases = heldFirst(said.standsFor());
         chosen(SoFar.NOTHING, List.of(cases), crossedIn, chosen -> dividing.add(chosen));
-        // Every case divides rows and every one was worked out: the case is what it was said as,
-        // and saying it again would read the line under another condition for nothing. A case no
-        // row is in is no case the line decides in either, so one of those left out is a case
-        // said for one the line does not decide in, as much as a case that holds rows on one side.
-        if (!leftSomeOut() && stopped.isEmpty() && !dividing.isEmpty()) {
+        // Every case with a row in it divides rows and every one was worked out: the case is what
+        // it was said as, and saying it again would read the line under another condition for
+        // nothing. A case no row is in adds no row to where it holds, so the rows it holds are
+        // the rows of the cases the line decides in; one with rows on one side would add rows the
+        // line turns nothing between.
+        if (!droppedNonDividing && stopped.isEmpty() && !dividing.isEmpty()) {
             return new Found(List.of(said), Set.of());
         }
         return new Found(dividing.stream().map(DecidingCase::alone).toList(), stopped);
@@ -432,7 +455,7 @@ public final class CasesOfALineAsked {
                 switch (goesOn.apply(further.condition())) {
                     case MAY_CROSS -> chosen(further, rest, goesOn, atEnd);
                     case CANNOT_CROSS -> droppedNonDividing = true;
-                    case NO_ROWS -> prunedNoRows = true;
+                    case NO_ROWS -> { }
                 }
             }
             // Every alternative: one that divides rows is no answer about another. Each taken is

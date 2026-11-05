@@ -226,7 +226,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         return ComparisonAssessment.partsOfARelation(new ComparisonAssessment.Several.Part(
                 new PlaceOfALine(PartOfAComparison.of(WrittenLine.THE_COMPARISON),
                         Spelling.of("relation")),
-                relation(), cases), relation(), inCases::get);
+                relation(), cases), relation(), inCases::get, _ -> true);
     }
 
     /** What a relation parts in a case is that case's: cases are said for several only past it. */
