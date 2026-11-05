@@ -841,6 +841,14 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/DecidingCase;)V",
                     "more ways of choosing than are taken apart, naming the figure and the ones"
                             + " the cases were never taken apart at"),
+            // Asked only to say whether what the statement chooses at is worth reading for a
+            // reader told why a line was not worked out. Nothing is stopped or left: the cases are
+            // asked as they would be either way, and where this says no the constructs are simply
+            // not named.
+            Map.entry("souther.compiler.partition.Cutting$Read$Several#pastTheCasesTakenApart()Z",
+                    "whether some line's cases are past the figure, which decides only whether the"
+                            + " constructs the statement chooses at are read for a reader; no work"
+                            + " is omitted"),
             Map.entry("souther.compiler.partition.ComparisonAssessment#aPartNarrowed("
                             + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
                             + "Lsouther/compiler/partition/Reachability;"

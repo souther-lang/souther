@@ -56,7 +56,10 @@ import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionCondition;
+import souther.compiler.meaning.CaseCount;
+import souther.compiler.meaning.CaseExpansion;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.NumericallyConsistentWays;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.meaning.WrittenLine;
@@ -89,6 +92,7 @@ import souther.compiler.inputs.AuthoredOrder;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ElementKey;
 import souther.compiler.inputs.EveryRunStops;
+import souther.compiler.inputs.CasesExpandedAtARule;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
@@ -301,7 +305,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
     }
 
-    public static final int SCHEMA_VERSION = 27;
+    public static final int SCHEMA_VERSION = 28;
 
     /**
      * Where the schema this writes documents ships.
@@ -4067,6 +4071,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         everyRunStopsAt(it.everyRunStops()),
                         inCopies(it.readAt(), behavior.conditionPlaces().copies(),
                                 rendering, declaredIn)));
+            }
+        }
+        // And, for a rule a line of which was not worked out because its cases were too many, what
+        // those cases were: a line of its own under the rule's, since the count is about the cases
+        // and not about why the line was not worked out.
+        PartitionEvidence partition = behavior.partition();
+        if (partition != null) {
+            for (CasesExpandedAtARule each : partition.caseExpansions()) {
+                out.append(String.format("      case expansion: %s, on `%s` — %s%n",
+                        cited(each.cited(), rendering, declaredIn, places),
+                        each.expansion().line(), caseExpansionSaid(each.expansion())));
             }
         }
         // And a position whose rules this reading never arrived at, which names no rule because
@@ -8922,6 +8937,99 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 sentTo(said, rule.sentTo(), parts, sources);
             }
         });
+        // And what the cases of each line not worked out for their number were, an entry per line
+        // and per case asked, beside the entries above and joined to them by the rule. Never put
+        // into those: two of them about one rule are one finding, and two counts are two counts.
+        DocumentArray expanded = DocumentPart.CASE_EXPANSIONS.putArray(out);
+        for (CasesExpandedAtARule each : partition.caseExpansions()) {
+            caseExpansionRow(expanded.addObject(), each, places, sources);
+        }
+    }
+
+    /** One rule's line and what its cases were, as a row of {@code caseExpansions}. */
+    private static void caseExpansionRow(DocumentItem row, CasesExpandedAtARule each,
+                                         PublishedRuleHandle.WhereARuleIs places,
+                                         DocumentSources sources) {
+        ObjectNode said = row.node();
+        RuleHandleSurface.CASE_EXPANSION_RULE.put(row,
+                PublishedRuleHandle.of(handle(each.cited(), places), places),
+                sources.rendering(), null);
+        ruleId(said.putObject("ruleId"), each.rule());
+        said.put("line", each.expansion().line());
+        caseExpansion(said.putObject("caseExpansion"), each.expansion());
+    }
+
+    /**
+     * How many ways the cases of one line were and what the statement chooses at. The constructs
+     * are not a factoring of the count, which is why they are a list beside it and not a product.
+     */
+    private static void caseExpansion(ObjectNode into, CaseExpansion expansion) {
+        ObjectNode structural = into.putObject("structuralWays");
+        switch (expansion.counted().structuralWays()) {
+            case CaseCount.Ways.Exactly(var ways) -> structural.put("exactly", ways.toString());
+            case CaseCount.Ways.MoreThan(var ways) -> structural.put("moreThan", ways.toString());
+        }
+        ObjectNode consistent = into.putObject("numericallyConsistentWays");
+        switch (expansion.counted().numericallyConsistentWays()) {
+            case NumericallyConsistentWays.Counted.AtMost(var ways) ->
+                    consistent.put("atMost", ways.toString());
+            case NumericallyConsistentWays.Counted.NotCounted(var why) ->
+                    consistent.put("notCounted", word(why));
+        }
+        ArrayNode factors = into.putArray("factors");
+        for (CaseExpansion.Contributing each : expansion.contributing()) {
+            ObjectNode one = factors.addObject();
+            copyId(one.putObject("construct"), each.construct());
+            one.put("kind", word(each.kind()));
+            one.put("width", each.width());
+            each.operation().ifPresent(operation -> one.put("operation", operation.qualified()));
+        }
+    }
+
+    /**
+     * One line's cases in a sentence: the two counts, then the constructs the statement chooses at
+     * as a list. Never joined by a sign of multiplication, which would say the count is their
+     * product.
+     */
+    private static String caseExpansionSaid(CaseExpansion expansion) {
+        StringBuilder out = new StringBuilder(switch (expansion.counted().structuralWays()) {
+            case CaseCount.Ways.Exactly(var ways) ->
+                    String.format(Locale.ROOT, "%,d structural ways", ways);
+            case CaseCount.Ways.MoreThan _ -> "more structural ways than a count is held to";
+        });
+        switch (expansion.counted().numericallyConsistentWays()) {
+            case NumericallyConsistentWays.Counted.AtMost(var ways) -> out.append(String.format(
+                    Locale.ROOT, "; at most %,d numerically consistent ways", ways));
+            case NumericallyConsistentWays.Counted.NotCounted(var why) -> out.append(
+                    "; numerically consistent ways not counted, past "
+                            + switch (why) {
+                                case STATES_A_COUNT_IS_TAKEN_IN -> "the states a count is taken in";
+                                case WAYS_A_COUNT_IS_HELD_TO -> "the ways a count is held to";
+                            });
+        }
+        if (!expansion.contributing().isEmpty()) {
+            out.append(". Contributing constructs: ").append(expansion.contributing().stream()
+                    .map(AdequacyReport::contributingSaid)
+                    .collect(Collectors.joining(", ")));
+        }
+        return out.toString();
+    }
+
+    /** One construct the statement chooses at, as an author would find it. */
+    private static String contributingSaid(CaseExpansion.Contributing each) {
+        String where = WrittenOwner.theBodyThatWrote(each.construct().origin().owner())
+                .definition();
+        String what = each.operation().map(operation -> switch (each.kind()) {
+            case CASES -> "cases of " + operation.qualified();
+            default -> word(each.kind());
+        }).orElse(word(each.kind()));
+        String among = switch (each.kind()) {
+            case FIND, FILTER -> each.width() + " elements written out";
+            case MATCH -> each.width() + " arms";
+            case IF -> "chosen at " + each.width() + " times";
+            case CASES -> each.width() + " cases";
+        };
+        return what + " in " + where + " (" + among + ")";
     }
 
     static void branch(ObjectNode into, BehaviorReport behavior, DocumentSources sources) {

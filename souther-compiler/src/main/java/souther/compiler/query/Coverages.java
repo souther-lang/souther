@@ -401,7 +401,7 @@ final class Coverages {
                 // measured is the separate answer `undivided` beside them carries, and a position
                 // no axis came back for still has whatever was written about it.
                 partitioning.notSeparated(), unansweredIn(partitioning),
-                readings.whyUnclassified());
+                readings.whyUnclassified(), partitioning.caseExpansions());
     }
 
     /**

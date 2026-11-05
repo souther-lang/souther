@@ -16,7 +16,11 @@ import souther.compiler.check.SidesBalanced;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.DeclaredClauses;
+import souther.compiler.inputs.CasesExpandedAtARule;
 import souther.compiler.inputs.Distinctions;
+import souther.compiler.inputs.EmptyInput;
+import souther.compiler.inputs.PositionValuesNotSeparated;
+import souther.compiler.inputs.RuleWhereARunMayStop;
 import souther.compiler.check.PlacesTheRulesRead;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
@@ -153,6 +157,8 @@ public final class Partitions {
      *                position an arm the reading of the runs could not name is about, what a fork
      *                it could name no subject for may tell apart, and which ways it read inside a
      *                closure say all a run decided within one application of it
+     * @param caseExpansions what each rule's line not worked out because its cases were too many
+     *                was told of those cases, beside the findings saying why
      */
     public record Partitioning(List<PositionMeasurements> measurements,
                                List<StandingQuestion> unanswered,
@@ -168,10 +174,33 @@ public final class Partitions {
                                souther.compiler.inputs.EmptyInput inputIsEmpty,
                                WhereTheOperationsStand operationsStanding,
                                StringsReached strings,
-                               List<DerivedValue.Replaced> replaced) {
+                               List<DerivedValue.Replaced> replaced,
+                               List<CasesExpandedAtARule> caseExpansions) {
+
+        /** The same, with no rule's cases told of. */
+        public Partitioning(List<PositionMeasurements> measurements,
+                            List<StandingQuestion> unanswered,
+                            Set<NumericTerm> uncertain,
+                            List<RuleWithoutALine> rulesWithoutALine,
+                            List<RuleWhereARunMayStop> rulesWhereARunMayStop,
+                            List<PositionValuesNotSeparated> notSeparated,
+                            List<Border> between,
+                            Map<AxisId, List<Border>> along,
+                            ReachingCuts reaching,
+                            MeasureClosure.OfThePartition partitionClosure,
+                            MeasureClosure.OfTheBorder borderClosure,
+                            EmptyInput inputIsEmpty,
+                            WhereTheOperationsStand operationsStanding,
+                            StringsReached strings,
+                            List<DerivedValue.Replaced> replaced) {
+            this(measurements, unanswered, uncertain, rulesWithoutALine, rulesWhereARunMayStop,
+                    notSeparated, between, along, reaching, partitionClosure, borderClosure,
+                    inputIsEmpty, operationsStanding, strings, replaced, List.of());
+        }
 
         public Partitioning {
             replaced = List.copyOf(replaced);
+            caseExpansions = List.copyOf(caseExpansions);
             measurements = List.copyOf(measurements);
             unanswered = List.copyOf(unanswered);
             uncertain = java.util.Set.copyOf(uncertain);
@@ -1135,6 +1164,7 @@ public final class Partitions {
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
         RulesWithNoLine.Gathered found = new RulesWithNoLine.Gathered();
         found.addAll(base.rulesWithoutALine());
+        base.caseExpansions().forEach(found::expanded);
         found.addAll(rulesWithoutALine);
         unclassifiedIn(base.unanswered(), found);
         RulesWithNoLine gathered = found.found();
@@ -1248,7 +1278,10 @@ public final class Partitions {
                 // is owed a weight for. Decided once by whoever read the lines, and carried: a
                 // reader that counted thresholds again over the borders would count a different
                 // set of lines.
-                replaced);
+                replaced,
+                // And what each line not worked out for its many cases was told of them, beside
+                // the findings above and gathered with them.
+                found.found().expanded());
     }
 
     /**

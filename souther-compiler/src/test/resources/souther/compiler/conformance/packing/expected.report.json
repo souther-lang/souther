@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 27,
+  "schemaVersion" : 28,
   "compilerVersion" : "<version>",
   "status" : "complete",
   "adequacy" : "not_satisfied",
@@ -2901,7 +2901,8 @@
           "unknown" : 1
         },
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "complete",
@@ -4285,7 +4286,8 @@
           "unknown" : 0
         },
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "complete",

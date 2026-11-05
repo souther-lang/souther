@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
+import souther.compiler.meaning.CaseExpansion;
 import souther.compiler.types.ModelOccurrences;
 import souther.compiler.values.ValuesWithin;
 
@@ -41,16 +42,25 @@ import java.util.Map;
  */
 public record RulesWithNoLine(List<RuleWithoutALine> reported,
                               List<StandingQuestion.Unclassified> unclassified,
-                              List<RuleWhereARunMayStop> stopping) {
+                              List<RuleWhereARunMayStop> stopping,
+                              List<CasesExpandedAtARule> expanded) {
 
     /** Nothing found, which is what a reader with no rules to read hands on. */
     public static final RulesWithNoLine NONE =
-            new RulesWithNoLine(List.of(), List.of(), List.of());
+            new RulesWithNoLine(List.of(), List.of(), List.of(), List.of());
 
     public RulesWithNoLine {
         reported = List.copyOf(reported);
         unclassified = List.copyOf(unclassified);
         stopping = List.copyOf(stopping);
+        expanded = List.copyOf(expanded);
+    }
+
+    /** The same, with no rule's cases told of. */
+    public RulesWithNoLine(List<RuleWithoutALine> reported,
+                           List<StandingQuestion.Unclassified> unclassified,
+                           List<RuleWhereARunMayStop> stopping) {
+        this(reported, unclassified, stopping, List.of());
     }
 
     /**
@@ -149,6 +159,21 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
         private final Map<Object, RuleWithoutALine> reported = new LinkedHashMap<>();
         private final Map<Object, StandingQuestion.Unclassified> unclassified = new LinkedHashMap<>();
         private final Map<RuleRef, RuleWhereARunMayStop> stopping = new LinkedHashMap<>();
+        private final Map<Object, CasesExpandedAtARule> expanded = new LinkedHashMap<>();
+
+        /**
+         * What a rule's line not worked out because its cases were too many was told of those
+         * cases, beside the finding that says why it was not worked out.
+         */
+        public void expanded(RuleCitation cited, ModelOccurrences readAt,
+                             CaseExpansion expansion) {
+            expanded(CasesExpandedAtARule.of(cited, readAt, expansion));
+        }
+
+        /** The same, as another reader handed it on. */
+        public void expanded(CasesExpandedAtARule one) {
+            expanded.merge(one.key(), one, CasesExpandedAtARule::mergedWith);
+        }
 
         /** A rule a run reaching it may stop in, which is what a report says of it. */
         public void mayStopARun(RuleCitation cited, ModelOccurrences readAt) {
@@ -268,12 +293,14 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
             other.unclassified().forEach(this::asked);
             other.stopping().forEach(one ->
                     stopping.merge(one.rule(), one, RuleWhereARunMayStop::mergedWith));
+            other.expanded().forEach(this::expanded);
         }
 
         /** What this gathering came to, which is what a reader hands on. */
         public RulesWithNoLine found() {
             return new RulesWithNoLine(List.copyOf(reported.values()),
-                    List.copyOf(unclassified.values()), List.copyOf(stopping.values()));
+                    List.copyOf(unclassified.values()), List.copyOf(stopping.values()),
+                    List.copyOf(expanded.values()));
         }
     }
 }
