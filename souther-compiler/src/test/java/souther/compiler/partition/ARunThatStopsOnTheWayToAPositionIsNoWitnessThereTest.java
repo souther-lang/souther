@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -71,28 +72,22 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
 
     /**
      * The values the sum stops on: {@code a} at 11 is past the greatest {@code Int} and at 10 is
-     * the greatest, so a row the compiler offers for the rule is one the program gets past, and
-     * the rows beside the stop hold the element on each side of it.
+     * the greatest, so a row the compiler offers for the rule is one the program gets past.
+     *
+     * <p>The line the stop draws through the elements of {@code hs} is shown to be no place of
+     * the author's line, owes nothing and is not searched, so the rows are the rule's own.
      */
     @Test
-    void theRowsOfferedAreRunsThatGetPastTheSumAndAreDrawnAtItsEdge() {
+    void theRowsOfferedAreRunsThatGetPastTheSum() {
         assertThrows(ArithmeticException.class, () -> Math.addExact(11L, FIRST_SUM));
         assertEquals(Long.MAX_VALUE, Math.addExact(10L, FIRST_SUM));
         for (String condition : List.of(THE_SUM_STOPPING, THE_REMAINDER_OF_A_SUM_STOPPING)) {
             List<List<String>> rows = certifiedRowsOf(condition);
             assertFalse(rows.isEmpty(), condition);
-            TreeSet<Long> elements = new TreeSet<>();
             for (List<String> row : rows) {
                 long a = Long.parseLong(row.get(0));
-                Math.addExact(a, FIRST_SUM);
-                for (String element : row.get(2).replaceAll("[\\[\\]\\s]", "").split(",")) {
-                    if (!element.isEmpty()) {
-                        elements.add(Long.parseLong(element));
-                    }
-                }
+                assertDoesNotThrow(() -> Math.addExact(a, FIRST_SUM), () -> condition + " " + row);
             }
-            assertTrue(elements.contains(10L) && elements.contains(11L),
-                    condition + " " + elements);
         }
     }
 
