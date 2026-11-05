@@ -166,14 +166,19 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides, CasesWor
         /** The same, asked at some element of a list of whole numbers it weighs, where it weighs
          *  one: what a row is asked then. */
         private final Optional<ACaseAskedAtSomeElement> atSomeElement;
-        /** How far the case was shown to be one the line decides in ({@link #workedOut}). */
-        private final CasesWorkedOut workedOut;
+        /** What a row holding the case is where the line decides: told so where the case was shown
+         *  to be one ({@link #workedOut}), and what it is not told otherwise, the same at every row
+         *  and so made once. */
+        private final AtARow holding;
 
         AskedOfRows(AStatementAtARow decides, Optional<ACaseAskedAtSomeElement> atSomeElement,
                     CasesWorkedOut workedOut) {
             this.decides = decides;
             this.atSomeElement = atSomeElement;
-            this.workedOut = workedOut;
+            this.holding = switch (workedOut) {
+                case CasesWorkedOut.Shown _ -> AtARow.DECIDES;
+                case CasesWorkedOut.Stopped stopped -> new AtARow.CouldNotTell(Set.of(stopped.gap()));
+            };
         }
 
         /** Reads {@code row} the way {@link #at} does, for the walk that finds which containers a
@@ -193,11 +198,7 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides, CasesWor
         AtARow at(BorderQuantity.Observation row) {
             return switch (atSomeElement.map(asked -> asked.at(row)).orElseGet(() ->
                     decides.at(row))) {
-                case AStatementAtARow.Answer.Holds _ -> switch (workedOut) {
-                    case CasesWorkedOut.Shown _ -> AtARow.DECIDES;
-                    case CasesWorkedOut.Stopped stopped ->
-                            new AtARow.CouldNotTell(Set.of(stopped.gap()));
-                };
+                case AStatementAtARow.Answer.Holds _ -> holding;
                 case AStatementAtARow.Answer.Fails _ -> AtARow.DECIDES_NOTHING;
                 case AStatementAtARow.Answer.CouldNotTell(var why) -> new AtARow.CouldNotTell(why);
             };
