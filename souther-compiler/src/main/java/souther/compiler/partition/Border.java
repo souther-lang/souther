@@ -708,12 +708,18 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * the line to say.
      */
     public List<OwedPoint> holdsOpen() {
-        return answers.keySet().stream().flatMap(point -> holdsOpen(point).stream()).toList();
+        AuthoredPlacement placement = placement();
+        return answers.keySet().stream()
+                .flatMap(point -> holdsOpen(point, placement).stream()).toList();
     }
 
     /** The same, of what this reading holds at {@code point} of its own. */
     public List<OwedPoint> holdsOpen(DomainPoint point) {
-        if (!(placement() instanceof AuthoredPlacement.NotShown)) {
+        return holdsOpen(point, placement());
+    }
+
+    private List<OwedPoint> holdsOpen(DomainPoint point, AuthoredPlacement placement) {
+        if (!(placement instanceof AuthoredPlacement.NotShown)) {
             return List.of();
         }
         BorderObligationId line = obligation();
@@ -739,8 +745,9 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * open. What a row there shows is about no point anybody is owed.
      */
     public List<OwedPoint> about(DomainPoint point) {
-        List<OwedPoint> out = new ArrayList<>(owes(point));
-        out.addAll(holdsOpen(point));
+        AuthoredPlacement placement = placement();
+        List<OwedPoint> out = new ArrayList<>(owes(point, placement));
+        out.addAll(holdsOpen(point, placement));
         return List.copyOf(out);
     }
 

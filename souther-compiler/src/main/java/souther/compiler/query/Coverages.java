@@ -2106,6 +2106,10 @@ final class Coverages {
         StandingAtAPoint.AtALine toRows = StandingAtAPoint.putToRows(line, site);
         return new OneShapeOfBorder() {
 
+            /** What a row has to be to arrive at this border, which is the same at every point of
+             *  it; built the first time a point asks. */
+            private Reachability reaching;
+
             @Override
             public StandingAtAPoint.Met met(Optional<Boolean> answeredAs, Criterion criterion,
                                             List<ObservedInputs> rows) {
@@ -2115,8 +2119,11 @@ final class Coverages {
 
             @Override
             public boolean classLiesOutsideTheCase(Criterion criterion) {
+                if (reaching == null) {
+                    reaching = Reachability.of(way, declarations);
+                }
                 return Coverages.classLiesOutsideTheCase(new LevelRealizer(), line.quantity(),
-                        criterion, Reachability.of(way, declarations));
+                        criterion, reaching);
             }
 
             @Override
@@ -2249,11 +2256,6 @@ final class Coverages {
                 border.origin().recordedAt();
         // Put to rows once for every row a point is searched with.
         StandingAtAPoint.AtALine toRows = StandingAtAPoint.putToRows(line, site);
-        // Built here and gone when the search is. What a row has to be to arrive is a way of asking
-        // about values rather than something that says what it is, so it is what the walk runs
-        // against and never what the answer keeps; the account it was built from is what travels.
-        souther.compiler.partition.Reachability reaching =
-                souther.compiler.partition.Reachability.of(within, rules.region());
         // Where the reading's numbers are written, which is the same at every point of it.
         List<RealizationTarget.OfANumber> read = quantity.numbers().stream()
                 .map(RealizationTarget::of).toList();
@@ -2269,9 +2271,23 @@ final class Coverages {
             private final Map<Reachability.Reaching, List<Optional<WayToTheBorder.Assuming>>>
                     assumingAlong = new IdentityHashMap<>();
 
+            /** What a row has to be to arrive; built the first time a point asks, and gone when the
+             *  search is. A border none of whose points is searched or told apart never builds it.
+             *  It is a way of asking about values rather than something that says what it is, so
+             *  it is what the walk runs against and never what the answer keeps; the account it
+             *  was built from is what travels. */
+            private Reachability reaching;
+
+            private Reachability reaching() {
+                if (reaching == null) {
+                    reaching = Reachability.of(within, rules.region());
+                }
+                return reaching;
+            }
+
             @Override
             public boolean classLiesOutsideTheCase(Criterion criterion) {
-                return Coverages.classLiesOutsideTheCase(realizer, quantity, criterion, reaching);
+                return Coverages.classLiesOutsideTheCase(realizer, quantity, criterion, reaching());
             }
 
             @Override
@@ -2332,7 +2348,7 @@ final class Coverages {
                 // in the one for a walk that tried what the rules leave and reached nothing:
                 // nothing was walked here, and what settles it is the model.
                 Reachability.Reaching able;
-                switch (reaching) {
+                switch (reaching()) {
                     case Reachability.Reaching way -> able = way;
                     case Reachability.NothingReaches _ -> {
                         return noRowTakes(label, within,

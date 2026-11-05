@@ -2,11 +2,10 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceRendering;
+import souther.compiler.inputs.RuleWhereARunMayStop;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
-import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
 
@@ -17,9 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * A line through an element a walk hands its step, where the container is made of the input, is
  * drawn where the elements the way leaves put it, and nowhere a number the way leaves out would.
  *
- * <p>Each of these lines is read as no place of the author's line, so it owes no row and none is
- * searched for at it ({@link souther.compiler.query.SearchOutcomes#unneeded}); what is held here
- * is where the lines are.
+ * <p>Asked of the lines as the rules alone draw them and of the rules a run may stop in, which are
+ * the owners of both answers: where a line falls takes no row, and none is composed here.
  */
 class ALineThroughAnElementIsDrawnWhereTheElementPutsItTest {
 
@@ -27,8 +25,8 @@ class ALineThroughAnElementIsDrawnWhereTheElementPutsItTest {
      *  where the element is three. */
     @Test
     void aLineThroughAWholeNumberInTurnIsAtTheFirstElement() {
-        assertEquals(List.of("7"), linesOn(compiled("a: Int, days: Int", "List<Int>", FROM_THREE),
-                "a"));
+        assertEquals(List.of("7"), linesOn(compiled("a: Int, days: Int", "List<Int>",
+                FROM_THREE)));
     }
 
     /**
@@ -39,7 +37,7 @@ class ALineThroughAnElementIsDrawnWhereTheElementPutsItTest {
     @Test
     void aLineThroughWhereAnElementStandsIsAtTheFirstPlace() {
         assertEquals(List.of("3"), linesOn(compiled("a: Int, xs: List<Int>", "List<Bool>",
-                "List.mapIndexed((i, _) -> a + i >= 3, xs)"), "a"));
+                "List.mapIndexed((i, _) -> a + i >= 3, xs)")));
     }
 
     /**
@@ -49,7 +47,7 @@ class ALineThroughAnElementIsDrawnWhereTheElementPutsItTest {
     @Test
     void aWayBoundingTheLastEndDrawsALineAtTheMostTheElementTakes() {
         assertEquals(List.of("4", "7"), linesOn(compiled("a: Int, days: Int", "List<Int>",
-                "if days <= 5 then " + FROM_THREE + " else []"), "a"));
+                "if days <= 5 then " + FROM_THREE + " else []")));
     }
 
     /**
@@ -60,7 +58,7 @@ class ALineThroughAnElementIsDrawnWhereTheElementPutsItTest {
     void aNumberTheWayLeavesOutDrawsNoLine() {
         assertEquals(List.of("6"), linesOn(compiled("a: Int, days: Int", "List<Int>",
                 "if days <= 5 then (if days == 5 then [] else (if days == 4 then [] else "
-                        + FROM_THREE + ")) else []"), "a"));
+                        + FROM_THREE + ")) else []")));
     }
 
     /** A way on which the list holds nothing makes no application: no line through the element,
@@ -69,18 +67,16 @@ class ALineThroughAnElementIsDrawnWhereTheElementPutsItTest {
     void aWayOnWhichTheListHoldsNothingDrawsNothingThroughTheElement() {
         Compilation compilation = compiled("a: Int, days: Int", "List<Int>",
                 "if days < 3 then " + FROM_THREE + " else []");
-        assertEquals(List.of(), linesOn(compilation, "a"));
-        assertEquals(List.of(), report(compilation).stream()
-                .filter(line -> line.startsWith("· may stop")).toList());
+        assertEquals(List.of(), linesOn(compilation));
+        assertEquals(List.of(), mayStop(compilation));
     }
 
     /** Ends that move together are not shown to leave the element every number, so nothing is
      *  said of which values of {@code a} settle the comparison. */
     @Test
     void endsThatMoveTogetherShowNothingTheElementTakes() {
-        Compilation compilation = compiled("a: Int, days: Int", "List<Int>",
-                "List.rangeInclusive(days, days + 3) |> List.filter(n -> a + n >= 10)");
-        assertEquals(List.of(), linesOn(compilation, "a"));
+        assertEquals(List.of(), linesOn(compiled("a: Int, days: Int", "List<Int>",
+                "List.rangeInclusive(days, days + 3) |> List.filter(n -> a + n >= 10)")));
     }
 
     /**
@@ -100,40 +96,31 @@ class ALineThroughAnElementIsDrawnWhereTheElementPutsItTest {
     private static final String FROM_THREE =
             "List.rangeInclusive(3, days) |> List.filter(n -> a + n >= 10)";
 
-    private static List<String> mayStop(Compilation compilation) {
-        return report(compilation).stream().filter(line -> line.startsWith("· may stop"))
-                .toList();
+    /** The rules of {@code m} some run reaching them may stop in. */
+    private static List<RuleWhereARunMayStop> mayStop(Compilation compilation) {
+        Partitions.Partitioning divided =
+                compilation.db().ask(new Adequacy.Divided("w1", "m")).value();
+        assertNotNull(divided, "m was divided");
+        assertEquals(List.of(), compilation.errors(), "the model compiles");
+        return divided.rulesWhereARunMayStop();
     }
 
-    private static List<String> report(Compilation compilation) {
-        return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
-                .map(String::strip).toList();
-    }
-
-    /** Where the lines of {@code m} on {@code quantity} are drawn, in the order they are
-     *  measured. */
-    private static List<String> linesOn(Compilation compilation, String quantity) {
-        return measured(compilation).stream().filter(line -> line.left().equals(quantity))
+    /** Where the lines of {@code m} on {@code a} are drawn, in the order they are read. */
+    private static List<String> linesOn(Compilation compilation) {
+        List<BorderAssessment> lines =
+                compilation.db().ask(new Adequacy.Boundaries("w1", "m")).value();
+        assertNotNull(lines, "m was read");
+        assertEquals(List.of(), compilation.errors(), "the model compiles");
+        return lines.stream().filter(line -> line.left().equals("a"))
                 .map(BorderAssessment::value).toList();
     }
 
-    private static List<BorderAssessment> measured(Compilation compilation) {
-        List<BorderAssessment> lines = Adequacy.readingsOf(compilation.db(), "w1").get("m");
-        assertNotNull(lines, "m was measured");
-        return lines;
-    }
-
     private static Compilation compiled(String parameters, String answer, String body) {
-        Compilation compilation = Compilation.ofSource("""
+        return Compilation.ofSource("""
                 module w1
                 behavior m : (%s) -> %s
                 let m (%s) = %s
                 """.formatted(parameters, answer, parameters.replaceAll(":\\s*[A-Za-z<>]+", ""),
                 body), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model compiles");
-        return compilation;
     }
 }

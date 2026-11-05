@@ -208,10 +208,10 @@ class ASearchIsMadeOnlyWhereWhatItFindsCanBeOwedTest {
         return out;
     }
 
+    /** The model, with its rows run: what the search and the obligations read, and nothing else. */
     private static Compilation analysed(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         return compilation;
     }
 }
