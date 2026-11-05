@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 
 /**
@@ -144,10 +145,11 @@ public final class NumericallyConsistentWays {
 
         @Override
         public Function<State, Map<State, BigInteger>> one(DecidingCase.Cases.One one) {
-            List<Proposition> parts = conjunctsOf(one.condition());
+            List<Narrowing> parts = new ArrayList<>();
+            conjunctsOf(one.condition()).forEach(part -> Narrowing.of(part).ifPresent(parts::add));
             return remembered(state -> {
                 State left = state;
-                for (Proposition part : parts) {
+                for (Narrowing part : parts) {
                     left = left.taking(part);
                     if (left == null) {
                         return Map.of();
@@ -280,51 +282,66 @@ public final class NumericallyConsistentWays {
     }
 
     /**
-     * What the comparisons chosen so far leave: each affine form's interval, and each dividend's
-     * remainders as the bits of a number, by the form of the dividend and the divisor.
+     * The coefficients of an affine form, hashed once: a state is looked up by its forms at every
+     * case it reaches, and a form's coefficients hash every quantity in them.
      */
-    record State(Map<Map<Quantity, ExactRatio>, Interval> forms,
-                 Map<List<Object>, Long> remainders) {
+    private record Form(Map<Quantity, ExactRatio> coefs, int hash) {
 
-        static final State NOTHING_CHOSEN = new State(Map.of(), Map.of());
-
-        State {
-            forms = Map.copyOf(forms);
-            remainders = Map.copyOf(remainders);
+        Form(Map<Quantity, ExactRatio> coefs) {
+            this(coefs, coefs.hashCode());
         }
 
-        /** This with {@code part} chosen; null where it leaves a form or a dividend nothing. */
-        State taking(Proposition part) {
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof Form form && hash == form.hash
+                    && coefs.equals(form.coefs));
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+    }
+
+    /** A dividend's remainders, told apart by the form of the dividend and the divisor. */
+    private record Dividend(Form form, int divisor) {
+    }
+
+    /** Which remainders of {@code of} a comparison leaves, as bits. */
+    private record Remainders(Dividend of, long allowed) {
+    }
+
+    /**
+     * One comparison of an affine form as it narrows a state, worked out once from the
+     * proposition: the form is to be {@code rel} to {@code at}, and a remainder compared leaves its
+     * dividend {@code remainders}, where it is one told apart.
+     */
+    private record Narrowing(Form form, Rel rel, ExactRatio at,
+                             Optional<Remainders> remainders) {
+
+        /** {@code part} as a narrowing; none where it compares no affine form, and so leaves
+         *  every state as it was. */
+        static Optional<Narrowing> of(Proposition part) {
             if (!(part instanceof Proposition.Compared(Relation.Affine affine, boolean holds,
                     Spelling _)) || affine.form().coefs().isEmpty()) {
-                return this;
+                return Optional.empty();
             }
-            Rel rel = holds ? affine.proposition() : affine.proposition().denied();
             Map<Quantity, ExactRatio> form = affine.form().coefs();
-            Interval left = forms.getOrDefault(form, Interval.EVERY)
-                    .with(rel, affine.form().constant().negated());
-            if (left == null) {
-                return null;
-            }
-            Map<Map<Quantity, ExactRatio>, Interval> nextForms = new HashMap<>(forms);
-            nextForms.put(form, left);
-            Map<List<Object>, Long> nextRemainders = remainders;
+            Optional<Remainders> remainders = Optional.empty();
             if (form.size() == 1 && form.keySet().iterator().next()
                     instanceof Quantity.RemainderOfADividend remainder
                     && remainder.divisor().compareTo(
                             BigInteger.valueOf(MOST_REMAINDERS_TOLD_APART)) <= 0) {
                 int divisor = remainder.divisor().intValueExact();
-                long allowed = remaindersMeeting(remainder, form.get(remainder),
-                        affine.form().constant(), affine.proposition(), holds, divisor);
-                List<Object> dividend = List.of(remainder.dividend().coefs(), remainder.divisor());
-                long kept = remainders.getOrDefault(dividend, (1L << divisor) - 1) & allowed;
-                if (kept == 0) {
-                    return null;
-                }
-                nextRemainders = new HashMap<>(remainders);
-                nextRemainders.put(dividend, kept);
+                remainders = Optional.of(new Remainders(
+                        new Dividend(new Form(remainder.dividend().coefs()), divisor),
+                        remaindersMeeting(remainder, form.get(remainder),
+                                affine.form().constant(), affine.proposition(), holds,
+                                divisor)));
             }
-            return new State(nextForms, nextRemainders);
+            return Optional.of(new Narrowing(new Form(form),
+                    holds ? affine.proposition() : affine.proposition().denied(),
+                    affine.form().constant().negated(), remainders));
         }
 
         /**
@@ -354,6 +371,88 @@ public final class NumericallyConsistentWays {
                 }
             }
             return out;
+        }
+    }
+
+    /**
+     * What the comparisons chosen so far leave: each affine form's interval, and each dividend's
+     * remainders as the bits of a number.
+     *
+     * <p>Hashed once when made, since every case a state reaches looks it up and every case
+     * leaving it merges it, and each such hash would otherwise walk every form it holds.
+     */
+    static final class State {
+
+        static final State NOTHING_CHOSEN = new State(Map.of(), Map.of());
+
+        private final Map<Form, Interval> forms;
+        private final Map<Dividend, Long> remainders;
+        private final int hash;
+
+        /** Held as given: each map is made for this state and changed by nobody after. */
+        private State(Map<Form, Interval> forms, Map<Dividend, Long> remainders) {
+            this.forms = forms;
+            this.remainders = remainders;
+            int hash = 0;
+            for (Map.Entry<Form, Interval> each : forms.entrySet()) {
+                hash += mixed(31 * each.getKey().hashCode() + each.getValue().hashCode());
+            }
+            for (Map.Entry<Dividend, Long> each : remainders.entrySet()) {
+                hash += mixed(31 * each.getKey().hashCode() + each.getValue().hashCode());
+            }
+            this.hash = hash;
+        }
+
+        /**
+         * One entry's hash spread over every bit. A map's own hash adds each key's hash bitwise
+         * apart from its value's, and states giving a few forms one of two intervals each then
+         * share a hash far more often than not.
+         */
+        private static int mixed(int entry) {
+            int out = entry * 0x9E3779B9;
+            out ^= out >>> 16;
+            out *= 0x85EBCA6B;
+            return out ^ (out >>> 13);
+        }
+
+        /** This with {@code part} chosen; null where it leaves a form or a dividend nothing. */
+        State taking(Proposition part) {
+            Optional<Narrowing> narrowing = Narrowing.of(part);
+            return narrowing.isEmpty() ? this : taking(narrowing.get());
+        }
+
+        /** This with {@code part} chosen; null where it leaves a form or a dividend nothing. */
+        private State taking(Narrowing part) {
+            Interval left = forms.getOrDefault(part.form(), Interval.EVERY)
+                    .with(part.rel(), part.at());
+            if (left == null) {
+                return null;
+            }
+            Map<Form, Interval> nextForms = new HashMap<>(forms);
+            nextForms.put(part.form(), left);
+            Map<Dividend, Long> nextRemainders = remainders;
+            if (part.remainders().isPresent()) {
+                Remainders meeting = part.remainders().get();
+                long kept = remainders.getOrDefault(meeting.of(),
+                        (1L << meeting.of().divisor()) - 1) & meeting.allowed();
+                if (kept == 0) {
+                    return null;
+                }
+                nextRemainders = new HashMap<>(remainders);
+                nextRemainders.put(meeting.of(), kept);
+            }
+            return new State(nextForms, nextRemainders);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof State state && hash == state.hash
+                    && forms.equals(state.forms) && remainders.equals(state.remainders));
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
         }
     }
 }

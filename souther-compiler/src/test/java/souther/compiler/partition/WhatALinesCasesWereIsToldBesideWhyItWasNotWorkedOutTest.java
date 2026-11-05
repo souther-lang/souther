@@ -48,7 +48,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
 
     private static Compilation compiled() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors());
         return compilation;
@@ -172,7 +172,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
                             / List.length(payable)))
                 }
                 """.replace("ROWS", rows), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors());
         JsonNode expansions = partition(compilation).path("caseExpansions");
