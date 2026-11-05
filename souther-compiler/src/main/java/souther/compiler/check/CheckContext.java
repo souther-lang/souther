@@ -143,11 +143,6 @@ public record CheckContext(Symbols symbols, DeclarationAccess declarations,
         return new ConstructOccurrence(origin, lineage);
     }
 
-    /** Which copy of its body the walk is elaborating, for a node that has no origin to ask about. */
-    public OccurrenceLineage lineage() {
-        return lineage;
-    }
-
     /**
      * This context, to change one thing about.
      *

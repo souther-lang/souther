@@ -448,7 +448,7 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
         Core.Construct held = (Core.Construct) standing.value();
         Core copied = Core.mapAll(standing,
                 child -> child == held ? new Core.Construct(held.typeName(), held.values(),
-                        held.type(), held.pos()) : child,
+                        held.type(), held.lineage(), held.pos()) : child,
                 name -> name);
         Core.Widen still = assertInstanceOf(Core.Widen.class, copied,
                 "a rewrite of what a Widen holds keeps it standing");

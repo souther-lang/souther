@@ -3,6 +3,7 @@ package souther.compiler.reach;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
@@ -165,7 +166,8 @@ public sealed interface Proof
          *                the call is handed them
          * @param inner   why no run gets past that application
          */
-        T noRunGetsPastOneOfItsApplications(SourcePos call, int element, Proof inner);
+        T noRunGetsPastOneOfItsApplications(SourcePos call, OccurrenceLineage lineage, int element,
+                                            Proof inner);
     }
 
     /** What this proof comes to, in {@code words}. */
@@ -221,16 +223,17 @@ public sealed interface Proof
 
     /** No run gets past one application a call on the way makes; see
      *  {@link Words#noRunGetsPastOneOfItsApplications}. */
-    static Proof noRunGetsPastOneOfItsApplications(SourcePos call, int element, Proof inner) {
-        return new NoRunGetsPastOneOfItsApplications(call, element, inner);
+    static Proof noRunGetsPastOneOfItsApplications(SourcePos call, OccurrenceLineage lineage,
+                                                   int element, Proof inner) {
+        return new NoRunGetsPastOneOfItsApplications(call, lineage, element, inner);
     }
 }
 
-record NoRunGetsPastOneOfItsApplications(SourcePos call, int element, Proof inner)
-        implements Proof {
+record NoRunGetsPastOneOfItsApplications(SourcePos call, OccurrenceLineage lineage, int element,
+                                         Proof inner) implements Proof {
 
     NoRunGetsPastOneOfItsApplications {
-        if (call == null || element < 0 || inner == null) {
+        if (call == null || lineage == null || element < 0 || inner == null) {
             throw new IllegalArgumentException("an application nothing gets past, of no call, at"
                     + " no element, or with nothing said of why: " + call + " " + element);
         }
@@ -238,7 +241,7 @@ record NoRunGetsPastOneOfItsApplications(SourcePos call, int element, Proof inne
 
     @Override
     public <T> T said(Words<T> words) {
-        return words.noRunGetsPastOneOfItsApplications(call, element, inner);
+        return words.noRunGetsPastOneOfItsApplications(call, lineage, element, inner);
     }
 }
 

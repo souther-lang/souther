@@ -10,6 +10,7 @@ import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -91,7 +92,8 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
      * given the scrutinee, and following what a name was given is the whole of the rule. */
     @Test
     void anArmOpeningWrittenTextOpensThatText() {
-        Core written = new Core.Construct(FOUND, List.of(), Type.ref(FOUND), POS);
+        Core written = new Core.Construct(FOUND, List.of(), Type.ref(FOUND),
+                OccurrenceLineage.ORIGINAL, POS);
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         Denotations at = engine.enteringArm(

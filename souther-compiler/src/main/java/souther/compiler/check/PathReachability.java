@@ -10,7 +10,6 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.coverage.NumberingIdentity;
-import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
 import souther.compiler.core.WhatABodyReads;
@@ -1114,21 +1113,16 @@ public final class PathReachability {
     /**
      * Which copy of its body the operator {@code e} is in.
      *
-     * <p>The kinds that answer — an operator, a negation, a call — say it themselves. A node that
-     * names no copy of its own, which narrows only by ending every run, stands wherever its parent
-     * does and is read as written: no call is marked for it, and its own place still is.
+     * <p>Asked of what {@link PathCompletion} may narrow or end a run at, and every such kind says
+     * its copy ({@link Core.InACopy}). A kind that does not is a kind added without saying so, and
+     * it is refused here: reading it as written would put a decision made in a helper's copy at the
+     * helper's one written place.
      */
     private static OccurrenceLineage copyOfAnOperator(Core e) {
-        return switch (Core.withoutStanding(e)) {
-            case Core.Binary binary -> binary.occurrence().lineage();
-            case Core.Neg neg -> neg.lineage();
-            case Core.Call call -> call.occurrence().lineage();
-            case Core.PreservedCall kept -> kept.place().lineage();
-            default -> {
-                ConstructOccurrence named = ACopyOfAnApplication.occurrenceOf(e);
-                yield named == null ? OccurrenceLineage.ORIGINAL : named.lineage();
-            }
-        };
+        if (Core.withoutStanding(e) instanceof Core.InACopy standing) {
+            return standing.lineage();
+        }
+        throw new IllegalStateException("an evaluation that answers says which copy it is in: " + e);
     }
 
     /**
@@ -1219,7 +1213,7 @@ public final class PathReachability {
                             operands.mayStop(), false, false,
                             body.whyNothingArrives().<WhyNone>map(why -> new WhyNone.Because(
                                             Proof.noRunGetsPastOneOfItsApplications(
-                                                    call.pos(), handed, why)))
+                                                    call.pos(), call.lineage(), handed, why)))
                                     .orElse(new WhyNone.Unsaid()),
                             false);
                 }

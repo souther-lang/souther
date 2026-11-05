@@ -99,6 +99,7 @@ import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.StepOfACopy;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
@@ -2038,22 +2039,35 @@ public final class Adequacy {
             private Diagnostic.Builder marked(Diagnostic.Builder out,
                                               List<PathDecision> decisions) {
                 for (PathDecision each : decisions) {
-                    out = out.secondary(Region.point(each.at()), each.said(
+                    out = markedInItsCopy(out, each.at(), each.lineage(), each.said(
                             new DeadBranchMessage.ThisOneHoldsOnTheWayHere(),
                             new DeadBranchMessage.ThisOneFailsOnTheWayHere(),
                             new DeadBranchMessage.ThisArmIsTakenOnTheWayHere(),
                             new DeadBranchMessage.ThisHasToAnswerOnTheWayHere()));
-                    for (StepOfACopy step : StepOfACopy.of(each.lineage())) {
-                        out = calledAt(out, step);
-                    }
+                }
+                return out;
+            }
+
+            /**
+             * {@code out} with {@code at} marked as {@code said}, and then each call that made the
+             * copy {@code lineage} names.
+             *
+             * <p>The one way a place of a proof is marked: a proof names evaluations, and a place
+             * alone is not one that stands in a helper.
+             */
+            private <M extends DeadBranchMessage & Supporting> Diagnostic.Builder markedInItsCopy(
+                    Diagnostic.Builder out, SourcePos at, OccurrenceLineage lineage, M said) {
+                out = out.secondary(Region.point(at), said);
+                for (StepOfACopy step : StepOfACopy.of(lineage)) {
+                    out = calledAt(out, step);
                 }
                 return out;
             }
 
             /** {@code out} with the call that made {@code step} marked, where there is one to mark. */
             private Diagnostic.Builder calledAt(Diagnostic.Builder out, StepOfACopy step) {
-                DeadBranchMessage.ThisCallMadeTheCopyTheNoteAboveIsIn said =
-                        new DeadBranchMessage.ThisCallMadeTheCopyTheNoteAboveIsIn(
+                DeadBranchMessage.ThisCallMadeTheCopyTheProofIsAbout said =
+                        new DeadBranchMessage.ThisCallMadeTheCopyTheProofIsAbout(
                                 Sites.calledIn(step, module));
                 Answer<Citation> call = Sites.whereMade(db, step);
                 if (!call.present()) {
@@ -2163,12 +2177,12 @@ public final class Adequacy {
 
             @Override
             public Diagnostic.Builder noRunGetsPastOneOfItsApplications(SourcePos call,
+                                                                        OccurrenceLineage lineage,
                                                                         int element,
                     souther.compiler.reach.Proof inner) {
-                return new DeadBranchProofWords(db, module, said
-                        .hint(new DeadBranchMessage.NoRunGetsPastOneOfItsApplications(element))
-                        .secondary(Region.point(call),
-                                new DeadBranchMessage.ThisAppliesAFunctionToEveryElement()))
+                return new DeadBranchProofWords(db, module, markedInItsCopy(
+                        said.hint(new DeadBranchMessage.NoRunGetsPastOneOfItsApplications(element)),
+                        call, lineage, new DeadBranchMessage.ThisAppliesAFunctionToEveryElement()))
                         .of(inner);
             }
 

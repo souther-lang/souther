@@ -9,6 +9,7 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -42,7 +43,8 @@ class ATypeNobodyListedIsNotAnsweredAsEndingNothingTest {
 
     private static Core.Construct construction(TypeSymbol.AtModule type) {
         return new Core.Construct(type, List.of(new Core.FieldValue("age",
-                new Core.Int(1, Type.INT, POS), POS)), Type.ref(type), POS);
+                new Core.Int(1, Type.INT, POS), POS)), Type.ref(type), OccurrenceLineage.ORIGINAL,
+                POS);
     }
 
     @Test

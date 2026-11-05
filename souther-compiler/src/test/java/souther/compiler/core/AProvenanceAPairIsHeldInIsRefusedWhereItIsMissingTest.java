@@ -2,6 +2,7 @@ package souther.compiler.core;
 
 import souther.compiler.KeptCalls;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -83,6 +84,6 @@ class AProvenanceAPairIsHeldInIsRefusedWhereItIsMissingTest {
     }
 
     private static Core.Construct construction() {
-        return new Core.Construct(DATA, List.of(), Type.ref(DATA), POS);
+        return new Core.Construct(DATA, List.of(), Type.ref(DATA), OccurrenceLineage.ORIGINAL, POS);
     }
 }

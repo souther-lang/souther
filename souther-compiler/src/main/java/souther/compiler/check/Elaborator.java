@@ -117,7 +117,8 @@ public final class Elaborator {
             // position that states none leaves `Never`, and a sibling branch may still fix it at the
             // join (a `match` arm beside one that answers a value).
             case Hir.Unreachable u ->
-                    new Core.Unreachable(u.reason(), expected == null ? Type.NEVER : expected, u.pos());
+                    new Core.Unreachable(u.reason(), expected == null ? Type.NEVER : expected,
+                            ctx.lineage(), u.pos());
             case Hir.Tuple tup -> {
                 // A pushed-down tuple type reaches each element, so a written `(Set<Int>, List<Int>)`
                 // fixes the empty collections the tuple seeds rather than leaving them bottoms (#74).
@@ -265,7 +266,8 @@ public final class Elaborator {
                         nd.inits(), spreads, nd.pos(),
                         ctx.layout().of(constructed), ctx.fieldTypes().of(constructed), env, ctx,
                         nd.mayOmitOptionalFields());
-                yield new Core.Construct(constructed, values, Type.ref(constructed), nd.pos());
+                yield new Core.Construct(constructed, values, Type.ref(constructed), ctx.lineage(),
+                        nd.pos());
             }
             case Hir.Match m -> MatchElaborator.elaborateMatch(m, env, ctx, expected);
             case Hir.If iff -> {

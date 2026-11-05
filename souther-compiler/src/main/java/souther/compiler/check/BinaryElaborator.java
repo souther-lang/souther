@@ -436,7 +436,8 @@ public final class BinaryElaborator {
                 ctx.occurrenceOf(bin.origin()),
                 base, bin.pos());
         return new Core.Construct(wrapper,
-                List.of(new Core.FieldValue(WRAPPED, computed, bin.pos())), result, bin.pos());
+                List.of(new Core.FieldValue(WRAPPED, computed, bin.pos())), result, ctx.lineage(),
+                bin.pos());
     }
 
     /** The number an operand carries: a newtype is opened to what it wraps, and anything else is

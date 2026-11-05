@@ -477,7 +477,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
         List<SourcePos> marked = new ArrayList<>();
         for (Diagnostic one : dead) {
             for (LabeledRegion each : one.secondary()) {
-                if (each.said() instanceof DeadBranchMessage.ThisCallMadeTheCopyTheNoteAboveIsIn made
+                if (each.said() instanceof DeadBranchMessage.ThisCallMadeTheCopyTheProofIsAbout made
                         && each.place() instanceof DiagnosticPlace.InSource there) {
                     assertEquals("shift", made.called());
                     marked.add(there.region().start());
