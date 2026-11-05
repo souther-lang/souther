@@ -177,7 +177,7 @@ class ASearchIsMadeOnlyWhereWhatItFindsCanBeOwedTest {
                 example keep
                     | (Amount(10)) -> Ok { n = 10 }
                     | (Amount(50)) -> Ok { n = 50 }
-                """);
+                """, ROWS_READ);
         List<Item> held = itemsOf(compilation, "example.both", "hold", AuthoredPlacement.class);
         assertFalse(held.isEmpty(), "hold reads the line and has no row at it");
         for (Item each : held) {
@@ -212,14 +212,14 @@ class ASearchIsMadeOnlyWhereWhatItFindsCanBeOwedTest {
                     | (12, true) -> false
                     | (21, true) -> false
                 """);
-        List<Item> atTen = itemsOf(compilation, "example.twice", "hold", AuthoredPlacement.class)
-                .stream().filter(each -> each.reading().border().label().equals("a = 10")
-                        && each.at() instanceof DomainPoint.AtTheLine).toList();
-        assertEquals(1, atTen.size(), () -> "the two copies at ten are one reading: " + atTen);
-        assertTrue(atTen.getFirst().reading().readAt().inOrder().size() > 1,
-                () -> "read at both calls: " + atTen.getFirst().reading().readAt());
-        assertTrue(atTen.getFirst().owed().unneeded(),
-                () -> atTen.getFirst() + " is about the point the row at eleven meets");
+        List<Item> readTwice = itemsOf(compilation, "example.twice", "hold",
+                AuthoredPlacement.class).stream().filter(each ->
+                        each.reading().readAt().inOrder().size() > 1
+                                && each.at() instanceof DomainPoint.AtTheLine).toList();
+        assertEquals(1, readTwice.size(),
+                () -> "the copies under the two arms are one reading: " + readTwice);
+        assertTrue(readTwice.getFirst().owed().unneeded(),
+                () -> readTwice.getFirst() + " is about the point the row at eleven meets");
         assertSearchedExactlyWhereSomethingIsUnmet(compilation, "example.twice");
     }
 
@@ -245,7 +245,7 @@ class ASearchIsMadeOnlyWhereWhatItFindsCanBeOwedTest {
                 behavior hold : (a: Amount) -> Ok
                 let hold (a) = Ok { n = a.value }
                 """), ModulePath.EMPTY);
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(ROWS_READ);
         List<Item> held = itemsOf(compilation, "example.carrying", "hold", AuthoredPlacement.class);
         assertFalse(held.isEmpty(), "hold reads the line and has no row at it");
         for (Item each : held) {
@@ -322,10 +322,23 @@ class ASearchIsMadeOnlyWhereWhatItFindsCanBeOwedTest {
         return out;
     }
 
-    /** The model, with its rows run: what the search and the obligations read, and nothing else. */
+    /**
+     * The rows read and nothing more, for a line a declaration drew: which points they stand at is
+     * what the gate and the obligations read, and a search is made because it is asked for.
+     */
+    private static final Adequacy.Asked ROWS_READ = Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS);
+
+    /** And with the arms the rows took, which is what a comparison a body wrote is read where. */
+    private static final Adequacy.Asked ARMS_RECORDED = Adequacy.Asked.fullReport();
+
+    /** The model, with what a comparison a body wrote is read by. */
     private static Compilation analysed(String model) {
+        return analysed(model, ARMS_RECORDED);
+    }
+
+    private static Compilation analysed(String model, Adequacy.Asked asked) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(asked);
         return compilation;
     }
 }

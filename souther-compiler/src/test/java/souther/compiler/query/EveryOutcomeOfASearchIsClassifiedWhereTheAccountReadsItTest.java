@@ -233,7 +233,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                         souther.compiler.partition.Level.OfTheQuantity.of(1)),
                 new Measurement.Complete<>(new ItemAssessment.Coverage.NoHit()),
                 ItemAssessment.WritabilityProjection.UNPROVEN,
-                SearchOutcomes.each(List.of(stopped(), certified())));
+                SearchOutcomes.each(List.of(stopped(), certified())), false);
 
         assertTrue(owed.writabilityEvidence().has(
                         ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT),

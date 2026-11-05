@@ -79,12 +79,6 @@ public sealed interface ItemAssessment {
             }
         }
 
-        /** A point nothing has been decided about searching yet. */
-        public Owed(Criterion criterion, Measurement<Coverage> coverage,
-                    WritabilityProjection projection, SearchOutcomes searches) {
-            this(criterion, coverage, projection, searches, false);
-        }
-
         /**
          * Whether building a value here would tell anybody anything.
          *

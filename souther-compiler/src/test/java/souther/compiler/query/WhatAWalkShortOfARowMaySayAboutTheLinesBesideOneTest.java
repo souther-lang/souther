@@ -365,7 +365,7 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
                                 new Measurement.NotMeasured<>(
                                         ItemAssessment.Coverage.NotAsked.NO_ROWS),
                                 ItemAssessment.WritabilityProjection.NOT_COMPUTED,
-                                SearchOutcomes.none())));
+                                SearchOutcomes.none(), false)));
         return new BorderAssessment(border, items, beside);
     }
 

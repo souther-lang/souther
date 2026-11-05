@@ -1743,7 +1743,7 @@ final class Coverages {
                     // composed is a fact about who asked for one, and a measurement that carried it
                     // was answering a question it had not been put.
                     yield new ItemAssessment.Owed(owed.criterion(), coverage,
-                            shape.projection(), SearchOutcomes.none());
+                            shape.projection(), SearchOutcomes.none(), false);
                 }
             });
         }
@@ -3084,7 +3084,8 @@ final class Coverages {
         }
         ItemAssessment.Owed both = new ItemAssessment.Owed(one.criterion(),
                 ObligationCoverage.acrossOneReadingsSearches(one.coverage(), two.coverage()),
-                one.projection().and(two.projection()), one.searches().plus(two.searches()));
+                one.projection().and(two.projection()), one.searches().plus(two.searches()),
+                false);
         // Left unsearched where it was left and is still worth a value: a row one of them stands at
         // makes the point no search's, and then nothing was left.
         return (one.unneeded() || two.unneeded()) && both.worthSearching()
