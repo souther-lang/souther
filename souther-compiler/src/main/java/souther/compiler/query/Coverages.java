@@ -6,6 +6,7 @@ import souther.compiler.types.ModelOccurrences;
 import souther.compiler.coverage.ComparisonEmissionIndex;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.CountWitnesses;
 import souther.compiler.diag.Citation;
 import souther.compiler.check.ElementBindings;
@@ -1246,10 +1247,26 @@ final class Coverages {
      * <p>Which is what makes composing later safe to do. What shows a point writable is read off the
      * evidence, and nothing a search finds is evidence against a point — so this can add a ground and
      * can never take one away, whenever it is run and however many points it is run over.
+     *
+     * <p><b>And only where what it finds can reach a point no row meets.</b> A point of a reading
+     * is a place a row says something about some of the author's points ({@link Border#about}), and
+     * what a search there finds is read by the accounts this module keeps of those points and by
+     * nothing else. A point a row meets stays met whatever a search finds, a point declarations of
+     * another module own is that module's account, and a point a reading holds open that no reading
+     * owes is in no account at all. So a reading's point none of whose author's points is in
+     * {@code unmet} is left unsearched — a point of a reading shown to be no place of the line among
+     * them, which is about none — and said as left unneeded rather than as no search
+     * ({@link ItemAssessment.Owed#unneeded}). What tells this reading's lines apart from the ones
+     * beside them is a different question and is asked whatever this one comes to.
+     *
+     * @param unmet the author's points some reading of the module owes, an account of the module
+     *              keeps ({@link BorderObligationPointAssessment#keptBy}) and no row meets, as the
+     *              obligations read from the rules alone say ({@code Adequacy.Obligations})
      */
     static LineReadings searched(LineReadings measured,
                                  souther.compiler.partition.MeasuredInput input,
-                                 Probe probe, ReachingCuts reaching) {
+                                 Probe probe, ReachingCuts reaching,
+                                 Set<BorderObligationPoint> unmet) {
         List<BorderAssessment> out = new ArrayList<>();
         MeasuredInput.Lines lines = input.lines();
         List<Border> everyLine = everyLineOf(input.partitioning());
@@ -1281,7 +1298,10 @@ final class Coverages {
                 // because this is the last place one reading's searches are that reading's alone:
                 // the readings of one line are put together next, searches and copies both, and a
                 // search stopped at one call would come out stopped at every call of the line.
-                if (item instanceof ItemAssessment.Owed owed && owed.worthSearching()) {
+                if (item instanceof ItemAssessment.Owed owed && owed.worthSearching()
+                        && !reachesAPointNoRowMeets(border.border(), point, unmet)) {
+                    items.put(point, owed.leftUnneeded());
+                } else if (item instanceof ItemAssessment.Owed owed && owed.worthSearching()) {
                     String label = border.border().label(point);
                     Optional<Boolean> answeredAs = answeredAs(border.border(), point)
                             .filter(_ -> search.classLiesOutsideTheCase(owed.criterion()));
@@ -1314,6 +1334,15 @@ final class Coverages {
                     border.readAt(), reaching.saidOnTheWayTo(border.border().origin())));
         }
         return new LineReadings(out, measured.tilts());
+    }
+
+    /**
+     * Whether a row at {@code point} of {@code reading} would say something about one of
+     * {@code unmet}.
+     */
+    static boolean reachesAPointNoRowMeets(Border reading, DomainPoint point,
+                                           Set<BorderObligationPoint> unmet) {
+        return reading.about(point).stream().anyMatch(each -> unmet.contains(each.point()));
     }
 
     /**
@@ -1714,7 +1743,7 @@ final class Coverages {
                     // composed is a fact about who asked for one, and a measurement that carried it
                     // was answering a question it had not been put.
                     yield new ItemAssessment.Owed(owed.criterion(), coverage,
-                            shape.projection(), SearchOutcomes.none());
+                            shape.projection(), SearchOutcomes.none(), false);
                 }
             });
         }
@@ -2079,6 +2108,10 @@ final class Coverages {
         StandingAtAPoint.AtALine toRows = StandingAtAPoint.putToRows(line, site);
         return new OneShapeOfBorder() {
 
+            /** What a row has to be to arrive at this border, which is the same at every point of
+             *  it; built the first time a point asks. */
+            private Reachability reaching;
+
             @Override
             public StandingAtAPoint.Met met(Optional<Boolean> answeredAs, Criterion criterion,
                                             List<ObservedInputs> rows) {
@@ -2088,8 +2121,11 @@ final class Coverages {
 
             @Override
             public boolean classLiesOutsideTheCase(Criterion criterion) {
+                if (reaching == null) {
+                    reaching = Reachability.of(way, declarations);
+                }
                 return Coverages.classLiesOutsideTheCase(new LevelRealizer(), line.quantity(),
-                        criterion, Reachability.of(way, declarations));
+                        criterion, reaching);
             }
 
             @Override
@@ -2222,11 +2258,6 @@ final class Coverages {
                 border.origin().recordedAt();
         // Put to rows once for every row a point is searched with.
         StandingAtAPoint.AtALine toRows = StandingAtAPoint.putToRows(line, site);
-        // Built here and gone when the search is. What a row has to be to arrive is a way of asking
-        // about values rather than something that says what it is, so it is what the walk runs
-        // against and never what the answer keeps; the account it was built from is what travels.
-        souther.compiler.partition.Reachability reaching =
-                souther.compiler.partition.Reachability.of(within, rules.region());
         // Where the reading's numbers are written, which is the same at every point of it.
         List<RealizationTarget.OfANumber> read = quantity.numbers().stream()
                 .map(RealizationTarget::of).toList();
@@ -2242,9 +2273,23 @@ final class Coverages {
             private final Map<Reachability.Reaching, List<Optional<WayToTheBorder.Assuming>>>
                     assumingAlong = new IdentityHashMap<>();
 
+            /** What a row has to be to arrive; built the first time a point asks, and gone when the
+             *  search is. A border none of whose points is searched or told apart never builds it.
+             *  It is a way of asking about values rather than something that says what it is, so
+             *  it is what the walk runs against and never what the answer keeps; the account it
+             *  was built from is what travels. */
+            private Reachability reaching;
+
+            private Reachability reaching() {
+                if (reaching == null) {
+                    reaching = Reachability.of(within, rules.region());
+                }
+                return reaching;
+            }
+
             @Override
             public boolean classLiesOutsideTheCase(Criterion criterion) {
-                return Coverages.classLiesOutsideTheCase(realizer, quantity, criterion, reaching);
+                return Coverages.classLiesOutsideTheCase(realizer, quantity, criterion, reaching());
             }
 
             @Override
@@ -2305,7 +2350,7 @@ final class Coverages {
                 // in the one for a walk that tried what the rules leave and reached nothing:
                 // nothing was walked here, and what settles it is the model.
                 Reachability.Reaching able;
-                switch (reaching) {
+                switch (reaching()) {
                     case Reachability.Reaching way -> able = way;
                     case Reachability.NothingReaches _ -> {
                         return noRowTakes(label, within,
@@ -3012,7 +3057,7 @@ final class Coverages {
      * through two copies of the closure it is in is reached on a different condition by each — so
      * what one proved the other may not have been asked.
      */
-    private static ItemAssessment together(ItemAssessment a, ItemAssessment b) {
+    static ItemAssessment together(ItemAssessment a, ItemAssessment b) {
         if (!(a instanceof ItemAssessment.Owed one) || !(b instanceof ItemAssessment.Owed two)) {
             // Two readings of one line owe the same points, so a point no row is owed at is that
             // under both — and there is nothing about it to put together.
@@ -3030,9 +3075,18 @@ final class Coverages {
             throw new IllegalStateException("two searches of one point asking for different"
                     + " values: " + one.criterion() + " and " + two.criterion());
         }
-        return new ItemAssessment.Owed(one.criterion(),
+        ItemAssessment.Owed both = new ItemAssessment.Owed(one.criterion(),
                 ObligationCoverage.acrossOneReadingsSearches(one.coverage(), two.coverage()),
-                one.projection().and(two.projection()), one.searches().plus(two.searches()));
+                one.projection().and(two.projection()), one.searches().plus(two.searches()),
+                false);
+        // Whether each was searched is each reading's own: the run beside the line can stop at a
+        // different line in each, a point of the author's line it is about can then differ, and
+        // one can be about a point a row meets while the other is about one no row does. So a
+        // search either made is a search of the point, and the point is left unsearched only
+        // where neither made one, one of them left it, and it is still worth a value — a row one
+        // of them stands at makes it no search's, and then nothing was left.
+        return !both.searches().ran() && (one.unneeded() || two.unneeded())
+                && both.worthSearching() ? both.leftUnneeded() : both;
     }
 
     /**

@@ -61,10 +61,27 @@ public sealed interface ItemAssessment {
      *                   <p>Several, because one reading of a line can be searched more than once: a
      *                   helper called from two arms is the same line at the same target, and a row
      *                   for it is composed under each caller's own conditions
+     * @param unneeded   whether the point was worth a value and none was built, because nothing a
+     *                   search here found would reach a point of the author's line that an account
+     *                   of the module keeps and no row meets ({@code Coverages.searched}). The
+     *                   decision about this point of this reading, held here rather than among
+     *                   {@code searches}: what searches came to is put together over readings, and
+     *                   whether this one was searched is no part of another reading's answer.
+     *                   Never beside a search that was made, and only at a point worth one
      */
     record Owed(Criterion criterion, Measurement<Coverage> coverage,
-                WritabilityProjection projection, SearchOutcomes searches)
+                WritabilityProjection projection, SearchOutcomes searches, boolean unneeded)
             implements ItemAssessment {
+
+        public Owed {
+            if (unneeded && searches.ran()) {
+                throw new IllegalArgumentException("a point searched was not left unsearched");
+            }
+            if (unneeded && !worthSearching(coverage)) {
+                throw new IllegalArgumentException("a point not worth a value was never a search to"
+                        + " leave: " + criterion);
+            }
+        }
 
         /**
          * Whether building a value here would tell anybody anything.
@@ -85,7 +102,12 @@ public sealed interface ItemAssessment {
          * the list was written before the state existed.
          */
         public boolean worthSearching() {
-            if (hasRowWitness()) {
+            return worthSearching(coverage);
+        }
+
+        /** The same, of what the rows came to at a point, which is all it is answered from. */
+        private static boolean worthSearching(Measurement<Coverage> coverage) {
+            if (hasRowWitness(coverage)) {
                 return false;
             }
             return switch (coverage) {
@@ -117,6 +139,10 @@ public sealed interface ItemAssessment {
          * silent {@code false}.
          */
         public boolean hasRowWitness() {
+            return hasRowWitness(coverage);
+        }
+
+        private static boolean hasRowWitness(Measurement<Coverage> coverage) {
             return switch (coverage) {
                 case Measurement.Complete<Coverage> it -> Coverage.hit(it.value());
                 case Measurement.Partial<Coverage> it -> Coverage.hit(it.value());
@@ -136,7 +162,15 @@ public sealed interface ItemAssessment {
          * anybody asked.
          */
         public Owed settledBy(SearchOutcomes searched) {
-            return new Owed(criterion, coverage, projection, searches.plus(searched));
+            return new Owed(criterion, coverage, projection, searches.plus(searched), unneeded);
+        }
+
+        /**
+         * The same point, left unsearched because nothing a search found here would reach a point
+         * anybody keeps an account of and no row meets.
+         */
+        public Owed leftUnneeded() {
+            return new Owed(criterion, coverage, projection, searches, true);
         }
 
         /**
