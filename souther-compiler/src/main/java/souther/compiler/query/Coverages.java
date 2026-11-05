@@ -6,6 +6,7 @@ import souther.compiler.types.ModelOccurrences;
 import souther.compiler.coverage.ComparisonEmissionIndex;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.CountWitnesses;
 import souther.compiler.diag.Citation;
 import souther.compiler.check.ElementBindings;
@@ -1246,10 +1247,24 @@ final class Coverages {
      * <p>Which is what makes composing later safe to do. What shows a point writable is read off the
      * evidence, and nothing a search finds is evidence against a point — so this can add a ground and
      * can never take one away, whenever it is run and however many points it is run over.
+     *
+     * <p><b>And only where what it finds can reach a point no row meets.</b> A point of a reading
+     * is a place a row says something about some of the author's points ({@link Border#about}), and
+     * what a search there finds goes into the module's account of those points and nowhere else. A
+     * point a row meets stays met whatever a search finds, and a point a reading holds open that no
+     * reading owes is in no account at all. So a reading's point none of whose author's points is
+     * in {@code unmet} is left unsearched — a point of a reading shown to be no place of the line
+     * among them, which is about none — and said as left unneeded rather than as no search
+     * ({@link SearchOutcomes#unneeded}). What tells this reading's lines apart from the ones beside
+     * them is a different question and is asked whatever this one comes to.
+     *
+     * @param unmet the author's points some reading of the module owes and no row meets, as the
+     *              obligations read from the rules alone say ({@code Adequacy.Obligations})
      */
     static LineReadings searched(LineReadings measured,
                                  souther.compiler.partition.MeasuredInput input,
-                                 Probe probe, ReachingCuts reaching) {
+                                 Probe probe, ReachingCuts reaching,
+                                 Set<BorderObligationPoint> unmet) {
         List<BorderAssessment> out = new ArrayList<>();
         MeasuredInput.Lines lines = input.lines();
         List<Border> everyLine = everyLineOf(input.partitioning());
@@ -1281,7 +1296,10 @@ final class Coverages {
                 // because this is the last place one reading's searches are that reading's alone:
                 // the readings of one line are put together next, searches and copies both, and a
                 // search stopped at one call would come out stopped at every call of the line.
-                if (item instanceof ItemAssessment.Owed owed && owed.worthSearching()) {
+                if (item instanceof ItemAssessment.Owed owed && owed.worthSearching()
+                        && !reachesAPointNoRowMeets(border.border(), point, unmet)) {
+                    items.put(point, owed.settledBy(SearchOutcomes.leftUnneeded()));
+                } else if (item instanceof ItemAssessment.Owed owed && owed.worthSearching()) {
                     String label = border.border().label(point);
                     Optional<Boolean> answeredAs = answeredAs(border.border(), point)
                             .filter(_ -> search.classLiesOutsideTheCase(owed.criterion()));
@@ -1314,6 +1332,15 @@ final class Coverages {
                     border.readAt(), reaching.saidOnTheWayTo(border.border().origin())));
         }
         return new LineReadings(out, measured.tilts());
+    }
+
+    /**
+     * Whether a row at {@code point} of {@code reading} would say something about one of
+     * {@code unmet}.
+     */
+    private static boolean reachesAPointNoRowMeets(Border reading, DomainPoint point,
+                                                   Set<BorderObligationPoint> unmet) {
+        return reading.about(point).stream().anyMatch(each -> unmet.contains(each.point()));
     }
 
     /**

@@ -3909,13 +3909,27 @@ public final class Adequacy {
             if (subject == null) {
                 return Answer.absent();
             }
+            // The points the module owes that no row meets, from every behavior's lines as the
+            // rules alone read them: the obligations a search's answers are folded into, asked
+            // before anything is built, so a search is made only where what it finds can be owed.
+            List<BorderObligationPointAssessment> owed = db.ask(new Obligations(name,
+                    new GenerationScope.Module(), HowALineIsRead.THE_RULES_ALONE)).value();
+            if (owed == null) {
+                return Answer.absent();
+            }
+            Set<souther.compiler.partition.BorderObligationPoint> unmet = new LinkedHashSet<>();
+            for (BorderObligationPointAssessment each : owed) {
+                if (!each.owed().hasRowWitness()) {
+                    unmet.add(each.point());
+                }
+            }
             return Answer.of(Coverages.merged(Coverages.searched(measured, subject,
                     probing(sig, subject, StatementsOfAnInput.of(read), constructing(db, name),
                             runningRowsOf(db, name, trialling(db, name), behavior, sig,
                                     RequiredDependencies.of(db, name, behavior)),
                             answering(db, name, behavior, subject),
                             rowsRanWith(db, name, behavior)),
-                    divided.reaching())));
+                    divided.reaching(), Set.copyOf(unmet))));
         }
 
     }
@@ -7146,8 +7160,12 @@ public final class Adequacy {
                 }
                 // A point the measurement does say is worth searching is a different thing, and it
                 // is the same thing `atEdge` refuses: this walks what a search answered, so a hole
-                // in it is the search having skipped a point it was asked about.
-                if (!each.searches().ran() && each.worthSearching()) {
+                // in it is the search having skipped a point it was asked about. A point left
+                // unneeded is not one: a row of this behavior meets everything a row there would
+                // be about, and offering another would put a second row in front of an author for
+                // a point they already wrote one for.
+                if (!each.searches().ran() && !each.searches().unneeded()
+                        && each.worthSearching()) {
                     throw new IllegalStateException("nothing was searched for at "
                             + point + ", which is worth searching");
                 }

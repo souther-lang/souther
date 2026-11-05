@@ -34,13 +34,24 @@ import java.util.Optional;
  * reading a search was made for is what says which calls a stopped search was stopped at: folded
  * away, a reader of a point read at three calls and stopped at one is told all three.
  *
- * @param made every search, with the copies of the model's code the reading it was made for was
- *             read at, in the order they were made
+ * <p><b>And none made is two things.</b> Nobody asked for a value here, or the point was worth one
+ * and none was built because whatever it found would say something only about points a row already
+ * meets, or about none ({@link #unneeded}). The second is said rather than left as no search:
+ * a point worth searching that nobody searched is otherwise a search that went missing, and a
+ * reader asking it would be told our own bookkeeping as an answer about the line.
+ *
+ * @param made     every search, with the copies of the model's code the reading it was made for
+ *                 was read at, in the order they were made
+ * @param unneeded whether the point was left unsearched because nothing a search found there would
+ *                 reach a point no row meets. Never beside a search that was made
  */
-public record SearchOutcomes(List<Made> made) {
+public record SearchOutcomes(List<Made> made, boolean unneeded) {
 
     public SearchOutcomes {
         made = List.copyOf(made);
+        if (unneeded && !made.isEmpty()) {
+            throw new IllegalArgumentException("a search that was made was not left unmade");
+        }
     }
 
     /**
@@ -59,7 +70,15 @@ public record SearchOutcomes(List<Made> made) {
 
     /** Nobody asked for a value to be built here. */
     public static SearchOutcomes none() {
-        return new SearchOutcomes(List.of());
+        return new SearchOutcomes(List.of(), false);
+    }
+
+    /**
+     * No value was built here, at a point worth one, because what it showed would be about points
+     * a row already meets or about none at all.
+     */
+    public static SearchOutcomes leftUnneeded() {
+        return new SearchOutcomes(List.of(), true);
     }
 
     /** One search, or none where {@code attempt} is null. */
@@ -70,20 +89,23 @@ public record SearchOutcomes(List<Made> made) {
     /** These searches, in the order they were made, by a reading nothing has said yet. */
     public static SearchOutcomes each(List<ItemAssessment.Attempt> attempts) {
         return new SearchOutcomes(attempts.stream()
-                .map(each -> new Made(each, ModelOccurrences.NONE)).toList());
+                .map(each -> new Made(each, ModelOccurrences.NONE)).toList(), false);
     }
 
-    /** These and those, in the order they were made. */
+    /**
+     * These and those, in the order they were made — and left unneeded only where neither made
+     * one and either was left unneeded.
+     */
     public SearchOutcomes plus(SearchOutcomes other) {
-        if (other.made.isEmpty()) {
+        if (other.made.isEmpty() && !other.unneeded) {
             return this;
         }
-        if (made.isEmpty()) {
+        if (made.isEmpty() && !unneeded) {
             return other;
         }
         List<Made> out = new ArrayList<>(made);
         out.addAll(other.made);
-        return new SearchOutcomes(out);
+        return new SearchOutcomes(out, out.isEmpty());
     }
 
     /**
@@ -94,7 +116,7 @@ public record SearchOutcomes(List<Made> made) {
      */
     public SearchOutcomes readAt(ModelOccurrences copies) {
         return new SearchOutcomes(made.stream()
-                .map(each -> new Made(each.attempt(), copies)).toList());
+                .map(each -> new Made(each.attempt(), copies)).toList(), unneeded);
     }
 
     /** What every search came to, in the order they were made. */

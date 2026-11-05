@@ -211,6 +211,9 @@ class AComparisonInAClosureThatIgnoresTheElementIsOwedARowOnlyWhereTheContainerH
                 .filter(ItemAssessment.Owed.class::isInstance)
                 .map(ItemAssessment.Owed.class::cast)
                 .filter(ItemAssessment.Owed::worthSearching)
+                // A point whose every author's point another reading's row meets is not searched,
+                // and has no row to stand anywhere.
+                .filter(owed -> !owed.searches().unneeded())
                 .toList();
     }
 
