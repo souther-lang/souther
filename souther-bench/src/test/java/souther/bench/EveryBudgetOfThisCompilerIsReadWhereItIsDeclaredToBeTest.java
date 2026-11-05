@@ -837,6 +837,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#pastTheSteps("
                             + "Ljava/util/List;)V",
                     "out of steps, naming them and the cases left nobody took apart"),
+            Map.entry("souther.compiler.meaning.CasesOfALineAsked#moreWaysThanAreTakenApart("
+                            + "Lsouther/compiler/meaning/DecidingCase;)V",
+                    "more ways of choosing than are taken apart, naming the figure and the ones"
+                            + " the cases were never taken apart at"),
             Map.entry("souther.compiler.partition.ComparisonAssessment#aPartNarrowed("
                             + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
                             + "Lsouther/compiler/partition/Reachability;"
@@ -1161,6 +1165,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.query.Weakening#figures()Ljava/util/List;",
                     "names the budget a decision's reading stopped at, for a reader told a wider"
                             + " run may read past it"),
+            Map.entry("souther.compiler.partition.CasesWorkedOut$Stopped#at("
+                            + "Ljava/util/Collection;)"
+                            + "Lsouther/compiler/partition/CasesWorkedOut$Stopped;",
+                    "names the budgets the cases a line is read in were not worked out past, which"
+                            + " a row there is told as what it was not told"),
             // Which figure each reason a part was not read or a condition not taken in stopped at,
             // said once for every reader that names the figure: a gap on the way, a rule that
             // drew no line, a composer of an answer.

@@ -6,6 +6,7 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.publish.WeakeningWord;
 import souther.compiler.query.Weakening;
@@ -95,7 +96,7 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                         WeakeningWord.BORDER_VALUE_ABSENT, Set.of("NoValue"),
                         WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE,
                                 Set.of("CouldNotWalk", "CouldNotReadRow", "KeysNotTold",
-                                        "ReachNotRead"),
+                                        "ReachNotRead", "CasesNotWorkedOut"),
                         WeakeningWord.BORDER_VALUE_NOT_WORKED_OUT, Set.of("CouldNotWorkOut")),
                 under,
                 () -> "the words no longer stand over the reasons they were meant to: " + under);
@@ -134,6 +135,8 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                         out.add(new ReadingGap.ReachNotRead(why));
                     }
                 }
+                case "CasesNotWorkedOut" -> out.add(new ReadingGap.CasesNotWorkedOut(List.of(
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure())));
                 // A reason added to the type and not to this list. Written as a failure rather than
                 // skipped: a reason nothing here can build is one nothing here is checking.
                 default -> throw new IllegalStateException(

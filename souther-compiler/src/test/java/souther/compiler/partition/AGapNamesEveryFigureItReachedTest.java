@@ -15,6 +15,7 @@ import souther.compiler.query.ReadingReasons;
 import souther.exact.ExactFailures;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -62,6 +63,13 @@ class AGapNamesEveryFigureItReachedTest {
                         ElementsWrittenOut.MOST_WALKED)),
                 new ReadingGap.ReachNotRead(
                         ReadingGap.ReachNotRead.Why.MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT).figures());
+        assertEquals(Figure.inOrder(List.of(
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure(),
+                        CompositionBudget.CASES_A_LINE_IS_ASKED_IN.figure())),
+                CasesWorkedOut.Stopped.at(EnumSet.of(
+                        CompositionBudget.CASES_A_LINE_IS_ASKED_IN,
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)).gap().figures(),
+                "a row in cases nobody worked out says every figure they were stopped at");
         assertEquals(List.of(DEPTH), ReadingGap.ofAComparisonOf(new ObservedValue.Sequence(
                         List.of(new ObservedValue.Truncated(DEPTH)))).figures(),
                 "a value the walk stopped says the figure the walk stopped it at");
@@ -178,6 +186,8 @@ class AGapNamesEveryFigureItReachedTest {
                         out.add(new ReadingGap.ReachNotRead(why));
                     }
                 }
+                case "CasesNotWorkedOut" -> out.add(new ReadingGap.CasesNotWorkedOut(List.of(
+                        CompositionBudget.CASES_A_LINE_IS_ASKED_IN.figure())));
                 default -> fail("a reading gap this cannot make: " + permitted);
             }
         }
