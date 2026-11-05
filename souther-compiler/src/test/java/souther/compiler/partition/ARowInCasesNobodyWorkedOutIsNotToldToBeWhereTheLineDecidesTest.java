@@ -13,6 +13,7 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -21,12 +22,16 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A row holding the condition a line's cases were said as, where which of them the line decides in
- * was more than was taken apart, is not told to be where the line decides: it may be in a case the
- * line turns nothing in, standing at the line's point on the one side that case's rows are on. One
- * failing the condition is in none of the cases, taken apart or not.
+ * A row holding the condition where cases nobody worked out are is not told to be where the line
+ * decides: it may be in a case the line turns nothing in, standing at the line's point on the one
+ * side that case's rows are on, and what it is not told says every figure that stopped them. One
+ * failing the condition is in none of the cases, worked out or not.
  */
-class ARowInCasesNobodyTookApartIsNotToldToBeWhereTheLineDecidesTest {
+class ARowInCasesNobodyWorkedOutIsNotToldToBeWhereTheLineDecidesTest {
+
+    private static final CasesWorkedOut STOPPED = CasesWorkedOut.Stopped.at(EnumSet.of(
+            CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
+            CompositionBudget.CASES_A_LINE_IS_ASKED_IN));
 
     private static final TermPath STAGE = TermPath.of("s");
 
@@ -46,28 +51,31 @@ class ARowInCasesNobodyTookApartIsNotToldToBeWhereTheLineDecidesTest {
             STAGE.refine(ONLY_HOT), new ObservationAtPoint.Value(A_VALUE));
 
     @Test
-    void aRowHoldingTheConditionIsWhereTheLineDecidesOnlyWhereTheCasesWereTakenApart() {
-        assertEquals(WhereAPartDecides.AtARow.DECIDES, at(HOT_HOLDS, true, IN_THE_CASE),
+    void aRowHoldingTheConditionIsWhereTheLineDecidesOnlyWhereTheCasesWereShownToBe() {
+        assertEquals(WhereAPartDecides.AtARow.DECIDES,
+                at(HOT_HOLDS, CasesWorkedOut.SHOWN, IN_THE_CASE),
                 "in a case the line was shown to decide in");
-        assertEquals(new WhereAPartDecides.AtARow.CouldNotTell(
-                        Set.of(ReadingGap.CASES_NOT_TAKEN_APART)),
-                at(HOT_HOLDS, false, IN_THE_CASE),
-                "in the condition cases nobody took apart were said as");
+        assertEquals(new WhereAPartDecides.AtARow.CouldNotTell(Set.of(
+                        new ReadingGap.CasesNotWorkedOut(List.of(
+                                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure(),
+                                CompositionBudget.CASES_A_LINE_IS_ASKED_IN.figure())))),
+                at(HOT_HOLDS, STOPPED, IN_THE_CASE),
+                "where cases nobody worked out are, naming what stopped them");
     }
 
     @Test
     void aRowFailingTheConditionIsInNoneOfTheCasesEitherWay() {
-        for (boolean takenApart : List.of(true, false)) {
+        for (CasesWorkedOut workedOut : List.of(CasesWorkedOut.SHOWN, STOPPED)) {
             assertEquals(WhereAPartDecides.AtARow.DECIDES_NOTHING,
-                    at(HOT_HOLDS.denied(), takenApart, IN_THE_CASE),
-                    () -> "taken apart: " + takenApart);
+                    at(HOT_HOLDS.denied(), workedOut, IN_THE_CASE),
+                    () -> "worked out: " + workedOut);
         }
     }
 
-    private static WhereAPartDecides.AtARow at(Proposition decides, boolean takenApart,
+    private static WhereAPartDecides.AtARow at(Proposition decides, CasesWorkedOut workedOut,
                                                Map<TermPath, ObservationAtPoint> walked) {
         return new WhereAPartDecides.AskedOfRows(AStatementAtARow.of(decides, "f", null),
-                Optional.empty(), takenApart).at(new AnObservationOfAForm() {
+                Optional.empty(), workedOut).at(new AnObservationOfAForm() {
 
                     @Override
                     public WalkResult<ObservationAtPoint> at(TermPath path) {

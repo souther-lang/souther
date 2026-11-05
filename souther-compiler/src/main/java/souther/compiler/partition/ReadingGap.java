@@ -340,17 +340,27 @@ public sealed interface ReadingGap {
 
     /**
      * The row stands at the point under the condition the line's cases were said as, and which of
-     * those cases the line decides in was not worked out: they were more ways of choosing one than
-     * are taken apart ({@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO}). So whether the
-     * row is in one the line turns the statement in is not told.
+     * those cases the line decides in was not worked out, at the figures named
+     * ({@link CasesWorkedOut.Stopped}). So whether the row is in one the line turns the statement in
+     * is not told.
      *
      * <p>Not a reason about the value at the point, which was read, and not a row that is
      * elsewhere: a row in a case the line turns nothing in stands at its point as well, on the one
      * side the case's rows are on, and says nothing about the line.
+     *
+     * @param stoppedAt in {@link Figure#inOrder}; one or more
      */
-    record CasesNotTakenApart() implements ReadingGap {
+    record CasesNotWorkedOut(List<Figure> stoppedAt) implements ReadingGap {
 
-        /** A run that takes more cases apart may tell which case the row is in. */
+        public CasesNotWorkedOut {
+            stoppedAt = Figure.inOrder(stoppedAt);
+            if (stoppedAt.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "cases nobody worked out were stopped at some figure");
+            }
+        }
+
+        /** A run that works more cases out may tell which case the row is in. */
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.MAY_CHANGE;
@@ -358,11 +368,16 @@ public sealed interface ReadingGap {
 
         @Override
         public List<Figure> figures() {
-            return List.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure());
+            return stoppedAt;
+        }
+
+        /** This and {@code other} as one: cases not worked out at the figures of both. */
+        CasesNotWorkedOut with(CasesNotWorkedOut other) {
+            List<Figure> both = new ArrayList<>(stoppedAt);
+            both.addAll(other.stoppedAt);
+            return new CasesNotWorkedOut(both);
         }
     }
-
-    ReadingGap CASES_NOT_TAKEN_APART = new CasesNotTakenApart();
 
     ReadingGap NO_VALUE = new NoValue();
 
@@ -382,23 +397,31 @@ public sealed interface ReadingGap {
     }
 
     /**
-     * {@code met}, with the observations that met one code made one.
+     * {@code met}, with the observations that met one code made one, and the cases nobody worked
+     * out made one.
      *
      * <p>What a reader is told once is what an observation met, and two readings of one point
-     * stopped by one code at two figures are that code met at both. Everything else is handed on as
-     * it came, in the order it came.
+     * stopped by one code at two figures are that code met at both. The same of cases nobody worked
+     * out, stopped at two sets of figures: one reason, met at all of them. Everything else is handed
+     * on as it came, in the order it came.
      */
     static List<ReadingGap> eachObservationOnce(Collection<? extends ReadingGap> met) {
         Map<Incompleteness.Code, Observation> byCode = new EnumMap<>(Incompleteness.Code.class);
+        CasesNotWorkedOut cases = null;
         List<ReadingGap> out = new ArrayList<>();
         for (ReadingGap each : met) {
             if (each instanceof Observation it) {
                 byCode.merge(it.code(), it, Observation::with);
+            } else if (each instanceof CasesNotWorkedOut it) {
+                cases = cases == null ? it : cases.with(it);
             } else {
                 out.add(each);
             }
         }
         out.addAll(byCode.values());
+        if (cases != null) {
+            out.add(cases);
+        }
         return List.copyOf(out);
     }
 

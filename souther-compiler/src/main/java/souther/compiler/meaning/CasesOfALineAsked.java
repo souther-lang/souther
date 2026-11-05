@@ -86,19 +86,52 @@ public final class CasesOfALineAsked {
      *                   or holds no row.
      *                   How many of them a line is read in one by one is the line's to say, over
      *                   every case it holds ({@link DecidingCase#saidInAsFewAsMay})
-     * @param notWorkedOut every figure some case was stopped at, where some was: which way those
-     *                   cases go was not worked out, and empty where every case was
+     * @param notWorkedOutIn the cases asked some of whose cases nobody worked out, each with the
+     *                   figures that stopped them; empty where every case was worked out
      */
-    public record Found(List<DecidingCase> decidesIn, Set<CompositionBudget> notWorkedOut) {
+    public record Found(List<DecidingCase> decidesIn, List<NotWorkedOut> notWorkedOutIn) {
 
         public Found {
             decidesIn = DecidingCase.eachByItsOwnCondition(decidesIn);
-            notWorkedOut = notWorkedOut.isEmpty() ? Set.of()
-                    : Collections.unmodifiableSet(EnumSet.copyOf(notWorkedOut));
+            notWorkedOutIn = List.copyOf(notWorkedOutIn);
+        }
+
+        /** Every figure some case was stopped at: which way those cases go was not worked out.
+         *  Empty where every case was. */
+        public Set<CompositionBudget> notWorkedOut() {
+            Set<CompositionBudget> out = EnumSet.noneOf(CompositionBudget.class);
+            notWorkedOutIn.forEach(each -> out.addAll(each.stoppedAt()));
+            return out.isEmpty() ? Set.of() : Collections.unmodifiableSet(out);
         }
     }
 
-    private static final Found IN_NONE = new Found(List.of(), Set.of());
+    /**
+     * A case asked some of whose cases nobody worked out, and what stopped them: the case itself,
+     * whose condition every case it stands for holds.
+     *
+     * <p>The case asked, and not where inside it the choosing stopped. Another case said beside it,
+     * shown to divide rows or to divide none, is outside it; a case inside it that was shown either
+     * way is not told apart from the ones nobody reached, which is what the case asked leaves open
+     * as a whole. Narrower than that would be what was chosen on the way to each stop, and those
+     * are as many as the stops; nor are two such cases joined into one, whose condition would be
+     * as long as they are many and asked of every row read at the line.
+     *
+     * @param in        the case asked
+     * @param stoppedAt the figures its cases were stopped at; one or more
+     */
+    public record NotWorkedOut(DecidingCase in, Set<CompositionBudget> stoppedAt) {
+
+        public NotWorkedOut {
+            Objects.requireNonNull(in, "cases nobody worked out are some case's");
+            if (stoppedAt.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "cases nobody worked out were stopped at some figure");
+            }
+            stoppedAt = Collections.unmodifiableSet(EnumSet.copyOf(stoppedAt));
+        }
+    }
+
+    private static final Found IN_NONE = new Found(List.of(), List.of());
 
     /**
      * What asking a case comes to for the line: three answers, of which only one walks the case
@@ -242,8 +275,7 @@ public final class CasesOfALineAsked {
         }
         long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
         if (waysCounted && said.standsFor().waysOfChoosing(most) > most) {
-            stopped.add(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
-            addFiguresNotTakenApart(said.standsFor());
+            moreWaysThanAreTakenApart(said);
             return new Atoms<>(List.of(), stopped);
         }
         List<Atom<T>> out = new ArrayList<>();
@@ -255,7 +287,7 @@ public final class CasesOfALineAsked {
     private Found asked(DecidingCase said) {
         if (!aStepIsLeft()) {
             pastTheSteps(List.of(said.standsFor()));
-            return new Found(List.of(), stopped);
+            return new Found(List.of(), notWorkedOutIn(said));
         }
         // Said as choices, the cases of a line that decides in more ways than are written out are
         // as many as their product, and the condition holding in some one of them would be as long
@@ -269,12 +301,11 @@ public final class CasesOfALineAsked {
             return IN_NONE;
         }
         if (said.saidAlone()) {
-            return new Found(List.of(said), Set.of());
+            return new Found(List.of(said), List.of());
         }
         if (said.standsFor().waysOfChoosing(most) > most) {
-            stopped.add(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
-            addFiguresNotTakenApart(said.standsFor());
-            return new Found(List.of(), stopped);
+            moreWaysThanAreTakenApart(said);
+            return new Found(List.of(), notWorkedOutIn(said));
         }
         DecidingCase.Cases cases = heldFirst(said.standsFor());
         chosen(SoFar.NOTHING, List.of(cases), crossedIn, chosen -> dividing.add(chosen));
@@ -284,9 +315,23 @@ public final class CasesOfALineAsked {
         // the rows of the cases the line decides in; one with rows on one side would add rows the
         // line turns nothing between.
         if (!droppedNonDividing && stopped.isEmpty() && !dividing.isEmpty()) {
-            return new Found(List.of(said), Set.of());
+            return new Found(List.of(said), List.of());
         }
-        return new Found(dividing.stream().map(DecidingCase::alone).toList(), stopped);
+        return new Found(dividing.stream().map(DecidingCase::alone).toList(),
+                notWorkedOutIn(said));
+    }
+
+    /** Where the cases of {@code said} nobody worked out are, if there are any: where it holds,
+     *  stopped at every figure the asking met ({@link NotWorkedOut}). */
+    private List<NotWorkedOut> notWorkedOutIn(DecidingCase said) {
+        return stopped.isEmpty() ? List.of() : List.of(new NotWorkedOut(said, stopped));
+    }
+
+    /** The cases of {@code said} were more ways of choosing one than are taken apart: none is
+     *  chosen, at that figure and at every figure they were never taken apart at. */
+    private void moreWaysThanAreTakenApart(DecidingCase said) {
+        stopped.add(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
+        stopped.addAll(said.standsFor().notTakenApartAt(figuresOf));
     }
 
     /**
@@ -503,15 +548,7 @@ public final class CasesOfALineAsked {
      */
     private void pastTheSteps(List<DecidingCase.Cases> notWalked) {
         stopped.add(CompositionBudget.CASES_A_LINE_IS_ASKED_IN);
-        notWalked.forEach(this::addFiguresNotTakenApart);
-    }
-
-    /** Adds to what stopped this each figure the cases {@code cases} stand for were stopped at,
-     *  where they were never taken apart. Out of steps is where this is asked, so it is asked of
-     *  each case once however many times the steps run out: what is asked is a visit to each case
-     *  and not a choice among them. */
-    private void addFiguresNotTakenApart(DecidingCase.Cases cases) {
-        stopped.addAll(cases.notTakenApartAt(figuresOf));
+        notWalked.forEach(each -> stopped.addAll(each.notTakenApartAt(figuresOf)));
     }
 
     /** Whether one more step may be taken — an alternative chosen or a part asked — counting it

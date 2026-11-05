@@ -5499,12 +5499,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case NO_REPRESENTATION_EXISTS -> "the values there come to a number this compiler"
                         + " has no way to hold";
             };
-            // The row is at the point under what the cases were said as; which of them the line
-            // turns the statement in was never taken apart, so a row in one it turns nothing in
-            // would stand there as well.
-            case ReadingGap.CasesNotTakenApart _ -> "the row stands there, but the cases"
-                    + " the line decides in were more than are taken apart, so whether the row is"
-                    + " in one of them was not worked out";
+            // The row is at the point where cases nobody worked out are; which of them the line
+            // turns the statement in is what was not worked out, so a row in one it turns nothing
+            // in would stand there as well.
+            case ReadingGap.CasesNotWorkedOut _ -> "the row stands there, but which of the cases"
+                    + " there the line decides in was not worked out, so whether the row is in one"
+                    + " of them is not known";
         };
     }
 
@@ -10880,7 +10880,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // The value was read and the row stands at the point under what the cases were
                 // said as; which of them it is in is what nobody worked out, which is no news
                 // about the row either.
-                case ReadingGap.CasesNotTakenApart _ ->
+                case ReadingGap.CasesNotWorkedOut _ ->
                         WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
                 // Every value was read here, so it is not that word: what stopped is the
                 // arithmetic. Both ways of that are one word, and the run sensitivity beside it

@@ -35,22 +35,20 @@ import java.util.stream.Collectors;
  *                crossing it turns the statement round. Over the relations the statement holds,
  *                every one of them a relation over the input's own numbers — so a row's values say
  *                whether it holds
- * @param takenApart whether {@code decides} is a case the line was shown to decide in; false where
- *                   it is the condition the cases were said as, and which of them the line decides
- *                   in was more than was taken apart. A row holding it then stands somewhere the
- *                   line may decide nothing, and is not told to be where it decides
- *                   ({@link ReadingGap.CasesNotTakenApart})
+ * @param workedOut how far {@code decides} was shown to be a case the line decides in, as the line
+ *                  read in it says ({@link CasesWorkedOut})
  */
-public record WhereAPartDecides(PlaceOfALine part, Proposition decides, boolean takenApart) {
+public record WhereAPartDecides(PlaceOfALine part, Proposition decides, CasesWorkedOut workedOut) {
 
     public WhereAPartDecides {
         Objects.requireNonNull(part, "a line of a statement is one of its lines");
         Objects.requireNonNull(decides, "a line decides somewhere, or nowhere");
+        Objects.requireNonNull(workedOut, "a case is worked out or not");
     }
 
     /** {@code decides}, a case the line was shown to decide in. */
     public WhereAPartDecides(PlaceOfALine part, Proposition decides) {
-        this(part, decides, true);
+        this(part, decides, CasesWorkedOut.SHOWN);
     }
 
     /**
@@ -158,7 +156,7 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides, boolean 
      */
     AskedOfRows askedOfRows(String behavior, MeasuredInput subject) {
         return new AskedOfRows(subject.putToRows(decides, behavior),
-                subject.putToRowsAtSomeElement(decides, behavior), takenApart);
+                subject.putToRowsAtSomeElement(decides, behavior), workedOut);
     }
 
     /** Where a line decides, ready to be asked of rows. */
@@ -168,14 +166,14 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides, boolean 
         /** The same, asked at some element of a list of whole numbers it weighs, where it weighs
          *  one: what a row is asked then. */
         private final Optional<ACaseAskedAtSomeElement> atSomeElement;
-        /** Whether the case is one the line was shown to decide in ({@link #takenApart}). */
-        private final boolean takenApart;
+        /** How far the case was shown to be one the line decides in ({@link #workedOut}). */
+        private final CasesWorkedOut workedOut;
 
         AskedOfRows(AStatementAtARow decides, Optional<ACaseAskedAtSomeElement> atSomeElement,
-                    boolean takenApart) {
+                    CasesWorkedOut workedOut) {
             this.decides = decides;
             this.atSomeElement = atSomeElement;
-            this.takenApart = takenApart;
+            this.workedOut = workedOut;
         }
 
         /** Reads {@code row} the way {@link #at} does, for the walk that finds which containers a
@@ -188,16 +186,18 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides, boolean 
          * Whether {@code row} is somewhere the line decides, read off its own numbers.
          *
          * <p>A relation over a position the row wrote nothing at holds of no value there, so the
-         * row is not somewhere it holds. A row holding the condition cases nobody took apart were
+         * row is not somewhere it holds. A row holding the condition cases nobody worked out were
          * said as may be in one the line decides nothing in, so it is not told to be where the line
          * decides; one failing it is in none of them.
          */
         AtARow at(BorderQuantity.Observation row) {
             return switch (atSomeElement.map(asked -> asked.at(row)).orElseGet(() ->
                     decides.at(row))) {
-                case AStatementAtARow.Answer.Holds _ when !takenApart ->
-                        new AtARow.CouldNotTell(Set.of(ReadingGap.CASES_NOT_TAKEN_APART));
-                case AStatementAtARow.Answer.Holds _ -> AtARow.DECIDES;
+                case AStatementAtARow.Answer.Holds _ -> switch (workedOut) {
+                    case CasesWorkedOut.Shown _ -> AtARow.DECIDES;
+                    case CasesWorkedOut.Stopped stopped ->
+                            new AtARow.CouldNotTell(Set.of(stopped.gap()));
+                };
                 case AStatementAtARow.Answer.Fails _ -> AtARow.DECIDES_NOTHING;
                 case AStatementAtARow.Answer.CouldNotTell(var why) -> new AtARow.CouldNotTell(why);
             };

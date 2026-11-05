@@ -235,7 +235,7 @@ public final class PublicationOrders {
      * <p>Composed from the order above and not written again. A reading that met an observation's
      * code is that code, so the two orders agreeing is not something to keep in step — there is one
      * order, and this is it with the reasons that are no observation's put after them. First of
-     * those is a row standing at the point in cases nobody took apart: the number was worked out
+     * those is a row standing at the point in cases nobody worked out: the number was worked out
      * and the row is there, and only which case it is in is not known. Then a number the values
      * came to and this could not work out: every value arrived, which
      * is nearer an answer than a position holding none. A walk that reached no value comes next for
@@ -249,16 +249,21 @@ public final class PublicationOrders {
                     PublicationOrders::placeOf);
 
     /**
-     * Where a reading gap sits: an observation at its code, since the figures it carries are what
-     * it was met at and not a reason of their own, and every other gap at itself.
+     * Where a reading gap sits: an observation at its code, and cases nobody worked out at their
+     * kind, since the figures each carries are what it was met at and not a reason of their own;
+     * every other gap at itself.
      */
     private static Object placeOf(ReadingGap gap) {
-        return gap instanceof ReadingGap.Observation it ? it.code() : gap;
+        if (gap instanceof ReadingGap.Observation it) {
+            return it.code();
+        }
+        return gap instanceof ReadingGap.CasesNotWorkedOut ? ReadingGap.CasesNotWorkedOut.class
+                : gap;
     }
 
     private static List<Object> everyPlaceOfAReadingGap() {
         List<Object> out = new ArrayList<>(OBSERVATION_CODES_IN_ORDER);
-        out.add(ReadingGap.CASES_NOT_TAKEN_APART);
+        out.add(ReadingGap.CasesNotWorkedOut.class);
         for (UnheldNumber why : UnheldNumber.values()) {
             out.add(ReadingGap.of(why));
         }

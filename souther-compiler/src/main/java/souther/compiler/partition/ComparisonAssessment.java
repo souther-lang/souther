@@ -934,9 +934,12 @@ sealed interface ComparisonAssessment {
          *              along the ways rows take to the cases it decides in
          *              ({@link EachWayItComesOut}), so of the rows of those cases and no others.
          *              None where it was not read along them
+         * @param workedOut how far {@code cases} were shown to be ones the line decides in, which
+         *              every reading of it is made with ({@link #readings})
          */
         public record Part(PlaceOfALine id, ComparisonAssessment line, List<DecidingCase> cases,
-                           Map<NumericTerm, EachWayItComesOut> comesOut, boolean takenApart) {
+                           Map<NumericTerm, EachWayItComesOut> comesOut,
+                           CasesWorkedOut workedOut) {
 
             /** A line not read along the ways to its cases. */
             public Part(PlaceOfALine id, ComparisonAssessment line, List<DecidingCase> cases) {
@@ -946,22 +949,24 @@ sealed interface ComparisonAssessment {
             /** A line read in cases it was shown to decide in. */
             public Part(PlaceOfALine id, ComparisonAssessment line, List<DecidingCase> cases,
                         Map<NumericTerm, EachWayItComesOut> comesOut) {
-                this(id, line, cases, comesOut, true);
+                this(id, line, cases, comesOut, CasesWorkedOut.SHOWN);
             }
 
             /**
-             * {@code line} read under {@code said}, the cases it was said for, where which of them
-             * it decides in was more than is taken apart: a row there may be in one the line
-             * decides nothing in ({@link WhereAPartDecides#takenApart}).
+             * {@code line} read in {@code cases}, some of whose cases nobody worked out, stopped at
+             * {@code stoppedAt}: a row there may be in one the line decides nothing in
+             * ({@link CasesWorkedOut.Stopped}).
              */
-            static Part inCasesNotTakenApart(PlaceOfALine id, ComparisonAssessment line,
-                                             List<DecidingCase> said) {
-                return new Part(id, line, said, Map.of(), false);
+            static Part inCasesNotWorkedOut(PlaceOfALine id, ComparisonAssessment line,
+                                            List<DecidingCase> cases,
+                                            Set<CompositionBudget> stoppedAt) {
+                return new Part(id, line, cases, Map.of(), CasesWorkedOut.Stopped.at(stoppedAt));
             }
 
             public Part {
                 comesOut = Collections.unmodifiableMap(new LinkedHashMap<>(comesOut));
                 Objects.requireNonNull(id, "a line of a statement is one of its lines");
+                Objects.requireNonNull(workedOut, "cases are worked out or not");
                 cases = DecidingCase.eachByItsOwnCondition(cases);
                 if (line == null || line instanceof Several) {
                     throw new IllegalArgumentException(
@@ -1023,7 +1028,7 @@ sealed interface ComparisonAssessment {
                     return List.of();
                 }
                 return cases.stream().map(each -> new WhereAPartDecides(id, each.condition(),
-                        takenApart)).toList();
+                        workedOut)).toList();
             }
         }
 
@@ -1644,23 +1649,24 @@ sealed interface ComparisonAssessment {
         List<DecidingCase> reached = found.reached();
         List<Reachability.Reaching> deciding = found.deciding();
         Set<CompositionBudget> stoppedAt = found.stoppedAt();
-        // The cases nobody worked out are neither ones the line turns in, owed rows where it may
-        // decide nothing, nor ones dropped for a proof nobody finished: they are the line not
-        // worked out there, naming every figure any of them stopped at, beside whatever the other
-        // cases showed. Said at the line's places and read in no case: no row is asked to be at a
-        // line nobody worked out, so which cases those were is not something a reader is told.
-        //
-        // Where none of them was taken apart, for being more ways of choosing one than are, the
-        // line is still a line, and its points are still owed: it is read under the condition the
-        // cases were said as, and a row standing at a point there is not told to be where the line
-        // decides ({@link Several.Part#inCasesNotTakenApart}). Its rows are an author's to write,
-        // and which of them is where the line decides is what the cases nobody took apart leave
-        // open.
+        // The cases nobody worked out are neither ones the line turns in, owed rows a row in them
+        // would be taken to meet, nor ones dropped for a proof nobody finished. The line is still a
+        // line there, and its points are still owed: it is read in each case asked some of whose
+        // cases nobody worked out ({@link CasesOfALineAsked.NotWorkedOut}), as that case was said,
+        // and a row standing at a point there is not told to be where the line decides
+        // ({@link Several.Part#inCasesNotWorkedOut}). Its rows are an author's to write, and which
+        // of them is where the line decides is what those cases leave open. Beside that it is the
+        // line not worked out there, naming every figure any of them stopped at, said at its places.
+        // A case shown to divide rows is read as one, whatever another case came to, and one shown
+        // to divide none is in neither. Cases stopped at the same figures are read together, each
+        // still a case of its own.
         List<Several.Part> out = new ArrayList<>();
-        if (reached.isEmpty()
-                && stoppedAt.contains(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)) {
-            out.add(Several.Part.inCasesNotTakenApart(part.id(), arrived, part.cases()));
+        Map<Set<CompositionBudget>, List<DecidingCase>> notWorkedOut = new LinkedHashMap<>();
+        for (CasesOfALineAsked.NotWorkedOut each : found.notWorkedOut()) {
+            notWorkedOut.computeIfAbsent(each.stoppedAt(), _ -> new ArrayList<>()).add(each.in());
         }
+        notWorkedOut.forEach((at, cases) ->
+                out.add(Several.Part.inCasesNotWorkedOut(part.id(), arrived, cases, at)));
         if (!reached.isEmpty()) {
             List<Reachability.Reaching> along = deciding.isEmpty()
                     ? waysArrivedBy(way, arrivals) : deciding;
@@ -1723,11 +1729,20 @@ sealed interface ComparisonAssessment {
     }
 
     /**
-     * The cases {@code line} turns the statement in, the ways rows reach it by there, and the
-     * figures the cases nobody worked out stopped at.
+     * What asking each case came to for a line: the cases it turns the statement in, the ways rows
+     * reach it by there, and where the cases nobody worked out are, with what stopped them. A case
+     * shown to divide no rows is in none of them.
      */
     record CasesReached(List<DecidingCase> reached, List<Reachability.Reaching> deciding,
-                        Set<CompositionBudget> stoppedAt) {}
+                        List<CasesOfALineAsked.NotWorkedOut> notWorkedOut) {
+
+        /** Every figure a case nobody worked out was stopped at. */
+        Set<CompositionBudget> stoppedAt() {
+            Set<CompositionBudget> out = EnumSet.noneOf(CompositionBudget.class);
+            notWorkedOut.forEach(each -> out.addAll(each.stoppedAt()));
+            return out;
+        }
+    }
 
     /**
      * Each of {@code cases} where a row on each side of {@code cutting} can stand in it. Rows on
@@ -1748,7 +1763,7 @@ sealed interface ComparisonAssessment {
                                               InputReading reading) {
         List<DecidingCase> reached = new ArrayList<>();
         List<Reachability.Reaching> deciding = new ArrayList<>();
-        Set<CompositionBudget> stoppedAt = EnumSet.noneOf(CompositionBudget.class);
+        List<CasesOfALineAsked.NotWorkedOut> notWorkedOut = new ArrayList<>();
         for (DecidingCase each : cases) {
             if (each.saidAlone()) {
                 if (wayToACase.crossing(cutting, each.condition(), reading, (toIt, keptTo) ->
@@ -1766,9 +1781,9 @@ sealed interface ComparisonAssessment {
                 reached.add(one);
                 deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));
             }
-            stoppedAt.addAll(found.notWorkedOut());
+            notWorkedOut.addAll(found.notWorkedOutIn());
         }
-        return new CasesReached(reached, deciding, stoppedAt);
+        return new CasesReached(reached, deciding, notWorkedOut);
     }
 
     /**
