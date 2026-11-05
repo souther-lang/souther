@@ -292,18 +292,17 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
      * The arguments of the call are worked out before it applies its step, whichever side of the
      * step they are written on: a comparison deciding an element is arrived at, and only what
      * follows the call is not. No line is drawn at the one deciding the element, so it is asked of
-     * the reading: the one comparison nothing arrives at is the one after the call.
+     * the reading, with nothing after the call: then no comparison is one nothing arrives at.
      */
     @Test
     void anElementWorkedOutBeforeTheApplicationsIsArrivedAtAndWhatFollowsThemIsNot() {
-        String body = """
+        String moved = """
                     guard n == %s else No
-                    let moved = List.map(k -> Date.addDays(n, d), [0, if size > 3 then 1 else 2])
-                    guard b > 3 else No""".formatted(GREATEST);
-        String report = report(body);
+                    let moved = List.map(k -> Date.addDays(n, d), [0, if size > 3 then 1 else 2])"""
+                .formatted(GREATEST);
+        String report = report(moved + "\n    guard b > 3 else No");
         assertTrue(nothingArrivesAbout(report, "b"), report);
-        assertEquals(1, nothingArrivesAt(arrivals(body)).size(),
-                "nothing arrives at `b > 3`, and at no other comparison");
+        assertEquals(List.of(), nothingArrivesAt(arrivals(moved)));
     }
 
     /**
