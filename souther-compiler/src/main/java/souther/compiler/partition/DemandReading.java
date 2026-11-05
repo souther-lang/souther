@@ -1710,11 +1710,19 @@ final class DemandReading {
         private static boolean walk(List<List<AnElementsWay>> parts, int at, AnElementsWay so,
                                     WhatAnElementIsLeft left, Set<AnElementsWay> open,
                                     int[] looked) {
+            int most = READINGS.maximum();
             if (at == parts.size()) {
+                // A way kept is as many ways as rows written alike meet it in, each of which a
+                // composer is handed: what is past the first is counted as a choice opening it.
+                Optional<List<List<RowDemand.OfAnElement>>> alike =
+                        RowDemand.writtenAlike(so.ofTheElement, most - looked[0] + 1);
+                if (alike.isEmpty()) {
+                    return false;
+                }
+                looked[0] += alike.get().size() - 1;
                 open.add(so);
                 return true;
             }
-            int most = READINGS.maximum();
             List<AnElementsWay> choices = parts.get(at);
             // A part with one choice is taken and not chosen, so a long conjunction of single
             // relations costs nothing of the figure: what is counted is each way a choice opens.
@@ -1839,19 +1847,23 @@ final class DemandReading {
                 yield out;
             }
             // And every element of such a container meeting something is elements that meet it,
-            // or the container holding none. A container inside an element is written alike in
-            // every element, so each of its elements meeting one way is a way of the outer
-            // element, and elements of it meeting different ones are not written.
+            // or the container holding none: two ways of the outer element, exactly, where what
+            // it meets is one way. Where it is one of several, each element meets whichever, and
+            // the ways stay one demand: a way of the outer element per way would be every element
+            // meeting the same one, and an inner container holding one of each kind is along
+            // none of them.
             case Read.Demands(RowDemand.ForAll inner) -> {
                 if (!everyElement && !anyInside(inner.positions(), element)) {
                     yield List.of(AnElementsWay.ofTheRow(each));
                 }
-                List<AnElementsWay> out = new ArrayList<>();
-                for (List<RowDemand.AskedOfAnElement> way : inner.ofEachElement().asAsked()) {
-                    out.add(AnElementsWay.asking(everyElementWithin(inner.container(), way)));
+                List<List<RowDemand.AskedOfAnElement>> ways = inner.ofEachElement().asAsked();
+                if (ways.size() > 1) {
+                    yield List.of(AnElementsWay.asking(new RowDemand.EveryElementWithin(
+                            inner.container(), ways, inner.holdingNone())));
                 }
-                out.add(AnElementsWay.asking(inner.holdingNone()));
-                yield out;
+                yield List.of(
+                        AnElementsWay.asking(everyElementWithin(inner.container(), ways.getFirst())),
+                        AnElementsWay.asking(inner.holdingNone()));
             }
             case Read.Demands(RowDemand.SoMany count) ->
                     List.of(everyElement || anyInside(count.positions(), element)
@@ -2000,6 +2012,7 @@ final class DemandReading {
                          RowDemand.WithinIt _ -> one;
                 });
                 case RowDemand.SomeElementWithin some -> out.add(some);
+                case RowDemand.EveryElementWithin every -> out.add(every);
             }
         }
         return List.copyOf(out);

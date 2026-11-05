@@ -10,16 +10,22 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.Count;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
+import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -33,13 +39,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Held against the statements themselves. Each shape here is a quantifier over the groups whose
  * body is quantifiers over a group's items — or, a level further in, over the items of a sub of a
- * group — each asking its item one or two bounds, against a written number or against the
- * group's own {@code m}, which the body may bound as well. Whether some input meets one is worked
- * out by running it over every group of at most two items, with every {@code m}, of the values the
- * bounds tell apart, which is every way a group can meet a body of at most two quantifiers. Where
- * some group meets it, neither the way to it nor a row composed past it is said to be closed.
- * Where one quantifier asks its item what no item meets beside what the group meets, the way is
- * closed: what one quantifier asks is one item's, and what the group is asked holds of it.
+ * group — each asking its item one of one or two ways of one or two bounds, against a written
+ * number or against the group's own {@code m}, which the body may bound as well, as it may the
+ * number of items. Whether some input meets one is worked out by running it over every group of
+ * at most two items, with every {@code m}, of the values the bounds tell apart, which is every way
+ * a group can meet a body of at most two quantifiers asking some item. Where some group meets it,
+ * neither the way to it nor a row composed past it is said to be closed. Where it asks some item
+ * of one quantifier, or of each, beside what every item meets one of, what no group meets, the way
+ * is closed: what one quantifier asks is one item's, and what every item meets and what the group
+ * is asked hold of it.
  */
 class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
 
@@ -59,8 +67,16 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
         }
     }
 
-    /** A quantifier over the items: every item or some item meets every one of {@code bounds}. */
-    private record Quantifier(boolean every, List<Bound> bounds) {
+    /**
+     * A quantifier over the items: every item or some item meets one of {@code ways}, each of
+     * which is every one of its bounds.
+     */
+    private record Quantifier(boolean every, List<List<Bound>> ways) {
+
+        /** One way of {@code bounds}. */
+        static Quantifier of(boolean every, List<Bound> bounds) {
+            return new Quantifier(every, List.of(bounds));
+        }
 
         boolean holds(List<Integer> items, int m) {
             return every ? items.stream().allMatch(n -> meets(n, m))
@@ -68,40 +84,67 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
         }
 
         private boolean meets(int n, int m) {
-            return bounds.stream().allMatch(bound -> bound.holds(n, m));
+            return ways.stream().anyMatch(way -> way.stream().allMatch(bound -> bound.holds(n, m)));
         }
 
         String written(String item, String container) {
-            return "List." + (every ? "all" : "any") + "(" + item + " -> " + bounds.stream()
-                    .map(bound -> bound.written(item + ".n")).collect(Collectors.joining(" && "))
-                    + ", " + container + ")";
+            return "List." + (every ? "all" : "any") + "(" + item + " -> " + ways.stream()
+                    .map(way -> way.stream().map(bound -> bound.written(item + ".n"))
+                            .collect(Collectors.joining(" && ", ways.size() > 1 ? "(" : "",
+                                    ways.size() > 1 ? ")" : "")))
+                    .collect(Collectors.joining(" || ")) + ", " + container + ")";
         }
     }
 
     /**
      * Quantifiers over the items of a group, or of a sub of a group where {@code deeper}, all of
      * which some group of the input meets together, beside the bounds {@code onTheGroup} asks of
-     * its {@code m}.
+     * its {@code m} and, where {@code twoItems}, the items being two at least.
      */
-    private record Shape(boolean deeper, List<Bound> onTheGroup, List<Quantifier> quantifiers) {
+    private record Shape(boolean deeper, List<Bound> onTheGroup, List<Quantifier> quantifiers,
+                         boolean twoItems) {
+
+        Shape(boolean deeper, List<Bound> onTheGroup, List<Quantifier> quantifiers) {
+            this(deeper, onTheGroup, quantifiers, false);
+        }
 
         /** Whether some input meets it: some group, or some sub of one, whose items meet all. */
         boolean met() {
             return VALUES.stream().anyMatch(m ->
                     onTheGroup.stream().allMatch(bound -> bound.holds(m, m))
-                    && ITEMS.stream().anyMatch(items ->
-                            quantifiers.stream().allMatch(each -> each.holds(items, m))));
+                    && ITEMS.stream().anyMatch(items -> (!twoItems || items.size() >= 2)
+                            && quantifiers.stream().allMatch(each -> each.holds(items, m))));
         }
 
-        /** Whether it is one quantifier asking some item, which is one item's to meet. */
-        boolean oneItem() {
-            return quantifiers.size() == 1 && !quantifiers.getFirst().every();
+        /**
+         * Whether what it asks of the items is what this compiler answers exactly: one quantifier
+         * asking some item one way; or, where the items are two at least, what every item meets
+         * one of several ways beside quantifiers each asking some item one way.
+         *
+         * <p>Not two statements of every item, which are asked apart and so less than together;
+         * nor one way every item meets beside some item, where the items may also be none: the
+         * container holding none is a way of its own, which what some item is asked does not
+         * close.
+         */
+        boolean askedExactly() {
+            if (quantifiers.size() == 1 && !quantifiers.getFirst().every()
+                    && quantifiers.getFirst().ways().size() == 1) {
+                return true;
+            }
+            return twoItems
+                    && quantifiers.stream().filter(each -> each.every()
+                            && each.ways().size() > 1).count() == 1
+                    && quantifiers.stream().allMatch(each -> each.every()
+                            || each.ways().size() == 1);
         }
 
         String written() {
             String holder = deeper ? "s" : "g";
             List<String> parts = new ArrayList<>();
             onTheGroup.forEach(bound -> parts.add(bound.written("g.m")));
+            if (twoItems) {
+                parts.add("List.length(" + holder + ".items) >= 2");
+            }
             for (int i = 0; i < quantifiers.size(); i++) {
                 parts.add(quantifiers.get(i).written("a" + i, holder + ".items"));
             }
@@ -137,47 +180,86 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
             new Bound(false, 1, false), new Bound(true, 0, true), new Bound(false, 0, true));
 
     /**
+     * Every item one of two ways of two bounds against the group's number: neither is met where
+     * the group's number is nought.
+     */
+    private static final Quantifier EACH_ONE_OF_TWO_AGAINST_THE_GROUP = new Quantifier(true,
+            List.of(List.of(new Bound(true, 0, true), new Bound(false, 1, false)),
+                    List.of(new Bound(true, 0, false), new Bound(false, 0, true))));
+
+    /**
      * One quantifier of either kind asking two bounds, and two quantifiers of either kind asking
-     * one each; and with a bound on the group's number, one quantifier of some item or two asking
-     * bounds against it — a level in and two levels in.
+     * one each; with a bound on the group's number, one quantifier of some item or two asking
+     * bounds against it; the items two at least, every item meeting one of two bounds beside no,
+     * one or two quantifiers of some item; and with two bounds on the group's number, every item
+     * meeting one of two ways against it, the items two at least or not — a level in and two
+     * levels in.
+     *
+     * <p>Each two once, in one order: the parts of a conjunction and of a disjunction are read in
+     * the order of their spellings, so the other order is the same statement read again.
      */
     private static final List<Shape> SHAPES = shapes();
 
     private static List<Shape> shapes() {
+        List<Quantifier> ofOne = new ArrayList<>();
+        for (boolean every : List.of(false, true)) {
+            BOUNDS.forEach(bound -> ofOne.add(Quantifier.of(every, List.of(bound))));
+        }
+        List<Quantifier> someOfOne = ofOne.stream().filter(each -> !each.every()).toList();
+        List<List<Quantifier>> beside = new ArrayList<>();
+        beside.add(List.of());
+        someOfOne.forEach(each -> beside.add(List.of(each)));
+        beside.addAll(twoOf(someOfOne));
         List<Shape> out = new ArrayList<>();
         for (boolean deeper : List.of(false, true)) {
             for (boolean every : List.of(false, true)) {
-                for (Bound first : BOUNDS) {
-                    for (Bound second : BOUNDS) {
-                        out.add(new Shape(deeper, List.of(),
-                                List.of(new Quantifier(every, List.of(first, second)))));
-                    }
+                for (List<Bound> two : twoOf(BOUNDS)) {
+                    out.add(new Shape(deeper, List.of(), List.of(Quantifier.of(every, two))));
                 }
             }
-            for (boolean firstEvery : List.of(false, true)) {
-                for (boolean secondEvery : List.of(false, true)) {
-                    for (Bound first : BOUNDS) {
-                        for (Bound second : BOUNDS) {
-                            out.add(new Shape(deeper, List.of(), List.of(
-                                    new Quantifier(firstEvery, List.of(first)),
-                                    new Quantifier(secondEvery, List.of(second)))));
-                        }
-                    }
-                }
+            for (List<Quantifier> two : twoOf(ofOne)) {
+                out.add(new Shape(deeper, List.of(), two));
             }
             for (Bound group : BOUNDS) {
-                for (Bound first : AGAINST_THE_GROUP) {
-                    for (Bound second : AGAINST_THE_GROUP) {
-                        out.add(new Shape(deeper, List.of(group),
-                                List.of(new Quantifier(false, List.of(first, second)))));
-                        out.add(new Shape(deeper, List.of(group), List.of(
-                                new Quantifier(false, List.of(first)),
-                                new Quantifier(false, List.of(second)))));
-                    }
+                for (List<Bound> two : twoOf(AGAINST_THE_GROUP)) {
+                    out.add(new Shape(deeper, List.of(group),
+                            List.of(Quantifier.of(false, two))));
+                    out.add(new Shape(deeper, List.of(group), List.of(
+                            Quantifier.of(false, List.of(two.getFirst())),
+                            Quantifier.of(false, List.of(two.getLast())))));
+                }
+            }
+            for (List<Bound> two : twoOf(BOUNDS)) {
+                if (two.getFirst().equals(two.getLast())) {
+                    continue;
+                }
+                Quantifier eachOneOfTwo = new Quantifier(true,
+                        List.of(List.of(two.getFirst()), List.of(two.getLast())));
+                for (List<Quantifier> some : beside) {
+                    List<Quantifier> asked = new ArrayList<>(some);
+                    asked.addFirst(eachOneOfTwo);
+                    out.add(new Shape(deeper, List.of(), asked, true));
+                }
+            }
+            for (List<Bound> group : twoOf(BOUNDS)) {
+                for (boolean twoItems : List.of(false, true)) {
+                    out.add(new Shape(deeper, group, List.of(EACH_ONE_OF_TWO_AGAINST_THE_GROUP),
+                            twoItems));
                 }
             }
         }
         return List.copyOf(out);
+    }
+
+    /** Every two of {@code these}, each two once and one of them twice. */
+    private static <T> List<List<T>> twoOf(List<T> these) {
+        List<List<T>> out = new ArrayList<>();
+        for (int i = 0; i < these.size(); i++) {
+            for (int j = i; j < these.size(); j++) {
+                out.add(List.of(these.get(i), these.get(j)));
+            }
+        }
+        return out;
     }
 
     @Test
@@ -214,28 +296,37 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
     }
 
     @Test
-    void aWayNoItemOfOneQuantifierMeetsIsClosed() {
+    void aWayNoGroupMeetsWhereItIsAskedExactlyIsClosed() {
         List<String> open = new ArrayList<>();
         int asked = 0;
+        boolean everyItemAsked = false;
         for (int i = 0; i < SHAPES.size(); i++) {
             Shape shape = SHAPES.get(i);
-            if (!shape.oneItem() || shape.met()) {
+            if (!shape.askedExactly() || shape.met()) {
                 continue;
             }
             asked++;
+            everyItemAsked |= shape.twoItems();
             if (Reachability.of(new WayToTheBorder(stated(i)), declarations())
                     instanceof Reachability.Reaching) {
                 open.add(shape.written());
             }
         }
-        assertTrue(asked > 0, "some shape asks one item what no item meets");
-        assertEquals(List.of(), open, "no item meets what each of these asks one item");
+        assertTrue(asked > 0 && everyItemAsked,
+                "some shape of each kind asks what no group meets");
+        assertEquals(List.of(), open, "no group meets what each of these asks");
     }
 
     /**
      * What is left of an element turns on what it was asked and not on the order: each two of the
      * things the ways here ask a group, taken in one after the other in either order, leave
      * nothing exactly where the two taken in at once do.
+     *
+     * <p>Each two one of which is asked of the elements of a container inside the group, and the
+     * other of which changes what that is asked beside — a relation of the group's own, or what
+     * every element of a container meets one of beside what some element of it is asked. Two
+     * relations of the group's own are one region taken in in either order, and two asked of the
+     * elements apart are asked apart in either order.
      */
     @Test
     void whatIsLeftOfAnElementDoesNotTurnOnTheOrderItIsAskedIn() {
@@ -246,15 +337,18 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
             }
         }
         WhatAnElementIsLeft nothingAsked = WhatAnElementIsLeft.of(declarations());
+        Map<RowDemand.AskedOfAnElement, Optional<WhatAnElementIsLeft>> askedFirst =
+                new LinkedHashMap<>();
+        pool.forEach(each -> askedFirst.put(each, nothingAsked.with(List.of(each))));
         List<String> differ = new ArrayList<>();
         int leaveNone = 0;
         for (RowDemand.AskedOfAnElement first : pool) {
             for (RowDemand.AskedOfAnElement second : pool) {
-                if (first.equals(second)) {
+                if (!askedBeside(first, second) && !askedBeside(second, first)) {
                     continue;
                 }
                 boolean together = nothingAsked.with(List.of(first, second)).isEmpty();
-                boolean inTurn = nothingAsked.with(List.of(first))
+                boolean inTurn = askedFirst.get(first)
                         .flatMap(left -> left.with(List.of(second))).isEmpty();
                 if (together) {
                     leaveNone++;
@@ -266,6 +360,139 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
         }
         assertTrue(leaveNone > 0, "some two of them leave no element");
         assertEquals(List.of(), differ, "taken in one after the other");
+    }
+
+    /**
+     * And past a guard some group meets, a comparison on another number draws the lines it draws
+     * past any other guard some group meets: what the guard asks of the items is about none of
+     * that number's values. Held for the guard of two quantifiers of some item over one group's
+     * items, and for every item meeting one of two ways beside them, against a guard of one.
+     */
+    @Test
+    void aLineOnAnotherNumberPastAGuardSomeGroupMeetsIsTheLineItDrawsPastAnyOther() {
+        String asked = "List.any(g -> List.any(a -> a.n < 0, g.items), x.groups)";
+        List<String> drawn = gateLinesPast(asked);
+        assertTrue(!drawn.isEmpty(), () -> "a line is drawn on x.gate past " + asked);
+        for (String guard : List.of(
+                "List.any(g -> List.any(a -> a.n < 0, g.items)"
+                        + " && List.any(b -> b.n >= 1, g.items), x.groups)",
+                "List.any(g -> List.length(g.items) >= 2"
+                        + " && List.all(i -> i.n < 0 || i.n >= 1, g.items)"
+                        + " && List.any(a -> a.n < 0, g.items)"
+                        + " && List.any(b -> b.n >= 1, g.items), x.groups)")) {
+            assertEquals(drawn, gateLinesPast(guard), guard);
+        }
+    }
+
+    /**
+     * What a composer is handed of every item meeting one of several ways is held to the figure
+     * the ways of an element are: every choice of a way for each such statement is a way a row
+     * written alike meets, and past the figure the rest are said to be left unread rather than
+     * made.
+     */
+    @Test
+    void theWaysEveryItemMeetingOneOfSeveralIsWrittenInAreHeldToTheFigure() {
+        List<String> eachOneOfTwo = List.of("i.n < 0 || i.n >= 1", "i.n < 0 || i.n >= 2",
+                "i.n < -1 || i.n >= 1", "i.n < -1 || i.n >= 2", "i.n < 1 || i.n >= 2",
+                "i.n < -2 || i.n >= 0");
+        String body = eachOneOfTwo.stream().map(each -> "List.all(i -> " + each + ", g.items)")
+                .collect(Collectors.joining(" && "));
+        Compilation made = Compilation.ofSource("""
+                module probe.figure
+
+                data Item = { n: Int }
+                    invariant n >= -10 && n <= 10
+                data Group = { items: List<Item> }
+                data Input = { groups: List<Group> }
+
+                behavior many : (x: Input) -> Bool
+                let many (x) = List.any(g -> %s, x.groups)
+                """.formatted(body), "Main");
+        assertEquals(List.of(), made.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
+        List<OnTheWay> stated = statedIn(made, "many");
+        List<Integer> handed = new ArrayList<>();
+        List<WhyNotTaken> declined = new ArrayList<>();
+        stated.forEach(each -> collect(each, handed, declined));
+        int most = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
+        assertTrue(handed.stream().allMatch(ways -> ways <= most),
+                () -> "no demand hands a composer more ways than the figure: " + handed);
+        assertTrue(declined.stream().anyMatch(WhyNotTaken.MoreWaysThanAreRead.class::isInstance),
+                () -> "and the rest are said to be unread: " + declined);
+    }
+
+    /** The ways each demand on an element hands a composer, and every reason something on the
+     *  way was declined, in {@code entry} and every alternative of it. */
+    private static void collect(OnTheWay entry, List<Integer> handed, List<WhyNotTaken> declined) {
+        switch (entry) {
+            case OnTheWay.TakenIn(var _, RowDemand.Exists some) ->
+                    handed.add(some.ofAnElement().ways().size());
+            case OnTheWay.TakenIn(var _, RowDemand.ForAll every) ->
+                    handed.add(every.ofEachElement().ways().size());
+            case OnTheWay.Declined declinedHere -> declined.addAll(declinedHere.whys());
+            default -> entry.alternatives().forEach(alternative ->
+                    alternative.forEach(each -> collect(each, handed, declined)));
+        }
+    }
+
+    /** What {@code behavior}'s body asks of a row coming out true, read in {@code made}. */
+    private static List<OnTheWay> statedIn(Compilation made, String behavior) {
+        String module = made.modules().getFirst();
+        RuleReadingSource rules = RuleReadings.of(made, module);
+        AnalysisBody analysis = made.db().ask(new Bodies.Checked(module)).value()
+                .analysisBodies().get(behavior);
+        InputDomain inputs = made.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
+        InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
+                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
+                inputs.dependencies());
+        InputReading reading = inputs.reading(rules);
+        return ReachingCuts.stating(Condition.of(analysis.core(), reads, rules.symbols(),
+                        rules.newtypes(), new ConditionNumbering(module, behavior,
+                                ConditionOccurrence.Reading.DIVIDING)),
+                reading, true, WhatConditionsState.of(reading)).entries();
+    }
+
+    /** The lines drawn on {@code x.gate} past {@code guard}, each as what it is on and the points
+     *  a row is asked to stand at. */
+    private static List<String> gateLinesPast(String guard) {
+        Compilation made = Compilation.ofSource("""
+                module probe.pastaguard
+
+                data Item = { n: Int }
+                    invariant n >= -10 && n <= 10
+                data Group = { items: List<Item> }
+                data Input = { groups: List<Group>, gate: Int }
+                    invariant gate >= -10 && gate <= 10
+                data A
+                data B
+                data C
+
+                behavior f : (x: Input) -> A | B | C
+                let f (x) = {
+                    guard %s else C
+                    if x.gate > 0 then A else B
+                }
+                """.formatted(guard), "Main");
+        assertEquals(List.of(), made.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
+        List<BorderAssessment> lines = Adequacy.readingsOf(made.db(), "probe.pastaguard").get("f");
+        assertNotNull(lines, "f was measured");
+        return lines.stream().map(line -> line.border().cut() + " " + new TreeSet<>(
+                        line.items().keySet().stream().map(String::valueOf).toList()))
+                .filter(line -> line.contains("x.gate")).sorted().toList();
+    }
+
+    /** Whether {@code asked} is asked of the elements of a container inside the group beside
+     *  what {@code beside} changes: a relation of the group's own, or, of what some element is
+     *  asked, what every element of a container meets one of. */
+    private static boolean askedBeside(RowDemand.AskedOfAnElement asked,
+                                       RowDemand.AskedOfAnElement beside) {
+        return switch (asked) {
+            case RowDemand.SomeElementWithin _ -> beside instanceof RowDemand.Relational
+                    || beside instanceof RowDemand.EveryElementWithin;
+            case RowDemand.EveryElementWithin _ -> beside instanceof RowDemand.Relational;
+            case RowDemand.OfAnElement _ -> false;
+        };
     }
 
     private static final String MODEL = """
@@ -295,10 +522,9 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
 
     private static final Compilation COMPILATION = compiled();
 
+    /** Compiled and asked nothing more: what each test asks of it is read when it is asked. */
     private static Compilation compiled() {
         Compilation made = Compilation.ofSource(MODEL, "Main");
-        made.measure(Adequacy.Asked.fullReport());
-        made.answerEverything();
         assertEquals(List.of(), made.errors().stream()
                 .map(each -> each.diagnostic().code()).toList(), "the model compiles");
         return made;
@@ -319,8 +545,15 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
                 (Reachability.Reaching) reached, Generator.CandidateCheck.ANY);
     }
 
+    /** What each shape coming out true asks of a row, read once for every test that asks it. */
+    private static final Map<Integer, List<OnTheWay>> STATED = new ConcurrentHashMap<>();
+
     /** What shape {@code i} coming out true asks of a row, as conditions on the way. */
     private static List<OnTheWay> stated(int i) {
+        return STATED.computeIfAbsent(i, AWayElementsOfTheirOwnMeetIsNeverShownClosedTest::read);
+    }
+
+    private static List<OnTheWay> read(int i) {
         String behavior = "s" + i;
         Bodies.Elaborated checked =
                 COMPILATION.db().ask(new Bodies.Checked(module())).value();
