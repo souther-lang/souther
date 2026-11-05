@@ -23,8 +23,11 @@ import java.util.stream.Collectors;
  *   <li><b>Ordered boundaries.</b> Comparisons of one affine form against constants, each an
  *       ordering ({@code >=}, {@code >}, {@code <=}, {@code <}): each comes out by which side of
  *       one point the form's value is on — at the point or not — so as many points as they make
- *       leave at most one way more than the points. Equalities are not among them, nor forms that
- *       differ by more than their constant.</li>
+ *       leave at most one way more than the points. A point is a constant and whether the value
+ *       at it is on the side above, so {@code x > 0} and {@code x >= 0} turn at two points and
+ *       come out three ways. Counted over the rationals: a form that takes whole values only, or
+ *       fewer values than that, may come out fewer ways, and this is no more than the most.
+ *       Equalities are not among them, nor forms that differ by more than their constant.</li>
  *   <li><b>Correlated remainders.</b> Comparisons of remainders of one dividend by one divisor:
  *       one remainder decides them all, so they come out as many ways as there are remainders
  *       that tell them apart, counted remainder by remainder as a count of consistent ways reads

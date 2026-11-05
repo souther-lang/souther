@@ -128,6 +128,15 @@ class WhatTheNumbersOfACaseLeaveAreTheWaysTheirTruthsComeOutTest {
         }
     }
 
+    /** One constant, two points: above it, and at it or above. Its value is a way of its own. */
+    @Test
+    void aStrictAndALooseOrderingAtOneConstantAreTwoPoints() {
+        List<CaseExpansion.Diagnosis> said = WhatTheNumbersOfACaseLeave.of(eachOf(List.of(
+                compared(NUMBER, 0, Rel.GT), compared(NUMBER, 0, Rel.GE))));
+        assertEquals(List.of(new CaseExpansion.OrderedBoundaries("x", 2, 2, 3)), said,
+                "below nought, at it, and above it");
+    }
+
     @Test
     void anEqualityIsNoBoundaryAndOneComparisonIsNoDiagnosis() {
         assertEquals(List.of(), WhatTheNumbersOfACaseLeave.of(eachOf(List.of(
