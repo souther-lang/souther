@@ -37,7 +37,7 @@ class PartsOfOneSpellingAreNumberedAloneTest {
         Proposition other = atLeast(4);
         assertNotSame(one, apart);
         AStatementAtARow.Parts parts = AStatementAtARow.Parts.of(new Proposition.All(
-                List.of(one, new Proposition.Any(List.of(apart, other)))), Map.of());
+                List.of(one, new Proposition.Any(List.of(apart, other)))));
         assertEquals(parts.numberOf(one), parts.numberOf(apart));
         assertNotEquals(parts.numberOf(one), parts.numberOf(other));
     }

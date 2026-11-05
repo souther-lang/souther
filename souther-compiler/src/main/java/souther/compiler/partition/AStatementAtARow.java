@@ -33,6 +33,9 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.Recognizer;
 import souther.compiler.types.ValueName;
 
+import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -46,7 +49,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.WeakHashMap;
 import java.util.function.Function;
 
 /**
@@ -100,12 +102,11 @@ final class AStatementAtARow {
     /** {@link #hashCode}, or {@code 0} before it is asked; the same whoever works it out. */
     private int hash;
     /**
-     * The parts of each statement, numbered on the first row it is asked. Held here and not in the
-     * statement, which answers carry: a table compared by address under them would make every
+     * What a row asks of each part of a statement, held by the statement's own address and not in
+     * it: answers carry a statement, and a table compared by address under them would make an
      * answer unequal to its own recomputation.
      */
-    private static final Map<AStatementAtARow,Parts> NUMBERED =
-            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Numbered NUMBERED = new Numbered();
 
     private AStatementAtARow(Proposition stated, Map<Relation, OneRelation> relations,
                              Map<Spelling,OverTheElements> elements, Set<TermPath> positions) {
@@ -1015,36 +1016,94 @@ final class AStatementAtARow {
      * row wherever it stands.
      */
     Answer at(BorderQuantity.Observation row) {
-        Parts numbered = NUMBERED.computeIfAbsent(this, _ -> Parts.of(stated, elements));
+        Parts numbered = NUMBERED.of(this);
         return at(stated, row, new Answer[numbered.size()], numbered);
     }
 
     /**
-     * The parts of the statement, numbered so that parts of one spelling have one number, and each
-     * object found while numbering is remembered by identity: a row asks a part by the object it
-     * holds, so the spellings are compared once here and not at every row.
+     * The {@link Parts} of each statement asked, found by the statement's address: two statements
+     * that are equal are still two, because what {@link Parts} remembers by address is the parts of
+     * the one it was made for. An entry goes when its statement does.
+     */
+    private static final class Numbered {
+
+        private final Map<Integer,List<Held>> byAddress = new HashMap<>();
+        private final ReferenceQueue<AStatementAtARow> gone = new ReferenceQueue<>();
+
+        private static final class Held extends WeakReference<AStatementAtARow> {
+            private final int address;
+            private final Parts parts;
+
+            Held(AStatementAtARow statement, int address, Parts parts,
+                 ReferenceQueue<AStatementAtARow> gone) {
+                super(statement, gone);
+                this.address = address;
+                this.parts = parts;
+            }
+        }
+
+        synchronized Parts of(AStatementAtARow statement) {
+            for (Reference<? extends AStatementAtARow> each; (each = gone.poll()) != null; ) {
+                Held left = (Held) each;
+                List<Held> held = byAddress.get(left.address);
+                held.remove(left);
+                if (held.isEmpty()) {
+                    byAddress.remove(left.address);
+                }
+            }
+            int address = System.identityHashCode(statement);
+            List<Held> held = byAddress.computeIfAbsent(address, _ -> new ArrayList<>());
+            for (Held each : held) {
+                if (each.get() == statement) {
+                    return each.parts;
+                }
+            }
+            Parts made = Parts.of(statement.stated, statement.relations, statement.elements);
+            held.add(new Held(statement, address, made, gone));
+            return made;
+        }
+    }
+
+    /**
+     * What a row asks of each part of a statement, found once for the statement and not at every
+     * row.
+     *
+     * <p>A part is numbered by its spelling, so parts spelled alike are one part however many
+     * objects stand for them, and the first of them is the one walked: the others are answered from
+     * its answer and are never asked of their own parts. Every object met is remembered by identity,
+     * with what a row would otherwise look up from it by a key built of its spelling — what it was
+     * written out to, the relation it is read by, the elements it is read over — so a row compares
+     * no spelling and builds none.
+     *
+     * <p>A part met that numbering did not meet is found by its spelling and its lookups made the
+     * long way. That costs more and answers the same.
      */
     static final class Parts {
 
+        private final Map<Relation,OneRelation> relations;
+        private final Map<Spelling,OverTheElements> elements;
         private final IdentityHashMap<Proposition,Integer> byObject = new IdentityHashMap<>();
         private final Map<Spelling,Integer> bySpelling = new HashMap<>();
-        private final Map<Spelling,OverTheElements> elements;
-        /** The elements a quantifier or a count of them is read over, by the part that says it. */
         private final IdentityHashMap<Proposition,OverTheElements> over = new IdentityHashMap<>();
+        private final IdentityHashMap<Proposition,OneRelation> relationOf = new IdentityHashMap<>();
+        private final IdentityHashMap<Proposition,Proposition> written = new IdentityHashMap<>();
 
-        private Parts(Map<Spelling,OverTheElements> elements) {
+        private Parts(Map<Relation,OneRelation> relations,
+                      Map<Spelling,OverTheElements> elements) {
+            this.relations = relations;
             this.elements = elements;
         }
 
-        static Parts of(Proposition stated, Map<Spelling,OverTheElements> elements) {
-            Parts out = new Parts(elements);
-            out.number(stated);
-            return out;
+        /** The parts of a statement that reads no relation and no element. */
+        static Parts of(Proposition stated) {
+            return of(stated, Map.of(), Map.of());
         }
 
-        /** What {@code part} is read over, or {@code null} for a part that was not found. */
-        OverTheElements overOf(Proposition part) {
-            return over.get(part);
+        private static Parts of(Proposition stated, Map<Relation,OneRelation> relations,
+                                Map<Spelling,OverTheElements> elements) {
+            Parts out = new Parts(relations, elements);
+            out.number(stated);
+            return out;
         }
 
         int size() {
@@ -1060,16 +1119,40 @@ final class AStatementAtARow {
             return found == null ? -1 : found;
         }
 
+        /** What a statement over the ways is written out to, as numbering found it. */
+        Proposition writtenOf(Proposition.OfTheWays ways) {
+            Proposition out = written.get(ways);
+            return out != null ? out : ways.written();
+        }
+
+        /** The relation {@code compared} is read by, as numbering found it. */
+        OneRelation relationOf(Proposition.Compared compared) {
+            OneRelation out = relationOf.get(compared);
+            return out != null ? out : relations.get(compared.relation());
+        }
+
+        /** What a quantifier, or a count of the elements meeting a statement, is read over. */
+        private OverTheElements overOf(Proposition.Some some) {
+            OverTheElements out = over.get(some);
+            return out != null ? out : elements.get(keyOf(some));
+        }
+
+        private OverTheElements overOf(Proposition.Compared compared, Quantity count) {
+            OverTheElements out = over.get(compared);
+            return out != null ? out : elements.get(keyOf(count));
+        }
+
         private void number(Proposition part) {
             if (byObject.containsKey(part)) {
                 return;
             }
-            Integer number = bySpelling.get(part.spelling());
-            if (number == null) {
-                number = bySpelling.size();
-                bySpelling.put(part.spelling(), number);
+            Integer first = bySpelling.get(part.spelling());
+            if (first != null) {
+                byObject.put(part, first);
+                return;
             }
-            byObject.put(part, number);
+            bySpelling.put(part.spelling(), bySpelling.size());
+            byObject.put(part, bySpelling.get(part.spelling()));
             switch (part) {
                 case Proposition.All all -> all.parts().forEach(this::number);
                 case Proposition.Any any -> any.parts().forEach(this::number);
@@ -1078,12 +1161,22 @@ final class AStatementAtARow {
                     number(where.states());
                 }
                 case Proposition.SoManyHold counted -> counted.statements().forEach(this::number);
-                case Proposition.OfTheWays ways -> number(ways.written());
+                case Proposition.OfTheWays ways -> {
+                    Proposition out = ways.written();
+                    written.put(part, out);
+                    number(out);
+                }
                 case Proposition.Some some -> over.put(part, elements.get(keyOf(some)));
                 case Proposition.Compared compared
                         when compared.relation() instanceof Relation.Affine affine
                         && countIn(affine) instanceof Quantity count ->
                         over.put(part, elements.get(keyOf(count)));
+                case Proposition.Compared compared -> {
+                    OneRelation relation = relations.get(compared.relation());
+                    if (relation != null) {
+                        relationOf.put(part, relation);
+                    }
+                }
                 default -> { }
             }
         }
@@ -1319,10 +1412,10 @@ final class AStatementAtARow {
                     at(where.states(), row, answered, numbered)), true);
             case Proposition.SoManyHold counted -> howManyHold(counted, counted.statements()
                     .stream().map(each -> at(each, row, answered, numbered)).toList());
-            case Proposition.OfTheWays ways -> at(ways.written(), row, answered, numbered);
+            case Proposition.OfTheWays ways ->
+                    at(numbered.writtenOf(ways), row, answered, numbered);
             case Proposition.Some some -> {
-                OverTheElements over = numbered.overOf(some) instanceof OverTheElements known
-                        ? known : elements.get(keyOf(some));
+                OverTheElements over = numbered.overOf(some);
                 HowManyAtARow counted = over.ofTheElement().howManyMeetIn(over.container(), row);
                 if (counted == null) {
                     yield new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
@@ -1332,16 +1425,14 @@ final class AStatementAtARow {
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
                     && countIn(affine) instanceof Quantity count -> {
-                OverTheElements over = numbered.overOf(compared) instanceof OverTheElements known
-                        ? known : elements.get(keyOf(count));
-                HowManyAtARow counted = over.howManyIn(row);
+                HowManyAtARow counted = numbered.overOf(compared, count).howManyIn(row);
                 if (counted == null) {
                     yield new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
                 }
                 yield countedAgainst(compared, affine, counted);
             }
             case Proposition.Compared compared when askable(compared) ->
-                    heldAs(compared.holds(), switch (relations.get(compared.relation())) {
+                    heldAs(compared.holds(), switch (numbered.relationOf(compared)) {
                         case OneRelation.OnAQuantity read -> heldAt(read, row);
                         case OneRelation.OnAProduct product -> product.at(row);
                         case OneRelation.OnARemainderByAnInput remainder -> remainder.at(row);
@@ -2515,7 +2606,8 @@ final class AStatementAtARow {
                 && positions.equals(that.positions));
     }
 
-    /** Worked out on the first ask, since {@link #NUMBERED} asks it at every row. */
+    /** Worked out on the first ask: a row's memo is keyed by a reading that holds the statement,
+     *  and asks it at every row. */
     @Override
     public int hashCode() {
         int known = hash;
