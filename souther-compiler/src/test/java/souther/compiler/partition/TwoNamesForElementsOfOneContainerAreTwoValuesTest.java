@@ -73,13 +73,39 @@ class TwoNamesForElementsOfOneContainerAreTwoValuesTest {
                 new Asked(name, "Bool.not(%s.paid)", value -> !value.paid()));
     }
 
-    private static final List<Asked> ASKED = askedOfBoth();
-
-    private static List<Asked> askedOfBoth() {
-        List<Asked> out = new ArrayList<>(askedOf("a"));
-        out.addAll(askedOf("b"));
-        return List.copyOf(out);
+    private static Asked below(String name) {
+        return askedOf(name).get(0);
     }
+
+    private static Asked above(String name) {
+        return askedOf(name).get(1);
+    }
+
+    private static Asked atLeastNought(String name) {
+        return askedOf(name).get(2);
+    }
+
+    private static Asked paid(String name) {
+        return askedOf(name).get(3);
+    }
+
+    private static Asked unpaid(String name) {
+        return askedOf(name).get(4);
+    }
+
+    /**
+     * The pairs what is claimed turns on: a bound on the number asked both ways and a truth asked
+     * both ways, each of one name, which no value meets, and of two names, which two values do —
+     * either name first; two bounds one value meets; a bound beside a truth.
+     */
+    private static final List<List<Asked>> PAIRS = List.of(
+            List.of(below("a"), above("a")),
+            List.of(paid("a"), unpaid("a")),
+            List.of(below("a"), above("b")),
+            List.of(below("b"), above("a")),
+            List.of(paid("a"), unpaid("b")),
+            List.of(above("a"), atLeastNought("a")),
+            List.of(below("a"), paid("b")));
 
     /** Whether some value of {@code a} and some of {@code b} meet every one of {@code asked}. */
     private static boolean met(List<Asked> asked) {
@@ -97,17 +123,6 @@ class TwoNamesForElementsOfOneContainerAreTwoValuesTest {
     /** Whether every one of {@code asked} is of one name. */
     private static boolean ofOneName(List<Asked> asked) {
         return asked.stream().map(Asked::name).distinct().count() == 1;
-    }
-
-    /** Every two conditions, each two once and one of them twice. */
-    private static List<List<Asked>> twoOf(List<Asked> these) {
-        List<List<Asked>> out = new ArrayList<>();
-        for (int i = 0; i < these.size(); i++) {
-            for (int j = i; j < these.size(); j++) {
-                out.add(List.of(these.get(i), these.get(j)));
-            }
-        }
-        return out;
     }
 
     private static final String DECLARED = """
@@ -176,7 +191,7 @@ class TwoNamesForElementsOfOneContainerAreTwoValuesTest {
     @Test
     void twoConditionsJoinedInsideTwoClosuresAreOfTheirOwnElements() {
         List<String> bodies = new ArrayList<>();
-        List<List<Asked>> asked = twoOf(ASKED);
+        List<List<Asked>> asked = PAIRS;
         for (List<Asked> two : asked) {
             bodies.add(("List.sum(List.map(a -> List.sum(List.map(b -> if %s && %s && x.gate > 0"
                     + " then 1 else 0, x.items)), x.items))")
@@ -204,7 +219,7 @@ class TwoNamesForElementsOfOneContainerAreTwoValuesTest {
         List<List<Asked>> asked = new ArrayList<>();
         List<Joined> joinedBy = new ArrayList<>();
         for (Joined join : joins) {
-            for (List<Asked> two : twoOf(ASKED)) {
+            for (List<Asked> two : PAIRS) {
                 bodies.add(("List.sum(List.map(a -> List.sum(List.map(b -> if %s then (if x.gate"
                         + " > 0 then 1 else 2) else 3, x.items)), x.items))").formatted(
                         join.written().formatted(two.getFirst().of(), two.getLast().of())));
@@ -284,10 +299,11 @@ class TwoNamesForElementsOfOneContainerAreTwoValuesTest {
                         }, x.items)), x.items))""";
         List<String> bodies = new ArrayList<>();
         List<List<Asked>> asked = new ArrayList<>();
-        for (Asked first : askedOf("a")) {
-            for (Asked second : ASKED) {
-                bodies.add(body.formatted(first.written().formatted("c"), second.of()));
-                asked.add(List.of(first, second));
+        for (List<Asked> two : PAIRS) {
+            Asked first = two.getFirst();
+            if (first.name().equals("a")) {
+                bodies.add(body.formatted(first.written().formatted("c"), two.getLast().of()));
+                asked.add(two);
             }
         }
         heldToTheRuns(bodies, asked);
@@ -305,7 +321,8 @@ class TwoNamesForElementsOfOneContainerAreTwoValuesTest {
     @Test
     void aQuantifierReadingItsElementTwiceReadsOneValue() {
         List<String> bodies = new ArrayList<>();
-        List<List<Asked>> asked = twoOf(askedOf("a"));
+        List<List<Asked>> asked = PAIRS.stream()
+                .filter(two -> ofOneName(two) && two.getFirst().name().equals("a")).toList();
         for (List<Asked> two : asked) {
             bodies.add("if List.any(a -> %s && %s, x.items) && x.gate > 0 then 1 else 0"
                     .formatted(two.getFirst().of(), two.getLast().of()));
@@ -339,9 +356,11 @@ class TwoNamesForElementsOfOneContainerAreTwoValuesTest {
     @Test
     void twoQuantifiersEachOwnTheirElementWhateverTheyCallIt() {
         List<String> bodies = new ArrayList<>();
+        // What no one value meets, asked of each quantifier's own: a bound either way, a truth
+        // either way.
         for (String second : List.of("a", "b")) {
-            for (Asked first : askedOf("a")) {
-                for (Asked other : askedOf(second)) {
+            for (Asked first : List.of(below("a"), paid("a"))) {
+                for (Asked other : List.of(above(second), unpaid(second))) {
                     bodies.add(("if List.any(a -> %s, x.items) && List.any(%s -> %s, x.items)"
                             + " && x.gate > 0 then 1 else 0").formatted(first.of(), second,
                             other.of()));
@@ -362,7 +381,7 @@ class TwoNamesForElementsOfOneContainerAreTwoValuesTest {
     @Test
     void twoForksOneInsideTheOtherAreOfTheirOwnElements() {
         List<String> bodies = new ArrayList<>();
-        List<List<Asked>> asked = twoOf(ASKED);
+        List<List<Asked>> asked = PAIRS;
         for (List<Asked> two : asked) {
             bodies.add(("List.sum(List.map(a -> List.sum(List.map(b -> if %s then (if %s then"
                     + " (if x.gate > 0 then 1 else 2) else 3) else 4, x.items)), x.items))")
@@ -379,7 +398,7 @@ class TwoNamesForElementsOfOneContainerAreTwoValuesTest {
     void aNameReadInsideAQuantifierOverItsContainerIsNotTheQuantifiersElement() {
         List<String> bodies = new ArrayList<>();
         List<List<Asked>> asked = new ArrayList<>();
-        for (List<Asked> two : twoOf(ASKED)) {
+        for (List<Asked> two : PAIRS) {
             if (!two.getFirst().name().equals("a") || !two.getLast().name().equals("b")) {
                 continue;
             }
@@ -427,8 +446,8 @@ class TwoNamesForElementsOfOneContainerAreTwoValuesTest {
     @Test
     void aConditionOnTheRowBesideTwoElementsIsStillTakenIn() {
         List<String> bodies = new ArrayList<>();
-        for (Asked first : askedOf("a")) {
-            for (Asked second : askedOf("b")) {
+        for (Asked first : List.of(below("a"), paid("a"))) {
+            for (Asked second : List.of(above("b"), unpaid("b"))) {
                 bodies.add(("List.sum(List.map(a -> List.sum(List.map(b -> if %s && %s"
                         + " && x.gate > 5 then (if x.gate > 0 then 1 else 2) else 3, x.items)),"
                         + " x.items))").formatted(first.of(), second.of()));

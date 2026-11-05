@@ -255,15 +255,27 @@ public final class ReadThroughNames {
                         : one == same.one() && other == same.other() ? stated
                         : new Proposition.SameValue(one, other, same.holds());
             }
-            case Proposition.All all -> Proposition.all(eachTold(all.parts(), telling,
-                    twoAsOne));
-            case Proposition.Any any -> Proposition.any(eachTold(any.parts(), telling,
-                    twoAsOne));
-            case Proposition.WhereItAnswers where -> Proposition.whereItAnswers(
-                    told(where.answers(), telling, twoAsOne),
-                    told(where.states(), telling, twoAsOne));
-            case Proposition.OnAnApplication applied -> Proposition.onAnApplication(
-                    eachTold(applied.each(), telling, twoAsOne));
+            // A statement none of whose parts was told anything is the statement it was, and is
+            // not put together again: joining parts orders them, which is no small thing to do
+            // for each statement a reader tells.
+            case Proposition.All all -> {
+                List<Proposition> parts = eachTold(all.parts(), telling, twoAsOne);
+                yield parts == null ? stated : Proposition.all(parts);
+            }
+            case Proposition.Any any -> {
+                List<Proposition> parts = eachTold(any.parts(), telling, twoAsOne);
+                yield parts == null ? stated : Proposition.any(parts);
+            }
+            case Proposition.WhereItAnswers where -> {
+                Proposition answers = told(where.answers(), telling, twoAsOne);
+                Proposition states = told(where.states(), telling, twoAsOne);
+                yield answers == where.answers() && states == where.states() ? stated
+                        : Proposition.whereItAnswers(answers, states);
+            }
+            case Proposition.OnAnApplication applied -> {
+                List<Proposition> each = eachTold(applied.each(), telling, twoAsOne);
+                yield each == null ? stated : Proposition.onAnApplication(each);
+            }
             // Inside a quantifier its container's element is its own, and stays as it stands: a
             // name read there for another element of the container was refused where it was
             // read. The container itself is told as any subject is.
@@ -286,13 +298,17 @@ public final class ReadThroughNames {
         };
     }
 
+    /** Each of {@code parts} told, or null where none of them was told anything. */
     private static List<Proposition> eachTold(List<Proposition> parts, Telling telling,
                                               Supplier<Proposition> twoAsOne) {
         List<Proposition> out = new ArrayList<>(parts.size());
+        boolean changed = false;
         for (Proposition each : parts) {
-            out.add(told(each, telling, twoAsOne));
+            Proposition told = told(each, telling, twoAsOne);
+            changed |= told != each;
+            out.add(told);
         }
-        return out;
+        return changed ? out : null;
     }
 
     /** {@code telling}, with what stands at {@code container}'s element left as it is. */
