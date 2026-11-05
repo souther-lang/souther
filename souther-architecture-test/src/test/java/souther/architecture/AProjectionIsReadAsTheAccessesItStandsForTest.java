@@ -484,6 +484,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/WhatABodyReads", "anyOf", "(" + core + "Ljava/util/Set;)Z",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "core/WhatABodyReads", "reading",
+                "(" + core + "Ljava/util/Set;Ljava/util/Set;)Z", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/WhatABodyReads", "madeOf", "(" + core + "Ljava/util/Set;)V",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/WhatABodyReads", "holds", "(" + core + "L" + c + "core/Core$Read;)Z",

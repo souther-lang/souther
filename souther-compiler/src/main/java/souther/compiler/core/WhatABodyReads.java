@@ -3,9 +3,11 @@ package souther.compiler.core;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -89,6 +91,26 @@ public final class WhatABodyReads {
         boolean[] found = {false};
         Core.forEachChild(e, child -> found[0] = found[0] || anyOf(child, bindings));
         return found[0];
+    }
+
+    /**
+     * Every node of {@code e} that reads one of {@code bindings} anywhere inside it, {@code e}
+     * among them where it does — held by identity, as the nodes of one tree: {@link #anyOf} asked
+     * of each node at once, for a reader that asks it of many nodes of one tree.
+     */
+    public static Set<Core> nodesReadingAnyOf(Core e, Set<BindingId> bindings) {
+        Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
+        reading(e, bindings, out);
+        return out;
+    }
+
+    private static boolean reading(Core e, Set<BindingId> bindings, Set<Core> into) {
+        boolean[] reads = {e instanceof Core.Read read && bindings.contains(read.binding())};
+        Core.forEachChild(e, child -> reads[0] |= reading(child, bindings, into));
+        if (reads[0]) {
+            into.add(e);
+        }
+        return reads[0];
     }
 
     /**

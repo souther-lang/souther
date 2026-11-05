@@ -702,8 +702,11 @@ public final class PathReachability {
     /** The steps the walk is inside, the innermost last. */
     private final List<StepEntered> steps = new ArrayList<>();
     /** The closures whose body, read once for every application, answered on some runs only
-     *  somewhere: the ones an application of may stop a run. */
-    private final Set<Core.Block> mayStopInside;
+     *  somewhere, each with what that reading says an application at a time could turn on
+     *  ({@link ReadOnce}). */
+    private final Map<Core.Block, ReadOnce> readOnce;
+    /** The parameters of each closure the walk is reading the body of once, the innermost last. */
+    private final List<ParametersRead> parametersRead = new ArrayList<>();
     /** How many more applications of a step this reading of the body walks one by one
      *  ({@link #noRunPastTheApplications}), across every walk it makes. */
     private final int[] applicationsLeft;
@@ -743,7 +746,7 @@ public final class PathReachability {
         this.arriving = arriving;
         this.meanings = Objects.requireNonNull(meanings);
         this.places = places;
-        this.mayStopInside = Collections.newSetFromMap(new IdentityHashMap<>());
+        this.readOnce = new IdentityHashMap<>();
         this.applicationsLeft = new int[] {ElementsWrittenOut.MOST_WALKED};
     }
 
@@ -763,7 +766,7 @@ public final class PathReachability {
         this.arriving = new LinkedHashMap<>();
         this.meanings = of.meanings;
         this.places = of.places;
-        this.mayStopInside = of.mayStopInside;
+        this.readOnce = of.readOnce;
         this.applicationsLeft = of.applicationsLeft;
     }
 
@@ -901,6 +904,7 @@ public final class PathReachability {
                 for (Core.FieldValue value : ic.construct().values()) {
                     given = walk(value.value(), given, at, reads);
                 }
+                takenIn(ic.construct());
                 Choice.Decides.ItWasBuilt held = Choice.Decides.ofBuilt(ic);
                 PathEngine.Entered built = engine.enteringBuilt(held, given.known(), at);
                 List<Walked> ways = new ArrayList<>();
@@ -922,6 +926,9 @@ public final class PathReachability {
             case Core.LetIn li -> {
                 Walked value = walk(li.value(), here, at, reads);
                 PathEngine.Entered in = engine.bindLet(li, value.known(), at);
+                if (in.known() != value.known()) {
+                    takenIn(li.value());
+                }
                 // Inside what the `let` binds, so an arm of an expanded helper is read against the
                 // position the call handed it. A binding is not a fork, so what stands above the
                 // body is what stood above the binding.
@@ -930,6 +937,7 @@ public final class PathReachability {
             }
             case Core.Match match -> {
                 Walked scrutinee = walk(match.scrutinee(), here, at, reads);
+                takenIn(match.scrutinee());
                 Known before = scrutinee.known();
                 if (before.reachesNothing()) {
                     // No run gets past the value matched on, so no arm is entered. An arm the
@@ -998,16 +1006,20 @@ public final class PathReachability {
                 if (step != null) {
                     steps.add(step);
                 }
+                ParametersRead parameters = ParametersRead.of(block);
+                parametersRead.add(parameters);
                 Walked body = walk(block.body(), new Walked(inside, here.decided(),
                                 here.mayStop(), here.nothingAbove() && applied.isEmpty(), true,
                                 why, inside.reachesNothing()), at,
                         reads.entering(new ScopeStep.Block(block), symbols, newtypes));
+                parametersRead.removeLast();
                 if (step != null) {
                     steps.removeLast();
                     pastTheApplicationsBefore(step, body);
                 }
                 if (!body.noneStopped() || body.known().reachesNothing()) {
-                    mayStopInside.add(block);
+                    readOnce.put(block, new ReadOnce(body.known().reachesNothing(),
+                            parameters.takenIn()));
                 }
                 // Making the function value runs nothing of its body, so nothing it holds is
                 // carried on. What stopped a run in it is: the call that applies it is worked out
@@ -1076,6 +1088,11 @@ public final class PathReachability {
         if (Core.withoutStanding(e) instanceof Core.Call call) {
             walkHeldToOneAtMost(call, operands.known(), at);
         }
+        // What an application is handed reaches past this evaluation where which values reach it
+        // decides whether a run gets past it, and where it hands them on to a closure of its own.
+        if (readsAParameter(e) && (appliesAClosure(e) || completion.answersSomewhereOnly(e, at))) {
+            takenIn(e);
+        }
         Walked stopped = noRunPastTheApplications(e, operands, at, reads);
         if (stopped != null) {
             return stopped;
@@ -1122,6 +1139,11 @@ public final class PathReachability {
      * call is, since its body is read where the call stands; and no more applications than
      * {@link #applicationsLeft} across the body, so a closure inside a closure costs what that
      * allows and not what the nesting would.
+     *
+     * <p>And only where an application could leave nothing that the one walk of the body did not
+     * find it leaves ({@link ReadOnce#couldLeaveNothing}). An application differs from that walk
+     * only in the values its parameters are handed, so where nothing the walk took in read one of
+     * them, each application takes in what the walk took in and leaves what it left.
      */
     private Walked noRunPastTheApplications(Core e, Walked operands, Denotations at,
                                             InputReads reads) {
@@ -1130,14 +1152,16 @@ public final class PathReachability {
         }
         for (Core argument : call.args()) {
             if (!(Core.withoutStanding(argument) instanceof Core.Block block)
-                    || !mayStopInside.contains(block)) {
+                    || !(readOnce.get(block) instanceof ReadOnce once)
+                    || !once.couldLeaveNothingOnAnyApplication()) {
                 continue;
             }
             if (!(reads.applicationsOf(block, symbols, newtypes, applicationsLeft[0],
                     ReadMeaning.WhereKept.NOTHING_DECIDED)
                     instanceof InputReads.Applications.Each(var each, var how))
                     || how != HowAClosureIsApplied.TO_EVERY_ELEMENT
-                    || each.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
+                    || each.stream().anyMatch(one -> !one.keptWhere().isEmpty())
+                    || !once.couldLeaveNothing(each.getFirst().handed().keySet())) {
                 continue;
             }
             Walked from = new Walked(operands.known(), operands.decided(), operands.mayStop(),
@@ -1230,6 +1254,7 @@ public final class PathReachability {
         // against conditions nothing on the way to it established.
         boolean reachedWhen = binary.op().rightRunsWhenLeftIs();
         Walked before = left.when(reachedWhen);
+        takenIn(binary.left());
         Predicates.Assumed reaching = assuming(binary.occurrence(),
                 MeaningsOfABody.Part.Asked.LEFT, binary.left(), before.known(), at, reads,
                 reachedWhen);
@@ -1432,6 +1457,83 @@ public final class PathReachability {
      * that.
      */
     private record StepEntered(Set<BindingId> madeBefore, List<ConstructOccurrence> reading) {}
+
+    /**
+     * What the one walk of a closure's body, under no value in particular, found of it.
+     *
+     * @param leftNothing whether it left nothing, whatever the parameters are handed
+     * @param takenIn     the parameters something it took in reads ({@link ParametersRead})
+     */
+    private record ReadOnce(boolean leftNothing, Set<BindingId> takenIn) {
+
+        ReadOnce {
+            takenIn = Set.copyOf(takenIn);
+        }
+
+        /** Whether some application could leave nothing, whichever parameters it hands values. */
+        boolean couldLeaveNothingOnAnyApplication() {
+            return leftNothing || !takenIn.isEmpty();
+        }
+
+        /** Whether an application handing values to {@code handed} could leave nothing. */
+        boolean couldLeaveNothing(Set<BindingId> handed) {
+            return leftNothing || !Collections.disjoint(takenIn, handed);
+        }
+    }
+
+    /**
+     * The parameters of a closure whose body the walk is reading once, each with every node of the
+     * body that reads it or a name the body makes of it, and those of them something the walk took
+     * in reads.
+     *
+     * <p>Taken in is what the walk carries on past: a condition assumed, the value matched on or
+     * built, a binding that says something of its value, an evaluation that answers on some values
+     * only, and a call handing what it is given to a closure of its own. Under a value handed to a
+     * parameter none of these read, the walk takes in the same and leaves the same.
+     */
+    private record ParametersRead(Map<BindingId, Set<Core>> readers, Set<BindingId> takenIn) {
+
+        static ParametersRead of(Core.Block block) {
+            Map<BindingId, Set<Core>> readers = new LinkedHashMap<>();
+            for (Core.Binder param : block.params()) {
+                if (param != null && param.binding() != null) {
+                    readers.put(param.binding(), WhatABodyReads.nodesReadingAnyOf(block.body(),
+                            WhatABodyReads.namesMadeOf(block.body(), Set.of(param.binding()))));
+                }
+            }
+            return new ParametersRead(readers, new LinkedHashSet<>());
+        }
+    }
+
+    /** Whether {@code e} reads a parameter of a closure the walk is reading the body of once. */
+    private boolean readsAParameter(Core e) {
+        for (ParametersRead each : parametersRead) {
+            for (Set<Core> nodes : each.readers().values()) {
+                if (nodes.contains(e)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** That the walk took {@code e} in, for every parameter it reads of a closure the walk is
+     *  reading the body of once. */
+    private void takenIn(Core e) {
+        for (ParametersRead each : parametersRead) {
+            each.readers().forEach((parameter, nodes) -> {
+                if (nodes.contains(e)) {
+                    each.takenIn().add(parameter);
+                }
+            });
+        }
+    }
+
+    /** Whether {@code e} is a call handed a closure, which it may apply to what it is handed. */
+    private static boolean appliesAClosure(Core e) {
+        return Core.withoutStanding(e) instanceof Core.Call call && call.args().stream()
+                .anyMatch(argument -> Core.withoutStanding(argument) instanceof Core.Block);
+    }
 
     /** {@code block} entered as a step, or null where no operation alone applies it or it is
      *  handed nothing the applications before one make. */
@@ -1777,6 +1879,7 @@ public final class PathReachability {
     private Walked enterArm(ControlPlace.Arm[] arms, int index, Core.If iff, Core arm,
                            Walked fork, Optional<Proof> noRunPast, Denotations at,
                            InputReads reads, boolean holds) {
+        takenIn(iff.cond());
         Predicates.Assumed taken = assuming(iff.place().occurrence(),
                 MeaningsOfABody.Part.Asked.CONDITION, iff.cond(), fork.known(), at, reads, holds);
         Known inside = taken.known();

@@ -235,6 +235,18 @@ final class PathCompletion {
     }
 
     /**
+     * Whether {@code e} answers on some of the values it is worked out of and not on others: an
+     * operator that answers anywhere short of everywhere, or a node a run may end at
+     * ({@link WhatARunMayEndFor}). Which values reach such a node can decide whether a run gets
+     * past it, and of no other node can they.
+     */
+    boolean answersSomewhereOnly(Core e, Denotations at) {
+        Operated operated = operated(e, at);
+        return operated.where() == null ? !WhatARunMayEndFor.itself(operated.e()).endsNone()
+                : !(operated.where() instanceof WhereAnOperatorAnswers.Everywhere);
+    }
+
+    /**
      * Whether where a run that reached the evaluation gets past it is read here, under {@code k}:
      * every operand it answers on is one {@link #past} keeps, and every one it does not is one past
      * leaves out.
