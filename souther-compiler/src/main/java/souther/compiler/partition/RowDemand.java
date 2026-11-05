@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
@@ -83,6 +84,20 @@ public sealed interface RowDemand {
     }
 
     /**
+     * What an element of a container is asked, as the reading states it: what the element is to
+     * meet, what some element of a container inside it is to meet ({@link SomeElementWithin}), or
+     * what each element of one is to meet one way or another ({@link EveryElementWithin}).
+     *
+     * <p>Wider than {@link OfAnElement} by what a composer does not write: which element of a
+     * container inside the element is asked something, and elements of one meeting different
+     * ways. A composer writes the elements of that container alike as well, so to it what some
+     * element of it is asked is what each is asked, and every element meeting one of several ways
+     * is every element meeting the same one of them ({@link AnElementMeets#ways}); a reader proving
+     * that no element meets a way asks them as they are ({@link AnElementMeets#asAsked}).
+     */
+    sealed interface AskedOfAnElement permits OfAnElement, SomeElementWithin, EveryElementWithin {}
+
+    /**
      * What an element of a container is to meet.
      *
      * <p>Three vocabularies, because a composer meets them three ways. A relation over the
@@ -96,7 +111,7 @@ public sealed interface RowDemand {
      * written into each; two elements asked for two things are a row it does not write, and never
      * a row the model does not have.
      */
-    sealed interface OfAnElement {
+    sealed interface OfAnElement extends AskedOfAnElement {
 
         /** Every position whose value this turns on, given the element it is asked of. */
         Set<TermPath> positions(TermPath element);
@@ -353,6 +368,154 @@ public sealed interface RowDemand {
     }
 
     /**
+     * That some element of the container at {@code container}, inside the element, meets every one
+     * of {@code asked}: one way of what a quantifier over that container asks.
+     *
+     * <p>The element it is asked of is one of its own. A position inside it says an element of the
+     * container and not which one, so what two of these ask, or one of these and what every element
+     * of the container is asked, is written at the same positions — and two of these may be met by
+     * two elements that differ. So what is asked here is asked of an element that meets what holds
+     * of every element there, and never together with what another of these asks.
+     *
+     * <p>{@code asked} is in the words of the inner element: what names the element names that
+     * one, as it does in the quantifier's own demand.
+     *
+     * @param container the container inside the element
+     * @param asked     what some element of it meets, all of it together; never empty
+     */
+    record SomeElementWithin(TermPath container, List<AskedOfAnElement> asked)
+            implements AskedOfAnElement {
+
+        public SomeElementWithin {
+            Objects.requireNonNull(container, "the container inside an element");
+            asked = List.copyOf(asked);
+            if (asked.isEmpty()) {
+                throw new IllegalArgumentException("some element of " + container
+                        + " is asked something");
+            }
+        }
+    }
+
+    /**
+     * That every element of the container at {@code container}, inside the element, meets one of
+     * {@code ways} — each element whichever of them, or the container holding none.
+     *
+     * <p>Not one of these ways for every element. Every element meeting one of two things is not
+     * every element meeting the same one of them, so taken apart into a way of the outer element
+     * per way, a container holding an element of each kind is along none of them, and where every
+     * one of those leaves nothing beside what else the element is asked, a container that meets
+     * them all would be proved to be none. So the ways stay here, and what follows from them is
+     * asked of each element they are asked of ({@link WhatAnElementIsLeft}).
+     *
+     * <p>Only of two ways or more. Every element meeting one way is that way for each of them or
+     * the container holding none, exactly, which is how one way is read: as two ways of the outer
+     * element.
+     *
+     * <p>{@code ways} are in the words of the inner element, as the quantifier's own demand is.
+     *
+     * @param container   the container inside the element
+     * @param ways        what each element of it meets one of; two or more, none of them empty
+     * @param holdingNone the container holding none, which meets this whatever the ways ask
+     */
+    record EveryElementWithin(TermPath container, List<List<AskedOfAnElement>> ways,
+                              Relational holdingNone) implements AskedOfAnElement {
+
+        public EveryElementWithin {
+            Objects.requireNonNull(container, "the container inside an element");
+            Objects.requireNonNull(holdingNone, "the container holding none, which it may");
+            ways = ways.stream().map(List::copyOf).toList();
+            if (ways.size() < 2 || ways.stream().anyMatch(List::isEmpty)) {
+                throw new IllegalArgumentException("every element of " + container + " meets one"
+                        + " of several ways, each asking something, or one way is read as it is: "
+                        + ways);
+            }
+        }
+    }
+
+    /**
+     * The ways {@code way} is met by a row whose elements are written alike: what some element of
+     * a container inside the element is asked, asked of each of them, and every element of one
+     * meeting one of several ways, every element meeting the same one of them or none.
+     *
+     * <p>What names the inner element by no position of it is said to be about that container
+     * ({@link WithinIt}); everything else names its positions already.
+     */
+    static List<List<OfAnElement>> writtenAlike(List<? extends AskedOfAnElement> way) {
+        return writtenAlike(way, Integer.MAX_VALUE).orElseThrow();
+    }
+
+    /**
+     * The same, where they are no more than {@code most} — or nothing where they are more, made
+     * no further than that shows.
+     *
+     * <p>As many as every choice of a way for each element of a container that meets one of
+     * several, so the ways a walk keeps are counted as these before they are kept: what a
+     * composer is handed is held to the figure the walk is.
+     */
+    static Optional<List<List<OfAnElement>>> writtenAlike(List<? extends AskedOfAnElement> way,
+                                                          int most) {
+        // Each way made so far, grown in place by what is asked one way and copied only where
+        // something is asked several.
+        List<List<OfAnElement>> out = new ArrayList<>();
+        out.add(new ArrayList<>());
+        for (AskedOfAnElement each : way) {
+            List<List<OfAnElement>> these = new ArrayList<>();
+            switch (each) {
+                case OfAnElement asked -> {
+                    out.forEach(made -> made.add(asked));
+                    continue;
+                }
+                case SomeElementWithin(TermPath container, var asked) -> {
+                    Optional<List<List<OfAnElement>>> inner = writtenAlike(asked, most);
+                    if (inner.isEmpty()) {
+                        return Optional.empty();
+                    }
+                    inner.get().forEach(one -> these.add(named(container, true, one)));
+                }
+                case EveryElementWithin(TermPath container, var ways, var holdingNone) -> {
+                    for (List<AskedOfAnElement> one : ways) {
+                        Optional<List<List<OfAnElement>>> inner = writtenAlike(one, most);
+                        if (inner.isEmpty()) {
+                            return Optional.empty();
+                        }
+                        inner.get().forEach(written -> these.add(named(container, false,
+                                written)));
+                    }
+                    these.add(List.of(holdingNone));
+                }
+            }
+            if ((long) out.size() * these.size() > most) {
+                return Optional.empty();
+            }
+            if (these.size() == 1) {
+                out.forEach(made -> made.addAll(these.getFirst()));
+                continue;
+            }
+            List<List<OfAnElement>> joined = new ArrayList<>();
+            for (List<OfAnElement> before : out) {
+                for (List<OfAnElement> one : these) {
+                    List<OfAnElement> both = new ArrayList<>(before);
+                    both.addAll(one);
+                    joined.add(both);
+                }
+            }
+            out = joined;
+        }
+        return Optional.of(out.stream().map(List::copyOf).toList());
+    }
+
+    /** {@code asked} of an element of the container at {@code container} inside the element, said
+     *  of positions of the outer one: what names the inner element as about that container. */
+    private static List<OfAnElement> named(TermPath container, boolean some,
+                                           List<OfAnElement> asked) {
+        return asked.stream().<OfAnElement>map(inner -> switch (inner) {
+            case SameAs _, DifferentFrom _, KeyedAs _, NotKeyedAs _ ->
+                    new WithinIt(container, some, inner);
+            case Relational _, ATruth _, InCases _, WithinIt _ -> inner;
+        }).toList();
+    }
+
+    /**
      * That the element is equal to the value at {@code value}.
      *
      * <p>The element is not named here: it is always the element of the container the demand
@@ -467,37 +630,75 @@ public sealed interface RowDemand {
      * is every element, and a demand with none is no element; neither is one of these, since the
      * reading settles both before a demand is made ({@link DemandReading}).
      *
+     * <p>Held as the reading states it ({@link #asAsked}), and read by a composer as it writes it
+     * ({@link #ways}): the second is worked out from the first and is never handed in beside it,
+     * so the two cannot come to say different things.
+     *
      * <p>A value, compared by its ways, and hashed once: what a reading of a statement asks is
      * gathered into sets at every level a disjunction nests at, and hashed afresh each time, the
      * ways inside were walked once per level.
      */
     static final class AnElementMeets {
 
-        /** Each way an element may meet it, each once and in the order the reading kept them; one
-         *  or more, and none of them empty. */
+        /** Each way an element may meet it as the reading states it, each once and in the order
+         *  the reading kept them; one or more, and none of them empty. */
+        private final List<List<AskedOfAnElement>> asAsked;
+        /** The ways of {@link #asAsked}, each as rows written alike meet it
+         *  ({@link RowDemand#writtenAlike}). */
         private final List<List<OfAnElement>> ways;
         private final int hash;
         /** What {@link #positions} came to last, or null before it is asked. */
         private volatile PositionsOf positions;
 
-        AnElementMeets(List<List<OfAnElement>> ways) {
-            this.ways = ways.stream().map(List::copyOf).distinct().toList();
-            if (this.ways.isEmpty() || this.ways.stream().anyMatch(List::isEmpty)) {
+        AnElementMeets(List<? extends List<? extends AskedOfAnElement>> ways) {
+            this.asAsked = ways.stream().map(List::<AskedOfAnElement>copyOf).distinct().toList();
+            if (this.asAsked.isEmpty() || this.asAsked.stream().anyMatch(List::isEmpty)) {
                 throw new IllegalArgumentException("what an element meets is one or more ways,"
-                        + " each asking something: " + this.ways);
+                        + " each asking something: " + this.asAsked);
             }
-            this.hash = this.ways.hashCode();
+            this.ways = this.asAsked.stream().flatMap(way -> writtenAlike(way).stream())
+                    .distinct().toList();
+            this.hash = this.asAsked.hashCode();
         }
 
-        /** Each way an element may meet it. */
+        /**
+         * Each way an element may meet it, as a row whose elements are written alike meets it:
+         * what some element of a container inside the element is asked, asked of each of them,
+         * and every element of one meeting one of several ways, the same one for each of them or
+         * none. Fewer rows than meet it, and so never asked whether some element does.
+         */
         public List<List<OfAnElement>> ways() {
             return ways;
+        }
+
+        /**
+         * Each way an element may meet it as the reading states it, with what some element of a
+         * container inside the element is asked kept apart ({@link SomeElementWithin}), and what
+         * each element of one meets one of kept whole ({@link EveryElementWithin}).
+         *
+         * <p>The one a reader proving that no element meets a way asks: two quantifiers over one
+         * container inside the element may be met by two of its elements, and every element of it
+         * meeting one of two ways by elements meeting different ones, which the ways written alike
+         * no longer tell from one element meeting both or every element meeting the same.
+         */
+        public List<List<AskedOfAnElement>> asAsked() {
+            return asAsked;
+        }
+
+        /**
+         * Whether no element of a container whose elements all hold {@code declared} is shown to
+         * meet this, along any of its ways ({@link WhatAnElementIsLeft}): a proof where true, and
+         * nothing at all where false.
+         */
+        boolean metByNoElementOf(SearchRegion declared) {
+            WhatAnElementIsLeft none = WhatAnElementIsLeft.of(declared);
+            return asAsked.stream().allMatch(way -> none.with(way).isEmpty());
         }
 
         @Override
         public boolean equals(Object other) {
             return this == other || (other instanceof AnElementMeets that && hash == that.hash
-                    && ways.equals(that.ways));
+                    && asAsked.equals(that.asAsked));
         }
 
         @Override
@@ -507,7 +708,7 @@ public sealed interface RowDemand {
 
         @Override
         public String toString() {
-            return "AnElementMeets[ways=" + ways + "]";
+            return "AnElementMeets[ways=" + asAsked + "]";
         }
 
         /** What an element asked only {@code asked} meets. */
@@ -670,7 +871,12 @@ public sealed interface RowDemand {
             }
         }
 
-        /** The relations among what the element is to meet, along its one way. */
+        /**
+         * The relations a row whose elements are written alike places for the element, along
+         * its one way ({@link AnElementMeets#ways}) — with what some element of a container
+         * inside it is asked among them, so what they leave of a region is no proof that no
+         * element meets this ({@link AnElementMeets#metByNoElementOf}).
+         */
         public List<Relational> relations() {
             return relationsAmong(ofAnElement.theWay());
         }
@@ -730,7 +936,12 @@ public sealed interface RowDemand {
             Objects.requireNonNull(counted, "the count it is, or that it is none");
         }
 
-        /** The relations among what every element is to meet, along its one way. */
+        /**
+         * The relations a row whose elements are written alike places for each element, along
+         * its one way ({@link AnElementMeets#ways}) — with what some element of a container
+         * inside it is asked among them, so what they leave of a region is no proof that no
+         * element meets this ({@link AnElementMeets#metByNoElementOf}).
+         */
         public List<Relational> relations() {
             return relationsAmong(ofEachElement.theWay());
         }

@@ -242,7 +242,9 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
         Map<String, String> rows = new LinkedHashMap<>();
         for (BorderAssessment border : lines) {
             border.items().forEach((role, item) -> {
-                if (item instanceof ItemAssessment.Owed owed
+                // A point a row there would say nothing owed about is not searched, and offers
+                // nothing.
+                if (item instanceof ItemAssessment.Owed owed && owed.searches().ran()
                         && owed.searches().only() instanceof ItemAssessment.Attempt.Built built) {
                     rows.put(border.label() + " " + border.border().named(role),
                             as.apply(built.row()));

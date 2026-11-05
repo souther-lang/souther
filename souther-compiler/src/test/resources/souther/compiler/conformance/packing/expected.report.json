@@ -1124,7 +1124,7 @@
         "axis" : "value",
         "against" : "0",
         "knownWritable" : true,
-        "writableBecause" : [ "it_is_proved", "a_row_is_at_it", "a_value_was_built" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -1266,7 +1266,7 @@
         "axis" : "value",
         "against" : "24",
         "knownWritable" : true,
-        "writableBecause" : [ "it_is_proved", "a_row_is_at_it", "a_value_was_built" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -3383,7 +3383,7 @@
             "relation" : "=",
             "against" : "24",
             "knownWritable" : true,
-            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "writableBecause" : [ "it_is_proved" ],
             "status" : "complete",
             "hit" : false
           }, {
@@ -3493,7 +3493,7 @@
             "relation" : "=",
             "against" : "15",
             "knownWritable" : true,
-            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "writableBecause" : [ "it_is_proved" ],
             "status" : "complete",
             "hit" : false
           }, {
@@ -3587,7 +3587,7 @@
             "relation" : "=",
             "against" : "0",
             "knownWritable" : true,
-            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "writableBecause" : [ "it_is_proved" ],
             "status" : "complete",
             "hit" : false
           }, {

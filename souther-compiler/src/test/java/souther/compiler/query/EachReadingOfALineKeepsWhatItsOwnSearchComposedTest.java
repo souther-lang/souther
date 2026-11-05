@@ -184,7 +184,8 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
                                 new Measurement.NotMeasured<>(
                                         ItemAssessment.Coverage.NotAsked.NO_ROWS),
                                 ItemAssessment.WritabilityProjection.NOT_COMPUTED,
-                                SearchOutcomes.of(attempt).readAt(ModelOccurrences.of(copy)))));
+                                SearchOutcomes.of(attempt).readAt(ModelOccurrences.of(copy)),
+                                false)));
         return new BorderAssessment(line, items,
                 new AnotherLineTheRowsAllow.ByDirection(List.of(BESIDE)),
                 ARowTellingTheLinesApart.notAsked(), ModelOccurrences.of(copy), SaidOnTheWay.NONE);
@@ -207,7 +208,7 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
                                 new Measurement.NotMeasured<>(
                                         ItemAssessment.Coverage.NotAsked.NO_ROWS),
                                 ItemAssessment.WritabilityProjection.NOT_COMPUTED,
-                                SearchOutcomes.none())));
+                                SearchOutcomes.none(), false)));
         return new BorderAssessment(line, items,
                 new AnotherLineTheRowsAllow.ByDirection(List.of(BESIDE)), toldApart);
     }

@@ -719,7 +719,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.DemandReading$AnElementsWay#walk("
                             + "Ljava/util/List;I"
                             + "Lsouther/compiler/partition/DemandReading$AnElementsWay;"
-                            + "Lsouther/compiler/inputs/SearchRegion;Ljava/util/Set;[I)Z",
+                            + "Lsouther/compiler/partition/WhatAnElementIsLeft;Ljava/util/Set;[I)Z",
                     "past the figure stops making ways whole, keeps the ones made and says the"
                             + " rest are where this compiler's work stopped"),
             Map.entry("souther.compiler.partition.DemandReading$AnElementsWay#oneOfEach("

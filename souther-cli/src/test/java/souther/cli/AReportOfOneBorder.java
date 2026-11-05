@@ -222,7 +222,7 @@ final class AReportOfOneBorder {
             items.put(point, new ItemAssessment.Owed(border.demand(point).criterion(),
                     coverage.apply(border.roleOf(point)),
                     ItemAssessment.WritabilityProjection.PROVEN,
-                    souther.compiler.query.SearchOutcomes.none()));
+                    souther.compiler.query.SearchOutcomes.none(), false));
         }
         // Every line this fixture builds is on one position, which has no line one step from it:
         // weighed one less it is nothing, and weighed one more it is the same line. So there is

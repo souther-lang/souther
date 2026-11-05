@@ -1281,15 +1281,29 @@ final class DemandReading {
             return AnElementMeeting.UNREAD;
         }
         List<RowDemand.OfAnElement> way = exists.ofAnElement().theWay();
-        Optional<List<TakenConstraint>> heldTo =
-                exists.relations().size() == way.size()
-                        ? Optional.of(exists.relations().stream()
-                                .map(RowDemand.Relational::constraint).toList())
-                        : Optional.empty();
+        // Relations of the element itself, as the reading states the way: what some element of
+        // a container inside it is asked is no relation of the element, though a row written
+        // alike writes it into every one of them.
+        List<List<RowDemand.AskedOfAnElement>> asAsked = exists.ofAnElement().asAsked();
+        Optional<List<TakenConstraint>> heldTo = asAsked.size() == 1
+                ? relationsAlone(asAsked.getFirst()) : Optional.empty();
         Optional<RowDemand.WithinIt> handedOn =
                 way.size() == 1 && way.getFirst() instanceof RowDemand.WithinIt within
                         ? Optional.of(within) : Optional.empty();
         return new AnElementMeeting(heldTo, handedOn);
+    }
+
+    /** What {@code way} asks, where it asks nothing but relations of the element itself. */
+    private static Optional<List<TakenConstraint>> relationsAlone(
+            List<RowDemand.AskedOfAnElement> way) {
+        List<TakenConstraint> out = new ArrayList<>();
+        for (RowDemand.AskedOfAnElement each : way) {
+            if (!(each instanceof RowDemand.Relational(TakenConstraint relation))) {
+                return Optional.empty();
+            }
+            out.add(relation);
+        }
+        return Optional.of(List.copyOf(out));
     }
 
     /**
@@ -1610,8 +1624,8 @@ final class DemandReading {
      *                     decides
      * @param never        whether something asked of the element is something no element meets
      */
-    private record AnElementsWay(List<RowDemand.OfAnElement> ofTheElement, List<Read> ofTheRow,
-                                 boolean never) {
+    private record AnElementsWay(List<RowDemand.AskedOfAnElement> ofTheElement,
+                                 List<Read> ofTheRow, boolean never) {
 
         static final AnElementsWay ASKING_NOTHING = new AnElementsWay(List.of(), List.of(), false);
 
@@ -1622,11 +1636,11 @@ final class DemandReading {
             ofTheRow = List.copyOf(ofTheRow);
         }
 
-        static AnElementsWay asking(RowDemand.OfAnElement one) {
+        static AnElementsWay asking(RowDemand.AskedOfAnElement one) {
             return new AnElementsWay(List.of(one), List.of(), false);
         }
 
-        static AnElementsWay asking(List<RowDemand.OfAnElement> these) {
+        static AnElementsWay asking(List<RowDemand.AskedOfAnElement> these) {
             return new AnElementsWay(these, List.of(), false);
         }
 
@@ -1655,9 +1669,9 @@ final class DemandReading {
          * <p>A way no element meets is not taken further: some element meeting it is no row's, and
          * every element meeting it is the container holding none, whatever else is asked beside
          * it. Which ways those are is proved and not guessed: what the declarations leave, which is
-         * what every element holds, with the relations the way asks of the element taken in, left
-         * with nothing ({@link TakenConstraint#nothingMeetsAll}). A choice between relations of one
-         * number written as a conjunction of disjunctions is, taken apart, mostly ways like that.
+         * what every element holds, with what the way asks of the element taken in, left with
+         * nothing ({@link WhatAnElementIsLeft}). A choice between relations of one number written
+         * as a conjunction of disjunctions is, taken apart, mostly ways like that.
          *
          * <p>What is looked at is held to the figure — each way a choice of several opens — whether
          * or not it turns out closed, so a walk among closed ways stops where it is told to.
@@ -1691,7 +1705,8 @@ final class DemandReading {
             WALKS.incrementAndGet();
             Set<AnElementsWay> open = new LinkedHashSet<>();
             int[] looked = {0};
-            if (!walk(parts, 0, ASKING_NOTHING, read.quantities().region(), open, looked)) {
+            if (!walk(parts, 0, ASKING_NOTHING, WhatAnElementIsLeft.of(read.quantities().region()),
+                    open, looked)) {
                 open.add(LEFT_UNREAD);
             }
             return open.isEmpty() ? List.of(NEVER) : List.copyOf(open);
@@ -1701,18 +1716,27 @@ final class DemandReading {
          * {@code so} taken one choice of each part from {@code at} on, each way made whole put in
          * {@code open}.
          *
-         * @param within what the declarations leave with every relation {@code so} asks of the
-         *               element taken in, carried down the walk so each choice narrows it by what
-         *               it adds and no more
+         * @param left what the declarations leave an element with everything {@code so} asks of
+         *             it taken in, carried down the walk so each choice takes in what it adds and
+         *             no more
          * @return whether every way was looked at, which is false where the figure stopped it
          */
         private static boolean walk(List<List<AnElementsWay>> parts, int at, AnElementsWay so,
-                                    SearchRegion within, Set<AnElementsWay> open, int[] looked) {
+                                    WhatAnElementIsLeft left, Set<AnElementsWay> open,
+                                    int[] looked) {
+            int most = READINGS.maximum();
             if (at == parts.size()) {
+                // A way kept is as many ways as rows written alike meet it in, each of which a
+                // composer is handed: what is past the first is counted as a choice opening it.
+                Optional<List<List<RowDemand.OfAnElement>>> alike =
+                        RowDemand.writtenAlike(so.ofTheElement, most - looked[0] + 1);
+                if (alike.isEmpty()) {
+                    return false;
+                }
+                looked[0] += alike.get().size() - 1;
                 open.add(so);
                 return true;
             }
-            int most = READINGS.maximum();
             List<AnElementsWay> choices = parts.get(at);
             // A part with one choice is taken and not chosen, so a long conjunction of single
             // relations costs nothing of the figure: what is counted is each way a choice opens.
@@ -1727,29 +1751,15 @@ final class DemandReading {
                 if (choice.never) {
                     continue;
                 }
-                List<TakenConstraint> added = relationsOf(choice);
-                SearchRegion further = added.isEmpty() ? within
-                        : TakenConstraint.narrowedBy(added, within);
-                if (!added.isEmpty() && TakenConstraint.nothingIsLeftFor(added, further)) {
+                Optional<WhatAnElementIsLeft> further = left.with(choice.ofTheElement);
+                if (further.isEmpty()) {
                     continue;
                 }
-                if (!walk(parts, at + 1, so.with(choice), further, open, looked)) {
+                if (!walk(parts, at + 1, so.with(choice), further.get(), open, looked)) {
                     return false;
                 }
             }
             return true;
-        }
-
-        /** The relations {@code way} asks of the element, which are what a region is narrowed
-         *  by. */
-        private static List<TakenConstraint> relationsOf(AnElementsWay way) {
-            List<TakenConstraint> out = new ArrayList<>();
-            for (RowDemand.OfAnElement each : way.ofTheElement) {
-                if (each instanceof RowDemand.Relational(TakenConstraint relation)) {
-                    out.add(relation);
-                }
-            }
-            return out;
         }
 
         /**
@@ -1784,7 +1794,7 @@ final class DemandReading {
         /** This way and {@code choice} together; whether an element meets them is the walk's to
          *  ask ({@link #walk}). */
         private AnElementsWay with(AnElementsWay choice) {
-            List<RowDemand.OfAnElement> element = new ArrayList<>(ofTheElement);
+            List<RowDemand.AskedOfAnElement> element = new ArrayList<>(ofTheElement);
             element.addAll(choice.ofTheElement);
             List<Read> row = new ArrayList<>(ofTheRow);
             row.addAll(choice.ofTheRow);
@@ -1837,31 +1847,37 @@ final class DemandReading {
             // A quantifier over a container: what it asks of its own elements is asked of
             // positions inside the element, where the container is inside it.
             // Some element of it meeting one of several things is a way of the outer element for
-            // each of them, exactly.
+            // each of them, exactly — each asked of an element of that container of its own, which
+            // another quantifier over it may find in another element.
             case Read.Demands(RowDemand.Exists inner) -> {
                 if (!everyElement && !anyInside(inner.positions(), element)) {
                     yield List.of(AnElementsWay.ofTheRow(each));
                 }
                 List<AnElementsWay> out = new ArrayList<>();
-                for (List<RowDemand.OfAnElement> way : inner.ofAnElement().ways()) {
-                    out.add(AnElementsWay.asking(within(inner.container(), true, way)));
+                for (List<RowDemand.AskedOfAnElement> way : inner.ofAnElement().asAsked()) {
+                    out.add(AnElementsWay.asking(
+                            new RowDemand.SomeElementWithin(inner.container(), way)));
                 }
                 yield out;
             }
             // And every element of such a container meeting something is elements that meet it,
-            // or the container holding none. A container inside an element is written alike in
-            // every element, so each of its elements meeting one way is a way of the outer
-            // element, and elements of it meeting different ones are not written.
+            // or the container holding none: two ways of the outer element, exactly, where what
+            // it meets is one way. Where it is one of several, each element meets whichever, and
+            // the ways stay one demand: a way of the outer element per way would be every element
+            // meeting the same one, and an inner container holding one of each kind is along
+            // none of them.
             case Read.Demands(RowDemand.ForAll inner) -> {
                 if (!everyElement && !anyInside(inner.positions(), element)) {
                     yield List.of(AnElementsWay.ofTheRow(each));
                 }
-                List<AnElementsWay> out = new ArrayList<>();
-                for (List<RowDemand.OfAnElement> way : inner.ofEachElement().ways()) {
-                    out.add(AnElementsWay.asking(within(inner.container(), false, way)));
+                List<List<RowDemand.AskedOfAnElement>> ways = inner.ofEachElement().asAsked();
+                if (ways.size() > 1) {
+                    yield List.of(AnElementsWay.asking(new RowDemand.EveryElementWithin(
+                            inner.container(), ways, inner.holdingNone())));
                 }
-                out.add(AnElementsWay.asking(inner.holdingNone()));
-                yield out;
+                yield List.of(
+                        AnElementsWay.asking(everyElementWithin(inner.container(), ways.getFirst())),
+                        AnElementsWay.asking(inner.holdingNone()));
             }
             case Read.Demands(RowDemand.SoMany count) ->
                     List.of(everyElement || anyInside(count.positions(), element)
@@ -1912,7 +1928,7 @@ final class DemandReading {
                                                          InputReading read) {
         return List.of(switch (ReachingCuts.taking(at, cases, read)) {
             case DeclaredInput.Taking.Narrows(TermPath to) -> {
-                List<RowDemand.OfAnElement> asked = new ArrayList<>();
+                List<RowDemand.AskedOfAnElement> asked = new ArrayList<>();
                 asked.add(new RowDemand.InCases(to, read.domain().reach().crossings()));
                 for (TakenConstraint.AwayFrom hole : ReachingCuts.onItsOrder(to, read)) {
                     asked.add(new RowDemand.Relational(hole));
@@ -1990,20 +2006,28 @@ final class DemandReading {
     }
 
     /**
-     * What a quantifier over the container at {@code container} asks of its elements, as what is
-     * asked of positions inside the element of the outer one: what names its own position as it
-     * is, and an element being another position's value as that of the inner container.
+     * What every element of the container at {@code container} is asked, as what is asked of
+     * positions inside the element of the outer one: what names its own position as it is, and an
+     * element being another position's value as that of the inner container.
+     *
+     * <p>What every element meets, each of them does, so it is asked of the positions inside them
+     * as it stands — and what some element of a container further in is asked stays asked of an
+     * element of its own ({@link RowDemand.SomeElementWithin}), whichever of them it is in.
      */
-    private static List<RowDemand.OfAnElement> within(TermPath container, boolean some,
-                                                      List<RowDemand.OfAnElement> asked) {
-        List<RowDemand.OfAnElement> out = new ArrayList<>();
-        for (RowDemand.OfAnElement each : asked) {
-            out.add(switch (each) {
-                case RowDemand.SameAs _, RowDemand.DifferentFrom _, RowDemand.KeyedAs _,
-                     RowDemand.NotKeyedAs _ -> new RowDemand.WithinIt(container, some, each);
-                case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.InCases _,
-                     RowDemand.WithinIt _ -> each;
-            });
+    private static List<RowDemand.AskedOfAnElement> everyElementWithin(
+            TermPath container, List<RowDemand.AskedOfAnElement> asked) {
+        List<RowDemand.AskedOfAnElement> out = new ArrayList<>();
+        for (RowDemand.AskedOfAnElement each : asked) {
+            switch (each) {
+                case RowDemand.OfAnElement one -> out.add(switch (one) {
+                    case RowDemand.SameAs _, RowDemand.DifferentFrom _, RowDemand.KeyedAs _,
+                         RowDemand.NotKeyedAs _ -> new RowDemand.WithinIt(container, false, one);
+                    case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.InCases _,
+                         RowDemand.WithinIt _ -> one;
+                });
+                case RowDemand.SomeElementWithin some -> out.add(some);
+                case RowDemand.EveryElementWithin every -> out.add(every);
+            }
         }
         return List.copyOf(out);
     }
@@ -2025,7 +2049,8 @@ final class DemandReading {
                                                  Optional<Quantity.HowManyMeet> counted,
                                                  Optional<Proposition> stated) {
         RowDemand.Relational holdingOne = sizeAgainst(held, read, true);
-        Map<List<Read>, List<List<RowDemand.OfAnElement>>> byTheRow = new LinkedHashMap<>();
+        Map<List<Read>, List<List<RowDemand.AskedOfAnElement>>> byTheRow =
+                new LinkedHashMap<>();
         Set<List<Read>> anyElement = new LinkedHashSet<>();
         for (AnElementsWay way : ways) {
             if (way.never()) {
@@ -2037,7 +2062,7 @@ final class DemandReading {
                     && way.ofTheElement().stream().anyMatch(each -> each instanceof RowDemand.SameAs)) {
                 return List.of(forTheRun(stated.get(), RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
             }
-            List<List<RowDemand.OfAnElement>> these =
+            List<List<RowDemand.AskedOfAnElement>> these =
                     byTheRow.computeIfAbsent(way.ofTheRow(), _ -> new ArrayList<>());
             // An element meeting nothing this reading could state is any element, and the
             // container holding one is all that is left to ask.
@@ -2081,7 +2106,7 @@ final class DemandReading {
                                                   Optional<Quantity.HowManyMeet> counted,
                                                   Optional<Proposition> stated) {
         RowDemand.Relational holdingNone = sizeAgainst(held, read, false);
-        List<List<RowDemand.OfAnElement>> ofTheElement = new ArrayList<>();
+        List<List<RowDemand.AskedOfAnElement>> ofTheElement = new ArrayList<>();
         List<AnElementsWay> withTheRow = new ArrayList<>();
         for (AnElementsWay way : ways) {
             if (way.never()) {
@@ -2108,7 +2133,7 @@ final class DemandReading {
         for (AnElementsWay way : withTheRow) {
             List<Read> out = new ArrayList<>(way.ofTheRow());
             if (!way.ofTheElement().isEmpty()) {
-                List<List<RowDemand.OfAnElement>> these = new ArrayList<>(ofTheElement);
+                List<List<RowDemand.AskedOfAnElement>> these = new ArrayList<>(ofTheElement);
                 these.add(way.ofTheElement());
                 out.add(new Read.Demands(new RowDemand.ForAll(held,
                         new RowDemand.AnElementMeets(these), holdingNone, Optional.empty())));

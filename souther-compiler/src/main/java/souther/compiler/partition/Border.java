@@ -708,24 +708,53 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * the line to say.
      */
     public List<OwedPoint> holdsOpen() {
-        if (!(placement() instanceof AuthoredPlacement.NotShown)) {
+        AuthoredPlacement placement = placement();
+        return answers.keySet().stream()
+                .flatMap(point -> holdsOpen(point, placement).stream()).toList();
+    }
+
+    /** The same, of what this reading holds at {@code point} of its own. */
+    public List<OwedPoint> holdsOpen(DomainPoint point) {
+        return holdsOpen(point, placement());
+    }
+
+    private List<OwedPoint> holdsOpen(DomainPoint point, AuthoredPlacement placement) {
+        if (!(placement instanceof AuthoredPlacement.NotShown)) {
             return List.of();
         }
         BorderObligationId line = obligation();
-        PointContributions own = PointContributions.by(origin.authoredLine());
+        PointContributions settled = settledAt(point, PointContributions.by(origin.authoredLine()));
+        if (settled == null) {
+            return List.of();
+        }
         List<OwedPoint> out = new ArrayList<>();
-        for (DomainPoint point : answers.keySet()) {
-            PointContributions settled = settledAt(point, own);
-            if (settled == null) {
-                continue;
-            }
-            for (DomainPoint each : pointsOf(line.line().facts())) {
-                if (sameKind(each, point)) {
-                    out.add(owedAt(line, each, settled, new ReadingSeat.Unresolved(point),
-                            threshold));
-                }
+        for (DomainPoint each : pointsOf(line.line().facts())) {
+            if (sameKind(each, point)) {
+                out.add(owedAt(line, each, settled, new ReadingSeat.Unresolved(point),
+                        threshold));
             }
         }
+        return List.copyOf(out);
+    }
+
+    /**
+     * Every point of the author's line a row at {@code point} of this reading would say something
+     * about: the ones it owes there, and the ones it holds open there.
+     *
+     * <p>Something about, and not something that settles. Each comes with where this reading stands
+     * to it ({@link OwedPoint#seat}): a row here settles the point only through a reading standing
+     * at it ({@link ReadingSeat.At}), and through one that cannot tie its place to the point
+     * ({@link ReadingSeat.Untied}) or is not shown to be a place of the line
+     * ({@link ReadingSeat.Unresolved}) it is what the reading tried, said against the point and
+     * counted neither for it nor against it.
+     *
+     * <p>Empty for a reading shown to be no place of the line, which owes nothing and holds nothing
+     * open. What a row there shows is about no point anybody is owed.
+     */
+    public List<OwedPoint> about(DomainPoint point) {
+        AuthoredPlacement placement = placement();
+        List<OwedPoint> out = new ArrayList<>(owes(point, placement));
+        out.addAll(holdsOpen(point, placement));
         return List.copyOf(out);
     }
 
