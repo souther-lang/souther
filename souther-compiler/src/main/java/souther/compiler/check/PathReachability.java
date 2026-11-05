@@ -1309,7 +1309,7 @@ public final class PathReachability {
                 reachedWhen);
         Exits right = exitsOf(binary.right(), before.at(reaching.known(),
                 with(before.decided(), reaching, binary.left().pos(),
-                        binary.occurrence().lineage(), reachedWhen)), at, reads);
+                        binary.lineage(), reachedWhen)), at, reads);
         // A run leaves the operator having run the right, or with the left settling it.
         // Which the left settling holds is asked only where no run leaves having run the
         // right: otherwise a run leaving holds what held after the left either way, and
@@ -1323,7 +1323,7 @@ public final class PathReachability {
                     reads, !reachedWhen);
             settled = settled.at(settling.known(),
                     with(settled.decided(), settling, binary.left().pos(),
-                            binary.occurrence().lineage(), !reachedWhen));
+                            binary.lineage(), !reachedWhen));
         }
         Walked completed = leaving(left.completed(), List.of(right.completed(), settled));
         Walked other = alternatives(left.completed(), List.of(settled, right.when(!reachedWhen)));
@@ -1652,7 +1652,7 @@ public final class PathReachability {
             out.put(where.get(), taken.known().reachesNothing()
                     ? new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(
                             with(here.decided(), taken, comparison.pos(),
-                                    comparison.occurrence().lineage(), result)))
+                                    comparison.lineage(), result)))
                     : new Reachability.Unsettled(whyNot(taken, comparison)));
         }
     }
@@ -1832,7 +1832,7 @@ public final class PathReachability {
             return decided;
         }
         List<PathDecision> out = new ArrayList<>(decided);
-        out.add(PathDecision.ofAnArm(arm.pos(), match.occurrence().lineage()));
+        out.add(PathDecision.ofAnArm(arm.pos(), match.lineage()));
         return out;
     }
 
@@ -1859,7 +1859,7 @@ public final class PathReachability {
                 MeaningsOfABody.Part.Asked.CONDITION, iff.cond(), fork.known(), at, reads, holds);
         Known inside = taken.known();
         List<PathDecision> under = with(fork.decided(), taken, iff.cond().pos(),
-                iff.place().occurrence().lineage(), holds);
+                iff.lineage(), holds);
         if (arms != null && index < arms.length) {
             out.put(arms[index], inside.reachesNothing()
                     ? new Reachability.Unreachable(why(iff, holds, under, reads))

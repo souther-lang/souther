@@ -29,6 +29,10 @@ class EveryEvaluationAProofMayRestOnSaysTheCopyItIsInTest {
     private static final String SOURCE = """
             module example.copies
 
+            data Grade = Int
+                invariant value >= 0
+
+            let graded (x: Int): Grade = Grade(x)
             let negated (x: Int): Int = -x
             let stop (x: Int): Int = if x > 100 then unreachable "no" else x
 
@@ -37,6 +41,10 @@ class EveryEvaluationAProofMayRestOnSaysTheCopyItIsInTest {
 
             behavior stoppedTwice : (a: Int, b: Int) -> Int
             let stoppedTwice (a, b) = stop(a) + stop(b)
+
+            behavior gradedTwice : (a: Int, b: Int) -> Grade
+                constructs Grade
+            let gradedTwice (a, b) = if a > b then graded(a) else graded(b)
             """;
 
     @Test
@@ -49,6 +57,12 @@ class EveryEvaluationAProofMayRestOnSaysTheCopyItIsInTest {
     void anUnreachableInAHelperCalledTwiceIsInTwoCopies() {
         List<Core.Unreachable> found = in("stoppedTwice", Core.Unreachable.class);
         assertCopies(found.stream().map(Core.Unreachable::lineage).toList());
+    }
+
+    @Test
+    void aConstructionInAHelperCalledTwiceIsInTwoCopies() {
+        List<Core.Construct> found = in("gradedTwice", Core.Construct.class);
+        assertCopies(found.stream().map(Core.Construct::lineage).toList());
     }
 
     private static void assertCopies(List<OccurrenceLineage> lineages) {

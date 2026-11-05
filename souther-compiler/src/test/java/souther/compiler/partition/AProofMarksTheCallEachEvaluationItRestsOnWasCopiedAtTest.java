@@ -18,8 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A dead-branch proof names evaluations, and a place inside a helper is evaluated once for every
  * call the helper is copied into. Whatever the proof rests on — a negation, an arm of a
- * {@code match}, the left of a short-circuit, an {@code unreachable}, the application of a
- * closure — it is marked at the calls that made the copy it rests on.
+ * {@code match}, the left of a short-circuit, the application of a closure — it is marked at the
+ * calls that made the copy it rests on. What the elaborator says of the copy a node stands in is
+ * asked of the tree, where a proof does not name the node ({@code EveryEvaluationAProofMayRest…}).
  *
  * <p>Each case is a helper holding the evaluation and one call of it, so that the mark is at the
  * call and the name it carries is the helper's. The nested case reads the order too: the call
@@ -40,10 +41,9 @@ class AProofMarksTheCallEachEvaluationItRestsOnWasCopiedAtTest {
     /** The names of the helpers whose copies the dead-branch notes of {@code source} are about, in
      *  the order the notes say them. */
     private static List<String> copiesNamed(String source) {
-        List<Diagnostic> all = Compiler.compileWithWarnings(TYPES + source).warnings();
-        List<Diagnostic> dead = all.stream().filter(each -> each.code().equals("E1327")).toList();
-        assertFalse(dead.isEmpty(), source + all.stream().map(each -> each.code() + " "
-                + each.notes()).toList());
+        List<Diagnostic> dead = Compiler.compileWithWarnings(TYPES + source).warnings().stream()
+                .filter(each -> each.code().equals("E1327")).toList();
+        assertFalse(dead.isEmpty(), source);
         List<String> named = new ArrayList<>();
         for (Diagnostic one : dead) {
             for (LabeledRegion each : one.secondary()) {

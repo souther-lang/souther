@@ -1490,7 +1490,12 @@ public sealed interface Core {
      * the other would put one reader's counting inside the other's identity.
      */
     record If(Core cond, Core then, Core els, ForkPlace place, Type type, SourcePos pos)
-            implements Core {
+            implements Core, InACopy {
+
+        @Override
+        public OccurrenceLineage lineage() {
+            return place.occurrence().lineage();
+        }
 
         public If {
             if (place == null) {
@@ -1530,7 +1535,12 @@ public sealed interface Core {
      * copy is called where supplied rules are looked up, as they do for {@link If}.
      */
     record IfConstructed(Construct construct, Binder binder, Core then, List<ElseArm> els,
-                         ForkPlace place, Type type, SourcePos pos) implements Core {
+                         ForkPlace place, Type type, SourcePos pos) implements Core, InACopy {
+
+        @Override
+        public OccurrenceLineage lineage() {
+            return place.occurrence().lineage();
+        }
 
         public IfConstructed {
             if (place == null) {
@@ -1945,7 +1955,12 @@ public sealed interface Core {
      * is called where supplied rules are looked up, as they do for {@link If}.
      */
     record Match(Core scrutinee, List<Case> cases, ForkPlace place, Type type, SourcePos pos)
-            implements Core {
+            implements Core, InACopy {
+
+        @Override
+        public OccurrenceLineage lineage() {
+            return place.occurrence().lineage();
+        }
 
         public Match {
             if (place == null) {
