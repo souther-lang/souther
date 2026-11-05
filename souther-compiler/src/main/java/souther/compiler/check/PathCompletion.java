@@ -142,6 +142,11 @@ final class PathCompletion {
      * ({@link #readsWhereItAnswers}). Nothing is added where no run gets past, since a place
      * nothing arrives at is not one a run may have stopped on the way to.
      *
+     * <p>And whether {@code e} itself is such a place, said apart from the list. The list is of
+     * kinds, so an evaluation of a kind already on it adds nothing to it and is one a run may stop
+     * at all the same; read off the list, a walk that began past an evaluation of that kind would
+     * take every one of the same kind after it for one no run stops at.
+     *
      * @param k       what holds before {@code e} answers, as for {@link #of}
      * @param mayStop what may have stopped a run on the way to {@code e}
      */
@@ -149,22 +154,28 @@ final class PathCompletion {
         Operated operated = operated(e, at);
         Known answered = answering(operated, k);
         if (of(e, k, answered.reachesNothing(), at) instanceof Completion.CannotComplete) {
-            return new Past(k.reachingNothing(), mayStop);
+            return new Past(k.reachingNothing(), mayStop, false);
+        }
+        if (readsWhereItAnswers(operated, k, at)) {
+            return new Past(answered, mayStop, false);
         }
         WhatMayStopARun stopping = whatStops(operated.e());
-        if (mayStop.contains(stopping) || readsWhereItAnswers(operated, k, at)) {
-            return new Past(answered, mayStop);
+        if (mayStop.contains(stopping)) {
+            return new Past(answered, mayStop, true);
         }
         List<WhatMayStopARun> more = new ArrayList<>(mayStop);
         more.add(stopping);
-        return new Past(answered, List.copyOf(more));
+        return new Past(answered, List.copyOf(more), true);
     }
 
     /**
      * What a run past an evaluation holds, and what on the way there may have stopped a run for
      * what nothing here says.
+     *
+     * @param mayStopHere whether the evaluation itself may stop a run for what nothing here says,
+     *                    whatever {@code mayStop} held before it
      */
-    record Past(Known known, List<WhatMayStopARun> mayStop) {}
+    record Past(Known known, List<WhatMayStopARun> mayStop, boolean mayStopHere) {}
 
     /** Which kind of thing {@code e} is, as one that may stop a run. */
     private static WhatMayStopARun whatStops(Core e) {

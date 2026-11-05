@@ -72,6 +72,19 @@ public sealed interface DeadBranchMessage extends Message {
     record ItsClosureIsAppliedToNothing(String containers) implements DeadBranchMessage,
             Supporting {}
 
+    /**
+     * A call on the way here applies a function to every element it is handed, and no run gets
+     * past the application to the element at {@code index}, as the notes after this one say.
+     *
+     * <p>The notes are about that application and not about the function's body: what they mark
+     * inside the function holds there on the application to that element.
+     */
+    record NoRunGetsPastOneOfItsApplications(int index) implements DeadBranchMessage,
+            Supporting {}
+
+    /** The call applying the function, on the way here. */
+    record ThisAppliesAFunctionToEveryElement() implements DeadBranchMessage, Supporting {}
+
     /** What to do about it. */
     record TakeItOutOrLetSomethingReachIt() implements DeadBranchMessage, Supporting {}
 }

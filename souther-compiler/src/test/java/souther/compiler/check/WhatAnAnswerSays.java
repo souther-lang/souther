@@ -77,6 +77,12 @@ final class WhatAnAnswerSays {
                                                                    List<PathDecision> decisions) {
                 return decisions;
             }
+
+            @Override
+            public List<PathDecision> noRunGetsPastOneOfItsApplications(SourcePos call,
+                                                                        int element, Proof inner) {
+                return List.of();
+            }
         });
     }
 
@@ -130,6 +136,12 @@ final class WhatAnAnswerSays {
             @Override
             public List<TypeSymbol> itsClosureIsAppliedToNothing(List<String> containers,
                                                                  List<PathDecision> decisions) {
+                return List.of();
+            }
+
+            @Override
+            public List<TypeSymbol> noRunGetsPastOneOfItsApplications(SourcePos call,
+                                                                      int element, Proof inner) {
                 return List.of();
             }
         });
@@ -212,6 +224,12 @@ final class WhatAnAnswerSays {
                                                        List<PathDecision> decisions) {
                 return null;
             }
+
+            @Override
+            public String noRunGetsPastOneOfItsApplications(SourcePos call, int element,
+                                                            Proof inner) {
+                return null;
+            }
         });
     }
 
@@ -267,6 +285,12 @@ final class WhatAnAnswerSays {
             public List<String> itsClosureIsAppliedToNothing(List<String> containers,
                                                              List<PathDecision> decisions) {
                 return containers;
+            }
+
+            @Override
+            public List<String> noRunGetsPastOneOfItsApplications(SourcePos call, int element,
+                                                                  Proof inner) {
+                return List.of();
             }
         });
     }

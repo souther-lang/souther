@@ -20,6 +20,7 @@ import souther.compiler.flow.WhyRuledOut;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -57,6 +58,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -697,6 +699,22 @@ public final class PathReachability {
             new LinkedHashMap<>();
     /** The steps the walk is inside, the innermost last. */
     private final List<StepEntered> steps = new ArrayList<>();
+    /** The closures whose body, read once for every application, answered on some runs only
+     *  somewhere or left nothing: the ones an application of may stop a run. */
+    private final Set<Core.Block> mayStopInside;
+    /**
+     * How many applications of closures one reading of a body walks one at a time
+     * ({@link #noRunPastTheApplications}), across every walk it makes and however the closures
+     * nest.
+     *
+     * <p>A figure of this reading's and not of the composing stage: reaching it stops no search a
+     * report says anything about. The applications not walked are ones nothing has shown no run
+     * gets past, which is what every application is taken to be without the walking, so what
+     * follows the call stays where the one walk of the body left it.
+     */
+    static final int APPLICATIONS_WALKED_ONE_BY_ONE = 1024;
+    /** How many more applications this reading of the body may walk one at a time. */
+    private final int[] applicationsLeft;
     /**
      * What holds where the body begins: the inputs entered and seeded, and no condition taken.
      *
@@ -733,6 +751,28 @@ public final class PathReachability {
         this.arriving = arriving;
         this.meanings = Objects.requireNonNull(meanings);
         this.places = places;
+        this.mayStopInside = Collections.newSetFromMap(new IdentityHashMap<>());
+        this.applicationsLeft = new int[] {APPLICATIONS_WALKED_ONE_BY_ONE};
+    }
+
+    /** A walk of the same body that files nothing where this one files: what it finds about
+     *  where a run gets is all it is asked. */
+    private PathReachability(PathReachability of) {
+        this.engine = of.engine;
+        this.completion = of.completion;
+        this.entry = of.entry;
+        this.entered = of.entered;
+        this.plan = of.plan;
+        this.reading = of.reading;
+        this.read = of.read;
+        this.symbols = of.symbols;
+        this.newtypes = of.newtypes;
+        this.out = new LinkedHashMap<>();
+        this.arriving = new LinkedHashMap<>();
+        this.meanings = of.meanings;
+        this.places = of.places;
+        this.mayStopInside = of.mayStopInside;
+        this.applicationsLeft = of.applicationsLeft;
     }
 
     /**
@@ -974,9 +1014,13 @@ public final class PathReachability {
                     steps.removeLast();
                     pastTheApplicationsBefore(step, body);
                 }
+                if (!body.noneStopped() || body.known().reachesNothing()) {
+                    mayStopInside.add(block);
+                }
                 // Making the function value runs nothing of its body, so nothing it holds is
                 // carried on. What stopped a run in it is: the call that applies it is worked out
-                // before what follows, and no state here holds where each application got past.
+                // before what follows. Whether some application stops every run is the call's to
+                // ask, under the value each is handed ({@link #noRunPastTheApplications}).
                 yield inside.reachesNothing() ? here : here.pastAnApplicationOf(body);
             }
             // Every other node evaluates its parts whichever run it is on, one after another and
@@ -1040,12 +1084,18 @@ public final class PathReachability {
         if (Core.withoutStanding(e) instanceof Core.Call call) {
             walkHeldToOneAtMost(call, operands.known(), at);
         }
+        Walked stopped = noRunPastTheApplications(e, operands, at, reads);
+        if (stopped != null) {
+            return stopped;
+        }
         // What a run past this evaluation holds is what its operands left with what its operator
         // asks of them, or nothing where it answers nothing. What is taken in there is a step on
         // the way like a condition, and a proof that leans on it names it.
         PathCompletion.Past past = completion.past(e, operands.known(), at, operands.mayStop());
+        // Whether this evaluation may stop a run is asked of it and not of whether the kinds on the
+        // way grew: one of a kind already there adds no kind and stops runs all the same.
         boolean narrowed = past.known() != operands.known();
-        if (!narrowed && past.mayStop().equals(operands.mayStop())) {
+        if (!narrowed && !past.mayStopHere()) {
             return operands;
         }
         List<PathDecision> answered = operands.decided();
@@ -1056,6 +1106,120 @@ public final class PathReachability {
         // Some run reaching here may not get past it, so what follows has something above it.
         return new Walked(past.known(), answered, past.mayStop(), false, false,
                 WhyNone.BY_THE_WAY, false);
+    }
+
+    /**
+     * What a run past {@code e} holds where no run gets past some application {@code e} makes of a
+     * step, or null where nothing here shows that.
+     *
+     * <p>Asked where the call is worked out and not where its closure is written. Writing the
+     * closure makes a function and runs none of its body; the call runs it, once on each element,
+     * after every argument has been worked out. So an argument written after the closure is still
+     * worked out before any application, and only what follows the call is past them.
+     *
+     * <p>Which closure the call applies, how far it goes and what it hands it are each asked of
+     * whoever answers them: the block an argument stands for of the reading of names this walks in
+     * ({@link Terms#blockOf}), so a closure given a name is the closure written; and the
+     * application itself of the uses of the closure ({@link ClosureUses.Application}). Only an
+     * application to every element, handing the closure the element and nothing else of the
+     * container — a position or a key would be values of their own to hand it. A parameter the
+     * applications before one make, as what a walk carries is, is handed nothing here
+     * ({@link ClosureUses.Application#madeByTheApplicationsBefore}): it is read as any value it may
+     * be, which narrows less and never more.
+     *
+     * <p>Each application is walked with the element it is handed, as that reading writes the
+     * container out: each element with where it is read, entered as a {@code let} enters its
+     * binder ({@link Terms#elementsOnEveryRun}). An element made by an application of another
+     * closure is read where that application read it, and a container that reading cannot write
+     * out, or that holds an element on some runs only, is one whose applications are not walked.
+     * The reading of the input is the body's own, under no element in particular: what it is asked
+     * here is where the conditions' positions stand, and an element it reads as several is read as
+     * every one of them, which narrows less and never more.
+     *
+     * <p>Each is walked from what holds once the arguments are, and not from what the one before
+     * it left. A run reaching an application has got past the ones before it, so what it holds is
+     * narrower than that, and an application nothing gets past from there is one nothing gets past
+     * from where a run reaches it. Every application is made on every run that makes the call, so
+     * one nothing gets past is one no run past the call got past. What is not shown is a stop only
+     * the applications together leave, each of them getting past alone: carrying one's state into
+     * the next would carry what it says of the closure's own names, which the next is handed anew,
+     * and nothing here takes those out of a state.
+     *
+     * <p>Why no run gets past is said as that application's
+     * ({@link Proof#noRunGetsPastOneOfItsApplications}), and the steps past the call are the ones
+     * on the way to it. What the walk of the application took in was taken in with the closure
+     * handed that element, which nothing on the way to the call says: the same conditions read as
+     * the way here would hold on the application to another element.
+     *
+     * <p>Only what arrives is read off these walks. Where a comparison in the body arrives is the
+     * one walk of the body's to say, made under no element in particular, so what one application
+     * finds is not filed under a place every application shares. Only a closure the one walk of
+     * its body found may stop a run ({@link #mayStopInside}), since one it found nothing in that
+     * answers on some runs only has nothing an application could stop on. And no more applications
+     * than {@link #APPLICATIONS_WALKED_ONE_BY_ONE} across the body, so a closure inside a closure
+     * costs what that allows and not what the nesting would.
+     */
+    private Walked noRunPastTheApplications(Core e, Walked operands, Denotations at,
+                                            InputReads reads) {
+        if (!(Core.withoutStanding(e) instanceof Core.Call call)) {
+            return null;
+        }
+        for (Core argument : call.args()) {
+            Core.Block block = Terms.blockOf(argument, at);
+            if (block == null || !mayStopInside.contains(block)) {
+                continue;
+            }
+            ClosureUses.Application applied = theOneApplicationOf(block, reads);
+            if (applied == null || applied.applied() != HowAClosureIsApplied.TO_EVERY_ELEMENT
+                    || applied.position() != null || applied.held().size() != 1) {
+                continue;
+            }
+            List<ElementsWrittenOut.Stood<Denotations>> elements =
+                    engine.terms().elementsOnEveryRun(applied.container(), at);
+            if (elements == null) {
+                continue;
+            }
+            BindingId element = applied.held().iterator().next();
+            InputReads inside = reads.entering(new ScopeStep.Block(block), symbols, newtypes);
+            Walked from = new Walked(operands.known(), operands.decided(), operands.mayStop(),
+                    false, true, WhyNone.BY_THE_WAY, false);
+            for (int i = 0; i < elements.size(); i++) {
+                if (applicationsLeft[0]-- <= 0) {
+                    return null;
+                }
+                Walked body = new PathReachability(this).walk(block.body(), from,
+                        engine.terms().elementsReading().handing(at, element, elements.get(i)),
+                        inside);
+                if (body.known().reachesNothing()) {
+                    int handed = i;
+                    return new Walked(operands.known().reachingNothing(), operands.decided(),
+                            operands.mayStop(), false, false,
+                            body.whyNothingArrives().<WhyNone>map(why -> new WhyNone.Because(
+                                            Proof.noRunGetsPastOneOfItsApplications(
+                                                    call.pos(), handed, why)))
+                                    .orElse(new WhyNone.Unsaid()),
+                            false);
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The one application an operation makes of {@code block}, as the uses of the closure say it,
+     * or null where nothing but that operation applying it is not what they say.
+     *
+     * <p>Told by the closure's parameters and not by the call or the block: the uses are read where
+     * the operation still stands as itself, and the walk this asks for reads the tree a rewrite
+     * made of it, which keeps the bindings and not the nodes ({@link ElementProvenance}). A closure
+     * the uses say one operation applies, and nothing else uses, is applied by the call it is
+     * handed to and by no other.
+     */
+    private static ClosureUses.Application theOneApplicationOf(Core.Block block,
+                                                               InputReads reads) {
+        ClosureUses uses = reads.usesOf(block);
+        return uses == null || uses.usedElsewhere() || uses.applications().size() != 1
+                ? null : uses.applications().getFirst();
     }
 
     /**
