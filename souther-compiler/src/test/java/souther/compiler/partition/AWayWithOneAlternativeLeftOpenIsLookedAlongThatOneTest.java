@@ -41,14 +41,15 @@ class AWayWithOneAlternativeLeftOpenIsLookedAlongThatOneTest {
     @Test
     void theOneAlternativeLeftIsTheWayLookedAlong() {
         WayToTheBorder way = new WayToTheBorder(List.of(
-                new OnTheWay.Narrowed(WHERE, KIND.refine(only("A")), List.of(), List.of()),
+                new OnTheWay.Narrowed(WHERE, KIND.refine(only("A")), List.of(), List.of(),
+                        NamedElements.NONE),
                 OnTheWay.OneOf.of(
                         new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 1),
                         WHERE, List.of(
                                 List.of(new OnTheWay.Narrowed(WHERE, KIND.refine(only("A")),
-                                        List.of(), List.of())),
+                                        List.of(), List.of(), NamedElements.NONE)),
                                 List.of(new OnTheWay.Narrowed(WHERE, KIND.refine(only("B")),
-                                        List.of(), List.of()))),
+                                        List.of(), List.of(), NamedElements.NONE))),
                         Optional.empty())));
         Reachability.Reaching reaching = assertInstanceOf(Reachability.Reaching.class,
                 Reachability.of(way, reading().quantities().region()));

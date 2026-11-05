@@ -154,7 +154,7 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
      */
     DecidingCase meeting(Proposition also) {
         for (Proposition part : conjunctsOf(condition)) {
-            if (part instanceof Proposition.InCases(DecisionSubject.AnInput(TermPath at),
+            if (part instanceof Proposition.InCases(DecisionSubject.AnInput(TermPath at, var _),
                     CasesLeft cases, boolean held, var _)
                     && held && cases.atoms().size() == 1
                     && at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Element

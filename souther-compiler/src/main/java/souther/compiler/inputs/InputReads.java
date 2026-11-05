@@ -2266,7 +2266,7 @@ public final class InputReads {
     }
 
     /** The container an element is held in. */
-    sealed interface ContainerOf {
+    public sealed interface ContainerOf {
 
         /** One that stands at a position of the input. */
         record AtAPosition(TermPath at) implements ContainerOf {
@@ -2309,8 +2309,31 @@ public final class InputReads {
      * <p>What tells two names for two elements of one container from one name met twice, and a
      * name for an entry's key from one for its value. A position inside a container says an element
      * and not which one, so that is the position's to say and not this's.
+     *
+     * <p>Through what each name was given as well: {@code let v = a.n + 1} reads the element
+     * {@code a} stands for wherever {@code v} is read, and a name read for its value is that value
+     * read. Each name is followed once, which is what stops it.
      */
     List<ElementStood> elementsStoodForIn(Core e, DeclarationNewtypes newtypes) {
+        Set<ElementStood> out = new LinkedHashSet<>();
+        stoodForIn(e, newtypes, new HashSet<>(), out);
+        return List.copyOf(out);
+    }
+
+    /**
+     * Which element of each container {@code e} reads, by the names that stand for it
+     * ({@link #elementsStoodForIn}): for a reader that holds what {@code e} states and no longer
+     * the names it was written with.
+     */
+    public ElementsNamed elementsNamedIn(Core e, DeclarationNewtypes newtypes) {
+        return ElementsNamed.of(elementsStoodForIn(e, newtypes).stream()
+                .map(each -> new ElementsNamed.Named(
+                        new ElementsNamed.Slot(each.container(), each.part()), each.name()))
+                .toList());
+    }
+
+    private void stoodForIn(Core e, DeclarationNewtypes newtypes, Set<BindingId> followed,
+                            Set<ElementStood> into) {
         Set<BindingId> made = new HashSet<>();
         Set<BindingId> read = new LinkedHashSet<>();
         walkNames(e, made, read);
@@ -2318,46 +2341,53 @@ public final class InputReads {
         // binds it, as a closure's parameter is on each element it is handed, and so no one
         // element the comparison is read of.
         read.removeAll(made);
-        List<ElementStood> out = new ArrayList<>();
         for (BindingId each : read) {
-            ElementStood stood = elementStoodBy(each, newtypes, 0);
-            if (stood != null) {
-                out.add(stood);
-            }
+            stoodBy(each, newtypes, followed, into);
         }
-        return List.copyOf(out);
     }
 
-    /** The element {@code name} is a name for, through the names it was only given. */
-    private ElementStood elementStoodBy(BindingId name, DeclarationNewtypes newtypes, int depth) {
+    /** The elements {@code name} is a name for, through the names and values it was only
+     *  given. */
+    private void stoodBy(BindingId name, DeclarationNewtypes newtypes, Set<BindingId> followed,
+                         Set<ElementStood> into) {
+        if (!followed.add(name)) {
+            return;
+        }
         // The entry a lookup picked out of a map filed from an answer's list is an element of that
         // list, as the entry of a map filed from the input's is.
         AnAnswerAt entry = names.placeInAnAnswer(name);
         if (entry != null && !entry.steps().isEmpty()
                 && entry.steps().getLast() instanceof TermPath.Step.Element) {
-            return new ElementStood(name, new ContainerOf.InAnAnswer(entry.evaluation(),
-                    entry.steps().subList(0, entry.steps().size() - 1)), HeldIn.Part.ELEMENT);
+            into.add(new ElementStood(name, new ContainerOf.InAnAnswer(entry.evaluation(),
+                    entry.steps().subList(0, entry.steps().size() - 1)), HeldIn.Part.ELEMENT));
+            return;
         }
-        return switch (names.roleOf(name)) {
-            case BindingRole.Element(HeldIn held) -> new ElementStood(name,
+        switch (names.roleOf(name)) {
+            case BindingRole.Element(HeldIn held) -> into.add(new ElementStood(name,
                     pathOf(held.container(), newtypes) instanceof PathResolution.At(TermPath at)
                             ? new ContainerOf.AtAPosition(at)
                             : new ContainerOf.Made(Core.withoutStanding(held.container())),
-                    held.part());
+                    held.part()));
             // A name given the position of an element, as the value of an entry a lookup
             // answered is.
-            case BindingRole.Root(TermPath path) -> stoodAt(name, path);
+            case BindingRole.Root(TermPath path) -> {
+                ElementStood stood = stoodAt(name, path);
+                if (stood != null) {
+                    into.add(stood);
+                }
+            }
             // A name only given another is that one, so that the same element met under two names
-            // is not two. Bounded by how far names are given names, which is a few.
-            case BindingRole.Alias(Core given) -> depth < KEPT_NAMES_APART
-                    && Core.withoutStanding(given) instanceof Core.Read root
-                    ? elementStoodBy(root.binding(), newtypes, depth + 1) : null;
-            case BindingRole.ElementOfSeveral _, BindingRole.Unknown _ -> null;
-        };
+            // is not two; a name given a value reads what the value reads.
+            case BindingRole.Alias(Core given) -> {
+                if (Core.withoutStanding(given) instanceof Core.Read root) {
+                    stoodBy(root.binding(), newtypes, followed, into);
+                } else {
+                    stoodForIn(given, newtypes, followed, into);
+                }
+            }
+            case BindingRole.ElementOfSeveral _, BindingRole.Unknown _ -> { }
+        }
     }
-
-    /** How many names given names are followed to the element. */
-    private static final int KEPT_NAMES_APART = 16;
 
     private static ElementStood stoodAt(BindingId name, TermPath path) {
         if (path.steps().isEmpty()) {

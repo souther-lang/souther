@@ -228,8 +228,8 @@ public final class StandingAtAPoint {
 
         /** The order {@code last} rests on, or null where it is about a place no row writes. */
         static OrderOfAKey of(Proposition.LastToHold last) {
-            return last.container() instanceof DecisionSubject.AnInput(TermPath container)
-                    && last.position() instanceof DecisionSubject.AnInput(TermPath position)
+            return last.container() instanceof DecisionSubject.AnInput(TermPath container, var _)
+                    && last.position() instanceof DecisionSubject.AnInput(TermPath position, var _)
                     ? new OrderOfAKey(container, position) : null;
         }
     }

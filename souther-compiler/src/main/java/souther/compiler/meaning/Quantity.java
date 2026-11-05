@@ -184,7 +184,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             List<NumericTerm> out = new ArrayList<>();
             for (Quantity each : of) {
                 List<NumericTerm> these = switch (each) {
-                    case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                    case DecisionAtom.OfTheInput(NumericTerm term, var _) -> List.of(term);
                     case WhatAnOperationAnswers inner -> inner.positionsItIsMadeOf();
                     default -> throw new IllegalStateException("held out by the constructor");
                 };
@@ -264,7 +264,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         /** The numbers of the input the string is made of, each once. */
         public List<NumericTerm> positionsItIsMadeOf() {
             return switch (string) {
-                case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                case DecisionAtom.OfTheInput(NumericTerm term, var _) -> List.of(term);
                 case WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
                 default -> throw new IllegalStateException("held out by the constructor");
             };
@@ -323,7 +323,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         /** The numbers of the input the string is made of, each once. */
         public List<NumericTerm> positionsItIsMadeOf() {
             return switch (string) {
-                case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                case DecisionAtom.OfTheInput(NumericTerm term, var _) -> List.of(term);
                 case WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
                 default -> throw new IllegalStateException("held out by the constructor");
             };
@@ -391,7 +391,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             List<NumericTerm> out = new ArrayList<>();
             for (Quantity each : List.of(value, string)) {
                 List<NumericTerm> these = switch (each) {
-                    case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                    case DecisionAtom.OfTheInput(NumericTerm term, var _) -> List.of(term);
                     case WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
                     default -> throw new IllegalStateException("held out by the constructor");
                 };
@@ -476,15 +476,16 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         /**
          * The dividend as a form of the input's numbers — or null where some value of it is read
-         * off a binding, and so is no number a row holds.
+         * off a binding, and so is no number a row holds, or where it weighs two values at one
+         * position, two elements of one container, which a form over positions holds as one.
          */
         public LinearForm<NumericTerm> overTheInput() {
             Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
             for (Map.Entry<Quantity, ExactRatio> each : dividend.coefs().entrySet()) {
-                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))) {
+                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _))
+                        || coefs.put(term, each.getValue()) != null) {
                     return null;
                 }
-                coefs.put(term, each.getValue());
             }
             return new LinearForm<>(dividend.constant(), coefs);
         }
@@ -494,7 +495,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         public Map<NumericTerm, ExactRatio> numbersOfTheInput() {
             Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>();
             dividend.coefs().forEach((each, by) -> {
-                if (each instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+                if (each instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)) {
                     out.put(term, by);
                 }
             });
@@ -535,7 +536,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 dividend.coefs().entrySet().stream()
                         .sorted(Comparator.comparing(each -> each.getKey().spelled()))
                         .forEach(each -> terms.add(Map.entry(
-                                each.getKey() instanceof DecisionAtom.OfTheInput(var term)
+                                each.getKey() instanceof DecisionAtom.OfTheInput(var term, var _)
                                         ? term.spelling() : each.getKey().spelling(),
                                 each.getValue())));
             }
@@ -846,7 +847,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         /** Whether this is the value at {@code place} of every element. */
         default boolean isAt(TermPath place) {
-            return this instanceof AtAPlace(DecisionSubject.AnInput(TermPath at))
+            return this instanceof AtAPlace(DecisionSubject.AnInput(TermPath at, var _))
                     && at.equals(place);
         }
 
@@ -883,7 +884,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
             @Override
             public List<TermPath> places() {
-                return at instanceof DecisionSubject.AnInput(TermPath path) ? List.of(path)
+                return at instanceof DecisionSubject.AnInput(TermPath path, var _) ? List.of(path)
                         : List.of();
             }
 
@@ -1106,7 +1107,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         private static DecisionSubject inside(DecisionSubject container, TheValue ofTheElement) {
             DecisionSubject where = ofTheElement.where();
             if (!(container instanceof DecisionSubject.AnInput)
-                    || !(where instanceof DecisionSubject.AnInput(TermPath at))
+                    || !(where instanceof DecisionSubject.AnInput(TermPath at, var _))
                     || !HowManyDifferentAcross.ofAContainerInside(container, where)) {
                 return null;
             }
@@ -1197,9 +1198,9 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                  */
                 public static boolean answersAlike(DecisionSubject container,
                                                    TheValue ofTheElement, Proposition stated) {
-                    if (!(container instanceof DecisionSubject.AnInput(TermPath held))
+                    if (!(container instanceof DecisionSubject.AnInput(TermPath held, var _))
                             || !(ofTheElement.where() instanceof DecisionSubject.AnInput(
-                                    TermPath where))) {
+                                    TermPath where, var _))) {
                         return false;
                     }
                     TermPath element = switch (ofTheElement) {
@@ -1270,7 +1271,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 /** Whether {@code subject} is the value itself or a place of the input outside
                  *  the elements. */
                 private static boolean alike(DecisionSubject subject, Apart apart) {
-                    return subject instanceof DecisionSubject.AnInput(TermPath at)
+                    return subject instanceof DecisionSubject.AnInput(TermPath at, var _)
                             && (apart.isTheValue(at) || !at.isAtOrUnder(apart.outermost()));
                 }
 
@@ -1278,7 +1279,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                  *  elements of one container, one gathered under it of every element, or a number
                  *  of the input outside the elements. */
                 private static boolean alike(Quantity number, Apart apart) {
-                    if (!(number instanceof DecisionAtom.OfTheInput(NumericTerm term))) {
+                    if (!(number instanceof DecisionAtom.OfTheInput(NumericTerm term, var _))) {
                         return false;
                     }
                     if (term instanceof NumericTerm.Multiplicity often) {

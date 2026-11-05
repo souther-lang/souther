@@ -112,8 +112,9 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
                 out.add(new TakenConstraint.AwayFrom(term, at.get()));
                 yield true;
             }
-            case Proposition.Compared(Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term),
-                    Place at, Rel rel), boolean holds, Spelling _)
+            case Proposition.Compared(Relation.Ordered(
+                    DecisionAtom.OfTheInput(NumericTerm term, var _), Place at, Rel rel),
+                    boolean holds, Spelling _)
                     when term.atOnePosition() != null -> {
                 Rel held = holds ? rel : rel.denied();
                 out.add(TakenConstraint.Ordered.isABound(held)
@@ -160,7 +161,7 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
 
     private static Optional<CasesAsked> casesAsked(Proposition stated) {
         return switch (stated) {
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at, var _), CasesLeft cases,
                     boolean holds, Spelling _) when holds -> {
                 // The position exists only in the cases the way to it narrows to, so each way
                 // is those cases and the case asked beside them.

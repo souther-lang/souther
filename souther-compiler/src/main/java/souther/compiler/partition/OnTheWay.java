@@ -96,9 +96,19 @@ public sealed interface OnTheWay {
      * <p>What it asks is {@link RowDemand}'s answer and not a second arm here. A rule over numbers,
      * a rule over a carrier's own values and whatever a composer learns to build next are all
      * conditions a row has to pass, and a reader asking what the way took in asks one list.
+     *
+     * <p>And which elements the names in the condition stood for. The demand is said at
+     * positions, and two names for two elements of one container are one position, so two
+     * entries alike but for the names are two conditions until the way is put together
+     * ({@link ElementsOnTheWay}).
      */
-    record TakenIn(ConditionReportAnchor anchor, RowDemand.OfACondition demand)
-            implements OnTheWay {}
+    record TakenIn(ConditionReportAnchor anchor, RowDemand.OfACondition demand,
+                   NamedElements named) implements OnTheWay {
+
+        public TakenIn {
+            Objects.requireNonNull(named, "the elements a condition was read of, or none");
+        }
+    }
 
     /**
      * A condition that says which values a position is one of, as the position it narrows.
@@ -133,12 +143,16 @@ public sealed interface OnTheWay {
      *                   each is one of its cases; only the ones some name of it crosses are kept
      * @param onItsOrder the places of its order the narrowing leaves out, one hole each; empty
      *                   where the position stands on no enumeration's order
+     * @param named      which elements the names in the scrutinee stood for, as a
+     *                   {@link TakenIn} keeps them
      */
     record Narrowed(ConditionReportAnchor anchor, TermPath position,
                     List<NameReach.Crossing> crossings,
-                    List<TakenConstraint.AwayFrom> onItsOrder) implements OnTheWay {
+                    List<TakenConstraint.AwayFrom> onItsOrder, NamedElements named)
+            implements OnTheWay {
 
         public Narrowed {
+            Objects.requireNonNull(named, "the elements a condition was read of, or none");
             if (position == null || !position.narrowsWhatItReaches()) {
                 throw new IllegalArgumentException(
                         "a narrowing on the way is a position read as one of its cases: " + position);
@@ -174,7 +188,7 @@ public sealed interface OnTheWay {
             for (Refinement each : position.narrowing().atoms()) {
                 out.add(List.of(new Narrowed(anchor,
                         DeclaredInput.narrowedTo(position, CasesLeft.of(each)), crossings,
-                        onItsOrder)));
+                        onItsOrder, named)));
             }
             return List.copyOf(out);
         }

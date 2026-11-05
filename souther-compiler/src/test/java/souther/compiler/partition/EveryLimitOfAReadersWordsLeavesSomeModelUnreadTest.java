@@ -114,6 +114,13 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
                 if List.length(List.distinct(o.ns)) >= 2
                 then (if o.a > 5 then A else B) else C
 
+            behavior twoElements : (o: O) -> A | B | C
+            let twoElements (o) =
+                if List.sum(List.map(a -> List.sum(List.map(b ->
+                    if a.n < 0 then (if b.n >= 1 then (if o.a > 5 then 1 else 2) else 3) else 4,
+                    o.xs)), o.xs)) > 0
+                then A else B
+
             behavior twoTexts : (o: O) -> A | B | C
             let twoTexts (o) = if o.name == o.other then (if o.a > 5 then A else B) else C
 
@@ -159,6 +166,9 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
         out.put(WhyNotTaken.DomainLimit.AN_ANSWER_A_ROW_STANDS_IN, "askedOfADependency");
         // A search from a node, which some node further down than a row is written may settle.
         out.put(WhyNotTaken.DomainLimit.A_NODE_BELOW_WHAT_A_ROW_WRITES, "aSearch");
+        // Two closures over one list, each handed an element, and a condition on each on the way
+        // to a comparison of the row's: the way is about one of the two.
+        out.put(WhyNotTaken.DomainLimit.ANOTHER_ELEMENT_THAN_THE_WAY_HOLDS, "twoElements");
         // A helper whose answer is one of two comparisons of two numbers: a path holds facts that
         // all hold, and the values of one number they leave, which these are not.
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES, "oneOfTwo");
@@ -245,6 +255,21 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
                         instanceof AWayThrough.NotRuledOut(var notAsked)) {
                     notAsked.forEach(why -> limitOf(why, out));
                 }
+            }
+        });
+        // And what the way to each comparison a run stops in declined, with each statement the
+        // body makes put on it either way, beside what the comparison reads: a row is written
+        // toward the way as one value at each position.
+        ReadComparisons comparisons = ReadComparisons.ofTheAnalysis(MODEL, behavior);
+        InputReading read = comparisons.inputs().reading(comparisons.rules());
+        meanings.stated().values().forEach(stated -> {
+            for (boolean way : List.of(true, false)) {
+                Proposition decides = way ? stated.states() : stated.states().denied();
+                comparisons.comparisons().stream()
+                        .filter(each -> each.statedAsACondition().isPresent())
+                        .forEach(each -> new WayToTheBorder(each.wayToACase(
+                                each.aCasePutOnTheWay(decides, read))).declined()
+                        .forEach(declined -> declined.whys().forEach(why -> limitOf(why, out))));
             }
         });
         return out;

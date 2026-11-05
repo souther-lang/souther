@@ -176,7 +176,7 @@ final class ResiduesAStatementLeaves {
                     moved = moved.add(round.leaves());
                     continue;
                 }
-                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))
+                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _))
                         || !each.getValue().equals(dividend.coefs().get(term))) {
                     return null;
                 }

@@ -14,6 +14,7 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.ValueIdentity;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
@@ -45,10 +46,12 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -95,13 +98,15 @@ final class MeaningAssumptions {
      *                   path starts with
      * @param typeAt     what stands at a position, or null where nothing is known to
      * @param standing   the expression of the condition that reads each position, in the tree the
-     *                   reader walks
+     *                   reader walks, by the position and which value there it reads
+     *                   ({@link ValueIdentity}): two names for two elements of one container read
+     *                   one position and two values
      * @param answering  the expression of the condition that is each place in an answer a
      *                   dependency gave, in the tree the reader walks: the call, or a name it was
      *                   given, with the fields read off it
      */
     record InputPlaces(Map<String, BindingId> parameters, Function<TermPath, Type> typeAt,
-                       Map<TermPath, Core> standing, Map<AnswerPlace, Core> answering) {
+                       Map<ReadAt, Core> standing, Map<AnswerPlace, Core> answering) {
 
         /** Where nothing stands: no proposition names a place here. */
         static final InputPlaces NONE =
@@ -114,8 +119,17 @@ final class MeaningAssumptions {
 
         /** The same places, with what a condition reads standing at each position it reads and
          *  each place in an answer it reads. */
-        InputPlaces readBy(Map<TermPath, Core> condition, Map<AnswerPlace, Core> answers) {
+        InputPlaces readBy(Map<ReadAt, Core> condition, Map<AnswerPlace, Core> answers) {
             return new InputPlaces(parameters, typeAt, condition, answers);
+        }
+    }
+
+    /** A position of the input, and which value there an expression reads. */
+    record ReadAt(TermPath position, ValueIdentity identity) {
+
+        ReadAt {
+            Objects.requireNonNull(position, "a value is read at some position");
+            Objects.requireNonNull(identity, "and is some value there");
         }
     }
 
@@ -324,8 +338,9 @@ final class MeaningAssumptions {
                             edges.forEach(this::outside);
                 }
             }
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) -> {
-                FactSubject place = placeOf(at);
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at, ValueIdentity identity),
+                    boolean holds, var _) -> {
+                FactSubject place = placeOf(at, identity);
                 if (place != null) {
                     known = known.taking(place, holds, Known.Held.ON_THE_PATH);
                     taken = true;
@@ -346,14 +361,16 @@ final class MeaningAssumptions {
                             .forEach(this::notTaken);
             // Some element, asked nothing of it, is the container holding one: a count, which a path
             // holds.
-            case Proposition.Some(DecisionSubject.AnInput(TermPath container),
+            case Proposition.Some(DecisionSubject.AnInput(TermPath container,
+                                          ValueIdentity identity),
                                   Proposition.Always(boolean anyElement), boolean holds, var _)
-                    when anyElement -> holdingOne(container, holds);
+                    when anyElement -> holdingOne(container, identity, holds);
             // Some element meeting something is the container holding one as well, which is taken
             // where a path names the count; which element it is, is not.
-            case Proposition.Some(DecisionSubject.AnInput(TermPath container), var _,
+            case Proposition.Some(DecisionSubject.AnInput(TermPath container,
+                                          ValueIdentity identity), var _,
                                   boolean holds, var _) when holds -> {
-                tookTheCount(container, true);
+                tookTheCount(container, identity, true);
                 WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
                         WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), asked)
                         .forEach(this::notTaken);
@@ -479,7 +496,8 @@ final class MeaningAssumptions {
     private AtomAt atomAt(Quantity quantity) {
         FactSubject named;
         switch (quantity) {
-            case DecisionAtom.OfTheInput(NumericTerm term) -> named = atomOf(term);
+            case DecisionAtom.OfTheInput(NumericTerm term, ValueIdentity identity) ->
+                    named = atomOf(term, identity);
             case DecisionAtom.OfAnAnswer(DecisionSubject.AnAnswer answer) ->
                     named = answerAtom(answer);
             case Quantity.OfABinding bound -> named = boundAtom(bound);
@@ -518,15 +536,16 @@ final class MeaningAssumptions {
      * <p>A size carries what its operation bounds its result to, of the value and not of the path:
      * a size is never negative whether or not the condition holds.
      */
-    private FactSubject atomOf(NumericTerm term) {
+    private FactSubject atomOf(NumericTerm term, ValueIdentity identity) {
         return switch (term) {
             case NumericTerm.ValueOf(TermPath at) -> {
                 Type type = places.typeAt().apply(at);
-                yield type == null ? null : terms.atomAt(placeOf(at), type);
+                yield type == null ? null : terms.atomAt(placeOf(at, identity), type);
             }
             case NumericTerm.TakenOf taken when taken.arguments().equals(TakenArguments.NONE)
                     && ofTheValueAsItStands(taken) && isASize(taken) -> {
-                FactSubject size = terms.sizeAtPlace(taken.operation(), placeOf(taken.position()));
+                FactSubject size = terms.sizeAtPlace(taken.operation(),
+                        placeOf(taken.position(), identity));
                 if (size != null) {
                     carrying(size, taken.operation());
                 }
@@ -539,7 +558,8 @@ final class MeaningAssumptions {
                     && ofTheValueAsItStands(taken)
                     && (taken.takenAs() instanceof TakenAs.PartOfTime
                     || taken.takenAs() instanceof TakenAs.PartOfDate) -> {
-                FactSubject part = terms.partAtPlace(taken.operation(), placeOf(taken.position()));
+                FactSubject part = terms.partAtPlace(taken.operation(),
+                        placeOf(taken.position(), identity));
                 if (part != null) {
                     carrying(part, taken.operation());
                 }
@@ -554,7 +574,7 @@ final class MeaningAssumptions {
                     && remainder.read(taken.arguments()) instanceof BigDecimal divisor
                     && isAWholeNumberOfALong(divisor) -> {
                 FactSubject left = terms.remainderAtPlace(taken.operation(),
-                        placeOf(taken.position()), divisor.longValue());
+                        placeOf(taken.position(), identity), divisor.longValue());
                 if (left != null) {
                     carryingBothEnds(left, taken.operation(), taken.arguments());
                 }
@@ -580,10 +600,18 @@ final class MeaningAssumptions {
                         instanceof ExactAnswer.Held<BigInteger>(BigInteger constant))) {
             return null;
         }
+        // Which value at its position each number is: one term each, since a form over positions
+        // holds no two values at one.
+        Map<NumericTerm, ValueIdentity> identities = new HashMap<>();
+        remainder.dividend().coefs().keySet().forEach(each -> {
+            if (each instanceof DecisionAtom.OfTheInput(NumericTerm term, ValueIdentity identity)) {
+                identities.put(term, identity);
+            }
+        });
         List<Map.Entry<FactSubject, BigDecimal>> weighed = new ArrayList<>();
         for (Map.Entry<NumericTerm, ExactRatio> each
                 : NumericTerms.entriesInOrder(dividend.coefs())) {
-            FactSubject place = atomOf(each.getKey());
+            FactSubject place = atomOf(each.getKey(), identities.get(each.getKey()));
             if (place == null || !(each.getValue().floor()
                     instanceof ExactAnswer.Held<BigInteger>(BigInteger weight))) {
                 return null;
@@ -679,8 +707,9 @@ final class MeaningAssumptions {
      */
     private void onAnOrder(Relation.Ordered ordered, boolean holds) {
         TermPath at = ordered.term() instanceof DecisionAtom.OfTheInput(
-                NumericTerm.ValueOf(TermPath value)) ? value : null;
-        FactSubject place = at == null ? null : placeOf(at);
+                NumericTerm.ValueOf(TermPath value), var _) ? value : null;
+        FactSubject place = at == null ? null : placeOf(at,
+                ((DecisionAtom.OfTheInput) ordered.term()).identity());
         Type type = place == null ? null : places.typeAt().apply(at);
         Carrier carrier = type == null ? null : Carrier.ofValue(type, terms.declarations());
         OrderedInterval range = OrderedInterval.leftBy(holds ? ordered.proposition()
@@ -700,7 +729,8 @@ final class MeaningAssumptions {
      */
     private void inCases(DecisionSubject of, CasesLeft cases) {
         FactSubject value = switch (of) {
-            case DecisionSubject.AnInput(TermPath at) -> placeOf(at);
+            case DecisionSubject.AnInput(TermPath at, ValueIdentity identity) ->
+                    placeOf(at, identity);
             case DecisionSubject.AnAnswer answer -> {
                 Core standing = answering(answer);
                 yield standing == null ? null : terms.subjectOf(standing, at);
@@ -932,17 +962,18 @@ final class MeaningAssumptions {
      * {@code holds} is false, taken in as what its count is: the same atom a clause or a guard
      * stating the count names.
      */
-    private void holdingOne(TermPath container, boolean holds) {
-        if (!tookTheCount(container, holds)) {
+    private void holdingOne(TermPath container, ValueIdentity identity, boolean holds) {
+        if (!tookTheCount(container, identity, holds)) {
             outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
         }
     }
 
     /** The same, saying whether the count was named here at all, and nothing about why not. */
-    private boolean tookTheCount(TermPath container, boolean holds) {
+    private boolean tookTheCount(TermPath container, ValueIdentity identity, boolean holds) {
         Type type = places.typeAt().apply(container);
         ValueName size = type == null ? null : NumericMeasures.takenOf(type, terms.newtypeInners());
-        FactSubject count = size == null ? null : terms.sizeAtPlace(size, placeOf(container));
+        FactSubject count = size == null ? null
+                : terms.sizeAtPlace(size, placeOf(container, identity));
         if (count == null) {
             return false;
         }
@@ -989,14 +1020,17 @@ final class MeaningAssumptions {
     /**
      * The place a position is in this tree: a chain of fields from a parameter, or what the
      * expression of the condition that reads it names — or null where neither stands for it.
+     *
+     * <p>The value there the proposition is about is {@code identity}, and the expression is the
+     * one that reads that value: another name for another element of the same container is
+     * another value at the same position.
      */
-    private FactSubject placeOf(TermPath position) {
+    private FactSubject placeOf(TermPath position, ValueIdentity identity) {
         BindingId parameter = places.parameters().get(position.head());
         RuleKey fields = position.ruleKey();
         if (parameter != null && fields != null) {
             return terms.under(terms.placeSubject(parameter), fields);
         }
-        Core reading = places.standing().get(position);
-        return reading == null ? null : terms.subjectOf(reading, at);
+        Core reading = places.standing().get(new ReadAt(position, identity));        return reading == null ? null : terms.subjectOf(reading, at);
     }
 }

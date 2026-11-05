@@ -91,7 +91,8 @@ final class WhatARunWorksOutBeforeACount {
                                        Core counted, Core root, InputReads reads,
                                        Map<BindingId, String> parameters) {
         if (counted == null
-                || !(count.container() instanceof DecisionSubject.AnInput(TermPath container))) {
+                || !(count.container() instanceof DecisionSubject.AnInput(TermPath container,
+                        var _))) {
             return false;
         }
         BindingId parameter = parameterOf(container, parameters);

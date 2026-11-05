@@ -155,7 +155,7 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
     void aTakenInEntryTheRegionCannotCarryIsRefusedLoudly() {
         WayToTheBorder forged = new WayToTheBorder(List.of(new OnTheWay.TakenIn(WHERE,
                 new RowDemand.Relational(new TakenConstraint.Affine(
-                        difference("recordsAreEqual", "a", "b"), Rel.EQ)))));
+                        difference("recordsAreEqual", "a", "b"), Rel.EQ)), NamedElements.NONE)));
 
         assertThrows(IllegalStateException.class,
                 () -> forged.narrowing(regionOf("recordsAreEqual")),

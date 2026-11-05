@@ -48,7 +48,7 @@ class AChoiceTheNumbersContradictIsNoOpenWayTest {
     private static OnTheWay holds(NumericTerm term, long weight, long constant, Rel rel) {
         return new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(
                 new TakenConstraint.Affine(new LinearForm<>(ExactRatio.of(constant),
-                        Map.of(term, ExactRatio.of(weight))), rel)));
+                        Map.of(term, ExactRatio.of(weight))), rel)), NamedElements.NONE);
     }
 
     private static OnTheWay.OneOf oneOf(int occurrence, OnTheWay one, OnTheWay other) {

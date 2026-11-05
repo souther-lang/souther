@@ -250,7 +250,8 @@ class EveryReaderOfARemainderMovedByANumberReadsItAsOneTest {
 
     private static List<OnTheWay.TakenIn> onTheWay(List<Drawn> statements) {
         List<OnTheWay.TakenIn> out = new ArrayList<>();
-        statements.forEach(each -> out.add(new OnTheWay.TakenIn(WHERE, each.demand())));
+        statements.forEach(each -> out.add(
+                new OnTheWay.TakenIn(WHERE, each.demand(), NamedElements.NONE)));
         return out;
     }
 

@@ -51,7 +51,7 @@ final class FactoredProducts {
     /** Whether {@code atom} is a product of two numbers: the only atoms this brings together. */
     private static boolean isAProduct(Quantity atom) {
         return atom instanceof Quantity.ProductOfTwo
-                || atom instanceof DecisionAtom.OfTheInput(NumericTerm.ProductOf _);
+                || atom instanceof DecisionAtom.OfTheInput(NumericTerm.ProductOf _, var _);
     }
 
     /**
@@ -88,7 +88,7 @@ final class FactoredProducts {
     private static LinearForm<Quantity> once(LinearForm<Quantity> form) {
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             if (!(each.getKey() instanceof DecisionAtom.OfTheInput(
-                    NumericTerm.ProductOf product))) {
+                    NumericTerm.ProductOf product, var _))) {
                 continue;
             }
             for (int at = 0; at < 2; at++) {

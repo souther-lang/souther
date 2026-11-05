@@ -4,6 +4,7 @@ import souther.compiler.check.Comparison;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.semantics.ConditionJoin;
@@ -84,6 +85,19 @@ sealed interface Condition {
      * tree for something the recognition has already answered.
      */
     ConditionReportAnchor anchor();
+
+    /**
+     * Which element of each container the names in it stand for, read where it stands: what an
+     * entry made of it keeps once what it states is said at positions ({@link NamedElements}).
+     */
+    default ElementsNamed elementsNamed(DeclarationNewtypes newtypes) {
+        return switch (this) {
+            case Joined joined -> joined.reads().elementsNamedIn(joined.value(), newtypes);
+            case Compares one -> one.reads().elementsNamedIn(one.comparison().left(), newtypes)
+                    .and(one.reads().elementsNamedIn(one.comparison().right(), newtypes));
+            case Truth truth -> truth.reads().elementsNamedIn(truth.value(), newtypes);
+        };
+    }
 
     /**
      * Two conditions put together, and what the connective makes of them.

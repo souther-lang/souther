@@ -93,7 +93,7 @@ final class OutsideTheOtherReadings {
                     case SearchRegion.Assumption.Refused _ -> region;
                 };
             }
-            case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm.FromOnePosition term),
+            case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm.FromOnePosition term, var _),
                                   var at, Rel _) -> insideAContainer(term) ? region
                     : (TakenConstraint.Ordered.isABound(met)
                             ? new TakenConstraint.Ordered(term, at, met)

@@ -178,7 +178,7 @@ public sealed interface Proposition {
      *  bound or a dependency answered is computed from something nothing here names, so it may. */
     private static boolean mayBeAnElementOf(Quantity quantity, DecisionSubject container) {
         return switch (quantity) {
-            case DecisionAtom.OfTheInput(var term) ->
+            case DecisionAtom.OfTheInput(var term, var _) ->
                     isAnElementOf(new DecisionSubject.AnInput(term.subjectPath()), container);
             // What a recursion carries stands for any number, which may be any element's.
             case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _, Quantity.HowManyCarried _,
@@ -1076,7 +1076,7 @@ public sealed interface Proposition {
         /** Whether {@code container} is a place under the node a search around it was written
          *  of, which names the place under each node the search reaches. */
         private static boolean reboundBy(DecisionSubject container, List<TermPath> rebound) {
-            return container instanceof DecisionSubject.AnInput(TermPath at)
+            return container instanceof DecisionSubject.AnInput(TermPath at, var _)
                     && rebound.stream().anyMatch(at::isAtOrUnder);
         }
 
@@ -1290,7 +1290,7 @@ public sealed interface Proposition {
             });
             Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
             for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
-                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))) {
+                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _))) {
                     return Optional.empty();
                 }
                 // A number may be none where the places are put, which is the term's to say.
@@ -2131,8 +2131,8 @@ public sealed interface Proposition {
     public static List<TermPath> positionsHeldEqual(Proposition stated) {
         if (stated instanceof SameValue(DecisionSubject one, DecisionSubject other, boolean holds,
                 var _)) {
-            return holds && one instanceof DecisionSubject.AnInput(TermPath at)
-                    && other instanceof DecisionSubject.AnInput(TermPath alsoAt)
+            return holds && one instanceof DecisionSubject.AnInput(TermPath at, var _)
+                    && other instanceof DecisionSubject.AnInput(TermPath alsoAt, var _)
                     ? List.of(at, alsoAt) : null;
         }
         if (!(stated instanceof Compared(Relation relation, boolean holds, var _))
@@ -2145,7 +2145,7 @@ public sealed interface Proposition {
         List<ExactRatio> weights = new ArrayList<>();
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             if (!(each.getKey() instanceof DecisionAtom.OfTheInput(
-                    NumericTerm.ValueOf(TermPath position)))) {
+                    NumericTerm.ValueOf(TermPath position), var _))) {
                 return null;
             }
             positions.add(position);
@@ -2308,8 +2308,8 @@ public sealed interface Proposition {
             return false;
         }
         return switch (form.coefs().keySet().iterator().next()) {
-            case DecisionAtom.OfTheInput(NumericTerm.TakenOf size) ->
-                    container instanceof DecisionSubject.AnInput(TermPath at)
+            case DecisionAtom.OfTheInput(NumericTerm.TakenOf size, var _) ->
+                    container instanceof DecisionSubject.AnInput(TermPath at, var _)
                             && size.position().equals(at)
                             && size.transformation() == ValueTransformation.NONE
                             && countsWhatItHolds(size.operation(), size.arguments());

@@ -1418,7 +1418,7 @@ public sealed interface Derivation {
                     case LawNumber.CodePointsOf<DeclaredArgument>(var of, var counted) -> {
                         TermPath at = positionOf(of);
                         yield at == null || (atom instanceof DecisionAtom.OfTheInput(
-                                NumericTerm term)
+                                NumericTerm term, var _)
                                 && term instanceof NumericTerm.CodePointClassCount count
                                 && count.position().equals(at)
                                 && count.through().equals(CaseMapping.NONE)
@@ -1518,7 +1518,7 @@ public sealed interface Derivation {
              * of.
              */
             private static TermPath containerCountedInside(Quantity atom, TermPath at) {
-                if (!(atom instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOver over))
+                if (!(atom instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOver over, var _))
                         || !(over.takenAs() instanceof TakenAs.HowManyItHolds)
                         || !(over.source() instanceof RunSource.FlattenedOccurrences(
                                 TermPath every))) {
@@ -1531,7 +1531,7 @@ public sealed interface Derivation {
             /** Whether {@code atom} is how many what stands at {@code at} holds. */
             private static boolean howManyAt(Quantity atom, TermPath at) {
                 return atom instanceof DecisionAtom.OfTheInput(
-                        NumericTerm.TakenOf taken) && taken.position().equals(at)
+                        NumericTerm.TakenOf taken, var _) && taken.position().equals(at)
                         && taken.takenAs() instanceof TakenAs.HowManyItHolds;
             }
         }
@@ -2593,7 +2593,7 @@ public sealed interface Derivation {
 
         public SizeAboveNought {
             Objects.requireNonNull(size, "a size is taken of something");
-            if (size instanceof DecisionAtom.OfTheInput(var term)
+            if (size instanceof DecisionAtom.OfTheInput(var term, var _)
                     && !(term instanceof NumericTerm.TakenOf)) {
                 throw new IllegalArgumentException(size + " is no size of a container");
             }
@@ -3606,7 +3606,10 @@ public sealed interface Derivation {
              *  answers on is how many meet it ({@link Derivation.WhereItIsAnswered}), or of their
              *  different values. */
             public Quantity counted(Conclusion numbering) {
-                Proposition meeting = Proposition.whereItHolds(numbering.of(ofTheElement));
+                // What stands at the container's element is the element counted, as a
+                // quantifier's is ({@link ReadThroughNames#ownedBy}).
+                Proposition meeting = Proposition.whereItHolds(
+                        ReadThroughNames.ownedBy(container, numbering.of(ofTheElement)));
                 return different.<Quantity>map(values -> new Quantity.HowManyDifferentMeet(
                         container, values.at(), values.ofEachValue()
                                 ? new Quantity.HowManyDifferentMeet.Selection.OfEachValue(meeting)

@@ -2492,7 +2492,7 @@ final class CardinalityComposer {
         static boolean oneEachUnder(TermPath container, Quantity.TheValue value,
                                     List<List<String>> apart) {
             if (!(value instanceof Quantity.TheValue.AtAPlace(
-                    DecisionSubject.AnInput(TermPath at)))) {
+                    DecisionSubject.AnInput(TermPath at, var _)))) {
                 return false;
             }
             ElementProjection below = ElementProjection.below(container.element(), at);

@@ -8243,7 +8243,8 @@ public final class Generator {
         boolean some = cut.demand() instanceof RowDemand.Exists;
         return new OnTheWay.TakenIn(cut.anchor(), new RowDemand.SoMany(counted,
                 some ? Rel.GE : Rel.EQ, some ? ExactRatio.ONE : ExactRatio.ZERO,
-                new LinearForm<>(ExactRatio.ZERO, Map.of()), AnElementMeeting.UNREAD));
+                new LinearForm<>(ExactRatio.ZERO, Map.of()), AnElementMeeting.UNREAD),
+                cut.named());
     }
 
     /** Whether {@code demand} asks nothing a number stands for: an element to be, or not to be,

@@ -44,7 +44,7 @@ final class ProductDeclarations implements NumericTerm.ProductOf.Declared {
      *  admit; the same form where there is none. */
     static LinearForm<Quantity> admittedIn(LinearForm<Quantity> form, InputReading read) {
         if (form.coefs().keySet().stream().noneMatch(atom ->
-                atom instanceof DecisionAtom.OfTheInput(NumericTerm.ProductOf _))) {
+                atom instanceof DecisionAtom.OfTheInput(NumericTerm.ProductOf _, var _))) {
             return form;
         }
         ProductDeclarations declared = new ProductDeclarations(read);
@@ -52,7 +52,7 @@ final class ProductDeclarations implements NumericTerm.ProductOf.Declared {
         parts.add(LinearForm.constant(form.constant()));
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             Quantity atom = each.getKey() instanceof DecisionAtom.OfTheInput(
-                    NumericTerm.ProductOf product)
+                    NumericTerm.ProductOf product, var _)
                     ? new DecisionAtom.OfTheInput(product.standingWhereTheDeclarationsAdmit(declared))
                     : each.getKey();
             parts.add(LinearForm.weighing(atom, each.getValue()));

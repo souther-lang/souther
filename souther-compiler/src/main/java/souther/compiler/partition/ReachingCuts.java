@@ -503,7 +503,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         SaidOnTheWay.Filing by = new SaidOnTheWay.Filing();
         for (DemandReading.Stated each : DemandReading.stated(node, read, holding, conditions)) {
             entries.add(onTheWay(each.where().occurrence(), each.where().anchor(), each.read(),
-                    read, each.readOff(), by, Optional.empty()));
+                    read, each.readOff(), by, Optional.empty(),
+                    NamedElements.of(each.where().occurrence(), each.named())));
         }
         return new Stating(entries, by.said());
     }
@@ -643,7 +644,9 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         // What the fork states of its own scrutinee, read off the copy it stands in.
         return Stating.of(List.of(switch (taking) {
             case DeclaredInput.Taking.Narrows(TermPath to) -> new OnTheWay.Narrowed(at, to,
-                    inputs.reach().crossings(), onItsOrder(to, read));
+                    inputs.reach().crossings(), onItsOrder(to, read),
+                    NamedElements.of(met, reads.elementsNamedIn(match.scrutinee(),
+                            ruleSource.newtypes())));
             case DeclaredInput.Taking.Implied _ -> new OnTheWay.Settled(met, at, true);
             case DeclaredInput.Taking.Excluded _ -> new OnTheWay.Settled(met, at, false);
         }), copyOf(match.occurrence()));
@@ -712,7 +715,9 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                                         InputReads reads, ConditionOccurrence met,
                                         ConditionReportAnchor at) {
         return armStated(WhatConditionsState.of(read).arm(match, part, reads), met, at, read,
-                copyOf(match.occurrence()), EnteredArm.of(match.cases().get(part)));
+                copyOf(match.occurrence()), EnteredArm.of(match.cases().get(part)),
+                NamedElements.of(met, reads.elementsNamedIn(match.scrutinee(),
+                        read.rules().newtypes())));
     }
 
     /**
@@ -843,7 +848,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         ConditionOccurrence met = numbering.metEntering(attempt, part);
         return armStated(WhatConditionsState.of(read).arm(attempt, part, reads), met,
                 numbering.anchorOfArm(attempt.origin(), part, at, met), read,
-                copyOf(attempt.occurrence()), Optional.empty());
+                copyOf(attempt.occurrence()), Optional.empty(),
+                NamedElements.of(met, reads.elementsNamedIn(attempt, read.rules().newtypes())));
     }
 
     /**
@@ -852,16 +858,19 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * fork itself states read off {@code fork}, the copy it stands in.
      *
      * @param entered the arm of the match that is entered, where it is one
+     * @param named   which elements the names the fork reads stood for
      */
     private static Stating armStated(Pullback.Pulled arm, ConditionOccurrence met,
                                      ConditionReportAnchor at, InputReading read,
-                                     ModelOccurrences fork, Optional<EnteredArm> entered) {
+                                     ModelOccurrences fork, Optional<EnteredArm> entered,
+                                     NamedElements named) {
         DemandReading.Projected made =
                 DemandReading.projectedOff(arm, arm.proposition(), read, fork);
         List<OnTheWay> entries = new ArrayList<>();
         SaidOnTheWay.Filing by = new SaidOnTheWay.Filing();
         for (DemandReading.Read each : made.reads()) {
-            entries.add(onTheWay(met, at, each, read, made.readOff(), by, entered));
+            entries.add(onTheWay(met, at, each, read, made.readOff(), by, entered,
+                    NamedElements.of(met, named.elements().and(made.namedOf(each)))));
         }
         return new Stating(entries, by.said());
     }
@@ -937,7 +946,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         for (DemandReading.Stated each
                 : DemandReading.askedAt(at, decides, read, WhatConditionsState.of(read))) {
             entries.add(onTheWay(at.occurrence(), at.anchor(), each.read(), read, each.readOff(),
-                    by, Optional.empty()));
+                    by, Optional.empty(), NamedElements.of(at.occurrence(), each.named())));
         }
         return new Stating(entries, by.said());
     }
@@ -964,7 +973,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         following.all(said);
         List<PutBy> runs = new ArrayList<>();
         said.entries().forEach((entry, by) -> {
-            if (entry instanceof OnTheWay.TakenIn(var _, RowDemand.ForTheRun run)) {
+            if (entry instanceof OnTheWay.TakenIn(var _, RowDemand.ForTheRun run, var _)) {
                 runs.add(new PutBy(run, by));
             }
         });
@@ -1001,7 +1010,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                 at++;
                 continue;
             }
-            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.OnARemainder follows)) {
+            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.OnARemainder follows, var _)) {
                 Set<RowDemand.ForTheRun> from = new HashSet<>(follows.from());
                 for (PutBy put : runs) {
                     if (from.contains(put.run())) {
@@ -1023,25 +1032,26 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                                      DemandReading.Read read, InputReading input,
                                      DemandReading.ReadOff readOff,
                                      SaidOnTheWay.Filing by,
-                                     Optional<EnteredArm> entered) {
+                                     Optional<EnteredArm> entered, NamedElements named) {
         OnTheWay made = switch (read) {
-            case DemandReading.Read.Demands(var demand) -> new OnTheWay.TakenIn(at, demand);
+            case DemandReading.Read.Demands(var demand) -> new OnTheWay.TakenIn(at, demand, named);
             case DemandReading.Read.Settled(var thisWay) ->
                     new OnTheWay.Settled(condition, at, thisWay);
             case DemandReading.Read.Narrows(TermPath position, CasesLeft cases) ->
-                    narrowing(condition, at, position, cases, input);
+                    narrowing(condition, at, position, cases, input, named);
             case DemandReading.Read.OneOf oneOf -> OnTheWay.OneOf.of(
                     condition, at, oneOf.alternatives().stream().map(each -> each.stream()
-                            .map(one -> onTheWay(condition, at, one, input, readOff, by, entered))
+                            .map(one -> onTheWay(condition, at, one, input, readOff, by, entered,
+                                    named))
                             .toList()).toList(),
                     oneOf.stated());
             case DemandReading.Read.Counted counted -> new OnTheWay.Counted(condition, at,
                     counted.statements().stream().map(each -> new OnTheWay.Counted.Statement(
                             each.weight(),
                             each.holding().stream().map(one -> onTheWay(condition, at, one, input,
-                                    readOff, by, entered)).toList(),
+                                    readOff, by, entered, named)).toList(),
                             each.failing().stream().map(one -> onTheWay(condition, at, one, input,
-                                    readOff, by, entered)).toList())).toList(),
+                                    readOff, by, entered, named)).toList())).toList(),
                     counted.admitted(), counted.stated());
             case DemandReading.Read.Unread(var whys, var besideAnAnswer) ->
                     new OnTheWay.Declined(condition, at, whys, entered, besideAnAnswer);
@@ -1056,11 +1066,12 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * those or none of them ({@link #taking}).
      */
     private static OnTheWay narrowing(ConditionOccurrence condition, ConditionReportAnchor at,
-                                      TermPath position, CasesLeft cases, InputReading read) {
+                                      TermPath position, CasesLeft cases, InputReading read,
+                                      NamedElements named) {
         InputDomain inputs = read.domain();
         return switch (taking(position, cases, read)) {
             case DeclaredInput.Taking.Narrows(TermPath to) -> new OnTheWay.Narrowed(at, to,
-                    inputs.reach().crossings(), onItsOrder(to, read));
+                    inputs.reach().crossings(), onItsOrder(to, read), named);
             case DeclaredInput.Taking.Implied _ -> new OnTheWay.Settled(condition, at, true);
             case DeclaredInput.Taking.Excluded _ -> new OnTheWay.Settled(condition, at, false);
         };

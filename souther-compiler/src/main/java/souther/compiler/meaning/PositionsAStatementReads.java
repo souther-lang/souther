@@ -181,7 +181,7 @@ public final class PositionsAStatementReads {
 
     private boolean reads(Quantity quantity) {
         return switch (quantity) {
-            case DecisionAtom.OfTheInput(var term) -> reads(term);
+            case DecisionAtom.OfTheInput(var term, var _) -> reads(term);
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
                  DecisionAtom.ComputedOverAnAnswer _ -> answersNameNothing;
             case Quantity.OfABinding value -> valuesBound && insideAnApplication == 0
@@ -241,7 +241,7 @@ public final class PositionsAStatementReads {
     }
     private boolean reads(DecisionSubject subject) {
         return switch (subject) {
-            case DecisionSubject.AnInput(TermPath at) -> {
+            case DecisionSubject.AnInput(TermPath at, var _) -> {
                 out.add(at);
                 yield true;
             }

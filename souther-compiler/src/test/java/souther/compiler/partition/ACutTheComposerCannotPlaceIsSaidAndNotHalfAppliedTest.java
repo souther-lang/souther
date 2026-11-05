@@ -157,7 +157,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
     void aCutNamingTwoTotalsOfOneContainerIsSaidAsThatAndTheRowIsComposedWithoutIt() {
         OnTheWay.TakenIn both = new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(
                 new TakenConstraint.Affine(LinearForm.<NumericTerm>sumOfAtoms(aTotalOver("a"),
-                        aTotalOverBothFields()), Rel.GE)));
+                        aTotalOverBothFields()), Rel.GE)), NamedElements.NONE);
 
         Generator.BoundaryAttempt attempt = composing(costAxis(), Count.of(100), both);
 
@@ -242,7 +242,8 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
 
     private static OnTheWay.TakenIn cut(NumericTerm over) {
         return new OnTheWay.TakenIn(WHERE,
-                new RowDemand.Relational(new TakenConstraint.Affine(LinearForm.atom(over), Rel.GE)));
+                new RowDemand.Relational(new TakenConstraint.Affine(LinearForm.atom(over), Rel.GE)),
+                NamedElements.NONE);
     }
 
     /** A row composed with {@code axis} at {@code at}, and {@code taken} on the way to it. */

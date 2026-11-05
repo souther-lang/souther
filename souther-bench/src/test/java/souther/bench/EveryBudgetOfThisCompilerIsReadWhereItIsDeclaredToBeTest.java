@@ -892,7 +892,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "omits no work a reader is owed: past either figure the count is held whole,"
                             + " every choice still what it states"),
             Map.entry("souther.compiler.meaning.Conclusion$Shared#<init>("
-                            + "Ljava/util/Optional;ZLsouther/compiler/partition/CompositionBudget;)V",
+                            + "Ljava/util/Optional;ZLsouther/compiler/partition/CompositionBudget;"
+                            + "Ljava/util/Map;)V",
                     "how many parts a concluding counts a statement to and no further than one"
                             + " past, handed in by whoever asks"),
             Map.entry("souther.compiler.meaning.Proposition$SoManyHold#writtenOutForAReader()"

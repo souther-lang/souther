@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
@@ -68,7 +69,7 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
                     + " some container meeting something");
         }
         if (differentAt.isPresent() && !(differentAt.get().where()
-                instanceof DecisionSubject.AnInput(TermPath where)
+                instanceof DecisionSubject.AnInput(TermPath where, var _)
                 && where.isAtOrUnder(container.element()))) {
             throw new IllegalArgumentException("the values counted are of the elements of "
                     + container + ", and " + differentAt.get() + " is none of theirs");
@@ -273,10 +274,10 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
      */
     NumericWitness.Standing placesBeside(SearchRegion within, boolean oneMeets,
                                          WitnessSearch looking) {
-        List<NumericTerm.FromOnePosition> placed = new ArrayList<>();
+        Set<NumericTerm> beside = new LinkedHashSet<>();
         for (NumericTerm term : numbers()) {
             if (!term.subjectPath().insideAContainer() && term.atOnePosition() != null) {
-                placed.add(term.atOnePosition());
+                beside.add(term);
             }
         }
         SearchRegion region = within;
@@ -284,10 +285,19 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
             for (TakenConstraint each : anElementMeeting.get()) {
                 region = each.narrowing(region);
                 for (NumericTerm term : each.terms()) {
-                    if (term.atOnePosition() != null && !placed.contains(term.atOnePosition())) {
-                        placed.add(term.atOnePosition());
+                    if (term.atOnePosition() != null) {
+                        beside.add(term);
                     }
                 }
+            }
+        }
+        // In the one order of the terms: the search tries so many values and no more, so which
+        // number it places first is part of its answer, and a form holds its terms in no order
+        // that means anything.
+        List<NumericTerm.FromOnePosition> placed = new ArrayList<>();
+        for (NumericTerm term : NumericTerms.inOrder(beside)) {
+            if (!placed.contains(term.atOnePosition())) {
+                placed.add(term.atOnePosition());
             }
         }
         return NumericWitness.of(region, placed, on::get, looking);

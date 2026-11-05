@@ -400,7 +400,7 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
         List<List<RowDemand.AskedOfAnElement>> out = List.of(List.of());
         for (Shape part : shape.parts()) {
             if (!(stated(part).getFirst()
-                    instanceof OnTheWay.TakenIn(var _, RowDemand.Exists some))) {
+                    instanceof OnTheWay.TakenIn(var _, RowDemand.Exists some, var _))) {
                 return Optional.empty();
             }
             List<List<RowDemand.AskedOfAnElement>> joined = new ArrayList<>();
@@ -479,9 +479,9 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
      *  way was declined, in {@code entry} and every alternative of it. */
     private static void collect(OnTheWay entry, List<Integer> handed, List<WhyNotTaken> declined) {
         switch (entry) {
-            case OnTheWay.TakenIn(var _, RowDemand.Exists some) ->
+            case OnTheWay.TakenIn(var _, RowDemand.Exists some, var _) ->
                     handed.add(some.ofAnElement().ways().size());
-            case OnTheWay.TakenIn(var _, RowDemand.ForAll every) ->
+            case OnTheWay.TakenIn(var _, RowDemand.ForAll every, var _) ->
                     handed.add(every.ofEachElement().ways().size());
             case OnTheWay.Declined declinedHere -> declined.addAll(declinedHere.whys());
             default -> entry.alternatives().forEach(alternative ->
