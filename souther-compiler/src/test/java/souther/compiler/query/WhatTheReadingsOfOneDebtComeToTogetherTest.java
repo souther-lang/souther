@@ -2,6 +2,8 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.ReadingGap;
 import souther.compiler.query.ItemAssessment.Coverage;
 
 import java.util.List;
@@ -40,6 +42,30 @@ class WhatTheReadingsOfOneDebtComeToTogetherTest {
                 ObligationCoverage.acrossTheReadings(List.of(
                         missed(), found(), unread())),
                 "one reading is at the point, which is what the line asked for");
+    }
+
+    /**
+     * A row found in a case the line was shown to decide in settles the line, whichever readings of
+     * cases nobody worked out are beside it and in whatever order: those leave open only whether a
+     * row is in a case the line decides in, which the row found answers. Without it, the debt is
+     * left undecided for that reason and no other.
+     */
+    @Test
+    void aRowFoundBesideCasesNobodyWorkedOutSettlesTheDebt() {
+        WeakeningSet whichCase = WeakeningSet.of(new Weakening.BorderValueUnreadable(null,
+                new ReadingGap.CasesNotWorkedOut(List.of(
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure()))));
+        Measurement<Coverage> notWorkedOut =
+                new Measurement.Partial<>(new Coverage.NoHit(), whichCase);
+        for (List<Measurement<Coverage>> readings : List.of(List.of(found(), notWorkedOut),
+                List.of(notWorkedOut, found()), List.of(notWorkedOut, found(), notWorkedOut))) {
+            assertEquals(new ObligationCoverage.Witnessed(RowWitnesses.ANOTHER_ROW),
+                    ObligationCoverage.acrossTheReadings(readings),
+                    () -> "the row found is at the point, read in the order " + readings);
+        }
+        assertEquals(new ObligationCoverage.Undecided(whichCase),
+                ObligationCoverage.acrossTheReadings(List.of(notWorkedOut)),
+                "and with no row found, what is open is which case the row is in");
     }
 
     /**
