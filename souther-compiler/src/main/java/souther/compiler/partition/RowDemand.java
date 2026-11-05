@@ -861,7 +861,12 @@ public sealed interface RowDemand {
             }
         }
 
-        /** The relations among what the element is to meet, along its one way. */
+        /**
+         * The relations a row whose elements are written alike places for the element, along
+         * its one way ({@link AnElementMeets#ways}) — with what some element of a container
+         * inside it is asked among them, so what they leave of a region is no proof that no
+         * element meets this ({@link AnElementMeets#metByNoElementOf}).
+         */
         public List<Relational> relations() {
             return relationsAmong(ofAnElement.theWay());
         }
@@ -921,7 +926,12 @@ public sealed interface RowDemand {
             Objects.requireNonNull(counted, "the count it is, or that it is none");
         }
 
-        /** The relations among what every element is to meet, along its one way. */
+        /**
+         * The relations a row whose elements are written alike places for each element, along
+         * its one way ({@link AnElementMeets#ways}) — with what some element of a container
+         * inside it is asked among them, so what they leave of a region is no proof that no
+         * element meets this ({@link AnElementMeets#metByNoElementOf}).
+         */
         public List<Relational> relations() {
             return relationsAmong(ofEachElement.theWay());
         }

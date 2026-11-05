@@ -1281,15 +1281,29 @@ final class DemandReading {
             return AnElementMeeting.UNREAD;
         }
         List<RowDemand.OfAnElement> way = exists.ofAnElement().theWay();
-        Optional<List<TakenConstraint>> heldTo =
-                exists.relations().size() == way.size()
-                        ? Optional.of(exists.relations().stream()
-                                .map(RowDemand.Relational::constraint).toList())
-                        : Optional.empty();
+        // Relations of the element itself, as the reading states the way: what some element of
+        // a container inside it is asked is no relation of the element, though a row written
+        // alike writes it into every one of them.
+        List<List<RowDemand.AskedOfAnElement>> asAsked = exists.ofAnElement().asAsked();
+        Optional<List<TakenConstraint>> heldTo = asAsked.size() == 1
+                ? relationsAlone(asAsked.getFirst()) : Optional.empty();
         Optional<RowDemand.WithinIt> handedOn =
                 way.size() == 1 && way.getFirst() instanceof RowDemand.WithinIt within
                         ? Optional.of(within) : Optional.empty();
         return new AnElementMeeting(heldTo, handedOn);
+    }
+
+    /** What {@code way} asks, where it asks nothing but relations of the element itself. */
+    private static Optional<List<TakenConstraint>> relationsAlone(
+            List<RowDemand.AskedOfAnElement> way) {
+        List<TakenConstraint> out = new ArrayList<>();
+        for (RowDemand.AskedOfAnElement each : way) {
+            if (!(each instanceof RowDemand.Relational(TakenConstraint relation))) {
+                return Optional.empty();
+            }
+            out.add(relation);
+        }
+        return Optional.of(List.copyOf(out));
     }
 
     /**
