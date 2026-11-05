@@ -46,6 +46,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.function.Function;
 
 /**
@@ -96,6 +97,13 @@ final class AStatementAtARow {
     private final Map<Spelling,OverTheElements> elements;
     /** The positions a part asks of their own value: whether it is true, whether there is one. */
     private final Set<TermPath> positions;
+    /**
+     * The parts of each statement, numbered on the first row it is asked. Held here and not in the
+     * statement, which answers carry: a table compared by address under them would make every
+     * answer unequal to its own recomputation.
+     */
+    private static final Map<AStatementAtARow,Parts> NUMBERED =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     private AStatementAtARow(Proposition stated, Map<Relation, OneRelation> relations,
                              Map<Spelling,OverTheElements> elements, Set<TermPath> positions) {
@@ -1005,7 +1013,78 @@ final class AStatementAtARow {
      * row wherever it stands.
      */
     Answer at(BorderQuantity.Observation row) {
-        return at(stated, row, new HashMap<>());
+        Parts numbered = NUMBERED.computeIfAbsent(this, _ -> Parts.of(stated, elements));
+        return at(stated, row, new Answer[numbered.size()], numbered);
+    }
+
+    /**
+     * The parts of the statement, numbered so that parts of one spelling have one number, and each
+     * object found while numbering is remembered by identity: a row asks a part by the object it
+     * holds, so the spellings are compared once here and not at every row.
+     */
+    static final class Parts {
+
+        private final IdentityHashMap<Proposition,Integer> byObject = new IdentityHashMap<>();
+        private final Map<Spelling,Integer> bySpelling = new HashMap<>();
+        private final Map<Spelling,OverTheElements> elements;
+        /** The elements a quantifier or a count of them is read over, by the part that says it. */
+        private final IdentityHashMap<Proposition,OverTheElements> over = new IdentityHashMap<>();
+
+        private Parts(Map<Spelling,OverTheElements> elements) {
+            this.elements = elements;
+        }
+
+        static Parts of(Proposition stated, Map<Spelling,OverTheElements> elements) {
+            Parts out = new Parts(elements);
+            out.number(stated);
+            return out;
+        }
+
+        /** What {@code part} is read over, or {@code null} for a part that was not found. */
+        OverTheElements overOf(Proposition part) {
+            return over.get(part);
+        }
+
+        int size() {
+            return bySpelling.size();
+        }
+
+        /** The number of {@code part}, or {@code -1} for a part that was not found in numbering. */
+        int numberOf(Proposition part) {
+            Integer found = byObject.get(part);
+            if (found == null) {
+                found = bySpelling.get(part.spelling());
+            }
+            return found == null ? -1 : found;
+        }
+
+        private void number(Proposition part) {
+            if (byObject.containsKey(part)) {
+                return;
+            }
+            Integer number = bySpelling.get(part.spelling());
+            if (number == null) {
+                number = bySpelling.size();
+                bySpelling.put(part.spelling(), number);
+            }
+            byObject.put(part, number);
+            switch (part) {
+                case Proposition.All all -> all.parts().forEach(this::number);
+                case Proposition.Any any -> any.parts().forEach(this::number);
+                case Proposition.WhereItAnswers where -> {
+                    number(where.answers());
+                    number(where.states());
+                }
+                case Proposition.SoManyHold counted -> counted.statements().forEach(this::number);
+                case Proposition.OfTheWays ways -> number(ways.written());
+                case Proposition.Some some -> over.put(part, elements.get(keyOf(some)));
+                case Proposition.Compared compared
+                        when compared.relation() instanceof Relation.Affine affine
+                        && countIn(affine) instanceof Quantity count ->
+                        over.put(part, elements.get(keyOf(count)));
+                default -> { }
+            }
+        }
     }
 
     /**
@@ -1175,19 +1254,23 @@ final class AStatementAtARow {
         }
     }
 
-    private Answer at(Proposition part, BorderQuantity.Observation row,
-                      Map<Spelling,Answer> answered) {
-        Answer known = answered.get(part.spelling());
+    private Answer at(Proposition part, BorderQuantity.Observation row, Answer[] answered,
+                      Parts numbered) {
+        int number = numbered.numberOf(part);
+        if (number < 0) {
+            return atOnce(part, row, answered, numbered);
+        }
+        Answer known = answered[number];
         if (known != null) {
             return known;
         }
-        Answer answer = atOnce(part, row, answered);
-        answered.put(part.spelling(), answer);
+        Answer answer = atOnce(part, row, answered, numbered);
+        answered[number] = answer;
         return answer;
     }
 
-    private Answer atOnce(Proposition part, BorderQuantity.Observation row,
-                          Map<Spelling,Answer> answered) {
+    private Answer atOnce(Proposition part, BorderQuantity.Observation row, Answer[] answered,
+                          Parts numbered) {
         return switch (part) {
             case Proposition.Always(boolean holds) -> holds ? Answer.HOLDS : Answer.FAILS;
             // Of the element this row is read with chosen: the last of those holding the value it
@@ -1224,18 +1307,20 @@ final class AStatementAtARow {
                         case TextAtARow.Unsaid(Said said) -> heldAs(holds, said);
                     };
             case Proposition.All all -> joined(all.parts().stream()
-                    .map(each -> at(each, row, answered)).toList(), true);
+                    .map(each -> at(each, row, answered, numbered)).toList(), true);
             case Proposition.Any any -> joined(any.parts().stream()
-                    .map(each -> at(each, row, answered)).toList(), false);
+                    .map(each -> at(each, row, answered, numbered)).toList(), false);
             // At a row it answered at, what it states; at one it did not, nothing holds — and its
             // denial is asked as its own proposition, so a row that stopped holds neither.
             case Proposition.WhereItAnswers where -> joined(List.of(
-                    at(where.answers(), row, answered), at(where.states(), row, answered)), true);
+                    at(where.answers(), row, answered, numbered),
+                    at(where.states(), row, answered, numbered)), true);
             case Proposition.SoManyHold counted -> howManyHold(counted, counted.statements()
-                    .stream().map(each -> at(each, row, answered)).toList());
-            case Proposition.OfTheWays ways -> at(ways.written(), row, answered);
+                    .stream().map(each -> at(each, row, answered, numbered)).toList());
+            case Proposition.OfTheWays ways -> at(ways.written(), row, answered, numbered);
             case Proposition.Some some -> {
-                OverTheElements over = elements.get(keyOf(some));
+                OverTheElements over = numbered.overOf(some) instanceof OverTheElements known
+                        ? known : elements.get(keyOf(some));
                 HowManyAtARow counted = over.ofTheElement().howManyMeetIn(over.container(), row);
                 if (counted == null) {
                     yield new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
@@ -1245,7 +1330,9 @@ final class AStatementAtARow {
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
                     && countIn(affine) instanceof Quantity count -> {
-                HowManyAtARow counted = elements.get(keyOf(count)).howManyIn(row);
+                OverTheElements over = numbered.overOf(compared) instanceof OverTheElements known
+                        ? known : elements.get(keyOf(count));
+                HowManyAtARow counted = over.howManyIn(row);
                 if (counted == null) {
                     yield new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
                 }
