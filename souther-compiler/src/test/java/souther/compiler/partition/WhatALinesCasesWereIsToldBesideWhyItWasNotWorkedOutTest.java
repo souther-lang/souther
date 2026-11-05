@@ -113,6 +113,18 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
             assertEquals("g", find.path("call").path("definition").asString());
             assertEquals(each.path("ruleId"), expansions.get(0).path("ruleId"),
                     "one rule, whose lines these are");
+            for (JsonNode diagnosis : counted.path("diagnosed")) {
+                assertEquals("orderedBoundaries", diagnosis.path("kind").asString(),
+                        "no remainder is compared: " + diagnosis);
+                assertTrue(Set.of("x", "y", "x + y").contains(
+                        diagnosis.path("quantity").asString()), diagnosis::toString);
+                assertEquals(diagnosis.path("points").asInt() + 1,
+                        diagnosis.path("waysAtMost").asInt(), diagnosis::toString);
+                assertTrue(diagnosis.path("points").asInt() <= 7,
+                        "a point at each threshold at most: " + diagnosis);
+            }
+            assertFalse(counted.path("diagnosed").isEmpty(),
+                    "the thresholds of each number tie its comparisons: " + counted);
         }
         assertEquals(Set.of("g/x", "g/y", "g/x + y"), lines, "a line of each number compared");
     }

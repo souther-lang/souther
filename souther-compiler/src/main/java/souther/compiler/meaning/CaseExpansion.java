@@ -24,9 +24,13 @@ import java.util.Optional;
  * @param ofTheCase  the condition the case was said as
  * @param counted    how many ways there were of choosing one of what the case stands for
  * @param attributed what the parts the case is taken apart on came from
+ * @param diagnosed  how many ways some of those parts can come out together, where they compare
+ *                   one number ({@link WhatTheNumbersOfACaseLeave}): what the numbers leave, and
+ *                   no count of cases nor of what a rewrite would leave
  */
 public record CaseExpansion(String line, Spelling relation, Proposition ofTheCase,
-                            CaseCount counted, Attribution attributed) {
+                            CaseCount counted, Attribution attributed,
+                            List<Diagnosis> diagnosed) {
 
     public CaseExpansion {
         Objects.requireNonNull(line, "cases are a line's");
@@ -34,6 +38,7 @@ public record CaseExpansion(String line, Spelling relation, Proposition ofTheCas
         Objects.requireNonNull(ofTheCase, "a case is said as some condition");
         Objects.requireNonNull(counted, "cases are some number of ways");
         Objects.requireNonNull(attributed, "what they came from, or why that was not said");
+        diagnosed = List.copyOf(diagnosed);
     }
 
     /**
@@ -54,9 +59,10 @@ public record CaseExpansion(String line, Spelling relation, Proposition ofTheCas
             Objects.requireNonNull(counted, "cases are some number of ways");
         }
 
-        /** This case, with what made its parts. */
+        /** This case, with what made its parts and what the numbers they compare leave. */
         CaseExpansion attributed(Attribution attributed) {
-            return new CaseExpansion(line, relation, asked.condition(), counted, attributed);
+            return new CaseExpansion(line, relation, asked.condition(), counted, attributed,
+                    WhatTheNumbersOfACaseLeave.of(asked.standsFor()));
         }
 
         /**
@@ -121,6 +127,58 @@ public record CaseExpansion(String line, Spelling relation, Proposition ofTheCas
 
         /** More steps were walked than {@link TheChoicesACaseIsMadeOf#STEPS_A_READING_TAKES}. */
         STEPS_A_READING_TAKES
+    }
+
+    /**
+     * How many ways some parts a case is taken apart on can come out together, where they
+     * compare one number. A count of what the numbers leave and of nothing a reading does.
+     */
+    public sealed interface Diagnosis {}
+
+    /**
+     * Comparisons of one affine form that each order it against a constant: their truths come
+     * out by which side of each point the value is on, so no more ways than one past the points.
+     *
+     * @param quantity    the form, without its constant, as its quantities are spelled
+     * @param comparisons how many of the parts compare it so
+     * @param points      how many points they turn at, told apart by the value and by whether
+     *                    the value itself is on the side above
+     * @param waysAtMost  how many ways their truths can come out together at most: one past the
+     *                    points, of the two to the power of {@code comparisons} they would if
+     *                    nothing tied them
+     */
+    public record OrderedBoundaries(String quantity, int comparisons, int points, int waysAtMost)
+            implements Diagnosis {
+
+        public OrderedBoundaries {
+            Objects.requireNonNull(quantity, "the boundaries are of some quantity");
+            if (comparisons < 2 || points < 1 || points > comparisons
+                    || waysAtMost != points + 1) {
+                throw new IllegalArgumentException("comparisons at points, one way past them: "
+                        + comparisons + ", " + points + ", " + waysAtMost);
+            }
+        }
+    }
+
+    /**
+     * Comparisons of remainders of one dividend by one divisor: one remainder decides them all.
+     *
+     * @param dividend    the dividend, without its constant, as its quantities are spelled
+     * @param divisor     what it is divided by
+     * @param comparisons how many of the parts compare a remainder of it so
+     * @param ways        how many ways their truths come out together, one remainder at a time
+     */
+    public record CorrelatedRemainders(String dividend, int divisor, int comparisons, int ways)
+            implements Diagnosis {
+
+        public CorrelatedRemainders {
+            Objects.requireNonNull(dividend, "remainders are of some dividend");
+            if (comparisons < 2 || ways < 1 || ways > divisor) {
+                throw new IllegalArgumentException("comparisons coming out no more ways than"
+                        + " there are remainders: " + comparisons + ", " + ways + " of "
+                        + divisor);
+            }
+        }
     }
 
     /** One thing in the model that made some of the parts a case is taken apart on. */

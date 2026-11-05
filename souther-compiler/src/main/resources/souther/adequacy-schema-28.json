@@ -8643,7 +8643,8 @@
       "description": "How many ways there were of choosing one of the cases one case of a line was said for, and what in the model made the parts that case is taken apart on. Neither is how much work a reading did: a reading of the cases stops a choosing early, and at a figure. One entry is one case: the reading tells cases apart by the line's relation and the condition the case was said as, so two cases of one line coming to the same counts and the same makers are two entries.",
       "required": [
         "structuralWays",
-        "numericallyConsistentWays"
+        "numericallyConsistentWays",
+        "diagnosed"
       ],
       "oneOf": [
         {
@@ -8716,6 +8717,83 @@
                 "ways_a_count_is_held_to"
               ]
             }
+          }
+        },
+        "diagnosed": {
+          "type": "array",
+          "description": "How many ways some of the parts the case is taken apart on can come out together, where they compare one number and so cannot come out every way. What the numbers leave, and nothing a reading of the cases does: neither is a count of cases, and neither says how many ways a reading would be left with were the model written otherwise — a statement with fewer comparisons may be taken apart into more ways. Empty where no two parts compare one number so.",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "description": "Comparisons of one affine form each ordering it against a constant (`>=`, `>`, `<=`, `<`; no equality): each comes out by which side of one point the value is on, so their truths come out no more ways than one past the points.",
+                "required": [
+                  "kind",
+                  "quantity",
+                  "comparisons",
+                  "points",
+                  "waysAtMost"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "orderedBoundaries"
+                  },
+                  "quantity": {
+                    "type": "string",
+                    "description": "The form, without its constant, as its quantities are spelled."
+                  },
+                  "comparisons": {
+                    "type": "integer",
+                    "minimum": 2
+                  },
+                  "points": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "How many points they turn at, told apart by the value and by whether the value itself is on the side above."
+                  },
+                  "waysAtMost": {
+                    "type": "integer",
+                    "minimum": 2,
+                    "description": "One past `points`, of the two to the power of `comparisons` they would come out if nothing tied them."
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "description": "Comparisons of remainders of one dividend by one divisor: one remainder decides them all, so their truths come out as many ways as there are remainders telling them apart, counted remainder by remainder.",
+                "required": [
+                  "kind",
+                  "dividend",
+                  "divisor",
+                  "comparisons",
+                  "ways"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "correlatedRemainders"
+                  },
+                  "dividend": {
+                    "type": "string",
+                    "description": "The dividend, without its constant, as its quantities are spelled."
+                  },
+                  "divisor": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "comparisons": {
+                    "type": "integer",
+                    "minimum": 2
+                  },
+                  "ways": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "No more than `divisor`."
+                  }
+                }
+              }
+            ]
           }
         },
         "partsSplitOn": {

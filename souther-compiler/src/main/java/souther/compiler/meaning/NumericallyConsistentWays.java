@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.function.Function;
 
 /**
@@ -197,6 +198,17 @@ public final class NumericallyConsistentWays {
                 DecidingCase.Cases.NotTakenApart notTakenApart) {
             return state -> Map.of(state, BigInteger.ONE);
         }
+    }
+
+    /**
+     * The remainders of its dividend {@code part} holds at, as bits, where it compares a
+     * remainder of one dividend this tells apart; none where it does not. The same reading of a
+     * remainder's comparison a count takes.
+     */
+    static OptionalLong remaindersWhereItHolds(Proposition part) {
+        Optional<Remainders> meeting = Narrowing.of(part).flatMap(Narrowing::remainders);
+        return meeting.isEmpty() ? OptionalLong.empty()
+                : OptionalLong.of(meeting.get().allowed());
     }
 
     /** What a condition chosen states together: its parts, where it is a conjunction. */

@@ -9017,6 +9017,29 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 attributed.factors().forEach(each -> factor(factors.addObject(), each));
             }
         }
+        ArrayNode diagnosed = into.putArray("diagnosed");
+        expansion.diagnosed().forEach(each -> diagnosis(diagnosed.addObject(), each));
+    }
+
+    /** How many ways some parts of a case can come out together, where they compare one
+     *  number. */
+    private static void diagnosis(ObjectNode into, CaseExpansion.Diagnosis diagnosis) {
+        switch (diagnosis) {
+            case CaseExpansion.OrderedBoundaries ordered -> {
+                into.put("kind", "orderedBoundaries");
+                into.put("quantity", ordered.quantity());
+                into.put("comparisons", ordered.comparisons());
+                into.put("points", ordered.points());
+                into.put("waysAtMost", ordered.waysAtMost());
+            }
+            case CaseExpansion.CorrelatedRemainders remainders -> {
+                into.put("kind", "correlatedRemainders");
+                into.put("dividend", remainders.dividend());
+                into.put("divisor", remainders.divisor());
+                into.put("comparisons", remainders.comparisons());
+                into.put("ways", remainders.ways());
+            }
+        }
     }
 
     /** One thing in the model that made some of the parts a case is taken apart on. */
@@ -9092,7 +9115,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             }
         }
+        if (!expansion.diagnosed().isEmpty()) {
+            out.append(". What the numbers leave of them: ").append(expansion.diagnosed().stream()
+                    .map(AdequacyReport::diagnosisSaid).collect(Collectors.joining("; ")));
+        }
         return out.toString();
+    }
+
+    /** How many ways some parts can come out together, in a clause. */
+    private static String diagnosisSaid(CaseExpansion.Diagnosis diagnosis) {
+        return switch (diagnosis) {
+            case CaseExpansion.OrderedBoundaries ordered -> String.format(Locale.ROOT,
+                    "%,d comparisons of `%s` turn at %,d %s, so come out at most %,d ways",
+                    ordered.comparisons(), ordered.quantity(), ordered.points(),
+                    ordered.points() == 1 ? "point" : "points", ordered.waysAtMost());
+            case CaseExpansion.CorrelatedRemainders remainders -> String.format(Locale.ROOT,
+                    "%,d comparisons of remainders of `%s` by %d come out %,d %s",
+                    remainders.comparisons(), remainders.dividend(), remainders.divisor(),
+                    remainders.ways(), remainders.ways() == 1 ? "way" : "ways");
+        };
     }
 
     /** One thing that made some of a case's parts, as an author would find it. */
