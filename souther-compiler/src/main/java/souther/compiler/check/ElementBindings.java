@@ -6,7 +6,9 @@ import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.HeldIn;
+import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -15,6 +17,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -405,13 +408,16 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         // expanded away, and the operation standing as itself where it has not. What is asked of it
         // is the same question, so it is asked once.
         if (e instanceof Core.Call call && call.fn() instanceof Core.Reached reached) {
-            handed(reached.denotes(), call.args(), found, null, held);
+            handed(reached.denotes(), call.args(),
+                    written(reached.denotes(), call.occurrence()), found, null, held);
         }
         if (e instanceof Core.PreservedCall preserved) {
             // Where the operation still stands, what it answers of what it was handed is still
             // there to be asked, so the licence a run needs is read from the declaration rather
             // than from a fact an expansion would have had to leave behind.
-            handed(preserved.declared().operation(), preserved.args(), found, standing, held);
+            handed(preserved.declared().operation(), preserved.args(),
+                    written(preserved.declared().operation(), preserved.occurrence()), found,
+                    standing, held);
         }
         Core.forEachChild(e, child ->
                 walk(child, found, held, provenance, answered, standing));
@@ -432,6 +438,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
      */
     private static void handed(ValueName operation,
                                List<Core> args,
+                               Optional<ACallOfAnOperation> call,
                                Map<BindingId, List<HeldIn>> found,
                                Map<BindingId, ElementAnswer> standing,
                                Map<BindingId, Core> held) {
@@ -445,7 +452,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         // the element.
         if (handed.key() != null && handed.key().binding() != null) {
             takes(found, handed.key().binding(),
-                    new HeldIn(handed.container(), HeldIn.Part.KEY, handed.applied(), false));
+                    new HeldIn(handed.container(), HeldIn.Part.KEY, handed.applied(), false,
+                            call));
         }
         if (handed.element().binding() == null) {
             return;
@@ -454,11 +462,18 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         boolean ofAnOption =
                 DefaultBoundOperationFacts.get().answersTheClosureOnWhatItHolds(operation) != null;
         takes(found, element, new HeldIn(handed.container(), HeldIn.Part.ELEMENT,
-                handed.applied(), ofAnOption));
+                handed.applied(), ofAnOption, call));
         if (standing != null && answersOnePerElementOf(operation, handed.container(), args)) {
             standing.putIfAbsent(element, new ElementAnswer(element, handed.step().body(),
                     handed.position() == null ? null : handed.position().binding()));
         }
+    }
+
+    /** The call of {@code operation} at {@code occurrence}, where some source wrote it. */
+    private static Optional<ACallOfAnOperation> written(ValueName operation,
+                                                        ConstructOccurrence occurrence) {
+        return occurrence == null || !occurrence.isWritten() ? Optional.empty()
+                : Optional.of(new ACallOfAnOperation(operation, occurrence));
     }
 
     /**

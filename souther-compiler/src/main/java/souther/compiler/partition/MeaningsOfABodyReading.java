@@ -111,7 +111,7 @@ public final class MeaningsOfABodyReading {
             // each is said all the same — and so of an application handed an element a filter
             // keeps on some rows, which is one the closure may be handed.
             List<InputReads> applications = switch (applied) {
-                case InputReads.Applications.Each(var made, var _) ->
+                case InputReads.Applications.Each(var made, var _, var _) ->
                         made.stream().map(InputReads.Applications.Made::reads).toList();
                 case InputReads.Applications.Unsaid(var mayBeMade) ->
                         mayBeMade.stream().map(InputReads.Applications.Made::reads).toList();

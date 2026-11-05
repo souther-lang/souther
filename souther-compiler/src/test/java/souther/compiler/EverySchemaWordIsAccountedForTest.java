@@ -431,12 +431,15 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "constructOccurrence", "properties", "through", "items",
                             "properties", "kind"),
                     ThroughStepWord.class),
-            // Which kind of choice a construct a line's cases were taken apart on makes, and why a
-            // count of the ways no number refutes was given up.
-            new Vocabulary("caseExpansion.factors[].kind",
-                    List.of("$defs", "caseExpansion", "properties", "factors", "items",
-                            "properties", "kind"),
-                    CaseExpansion.Kind.class),
+            // Which kind of choice made parts a line's case was taken apart on, why what made them
+            // was not read, and why a count of the ways no number refutes was given up.
+            new Vocabulary("caseExpansion.factors[].choice",
+                    List.of("$defs", "caseExpansion", "properties", "factors", "items", "oneOf",
+                            "0", "properties", "choice"),
+                    CaseExpansion.ChoiceKind.class),
+            new Vocabulary("caseExpansion.notAttributed",
+                    List.of("$defs", "caseExpansion", "properties", "notAttributed"),
+                    CaseExpansion.WhyNotAttributed.class),
             new Vocabulary("caseExpansion.numericallyConsistentWays.notCounted",
                     List.of("$defs", "caseExpansion", "properties", "numericallyConsistentWays",
                             "properties", "notCounted"),

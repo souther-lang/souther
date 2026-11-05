@@ -4078,10 +4078,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // and not about why the line was not worked out.
         PartitionEvidence partition = behavior.partition();
         if (partition != null) {
-            for (CasesExpandedAtARule each : partition.caseExpansions()) {
-                out.append(String.format("      case expansion: %s, on `%s` — %s%n",
+            List<CasesExpandedAtARule> expanded = partition.caseExpansions();
+            List<CaseOfALine> numbered = casesNumbered(expanded);
+            for (int at = 0; at < expanded.size(); at++) {
+                CasesExpandedAtARule each = expanded.get(at);
+                out.append(String.format("      case expansion: %s, on `%s`, case %d of %d — %s%n",
                         cited(each.cited(), rendering, declaredIn, places),
-                        each.expansion().line(), caseExpansionSaid(each.expansion())));
+                        each.expansion().line(), numbered.get(at).ordinal(),
+                        numbered.get(at).of(), caseExpansionSaid(each.expansion())));
             }
         }
         // And a position whose rules this reading never arrived at, which names no rule because
@@ -8941,13 +8945,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // and per case asked, beside the entries above and joined to them by the rule. Never put
         // into those: two of them about one rule are one finding, and two counts are two counts.
         DocumentArray expanded = DocumentPart.CASE_EXPANSIONS.putArray(out);
-        for (CasesExpandedAtARule each : partition.caseExpansions()) {
-            caseExpansionRow(expanded.addObject(), each, places, sources);
+        List<CasesExpandedAtARule> told = partition.caseExpansions();
+        List<CaseOfALine> numbered = casesNumbered(told);
+        for (int at = 0; at < told.size(); at++) {
+            caseExpansionRow(expanded.addObject(), told.get(at), numbered.get(at), places,
+                    sources);
         }
     }
 
-    /** One rule's line and what its cases were, as a row of {@code caseExpansions}. */
+    /** One rule's line and what one of its cases was, as a row of {@code caseExpansions}. */
     private static void caseExpansionRow(DocumentItem row, CasesExpandedAtARule each,
+                                         CaseOfALine which,
                                          PublishedRuleHandle.WhereARuleIs places,
                                          DocumentSources sources) {
         ObjectNode said = row.node();
@@ -8956,12 +8964,36 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 sources.rendering(), null);
         ruleId(said.putObject("ruleId"), each.rule());
         said.put("line", each.expansion().line());
+        said.put("case", which.ordinal());
+        said.put("casesOfTheLine", which.of());
         caseExpansion(said.putObject("caseExpansion"), each.expansion());
     }
 
+    /** Which of the cases a rule's line was told of an entry is, from one, and of how many. */
+    private record CaseOfALine(int ordinal, int of) {}
+
     /**
-     * How many ways the cases of one line were and what the statement chooses at. The constructs
-     * are not a factoring of the count, which is why they are a list beside it and not a product.
+     * Each entry numbered among those about the same rule and line, in the order they stand. Two
+     * entries are two cases ({@link CasesExpandedAtARule#key}), which is all the number says: the
+     * condition a case was said as is what tells it apart, and it is too long to be read.
+     */
+    private static List<CaseOfALine> casesNumbered(List<CasesExpandedAtARule> expanded) {
+        Map<List<Object>, Integer> of = new HashMap<>();
+        for (CasesExpandedAtARule each : expanded) {
+            of.merge(List.of(each.rule(), each.expansion().line()), 1, Integer::sum);
+        }
+        Map<List<Object>, Integer> sofar = new HashMap<>();
+        List<CaseOfALine> out = new ArrayList<>();
+        for (CasesExpandedAtARule each : expanded) {
+            List<Object> line = List.of(each.rule(), each.expansion().line());
+            out.add(new CaseOfALine(sofar.merge(line, 1, Integer::sum), of.get(line)));
+        }
+        return out;
+    }
+
+    /**
+     * How many ways one case of a line was and what made the parts it is taken apart on. What made
+     * them is not a factoring of the count, which is why it is a list beside it and not a product.
      */
     private static void caseExpansion(ObjectNode into, CaseExpansion expansion) {
         ObjectNode structural = into.putObject("structuralWays");
@@ -8976,20 +9008,54 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case NumericallyConsistentWays.Counted.NotCounted(var why) ->
                     consistent.put("notCounted", word(why));
         }
-        ArrayNode factors = into.putArray("factors");
-        for (CaseExpansion.Contributing each : expansion.contributing()) {
-            ObjectNode one = factors.addObject();
-            copyId(one.putObject("construct"), each.construct());
-            one.put("kind", word(each.kind()));
-            one.put("width", each.width());
-            each.operation().ifPresent(operation -> one.put("operation", operation.qualified()));
+        switch (expansion.attributed()) {
+            case CaseExpansion.NotAttributed(var why) -> into.put("notAttributed", word(why));
+            case CaseExpansion.Attributed attributed -> {
+                into.put("partsSplitOn", attributed.partsSplitOn());
+                into.put("unattributed", attributed.unattributed());
+                ArrayNode factors = into.putArray("factors");
+                attributed.factors().forEach(each -> factor(factors.addObject(), each));
+            }
         }
     }
 
+    /** One thing in the model that made some of the parts a case is taken apart on. */
+    private static void factor(ObjectNode into, CaseExpansion.Factor factor) {
+        switch (factor) {
+            case CaseExpansion.Choice choice -> {
+                into.put("kind", "choice");
+                copyId(into.putObject("construct"), choice.construct());
+                into.put("choice", word(choice.kind()));
+                into.put("alternatives", choice.alternatives());
+                into.put("times", choice.times());
+                choice.operation().ifPresent(operation ->
+                        into.put("operation", operationNamed(operation)));
+            }
+            case CaseExpansion.Applications applications -> {
+                into.put("kind", "applications");
+                copyId(into.putObject("call"), applications.call());
+                into.put("operation", operationNamed(applications.operation()));
+                into.put("applications", applications.applications());
+            }
+            case CaseExpansion.KeptWays kept -> {
+                into.put("kind", "keptWays");
+                ArrayNode by = into.putArray("keptBy");
+                kept.keptBy().forEach(each -> copyId(by.addObject(), each));
+                into.put("ways", kept.ways());
+                into.put("times", kept.times());
+            }
+        }
+    }
+
+    /** An operation of the language as the library publishes it, or as it is named otherwise. */
+    private static String operationNamed(ValueName operation) {
+        return operation instanceof ValueName.Stdlib stdlib ? stdlib.qualified()
+                : operation.toString();
+    }
+
     /**
-     * One line's cases in a sentence: the two counts, then the constructs the statement chooses at
-     * as a list. Never joined by a sign of multiplication, which would say the count is their
-     * product.
+     * One case in a sentence: the two counts, then what made its parts as a list. Never joined by
+     * a sign of multiplication, which would say the count is their product.
      */
     private static String caseExpansionSaid(CaseExpansion expansion) {
         StringBuilder out = new StringBuilder(switch (expansion.counted().structuralWays()) {
@@ -9007,29 +9073,58 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 case WAYS_A_COUNT_IS_HELD_TO -> "the ways a count is held to";
                             });
         }
-        if (!expansion.contributing().isEmpty()) {
-            out.append(". Contributing constructs: ").append(expansion.contributing().stream()
-                    .map(AdequacyReport::contributingSaid)
-                    .collect(Collectors.joining(", ")));
+        switch (expansion.attributed()) {
+            case CaseExpansion.NotAttributed(var why) -> out.append(
+                    ". What made its parts was not read, past " + switch (why) {
+                        case NOTHING_DERIVED -> "what was held of how it was derived";
+                        case STEPS_A_READING_TAKES -> "the steps such a reading takes";
+                    });
+            case CaseExpansion.Attributed attributed -> {
+                if (!attributed.factors().isEmpty()) {
+                    out.append(". Its parts were made by: ").append(attributed.factors().stream()
+                            .map(AdequacyReport::factorSaid)
+                            .collect(Collectors.joining("; ")));
+                }
+                if (attributed.unattributed() > 0) {
+                    out.append(String.format(Locale.ROOT,
+                            ". %,d of its %,d parts were made by nothing named here",
+                            attributed.unattributed(), attributed.partsSplitOn()));
+                }
+            }
         }
         return out.toString();
     }
 
-    /** One construct the statement chooses at, as an author would find it. */
-    private static String contributingSaid(CaseExpansion.Contributing each) {
-        String where = WrittenOwner.theBodyThatWrote(each.construct().origin().owner())
-                .definition();
-        String what = each.operation().map(operation -> switch (each.kind()) {
-            case CASES -> "cases of " + operation.qualified();
-            default -> word(each.kind());
-        }).orElse(word(each.kind()));
-        String among = switch (each.kind()) {
-            case FIND, FILTER -> each.width() + " elements written out";
-            case MATCH -> each.width() + " arms";
-            case IF -> "chosen at " + each.width() + " times";
-            case CASES -> each.width() + " cases";
+    /** One thing that made some of a case's parts, as an author would find it. */
+    private static String factorSaid(CaseExpansion.Factor factor) {
+        return switch (factor) {
+            case CaseExpansion.Choice choice -> {
+                String what = switch (choice.kind()) {
+                    case IF -> "the if";
+                    case MATCH -> "the match";
+                    case CASES -> "the cases of " + choice.operation().map(
+                            AdequacyReport::operationNamed).orElse("an operation");
+                };
+                yield String.format(Locale.ROOT, "%s in %s, %,d ways each, chosen %,d %s", what,
+                        writtenIn(choice.construct()), choice.alternatives(), choice.times(),
+                        choice.times() == 1 ? "time" : "times");
+            }
+            case CaseExpansion.Applications applications -> String.format(Locale.ROOT,
+                    "the call of %s in %s, on %,d %s", operationNamed(applications.operation()),
+                    writtenIn(applications.call()), applications.applications(),
+                    applications.applications() == 1 ? "application" : "applications");
+            case CaseExpansion.KeptWays kept -> String.format(Locale.ROOT,
+                    "the ways elements are kept%s, %,d ways written out %,d %s",
+                    kept.keptBy().isEmpty() ? "" : " by what " + kept.keptBy().stream()
+                            .map(AdequacyReport::writtenIn).distinct()
+                            .collect(Collectors.joining(" and ")) + " states",
+                    kept.ways(), kept.times(), kept.times() == 1 ? "time" : "times");
         };
-        return what + " in " + where + " (" + among + ")";
+    }
+
+    /** The definition a construct of the model was written in. */
+    private static String writtenIn(ModelOccurrence construct) {
+        return WrittenOwner.theBodyThatWrote(construct.origin().owner()).definition();
     }
 
     static void branch(ObjectNode into, BehaviorReport behavior, DocumentSources sources) {

@@ -8602,6 +8602,8 @@
               "rule",
               "ruleId",
               "line",
+              "case",
+              "casesOfTheLine",
               "caseExpansion"
             ],
             "additionalProperties": false,
@@ -8618,6 +8620,16 @@
                 "type": "string",
                 "description": "The quantity the line is on, named the way a boundary on it is named."
               },
+              "case": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Which of the cases of this rule's line the entry is, counted from one in the order the entries stand. Two entries of one rule and line are two cases, whatever they came to; the condition a case was said as is what tells them apart, and it is not written."
+              },
+              "casesOfTheLine": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "How many entries there are for this rule and line."
+              },
               "caseExpansion": {
                 "$ref": "#/$defs/caseExpansion"
               }
@@ -8628,11 +8640,24 @@
     },
     "caseExpansion": {
       "type": "object",
-      "description": "How many ways there were of choosing one of the cases one case of a line was said for, and the constructs of the model the statement chooses at. Neither is how much work a reading did: a reading of the cases stops a choosing early, and at a figure.",
+      "description": "How many ways there were of choosing one of the cases one case of a line was said for, and what in the model made the parts that case is taken apart on. Neither is how much work a reading did: a reading of the cases stops a choosing early, and at a figure. One entry is one case: the reading tells cases apart by the line's relation and the condition the case was said as, so two cases of one line coming to the same counts and the same makers are two entries.",
       "required": [
         "structuralWays",
-        "numericallyConsistentWays",
-        "factors"
+        "numericallyConsistentWays"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "partsSplitOn",
+            "unattributed",
+            "factors"
+          ]
+        },
+        {
+          "required": [
+            "notAttributed"
+          ]
+        }
       ],
       "additionalProperties": false,
       "properties": {
@@ -8693,42 +8718,132 @@
             }
           }
         },
+        "partsSplitOn": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many parts the case is taken apart on, told apart as the reading tells them apart."
+        },
+        "unattributed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many of `partsSplitOn` nothing in `factors` was found to have made: a part a step of the reading made out of others where no step said which construct of the model it is of. Never more than `partsSplitOn`."
+        },
+        "notAttributed": {
+          "type": "string",
+          "enum": [
+            "nothing_derived",
+            "steps_a_reading_takes"
+          ],
+          "description": "What made the parts was not read: `nothing_derived` where how the statement was derived was not held where the case was counted, `steps_a_reading_takes` where reading it walked more steps than such a reading takes, which is no figure the line stopped at."
+        },
         "factors": {
           "type": "array",
-          "description": "The constructs of the model the statement chooses at, each once, named as their author wrote them. Not a factoring of `structuralWays`: the cases are alternatives and choices held together sharing what follows from a choice, so the count is not the widths multiplied, and one construct may stand inside another. A choice this compiler cannot name as a construct of the model is not listed.",
+          "description": "What in the model made the parts the case is taken apart on, read off the steps of the reading whose conclusions first hold each part, in the order the reading meets them. Not a factoring of `structuralWays`: the cases are alternatives and choices held together sharing what follows from a choice, so the count is no product of these, and one stands inside another — a `choice` written in a closure is chosen once on each of the `applications` of it. A part made at two places counts for both.",
           "items": {
-            "type": "object",
-            "required": [
-              "construct",
-              "kind",
-              "width"
-            ],
-            "additionalProperties": false,
-            "properties": {
-              "construct": {
-                "$ref": "#/$defs/constructOccurrence"
-              },
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "find",
-                  "filter",
-                  "match",
-                  "if",
-                  "cases"
+            "oneOf": [
+              {
+                "type": "object",
+                "description": "A choice the author wrote: `if` a branch, `match` an arm, `cases` an operation of the language whose answer is one of several cases of its arguments.",
+                "required": [
+                  "kind",
+                  "construct",
+                  "choice",
+                  "alternatives",
+                  "times"
                 ],
-                "description": "`find` searches the elements of a list written out for the first meeting a condition, `filter` keeps those that meet one, `match` chooses an arm the author wrote, `if` a branch the author wrote, and `cases` is an operation of the language whose answer is one of several cases of its arguments."
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "choice"
+                  },
+                  "construct": {
+                    "$ref": "#/$defs/constructOccurrence"
+                  },
+                  "choice": {
+                    "type": "string",
+                    "enum": [
+                      "if",
+                      "match",
+                      "cases"
+                    ]
+                  },
+                  "alternatives": {
+                    "type": "integer",
+                    "minimum": 2,
+                    "description": "Among how many one choosing there chooses: two for `if`, the arms for `match`, the cases for `cases`."
+                  },
+                  "times": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "How many of its choosings the case is taken apart on parts of: one on each application of a closure it is written in, and one wherever else it is read. No number of alternatives: two ways chosen fifty times is not fifty ways chosen once."
+                  },
+                  "operation": {
+                    "type": "string",
+                    "description": "The operation, for `cases`."
+                  }
+                }
               },
-              "width": {
-                "type": "integer",
-                "minimum": 1,
-                "description": "Among how many it chooses: the elements written out for `find` and `filter`, the arms for `match`, the cases for `cases`, and for `if` how many times the statement chooses at it — once on each application of a closure it is read on, and again wherever what an application chose is read more than once, so no count of applications."
+              {
+                "type": "object",
+                "description": "A call of an operation of the language that applies a closure, as many of whose applications as `applications` some part was read on.",
+                "required": [
+                  "kind",
+                  "call",
+                  "operation",
+                  "applications"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "applications"
+                  },
+                  "call": {
+                    "$ref": "#/$defs/constructOccurrence"
+                  },
+                  "operation": {
+                    "type": "string",
+                    "description": "The operation called, as the library publishes it."
+                  },
+                  "applications": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
               },
-              "operation": {
-                "type": "string",
-                "description": "The operation of the language making the choice, for `find`, `filter` and `cases`."
+              {
+                "type": "object",
+                "description": "The ways of keeping elements that a statement over what was kept is written out over: one part for each way the truths keeping them come out.",
+                "required": [
+                  "kind",
+                  "keptBy",
+                  "ways",
+                  "times"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "keptWays"
+                  },
+                  "keptBy": {
+                    "type": "array",
+                    "description": "The constructs of the model the truths keeping the elements are.",
+                    "items": {
+                      "$ref": "#/$defs/constructOccurrence"
+                    }
+                  },
+                  "ways": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "The most parts one writing out made that the case is taken apart on."
+                  },
+                  "times": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "How many writings out made some of them: one on each application of a closure the statement is read on."
+                  }
+                }
               }
-            }
+            ]
           }
         }
       }

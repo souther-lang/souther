@@ -7,7 +7,9 @@ import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.CaseCount;
 import souther.compiler.meaning.CaseExpansion;
+import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.NumericallyConsistentWays;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Spelling;
 import souther.compiler.meaning.WrittenLine;
 
@@ -34,20 +36,22 @@ class ACountOfALinesCasesLeavesWhatItsPlacesAreLeftWithAsItWasTest {
                             CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure())),
                     WhereAReadingStopped.ELSEWHERE);
 
-    private static ComparisonAssessment.Several read(List<CaseExpansion> expanded) {
+    private static ComparisonAssessment.Several read(List<CaseExpansion.Counted> expanded) {
         return new ComparisonAssessment.Several(List.of(new ComparisonAssessment.Several.Part(
                 LINE, NOT_WORKED_OUT, List.of(), Map.of(), CasesWorkedOut.SHOWN, expanded)));
     }
 
-    private static CaseExpansion expansion(CaseCount.Ways structural,
-                                           NumericallyConsistentWays.Counted consistent) {
-        return new CaseExpansion("g/x", new CaseCount(structural, consistent), List.of());
+    private static CaseExpansion.Counted expansion(CaseCount.Ways structural,
+                                                   NumericallyConsistentWays.Counted consistent) {
+        return new CaseExpansion.Counted("g/x", LINE.relation(),
+                DecidingCase.alone(new Proposition.Always(true)),
+                new CaseCount(structural, consistent));
     }
 
     @Test
     void whatEachPlaceIsLeftWithIsTheSameWhateverTheCountBesideIt() {
         BigInteger many = BigInteger.valueOf(729);
-        List<List<CaseExpansion>> counts = List.of(
+        List<List<CaseExpansion.Counted>> counts = List.of(
                 List.of(expansion(new CaseCount.Ways.Exactly(many),
                         new NumericallyConsistentWays.Counted.AtMost(BigInteger.TEN))),
                 List.of(expansion(new CaseCount.Ways.Exactly(many),
@@ -61,11 +65,13 @@ class ACountOfALinesCasesLeavesWhatItsPlacesAreLeftWithAsItWasTest {
                         expansion(new CaseCount.Ways.Exactly(many),
                                 new NumericallyConsistentWays.Counted.AtMost(BigInteger.TWO))));
         List<ComparisonAssessment.LeftAt> uncounted = read(List.of()).whatEachPlaceIsLeftWith();
-        for (List<CaseExpansion> each : counts) {
+        for (List<CaseExpansion.Counted> each : counts) {
             ComparisonAssessment.Several read = read(each);
             assertEquals(uncounted, read.whatEachPlaceIsLeftWith(),
                     "why the line was not worked out, whatever was counted beside it: " + each);
-            assertEquals(each, read.caseExpansions(), "and the counts, each as it was");
+            assertEquals(each.stream().map(CaseExpansion.Counted::counted).toList(),
+                    read.caseExpansions().stream().map(CaseExpansion::counted).toList(),
+                    "and the counts, each as it was");
         }
     }
 }

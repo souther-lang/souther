@@ -32,6 +32,7 @@ import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseSelector;
+import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -769,6 +770,7 @@ public final class InputReads {
         List<Core.Binder> handed = new ArrayList<>();
         List<List<ReadMeaning.Occurrence>> occurrencesOf = new ArrayList<>();
         HowAClosureIsApplied how = HowAClosureIsApplied.TO_EVERY_ELEMENT;
+        Optional<ACallOfAnOperation> madeBy = Optional.empty();
         long readings = applied.readings();
         for (int at = 0; at < block.params().size(); at++) {
             Core.Binder param = block.params().get(at);
@@ -787,6 +789,9 @@ public final class InputReads {
                             && names.roleOf(param.binding())
                                     instanceof BindingRole.Element(var held)) {
                         how = held.applied();
+                        if (madeBy.isEmpty()) {
+                            madeBy = held.handedBy();
+                        }
                     }
                     handed.add(param);
                     occurrencesOf.add(occurrences);
@@ -839,7 +844,7 @@ public final class InputReads {
                 || (handed.size() > 1 && how != HowAClosureIsApplied.TO_EVERY_ELEMENT)) {
             return new Applications.Unsaid(each);
         }
-        return new Applications.Each(each, how);
+        return new Applications.Each(each, how, madeBy);
     }
 
     /**
@@ -1197,15 +1202,18 @@ public final class InputReads {
 
         /**
          * One application per occurrence, in the order a walk of the container meets them, which
-         * is the order a run makes them in, and how far the operation goes making them.
+         * is the order a run makes them in, how far the operation goes making them, and the call
+         * that makes them where some source wrote it ({@link HeldIn#handedBy}).
          */
-        record Each(List<Made> each, HowAClosureIsApplied how) implements Applications {
+        record Each(List<Made> each, HowAClosureIsApplied how,
+                    Optional<ACallOfAnOperation> madeBy) implements Applications {
 
             public Each {
                 each = List.copyOf(each);
                 if (how == null) {
                     throw new IllegalArgumentException("applications are made some way");
                 }
+                Objects.requireNonNull(madeBy, "by some call written somewhere, or by none");
             }
         }
 

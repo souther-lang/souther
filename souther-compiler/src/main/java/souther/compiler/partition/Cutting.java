@@ -28,7 +28,6 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.AuthorsLines;
 import souther.compiler.meaning.CaseExpansion;
-import souther.compiler.meaning.ChoicesADerivationMakes;
 import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.DecisionAtom;
@@ -52,7 +51,6 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -328,37 +326,37 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
          * meets it: it is read off what the statement states, and what meets a line afterwards
          * holds the line and not the statement.
          *
-         * <p>And the constructs of the model the statement chooses at, where some line's cases
-         * are more ways of choosing one than are taken apart: what a reader telling an author why
-         * that line was not worked out names ({@link ChoicesADerivationMakes}). Read off how the
-         * statement was derived, which nothing past the drawing holds.
+         * <p>And how the statement was derived, where some line's cases are more ways of choosing
+         * one than are taken apart: what a reader telling an author why that line was not worked
+         * out reads what made the parts of its cases off ({@link CaseExpansion.Counted}), and
+         * which nothing past the drawing holds.
          *
-         * @param choosingAt the constructs the statement chooses at, or none where no line's cases
-         *                   are past the figure they are taken apart to
+         * @param derivedBy the statement's derivation on each application it was read on, each
+         *                  said to be that application ({@link Derivation.AnApplication}); none
+         *                  where no line's cases are past the figure they are taken apart to
          */
-        record Several(List<Part> parts, List<CaseExpansion.Contributing> choosingAt)
-                implements Read {
+        record Several(List<Part> parts, List<Derivation> derivedBy) implements Read {
 
             public Several {
                 parts = List.copyOf(parts);
-                choosingAt = List.copyOf(choosingAt);
+                derivedBy = List.copyOf(derivedBy);
                 if (parts.isEmpty()) {
                     throw new IllegalArgumentException("several lines are some lines");
                 }
             }
 
-            /** Lines whose statement nothing is said to choose at. */
+            /** Lines whose statement's derivation is not held. */
             Several(List<Part> parts) {
                 this(parts, List.of());
             }
 
-            /** The same lines, read as chosen at {@code choosingAt}. */
-            Several choosingAt(List<CaseExpansion.Contributing> at) {
-                return new Several(parts, at);
+            /** The same lines, of a statement derived as {@code derived}. */
+            Several derivedBy(List<Derivation> derived) {
+                return new Several(parts, derived);
             }
 
             /** Whether some line's cases are more ways of choosing one than are taken apart,
-             *  which is where what the statement chooses at is told. */
+             *  which is where what made their parts is told. */
             boolean pastTheCasesTakenApart() {
                 long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
                 return parts.stream().anyMatch(part -> part.cases().stream()
@@ -732,17 +730,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> relating = new LinkedHashMap<>();
         boolean relatedOnlySomewhere = false;
         InputReads statingNoRelation = null;
-        // What the statement chooses at on any application, each construct once; and how each
-        // application's statement was derived, for where the lines its applications draw
-        // together are past the cases taken apart though none of them alone is.
-        Set<CaseExpansion.Contributing> choosingAt = new LinkedHashSet<>();
+        // How each application's statement was derived, said to be that application's, for where
+        // the lines its applications draw are past the cases taken apart.
         List<Derivation> derived = new ArrayList<>();
         for (ClosureApplications.Application one : each) {
             if (one.reached() instanceof Proposition.Always(boolean made) && !made) {
                 continue;
             }
             Pullback.OnTheInput onTheInput = conditions.comparison(comparison, one.reads(), read);
-            derived.add(onTheInput.stated().meaning().how());
+            derived.add(one.statedOn(onTheInput.stated().meaning().how()));
             switch (readOnce(behavior, comparison, read, one.reads(), answering, onTheInput,
                     one.metOn().levels().isEmpty(), writtenIn)) {
                 case Read.Stopped alone -> {
@@ -782,7 +778,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             boolean holds) && holds);
                 }
                 case Read.Several several -> {
-                    choosingAt.addAll(several.choosingAt());
                     for (Read.Several.Part part : several.parts()) {
                         if (part.line() instanceof Read.Stopped beside) {
                             stopped = stopped.and(beside.places());
@@ -828,7 +823,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return relatedOnlySomewhere && lines.isEmpty() && parts.stream().allMatch(part ->
                     part.cases().stream().allMatch(one -> AStatementAtARow.askable(
                             one.condition()) && saysNothingOfAnElement(one.condition())))
-                    ? choosingAtOnEach(new Read.Several(parts, List.copyOf(choosingAt)), derived)
+                    ? derivedOnEach(new Read.Several(parts), derived)
                     : new Read.AgainstAnotherValue(against, relations);
         }
         // A statement of no relation on some application is no line there, and the lines the
@@ -862,23 +857,17 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         workingOf(conditions.comparison(comparison, reads, read)))) {
             return parts.getFirst().line();
         }
-        return choosingAtOnEach(new Read.Several(parts, List.copyOf(choosingAt)), derived);
+        return derivedOnEach(new Read.Several(parts), derived);
     }
 
     /**
      * {@code lines}, drawn of the applications {@code derived} are each application's statement
-     * of, with what those statements choose at where the lines together are past the cases taken
-     * apart and no application's reading said it: cases where a line read on several
-     * applications decides are the cases of each, any one of them, and those can be past the
-     * figure where none of them alone is.
+     * of, held with those derivations where the lines are past the cases taken apart: cases where
+     * a line read on several applications decides are the cases of each, any one of them, and
+     * what made their parts is read off the application each was read on.
      */
-    private static Read.Several choosingAtOnEach(Read.Several lines, List<Derivation> derived) {
-        if (!lines.choosingAt().isEmpty() || !lines.pastTheCasesTakenApart()) {
-            return lines;
-        }
-        Set<CaseExpansion.Contributing> out = new LinkedHashSet<>();
-        derived.forEach(how -> out.addAll(ChoicesADerivationMakes.of(how)));
-        return lines.choosingAt(List.copyOf(out));
+    private static Read.Several derivedOnEach(Read.Several lines, List<Derivation> derived) {
+        return lines.pastTheCasesTakenApart() ? lines.derivedBy(derived) : lines;
     }
 
     /**
@@ -1273,7 +1262,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Read.Several several -> new Read.Several(several.parts().stream()
                     .map(part -> new Read.Several.Part(part.id(),
                             writtenAgainst(part.line(), level), part.cases(), part.working()))
-                    .toList(), several.choosingAt());
+                    .toList(), several.derivedBy());
             default -> drawn;
         };
     }
@@ -1290,7 +1279,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Read.Several several -> new Read.Several(several.parts().stream()
                     .map(part -> new Read.Several.Part(part.id(), heldIn(part.line(), data),
                             part.cases(), part.working()))
-                    .toList(), several.choosingAt());
+                    .toList(), several.derivedBy());
             default -> drawn;
         };
     }
@@ -1306,10 +1295,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         Optional.of(comparison.claim()))));
         Read drawn = readAsAWhole(behavior, comparison, read, reads, answering, onTheInput,
                 onEveryElement, lines);
-        // What the statement chooses at is read only where some line's cases are too many to be
-        // taken apart, which is the one place a reader is told it.
+        // How the statement was derived is held only where some line's cases are too many to be
+        // taken apart, which is the one place a reader reads what made their parts off it.
         if (drawn instanceof Read.Several several && several.pastTheCasesTakenApart()) {
-            return several.choosingAt(ChoicesADerivationMakes.of(stated.meaning().how()));
+            return several.derivedBy(List.of(stated.meaning().how()));
         }
         if (writtenIn.isEmpty() || !(stated.proposition() instanceof Proposition.Compared compared)
                 || !(drawn instanceof Read.Cuts || drawn instanceof Read.NoOrderToCountOn
