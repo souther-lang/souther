@@ -25,6 +25,7 @@ import souther.compiler.reach.Reachability;
 import souther.compiler.reach.WhyUnsettled;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.OccurrenceLineage;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -378,7 +379,7 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
 
     private static Reachability unreachable() {
         return new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(List.of(
-                PathDecision.ofACondition(COMPILED.where(), true))));
+                PathDecision.ofACondition(COMPILED.where(), OccurrenceLineage.ORIGINAL, true))));
     }
 
     private static Reachability unsettled() {

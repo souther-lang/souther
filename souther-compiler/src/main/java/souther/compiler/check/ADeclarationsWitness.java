@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -391,6 +392,8 @@ final class ADeclarationsWitness {
         return false;
     }
 
+    /** The value a shape stands for. What is built here is composed by this pass and stands in no
+     *  copy of any body, as an occurrence says of what a pass composes. */
     private Core valueOf(Shape shape, List<List<Core>> candidates, int[] chosen) {
         return switch (shape) {
             case Slot slot -> candidates.get(slot.at()).get(chosen[slot.at()]);
@@ -404,7 +407,7 @@ final class ADeclarationsWitness {
                             valueOf(product.fields().get(i), candidates, chosen), pos));
                 }
                 yield new Core.Construct(product.declared(), values,
-                        new Type.Ref(product.declared()), pos);
+                        new Type.Ref(product.declared()), OccurrenceLineage.ORIGINAL, pos);
             }
         };
     }

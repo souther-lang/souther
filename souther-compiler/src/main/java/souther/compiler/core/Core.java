@@ -243,7 +243,39 @@ public sealed interface Core {
     record MaterialisedValue(ReachName.Declaration value, MaterialisationSite site, Type type,
                              SourcePos pos) implements Core {}
 
-    record Neg(Core operand, Type type, SourcePos pos) implements Core {}
+    /**
+     * An evaluation that says which copy of its body it stands in.
+     *
+     * <p>What a proof about the way to a place can name: it says an evaluation answered or ended a
+     * run, and a place inside a helper is evaluated once for every call the helper is copied into,
+     * so the place alone is not which evaluation. Every kind that can end a run or narrow what
+     * holds past it is one of these, which is what lets a reader asking for the copy have no
+     * default to fall to — an answer of "as written" for a node that cannot say would be the same
+     * word for two things, one written where it stands and one whose copy is unknown.
+     *
+     * <p>A node no pass wrote in a copy is in none, as {@link ConstructOccurrence#unwritten()}
+     * says: what a pass composes it composes where it stands.
+     */
+    interface InACopy {
+
+        /** Which copy of the body that wrote it this evaluation stands in. */
+        OccurrenceLineage lineage();
+    }
+
+    /**
+     * The negation of {@code operand}, in the copy {@code lineage} names. A negation may stop a
+     * run, and a proof that a run does not get past one has to say which copy it means; it has no
+     * origin of its own to hold, so the copy is all it says.
+     */
+    record Neg(Core operand, Type type, OccurrenceLineage lineage, SourcePos pos)
+            implements Core, InACopy {
+
+        public Neg {
+            if (lineage == null) {
+                throw new IllegalArgumentException("a negation stands in some copy of its body");
+            }
+        }
+    }
 
     record FieldAccess(Core target, String field, Type type, SourcePos pos) implements Core {}
 
@@ -489,7 +521,12 @@ public sealed interface Core {
      */
     record Binary(BinOp op, Core left, Core right, BinaryReading reading,
                   Optional<OrderingBasis> ordering, ConstructOccurrence occurrence, Type type,
-                  SourcePos pos) implements Core {
+                  SourcePos pos) implements Core, InACopy {
+
+        @Override
+        public OccurrenceLineage lineage() {
+            return occurrence.lineage();
+        }
 
         /** An operator that orders nothing, or a comparison no source wrote, so with no basis. */
         public Binary(BinOp op, Core left, Core right, BinaryReading reading,
@@ -1084,7 +1121,12 @@ public sealed interface Core {
      * than carried on to an output that would read the two as disagreeing.
      */
     record Call(CallTarget fn, List<Core> args, ConstructOccurrence occurrence,
-                CallSettlement settlement, Type type, SourcePos pos) implements Core {
+                CallSettlement settlement, Type type, SourcePos pos) implements Core, InACopy {
+
+        @Override
+        public OccurrenceLineage lineage() {
+            return occurrence.lineage();
+        }
 
         public Call {
             // A call is some call of the model, in some copy of the body that wrote it — or one no
@@ -1338,7 +1380,14 @@ public sealed interface Core {
      * what each was taken as would stop being true of the call the moment it did.
      */
     record PreservedCall(DeclaredOperation declared, List<Core> args, KeptCallPlace place,
-                         KernelFact settled, Type type, SourcePos pos) implements Core {
+                         KernelFact settled, Type type, SourcePos pos) implements Core, InACopy {
+
+        /** The copy the call stands in, which the place says even where no author wrote the
+         *  application: {@link #occurrence} is nothing then, and the copy is still a copy. */
+        @Override
+        public OccurrenceLineage lineage() {
+            return place.lineage();
+        }
 
         // Not a construct of the source. A call kept for a reader to quote is not always one an
         // author wrote: a library operation used as a value is expanded into a block, and the
@@ -1441,7 +1490,12 @@ public sealed interface Core {
      * the other would put one reader's counting inside the other's identity.
      */
     record If(Core cond, Core then, Core els, ForkPlace place, Type type, SourcePos pos)
-            implements Core {
+            implements Core, InACopy {
+
+        @Override
+        public OccurrenceLineage lineage() {
+            return place.occurrence().lineage();
+        }
 
         public If {
             if (place == null) {
@@ -1481,7 +1535,12 @@ public sealed interface Core {
      * copy is called where supplied rules are looked up, as they do for {@link If}.
      */
     record IfConstructed(Construct construct, Binder binder, Core then, List<ElseArm> els,
-                         ForkPlace place, Type type, SourcePos pos) implements Core {
+                         ForkPlace place, Type type, SourcePos pos) implements Core, InACopy {
+
+        @Override
+        public OccurrenceLineage lineage() {
+            return place.occurrence().lineage();
+        }
 
         public IfConstructed {
             if (place == null) {
@@ -1596,7 +1655,14 @@ public sealed interface Core {
      * fields are evaluated.
      */
     record Construct(TypeSymbol.AtModule typeName, List<FieldValue> values, Type type,
-                     SourcePos pos) implements Core {}
+                     OccurrenceLineage lineage, SourcePos pos) implements Core, InACopy {
+
+        public Construct {
+            if (lineage == null) {
+                throw new IllegalArgumentException("a construction stands in some copy of its body: "
+                        + typeName);
+            }
+        }}
 
     /**
      * What an arm selects, as the checker decided it.
@@ -1889,7 +1955,12 @@ public sealed interface Core {
      * is called where supplied rules are looked up, as they do for {@link If}.
      */
     record Match(Core scrutinee, List<Case> cases, ForkPlace place, Type type, SourcePos pos)
-            implements Core {
+            implements Core, InACopy {
+
+        @Override
+        public OccurrenceLineage lineage() {
+            return place.occurrence().lineage();
+        }
 
         public Match {
             if (place == null) {
@@ -2048,8 +2119,18 @@ public sealed interface Core {
     }
 
     /** {@code unreachable "reason"}: the position it stands in gets no value, and the reason is the
-     * message the abort carries. Its type is {@link Type.Never}, which fits whatever was expected. */
-    record Unreachable(String reason, Type type, SourcePos pos) implements Core {
+     * message the abort carries. Its type is {@link Type.Never}, which fits whatever was expected.
+     * It says which copy of its body it stands in: the model wrote it once, and a helper holding it
+     * is copied into every call of it. */
+    record Unreachable(String reason, Type type, OccurrenceLineage lineage, SourcePos pos)
+            implements Core, InACopy {
+
+        public Unreachable {
+            if (lineage == null) {
+                throw new IllegalArgumentException("an unreachable stands in some copy of its body: "
+                        + reason);
+            }
+        }
 
         /**
          * The shape this leaves on the stack where its position asks for {@code expected}: what the
@@ -2118,7 +2199,7 @@ public sealed interface Core {
             }
             case Neg n -> {
                 Core operand = atExpr.apply(n.operand());
-                yield operand == n.operand() ? n : new Neg(operand, n.type(), n.pos());
+                yield operand == n.operand() ? n : new Neg(operand, n.type(), n.lineage(), n.pos());
             }
             case FieldAccess fa -> {
                 Core target = atExpr.apply(fa.target());
@@ -2229,7 +2310,7 @@ public sealed interface Core {
             return value == v.value() ? v : new FieldValue(v.field(), value, v.pos());
         });
         return values == nd.values() ? nd
-                : new Construct(nd.typeName(), values, nd.type(), nd.pos());
+                : new Construct(nd.typeName(), values, nd.type(), nd.lineage(), nd.pos());
     }
 
     /** {@code p}'s names read off {@code base} instead. Where {@code base} is a projection the names

@@ -7,6 +7,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -83,7 +84,8 @@ class AValueThatSettlesItsCaseIsTakenByTheArmWrittenForItTest {
         TypeSymbol.AtModule station = (TypeSymbol.AtModule) match.cases().get(0).pattern()
                 .cases().get(0).atoms().get(0);
         assertEquals("Station", station.name(), "the first leaf under OnceKind");
-        Core made = new Core.Construct(station, List.of(), Type.ref(station), HERE);
+        Core made = new Core.Construct(station, List.of(), Type.ref(station),
+                OccurrenceLineage.ORIGINAL, HERE);
         assertEquals(List.of(true, false), taken(match, made));
     }
 

@@ -99,6 +99,7 @@ import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.StepOfACopy;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
@@ -1973,7 +1974,7 @@ public final class Adequacy {
                     SourcePos.IN_WRITTEN_ORDER));
             List<Report> reports = new ArrayList<>();
             for (Dead each : found) {
-                reports.add(warning(db, each.arm(), each.proof()));
+                reports.add(warning(db, name, each.arm(), each.proof()));
             }
             return Answer.of(true, reports);
         }
@@ -1987,12 +1988,13 @@ public final class Adequacy {
          * answers and never this.
          */
         private static Report warning(
-                Db db, ControlPlace.Arm arm,
+                Db db, String module, ControlPlace.Arm arm,
                 Optional<souther.compiler.reach.Proof> proof) {
             souther.compiler.diag.Diagnostic.Builder said =
                     Warnings.pointedAt(Sites.placeOf(db, arm.anchor()))
                             .say(new DeadBranchMessage.NothingReachesThisBranch());
-            return Report.of(proof.map(new DeadBranchProofWords(said)::of).orElse(said)
+            return Report.of(proof.map(new DeadBranchProofWords(db, module, said)::of)
+                    .orElse(said)
                     .hint(new DeadBranchMessage.TakeItOutOrLetSomethingReachIt())
                     .build());
         }
@@ -2007,7 +2009,8 @@ public final class Adequacy {
          * <p>It says a word for every arm or does not compile. A proof's arms are not types this
          * package can name, so there is no switch to fall through and no default to write.
          */
-        private record DeadBranchProofWords(souther.compiler.diag.Diagnostic.Builder said)
+        private record DeadBranchProofWords(Db db, String module,
+                                           souther.compiler.diag.Diagnostic.Builder said)
                 implements souther.compiler.reach.Proof.Words<
                         souther.compiler.diag.Diagnostic.Builder> {
 
@@ -2023,18 +2026,59 @@ public final class Adequacy {
                         new DeadBranchMessage.TheConditionsOnTheWayHereCannotAllHold()), decisions);
             }
 
-            /** {@code out} with each of {@code decisions} marked where it is written, saying which
-             *  way the way here needs it to go. */
-            private static Diagnostic.Builder marked(Diagnostic.Builder out,
-                                                     List<PathDecision> decisions) {
+            /**
+             * {@code out} with each of {@code decisions} marked where it is written, saying which
+             * way the way here needs it to go, and then each call that made the copy it was
+             * decided in.
+             *
+             * <p>A place inside a helper is one place for every call of the helper, and what tells
+             * the decisions made there apart is the call each copy was made at. A call nothing
+             * places is not marked: it was not written where this compilation can show it, and the
+             * decision's own mark still is.
+             */
+            private Diagnostic.Builder marked(Diagnostic.Builder out,
+                                              List<PathDecision> decisions) {
                 for (PathDecision each : decisions) {
-                    out = out.secondary(Region.point(each.at()), each.said(
+                    out = markedInItsCopy(out, each.at(), each.lineage(), each.said(
                             new DeadBranchMessage.ThisOneHoldsOnTheWayHere(),
                             new DeadBranchMessage.ThisOneFailsOnTheWayHere(),
                             new DeadBranchMessage.ThisArmIsTakenOnTheWayHere(),
                             new DeadBranchMessage.ThisHasToAnswerOnTheWayHere()));
                 }
                 return out;
+            }
+
+            /**
+             * {@code out} with {@code at} marked as {@code said}, and then each call that made the
+             * copy {@code lineage} names.
+             *
+             * <p>The one way a place of a proof is marked: a proof names evaluations, and a place
+             * alone is not one that stands in a helper.
+             */
+            private <M extends DeadBranchMessage & Supporting> Diagnostic.Builder markedInItsCopy(
+                    Diagnostic.Builder out, SourcePos at, OccurrenceLineage lineage, M said) {
+                out = out.secondary(Region.point(at), said);
+                for (StepOfACopy step : StepOfACopy.of(lineage)) {
+                    out = calledAt(out, step);
+                }
+                return out;
+            }
+
+            /** {@code out} with the call that made {@code step} marked, where there is one to mark. */
+            private Diagnostic.Builder calledAt(Diagnostic.Builder out, StepOfACopy step) {
+                DeadBranchMessage.ThisCallMadeTheCopyTheProofIsAbout said =
+                        new DeadBranchMessage.ThisCallMadeTheCopyTheProofIsAbout(
+                                Sites.calledIn(step, module));
+                Answer<Citation> call = Sites.whereMade(db, step);
+                if (!call.present()) {
+                    return out;
+                }
+                return switch (call.value()) {
+                    case Citation.Written w -> out.secondary(Region.point(w.at()), said);
+                    case Citation.Reached r -> out.secondary(Region.point(r.at()), said);
+                    case Citation.OutOfSight gone -> out.secondaryOutOfSight(gone.provenance(), said);
+                    case Citation.Unplaced _, Citation.UnplacedElsewhere _ -> out;
+                };
             }
 
             @Override
@@ -2133,12 +2177,12 @@ public final class Adequacy {
 
             @Override
             public Diagnostic.Builder noRunGetsPastOneOfItsApplications(SourcePos call,
+                                                                        OccurrenceLineage lineage,
                                                                         int element,
                     souther.compiler.reach.Proof inner) {
-                return new DeadBranchProofWords(said
-                        .hint(new DeadBranchMessage.NoRunGetsPastOneOfItsApplications(element))
-                        .secondary(Region.point(call),
-                                new DeadBranchMessage.ThisAppliesAFunctionToEveryElement()))
+                return new DeadBranchProofWords(db, module, markedInItsCopy(
+                        said.hint(new DeadBranchMessage.NoRunGetsPastOneOfItsApplications(element)),
+                        call, lineage, new DeadBranchMessage.ThisAppliesAFunctionToEveryElement()))
                         .of(inner);
             }
 
@@ -2148,7 +2192,7 @@ public final class Adequacy {
                 souther.compiler.diag.Diagnostic.Builder out =
                         said.hint(new DeadBranchMessage.EveryWayInIsRuledOut());
                 for (souther.compiler.reach.Proof way : each) {
-                    out = new DeadBranchProofWords(out).of(way);
+                    out = new DeadBranchProofWords(db, module, out).of(way);
                 }
                 return out;
             }
