@@ -574,6 +574,14 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
      * asking met, however it came to them: met as the choosing walks beside a case shown to divide
      * rows, counted as more than are taken apart, or left where the steps ran out. A case all of
      * whose cases were worked out leaves none.
+     *
+     * <p>Wider than the cases nobody reached, on purpose: a case of the one asked that was shown to
+     * divide rows, or to divide none, is inside it too. So a row in one of those is not told where
+     * it is by this alone. One shown to divide rows says so where it is read as a case of its own
+     * ({@link CasesOfALineAsked.Found#decidesIn}), and a row there meets the line whatever this
+     * leaves open; one shown to divide none is read nowhere else. Narrowed to what was chosen on the
+     * way to each stop, the place would be as many conditions as the stops, every one asked of each
+     * row read at the line.
      */
     @Test
     void theCasesNobodyWorkedOutAreWhereTheCaseAskedHolds() {
@@ -585,7 +593,8 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
                 "a with c divides rows");
         assertEquals(List.of(new CasesOfALineAsked.NotWorkedOut(new DecidingCase(SAID, besideA),
                         Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO))),
-                beside.notWorkedOutIn(), "and the cases nobody took apart beside it");
+                beside.notWorkedOutIn(), "and the cases nobody took apart beside it, in the case"
+                        + " asked, which holds a with c too");
 
         DecidingCase.Cases many = manyCases(TAKEN_APART + 1);
         assertEquals(List.of(new CasesOfALineAsked.NotWorkedOut(new DecidingCase(SAID, many),

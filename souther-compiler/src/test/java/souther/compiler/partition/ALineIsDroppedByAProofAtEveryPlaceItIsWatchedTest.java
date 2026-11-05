@@ -426,7 +426,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
      * one nobody worked out is read where it is, a row there not told to be where the line decides,
      * and one shown to hold no row is in neither. Whether some case divides rows decides nothing
      * about the case nobody worked out, and the case shown to hold none is not put back among the
-     * ones nobody worked out for being asked beside them.
+     * ones nobody worked out for being asked beside them. Nor does the order the cases are asked in:
+     * each is read as what it came to in every order.
      */
     @Test
     void eachCaseIsReadAsWhatItCameTo() {
@@ -442,11 +443,17 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("b")), true));
         CasesWorkedOut notTakenApart = CasesWorkedOut.Stopped.at(
                 Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO));
-        Map<List<DecidingCase>, List<WhereAPartDecides>> readAs = new LinkedHashMap<>();
-        readAs.put(List.of(shown, unworked, none), List.of(
-                new WhereAPartDecides(at, said, notTakenApart),
-                new WhereAPartDecides(at, shown.condition())));
-        readAs.put(List.of(none, unworked), List.of(
+        Map<List<DecidingCase>, Set<WhereAPartDecides>> readAs = new LinkedHashMap<>();
+        for (List<DecidingCase> order : List.of(List.of(shown, unworked, none),
+                List.of(shown, none, unworked), List.of(unworked, shown, none),
+                List.of(unworked, none, shown), List.of(none, shown, unworked),
+                List.of(none, unworked, shown))) {
+            readAs.put(order, Set.of(new WhereAPartDecides(at, said, notTakenApart),
+                    new WhereAPartDecides(at, shown.condition())));
+        }
+        readAs.put(List.of(none, unworked), Set.of(
+                new WhereAPartDecides(at, said, notTakenApart)));
+        readAs.put(List.of(unworked, none), Set.of(
                 new WhereAPartDecides(at, said, notTakenApart)));
         readAs.forEach((cases, readings) -> {
             ComparisonAssessment.Several read = new ComparisonAssessment.Several(List.of(
@@ -460,9 +467,11 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                                     : untouched()),
                             List.of(new ComparisonArrival.NoProjection()), false, reading(),
                             CountWitnesses.Lookup.NONE));
-            assertEquals(readings, narrowed.parts().stream()
-                            .flatMap(part -> part.readings().stream()).toList(),
+            List<WhereAPartDecides> made = narrowed.parts().stream()
+                    .flatMap(part -> part.readings().stream()).toList();
+            assertEquals(readings, Set.copyOf(made),
                     () -> "read as each case came to, of " + cases);
+            assertEquals(readings.size(), made.size(), () -> "each once, of " + cases);
         });
     }
 
