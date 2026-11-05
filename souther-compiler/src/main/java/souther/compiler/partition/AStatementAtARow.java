@@ -97,6 +97,8 @@ final class AStatementAtARow {
     private final Map<Spelling,OverTheElements> elements;
     /** The positions a part asks of their own value: whether it is true, whether there is one. */
     private final Set<TermPath> positions;
+    /** {@link #hashCode}, or {@code 0} before it is asked; the same whoever works it out. */
+    private int hash;
     /**
      * The parts of each statement, numbered on the first row it is asked. Held here and not in the
      * statement, which answers carry: a table compared by address under them would make every
@@ -2507,14 +2509,21 @@ final class AStatementAtARow {
      */
     @Override
     public boolean equals(Object other) {
-        return other instanceof AStatementAtARow that && stated.equals(that.stated)
+        return this == other || (other instanceof AStatementAtARow that
+                && hashCode() == that.hashCode() && stated.equals(that.stated)
                 && relations.equals(that.relations) && elements.equals(that.elements)
-                && positions.equals(that.positions);
+                && positions.equals(that.positions));
     }
 
+    /** Worked out on the first ask, since {@link #NUMBERED} asks it at every row. */
     @Override
     public int hashCode() {
-        return Objects.hash(stated, relations, elements, positions);
+        int known = hash;
+        if (known == 0) {
+            known = Objects.hash(stated, relations, elements, positions);
+            hash = known;
+        }
+        return known;
     }
 
     /** Every relation over the input's own numbers this reads, for the quantities a reader of it
