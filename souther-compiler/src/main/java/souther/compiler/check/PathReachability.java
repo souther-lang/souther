@@ -19,7 +19,10 @@ import souther.compiler.flow.WhyNoValueTakesTheArm;
 import souther.compiler.flow.WhyRuledOut;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.Case;
+import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -57,6 +60,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -697,6 +701,12 @@ public final class PathReachability {
             new LinkedHashMap<>();
     /** The steps the walk is inside, the innermost last. */
     private final List<StepEntered> steps = new ArrayList<>();
+    /** The closures whose body, read once for every application, answered on some runs only
+     *  somewhere: the ones an application of may stop a run. */
+    private final Set<Core.Block> mayStopInside;
+    /** How many more applications of a step this reading of the body walks one by one
+     *  ({@link #noRunPastTheApplications}), across every walk it makes. */
+    private final int[] applicationsLeft;
     /**
      * What holds where the body begins: the inputs entered and seeded, and no condition taken.
      *
@@ -733,6 +743,28 @@ public final class PathReachability {
         this.arriving = arriving;
         this.meanings = Objects.requireNonNull(meanings);
         this.places = places;
+        this.mayStopInside = Collections.newSetFromMap(new IdentityHashMap<>());
+        this.applicationsLeft = new int[] {ElementsWrittenOut.MOST_WALKED};
+    }
+
+    /** A walk of the same body that files nothing where this one files: what it finds about
+     *  where a run gets is all it is asked. */
+    private PathReachability(PathReachability of) {
+        this.engine = of.engine;
+        this.completion = of.completion;
+        this.entry = of.entry;
+        this.entered = of.entered;
+        this.plan = of.plan;
+        this.reading = of.reading;
+        this.read = of.read;
+        this.symbols = of.symbols;
+        this.newtypes = of.newtypes;
+        this.out = new LinkedHashMap<>();
+        this.arriving = new LinkedHashMap<>();
+        this.meanings = of.meanings;
+        this.places = of.places;
+        this.mayStopInside = of.mayStopInside;
+        this.applicationsLeft = of.applicationsLeft;
     }
 
     /**
@@ -974,9 +1006,13 @@ public final class PathReachability {
                     steps.removeLast();
                     pastTheApplicationsBefore(step, body);
                 }
+                if (!body.noneStopped() || body.known().reachesNothing()) {
+                    mayStopInside.add(block);
+                }
                 // Making the function value runs nothing of its body, so nothing it holds is
                 // carried on. What stopped a run in it is: the call that applies it is worked out
-                // before what follows, and no state here holds where each application got past.
+                // before what follows. Whether some application stops every run is the call's to
+                // ask, under the value each is handed ({@link #noRunPastTheApplications}).
                 yield inside.reachesNothing() ? here : here.pastAnApplicationOf(body);
             }
             // Every other node evaluates its parts whichever run it is on, one after another and
@@ -1040,6 +1076,10 @@ public final class PathReachability {
         if (Core.withoutStanding(e) instanceof Core.Call call) {
             walkHeldToOneAtMost(call, operands.known(), at);
         }
+        Walked stopped = noRunPastTheApplications(e, operands, at, reads);
+        if (stopped != null) {
+            return stopped;
+        }
         // What a run past this evaluation holds is what its operands left with what its operator
         // asks of them, or nothing where it answers nothing. What is taken in there is a step on
         // the way like a condition, and a proof that leans on it names it.
@@ -1056,6 +1096,73 @@ public final class PathReachability {
         // Some run reaching here may not get past it, so what follows has something above it.
         return new Walked(past.known(), answered, past.mayStop(), false, false,
                 WhyNone.BY_THE_WAY, false);
+    }
+
+    /**
+     * What a run past {@code e} holds where no run gets past some application {@code e} makes of a
+     * step, or null where nothing here shows that.
+     *
+     * <p>Asked where the call is worked out and not where its closure is written. Writing the
+     * closure makes a function and runs none of its body; the call runs it, once on each element,
+     * after every argument has been worked out. So an argument written after the closure is still
+     * worked out before any application, and only what follows the call is past them.
+     *
+     * <p>Each application is walked from what holds once the arguments are, with each parameter
+     * the value that application hands it — the values the reading of the input enters it as
+     * ({@link InputReads.Applications.Made#handed}), entered here as a {@code let} enters its
+     * binder. A run reaching an application has got past the ones before it, so what it holds is
+     * narrower than that, and an application nothing gets past from there is one nothing gets
+     * past from where a run reaches it. Only where every application is made on every run that
+     * makes the call — the closure applied to every element, each element there on every run — is
+     * one nothing gets past one no run past the call got past.
+     *
+     * <p>Only what arrives is read off these walks. Where a comparison in the body arrives is the
+     * one walk of the body's to say, made under no element in particular, so what one application
+     * finds is not filed under a place every application shares. Only a closure written where the
+     * call is, since its body is read where the call stands; and no more applications than
+     * {@link #applicationsLeft} across the body, so a closure inside a closure costs what that
+     * allows and not what the nesting would.
+     */
+    private Walked noRunPastTheApplications(Core e, Walked operands, Denotations at,
+                                            InputReads reads) {
+        if (!(Core.withoutStanding(e) instanceof Core.Call call)) {
+            return null;
+        }
+        for (Core argument : call.args()) {
+            if (!(Core.withoutStanding(argument) instanceof Core.Block block)
+                    || !mayStopInside.contains(block)) {
+                continue;
+            }
+            if (!(reads.applicationsOf(block, symbols, newtypes, applicationsLeft[0],
+                    ReadMeaning.WhereKept.NOTHING_DECIDED)
+                    instanceof InputReads.Applications.Each(var each, var how))
+                    || how != HowAClosureIsApplied.TO_EVERY_ELEMENT
+                    || each.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
+                continue;
+            }
+            Walked from = new Walked(operands.known(), operands.decided(), operands.mayStop(),
+                    false, true, WhyNone.BY_THE_WAY, false);
+            for (InputReads.Applications.Made one : each) {
+                if (applicationsLeft[0]-- <= 0) {
+                    return null;
+                }
+                Denotations handed = at;
+                for (Map.Entry<BindingId, Denotation> value : one.handed().entrySet()) {
+                    handed = engine.terms().elementsReading().handing(handed, value.getKey(),
+                            new ElementsWrittenOut.Stood<>(value.getValue().value(), at));
+                }
+                Walked body = new PathReachability(this).walk(block.body(), from, handed,
+                        one.reads().entering(new ScopeStep.Block(block), symbols, newtypes));
+                if (body.known().reachesNothing()) {
+                    return new Walked(operands.known().reachingNothing(), body.decided(),
+                            operands.mayStop(), false, false,
+                            body.whyNothingArrives().<WhyNone>map(WhyNone.Because::new)
+                                    .orElse(new WhyNone.Unsaid()),
+                            false);
+                }
+            }
+        }
+        return null;
     }
 
     /**
