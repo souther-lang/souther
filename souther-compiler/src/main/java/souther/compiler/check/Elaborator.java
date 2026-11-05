@@ -158,7 +158,7 @@ public final class Elaborator {
                                     .at(neg.reportedAt())
                                     .say(new TypeMessage.UnaryMinusNeedsANumber(Type.show(t))).build());
                 }
-                yield new Core.Neg(operand, t, neg.pos());
+                yield new Core.Neg(operand, t, ctx.lineage(), neg.pos());
             }
             case Hir.LetIn li -> {
                 Bound bound = bound(li, env, ctx);

@@ -243,7 +243,23 @@ public sealed interface Core {
     record MaterialisedValue(ReachName.Declaration value, MaterialisationSite site, Type type,
                              SourcePos pos) implements Core {}
 
-    record Neg(Core operand, Type type, SourcePos pos) implements Core {}
+    /**
+     * The negation of {@code operand}.
+     *
+     * <p>Holds which copy of the body that wrote it it stands in, as a call or an operator does
+     * through its occurrence: a negation may stop a run, and a proof that a run does not get past
+     * one has to say which copy it means. A negation no author wrote the origin of has no
+     * occurrence to hold, so the copy is all it says.
+     */
+    record Neg(Core operand, Type type, OccurrenceLineage lineage, SourcePos pos)
+            implements Core {
+
+        public Neg {
+            if (lineage == null) {
+                throw new IllegalArgumentException("a negation stands in some copy of its body");
+            }
+        }
+    }
 
     record FieldAccess(Core target, String field, Type type, SourcePos pos) implements Core {}
 
@@ -2118,7 +2134,7 @@ public sealed interface Core {
             }
             case Neg n -> {
                 Core operand = atExpr.apply(n.operand());
-                yield operand == n.operand() ? n : new Neg(operand, n.type(), n.pos());
+                yield operand == n.operand() ? n : new Neg(operand, n.type(), n.lineage(), n.pos());
             }
             case FieldAccess fa -> {
                 Core target = atExpr.apply(fa.target());

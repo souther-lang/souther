@@ -5,8 +5,10 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.Compiler;
 import souther.compiler.check.PathReachability;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Note;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.diag.msg.DeadBranchMessage;
 import souther.compiler.query.Adequacy;
@@ -15,6 +17,7 @@ import souther.compiler.reach.ComparisonArrival;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.types.ConstructOccurrence;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -447,6 +450,63 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                         |> Option.withDefault(d)
                     guard b > 3 else No""".formatted(GREATEST));
         assertTrue(aRunArrivesAbout(report, "b"), report);
+    }
+
+    /** The marks a dead branch after two calls of {@code shift} makes at a call of it, in the
+     *  order {@code first} and {@code second} are written. */
+    private static List<SourcePos> callsMarkedWhen(String first, String second) {
+        List<Diagnostic> dead = Compiler.compileWithWarnings("""
+                module w1
+
+                data Ok
+                data No
+                data Answer = Ok | No
+
+                let shift (x: Int, d: Date): Date = Date.addDays(x, d)
+
+                behavior f : (n: Int, d: Date, b: Int) -> Answer
+                let f (n, d, b) = {
+                    guard n == %s else No
+                    let early = %s
+                    let late = %s
+                    if b > 3 then Ok else No
+                }
+                """.formatted(GREATEST, first, second)).warnings().stream()
+                .filter(each -> each.code().equals("E1327")).toList();
+        assertFalse(dead.isEmpty());
+        List<SourcePos> marked = new ArrayList<>();
+        for (Diagnostic one : dead) {
+            for (LabeledRegion each : one.secondary()) {
+                if (each.said() instanceof DeadBranchMessage.ThisCallMadeTheCopyTheNoteAboveIsIn made
+                        && each.place() instanceof DiagnosticPlace.InSource there) {
+                    assertEquals("shift", made.called());
+                    marked.add(there.region().start());
+                }
+            }
+        }
+        return marked;
+    }
+
+    /**
+     * A decision made inside a helper is marked at the call whose copy it was made in, so that two
+     * calls of one helper are two marks, one at each call. Where the first call is the one that
+     * cannot answer, no run gets to the second, so the second is not a step on the way and only the
+     * first is marked.
+     */
+    @Test
+    void aDecisionInAHelperIsMarkedAtTheCallItsCopyWasMadeAt() {
+        List<SourcePos> marked = callsMarkedWhen("shift(0, d)", "shift(n, d)").stream()
+                .distinct().sorted(SourcePos.IN_WRITTEN_ORDER).toList();
+        assertEquals(2, marked.size(), marked.toString());
+        List<SourcePos> swapped = callsMarkedWhen("shift(n, d)", "shift(0, d)").stream()
+                .distinct().sorted(SourcePos.IN_WRITTEN_ORDER).toList();
+        assertEquals(List.of(marked.getFirst()), swapped);
+    }
+
+    /** A date moved where it is written is in no copy of a helper, so no call is marked. */
+    @Test
+    void aDecisionOutsideAHelperIsMarkedAtNoCall() {
+        assertEquals(List.of(), callsMarkedWhen("Date.addDays(0, d)", "Date.addDays(n, d)"));
     }
 
     /** The reports that nothing reaches an arm of {@code body}. */

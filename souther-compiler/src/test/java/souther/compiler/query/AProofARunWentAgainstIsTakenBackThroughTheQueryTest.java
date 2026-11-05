@@ -23,6 +23,7 @@ import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Proof;
 import souther.compiler.reach.Reachability;
 import souther.compiler.reach.Witness;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
@@ -78,7 +79,7 @@ class AProofARunWentAgainstIsTakenBackThroughTheQueryTest {
 
     private static Reachability shut() {
         return new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(
-                List.of(PathDecision.ofACondition(new SourcePos(1, 1), true))));
+                List.of(PathDecision.ofACondition(new SourcePos(1, 1), OccurrenceLineage.ORIGINAL, true))));
     }
 
     /** One of each proof, every one of them wrong if a run is where it says no run is. */
