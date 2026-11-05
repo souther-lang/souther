@@ -67,7 +67,7 @@ public sealed interface ItemAssessment {
      *                   decision about this point of this reading, held here rather than among
      *                   {@code searches}: what searches came to is put together over readings, and
      *                   whether this one was searched is no part of another reading's answer.
-     *                   Never beside a search that was made
+     *                   Never beside a search that was made, and only at a point worth one
      */
     record Owed(Criterion criterion, Measurement<Coverage> coverage,
                 WritabilityProjection projection, SearchOutcomes searches, boolean unneeded)
@@ -76,6 +76,10 @@ public sealed interface ItemAssessment {
         public Owed {
             if (unneeded && searches.ran()) {
                 throw new IllegalArgumentException("a point searched was not left unsearched");
+            }
+            if (unneeded && !worthSearching(coverage)) {
+                throw new IllegalArgumentException("a point not worth a value was never a search to"
+                        + " leave: " + criterion);
             }
         }
 
@@ -98,7 +102,12 @@ public sealed interface ItemAssessment {
          * the list was written before the state existed.
          */
         public boolean worthSearching() {
-            if (hasRowWitness()) {
+            return worthSearching(coverage);
+        }
+
+        /** The same, of what the rows came to at a point, which is all it is answered from. */
+        private static boolean worthSearching(Measurement<Coverage> coverage) {
+            if (hasRowWitness(coverage)) {
                 return false;
             }
             return switch (coverage) {
@@ -130,6 +139,10 @@ public sealed interface ItemAssessment {
          * silent {@code false}.
          */
         public boolean hasRowWitness() {
+            return hasRowWitness(coverage);
+        }
+
+        private static boolean hasRowWitness(Measurement<Coverage> coverage) {
             return switch (coverage) {
                 case Measurement.Complete<Coverage> it -> Coverage.hit(it.value());
                 case Measurement.Partial<Coverage> it -> Coverage.hit(it.value());
@@ -157,10 +170,6 @@ public sealed interface ItemAssessment {
          * anybody keeps an account of and no row meets.
          */
         public Owed leftUnneeded() {
-            if (!worthSearching()) {
-                throw new IllegalStateException("a point not worth a value was never a search to"
-                        + " leave: " + criterion);
-            }
             return new Owed(criterion, coverage, projection, searches, true);
         }
 

@@ -46,16 +46,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A reading shown to be a place of the author's line whose sides it cannot tell apart is about
- * every point of the author's line of the kind it cannot tie, and is searched where any of them is
- * unmet.
+ * every point of the author's line of the kind it cannot tie, and the gate a search is made under
+ * ({@link Coverages#reachesAPointNoRowMeets}) asks it to be searched where any of them is unmet.
  *
  * <p>The comparison here keeps the values from a hundred up and was written as singling a value out:
  * the reading's line at a hundred is the author's line at it, and a side of the reading's is no
  * side of a line that names a value, so its run beside the line stands to both of the author's
  * ({@link ReadingSeat.Untied}). What a row there shows is said against both, and is worth showing
  * while either is unmet.
+ *
+ * <p>Asked of the gate and of a border made here rather than of a model's search: no model this
+ * compiler reads yet comes to an untied reading, and the gate is what the search is made under for
+ * every reading alike.
  */
-class AnUntiedReadingIsSearchedForEveryPointItCannotTellApartTest {
+class TheGateReadsAnUntiedReadingAsAboutEveryPointItCannotTieTest {
 
     private static final Carrier WHOLE = new Carrier.Whole();
 
@@ -73,7 +77,7 @@ class AnUntiedReadingIsSearchedForEveryPointItCannotTellApartTest {
     }
 
     @Test
-    void itIsSearchedWhereEitherIsUnmetAndNotWhereBothAreMet() {
+    void itIsToBeSearchedWhereEitherIsUnmetAndNotWhereBothAreMet() {
         Border reading = untied();
         DomainPoint beside = besideTheLine(reading);
         List<BorderObligationPoint> sides =

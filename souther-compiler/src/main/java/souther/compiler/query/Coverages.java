@@ -3057,7 +3057,7 @@ final class Coverages {
      * through two copies of the closure it is in is reached on a different condition by each — so
      * what one proved the other may not have been asked.
      */
-    private static ItemAssessment together(ItemAssessment a, ItemAssessment b) {
+    static ItemAssessment together(ItemAssessment a, ItemAssessment b) {
         if (!(a instanceof ItemAssessment.Owed one) || !(b instanceof ItemAssessment.Owed two)) {
             // Two readings of one line owe the same points, so a point no row is owed at is that
             // under both — and there is nothing about it to put together.
@@ -3075,21 +3075,18 @@ final class Coverages {
             throw new IllegalStateException("two searches of one point asking for different"
                     + " values: " + one.criterion() + " and " + two.criterion());
         }
-        // Whether to search is decided from the line, the point and what no row meets, which two
-        // readings of one line share: a reading searched beside one left unsearched is the
-        // decision made twice and made differently, and nothing to put together.
-        if ((one.unneeded() && two.searches().ran()) || (two.unneeded() && one.searches().ran())) {
-            throw new IllegalStateException("one reading of a line searched at a point and another"
-                    + " left it unsearched: " + one.criterion());
-        }
         ItemAssessment.Owed both = new ItemAssessment.Owed(one.criterion(),
                 ObligationCoverage.acrossOneReadingsSearches(one.coverage(), two.coverage()),
                 one.projection().and(two.projection()), one.searches().plus(two.searches()),
                 false);
-        // Left unsearched where it was left and is still worth a value: a row one of them stands at
-        // makes the point no search's, and then nothing was left.
-        return (one.unneeded() || two.unneeded()) && both.worthSearching()
-                ? both.leftUnneeded() : both;
+        // Whether each was searched is each reading's own: the run beside the line can stop at a
+        // different line in each, a point of the author's line it is about can then differ, and
+        // one can be about a point a row meets while the other is about one no row does. So a
+        // search either made is a search of the point, and the point is left unsearched only
+        // where neither made one, one of them left it, and it is still worth a value — a row one
+        // of them stands at makes it no search's, and then nothing was left.
+        return !both.searches().ran() && (one.unneeded() || two.unneeded())
+                && both.worthSearching() ? both.leftUnneeded() : both;
     }
 
     /**

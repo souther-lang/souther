@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BorderObligationPoint;
+import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.DomainPoint;
 
 import java.util.ArrayList;
@@ -257,8 +258,12 @@ class ASearchIsMadeOnlyWhereWhatItFindsCanBeOwedTest {
 
     /**
      * Every point worth a value, of every reading of every behavior: searched exactly where some
-     * author's point a row there is about is one the module keeps and no row meets, and left
-     * unneeded everywhere else.
+     * reading put together into it was worth a value there and about an author's point the module
+     * keeps and no row meets, and left unneeded everywhere else.
+     *
+     * <p>Asked of each reading before they are put together, because that is where a reading is
+     * about what it is about: two readings of one line read at one place can owe different points
+     * beside it, and the reading they make together carries the first one's border.
      */
     private static void assertSearchedExactlyWhereSomethingIsUnmet(Compilation compilation,
                                                                    String module) {
@@ -267,9 +272,17 @@ class ASearchIsMadeOnlyWhereWhatItFindsCanBeOwedTest {
                 Adequacy.searchedBoundariesOf(compilation.db(), module);
         assertNotNull(searched, "the module's lines were searched");
         for (String behavior : searched.keySet()) {
+            LineReadings apart = compilation.db().ask(new Adequacy.Readings(module, behavior))
+                    .value();
+            assertNotNull(apart, "the behavior's lines were read");
             for (Item each : itemsOf(compilation, module, behavior, AuthoredPlacement.class)) {
-                boolean reaches = each.reading().border().about(each.at()).stream()
-                        .anyMatch(owed -> unmet.contains(owed.point()));
+                BoundaryLine line = BoundaryLine.of(each.reading().border());
+                boolean reaches = apart.each().stream()
+                        .filter(copy -> BoundaryLine.of(copy.border()).equals(line))
+                        .anyMatch(copy -> copy.at(each.at()) instanceof ItemAssessment.Owed owed
+                                && owed.worthSearching()
+                                && copy.border().about(each.at()).stream()
+                                        .anyMatch(point -> unmet.contains(point.point())));
                 assertEquals(reaches, each.owed().searches().ran(),
                         () -> each + " is searched where what it finds is read, unmet: " + unmet);
                 assertEquals(!reaches, each.owed().unneeded(),
