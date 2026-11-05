@@ -95,7 +95,7 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                         WeakeningWord.BORDER_VALUE_ABSENT, Set.of("NoValue"),
                         WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE,
                                 Set.of("CouldNotWalk", "CouldNotReadRow", "KeysNotTold",
-                                        "ReachNotRead"),
+                                        "ReachNotRead", "CasesNotTakenApart"),
                         WeakeningWord.BORDER_VALUE_NOT_WORKED_OUT, Set.of("CouldNotWorkOut")),
                 under,
                 () -> "the words no longer stand over the reasons they were meant to: " + under);
@@ -134,6 +134,7 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                         out.add(new ReadingGap.ReachNotRead(why));
                     }
                 }
+                case "CasesNotTakenApart" -> out.add(ReadingGap.CASES_NOT_TAKEN_APART);
                 // A reason added to the type and not to this list. Written as a failure rather than
                 // skipped: a reason nothing here can build is one nothing here is checking.
                 default -> throw new IllegalStateException(

@@ -537,8 +537,11 @@ public enum CompositionBudget {
      * nobody took apart ({@link souther.compiler.meaning.DecidingCase.Cases.NotTakenApart}).
      * Where rows on both sides of the line reach the condition, which is all that says where the
      * cases hold, the line is not worked out in them
-     * ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}) — never owed
-     * rows where the statement may turn nothing, and never dropped for a proof nobody finished.
+     * ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}), and never
+     * dropped for a proof nobody finished. Its points are still owed: the line is read under the
+     * condition, and a row standing at a point there is not told to be where the line decides
+     * ({@link ReadingGap.CasesNotTakenApart}), since it may be in a case the statement turns
+     * nothing in. An author writes the rows at them, and which case each is in is what is open.
      */
     CASES_A_LINE_IS_TAKEN_APART_INTO(256),
 

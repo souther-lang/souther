@@ -235,7 +235,9 @@ public final class PublicationOrders {
      * <p>Composed from the order above and not written again. A reading that met an observation's
      * code is that code, so the two orders agreeing is not something to keep in step — there is one
      * order, and this is it with the reasons that are no observation's put after them. First of
-     * those is a number the values came to and this could not work out: every value arrived, which
+     * those is a row standing at the point in cases nobody took apart: the number was worked out
+     * and the row is there, and only which case it is in is not known. Then a number the values
+     * came to and this could not work out: every value arrived, which
      * is nearer an answer than a position holding none. A walk that reached no value comes next for
      * the same reason the codes are in the order they are: it is further from an answer. The two
      * that never reached a value to begin with follow it, a step further out again — a position that
@@ -256,6 +258,7 @@ public final class PublicationOrders {
 
     private static List<Object> everyPlaceOfAReadingGap() {
         List<Object> out = new ArrayList<>(OBSERVATION_CODES_IN_ORDER);
+        out.add(ReadingGap.CASES_NOT_TAKEN_APART);
         for (UnheldNumber why : UnheldNumber.values()) {
             out.add(ReadingGap.of(why));
         }

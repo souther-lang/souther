@@ -319,9 +319,10 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     }
 
     /**
-     * A line of several whose cases nobody worked out is neither kept nor dropped: it is a line
-     * where it decides was not worked out, naming the figure, and the line beside it in the same
-     * statement is read as it would be alone.
+     * A line of several whose cases nobody took apart is neither kept as one it decides in nor
+     * dropped: it is read under the condition the cases were said as, a row there told not to be
+     * where it decides, and beside that it is a line where it decides was not worked out, naming
+     * the figure. The line beside it in the same statement is read as it would be alone.
      *
      * <p>Rows reach the condition the cases were said as on both sides of the line, so the
      * condition is no proof that the line turns nothing; and nothing showed that it turns
@@ -347,12 +348,16 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
                         waysTo(_ -> untouched()), List.of(new ComparisonArrival.NoProjection()), false,
                         reading(), CountWitnesses.Lookup.NONE));
+        PlaceOfALine unworked = read.parts().getFirst().id();
+        assertEquals(List.of(new WhereAPartDecides(unworked, anywhere, false)),
+                narrowed.parts().getFirst().readings(),
+                "the line read under what its cases were said as, none of them taken apart");
         ComparisonAssessment.Unread unread = assertInstanceOf(ComparisonAssessment.Unread.class,
-                narrowed.parts().getFirst().line(), "the line whose cases nobody took apart");
+                narrowed.parts().get(1).line(), "the line whose cases nobody took apart");
         assertEquals(List.of(new BlockReason.WhereALineDecidesNotWorkedOut(
                         CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure())),
                 List.copyOf(unread.why().values()), "and the figure that left them whole");
-        assertEquals(List.of(), narrowed.parts().getFirst().cases(),
+        assertEquals(List.of(), narrowed.parts().get(1).cases(),
                 "and read in no case: none of them is taken for one it turns in");
         assertEquals(read.parts().getLast(), narrowed.parts().getLast(),
                 "the line beside it is read as it would be alone");
@@ -510,14 +515,19 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                             waysTo(reachingOnlyEveryRow),
                             List.of(new ComparisonArrival.NoProjection()), false, reading(),
                             CountWitnesses.Lookup.NONE));
-            assertEquals(1, narrowed.parts().size(), () -> "one part: " + narrowed);
+            assertEquals(2, narrowed.parts().size(), () -> "two parts: " + narrowed);
+            ComparisonAssessment.Several.Part underTheCases = narrowed.parts().getFirst();
+            assertEquals(cases, underTheCases.cases(),
+                    "the line read under what its cases were said as, none of them taken apart");
+            assertFalse(underTheCases.takenApart(),
+                    "so a row there is not told to be where the line decides");
             ComparisonAssessment.Unread unread = assertInstanceOf(
-                    ComparisonAssessment.Unread.class, narrowed.parts().getFirst().line());
+                    ComparisonAssessment.Unread.class, narrowed.parts().getLast().line());
             assertEquals(List.of(new BlockReason.WhereALineDecidesNotWorkedOut(figures)),
                     List.copyOf(unread.why().values()),
                     () -> "not worked out at both figures, asked in the order " + cases);
-            assertEquals(List.of(), narrowed.parts().getFirst().cases(),
-                    "and no row is asked to be in either");
+            assertEquals(List.of(), narrowed.parts().getLast().cases(),
+                    "and what was not worked out is read in no case");
             assertEquals(List.of(figures), narrowed.whatEachPlaceIsLeftWith().stream()
                             .map(left -> assertInstanceOf(BlockReason.RuleReadingStopped.class,
                                     left.why()).figures())

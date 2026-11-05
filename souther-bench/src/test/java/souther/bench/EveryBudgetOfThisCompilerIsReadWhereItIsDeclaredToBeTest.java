@@ -1161,6 +1161,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.query.Weakening#figures()Ljava/util/List;",
                     "names the budget a decision's reading stopped at, for a reader told a wider"
                             + " run may read past it"),
+            Map.entry("souther.compiler.partition.ReadingGap$CasesNotTakenApart#figures()"
+                            + "Ljava/util/List;",
+                    "names the budget the cases a row stands in were not taken apart past, for a"
+                            + " reader told a wider run may tell which case the row is in"),
             // Which figure each reason a part was not read or a condition not taken in stopped at,
             // said once for every reader that names the figure: a gap on the way, a rule that
             // drew no line, a composer of an answer.

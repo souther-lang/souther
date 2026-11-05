@@ -62,6 +62,9 @@ class AGapNamesEveryFigureItReachedTest {
                         ElementsWrittenOut.MOST_WALKED)),
                 new ReadingGap.ReachNotRead(
                         ReadingGap.ReachNotRead.Why.MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT).figures());
+        assertEquals(List.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure()),
+                ReadingGap.CASES_NOT_TAKEN_APART.figures(),
+                "a row in cases nobody took apart says the figure the taking apart stopped at");
         assertEquals(List.of(DEPTH), ReadingGap.ofAComparisonOf(new ObservedValue.Sequence(
                         List.of(new ObservedValue.Truncated(DEPTH)))).figures(),
                 "a value the walk stopped says the figure the walk stopped it at");
@@ -178,6 +181,7 @@ class AGapNamesEveryFigureItReachedTest {
                         out.add(new ReadingGap.ReachNotRead(why));
                     }
                 }
+                case "CasesNotTakenApart" -> out.add(ReadingGap.CASES_NOT_TAKEN_APART);
                 default -> fail("a reading gap this cannot make: " + permitted);
             }
         }

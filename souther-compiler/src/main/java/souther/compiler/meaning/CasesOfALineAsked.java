@@ -54,9 +54,12 @@ import java.util.function.Predicate;
  * choices before any is asked ({@link DecidingCase.Cases#waysOfChoosing}), and past
  * {@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO} none is asked: those are more cases
  * than are taken apart, whether they were written out or said as choices, and the line is not
- * worked out in them at that figure. Where a part chosen so far that no row is in leaves the cases
- * past it out — asking where a line decides, and asking the cases some row may be in — the ways
- * are not counted: most of them are past such a part, and the steps bound the rest.
+ * worked out in them at that figure. Asking where a line decides counts them too, before the
+ * choosing: the cases a line decides in are what its points are read in, and walking more ways than
+ * are taken apart to find them costs the line its reading in every one, where an author can say the
+ * rows at its points outright. Where a part chosen so far that no row is in leaves the cases past it
+ * out, asking the cases some row may be in, the ways are not counted: most of them are past such a
+ * part, and the steps bound the rest.
  *
  * <p><b>Counted by the step, and stopped short as a stop.</b> Every step of the choosing is counted
  * against {@link CompositionBudget#CASES_A_LINE_IS_ASKED_IN} for the one case they were said as:
@@ -267,6 +270,11 @@ public final class CasesOfALineAsked {
         }
         if (said.saidAlone()) {
             return new Found(List.of(said), Set.of());
+        }
+        if (said.standsFor().waysOfChoosing(most) > most) {
+            stopped.add(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
+            addFiguresNotTakenApart(said.standsFor());
+            return new Found(List.of(), stopped);
         }
         DecidingCase.Cases cases = heldFirst(said.standsFor());
         chosen(SoFar.NOTHING, List.of(cases), crossedIn, chosen -> dividing.add(chosen));

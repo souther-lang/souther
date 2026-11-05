@@ -936,11 +936,27 @@ sealed interface ComparisonAssessment {
          *              None where it was not read along them
          */
         public record Part(PlaceOfALine id, ComparisonAssessment line, List<DecidingCase> cases,
-                           Map<NumericTerm, EachWayItComesOut> comesOut) {
+                           Map<NumericTerm, EachWayItComesOut> comesOut, boolean takenApart) {
 
             /** A line not read along the ways to its cases. */
             public Part(PlaceOfALine id, ComparisonAssessment line, List<DecidingCase> cases) {
                 this(id, line, cases, Map.of());
+            }
+
+            /** A line read in cases it was shown to decide in. */
+            public Part(PlaceOfALine id, ComparisonAssessment line, List<DecidingCase> cases,
+                        Map<NumericTerm, EachWayItComesOut> comesOut) {
+                this(id, line, cases, comesOut, true);
+            }
+
+            /**
+             * {@code line} read under {@code said}, the cases it was said for, where which of them
+             * it decides in was more than is taken apart: a row there may be in one the line
+             * decides nothing in ({@link WhereAPartDecides#takenApart}).
+             */
+            static Part inCasesNotTakenApart(PlaceOfALine id, ComparisonAssessment line,
+                                             List<DecidingCase> said) {
+                return new Part(id, line, said, Map.of(), false);
             }
 
             public Part {
@@ -1006,8 +1022,8 @@ sealed interface ComparisonAssessment {
                 if (line instanceof AgainstAnotherValue against && against.settling().isEmpty()) {
                     return List.of();
                 }
-                return cases.stream().map(each -> new WhereAPartDecides(id, each.condition()))
-                        .toList();
+                return cases.stream().map(each -> new WhereAPartDecides(id, each.condition(),
+                        takenApart)).toList();
             }
         }
 
@@ -1633,7 +1649,18 @@ sealed interface ComparisonAssessment {
         // worked out there, naming every figure any of them stopped at, beside whatever the other
         // cases showed. Said at the line's places and read in no case: no row is asked to be at a
         // line nobody worked out, so which cases those were is not something a reader is told.
+        //
+        // Where none of them was taken apart, for being more ways of choosing one than are, the
+        // line is still a line, and its points are still owed: it is read under the condition the
+        // cases were said as, and a row standing at a point there is not told to be where the line
+        // decides ({@link Several.Part#inCasesNotTakenApart}). Its rows are an author's to write,
+        // and which of them is where the line decides is what the cases nobody took apart leave
+        // open.
         List<Several.Part> out = new ArrayList<>();
+        if (reached.isEmpty()
+                && stoppedAt.contains(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)) {
+            out.add(Several.Part.inCasesNotTakenApart(part.id(), arrived, part.cases()));
+        }
         if (!reached.isEmpty()) {
             List<Reachability.Reaching> along = deciding.isEmpty()
                     ? waysArrivedBy(way, arrivals) : deciding;

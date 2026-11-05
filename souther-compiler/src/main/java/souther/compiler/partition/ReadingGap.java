@@ -338,6 +338,32 @@ public sealed interface ReadingGap {
         }
     }
 
+    /**
+     * The row stands at the point under the condition the line's cases were said as, and which of
+     * those cases the line decides in was not worked out: they were more ways of choosing one than
+     * are taken apart ({@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO}). So whether the
+     * row is in one the line turns the statement in is not told.
+     *
+     * <p>Not a reason about the value at the point, which was read, and not a row that is
+     * elsewhere: a row in a case the line turns nothing in stands at its point as well, on the one
+     * side the case's rows are on, and says nothing about the line.
+     */
+    record CasesNotTakenApart() implements ReadingGap {
+
+        /** A run that takes more cases apart may tell which case the row is in. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.MAY_CHANGE;
+        }
+
+        @Override
+        public List<Figure> figures() {
+            return List.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure());
+        }
+    }
+
+    ReadingGap CASES_NOT_TAKEN_APART = new CasesNotTakenApart();
+
     ReadingGap NO_VALUE = new NoValue();
 
     ReadingGap REACH_IS_NO_VALUE_OF_THE_ROW =
