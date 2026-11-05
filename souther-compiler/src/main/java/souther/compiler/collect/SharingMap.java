@@ -15,7 +15,9 @@ import java.util.Objects;
  *
  * <p>Keys are equal by {@link Object#equals} and hashed by {@link Object#hashCode}, as a
  * {@code HashMap}'s are. Keys whose hashes are equal are kept in one list at the bottom of the
- * trie and told apart there.
+ * trie and told apart there, which a get and a put go along and a put copies: past the depth of
+ * the trie, they cost as many keys as share the whole of the hash. The keys are told apart by
+ * their equality alone, which orders nothing, so the list is all that can hold them.
  *
  * <p>No equality of its own, and no walk over what it holds: what is asked of one is what is under
  * a key.

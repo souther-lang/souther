@@ -4,7 +4,9 @@ import souther.compiler.collect.SharingMap;
 import souther.compiler.collect.Stacked;
 import souther.compiler.numeric.WholeNumberRuns;
 
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -19,17 +21,43 @@ import java.util.Optional;
  *
  * <p>A way's walk holds these for each alternative it takes, so a statement taken in makes another
  * of these and leaves the one it was taken into as it was.
+ *
+ * <p>A walk takes one statement in along every way of the choices before it, and what the
+ * statement says of its remainder is the statement's alone. So what each statement says is read
+ * once a walk, by the statement, and held by every one of these made from the walk's
+ * {@link #none}: one walk's, and so one thread's.
  */
 final class RemaindersHeld {
-
-    static final RemaindersHeld NONE = new RemaindersHeld(SharingMap.empty());
 
     /** What the statements of each remainder leave of it, shared with the ones this was made
      *  from. */
     private final SharingMap<ARemainderMoved.Unmoved, Left> held;
 
-    private RemaindersHeld(SharingMap<ARemainderMoved.Unmoved, Left> held) {
+    /** What each statement taken in on this walk says of its remainder, by the statement: empty
+     *  where it is of no remainder read as one with others. */
+    private final Map<RowDemand.OnARemainder, Optional<Read>> read;
+
+    private RemaindersHeld(SharingMap<ARemainderMoved.Unmoved, Left> held,
+                           Map<RowDemand.OnARemainder, Optional<Read>> read) {
         this.held = held;
+        this.read = read;
+    }
+
+    /** Nothing taken in, at the start of one walk. */
+    static RemaindersHeld none() {
+        return new RemaindersHeld(SharingMap.empty(), new IdentityHashMap<>());
+    }
+
+    /** What a statement says of its remainder: the remainder of its form unmoved and what it
+     *  leaves of that. */
+    private record Read(ARemainderMoved.Unmoved of, WholeNumberRuns leaves) {
+
+        /** What {@code statement} says, or empty where it is of no remainder read as one with
+         *  others. */
+        static Optional<Read> of(RowDemand.OnARemainder statement) {
+            return ARemainderMoved.of(statement)
+                    .map(stated -> new Read(stated.of(), stated.unmoved(statement.leaves())));
+        }
     }
 
     /** What the statements of a remainder leave of it, and the statements, which are written out
@@ -50,12 +78,12 @@ final class RemaindersHeld {
     /** These with {@code added} taken in, or the statements of its remainder where they leave
      *  none of it. */
     Taken taking(RowDemand.OnARemainder added) {
-        Optional<ARemainderMoved> stated = ARemainderMoved.of(added);
+        Optional<Read> stated = read.computeIfAbsent(added, Read::of);
         if (stated.isEmpty()) {
             return new Taken.Held(this);
         }
         ARemainderMoved.Unmoved of = stated.get().of();
-        WholeNumberRuns leaves = stated.get().unmoved(added.leaves());
+        WholeNumberRuns leaves = stated.get().leaves();
         Left before = held.get(of);
         Stacked<RowDemand.OnARemainder> statements = Stacked.empty();
         if (before != null) {
@@ -66,6 +94,7 @@ final class RemaindersHeld {
         if (leaves.isNone()) {
             return new Taken.NoneLeft(statements.inOrder());
         }
-        return new Taken.Held(new RemaindersHeld(held.with(of, new Left(leaves, statements))));
+        return new Taken.Held(new RemaindersHeld(held.with(of, new Left(leaves, statements)),
+                read));
     }
 }

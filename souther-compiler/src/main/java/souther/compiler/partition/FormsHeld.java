@@ -6,10 +6,12 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The relations of numbers a way has taken in, each held to the line of the form it weighs.
@@ -26,9 +28,9 @@ import java.util.Map;
  *
  * <p>A statement joins the first group, in the order they were made, whose form it is a number
  * times ({@link WhatStatementsOfOneFormDecide#factorBetween}). Past a few groups they are found by
- * their form scaled so that its greatest weight is one either way round ({@link Filed}), and a
- * statement is told against the groups it may join and not against every group. Below that,
- * every group is told against, which costs less than scaling the form.
+ * their form up to a factor ({@link UpToAFactor}), and a statement is told against the groups it
+ * may join and not against every group. Below that, every group is told against, which costs
+ * less than reading a form up to a factor.
  *
  * <p>A way's walk holds these for each alternative it takes, so a statement taken in makes another
  * of these and leaves the one it was taken into as it was.
@@ -39,6 +41,11 @@ final class FormsHeld {
 
     /** How many groups are told against one by one before they are filed by their form. */
     private static final int LOOKED_THROUGH = 16;
+
+    /** Where a test in this package counts the groups a statement is told against, and null
+     *  everywhere else. Which groups were told against is the same answer whichever were, so how
+     *  many has nowhere else to be read. */
+    static long[] COUNTING_TOLD;
 
     /** What taking a statement in came to. */
     sealed interface Taken {
@@ -74,9 +81,13 @@ final class FormsHeld {
             return new Taken.Held(this);
         }
         boolean byForm = made > LOOKED_THROUGH;
-        Map<NumericTerm, ExactRatio> scaled = byForm ? scaled(coefs) : null;
-        for (int at : byForm ? filed.mayBeOfTheForm(scaled, made) : every(made)) {
+        Optional<UpToAFactor> form = byForm ? UpToAFactor.of(coefs) : Optional.empty();
+        for (int at : byForm ? filed.mayBeOfTheForm(form, made) : every(made)) {
             Group group = groups.get(at);
+            long[] counting = COUNTING_TOLD;
+            if (counting != null) {
+                counting[0]++;
+            }
             ExactRatio factor = WhatStatementsOfOneFormDecide.factorBetween(group.weighing, coefs);
             if (factor != null) {
                 Group joined = group.with(added, factor);
@@ -95,10 +106,10 @@ final class FormsHeld {
         SharingMap<Integer, Group> wider = groups.with(made, joined);
         Filed refiled = filed;
         if (byForm) {
-            refiled = filed.with(made, scaled);
+            refiled = filed.with(made, form);
         } else if (made + 1 > LOOKED_THROUGH) {
             for (int at = 0; at <= made; at++) {
-                refiled = refiled.with(at, scaled(wider.get(at).weighing));
+                refiled = refiled.with(at, UpToAFactor.of(wider.get(at).weighing));
             }
         }
         return new Taken.Held(new FormsHeld(wider, made + 1, refiled));
@@ -113,75 +124,115 @@ final class FormsHeld {
     }
 
     /**
-     * The groups by their form scaled ({@link #scaled}), filed under it and under its negation,
-     * and the groups of a form the arithmetic cannot scale.
+     * A form up to a factor of either sign: its weights with what the factor can change taken out,
+     * the same for a form and for every number times it but for the sign, and read without
+     * dividing, so it is read for every form a host's numbers hold.
      *
-     * <p>A form a number times another is scaled to it or to its negation, since the greatest
-     * weight of the one is the greatest of the other times that number made positive. So a group
-     * whose form a statement is a number times is filed under the statement's form scaled, or is
-     * one of a form not scaled.
+     * <p>A weight is a sign, a fraction with no two or five in it, and powers of two and five
+     * ({@link ExactRatio}). A factor moves every power of two by its own, every power of five by
+     * its own, and times every fraction by its fraction. So the powers are held as how far each is
+     * above the least of the form's, and the fractions as the one list of whole numbers with no
+     * common factor they are a number times: each fraction times the least common multiple of the
+     * denominators and over the greatest common divisor of the numerators. That list is one up to
+     * its sign, and a form is filed under both signs.
+     *
+     * <p>Two forms of one key are a number times each other, though not always one the arithmetic
+     * holds: one past sixty-four bits of a power of two or of five, or past the host's numbers. A
+     * group is made beside the others of its key only where its form is no number the arithmetic
+     * holds times theirs. Two powers sixty-four bits hold that are that far apart lie one in each
+     * half of what sixty-four bits hold, so the groups of one key each lie in another pair of
+     * halves, of the twos and of the fives, and a key holds no more than four groups, save of forms
+     * whose factor is past the host's numbers.
      */
-    private record Filed(SharingMap<Map<NumericTerm, ExactRatio>, Stacked<Integer>> byScaledForm,
-                         Stacked<Integer> unscaled) {
+    private record UpToAFactor(Map<NumericTerm, Weight> weights) {
+
+        /** A weight up to the factor: the whole number, and the powers above the form's least. */
+        record Weight(BigInteger whole, BigInteger twos, BigInteger fives) {}
+
+        /** The form of {@code coefs} up to a factor, or empty where reading it takes a number
+         *  past the largest the host holds. */
+        static Optional<UpToAFactor> of(Map<NumericTerm, ExactRatio> coefs) {
+            try {
+                BigInteger divisor = BigInteger.ZERO;
+                BigInteger multiple = BigInteger.ONE;
+                long leastTwos = Long.MAX_VALUE;
+                long leastFives = Long.MAX_VALUE;
+                for (ExactRatio each : coefs.values()) {
+                    divisor = divisor.gcd(each.numeratorWithoutUnits());
+                    BigInteger below = each.denominatorWithoutUnits();
+                    multiple = multiple.divide(multiple.gcd(below)).multiply(below);
+                    leastTwos = Math.min(leastTwos, each.twos());
+                    leastFives = Math.min(leastFives, each.fives());
+                }
+                Map<NumericTerm, Weight> out = new HashMap<>();
+                for (Map.Entry<NumericTerm, ExactRatio> each : coefs.entrySet()) {
+                    ExactRatio weight = each.getValue();
+                    out.put(each.getKey(), new Weight(
+                            weight.numeratorWithoutUnits().divide(divisor)
+                                    .multiply(multiple.divide(weight.denominatorWithoutUnits())),
+                            BigInteger.valueOf(weight.twos())
+                                    .subtract(BigInteger.valueOf(leastTwos)),
+                            BigInteger.valueOf(weight.fives())
+                                    .subtract(BigInteger.valueOf(leastFives))));
+                }
+                return Optional.of(new UpToAFactor(out));
+            } catch (ArithmeticException _) {
+                return Optional.empty();
+            }
+        }
+
+        UpToAFactor negated() {
+            Map<NumericTerm, Weight> out = new HashMap<>();
+            weights.forEach((term, weight) -> out.put(term,
+                    new Weight(weight.whole().negate(), weight.twos(), weight.fives())));
+            return new UpToAFactor(out);
+        }
+    }
+
+    /**
+     * The groups by their form up to a factor, and the groups of a form that takes a number past
+     * the host's to read so.
+     *
+     * <p>A group whose form a statement is a number times is filed under the statement's form up
+     * to a factor, or is one of the others.
+     */
+    private record Filed(SharingMap<UpToAFactor, Stacked<Integer>> byForm,
+                         Stacked<Integer> pastTheHost) {
 
         static final Filed NONE = new Filed(SharingMap.empty(), Stacked.empty());
 
-        /** These with group {@code at}, of a form scaled to {@code scaled}, or null where the
-         *  arithmetic could not scale it. */
-        Filed with(int at, Map<NumericTerm, ExactRatio> scaled) {
-            if (scaled == null) {
-                return new Filed(byScaledForm, unscaled.then(at));
+        /** These with group {@code at}, of {@code form}, or of a form past the host's numbers
+         *  where it is empty. */
+        Filed with(int at, Optional<UpToAFactor> form) {
+            if (form.isEmpty()) {
+                return new Filed(byForm, pastTheHost.then(at));
             }
-            Map<NumericTerm, ExactRatio> negated = new HashMap<>();
-            scaled.forEach((term, weight) -> negated.put(term, weight.negated()));
-            return new Filed(filedUnder(filedUnder(byScaledForm, scaled, at), negated, at),
-                    unscaled);
+            return new Filed(filedUnder(filedUnder(byForm, form.get(), at),
+                    form.get().negated(), at), pastTheHost);
         }
 
-        /** The groups of the {@code made} a statement of a form scaled to {@code scaled} may join,
-         *  in the order they were made: every one where the form could not be scaled. */
-        List<Integer> mayBeOfTheForm(Map<NumericTerm, ExactRatio> scaled, int made) {
-            if (scaled == null) {
+        /** The groups of the {@code made} a statement of {@code form} may join, in the order they
+         *  were made: every one where its form is past the host's numbers. */
+        List<Integer> mayBeOfTheForm(Optional<UpToAFactor> form, int made) {
+            if (form.isEmpty()) {
                 return every(made);
             }
             List<Integer> out = new ArrayList<>();
-            Stacked<Integer> alike = byScaledForm.get(scaled);
+            Stacked<Integer> alike = byForm.get(form.get());
             if (alike != null) {
                 out.addAll(alike.inOrder());
             }
-            out.addAll(unscaled.inOrder());
+            out.addAll(pastTheHost.inOrder());
             out.sort(null);
             return out;
         }
 
-        private static SharingMap<Map<NumericTerm, ExactRatio>, Stacked<Integer>> filedUnder(
-                SharingMap<Map<NumericTerm, ExactRatio>, Stacked<Integer>> filed,
-                Map<NumericTerm, ExactRatio> scaled, int group) {
-            Stacked<Integer> before = filed.get(scaled);
-            return filed.with(scaled,
+        private static SharingMap<UpToAFactor, Stacked<Integer>> filedUnder(
+                SharingMap<UpToAFactor, Stacked<Integer>> filed, UpToAFactor form, int group) {
+            Stacked<Integer> before = filed.get(form);
+            return filed.with(form,
                     (before == null ? Stacked.<Integer>empty() : before).then(group));
         }
-    }
-
-    /** Each weight of {@code coefs} divided by the greatest of them made positive, or null where
-     *  the arithmetic cannot hold one of the quotients. */
-    private static Map<NumericTerm, ExactRatio> scaled(Map<NumericTerm, ExactRatio> coefs) {
-        ExactRatio greatest = null;
-        for (ExactRatio each : coefs.values()) {
-            ExactRatio size = each.abs();
-            if (greatest == null || size.compareTo(greatest) > 0) {
-                greatest = size;
-            }
-        }
-        Map<NumericTerm, ExactRatio> out = new HashMap<>();
-        for (Map.Entry<NumericTerm, ExactRatio> each : coefs.entrySet()) {
-            ExactRatio scaled = each.getValue().dividedBy(greatest).orNull();
-            if (scaled == null) {
-                return null;
-            }
-            out.put(each.getKey(), scaled);
-        }
-        return out;
     }
 
     /**

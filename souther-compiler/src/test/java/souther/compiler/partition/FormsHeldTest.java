@@ -10,6 +10,7 @@ import souther.compiler.numeric.Rel;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -29,30 +30,41 @@ class FormsHeldTest {
     private static final NumericTerm X = new NumericTerm.ValueOf(TermPath.of("x"));
     private static final NumericTerm Y = new NumericTerm.ValueOf(TermPath.of("y"));
 
-    /** A statement as {@code weight * term + constant} against nought. */
-    private record Written(NumericTerm term, long weight, long constant, Rel rel) {
+    /**
+     * A statement as {@code weight * term + constant} against nought, with the form it is and the
+     * quarters from -40 to 40 it holds at, each at its distance from -40.
+     */
+    private record Written(NumericTerm term, long weight, long constant, Rel rel,
+                           TakenConstraint.Affine affine, BitSet holdsAt) {
 
-        TakenConstraint.Affine affine() {
-            return new TakenConstraint.Affine(new LinearForm<>(ExactRatio.of(constant),
-                    Map.of(term, ExactRatio.of(weight))), rel);
+        Written(NumericTerm term, long weight, long constant, Rel rel) {
+            this(term, weight, constant, rel, new TakenConstraint.Affine(new LinearForm<>(
+                    ExactRatio.of(constant), Map.of(term, ExactRatio.of(weight))), rel),
+                    quartersHeldAt(weight, constant, rel));
         }
 
-        boolean holdsAt(int quarters) {
-            return rel.holds(Long.signum(weight * quarters + constant * 4));
+        private static BitSet quartersHeldAt(long weight, long constant, Rel rel) {
+            BitSet out = new BitSet();
+            for (int quarters = -40; quarters <= 40; quarters++) {
+                if (rel.holds(Long.signum(weight * quarters + constant * 4))) {
+                    out.set(quarters + 40);
+                }
+            }
+            return out;
+        }
+
+        @Override
+        public String toString() {
+            return affine.toString();
         }
     }
 
     private static boolean leavesNoPoint(List<Written> statements) {
-        for (int quarters = -40; quarters <= 40; quarters++) {
-            boolean holdsAll = true;
-            for (Written each : statements) {
-                holdsAll &= each.holdsAt(quarters);
-            }
-            if (holdsAll) {
-                return false;
-            }
+        BitSet holdsAll = (BitSet) statements.getFirst().holdsAt().clone();
+        for (Written each : statements) {
+            holdsAll.and(each.holdsAt());
         }
-        return true;
+        return holdsAll.isEmpty();
     }
 
     private static List<Written> statementsOf(NumericTerm term, long[] weights,
@@ -96,7 +108,7 @@ class FormsHeldTest {
                             expected = length - 1;
                         }
                     }
-                    assertEquals(expected, closedAt(sequence), sequence.toString());
+                    assertEquals(expected, closedAt(sequence), sequence::toString);
                 }
             }
         }
@@ -117,7 +129,7 @@ class FormsHeldTest {
                                 expected = length - 1;
                             }
                         }
-                        assertEquals(expected, closedAt(sequence), sequence.toString());
+                        assertEquals(expected, closedAt(sequence), sequence::toString);
                     }
                 }
             }
@@ -134,7 +146,7 @@ class FormsHeldTest {
                     boolean closed = closedAt(sequence) >= 0;
                     assertEquals(WhatStatementsOfOneFormDecide.of(
                             sequence.stream().map(Written::affine).toList(), null)
-                            .noRowArrives(), closed, sequence.toString());
+                            .noRowArrives(), closed, sequence::toString);
                 }
             }
         }
@@ -144,10 +156,27 @@ class FormsHeldTest {
         return new ExactRatio(BigInteger.ONE, BigInteger.ONE, exponent, 0);
     }
 
+    /** {@code x + y} times two to {@code twos} and five to {@code fives}. */
+    private static Map<NumericTerm, ExactRatio> bothAt(long twos, long fives) {
+        ExactRatio weight = new ExactRatio(BigInteger.ONE, BigInteger.ONE, twos, fives);
+        return Map.of(X, weight, Y, weight);
+    }
+
+    /**
+     * {@code x + y} moved to each end of the powers of two and five, and between: each a number
+     * times the others, though the number between two ends is past what the arithmetic holds, so
+     * a form joins the first of them it is a number the arithmetic holds times, which is not a
+     * matter of which of them it is a number times.
+     */
+    private static final List<Map<NumericTerm, ExactRatio>> AT_THE_ENDS = List.of(
+            bothAt(Long.MIN_VALUE, Long.MIN_VALUE), bothAt(Long.MAX_VALUE, Long.MAX_VALUE),
+            bothAt(Long.MIN_VALUE, Long.MAX_VALUE), bothAt(Long.MAX_VALUE, Long.MIN_VALUE),
+            bothAt(0, 0));
+
     /**
      * Forms over two terms, each a number times some of the others, of either sign, and not of the
-     * rest; and two whose weights the arithmetic cannot divide one by the other. Each list is the
-     * forms one of the others is a number times, and there are more of them than the groups told
+     * rest; two whose weights are past sixty-four bits apart; and {@link #AT_THE_ENDS}. Each list
+     * is of forms a number times each other, and there are more lists than the groups told
      * against one by one, so that a sequence of them is filed by its forms.
      */
     private static final List<List<Map<NumericTerm, ExactRatio>>> FORMS = forms();
@@ -157,7 +186,8 @@ class FormsHeldTest {
                 List.of(Map.of(X, ExactRatio.of(-3)), Map.of(X, ExactRatio.of(1))),
                 List.of(Map.of(X, twoTo(Long.MAX_VALUE), Y, twoTo(Long.MIN_VALUE)),
                         Map.of(X, twoTo(Long.MAX_VALUE).negated(),
-                                Y, twoTo(Long.MIN_VALUE).negated()))));
+                                Y, twoTo(Long.MIN_VALUE).negated())),
+                AT_THE_ENDS));
         for (long weight = -12; weight <= 12; weight++) {
             if (weight != 0) {
                 out.add(List.of(Map.of(X, ExactRatio.of(1), Y, ExactRatio.of(weight)),
@@ -171,55 +201,106 @@ class FormsHeldTest {
     private static TakenConstraint.Affine anyStatementOf(List<Map<NumericTerm, ExactRatio>> forms,
                                                          Random random) {
         long[] constants = {-2, 0, 1, 3};
+        List<Rel> rels = List.of(Rel.values());
         return new TakenConstraint.Affine(new LinearForm<>(
                 ExactRatio.of(constants[random.nextInt(constants.length)]),
                 forms.get(random.nextInt(forms.size()))),
-                Rel.values()[random.nextInt(Rel.values().length)]);
+                rels.get(random.nextInt(rels.size())));
     }
 
     /**
-     * A statement joins the statements before it of a form it is a number times, and leaves no
-     * point of the line exactly where those and it leave none — whichever forms came before, in
-     * whichever order, so that finding the statements of its form among the others is the walk
-     * over every one of them. Each sequence opens with one statement of each of some forms, which
-     * leave a point each, so that it goes on past as many groups as were opened.
+     * A statement joins the first group, in the order they were made, of a form it is a number
+     * the arithmetic holds times, and leaves no point of the line exactly where the statements of
+     * that group taken in alone and it leave none — the group the walk over every group before it
+     * finds, whichever forms came before and in whichever order. Each sequence opens with one
+     * statement of each of some lists of forms, which leave a point each, so that it goes on past
+     * as many groups as were opened.
      */
     @Test
     void aStatementIsToldAgainstTheStatementsBeforeItOfItsFormAndNoOthers() {
         Random random = new Random(3024);
-        for (int round = 0; round < 3000; round++) {
-            List<List<Map<NumericTerm, ExactRatio>>> opened = new ArrayList<>(FORMS);
-            Collections.shuffle(opened, random);
+        for (int round = 0; round < 300; round++) {
+            List<Integer> forms = new ArrayList<>();
+            for (int form = 0; form < FORMS.size(); form++) {
+                forms.add(form);
+            }
+            Collections.shuffle(forms, random);
+            forms = new ArrayList<>(forms.subList(0, random.nextInt(forms.size() + 1)));
+            for (int length = forms.size() + 1 + random.nextInt(12); forms.size() < length; ) {
+                forms.add(random.nextInt(FORMS.size()));
+            }
             List<TakenConstraint.Affine> sequence = new ArrayList<>();
-            for (List<Map<NumericTerm, ExactRatio>> each
-                    : opened.subList(0, random.nextInt(opened.size() + 1))) {
-                sequence.add(anyStatementOf(each, random));
+            for (int form : forms) {
+                sequence.add(anyStatementOf(FORMS.get(form), random));
             }
-            for (int length = sequence.size() + 1 + random.nextInt(12);
-                    sequence.size() < length; ) {
-                sequence.add(anyStatementOf(FORMS.get(random.nextInt(FORMS.size())), random));
-            }
+            // Each group the walk over every group finds, and what its statements alone come to.
+            List<TakenConstraint.Affine> firsts = new ArrayList<>();
+            List<FormsHeld> alone = new ArrayList<>();
             FormsHeld held = FormsHeld.NONE;
             for (int at = 0; at < sequence.size(); at++) {
                 TakenConstraint.Affine added = sequence.get(at);
-                List<TakenConstraint.Affine> ofItsForm = new ArrayList<>();
-                for (TakenConstraint.Affine each : sequence.subList(0, at + 1)) {
-                    if (WhatStatementsOfOneFormDecide.factorBetween(
-                            each.form().coefs(), added.form().coefs()) != null) {
-                        ofItsForm.add(each);
-                    }
+                int group = 0;
+                while (group < firsts.size() && WhatStatementsOfOneFormDecide.factorBetween(
+                        firsts.get(group).form().coefs(), added.form().coefs()) == null) {
+                    group++;
                 }
-                boolean none = WhatStatementsOfOneFormDecide.of(ofItsForm, null).noRowArrives();
+                if (group == firsts.size()) {
+                    firsts.add(added);
+                    alone.add(FormsHeld.NONE);
+                }
+                FormsHeld.Taken expected = alone.get(group).taking(added);
                 FormsHeld.Taken taken = held.taking(added);
-                if (none) {
-                    assertEquals(ofItsForm, assertInstanceOf(FormsHeld.Taken.NoPointLeft.class,
-                            taken, sequence.toString()).statements(), sequence.toString());
+                if (expected instanceof FormsHeld.Taken.NoPointLeft(var statements)) {
+                    assertEquals(statements, assertInstanceOf(FormsHeld.Taken.NoPointLeft.class,
+                            taken, sequence::toString).statements(), sequence::toString);
                     break;
                 }
+                alone.set(group, ((FormsHeld.Taken.Held) expected).forms());
                 held = assertInstanceOf(FormsHeld.Taken.Held.class, taken,
-                        sequence.toString()).forms();
+                        sequence::toString).forms();
             }
         }
+    }
+
+    /**
+     * Past the groups told against one by one, a statement is told against the groups of its form
+     * up to a factor and no others: none where no group is of its form, and no more than four
+     * where its form is a number times theirs past what the arithmetic holds — the four ends of
+     * {@link #AT_THE_ENDS}, opened first so that each is a group of its own.
+     */
+    @Test
+    void pastTheGroupsToldOneByOneAStatementIsToldAgainstTheGroupsOfItsFormAlone() {
+        List<Map<NumericTerm, ExactRatio>> opened = new ArrayList<>(AT_THE_ENDS);
+        for (long weight = 2; weight <= 40; weight++) {
+            opened.add(Map.of(X, ExactRatio.of(1), Y, ExactRatio.of(weight)));
+        }
+        List<Map<NumericTerm, ExactRatio>> asked = new ArrayList<>(opened);
+        for (long weight = 41; weight <= 80; weight++) {
+            asked.add(Map.of(X, ExactRatio.of(-2), Y, ExactRatio.of(-2 * weight)));
+        }
+        long[] counting = {0};
+        FormsHeld.COUNTING_TOLD = counting;
+        try {
+            FormsHeld held = FormsHeld.NONE;
+            for (Map<NumericTerm, ExactRatio> each : opened) {
+                held = ((FormsHeld.Taken.Held) held.taking(nought(each))).forms();
+            }
+            for (Map<NumericTerm, ExactRatio> each : asked) {
+                long before = counting[0];
+                held = assertInstanceOf(FormsHeld.Taken.Held.class,
+                        held.taking(nought(each))).forms();
+                long told = counting[0] - before;
+                assertTrue(told <= 4, () -> each + " was told against " + told + " groups");
+            }
+            assertTrue(counting[0] > 0, "the groups told against are counted");
+        } finally {
+            FormsHeld.COUNTING_TOLD = null;
+        }
+    }
+
+    /** {@code form >= 0}, which holds beside any other such statement at nought. */
+    private static TakenConstraint.Affine nought(Map<NumericTerm, ExactRatio> form) {
+        return new TakenConstraint.Affine(new LinearForm<>(ExactRatio.ZERO, form), Rel.GE);
     }
 
     @Test
