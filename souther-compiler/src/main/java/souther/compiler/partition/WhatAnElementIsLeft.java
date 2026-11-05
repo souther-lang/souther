@@ -91,14 +91,14 @@ final class WhatAnElementIsLeft {
         allSome.addAll(addedSome);
         List<RowDemand.EveryElementWithin> allEach = new ArrayList<>(ofEach);
         allEach.addAll(addedEach);
-        List<RowDemand.SomeElementWithin> someAsked = new ArrayList<>(addedSome);
-        List<RowDemand.EveryElementWithin> eachAsked = new ArrayList<>(addedEach);
-        if (!own.isEmpty()) {
-            someAsked = allSome;
-            eachAsked = allEach;
-        } else if (!addedEach.isEmpty()) {
-            Set<TermPath> movedIn = new LinkedHashSet<>();
-            addedEach.forEach(every -> movedIn.add(every.container()));
+        // What is asked again: everything where the element itself was narrowed, and otherwise
+        // what was added, with what is asked of the elements of each container something added
+        // says every element of meets one of several ways.
+        Set<TermPath> movedIn = new LinkedHashSet<>();
+        (own.isEmpty() ? addedEach : allEach).forEach(every -> movedIn.add(every.container()));
+        List<RowDemand.SomeElementWithin> someAsked = new ArrayList<>(own.isEmpty() ? addedSome
+                : allSome);
+        if (own.isEmpty()) {
             ofTheirOwn.stream().filter(some -> movedIn.contains(some.container()))
                     .forEach(someAsked::add);
         }
@@ -107,13 +107,29 @@ final class WhatAnElementIsLeft {
                 return Optional.empty();
             }
         }
-        for (RowDemand.EveryElementWithin every : eachAsked) {
-            if (TakenConstraint.nothingMeetsAll(List.of(every.holdingNone().constraint()), further)
-                    && !someElementMeets(further, every.container(), List.of(), allEach)) {
+        for (TermPath container : movedIn) {
+            if (!holdsNoneOrSomeElementMeets(further, container, allEach)) {
                 return Optional.empty();
             }
         }
         return Optional.of(new WhatAnElementIsLeft(further, allSome, allEach));
+    }
+
+    /**
+     * Whether the container at {@code container} may hold none beside {@code held} — every one
+     * of {@code ofEach} over it then met whatever its ways ask — or some element of it is not
+     * shown to meet nothing of one way of each.
+     *
+     * <p>Asked of the container and not of any one statement over it: that it cannot hold none is
+     * said by each of them, and what some element of it then meets is asked of all of them.
+     */
+    private static boolean holdsNoneOrSomeElementMeets(SearchRegion held, TermPath container,
+                                                       List<RowDemand.EveryElementWithin> ofEach) {
+        boolean holdsNone = ofEach.stream()
+                .filter(every -> every.container().equals(container))
+                .noneMatch(every -> TakenConstraint.nothingMeetsAll(
+                        List.of(every.holdingNone().constraint()), held));
+        return holdsNone || someElementMeets(held, container, List.of(), ofEach);
     }
 
     /**

@@ -18,7 +18,6 @@ import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -138,6 +137,17 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
                             || each.ways().size() == 1);
         }
 
+        /** Each part of the body a level in, as a shape of its own. */
+        List<Shape> parts() {
+            List<Shape> out = new ArrayList<>();
+            onTheGroup.forEach(bound -> out.add(new Shape(false, List.of(bound), List.of())));
+            if (twoItems) {
+                out.add(new Shape(false, List.of(), List.of(), true));
+            }
+            quantifiers.forEach(each -> out.add(new Shape(false, List.of(), List.of(each))));
+            return out;
+        }
+
         String written() {
             String holder = deeper ? "s" : "g";
             List<String> parts = new ArrayList<>();
@@ -180,20 +190,37 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
             new Bound(false, 1, false), new Bound(true, 0, true), new Bound(false, 0, true));
 
     /**
-     * Every item one of two ways of two bounds against the group's number: neither is met where
-     * the group's number is nought.
+     * Every item meeting one of two ways, each a bound against a written number and one against
+     * the group's number: every two of the four such ways, which some group's number leaves no
+     * item meeting either of.
      */
-    private static final Quantifier EACH_ONE_OF_TWO_AGAINST_THE_GROUP = new Quantifier(true,
-            List.of(List.of(new Bound(true, 0, true), new Bound(false, 1, false)),
-                    List.of(new Bound(true, 0, false), new Bound(false, 0, true))));
+    private static final List<Quantifier> EACH_ONE_OF_TWO_AGAINST_THE_GROUP = eachOneOfTwo();
+
+    private static List<Quantifier> eachOneOfTwo() {
+        List<List<Bound>> ways = new ArrayList<>();
+        for (Bound written : List.of(new Bound(true, 0, false), new Bound(false, 1, false))) {
+            for (Bound ofTheGroup : List.of(new Bound(true, 0, true),
+                    new Bound(false, 0, true))) {
+                ways.add(List.of(written, ofTheGroup));
+            }
+        }
+        List<Quantifier> out = new ArrayList<>();
+        for (List<List<Bound>> two : twoOf(ways)) {
+            if (!two.getFirst().equals(two.getLast())) {
+                out.add(new Quantifier(true, two));
+            }
+        }
+        return List.copyOf(out);
+    }
 
     /**
      * One quantifier of either kind asking two bounds, and two quantifiers of either kind asking
      * one each; with a bound on the group's number, one quantifier of some item or two asking
-     * bounds against it; the items two at least, every item meeting one of two bounds beside no,
-     * one or two quantifiers of some item; and with two bounds on the group's number, every item
-     * meeting one of two ways against it, the items two at least or not — a level in and two
-     * levels in.
+     * bounds against it; every item meeting one of two bounds beside no, one or two quantifiers
+     * of some item asking one bound, or one asking two, the items two at least or not — a level in
+     * and two levels in; and a level in, with two
+     * bounds on the group's number, every item meeting one of two ways against it, the items two
+     * at least or not.
      *
      * <p>Each two once, in one order: the parts of a conjunction and of a disjunction are read in
      * the order of their spellings, so the other order is the same statement read again.
@@ -210,6 +237,7 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
         beside.add(List.of());
         someOfOne.forEach(each -> beside.add(List.of(each)));
         beside.addAll(twoOf(someOfOne));
+        twoOf(BOUNDS).forEach(two -> beside.add(List.of(Quantifier.of(false, two))));
         List<Shape> out = new ArrayList<>();
         for (boolean deeper : List.of(false, true)) {
             for (boolean every : List.of(false, true)) {
@@ -238,13 +266,16 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
                 for (List<Quantifier> some : beside) {
                     List<Quantifier> asked = new ArrayList<>(some);
                     asked.addFirst(eachOneOfTwo);
-                    out.add(new Shape(deeper, List.of(), asked, true));
+                    for (boolean twoItems : List.of(false, true)) {
+                        out.add(new Shape(deeper, List.of(), asked, twoItems));
+                    }
                 }
             }
-            for (List<Bound> group : twoOf(BOUNDS)) {
+        }
+        for (List<Bound> group : twoOf(BOUNDS)) {
+            for (Quantifier every : EACH_ONE_OF_TWO_AGAINST_THE_GROUP) {
                 for (boolean twoItems : List.of(false, true)) {
-                    out.add(new Shape(deeper, group, List.of(EACH_ONE_OF_TWO_AGAINST_THE_GROUP),
-                            twoItems));
+                    out.add(new Shape(false, group, List.of(every), twoItems));
                 }
             }
         }
@@ -318,48 +349,71 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
     }
 
     /**
-     * What is left of an element turns on what it was asked and not on the order: each two of the
-     * things the ways here ask a group, taken in one after the other in either order, leave
-     * nothing exactly where the two taken in at once do.
+     * What is left of an element turns on what it was asked and not on the order: what each part
+     * of a shape's body asks a group, one choice of each, taken in one by one from the first or
+     * from the last, leaves nothing exactly where it all taken in at once does.
      *
-     * <p>Each two one of which is asked of the elements of a container inside the group, and the
-     * other of which changes what that is asked beside — a relation of the group's own, or what
-     * every element of a container meets one of beside what some element of it is asked. Two
-     * relations of the group's own are one region taken in in either order, and two asked of the
-     * elements apart are asked apart in either order.
+     * <p>What the parts ask is read part by part, each as a shape of its own, so it is what a walk
+     * of the body takes in and not what the walk kept: a body no group meets asks, part by part,
+     * what leaves nothing. A walk takes the parts in the order of their spellings, which is one
+     * order; the others are asked here.
      */
     @Test
     void whatIsLeftOfAnElementDoesNotTurnOnTheOrderItIsAskedIn() {
-        Set<RowDemand.AskedOfAnElement> pool = new LinkedHashSet<>();
-        for (int i = 0; i < SHAPES.size(); i++) {
-            if (stated(i).getFirst() instanceof OnTheWay.TakenIn(var _, RowDemand.Exists some)) {
-                some.ofAnElement().asAsked().forEach(pool::addAll);
-            }
-        }
         WhatAnElementIsLeft nothingAsked = WhatAnElementIsLeft.of(declarations());
-        Map<RowDemand.AskedOfAnElement, Optional<WhatAnElementIsLeft>> askedFirst =
-                new LinkedHashMap<>();
-        pool.forEach(each -> askedFirst.put(each, nothingAsked.with(List.of(each))));
         List<String> differ = new ArrayList<>();
         int leaveNone = 0;
-        for (RowDemand.AskedOfAnElement first : pool) {
-            for (RowDemand.AskedOfAnElement second : pool) {
-                if (!askedBeside(first, second) && !askedBeside(second, first)) {
-                    continue;
-                }
-                boolean together = nothingAsked.with(List.of(first, second)).isEmpty();
-                boolean inTurn = askedFirst.get(first)
-                        .flatMap(left -> left.with(List.of(second))).isEmpty();
+        for (Shape shape : SHAPES) {
+            Optional<List<List<RowDemand.AskedOfAnElement>>> asked = askedPartByPart(shape);
+            if (asked.isEmpty()) {
+                continue;
+            }
+            for (List<RowDemand.AskedOfAnElement> each : asked.get()) {
+                boolean together = nothingAsked.with(each).isEmpty();
                 if (together) {
                     leaveNone++;
                 }
-                if (together != inTurn) {
-                    differ.add(first + " then " + second);
+                for (List<RowDemand.AskedOfAnElement> order : List.of(each, each.reversed())) {
+                    Optional<WhatAnElementIsLeft> left = Optional.of(nothingAsked);
+                    for (RowDemand.AskedOfAnElement one : order) {
+                        left = left.flatMap(so -> so.with(List.of(one)));
+                    }
+                    if (left.isEmpty() != together) {
+                        differ.add(shape.written() + " taken in as " + order);
+                    }
                 }
             }
         }
-        assertTrue(leaveNone > 0, "some two of them leave no element");
-        assertEquals(List.of(), differ, "taken in one after the other");
+        assertTrue(leaveNone > 0, "some shape asks what leaves no group");
+        assertEquals(List.of(), differ, "taken in one by one");
+    }
+
+    /**
+     * What {@code shape}'s parts ask a group, one choice of each, every way: each part read as a
+     * shape of its own. Nothing where some part is read as no demand on a group, or the shape is
+     * a level further in, where what is asked of a group is asked of a sub of it.
+     */
+    private static Optional<List<List<RowDemand.AskedOfAnElement>>> askedPartByPart(Shape shape) {
+        if (shape.deeper()) {
+            return Optional.empty();
+        }
+        List<List<RowDemand.AskedOfAnElement>> out = List.of(List.of());
+        for (Shape part : shape.parts()) {
+            if (!(stated(part).getFirst()
+                    instanceof OnTheWay.TakenIn(var _, RowDemand.Exists some))) {
+                return Optional.empty();
+            }
+            List<List<RowDemand.AskedOfAnElement>> joined = new ArrayList<>();
+            for (List<RowDemand.AskedOfAnElement> before : out) {
+                for (List<RowDemand.AskedOfAnElement> way : some.ofAnElement().asAsked()) {
+                    List<RowDemand.AskedOfAnElement> both = new ArrayList<>(before);
+                    both.addAll(way);
+                    joined.add(List.copyOf(both));
+                }
+            }
+            out = joined;
+        }
+        return Optional.of(out);
     }
 
     /**
@@ -482,22 +536,18 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
                 .filter(line -> line.contains("x.gate")).sorted().toList();
     }
 
-    /** Whether {@code asked} is asked of the elements of a container inside the group beside
-     *  what {@code beside} changes: a relation of the group's own, or, of what some element is
-     *  asked, what every element of a container meets one of. */
-    private static boolean askedBeside(RowDemand.AskedOfAnElement asked,
-                                       RowDemand.AskedOfAnElement beside) {
-        return switch (asked) {
-            case RowDemand.SomeElementWithin _ -> beside instanceof RowDemand.Relational
-                    || beside instanceof RowDemand.EveryElementWithin;
-            case RowDemand.EveryElementWithin _ -> beside instanceof RowDemand.Relational;
-            case RowDemand.OfAnElement _ -> false;
-        };
+    /** Every shape asked of, and each part of one a level in as a shape of its own. */
+    private static final List<Shape> READ = read();
+
+    private static List<Shape> read() {
+        Set<Shape> out = new LinkedHashSet<>(SHAPES);
+        SHAPES.stream().filter(shape -> !shape.deeper())
+                .forEach(shape -> out.addAll(shape.parts()));
+        return List.copyOf(out);
     }
 
-    private static final String MODEL = """
-            module probe.ownelements
-
+    /** The input every shape and the behavior a row is composed for read. */
+    private static final String DECLARED = """
             data Item = { n: Int }
                 invariant n >= -10 && n <= 10
 
@@ -507,24 +557,34 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
 
             data Input = { groups: List<Group>, gate: Int }
                 invariant gate >= -10 && gate <= 10
+            """;
+
+    private static final String MODEL = "module probe.ownelements\n\n" + DECLARED + "\n"
+            + IntStream.range(0, READ.size())
+            .mapToObj(i -> "behavior s" + i + " : (x: Input) -> Bool\nlet s" + i + " (x) = "
+                    + READ.get(i).written())
+            .collect(Collectors.joining("\n\n"));
+
+    /**
+     * The behavior a row past a shape is composed for, compiled apart from the shapes: what it
+     * is measured by is worked out over every behavior of its module, and the shapes are many.
+     */
+    private static final String DECIDING = "module probe.deciding\n\n" + DECLARED + """
 
             data A
             data B
 
             behavior decide : (x: Input) -> A | B
             let decide (x) = if x.gate > 0 then A else B
+            """;
 
-            %s
-            """.formatted(IntStream.range(0, SHAPES.size())
-            .mapToObj(i -> "behavior s" + i + " : (x: Input) -> Bool\nlet s" + i + " (x) = "
-                    + SHAPES.get(i).written())
-            .collect(Collectors.joining("\n\n")));
+    private static final Compilation COMPILATION = compiled(MODEL);
 
-    private static final Compilation COMPILATION = compiled();
+    private static final Compilation DECIDE = compiled(DECIDING);
 
     /** Compiled and asked nothing more: what each test asks of it is read when it is asked. */
-    private static Compilation compiled() {
-        Compilation made = Compilation.ofSource(MODEL, "Main");
+    private static Compilation compiled(String model) {
+        Compilation made = Compilation.ofSource(model, "Main");
         assertEquals(List.of(), made.errors().stream()
                 .map(each -> each.diagnostic().code()).toList(), "the model compiles");
         return made;
@@ -540,21 +600,27 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
         return Generator.probeFixing(subject(), "x.gate = 1",
                 Map.of(new RealizationTarget.AtOnePosition(gate.term()), Count.of(1)),
                 NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(
-                        domain("decide").quantities(rules()).ordersOf(gate.term()).answered(),
+                        deciding().quantities(decidingRules()).ordersOf(gate.term()).answered(),
                         Count.of(1)))),
                 (Reachability.Reaching) reached, Generator.CandidateCheck.ANY);
     }
 
     /** What each shape coming out true asks of a row, read once for every test that asks it. */
-    private static final Map<Integer, List<OnTheWay>> STATED = new ConcurrentHashMap<>();
+    private static final Map<Shape, List<OnTheWay>> STATED = new ConcurrentHashMap<>();
 
     /** What shape {@code i} coming out true asks of a row, as conditions on the way. */
     private static List<OnTheWay> stated(int i) {
-        return STATED.computeIfAbsent(i, AWayElementsOfTheirOwnMeetIsNeverShownClosedTest::read);
+        return stated(SHAPES.get(i));
     }
 
-    private static List<OnTheWay> read(int i) {
-        String behavior = "s" + i;
+    /** What {@code shape} coming out true asks of a row, as conditions on the way. */
+    private static List<OnTheWay> stated(Shape shape) {
+        return STATED.computeIfAbsent(shape,
+                AWayElementsOfTheirOwnMeetIsNeverShownClosedTest::readOf);
+    }
+
+    private static List<OnTheWay> readOf(Shape shape) {
+        String behavior = "s" + READ.indexOf(shape);
         Bodies.Elaborated checked =
                 COMPILATION.db().ask(new Bodies.Checked(module())).value();
         AnalysisBody analysis = checked.analysisBodies().get(behavior);
@@ -586,16 +652,32 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
         return read;
     }
 
+    /** What the declarations of the input leave, as the behavior a row is composed for reads it. */
     private static SearchRegion declarations() {
-        return domain("decide").quantities(rules()).region();
+        return deciding().quantities(decidingRules()).region();
+    }
+
+    private static InputDomain deciding() {
+        InputDomain read = DECIDE.db().ask(new Adequacy.Inputs(decidingModule())).value()
+                .get("decide");
+        assertNotNull(read, "the behavior a row is composed for compiles");
+        return read;
+    }
+
+    private static String decidingModule() {
+        return DECIDE.modules().getFirst();
+    }
+
+    private static RuleReadingSource decidingRules() {
+        return RuleReadings.of(DECIDE, decidingModule());
     }
 
     private static List<Axis> axes() {
-        return COMPILATION.db().ask(new Adequacy.Divided(module(), "decide")).value().axes();
+        return DECIDE.db().ask(new Adequacy.Divided(decidingModule(), "decide")).value().axes();
     }
 
     private static MeasuredInput subject() {
-        return MeasuredInput.of("decide", domain("decide").reading(rules()),
+        return MeasuredInput.of("decide", deciding().reading(decidingRules()),
                 AxesATestWrote.asAMeasurement("decide", axes()));
     }
 }

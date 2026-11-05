@@ -454,11 +454,17 @@ public sealed interface RowDemand {
      */
     static Optional<List<List<OfAnElement>>> writtenAlike(List<? extends AskedOfAnElement> way,
                                                           int most) {
-        List<List<OfAnElement>> out = List.of(List.of());
+        // Each way made so far, grown in place by what is asked one way and copied only where
+        // something is asked several.
+        List<List<OfAnElement>> out = new ArrayList<>();
+        out.add(new ArrayList<>());
         for (AskedOfAnElement each : way) {
             List<List<OfAnElement>> these = new ArrayList<>();
             switch (each) {
-                case OfAnElement asked -> these.add(List.of(asked));
+                case OfAnElement asked -> {
+                    out.forEach(made -> made.add(asked));
+                    continue;
+                }
                 case SomeElementWithin(TermPath container, var asked) -> {
                     Optional<List<List<OfAnElement>>> inner = writtenAlike(asked, most);
                     if (inner.isEmpty()) {
@@ -481,17 +487,21 @@ public sealed interface RowDemand {
             if ((long) out.size() * these.size() > most) {
                 return Optional.empty();
             }
+            if (these.size() == 1) {
+                out.forEach(made -> made.addAll(these.getFirst()));
+                continue;
+            }
             List<List<OfAnElement>> joined = new ArrayList<>();
             for (List<OfAnElement> before : out) {
                 for (List<OfAnElement> one : these) {
                     List<OfAnElement> both = new ArrayList<>(before);
                     both.addAll(one);
-                    joined.add(List.copyOf(both));
+                    joined.add(both);
                 }
             }
             out = joined;
         }
-        return Optional.of(out);
+        return Optional.of(out.stream().map(List::copyOf).toList());
     }
 
     /** {@code asked} of an element of the container at {@code container} inside the element, said
