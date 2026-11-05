@@ -1,5 +1,6 @@
 package souther.compiler.reach;
 
+import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeSymbol;
@@ -24,7 +25,7 @@ import java.util.List;
 public sealed interface Proof
         permits ConditionsThatCannotAllHold, OutsideInputDomain, EveryCaseRefused,
         NoCaseTheValueCanBeIsTaken, TheDeclarationHoldsNoneOf, TheDeclarationHoldsNothingElse,
-        EveryWayInIsRuledOut, ItsClosureIsAppliedToNothing {
+        EveryWayInIsRuledOut, ItsClosureIsAppliedToNothing, NoRunGetsPastOneOfItsApplications {
 
     /**
      * The sentences a proof can come to, one per arm.
@@ -149,6 +150,22 @@ public sealed interface Proof
          *                   were assumed; none where the rules alone leave the containers empty
          */
         T itsClosureIsAppliedToNothing(List<String> containers, List<PathDecision> decisions);
+
+        /**
+         * A call on the way here applies a closure to every element it is handed, on every run
+         * that makes it, and no run gets past the application to one of them.
+         *
+         * <p>About one application and not about the closure's body. What {@code inner} says was
+         * shown with the closure handed that element, so what it marks inside the closure holds
+         * there on that application and not on the others: the element is a premise of it that
+         * nothing on the way here is.
+         *
+         * @param call    where the call applying the closure is written
+         * @param element which element the application is handed, counted from nought in the order
+         *                the call is handed them
+         * @param inner   why no run gets past that application
+         */
+        T noRunGetsPastOneOfItsApplications(SourcePos call, int element, Proof inner);
     }
 
     /** What this proof comes to, in {@code words}. */
@@ -200,6 +217,28 @@ public sealed interface Proof
     static Proof itsClosureIsAppliedToNothing(List<String> containers,
                                               List<PathDecision> decisions) {
         return new ItsClosureIsAppliedToNothing(containers, decisions);
+    }
+
+    /** No run gets past one application a call on the way makes; see
+     *  {@link Words#noRunGetsPastOneOfItsApplications}. */
+    static Proof noRunGetsPastOneOfItsApplications(SourcePos call, int element, Proof inner) {
+        return new NoRunGetsPastOneOfItsApplications(call, element, inner);
+    }
+}
+
+record NoRunGetsPastOneOfItsApplications(SourcePos call, int element, Proof inner)
+        implements Proof {
+
+    NoRunGetsPastOneOfItsApplications {
+        if (call == null || element < 0 || inner == null) {
+            throw new IllegalArgumentException("an application nothing gets past, of no call, at"
+                    + " no element, or with nothing said of why: " + call + " " + element);
+        }
+    }
+
+    @Override
+    public <T> T said(Words<T> words) {
+        return words.noRunGetsPastOneOfItsApplications(call, element, inner);
     }
 }
 
