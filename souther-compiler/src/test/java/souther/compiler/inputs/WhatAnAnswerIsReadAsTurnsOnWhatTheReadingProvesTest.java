@@ -7,6 +7,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -49,7 +50,7 @@ class WhatAnAnswerIsReadAsTurnsOnWhatTheReadingProvesTest {
 
     private static Core.Construct wearing(Core value) {
         return new Core.Construct(LABEL, List.of(new Core.FieldValue("value", value, POS)),
-                Type.ref(LABEL), POS);
+                Type.ref(LABEL), OccurrenceLineage.ORIGINAL, POS);
     }
 
     private static Core widened(Core value) {
@@ -149,7 +150,7 @@ class WhatAnAnswerIsReadAsTurnsOnWhatTheReadingProvesTest {
     @Test
     void aFieldOfAConstructionGivenTheElementIsTheElement() {
         Core.Construct made = new Core.Construct(ISSUE, List.of(new Core.FieldValue("of",
-                THE_ELEMENT, POS)), Type.ref(ISSUE), POS);
+                THE_ELEMENT, POS)), Type.ref(ISSUE), OccurrenceLineage.ORIGINAL, POS);
         assertTrue(ElementProjection.isTheElementItself(
                 new Core.FieldAccess(made, "of", Type.ref(ISSUE), POS), ELEMENT, Map.of(),
                 NEWTYPES));

@@ -1,12 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.collect.SharingMap;
+import souther.compiler.collect.Stacked;
 import souther.compiler.numeric.WholeNumberRuns;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -24,22 +22,19 @@ import java.util.Optional;
  */
 final class RemaindersHeld {
 
-    static final RemaindersHeld NONE = new RemaindersHeld(Map.of());
+    static final RemaindersHeld NONE = new RemaindersHeld(SharingMap.empty());
 
-    /** What the statements of each remainder leave of it, never changed once made. */
-    private final Map<ARemainderMoved.Unmoved, Left> held;
+    /** What the statements of each remainder leave of it, shared with the ones this was made
+     *  from. */
+    private final SharingMap<ARemainderMoved.Unmoved, Left> held;
 
-    private RemaindersHeld(Map<ARemainderMoved.Unmoved, Left> held) {
+    private RemaindersHeld(SharingMap<ARemainderMoved.Unmoved, Left> held) {
         this.held = held;
     }
 
-    /** What the statements of a remainder leave of it, and the statements. */
-    record Left(WholeNumberRuns remainders, List<RowDemand.OnARemainder> statements) {
-
-        Left {
-            statements = List.copyOf(statements);
-        }
-    }
+    /** What the statements of a remainder leave of it, and the statements, which are written out
+     *  only where they leave none. */
+    private record Left(WholeNumberRuns remainders, Stacked<RowDemand.OnARemainder> statements) {}
 
     /** What taking a statement in came to. */
     sealed interface Taken {
@@ -55,24 +50,22 @@ final class RemaindersHeld {
     /** These with {@code added} taken in, or the statements of its remainder where they leave
      *  none of it. */
     Taken taking(RowDemand.OnARemainder added) {
-        Optional<ARemainderMoved> stated = ARemainderMoved.of(added);
-        if (stated.isEmpty()) {
+        Optional<ARemainderMoved.Said> said = ARemainderMoved.saidBy(added);
+        if (said.isEmpty()) {
             return new Taken.Held(this);
         }
-        ARemainderMoved.Unmoved of = stated.get().of();
-        WholeNumberRuns leaves = stated.get().unmoved(added.leaves());
+        ARemainderMoved.Unmoved of = said.get().stated().of();
+        WholeNumberRuns leaves = said.get().unmoved();
         Left before = held.get(of);
-        List<RowDemand.OnARemainder> statements = new ArrayList<>();
+        Stacked<RowDemand.OnARemainder> statements = Stacked.empty();
         if (before != null) {
-            statements.addAll(before.statements());
+            statements = before.statements();
             leaves = leaves.and(before.remainders());
         }
-        statements.add(added);
+        statements = statements.then(added);
         if (leaves.isNone()) {
-            return new Taken.NoneLeft(statements);
+            return new Taken.NoneLeft(statements.inOrder());
         }
-        Map<ARemainderMoved.Unmoved, Left> out = new HashMap<>(held);
-        out.put(of, new Left(leaves, statements));
-        return new Taken.Held(new RemaindersHeld(Collections.unmodifiableMap(out)));
+        return new Taken.Held(new RemaindersHeld(held.with(of, new Left(leaves, statements))));
     }
 }

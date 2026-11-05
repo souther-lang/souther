@@ -10,6 +10,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -84,7 +85,7 @@ class AValueReadThroughItselfIsNotAPositionNothingNamesTest {
                 new Core.FieldAccess(read("c", FIRST, Type.ref(CODE)), "value", Type.INT, POS);
         Core.Construct wrapping = new Core.Construct(CODE,
                 java.util.List.of(new Core.FieldValue("value", ofItself, POS)),
-                Type.ref(CODE), POS);
+                Type.ref(CODE), OccurrenceLineage.ORIGINAL, POS);
         return reads(Map.of(FIRST, wrapping));
     }
 

@@ -8,6 +8,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Proof;
 import souther.compiler.reach.WhyUnsettled;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
 import souther.compiler.reach.ValuesNamed;
@@ -80,7 +81,7 @@ final class WhatAnAnswerSays {
 
             @Override
             public List<PathDecision> noRunGetsPastOneOfItsApplications(SourcePos call,
-                                                                        int element, Proof inner) {
+                    OccurrenceLineage lineage, int element, Proof inner) {
                 return List.of();
             }
         });
@@ -141,7 +142,7 @@ final class WhatAnAnswerSays {
 
             @Override
             public List<TypeSymbol> noRunGetsPastOneOfItsApplications(SourcePos call,
-                                                                      int element, Proof inner) {
+                    OccurrenceLineage lineage, int element, Proof inner) {
                 return List.of();
             }
         });
@@ -226,8 +227,8 @@ final class WhatAnAnswerSays {
             }
 
             @Override
-            public String noRunGetsPastOneOfItsApplications(SourcePos call, int element,
-                                                            Proof inner) {
+            public String noRunGetsPastOneOfItsApplications(SourcePos call,
+                    OccurrenceLineage lineage, int element, Proof inner) {
                 return null;
             }
         });
@@ -288,8 +289,8 @@ final class WhatAnAnswerSays {
             }
 
             @Override
-            public List<String> noRunGetsPastOneOfItsApplications(SourcePos call, int element,
-                                                                  Proof inner) {
+            public List<String> noRunGetsPastOneOfItsApplications(SourcePos call,
+                    OccurrenceLineage lineage, int element, Proof inner) {
                 return List.of();
             }
         });

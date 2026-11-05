@@ -8,6 +8,7 @@ import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ResolvedCase;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -187,6 +188,6 @@ class BlockReachesTest {
     }
 
     private static Core.Construct construction() {
-        return new Core.Construct(CASE, List.of(), Type.ref(CASE), POS);
+        return new Core.Construct(CASE, List.of(), Type.ref(CASE), OccurrenceLineage.ORIGINAL, POS);
     }
 }

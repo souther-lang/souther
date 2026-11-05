@@ -41,6 +41,11 @@ public sealed interface DeadBranchMessage extends Message {
      *  one whose value an {@code Int} holds. */
     record ThisHasToAnswerOnTheWayHere() implements DeadBranchMessage, Supporting {}
 
+    /** The call that made the copy of {@code called} a mark of this proof stands in: the same place
+     *  stands in the copy every other call of it makes, and this is the one the proof is about. */
+    record ThisCallMadeTheCopyTheProofIsAbout(String called) implements DeadBranchMessage,
+            Supporting {}
+
     /** The values it is written for are not values the position can hold. */
     record ThePositionStopsShortOfIt(String position, String admits) implements DeadBranchMessage,
             Supporting {}

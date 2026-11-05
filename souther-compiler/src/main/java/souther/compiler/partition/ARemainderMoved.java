@@ -62,7 +62,42 @@ record ARemainderMoved(Unmoved of, BigInteger by) {
     /** The remainder {@code statement} states, or empty where it is not read as one with
      *  others. */
     static Optional<ARemainderMoved> of(RowDemand.OnARemainder statement) {
-        return of(statement.dividend(), statement.remainder().divisor());
+        return saidBy(statement).map(Said::stated);
+    }
+
+    /**
+     * What a statement says of its remainder: the remainder, and what the statement leaves of the
+     * remainder of the form unmoved ({@link #unmoved}).
+     *
+     * @param stated  the remainder the statement states
+     * @param unmoved what it leaves of the remainder of the form unmoved
+     */
+    record Said(ARemainderMoved stated, WholeNumberRuns unmoved) {}
+
+    /**
+     * What {@code statement} says of its remainder, or empty where it is not read as one with
+     * others.
+     *
+     * <p>A function of the statement alone, which every reader that holds one statement of a
+     * remainder against another asks of the same statements over and over: read once a reading
+     * ({@link OneReading#remainderSaidBy}).
+     */
+    static Optional<Said> saidBy(RowDemand.OnARemainder statement) {
+        return OneReading.remainderSaidBy(statement, () ->
+                of(statement.dividend(), statement.remainder().divisor())
+                        .map(stated -> new Said(stated, stated.unmoved(statement.leaves()))));
+    }
+
+    /** Whether {@code one} and {@code other} state one remainder, which is where either leaves
+     *  something of the other's ({@link #leftBy}). */
+    static boolean ofOneRemainder(RowDemand.OnARemainder one, RowDemand.OnARemainder other) {
+        return of(one).filter(own -> own.isStatedBy(other)).isPresent();
+    }
+
+    /** Whether {@code statement} states this remainder, moved by whatever number: where it
+     *  leaves something of it ({@link #leftBy}). */
+    boolean isStatedBy(RowDemand.OnARemainder statement) {
+        return of(statement).filter(stated -> stated.of.equals(of)).isPresent();
     }
 
     /** What {@code statement} leaves of this remainder, or empty where it states another. */

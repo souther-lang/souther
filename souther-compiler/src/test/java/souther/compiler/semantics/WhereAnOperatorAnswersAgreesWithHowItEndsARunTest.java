@@ -9,6 +9,7 @@ import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
@@ -51,7 +52,7 @@ class WhereAnOperatorAnswersAgreesWithHowItEndsARunTest {
         }
         for (Type answer : List.of(Type.INT, Type.DECIMAL, Type.RATIONAL)) {
             WhereAnOperatorAnswers where = WhereAnOperatorAnswers.ofANegation(answer);
-            AbortSet ends = AbortSites.ofANegation(new Core.Neg(value(answer), answer, NOWHERE));
+            AbortSet ends = AbortSites.ofANegation(new Core.Neg(value(answer), answer, OccurrenceLineage.ORIGINAL, NOWHERE));
             if (!agree(where, ends)) {
                 disagree.add("negation of " + Type.show(answer) + ": " + where + " beside " + ends);
             }

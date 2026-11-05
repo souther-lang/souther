@@ -10,6 +10,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -69,13 +70,14 @@ class AProjectionOutOfAConstructionIsWhereItWasGivenItTest {
     /** {@code Code(a)}, the one-field construction a newtype is written as. */
     private static Core.Construct code(Core given) {
         return new Core.Construct(CODE, List.of(new Core.FieldValue("value", given, POS)),
-                Type.ref(CODE), POS);
+                Type.ref(CODE), OccurrenceLineage.ORIGINAL, POS);
     }
 
     /** {@code Pair { left = a, right = b }}. */
     private static Core.Construct pair(Core left, Core right) {
         return new Core.Construct(PAIR, List.of(new Core.FieldValue("left", left, POS),
-                new Core.FieldValue("right", right, POS)), Type.ref(PAIR), POS);
+                new Core.FieldValue("right", right, POS)), Type.ref(PAIR),
+                OccurrenceLineage.ORIGINAL, POS);
     }
 
     /**
@@ -140,7 +142,8 @@ class AProjectionOutOfAConstructionIsWhereItWasGivenItTest {
     @Test
     void aProjectionOfAConstructionGivenAConstructionReachesTheValueInside() {
         Core.Construct outer = new Core.Construct(OUTER,
-                List.of(new Core.FieldValue("inner", code(a()), POS)), Type.ref(OUTER), POS);
+                List.of(new Core.FieldValue("inner", code(a()), POS)), Type.ref(OUTER),
+                OccurrenceLineage.ORIGINAL, POS);
 
         assertEquals(new PathResolution.At(TermPath.of("a")),
                 readingOf(field(field(outer, "inner", Type.ref(CODE)), "value", Type.STRING)));

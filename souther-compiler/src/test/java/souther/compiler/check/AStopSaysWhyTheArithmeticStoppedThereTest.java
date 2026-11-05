@@ -12,6 +12,7 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.WrittenOwner;
 
@@ -70,7 +71,8 @@ class AStopSaysWhyTheArithmeticStoppedThereTest {
         assertSame(quotient, stopped.node());
         assertInstanceOf(AffineForms.Halt.NoNumberOnARun.class, stopped.why());
         assertInstanceOf(AffineForms.Halt.NoNumberOnARun.class,
-                stopOf(new Core.Neg(new Core.Int(Long.MIN_VALUE, Type.INT, POS), Type.INT, POS))
+                stopOf(new Core.Neg(new Core.Int(Long.MIN_VALUE, Type.INT, POS), Type.INT,
+                        OccurrenceLineage.ORIGINAL, POS))
                         .why(),
                 "and nor has the least whole number negated");
     }

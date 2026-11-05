@@ -50,6 +50,7 @@ import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -978,7 +979,8 @@ public final class PathReachability {
                     // the case it selects, which is where a comparison written inside the arm draws
                     // its line.
                     ways.add(walk(arm.body(), scrutinee.enteringAWay(in.known(),
-                                    taking(on, arm, !in.known().cases().equals(before.cases()))),
+                                    taking(on, match, arm,
+                                            !in.known().cases().equals(before.cases()))),
                             in.at(),
                             reads.choosing(Choice.Decides.ofCase(match, arm), symbols, newtypes)));
                 }
@@ -1101,11 +1103,26 @@ public final class PathReachability {
         List<PathDecision> answered = operands.decided();
         if (narrowed) {
             answered = new ArrayList<>(answered);
-            answered.add(PathDecision.ofAnAnswer(e.pos()));
+            answered.add(PathDecision.ofAnAnswer(e.pos(), copyOfAnOperator(e)));
         }
         // Some run reaching here may not get past it, so what follows has something above it.
         return new Walked(past.known(), answered, past.mayStop(), false, false,
                 WhyNone.BY_THE_WAY, false);
+    }
+
+    /**
+     * Which copy of its body the operator {@code e} is in.
+     *
+     * <p>Asked of what {@link PathCompletion} may narrow or end a run at, and every such kind says
+     * its copy ({@link Core.InACopy}). A kind that does not is a kind added without saying so, and
+     * it is refused here: reading it as written would put a decision made in a helper's copy at the
+     * helper's one written place.
+     */
+    private static OccurrenceLineage copyOfAnOperator(Core e) {
+        if (Core.withoutStanding(e) instanceof Core.InACopy standing) {
+            return standing.lineage();
+        }
+        throw new IllegalStateException("an evaluation that answers says which copy it is in: " + e);
     }
 
     /**
@@ -1196,7 +1213,7 @@ public final class PathReachability {
                             operands.mayStop(), false, false,
                             body.whyNothingArrives().<WhyNone>map(why -> new WhyNone.Because(
                                             Proof.noRunGetsPastOneOfItsApplications(
-                                                    call.pos(), handed, why)))
+                                                    call.pos(), call.lineage(), handed, why)))
                                     .orElse(new WhyNone.Unsaid()),
                             false);
                 }
@@ -1291,7 +1308,8 @@ public final class PathReachability {
                 MeaningsOfABody.Part.Asked.LEFT, binary.left(), before.known(), at, reads,
                 reachedWhen);
         Exits right = exitsOf(binary.right(), before.at(reaching.known(),
-                with(before.decided(), reaching, binary.left().pos(), reachedWhen)), at, reads);
+                with(before.decided(), reaching, binary.left().pos(),
+                        binary.lineage(), reachedWhen)), at, reads);
         // A run leaves the operator having run the right, or with the left settling it.
         // Which the left settling holds is asked only where no run leaves having run the
         // right: otherwise a run leaving holds what held after the left either way, and
@@ -1304,7 +1322,8 @@ public final class PathReachability {
                     MeaningsOfABody.Part.Asked.LEFT, binary.left(), settled.known(), at,
                     reads, !reachedWhen);
             settled = settled.at(settling.known(),
-                    with(settled.decided(), settling, binary.left().pos(), !reachedWhen));
+                    with(settled.decided(), settling, binary.left().pos(),
+                            binary.lineage(), !reachedWhen));
         }
         Walked completed = leaving(left.completed(), List.of(right.completed(), settled));
         Walked other = alternatives(left.completed(), List.of(settled, right.when(!reachedWhen)));
@@ -1632,7 +1651,8 @@ public final class PathReachability {
                     MeaningsOfABody.Part.Asked.ITSELF, comparison, k, at, reads, result);
             out.put(where.get(), taken.known().reachesNothing()
                     ? new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(
-                            with(here.decided(), taken, comparison.pos(), result)))
+                            with(here.decided(), taken, comparison.pos(),
+                                    comparison.lineage(), result)))
                     : new Reachability.Unsettled(whyNot(taken, comparison)));
         }
     }
@@ -1791,12 +1811,13 @@ public final class PathReachability {
      * when they plainly can, which is a claim about the model made out of a limit of this compiler.
      */
     private static List<PathDecision> with(List<PathDecision> decided, Predicates.Assumed taken,
-                                           SourcePos at, boolean held) {
+                                           SourcePos at, OccurrenceLineage lineage,
+                                           boolean held) {
         if (!taken.taken()) {
             return decided;
         }
         List<PathDecision> out = new ArrayList<>(decided);
-        out.add(PathDecision.ofACondition(at, held));
+        out.add(PathDecision.ofACondition(at, lineage, held));
         return out;
     }
 
@@ -1805,13 +1826,13 @@ public final class PathReachability {
      * something of the value it matched, which is the same rule as for a condition: an arm nothing
      * was taken from narrowed nothing.
      */
-    private static List<PathDecision> taking(List<PathDecision> decided, Core.Case arm,
-                                             boolean settled) {
+    private static List<PathDecision> taking(List<PathDecision> decided, Core.Match match,
+                                             Core.Case arm, boolean settled) {
         if (!settled) {
             return decided;
         }
         List<PathDecision> out = new ArrayList<>(decided);
-        out.add(new PathDecision(arm.pos(), PathDecision.Way.TAKEN));
+        out.add(PathDecision.ofAnArm(arm.pos(), match.lineage()));
         return out;
     }
 
@@ -1837,7 +1858,8 @@ public final class PathReachability {
         Predicates.Assumed taken = assuming(iff.place().occurrence(),
                 MeaningsOfABody.Part.Asked.CONDITION, iff.cond(), fork.known(), at, reads, holds);
         Known inside = taken.known();
-        List<PathDecision> under = with(fork.decided(), taken, iff.cond().pos(), holds);
+        List<PathDecision> under = with(fork.decided(), taken, iff.cond().pos(),
+                iff.lineage(), holds);
         if (arms != null && index < arms.length) {
             out.put(arms[index], inside.reachesNothing()
                     ? new Reachability.Unreachable(why(iff, holds, under, reads))
@@ -1893,7 +1915,7 @@ public final class PathReachability {
             }
             if (engine.takingItsCases(arm, match.scrutinee(), k, in).reachesNothing()) {
                 out.put(arms[i], new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(
-                        taking(decided, arm, true))));
+                        taking(decided, match, arm, true))));
                 continue;
             }
             if (path == null) {
