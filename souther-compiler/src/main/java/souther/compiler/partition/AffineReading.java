@@ -779,7 +779,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         UndividedByARelation.IntOperation.overTheInput(form, held.least(),
                                 held.greatest(), after);
                 if (!FormRange.liesWithin(form, ofTheInput, Map.of(), held.least(), held.greatest())
-                        && !told.operations.contains(operation)) {
+                        && !told.told(operation)) {
                     told.add(node, operation);
                 }
             }
@@ -1928,6 +1928,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     private static final class WhatWasTold {
 
         private final List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
+        /** Each of {@link #operations} once, for asking whether one was told: a list written out
+         *  element by element tells one operation per element, so asking the list is asked of
+         *  every one told before it. Written where they are and nowhere else ({@link #add}). */
+        private final Set<UndividedByARelation.IntOperation> toldOnce = new HashSet<>();
         /** The node each of {@link #operations} was told at, by where it is among them. */
         private final List<Core> at = new ArrayList<>();
         /** The operations of decimals, in the order they were told. */
@@ -2024,6 +2028,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         void add(Core node, UndividedByARelation.IntOperation operation) {
             at.add(Core.withoutStanding(node));
             operations.add(operation);
+            toldOnce.add(operation);
+        }
+
+        /** Whether {@code operation} is among the operations told. */
+        boolean told(UndividedByARelation.IntOperation operation) {
+            return toldOnce.contains(operation);
         }
 
         /**

@@ -8152,7 +8152,7 @@ public final class Generator {
             case RowDemand.Exists exists -> asComposedOnly(cut,
                     placedIn(subject, composer, looking, here, alreadyStanding, someElement,
                             assumed, cut, constraints(exists.relations()), true),
-                    noElementCanMeet(constraints(exists.relations()), subject));
+                    noElementCanMeet(exists.ofAnElement(), subject));
             // And where no element can be written that meets them, the container holding none,
             // which every element of meets them. Closed only where neither way is open: no element
             // the rules allow meets them, and the container cannot hold none.
@@ -8170,7 +8170,7 @@ public final class Generator {
                 }
                 yield asComposedOnly(cut, some,
                         none instanceof Placed.AtNone(ReachabilityGap.ProvedImpossible _)
-                                && noElementCanMeet(constraints(ofEachElement), subject));
+                                && noElementCanMeet(every.ofEachElement(), subject));
             }
             // Passed over before it is asked: it places no number ({@link #placesNoNumber}).
             case RowDemand.ATruth truth -> throw new IllegalArgumentException(
@@ -8191,17 +8191,19 @@ public final class Generator {
     }
 
     /**
-     * Whether no element the rules of the input allow meets every one of {@code ofAnElement}.
+     * Whether no element the rules of the input allow meets {@code ofAnElement}.
      *
      * <p>Asked of what the declarations leave and of nothing the way added. A way can hold a
      * condition on the element it is walking — a rule inside a closure handed one — and that is
      * about one element; a region holding both it and these would leave nothing where two
      * elements meet the two. What the declarations leave is what every element holds, so what
-     * that leaves nothing for is something no element is.
+     * that leaves nothing for is something no element is. And asked of what the element is asked
+     * as the reading states it, not as its elements are written alike: what two quantifiers over a
+     * container inside it ask is met by two elements there.
      */
-    private static boolean noElementCanMeet(List<TakenConstraint> ofAnElement,
+    private static boolean noElementCanMeet(RowDemand.AnElementMeets ofAnElement,
                                             MeasuredInput subject) {
-        return TakenConstraint.nothingMeetsAll(ofAnElement, subject.quantities().region());
+        return ofAnElement.metByNoElementOf(subject.quantities().region());
     }
 
     private static List<TakenConstraint> constraints(List<RowDemand.Relational> relations) {
