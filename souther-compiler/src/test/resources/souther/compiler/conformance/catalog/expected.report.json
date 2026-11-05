@@ -5399,7 +5399,7 @@
             "relation" : "=",
             "against" : "1",
             "knownWritable" : true,
-            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "writableBecause" : [ "it_is_proved" ],
             "status" : "complete",
             "hit" : false
           }, {
@@ -6043,7 +6043,7 @@
             "relation" : "=",
             "against" : "1",
             "knownWritable" : true,
-            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "writableBecause" : [ "it_is_proved" ],
             "status" : "complete",
             "hit" : false
           }, {
@@ -8167,7 +8167,7 @@
             "relation" : "=",
             "against" : "1",
             "knownWritable" : true,
-            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "writableBecause" : [ "it_is_proved" ],
             "status" : "complete",
             "hit" : false
           }, {

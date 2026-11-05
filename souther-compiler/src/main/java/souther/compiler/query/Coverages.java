@@ -1250,15 +1250,17 @@ final class Coverages {
      *
      * <p><b>And only where what it finds can reach a point no row meets.</b> A point of a reading
      * is a place a row says something about some of the author's points ({@link Border#about}), and
-     * what a search there finds goes into the module's account of those points and nowhere else. A
-     * point a row meets stays met whatever a search finds, and a point a reading holds open that no
-     * reading owes is in no account at all. So a reading's point none of whose author's points is
-     * in {@code unmet} is left unsearched — a point of a reading shown to be no place of the line
-     * among them, which is about none — and said as left unneeded rather than as no search
-     * ({@link SearchOutcomes#unneeded}). What tells this reading's lines apart from the ones beside
-     * them is a different question and is asked whatever this one comes to.
+     * what a search there finds is read by the accounts this module keeps of those points and by
+     * nothing else. A point a row meets stays met whatever a search finds, a point declarations of
+     * another module own is that module's account, and a point a reading holds open that no reading
+     * owes is in no account at all. So a reading's point none of whose author's points is in
+     * {@code unmet} is left unsearched — a point of a reading shown to be no place of the line among
+     * them, which is about none — and said as left unneeded rather than as no search
+     * ({@link ItemAssessment.Owed#unneeded}). What tells this reading's lines apart from the ones
+     * beside them is a different question and is asked whatever this one comes to.
      *
-     * @param unmet the author's points some reading of the module owes and no row meets, as the
+     * @param unmet the author's points some reading of the module owes, an account of the module
+     *              keeps ({@link BorderObligationPointAssessment#keptBy}) and no row meets, as the
      *              obligations read from the rules alone say ({@code Adequacy.Obligations})
      */
     static LineReadings searched(LineReadings measured,
@@ -1298,7 +1300,7 @@ final class Coverages {
                 // search stopped at one call would come out stopped at every call of the line.
                 if (item instanceof ItemAssessment.Owed owed && owed.worthSearching()
                         && !reachesAPointNoRowMeets(border.border(), point, unmet)) {
-                    items.put(point, owed.settledBy(SearchOutcomes.leftUnneeded()));
+                    items.put(point, owed.leftUnneeded());
                 } else if (item instanceof ItemAssessment.Owed owed && owed.worthSearching()) {
                     String label = border.border().label(point);
                     Optional<Boolean> answeredAs = answeredAs(border.border(), point)
@@ -1338,8 +1340,8 @@ final class Coverages {
      * Whether a row at {@code point} of {@code reading} would say something about one of
      * {@code unmet}.
      */
-    private static boolean reachesAPointNoRowMeets(Border reading, DomainPoint point,
-                                                   Set<BorderObligationPoint> unmet) {
+    static boolean reachesAPointNoRowMeets(Border reading, DomainPoint point,
+                                           Set<BorderObligationPoint> unmet) {
         return reading.about(point).stream().anyMatch(each -> unmet.contains(each.point()));
     }
 
@@ -3073,9 +3075,20 @@ final class Coverages {
             throw new IllegalStateException("two searches of one point asking for different"
                     + " values: " + one.criterion() + " and " + two.criterion());
         }
-        return new ItemAssessment.Owed(one.criterion(),
+        // Whether to search is decided from the line, the point and what no row meets, which two
+        // readings of one line share: a reading searched beside one left unsearched is the
+        // decision made twice and made differently, and nothing to put together.
+        if ((one.unneeded() && two.searches().ran()) || (two.unneeded() && one.searches().ran())) {
+            throw new IllegalStateException("one reading of a line searched at a point and another"
+                    + " left it unsearched: " + one.criterion());
+        }
+        ItemAssessment.Owed both = new ItemAssessment.Owed(one.criterion(),
                 ObligationCoverage.acrossOneReadingsSearches(one.coverage(), two.coverage()),
                 one.projection().and(two.projection()), one.searches().plus(two.searches()));
+        // Left unsearched where it was left and is still worth a value: a row one of them stands at
+        // makes the point no search's, and then nothing was left.
+        return (one.unneeded() || two.unneeded()) && both.worthSearching()
+                ? both.leftUnneeded() : both;
     }
 
     /**

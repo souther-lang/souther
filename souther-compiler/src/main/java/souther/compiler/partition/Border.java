@@ -741,6 +741,13 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * Every point of the author's line a row at {@code point} of this reading would say something
      * about: the ones it owes there, and the ones it holds open there.
      *
+     * <p>Something about, and not something that settles. Each comes with where this reading stands
+     * to it ({@link OwedPoint#seat}): a row here settles the point only through a reading standing
+     * at it ({@link ReadingSeat.At}), and through one that cannot tie its place to the point
+     * ({@link ReadingSeat.Untied}) or is not shown to be a place of the line
+     * ({@link ReadingSeat.Unresolved}) it is what the reading tried, said against the point and
+     * counted neither for it nor against it.
+     *
      * <p>Empty for a reading shown to be no place of the line, which owes nothing and holds nothing
      * open. What a row there shows is about no point anybody is owed.
      */

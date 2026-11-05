@@ -213,7 +213,7 @@ class AComparisonInAClosureThatIgnoresTheElementIsOwedARowOnlyWhereTheContainerH
                 .filter(ItemAssessment.Owed::worthSearching)
                 // A point whose every author's point another reading's row meets is not searched,
                 // and has no row to stand anywhere.
-                .filter(owed -> !owed.searches().unneeded())
+                .filter(owed -> !owed.unneeded())
                 .toList();
     }
 
