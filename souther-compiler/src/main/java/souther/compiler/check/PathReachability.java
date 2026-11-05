@@ -1092,8 +1092,10 @@ public final class PathReachability {
         // asks of them, or nothing where it answers nothing. What is taken in there is a step on
         // the way like a condition, and a proof that leans on it names it.
         PathCompletion.Past past = completion.past(e, operands.known(), at, operands.mayStop());
+        // Whether this evaluation may stop a run is asked of it and not of whether the kinds on the
+        // way grew: one of a kind already there adds no kind and stops runs all the same.
         boolean narrowed = past.known() != operands.known();
-        if (!narrowed && past.mayStop().equals(operands.mayStop())) {
+        if (!narrowed && !past.mayStopHere()) {
             return operands;
         }
         List<PathDecision> answered = operands.decided();
@@ -1120,7 +1122,10 @@ public final class PathReachability {
      * ({@link Terms#blockOf}), so a closure given a name is the closure written; and the
      * application itself of the uses of the closure ({@link ClosureUses.Application}). Only an
      * application to every element, handing the closure the element and nothing else of the
-     * container — a position or a key would be values of their own to hand it.
+     * container — a position or a key would be values of their own to hand it. A parameter the
+     * applications before one make, as what a walk carries is, is handed nothing here
+     * ({@link ClosureUses.Application#madeByTheApplicationsBefore}): it is read as any value it may
+     * be, which narrows less and never more.
      *
      * <p>Each application is walked with the element it is handed, as that reading writes the
      * container out: each element with where it is read, entered as a {@code let} enters its

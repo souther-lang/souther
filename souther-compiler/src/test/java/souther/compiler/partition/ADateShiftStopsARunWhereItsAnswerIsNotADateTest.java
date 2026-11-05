@@ -131,6 +131,68 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
     }
 
     /**
+     * A step is applied under what holds where it is applied and not where it was written: the
+     * guard that leaves no date past the shift comes after the step is given its name.
+     */
+    @Test
+    void aStepWrittenBeforeWhatStopsItIsReadWhereItIsApplied() {
+        String report = report("""
+                    let shift = k -> Date.addDays(k * n, d)
+                    guard n == %s else No
+                    let ys = List.map(shift, [0, 1, 2])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(report, "b"), report);
+        String alone = report("""
+                    let shift = k -> Date.addDays(n, d)
+                    guard n == %s else No
+                    let ys = List.map(shift, [0, 1, 2])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(alone, "b"), "a step reading no element\n" + alone);
+    }
+
+    /**
+     * What a step may stop on is the step's, whatever may have stopped a run before it: a shift
+     * worked out on the way to the call is of the same kind as the step's own, and the step's
+     * still stops every run on the element that is the greatest count.
+     */
+    @Test
+    void aStepStopsTheRunWhateverStoppedARunOfTheSameKindBeforeIt() {
+        String report = report("""
+                    let early = Date.addDays(size, d)
+                    guard n == %s else No
+                    let ys = List.map(k -> Date.addDays(k, d), [0, n])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(report, "b"), report);
+        String alone = report("""
+                    guard n == %s else No
+                    let ys = List.map(k -> Date.addDays(k, d), [0, n])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(alone, "b"), "nothing before the step\n" + alone);
+    }
+
+    /**
+     * A step a walk carries a value through is handed the element and what the applications
+     * before it made, and only the element is a value written out: what is carried is read as any
+     * value it may be. Carried here, it stays nought, and the shift by it moves no date; the same
+     * shift by the element stops every run.
+     */
+    @Test
+    void whatAWalkCarriesIsNoElementOfTheList() {
+        String carried = report("""
+                    guard n == %s else No
+                    let total = List.fold((acc, k) -> { let moved = Date.addDays(acc * n, d)
+                        acc }, 0, [1, 2])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertFalse(nothingArrivesAbout(carried, "b"), carried);
+        String element = report("""
+                    guard n == %s else No
+                    let total = List.fold((acc, k) -> { let moved = Date.addDays(k * n, d)
+                        acc }, 0, [1, 2])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(element, "b"), element);
+    }
+
+    /**
      * An element handed on an application of another closure is the value that application
      * handed it: on the outer application to {@code 1}, the inner one is handed {@code 1} too.
      */
