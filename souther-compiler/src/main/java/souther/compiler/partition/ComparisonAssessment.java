@@ -1788,8 +1788,7 @@ sealed interface ComparisonAssessment {
                                             arrivals, line.cutting().keptTo(condition, reading)))
                                     .toList());
                 });
-        return partsOfARelation(part, against, inCase,
-                condition -> wayToACase.apply(condition) instanceof Reachability.Reaching);
+        return partsOfARelation(part, against, inCase, wayToACase::reaches);
     }
 
     /**
