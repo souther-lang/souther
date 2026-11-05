@@ -199,7 +199,13 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             // past it the point is asked as the remainders it stands at together.
             Map.entry("souther.compiler.partition.Standing.REMAINDERS_TOLD_APART",
                     "how many remainders a point is asked at one by one; past it they are asked"
-                            + " together, and nothing is left unread")));
+                            + " together, and nothing is left unread"),
+
+            // How many groups of a form a statement is told against one by one. No search stops
+            // at it: past it the groups are found by their form, and the same group is joined.
+            Map.entry("souther.compiler.partition.FormsHeld.LOOKED_THROUGH",
+                    "how many groups of statements of one form are told against one by one; past"
+                            + " it they are found by their form, and nothing is left unread")));
 
     /**
      * A number written into a composing class is a budget's, or is one of the above.

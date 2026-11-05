@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.collect.SharingMap;
 import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
@@ -13,7 +14,6 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.partition.OneOfEach.Step;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -602,22 +602,41 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * many elements meet each statement it counts, which two conditions asking for counts that
      * leave none in common contradict each other in as well.
      *
+     * <p>A way's walk holds these for each alternative it takes, so each step makes another of
+     * these and shares with the one it was made from what the step left alone.
+     *
+     * @param truths the value each position is asked to hold
      * @param counts what is left of each count asked, by its spelling
      * @param numbers the relations of numbers it has taken in, which statements of one form
      *                leave no point of the line in common
      * @param remainders the remainders it has taken in, which statements of one remainder leave
      *                   none of in common
      */
-    private record HeldTogether(Requirements requirements, List<RowDemand.ATruth> truths,
-                                Map<String, LevelRegion> counts, FormsHeld numbers,
+    private record HeldTogether(Requirements requirements, SharingMap<TermPath, Boolean> truths,
+                                SharingMap<String, LevelRegion> counts, FormsHeld numbers,
                                 RemaindersHeld remainders) {
 
         HeldTogether withRequirements(Requirements required) {
             return new HeldTogether(required, truths, counts, numbers, remainders);
         }
 
-        HeldTogether withTruths(List<RowDemand.ATruth> asked) {
-            return new HeldTogether(requirements, asked, counts, numbers, remainders);
+        /**
+         * These with {@code asked} held as well, or why no row is where it and a truth asked
+         * before ask two values of one position.
+         *
+         * <p>What was held before holds together, since the way was open, so the one position
+         * that can newly be asked both values is the one {@code asked} is of: the position
+         * {@link TruthsAsked#of} would say of all of them in the order they were asked.
+         */
+        Step<HeldTogether, Reachability> asking(RowDemand.ATruth asked) {
+            Boolean before = truths.get(asked.at());
+            if (before == null) {
+                return new Step.Held<>(new HeldTogether(requirements,
+                        truths.with(asked.at(), asked.held()), counts, numbers, remainders));
+            }
+            return before == asked.held() ? new Step.Held<>(this)
+                    : new Step.Closed<>(new Reachability.NothingReaches(
+                            new Reachability.TwoAtOnce.Truths(asked.at())));
         }
 
         /**
@@ -678,10 +697,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                         new Reachability.TwoAtOnce.Counts(AStatementAtARow.elementsOf(counted)
                                 .container().inputPosition())));
             }
-            Map<String, LevelRegion> out = new LinkedHashMap<>(counts);
-            out.put(spelled, left);
-            return new Step.Held<>(new HeldTogether(requirements, truths, out, numbers,
-                    remainders));
+            return new Step.Held<>(new HeldTogether(requirements, truths,
+                    counts.with(spelled, left), numbers, remainders));
         }
     }
 
@@ -727,8 +744,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
 
                 @Override
                 public HeldTogether nothing() {
-                    return new HeldTogether(Requirements.NONE, List.of(), Map.of(),
-                            FormsHeld.NONE, RemaindersHeld.NONE);
+                    return new HeldTogether(Requirements.NONE, SharingMap.empty(),
+                            SharingMap.empty(), FormsHeld.NONE, RemaindersHeld.NONE);
                 }
 
                 /** {@code so} with {@code entry} taken in, or why no row takes them together. */
@@ -831,15 +848,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                 case Requirements.Merge.Conflict conflict -> new Step.Closed<>(
                         new Reachability.NothingReaches(new Reachability.TwoAtOnce.Cases(conflict)));
             };
-            case OnTheWay.TakenIn(var _, RowDemand.ATruth truth) -> {
-                List<RowDemand.ATruth> truths = new ArrayList<>(so.truths());
-                truths.add(truth);
-                yield switch (TruthsAsked.of(truths)) {
-                    case TruthsAsked.Merge.Merged _ -> new Step.Held<>(so.withTruths(truths));
-                    case TruthsAsked.Merge.Conflict(var at) -> new Step.Closed<>(
-                            new Reachability.NothingReaches(new Reachability.TwoAtOnce.Truths(at)));
-                };
-            }
+            case OnTheWay.TakenIn(var _, RowDemand.ATruth truth) -> so.asking(truth);
             case OnTheWay.TakenIn(var _, RowDemand.Exists exists)
                     when exists.counted().isPresent() ->
                     so.counting(exists.counted().get(), ONE_OR_MORE);
