@@ -6,8 +6,10 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.CasesHeldTo;
 import souther.compiler.meaning.Proposition;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -39,6 +41,33 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
     public WhereAPartDecides {
         Objects.requireNonNull(part, "a line of a statement is one of its lines");
         Objects.requireNonNull(decides, "a line decides somewhere, or nowhere");
+    }
+
+    /**
+     * The parts of {@code decides} no conjunction or alternative is made of, each once, in the
+     * order they are met: what a row is asked part by part where whether it is in the case is
+     * asked of what each part comes to ({@link TheCaseALineDecidesIn#possibilityAt}), and what each is
+     * read to ask of a row once for the comparison.
+     */
+    static List<Proposition> atomsOf(Proposition decides) {
+        Set<Proposition> out = new LinkedHashSet<>();
+        Deque<Proposition> open = new ArrayDeque<>(List.of(decides));
+        while (!open.isEmpty()) {
+            Proposition each = open.pop();
+            switch (each) {
+                case Proposition.All all -> pushInOrder(open, all.parts());
+                case Proposition.Any any -> pushInOrder(open, any.parts());
+                case Proposition.Always _ -> { }
+                default -> out.add(each);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    private static void pushInOrder(Deque<Proposition> open, List<Proposition> parts) {
+        for (int at = parts.size() - 1; at >= 0; at--) {
+            open.push(parts.get(at));
+        }
     }
 
     /**

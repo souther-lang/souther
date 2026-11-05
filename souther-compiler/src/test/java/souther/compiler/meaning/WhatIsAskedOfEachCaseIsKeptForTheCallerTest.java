@@ -6,6 +6,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
@@ -120,6 +121,42 @@ class WhatIsAskedOfEachCaseIsKeptForTheCallerTest {
         assertEquals(List.of(), asking.asked());
         assertEquals(Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO),
                 atoms.notWorkedOut());
+    }
+
+    /**
+     * Of the cases some row may be in, a part chosen so far no row is in leaves every case past it
+     * unanswered, and the ways of choosing are not counted: nine choices are more ways than are
+     * taken apart, and the one case no part of which leaves no row is answered.
+     */
+    @Test
+    void aPartNoRowIsInLeavesTheCasesPastItUnanswered() {
+        List<DecidingCase.Cases> choices = new ArrayList<>();
+        List<Proposition> everyKept = new ArrayList<>();
+        Set<Proposition> noRow = new HashSet<>();
+        for (int i = 0; i < 9; i++) {
+            Proposition kept = truth("k" + i);
+            Proposition left = truth("n" + i);
+            everyKept.add(kept);
+            noRow.add(left);
+            choices.add(new DecidingCase.Cases.EachOf(List.of(one(left), one(kept))));
+        }
+        DecidingCase.Cases cases = new DecidingCase.Cases.Together(choices);
+        List<Proposition> answered = new ArrayList<>();
+        List<Proposition> askedOfRows = new ArrayList<>();
+
+        CasesOfALineAsked.Atoms<Boolean> atoms = CasesOfALineAsked.atomsOf(
+                new DecidingCase(SAID, cases), condition -> answered.add(condition),
+                condition -> {
+                    askedOfRows.add(condition);
+                    return (condition instanceof Proposition.All all ? all.parts()
+                            : List.of(condition)).stream().noneMatch(noRow::contains);
+                });
+
+        assertEquals(List.of(Proposition.all(everyKept)), answered);
+        assertEquals(List.of(new CasesOfALineAsked.Atom<>(Proposition.all(everyKept), true)),
+                atoms.each());
+        assertEquals(Set.of(), atoms.notWorkedOut());
+        assertEquals(18, askedOfRows.size(), "each part asked once, beside the kept before it");
     }
 
     /** The cases walked to are kept beside the figure the others were stopped at. */

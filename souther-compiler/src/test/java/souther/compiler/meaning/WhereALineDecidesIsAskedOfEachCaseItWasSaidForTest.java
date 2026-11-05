@@ -99,26 +99,41 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         Asking asking = noRowsIn(Set.of(A));
 
         CasesOfALineAsked.Found found = asking.of(FOUR);
-        assertEquals(List.of(DecidingCase.alone(both(B, C)), DecidingCase.alone(both(B, D))),
-                found.decidesIn(), "the cases of b, each by itself, and none of a");
+        assertEquals(List.of(new DecidingCase(SAID, FOUR)), found.decidesIn(),
+                "the cases of b divide and those of a hold no row: the four as said");
         assertEquals(Set.of(), found.notWorkedOut(), "a case no row is in is worked out");
         assertEquals(List.of(SOME_OF_FOUR, A, B, both(B, C), both(B, D)), asking.asked(),
                 "nothing past a");
     }
 
     /**
-     * Every case with a row in it dividing rows does not make the case what it was said as: one
-     * it stands for holds no row, and is not a case the line decides in. So the cases that divide
-     * are said each by itself, as where one holds rows on one side alone.
+     * Every case with a row in it dividing rows makes the case what it was said as, though one it
+     * stands for holds no row: that one adds no row to where the case holds, so the rows of the
+     * case are the rows of the ones the line decides in.
      */
     @Test
-    void aCaseNoRowIsInIsNotOneTheCaseIsSaidAsBeside() {
+    void aCaseNoRowIsInLeavesTheCaseWhatItWasSaidAs() {
         CasesOfALineAsked.Found found = noRowsIn(Set.of(both(A, D))).of(FOUR);
 
-        assertEquals(List.of(DecidingCase.alone(both(A, C)), DecidingCase.alone(both(B, C)),
-                DecidingCase.alone(both(B, D))), found.decidesIn(),
-                "the three with rows in them, each by itself, and not the four as said");
+        assertEquals(List.of(new DecidingCase(SAID, FOUR)), found.decidesIn(),
+                "the four as said, the one with no row among them");
         assertEquals(Set.of(), found.notWorkedOut());
+    }
+
+    /**
+     * A case whose rows are on one side of the line keeps the case from being what it was said
+     * as, where every other case with a row divides and one holds none: its rows would be counted
+     * at the line, which turns nothing between them.
+     */
+    @Test
+    void aCaseOnOneSideBesideOneNoRowIsInLeavesTheOthersEachByItself() {
+        CasesOfALineAsked.Found found = new Asking(condition -> condition.equals(both(A, D))
+                ? CasesOfALineAsked.Crossing.NO_ROWS : condition.equals(both(B, C))
+                ? CasesOfALineAsked.Crossing.CANNOT_CROSS : CasesOfALineAsked.Crossing.MAY_CROSS,
+                new ArrayList<>()).of(FOUR);
+
+        assertEquals(List.of(DecidingCase.alone(both(A, C)), DecidingCase.alone(both(B, D))),
+                found.decidesIn(), "the two that divide, each by itself");
     }
 
     /** Where some one of the cases holding is shown to hold no row, none does, and that one

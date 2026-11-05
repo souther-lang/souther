@@ -187,7 +187,19 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             // go is worked out again, to the way it was.
             Map.entry("souther.compiler.partition.WaysToACase.CASES_KEPT",
                     "how many cases' ways are kept for the lines asking them; past it a way is"
-                            + " worked out again, and nothing is left unread")));
+                            + " worked out again, and nothing is left unread"),
+
+            // How many truths of a case's parts are tried before a way is left unrefuted. No
+            // search stops at it: a way not refuted is searched for a row as any other is.
+            Map.entry("souther.compiler.partition.TheCaseALineDecidesIn.TRUTHS_TRIED",
+                    "how many truths of a case's parts are tried to refute a row at a point along"
+                            + " a way; past it the way is searched, and nothing is left unread"),
+
+            // How many remainders a point is told apart at one by one. No search stops at it:
+            // past it the point is asked as the remainders it stands at together.
+            Map.entry("souther.compiler.partition.Standing.REMAINDERS_TOLD_APART",
+                    "how many remainders a point is asked at one by one; past it they are asked"
+                            + " together, and nothing is left unread")));
 
     /**
      * A number written into a composing class is a budget's, or is one of the above.

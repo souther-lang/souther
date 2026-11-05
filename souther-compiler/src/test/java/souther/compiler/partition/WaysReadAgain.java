@@ -180,7 +180,7 @@ final class WaysReadAgain {
             List<OnTheWay> way, AWayReadForARelation.Declarations declarations) {
         return AWayReadForARelation.of(new Reachability.Ways.Whole(
                         way.stream().filter(OnTheWay::splitsTheWay).toList(),
-                        CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG, List.of(),
+                        CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG, List.of(), List.of(),
                         new Reachability.ReadFrom(new WayToTheBorder(way), REGION)),
                 Set.of(X, Y, AN_ELEMENT), declarations);
     }
