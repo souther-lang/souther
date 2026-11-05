@@ -33,9 +33,6 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.Recognizer;
 import souther.compiler.types.ValueName;
 
-import java.lang.ref.Reference;
-import java.lang.ref.ReferenceQueue;
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -101,12 +98,8 @@ final class AStatementAtARow {
     private final Set<TermPath> positions;
     /** {@link #hashCode}, or {@code 0} before it is asked; the same whoever works it out. */
     private int hash;
-    /**
-     * What a row asks of each part of a statement, held by the statement's own address and not in
-     * it: answers carry a statement, and a table compared by address under them would make an
-     * answer unequal to its own recomputation.
-     */
-    private static final Numbered NUMBERED = new Numbered();
+    /** The parts numbered on the first row asked; the same whoever numbers them. */
+    private volatile PartsOfTheStatement parts;
 
     private AStatementAtARow(Proposition stated, Map<Relation, OneRelation> relations,
                              Map<Spelling,OverTheElements> elements, Set<TermPath> positions) {
@@ -1016,170 +1009,113 @@ final class AStatementAtARow {
      * row wherever it stands.
      */
     Answer at(BorderQuantity.Observation row) {
-        Parts numbered = NUMBERED.of(this);
-        return at(stated, row, new Answer[numbered.size()], numbered);
+        PartsOfTheStatement numbered = parts;
+        if (numbered == null) {
+            numbered = PartsOfTheStatement.of(stated, relations, elements);
+            parts = numbered;
+        }
+        return at(numbered.root(), row, new Answer[numbered.size()], numbered);
     }
 
     /**
-     * The {@link Parts} of each statement asked, found by the statement's address: two statements
-     * that are equal are still two, because what {@link Parts} remembers by address is the parts of
-     * the one it was made for. An entry goes when its statement does.
+     * A part of the statement as a row reads it, with what a row would otherwise look up for it by
+     * a key built of its spelling.
+     *
+     * @param parts the numbers of the parts it is made of, in the order they are asked
+     * @param over for a quantifier, or a count of the elements meeting a statement, what it is
+     *             read over
+     * @param relation for a comparison, how it is read
      */
-    private static final class Numbered {
+    private record APart(Proposition part, List<Integer> parts, OverTheElements over,
+                         OneRelation relation) {
 
-        private final Map<Integer,List<Held>> byAddress = new HashMap<>();
-        private final ReferenceQueue<AStatementAtARow> gone = new ReferenceQueue<>();
-
-        private static final class Held extends WeakReference<AStatementAtARow> {
-            private final int address;
-            private final Parts parts;
-
-            Held(AStatementAtARow statement, int address, Parts parts,
-                 ReferenceQueue<AStatementAtARow> gone) {
-                super(statement, gone);
-                this.address = address;
-                this.parts = parts;
-            }
-        }
-
-        synchronized Parts of(AStatementAtARow statement) {
-            for (Reference<? extends AStatementAtARow> each; (each = gone.poll()) != null; ) {
-                Held left = (Held) each;
-                List<Held> held = byAddress.get(left.address);
-                held.remove(left);
-                if (held.isEmpty()) {
-                    byAddress.remove(left.address);
-                }
-            }
-            int address = System.identityHashCode(statement);
-            List<Held> held = byAddress.computeIfAbsent(address, _ -> new ArrayList<>());
-            for (Held each : held) {
-                if (each.get() == statement) {
-                    return each.parts;
-                }
-            }
-            Parts made = Parts.of(statement.stated, statement.relations, statement.elements);
-            held.add(new Held(statement, address, made, gone));
-            return made;
+        APart {
+            parts = Collections.unmodifiableList(new ArrayList<>(parts));
         }
     }
 
     /**
-     * What a row asks of each part of a statement, found once for the statement and not at every
-     * row.
+     * The statement's parts numbered once, so a row asks no spelling of anything.
      *
      * <p>A part is numbered by its spelling, so parts spelled alike are one part however many
-     * objects stand for them, and the first of them is the one walked: the others are answered from
-     * its answer and are never asked of their own parts. Every object met is remembered by identity,
-     * with what a row would otherwise look up from it by a key built of its spelling — what it was
-     * written out to, the relation it is read by, the elements it is read over — so a row compares
-     * no spelling and builds none.
+     * objects stand for them, and the parts of one are numbered once. A part comes after the parts
+     * it is made of, and a statement over the ways after what it is written out to, which is
+     * written out here and not at each row. Every part a row asks is one of these, and each is
+     * asked by number.
      *
-     * <p>A part met that numbering did not meet is found by its spelling and its lookups made the
-     * long way. That costs more and answers the same.
+     * <p>Worked out from the statement alone, so it is no part of what makes two statements equal.
+     *
+     * @param parts every part, each after the parts it is made of
+     * @param root the number of the statement
      */
-    static final class Parts {
+    private record PartsOfTheStatement(List<APart> parts, int root) {
 
+        PartsOfTheStatement {
+            parts = Collections.unmodifiableList(new ArrayList<>(parts));
+        }
+
+        static PartsOfTheStatement of(Proposition stated, Map<Relation,OneRelation> relations,
+                                      Map<Spelling,OverTheElements> elements) {
+            Numbering numbering = new Numbering(relations, elements);
+            int root = numbering.number(stated);
+            return new PartsOfTheStatement(numbering.parts, root);
+        }
+
+        int size() {
+            return parts.size();
+        }
+
+        APart part(int number) {
+            return parts.get(number);
+        }
+    }
+
+    /** The numbering under way: what has been numbered, and what a part is read by. */
+    private static final class Numbering {
+
+        private final List<APart> parts = new ArrayList<>();
+        private final Map<Spelling,Integer> bySpelling = new HashMap<>();
         private final Map<Relation,OneRelation> relations;
         private final Map<Spelling,OverTheElements> elements;
-        private final IdentityHashMap<Proposition,Integer> byObject = new IdentityHashMap<>();
-        private final Map<Spelling,Integer> bySpelling = new HashMap<>();
-        private final IdentityHashMap<Proposition,OverTheElements> over = new IdentityHashMap<>();
-        private final IdentityHashMap<Proposition,OneRelation> relationOf = new IdentityHashMap<>();
-        private final IdentityHashMap<Proposition,Proposition> written = new IdentityHashMap<>();
 
-        private Parts(Map<Relation,OneRelation> relations,
-                      Map<Spelling,OverTheElements> elements) {
+        Numbering(Map<Relation,OneRelation> relations, Map<Spelling,OverTheElements> elements) {
             this.relations = relations;
             this.elements = elements;
         }
 
-        /** The parts of a statement that reads no relation and no element. */
-        static Parts of(Proposition stated) {
-            return of(stated, Map.of(), Map.of());
-        }
-
-        private static Parts of(Proposition stated, Map<Relation,OneRelation> relations,
-                                Map<Spelling,OverTheElements> elements) {
-            Parts out = new Parts(relations, elements);
-            out.number(stated);
-            return out;
-        }
-
-        int size() {
-            return bySpelling.size();
-        }
-
-        /** The number of {@code part}, or {@code -1} for a part that was not found in numbering. */
-        int numberOf(Proposition part) {
-            Integer found = byObject.get(part);
-            if (found == null) {
-                found = bySpelling.get(part.spelling());
+        int number(Proposition part) {
+            Integer had = bySpelling.get(part.spelling());
+            if (had != null) {
+                return had;
             }
-            return found == null ? -1 : found;
-        }
-
-        /** What a statement over the ways is written out to, as numbering found it. */
-        Proposition writtenOf(Proposition.OfTheWays ways) {
-            Proposition out = written.get(ways);
-            return out != null ? out : ways.written();
-        }
-
-        /** The relation {@code compared} is read by, as numbering found it. */
-        OneRelation relationOf(Proposition.Compared compared) {
-            OneRelation out = relationOf.get(compared);
-            return out != null ? out : relations.get(compared.relation());
-        }
-
-        /** What a quantifier, or a count of the elements meeting a statement, is read over. */
-        private OverTheElements overOf(Proposition.Some some) {
-            OverTheElements out = over.get(some);
-            return out != null ? out : elements.get(keyOf(some));
-        }
-
-        private OverTheElements overOf(Proposition.Compared compared, Quantity count) {
-            OverTheElements out = over.get(compared);
-            return out != null ? out : elements.get(keyOf(count));
-        }
-
-        private void number(Proposition part) {
-            if (byObject.containsKey(part)) {
-                return;
-            }
-            Integer first = bySpelling.get(part.spelling());
-            if (first != null) {
-                byObject.put(part, first);
-                return;
-            }
-            int number = bySpelling.size();
-            bySpelling.put(part.spelling(), number);
-            byObject.put(part, number);
-            switch (part) {
-                case Proposition.All all -> all.parts().forEach(this::number);
-                case Proposition.Any any -> any.parts().forEach(this::number);
-                case Proposition.WhereItAnswers where -> {
-                    number(where.answers());
-                    number(where.states());
-                }
-                case Proposition.SoManyHold counted -> counted.statements().forEach(this::number);
-                case Proposition.OfTheWays ways -> {
-                    Proposition out = ways.written();
-                    written.put(part, out);
-                    number(out);
-                }
-                case Proposition.Some some -> over.put(part, elements.get(keyOf(some)));
+            APart made = switch (part) {
+                case Proposition.All all -> madeOf(part, all.parts());
+                case Proposition.Any any -> madeOf(part, any.parts());
+                case Proposition.WhereItAnswers where ->
+                        madeOf(part, List.of(where.answers(), where.states()));
+                case Proposition.SoManyHold counted -> madeOf(part, counted.statements());
+                case Proposition.OfTheWays ways -> madeOf(part, List.of(ways.written()));
+                case Proposition.Some some -> new APart(part, List.of(),
+                        elements.get(keyOf(some)), null);
                 case Proposition.Compared compared
                         when compared.relation() instanceof Relation.Affine affine
                         && countIn(affine) instanceof Quantity count ->
-                        over.put(part, elements.get(keyOf(count)));
-                case Proposition.Compared compared -> {
-                    OneRelation relation = relations.get(compared.relation());
-                    if (relation != null) {
-                        relationOf.put(part, relation);
-                    }
-                }
-                default -> { }
+                        new APart(part, List.of(), elements.get(keyOf(count)), null);
+                case Proposition.Compared compared -> new APart(part, List.of(), null,
+                        relations.get(compared.relation()));
+                default -> new APart(part, List.of(), null, null);
+            };
+            parts.add(made);
+            bySpelling.put(part.spelling(), parts.size() - 1);
+            return parts.size() - 1;
+        }
+
+        private APart madeOf(Proposition part, List<Proposition> made) {
+            List<Integer> numbers = new ArrayList<>();
+            for (Proposition each : made) {
+                numbers.add(number(each));
             }
+            return new APart(part, numbers, null, null);
         }
     }
 
@@ -1350,23 +1286,20 @@ final class AStatementAtARow {
         }
     }
 
-    private Answer at(Proposition part, BorderQuantity.Observation row, Answer[] answered,
-                      Parts numbered) {
-        int number = numbered.numberOf(part);
-        if (number < 0) {
-            return atOnce(part, row, answered, numbered);
-        }
+    private Answer at(int number, BorderQuantity.Observation row, Answer[] answered,
+                      PartsOfTheStatement numbered) {
         Answer known = answered[number];
         if (known != null) {
             return known;
         }
-        Answer answer = atOnce(part, row, answered, numbered);
+        Answer answer = atOnce(numbered.part(number), row, answered, numbered);
         answered[number] = answer;
         return answer;
     }
 
-    private Answer atOnce(Proposition part, BorderQuantity.Observation row, Answer[] answered,
-                          Parts numbered) {
+    private Answer atOnce(APart node, BorderQuantity.Observation row, Answer[] answered,
+                          PartsOfTheStatement numbered) {
+        Proposition part = node.part();
         return switch (part) {
             case Proposition.Always(boolean holds) -> holds ? Answer.HOLDS : Answer.FAILS;
             // Of the element this row is read with chosen: the last of those holding the value it
@@ -1402,21 +1335,20 @@ final class AStatementAtARow {
                                 .orElseGet(() -> new Said.NotRead(Set.of(ReadingGap.NO_VALUE))));
                         case TextAtARow.Unsaid(Said said) -> heldAs(holds, said);
                     };
-            case Proposition.All all -> joined(all.parts().stream()
+            case Proposition.All _ -> joined(node.parts().stream()
                     .map(each -> at(each, row, answered, numbered)).toList(), true);
-            case Proposition.Any any -> joined(any.parts().stream()
+            case Proposition.Any _ -> joined(node.parts().stream()
                     .map(each -> at(each, row, answered, numbered)).toList(), false);
             // At a row it answered at, what it states; at one it did not, nothing holds — and its
             // denial is asked as its own proposition, so a row that stopped holds neither.
-            case Proposition.WhereItAnswers where -> joined(List.of(
-                    at(where.answers(), row, answered, numbered),
-                    at(where.states(), row, answered, numbered)), true);
-            case Proposition.SoManyHold counted -> howManyHold(counted, counted.statements()
+            case Proposition.WhereItAnswers _ -> joined(node.parts().stream()
+                    .map(each -> at(each, row, answered, numbered)).toList(), true);
+            case Proposition.SoManyHold counted -> howManyHold(counted, node.parts()
                     .stream().map(each -> at(each, row, answered, numbered)).toList());
-            case Proposition.OfTheWays ways ->
-                    at(numbered.writtenOf(ways), row, answered, numbered);
+            case Proposition.OfTheWays _ ->
+                    at(node.parts().getFirst(), row, answered, numbered);
             case Proposition.Some some -> {
-                OverTheElements over = numbered.overOf(some);
+                OverTheElements over = node.over();
                 HowManyAtARow counted = over.ofTheElement().howManyMeetIn(over.container(), row);
                 if (counted == null) {
                     yield new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
@@ -1425,15 +1357,15 @@ final class AStatementAtARow {
             }
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
-                    && countIn(affine) instanceof Quantity count -> {
-                HowManyAtARow counted = numbered.overOf(compared, count).howManyIn(row);
+                    && countIn(affine) instanceof Quantity _ -> {
+                HowManyAtARow counted = node.over().howManyIn(row);
                 if (counted == null) {
                     yield new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
                 }
                 yield countedAgainst(compared, affine, counted);
             }
             case Proposition.Compared compared when askable(compared) ->
-                    heldAs(compared.holds(), switch (numbered.relationOf(compared)) {
+                    heldAs(compared.holds(), switch (node.relation()) {
                         case OneRelation.OnAQuantity read -> heldAt(read, row);
                         case OneRelation.OnAProduct product -> product.at(row);
                         case OneRelation.OnARemainderByAnInput remainder -> remainder.at(row);
