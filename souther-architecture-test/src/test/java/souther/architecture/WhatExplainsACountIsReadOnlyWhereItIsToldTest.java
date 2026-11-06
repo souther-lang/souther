@@ -3,12 +3,15 @@ package souther.architecture;
 import org.junit.jupiter.api.Test;
 
 import java.lang.classfile.ClassModel;
+import java.lang.classfile.CodeElement;
 import java.lang.classfile.CodeModel;
 import java.lang.classfile.FieldModel;
 import java.lang.classfile.MethodModel;
 import java.lang.classfile.instruction.FieldInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -192,11 +195,60 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
         return by;
     }
 
+    /**
+     * What the compiled classes say of every account: who reads it outside its carrier, whether
+     * its carrier reads it, and the carrier.
+     *
+     * <p>Read off in one walk over every method's code, which is the whole of what either test
+     * costs: each instruction is matched against every account at once, so a row added to the list
+     * adds a lookup and not a walk.
+     */
+    private record Walked(Map<Account, Set<String>> outside, Set<Account> inside,
+                          Map<Account, ClassModel> carriers) {}
+
+    private static final Walked WALKED = walked();
+
+    private static Walked walked() {
+        Map<Account, Set<String>> outside = new LinkedHashMap<>();
+        READ_BY.keySet().forEach(account -> outside.put(account, new TreeSet<>()));
+        Set<Account> inside = new HashSet<>();
+        Map<Account, ClassModel> carriers = new HashMap<>();
+        for (Path module : COMPILED.modules()) {
+            for (ClassModel each : COMPILED.classesOf(module)) {
+                String owner = each.thisClass().asInternalName();
+                READ_BY.keySet().stream().filter(account -> account.owner().equals(owner))
+                        .forEach(account -> carriers.put(account, each));
+                for (MethodModel method : each.methods()) {
+                    CodeModel code = method.code().orElse(null);
+                    if (code == null) {
+                        continue;
+                    }
+                    for (CodeElement element : code) {
+                        Account read = switch (element) {
+                            case FieldInstruction it -> new Account(
+                                    it.owner().name().stringValue(), it.name().stringValue());
+                            case InvokeInstruction it -> new Account(
+                                    it.owner().name().stringValue(), it.name().stringValue());
+                            default -> null;
+                        };
+                        if (read == null || !outside.containsKey(read)) {
+                            continue;
+                        }
+                        if (read.owner().equals(owner)) {
+                            inside.add(read);
+                        } else {
+                            outside.get(read).add(AMethod.of(each, method));
+                        }
+                    }
+                }
+            }
+        }
+        return new Walked(outside, inside, carriers);
+    }
+
     @Test
     void eachAccountIsReadOnlyWhereItIsHandedOnOrTold() {
-        Map<Account, Set<String>> found = new LinkedHashMap<>();
-        READ_BY.keySet().forEach(account -> found.put(account, readersOutside(account)));
-        assertEquals(sorted(READ_BY), found,
+        assertEquals(sorted(READ_BY), WALKED.outside(),
                 "what a value carries to tell an author what multiplied a line is read to decide"
                         + " nothing: a reader not written here is one that may");
     }
@@ -210,7 +262,8 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
     void andEachAccountIsAComponentTheWalkSeesBeingRead() {
         for (Account account : READ_BY.keySet()) {
             assertTrue(declares(account), account + " is declared by its carrier");
-            assertTrue(!readersOutside(account).isEmpty() || readInside(account),
+            assertTrue(!WALKED.outside().get(account).isEmpty()
+                            || WALKED.inside().contains(account),
                     account + " is read somewhere, or the walk sees no read of it at all");
         }
     }
@@ -221,58 +274,15 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
         return sorted;
     }
 
-    private static Set<String> readersOutside(Account account) {
-        Set<String> found = new TreeSet<>();
-        for (Path module : COMPILED.modules()) {
-            for (ClassModel each : COMPILED.classesOf(module)) {
-                if (each.thisClass().asInternalName().equals(account.owner())) {
-                    continue;
-                }
-                for (MethodModel method : each.methods()) {
-                    if (reads(method, account)) {
-                        found.add(AMethod.of(each, method));
-                    }
-                }
-            }
-        }
-        return found;
-    }
-
-    private static boolean readInside(Account account) {
-        return carrier(account).methods().stream().anyMatch(method -> reads(method, account));
-    }
-
     /** Whether the carrier holds the account as a field, or works it out in a method. */
     private static boolean declares(Account account) {
-        ClassModel carrier = carrier(account);
+        ClassModel carrier = WALKED.carriers().get(account);
+        if (carrier == null) {
+            throw new AssertionError(account.owner() + " is compiled in no module");
+        }
         return carrier.fields().stream().map(FieldModel::fieldName)
                 .anyMatch(name -> name.equalsString(account.name()))
                 || carrier.methods().stream().map(MethodModel::methodName)
                         .anyMatch(name -> name.equalsString(account.name()));
-    }
-
-    private static ClassModel carrier(Account account) {
-        for (Path module : COMPILED.modules()) {
-            for (ClassModel each : COMPILED.classesOf(module)) {
-                if (each.thisClass().asInternalName().equals(account.owner())) {
-                    return each;
-                }
-            }
-        }
-        throw new AssertionError(account.owner() + " is compiled in no module");
-    }
-
-    private static boolean reads(MethodModel method, Account account) {
-        CodeModel code = method.code().orElse(null);
-        if (code == null) {
-            return false;
-        }
-        return code.elementStream().anyMatch(element -> switch (element) {
-            case FieldInstruction it -> account.owner().equals(it.owner().name().stringValue())
-                    && account.name().equals(it.name().stringValue());
-            case InvokeInstruction it -> account.owner().equals(it.owner().name().stringValue())
-                    && account.name().equals(it.name().stringValue());
-            default -> false;
-        });
     }
 }
