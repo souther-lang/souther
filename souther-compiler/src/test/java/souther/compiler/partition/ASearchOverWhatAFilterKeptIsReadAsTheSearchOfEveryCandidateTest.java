@@ -49,13 +49,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * that is not read.
  *
  * <p>Of the behavior, and not of the helper the search is written in. A filter applies its
- * closure to every candidate on every run, and a search applies its own until one holds: the third
- * candidate's bound is a line the filter draws, and one the search of every candidate never
- * reaches, since the two before it both fail only where the given number is each of them. The
- * behavior's obligations are read in the regions every line on their axis leaves, the helper's
- * among them, so they are read alike where the helper draws the same lines. Nor are the
- * applications a reading was read on the same: they are the applications of the closures written,
- * which are not the same closures.
+ * closure to every candidate on every run, and a search applies its own until one holds, so the
+ * filter can draw a line of a later candidate where the search never applies its closure to it
+ * (one such line is below). The behavior's obligations are read in the regions every line on
+ * their axis leaves, the helper's among them, so they are read alike where the helper draws the
+ * same lines. Nor are the applications a reading was read on the same: they are the applications
+ * of the closures written, which are not the same closures.
+ *
+ * <p>And of what the behavior states where a run answers, and not of whether it does. A filter
+ * working out its closure on a later candidate may end a run the search would have finished:
+ * where a run may end is read beside the statement, by what a run may end for, and the two
+ * searches are no one program there.
  */
 class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
 
@@ -200,14 +204,16 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
                 : new TreeSet<>();
     }
 
-    /** Every line a rule of the helper draws, whichever rule draws it. */
+    /** Every line a rule of the helper draws, by its axis and the value it is at, whichever rule
+     *  draws it. */
     private static Set<String> drawnByTheHelper(JsonNode partition) {
         Set<String> out = new TreeSet<>();
         for (JsonNode boundary : partition.path("boundaries")) {
             if (!ruleOf(boundary.path("lineId").path("line").path("which").path("rule"))
                     .startsWith("g#")) {
-                out.add(boundary.path("lineId").path("target") + " "
-                        + boundary.path("kind").asString());
+                out.add(boundary.path("axis").asString() + " at "
+                        + boundary.path("lineId").path("target").path("level").path("at")
+                        .asString() + " " + boundary.path("kind").asString());
             }
         }
         return out;
@@ -248,11 +254,13 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
                 search + " " + rule);
     }
 
-    /** Whatever the rule reads of what was found: itself, a remainder of it, or a field of a
-     *  record built of it. */
+    /** Whatever the rule reads of what was found: itself, a remainder of it, a field of a record
+     *  built of it, or what arithmetic makes of it. */
     @Test
     void theTwoSearchesStateOneStatementTakenApartIntoTheSameCases() {
-        for (String rule : List.of(ITS_WEEKDAY_IN_A_RECORD, ITS_WEEKDAY, WHAT_WAS_FOUND)) {
+        for (String rule : List.of(ITS_WEEKDAY_IN_A_RECORD, ITS_WEEKDAY, WHAT_WAS_FOUND,
+                "first(base, h) + 1 > 2", "first(base, h) - base > 0", "2 * first(base, h) > 3",
+                "Int.abs(first(base, h)) > 2", "first(base, h) / 7 > 1")) {
             sameStatement(OF_TWO, rule);
         }
     }
@@ -290,16 +298,26 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
     }
 
     /**
-     * An obligation is read in the regions every line on its axis leaves, the helper's among them,
-     * and over three candidates the filter draws a line the search never reaches.
+     * Over three candidates the helper draws one line more written with the filter, and it is the
+     * third candidate's upper bound where it turns on the weekday of {@code base}: {@code
+     * Int.floorMod(base + 2, 7) <= 5} is false only where {@code Int.floorMod(base, 7)} is four,
+     * so it turns between three and four. Near that line the first candidate's weekday is three
+     * or four and the second's four or five, both between one and five, so each fails only where
+     * it is the given number — the first where {@code base == h}, the second where
+     * {@code base + 1 == h}, never both. The search applies its closure to the third candidate
+     * nowhere near the line; the filter applies its own to every candidate on every run. Every
+     * other line of the third candidate is one an earlier candidate draws at the same value.
      */
     @Test
-    void overThreeTheFilterDrawsTheThirdCandidatesBoundAndTheSearchDoesNot() {
+    void overThreeTheFilterDrawsTheThirdCandidatesBoundTheSearchNeverReaches() {
         Set<String> searched = drawnByTheHelper(partition(OF_THREE.everyCandidate(),
                 WHAT_WAS_FOUND));
         Set<String> filtered = drawnByTheHelper(partition(OF_THREE.whatAFilterKept(),
                 WHAT_WAS_FOUND));
-        assertTrue(filtered.containsAll(searched) && filtered.size() > searched.size(),
+        Set<String> more = new TreeSet<>(filtered);
+        more.removeAll(searched);
+        assertEquals(Set.of("g/Int.floorMod(base, 7) at 3 at_value"), more,
                 searched + " " + filtered);
+        assertTrue(filtered.containsAll(searched), searched + " " + filtered);
     }
 }
