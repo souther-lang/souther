@@ -148,8 +148,74 @@ public record TermPath(String head, List<Step> steps) {
         // A path is rooted somewhere. Rooted at nothing it is a place with no parameter to be a
         // place of, and every answer that carries one says a position was reached.
         Objects.requireNonNull(head, "a path is rooted at a parameter");
+        // Steps of a path being made are one step further than a path that already holds each
+        // position narrowed once (within), so only steps handed in from outside are folded here.
         steps = steps instanceof Steps own && own.head.equals(head) && own.id == 0
-                ? steps : Steps.plain(head, List.copyOf(steps));
+                ? steps : Steps.plain(head, eachPositionNarrowedOnce(steps));
+    }
+
+    /**
+     * What a narrowing to {@code cases} taken right after {@code last} comes to: the narrowing
+     * {@code last} becomes, where the two are narrowings of one position; or null where the new
+     * one is of another position, taken after it.
+     *
+     * <p>The one rule of what a narrowing after a narrowing is, which every way of making a path
+     * keeps, so that each refinement of a path is about a position of its own
+     * ({@link #requirements}). A narrowing to several cases leaves the value standing where it
+     * stood ({@link #position}), so a narrowing after it is of the same value, and the two are the
+     * cases both leave ({@link CasesLeft#meet}): {@code kind@{Hospital|Station}} narrowed to
+     * {@code Station|Depot} is {@code kind@Station}. A narrowing to one case is a position of its
+     * own — the case's value, or what an optional holds — so a narrowing after it is of that
+     * value: {@code x@Some@Some} is the inner optional holding something too.
+     *
+     * @throws IllegalArgumentException where the two are of one position and leave it no case in
+     *                                  common: no value stands at a place narrowed to both, so no
+     *                                  path is one
+     */
+    static CasesLeft narrowedOnce(Step last, CasesLeft cases) {
+        CasesLeft had = severalCasesOf(last);
+        if (had == null) {
+            return null;
+        }
+        CasesLeft both = had.meet(cases);
+        if (both == null) {
+            throw new IllegalArgumentException("a value left " + had.spelled() + " is never "
+                    + cases.spelled() + ", so no place is narrowed to both");
+        }
+        return both;
+    }
+
+    /** The cases {@code step} leaves a value, where it narrows the value to several and so a
+     *  narrowing after it is of the same position; null otherwise. */
+    private static CasesLeft severalCasesOf(Step step) {
+        return step instanceof Step.Refine(CasesLeft had) && had.only() == null ? had : null;
+    }
+
+    /**
+     * Whether narrowing this path to {@code cases} is a place ({@link #refine(CasesLeft)}): false
+     * only where this path narrows the position to several cases that share none with
+     * {@code cases}, which no value is both of ({@link #narrowedOnce}). For a reader asking
+     * whether a value can be those cases before it names where it would stand.
+     */
+    public boolean admits(CasesLeft cases) {
+        CasesLeft had = steps.isEmpty() ? null : severalCasesOf(steps.getLast());
+        return had == null || had.meet(cases) != null;
+    }
+
+    /** {@code steps} with each narrowing taken after a narrowing of the same position folded into
+     *  it ({@link #narrowedOnce}). */
+    static List<Step> eachPositionNarrowedOnce(List<Step> steps) {
+        List<Step> out = new ArrayList<>(steps.size());
+        for (Step step : steps) {
+            CasesLeft folded = step instanceof Step.Refine(CasesLeft cases) && !out.isEmpty()
+                    ? narrowedOnce(out.getLast(), cases) : null;
+            if (folded != null) {
+                out.set(out.size() - 1, new Step.Refine(folded));
+            } else {
+                out.add(step);
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -406,8 +472,18 @@ public record TermPath(String head, List<Step> steps) {
         return (Steps) steps;
     }
 
-    /** The path one step further than this filed one, made the first time it is asked. */
+    /**
+     * The path one step further than this filed one, made the first time it is asked. A narrowing
+     * of the position the last step narrowed is folded into that step ({@link #narrowedOnce}),
+     * since every path is made through here.
+     */
     private TermPath within(Step step) {
+        if (step instanceof Step.Refine(CasesLeft cases) && !steps.isEmpty()) {
+            CasesLeft folded = narrowedOnce(steps.getLast(), cases);
+            if (folded != null) {
+                return prefix(steps.size() - 1).within(new Step.Refine(folded));
+            }
+        }
         Place place = new Place(held().id, step);
         TermPath had = filedAt(place);
         if (had != null) {
@@ -535,7 +611,15 @@ public record TermPath(String head, List<Step> steps) {
         return refine(CasesLeft.of(refinement));
     }
 
-    /** The same position, narrowed to the values {@code cases} leaves. */
+    /**
+     * The same position, narrowed to the values {@code cases} leaves.
+     *
+     * <p>A position this path already narrowed to several cases is narrowed once, to the cases
+     * both leave, and not a second time after the first ({@link #narrowedOnce}).
+     *
+     * @throws IllegalArgumentException where this path narrowed the position to cases that share
+     *                                  none with {@code cases}
+     */
     public TermPath refine(CasesLeft cases) {
         return append(new Step.Refine(cases));
     }
@@ -552,6 +636,10 @@ public record TermPath(String head, List<Step> steps) {
      * than about this one. Read here and nowhere else: every reader that decides whether two
      * positions or two classes can be in one row asks {@link Requirements#merge}, and none of them
      * keeps an account of its own.
+     *
+     * <p>Every refinement is kept: no two steps of a path narrow one position, since a narrowing of
+     * a position the step before narrowed to several cases is folded into it where the path is
+     * made ({@link #narrowedOnce}). So what this requires is every refinement the path holds.
      */
     public Requirements requirements() {
         Map<TermPath, CasesLeft> out = null;
@@ -563,7 +651,12 @@ public record TermPath(String head, List<Step> steps) {
                 // Keyed by where the value stands: under a narrowing to several cases, a name is
                 // the name read at the sum, and what is required of it is required there. A path
                 // is built only where it is a key, and not at every step on the way.
-                out.put(prefix(at).position(), refine.cases());
+                TermPath position = prefix(at).position();
+                CasesLeft had = out.put(position, refine.cases());
+                if (had != null) {
+                    throw new IllegalStateException("`" + this + "` narrows `" + position
+                            + "` twice, which every way of making a path folds into one");
+                }
             }
         }
         return out == null ? Requirements.NONE : new Requirements(out, List.of());

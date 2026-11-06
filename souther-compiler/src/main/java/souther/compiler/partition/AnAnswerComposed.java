@@ -144,7 +144,8 @@ public final class AnAnswerComposed {
             if (!(each instanceof AnswerDemand.ACase(var _, var _, var steps, var to))) {
                 continue;
             }
-            if (!(required.merge(path(at, steps).refine(to).requirements())
+            TermPath asked = path(at, steps);
+            if (!asked.admits(to) || !(required.merge(asked.refine(to).requirements())
                     instanceof Requirements.Merge.Merged(var both))) {
                 // The way asks the answer to be two cases at once, which no value is. A fact about
                 // what was asked rather than about what was tried, and it comes back as nothing

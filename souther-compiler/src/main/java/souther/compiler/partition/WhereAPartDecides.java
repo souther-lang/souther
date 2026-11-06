@@ -109,7 +109,8 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides, CasesWor
         CasesHeldTo.of(decides).forEach((at, held) -> {
             switch (held) {
                 case CasesHeldTo.Held.OneOf(var cases) -> {
-                    if (readAt.stream().noneMatch(each -> each.isAtOrUnder(at.refine(cases)))) {
+                    if (!at.admits(cases) || readAt.stream()
+                            .noneMatch(each -> each.isAtOrUnder(at.refine(cases)))) {
                         said.add(at + " is " + spelled(cases));
                     }
                 }

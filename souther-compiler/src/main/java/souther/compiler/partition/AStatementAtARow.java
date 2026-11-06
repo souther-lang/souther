@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.inputs.CasesLeft;
-import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.ElementKey;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.NumericTerm;
@@ -1835,8 +1834,12 @@ final class AStatementAtARow {
         }
         // The value this reading holds at the position is there, so nothing of it standing under
         // the cases is that value being another case — whether the row wrote nothing there at
-        // all, or only the other elements of a container this reading did not choose did.
-        return switch (row.at(DeclaredInput.narrowedTo(at, cases))) {
+        // all, or only the other elements of a container this reading did not choose did. A value
+        // the position is narrowed to cases sharing none with these is none of them.
+        if (!at.admits(cases)) {
+            return Said.FALSE;
+        }
+        return switch (row.at(at.refine(cases))) {
             case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
                     new Said.NotRead(Set.of(ReadingGap.COULD_NOT_WALK));
             case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
