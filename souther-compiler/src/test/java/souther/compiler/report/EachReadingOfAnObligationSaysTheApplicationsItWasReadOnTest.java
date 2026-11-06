@@ -232,6 +232,40 @@ class EachReadingOfAnObligationSaysTheApplicationsItWasReadOnTest {
         assertEquals(4, byCall.get(1).path("applications").asInt(), "inner: " + byCall);
     }
 
+    /**
+     * An operation that stops at its first answer makes its second application only on a row the
+     * first did not answer, which is below the line the first reads: the line is read on the first
+     * application alone, though the second compares against the same number.
+     */
+    @Test
+    void anApplicationMadeOnlyPastTheLineIsNotOneTheLineIsReadOn() {
+        JsonNode obligations = obligations("""
+                module demo exposing (g, Big, Yes, No)
+
+                data Big = { threshold: Int }
+                data Yes
+                data No
+
+                behavior g : (n: Int, c: Bool) -> Yes | No
+                let g (n, c) = {
+                        let ks = [ Big { threshold = 100000 }
+                                 , if c then Big { threshold = 100000 }
+                                   else Big { threshold = 100000 } ]
+                        if List.any((k) -> n >= k.threshold, ks) then Yes else No
+                    }
+                """);
+        boolean read = false;
+        for (JsonNode point : obligations) {
+            for (JsonNode reading : point.path("readings")) {
+                if (reading.path("axis").asString().equals("g/n")) {
+                    read = true;
+                    assertEquals(List.of(0), ordinals(reading), reading.toString());
+                }
+            }
+        }
+        assertTrue(read, "the line on n is read: " + obligations);
+    }
+
     /** Outside every closure, and inside one over the input whose applications are not said,
      *  a reading is read on nothing a source's call is named for. */
     @Test

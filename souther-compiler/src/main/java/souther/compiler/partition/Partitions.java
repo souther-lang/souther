@@ -159,6 +159,8 @@ public final class Partitions {
      *                closure say all a run decided within one application of it
      * @param caseExpansions what each rule's line not worked out because its cases were too many
      *                was told of those cases, beside the findings saying why
+     * @param readOn  which applications of the closures the body's comparisons stand in read each
+     *                line they drew, by the line's origin, beside the lines
      */
     public record Partitioning(List<PositionMeasurements> measurements,
                                List<StandingQuestion> unanswered,
@@ -175,7 +177,31 @@ public final class Partitions {
                                WhereTheOperationsStand operationsStanding,
                                StringsReached strings,
                                List<DerivedValue.Replaced> replaced,
-                               List<CasesExpandedAtARule> caseExpansions) {
+                               List<CasesExpandedAtARule> caseExpansions,
+                               ReadingsReadOn readOn) {
+
+        /** The same, with no line read on an application of a closure. */
+        public Partitioning(List<PositionMeasurements> measurements,
+                            List<StandingQuestion> unanswered,
+                            Set<NumericTerm> uncertain,
+                            List<RuleWithoutALine> rulesWithoutALine,
+                            List<RuleWhereARunMayStop> rulesWhereARunMayStop,
+                            List<PositionValuesNotSeparated> notSeparated,
+                            List<Border> between,
+                            Map<AxisId, List<Border>> along,
+                            ReachingCuts reaching,
+                            MeasureClosure.OfThePartition partitionClosure,
+                            MeasureClosure.OfTheBorder borderClosure,
+                            EmptyInput inputIsEmpty,
+                            WhereTheOperationsStand operationsStanding,
+                            StringsReached strings,
+                            List<DerivedValue.Replaced> replaced,
+                            List<CasesExpandedAtARule> caseExpansions) {
+            this(measurements, unanswered, uncertain, rulesWithoutALine, rulesWhereARunMayStop,
+                    notSeparated, between, along, reaching, partitionClosure, borderClosure,
+                    inputIsEmpty, operationsStanding, strings, replaced, caseExpansions,
+                    ReadingsReadOn.NONE);
+        }
 
         /** The same, with no rule's cases told of. */
         public Partitioning(List<PositionMeasurements> measurements,
@@ -195,10 +221,12 @@ public final class Partitions {
                             List<DerivedValue.Replaced> replaced) {
             this(measurements, unanswered, uncertain, rulesWithoutALine, rulesWhereARunMayStop,
                     notSeparated, between, along, reaching, partitionClosure, borderClosure,
-                    inputIsEmpty, operationsStanding, strings, replaced, List.of());
+                    inputIsEmpty, operationsStanding, strings, replaced, List.of(),
+                    ReadingsReadOn.NONE);
         }
 
         public Partitioning {
+            java.util.Objects.requireNonNull(readOn, "read on some applications, or on none");
             replaced = List.copyOf(replaced);
             caseExpansions = List.copyOf(caseExpansions);
             measurements = List.copyOf(measurements);
@@ -1158,7 +1186,8 @@ public final class Partitions {
                                             ReachingCuts reaching,
                                             MeasureClosure.Drawing drawing,
                                             WhereTheOperationsStand operationsStanding,
-                                            List<DerivedValue.Replaced> replaced) {
+                                            List<DerivedValue.Replaced> replaced,
+                                            ReadingsReadOn readOn) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
@@ -1281,7 +1310,10 @@ public final class Partitions {
                 replaced,
                 // And what each line not worked out for its many cases was told of them, beside
                 // the findings above and gathered with them.
-                found.found().expanded());
+                found.found().expanded(),
+                // And which applications read each line, by its origin, as the reading that drew
+                // the lines told it.
+                readOn);
     }
 
     /**

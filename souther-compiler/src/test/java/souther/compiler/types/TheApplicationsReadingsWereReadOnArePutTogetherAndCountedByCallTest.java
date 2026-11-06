@@ -3,6 +3,7 @@ package souther.compiler.types;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -27,13 +28,16 @@ class TheApplicationsReadingsWereReadOnArePutTogetherAndCountedByCallTest {
     private static final ACallOfAnOperation OUTER = call(1);
     private static final ACallOfAnOperation INNER = call(2);
 
+    private static AnApplicationOfAClosure.Made made(ACallOfAnOperation call, int ordinal) {
+        return AnApplicationOfAClosure.Made.of(call, ordinal).orElseThrow();
+    }
+
     private static AnApplicationOfAClosure of(ACallOfAnOperation call, int ordinal) {
-        return AnApplicationOfAClosure.OF_NO_CALL_WRITTEN.inside(
-                new AnApplicationOfAClosure.Made(call, ordinal));
+        return new AnApplicationOfAClosure(List.of(made(call, ordinal)));
     }
 
     private static AnApplicationOfAClosure inner(int outer, int inner) {
-        return of(OUTER, outer).inside(new AnApplicationOfAClosure.Made(INNER, inner));
+        return new AnApplicationOfAClosure(List.of(made(OUTER, outer), made(INNER, inner)));
     }
 
     private static ApplicationsReadOn on(AnApplicationOfAClosure... each) {
@@ -68,13 +72,19 @@ class TheApplicationsReadingsWereReadOnArePutTogetherAndCountedByCallTest {
         assertEquals(List.of(), ApplicationsReadOn.byCall(List.of(ApplicationsReadOn.NONE)));
     }
 
+    private static ApplicationsReadOn.OfACall counted(ACallOfAnOperation call, int applications,
+                                                      int readings) {
+        return new ApplicationsReadOn.OfACall(call, made(call, 0).construct(), applications,
+                readings);
+    }
+
     /** Two applications reading one line at one place are one reading of two applications; one
      *  application reading two lines is two readings of one. */
     @Test
     void aCallsApplicationsAndItsReadingsAreCountedApart() {
-        assertEquals(List.of(new ApplicationsReadOn.OfACall(OUTER, 2, 1)),
+        assertEquals(List.of(counted(OUTER, 2, 1)),
                 ApplicationsReadOn.byCall(List.of(on(of(OUTER, 0), of(OUTER, 1)))));
-        assertEquals(List.of(new ApplicationsReadOn.OfACall(OUTER, 1, 2)),
+        assertEquals(List.of(counted(OUTER, 1, 2)),
                 ApplicationsReadOn.byCall(List.of(on(of(OUTER, 0)), on(of(OUTER, 0)))));
     }
 
@@ -85,11 +95,29 @@ class TheApplicationsReadingsWereReadOnArePutTogetherAndCountedByCallTest {
      */
     @Test
     void anApplicationOfANestedCallIsToldApartByTheApplicationsAroundIt() {
-        assertEquals(List.of(new ApplicationsReadOn.OfACall(OUTER, 2, 2),
-                        new ApplicationsReadOn.OfACall(INNER, 2, 2)),
+        assertEquals(List.of(counted(OUTER, 2, 2), counted(INNER, 2, 2)),
                 ApplicationsReadOn.byCall(List.of(on(inner(0, 0)), on(inner(1, 0)))));
-        assertEquals(List.of(new ApplicationsReadOn.OfACall(OUTER, 1, 1),
-                        new ApplicationsReadOn.OfACall(INNER, 2, 1)),
+        assertEquals(List.of(counted(OUTER, 1, 1), counted(INNER, 2, 1)),
                 ApplicationsReadOn.byCall(List.of(on(inner(0, 0), inner(0, 1)))));
+    }
+
+    /**
+     * A call written inside one of the language's own operations is no call of the model: an
+     * application is not told by it, and is told by the calls of the model around it all the
+     * same.
+     */
+    @Test
+    void aCallInsideALanguagesOwnOperationTellsNoApplication() {
+        ConstructOccurrence insideTheLibrary = new ConstructOccurrence(
+                SourceConstructOrigin.written(new WrittenOwner.Body("m", "f"), 3,
+                        SourceConstruct.CALL),
+                new OccurrenceLineage.Expansion(OccurrenceLineage.ORIGINAL,
+                        new ValueName.Stdlib.Operation("List", "sum"),
+                        new ExpansionSite.Written(SourceConstructOrigin.written(
+                                new WrittenOwner.Body("m", "f"), 4, SourceConstruct.CALL))));
+        ACallOfAnOperation library = new ACallOfAnOperation(
+                new ValueName.Stdlib.Operation("List", "fold"), insideTheLibrary);
+        assertEquals(Optional.empty(), AnApplicationOfAClosure.Made.of(library, 0));
+        assertEquals(OUTER, made(OUTER, 0).call());
     }
 }

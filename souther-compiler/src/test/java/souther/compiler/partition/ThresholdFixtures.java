@@ -108,7 +108,7 @@ final class ThresholdFixtures {
         return Partitions.withEvidence(base, reading, evidence, List.of(), allowance, ruleReading,
                 rulesWithoutALine, between, reaching,
                 new MeasureClosure.Drawing.FromTheReading(), WhereTheOperationsStand.NONE,
-                List.of());
+                List.of(), ReadingsReadOn.NONE);
     }
 
     private ThresholdFixtures() {}

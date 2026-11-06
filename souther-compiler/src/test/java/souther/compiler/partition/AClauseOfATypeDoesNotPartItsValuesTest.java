@@ -7,7 +7,6 @@ import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.WrittenLine;
 import souther.compiler.coverage.Numberings;
-import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstruct;
@@ -220,7 +219,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(WHERE), ElementsMetOn.EVERY, LineOrigin.NOTHING_ON_THE_WAY,
-                        Optional.empty(), Optional.empty(), ApplicationsReadOn.NONE),
+                        Optional.empty(), Optional.empty()),
                 Optional.empty(),
                 new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,

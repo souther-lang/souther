@@ -2468,7 +2468,7 @@
                 "applications": {
                   "type": "array",
                   "minItems": 1,
-                  "description": "The applications of closures this reading was read on, where some call a source wrote made them; absent where none did. Two applications reading the line at one place are one reading of both, so how many there are bounds nothing about how many readings there are.",
+                  "description": "The applications of closures this reading was read on, where some call the model states made them; absent where none did, or where which applications read the line was not told apart. Two applications reading the line at one place are one reading of both, so how many there are bounds nothing about how many readings there are.",
                   "items": {
                     "type": "object",
                     "required": [
@@ -2479,7 +2479,7 @@
                       "madeBy": {
                         "type": "array",
                         "minItems": 1,
-                        "description": "For each closure the application stands inside whose call a source wrote, that call and which of its applications it is, the outermost first.",
+                        "description": "For each closure the application stands inside whose call the model states, that call and which of its applications it is, the outermost first.",
                         "items": {
                           "$ref": "#/$defs/anApplicationsCall"
                         }
@@ -2559,11 +2559,12 @@
           "readingsByCall": {
             "type": "array",
             "minItems": 1,
-            "description": "For each call whose applications some of `readings` were read on, or inside: how many of its applications made some of them and how many of them those made. Two counts with no relation between them. An application inside two applications of the call around it is two applications. Absent where no reading was read on an application some call a source wrote made.",
+            "description": "For each call whose applications some of `readings` were read on, or inside: how many of its applications made some of them and how many of them those made. Two counts with no relation between them. An application inside two applications of the call around it is two applications. Absent where no reading was read on an application some call the model states made.",
             "items": {
               "type": "object",
               "required": [
                 "operation",
+                "call",
                 "applications",
                 "readings"
               ],
@@ -2575,7 +2576,7 @@
                 },
                 "call": {
                   "$ref": "#/$defs/constructOccurrence",
-                  "description": "The call, in the copy of the body it stands in: a helper called twice is two calls. Absent where the call stands inside one of the language's own operations, which no model states."
+                  "description": "The call, in the copy of the body it stands in: a helper called twice is two calls. Only calls the model states are told: one inside one of the language's own operations is none."
                 },
                 "at": {
                   "$ref": "#/$defs/at",
@@ -6136,6 +6137,7 @@
       "description": "One call of an operation of the language that applied a closure, and which of its applications it is, counted from nought in the order a run makes them.",
       "required": [
         "operation",
+        "call",
         "application"
       ],
       "additionalProperties": false,
@@ -6146,7 +6148,7 @@
         },
         "call": {
           "$ref": "#/$defs/constructOccurrence",
-          "description": "The call, in the copy of the body it stands in. Absent where the call stands inside one of the language's own operations, which no model states."
+          "description": "The call, in the copy of the body it stands in. Only calls the model states are told: one inside one of the language's own operations is none, and the calls of the model around it still are."
         },
         "at": {
           "$ref": "#/$defs/at",

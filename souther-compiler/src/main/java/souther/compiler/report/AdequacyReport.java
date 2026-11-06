@@ -2174,8 +2174,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             for (BorderAssessment reading : point.met().values()) {
                 for (AnApplicationOfAClosure application : reading.readOn().each()) {
                     for (AnApplicationOfAClosure.Made made : application.by()) {
-                        callWritten(made.call()).flatMap(AdequacyReport::whereItIsWritten)
-                                .ifPresent(take);
+                        whereItIsWritten(made.construct()).ifPresent(take);
                     }
                 }
             }
@@ -9971,7 +9970,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         ArrayNode by = applications.addObject().putArray("madeBy");
                         for (AnApplicationOfAClosure.Made made : one.by()) {
                             ObjectNode step = by.addObject();
-                            calledAt(step, made.call(), parts, sources);
+                            calledAt(step, made.call(), made.construct(), parts, sources);
                             step.put("application", made.ordinal());
                         }
                     }
@@ -9985,7 +9984,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 ArrayNode calls = o.putArray("readingsByCall");
                 for (ApplicationsReadOn.OfACall each : byCall) {
                     ObjectNode one = calls.addObject();
-                    calledAt(one, each.call(), parts, sources);
+                    calledAt(one, each.call(), each.construct(), parts, sources);
                     one.put("applications", each.applications());
                     one.put("readings", each.readings());
                 }
@@ -9994,23 +9993,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
-     * A call of one of the language's operations, as the construct of the model it is and where
-     * its author wrote it, where this document can say: the operation by the name the library
-     * publishes it under.
+     * A call of the model applying a closure, as the construct of the model it is
+     * ({@code construct}, which was decided where the application was told) and where its author
+     * wrote it, where this document can say: the operation by the name the library publishes it
+     * under.
      */
     private static void calledAt(ObjectNode into, ACallOfAnOperation call,
-                                 Optional<WhereAPartIs> parts, DocumentSources sources) {
+                                 ModelOccurrence construct, Optional<WhereAPartIs> parts,
+                                 DocumentSources sources) {
         into.put("operation", operationNamed(call.operation()));
-        callWritten(call).ifPresent(construct -> {
-            copyId(into.putObject("call"), construct);
-            parts.ifPresent(where -> writtenAt(into, construct, where, sources));
-        });
-    }
-
-    /** The construct of the model {@code call} is, where the model states one there: a call made
-     *  inside one of the language's own operations is none. */
-    private static Optional<ModelOccurrence> callWritten(ACallOfAnOperation call) {
-        return ModelOccurrence.statedAt(call.at());
+        copyId(into.putObject("call"), construct);
+        parts.ifPresent(where -> writtenAt(into, construct, where, sources));
     }
 
     /**

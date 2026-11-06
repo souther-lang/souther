@@ -50,7 +50,6 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
 import souther.compiler.reach.ComparisonArrival;
-import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
@@ -200,8 +199,7 @@ sealed interface ComparisonAssessment {
                                        CountWitnesses.Lookup witnesses) {
             return new AcrossPositions(cutting, at, places, relation, left,
                     settlingLines(new DrawnBeside(cutting.of().behavior(), at, authored.line(),
-                            Optional.of(authored.claims()), cutting.readOn()), left.settled(),
-                            reading, witnesses),
+                            Optional.of(authored.claims())), left.settled(), reading, witnesses),
                     authored);
         }
 
@@ -253,29 +251,16 @@ sealed interface ComparisonAssessment {
 
     /**
      * What a line parting the values that settle a relation is drawn beside: the behavior it is a
-     * line of, where the comparison stands, the author's line it is no place of, and the
-     * applications of closures the relation was read on, which the line is read on too.
+     * line of, where the comparison stands, and the author's line it is no place of.
      */
     record DrawnBeside(String behavior, Citation at, WrittenLine line,
-                       Optional<ComparisonClaim> claim, ApplicationsReadOn readOn) {
+                       Optional<ComparisonClaim> claim) {
 
         public DrawnBeside {
             Objects.requireNonNull(behavior, "a line is some behavior's");
             Objects.requireNonNull(at, "drawn beside a comparison standing somewhere");
             Objects.requireNonNull(line, "and no place of some line of the author's");
             Objects.requireNonNull(claim, "the comparison's claim, or the line's own");
-            Objects.requireNonNull(readOn, "read on the applications what it is beside is");
-        }
-
-        /** Beside a comparison read on no application a source's call made. */
-        DrawnBeside(String behavior, Citation at, WrittenLine line,
-                    Optional<ComparisonClaim> claim) {
-            this(behavior, at, line, claim, ApplicationsReadOn.NONE);
-        }
-
-        /** The same, beside a relation read on {@code applications}. */
-        DrawnBeside drawnOn(ApplicationsReadOn applications) {
-            return new DrawnBeside(behavior, at, line, claim, applications);
         }
 
         /** The line {@code drawn} said to be no place of the author's line: it claims what the
@@ -315,9 +300,6 @@ sealed interface ComparisonAssessment {
             for (WhatARelationLeavesUndivided.Line each : lines) {
                 Cutting drawn = Cutting.onOneTerm(beside.behavior(), term,
                         each.at(), each.relation(), reading.quantities());
-                if (drawn != null) {
-                    drawn = drawn.drawnOn(beside.readOn());
-                }
                 if (drawn == null || !(onTheQuantity(beside.at(), drawn, beside.noPlaceOfIt(drawn),
                         reading, false, witnesses) instanceof AtAPosition line)) {
                     here = null;
@@ -398,13 +380,12 @@ sealed interface ComparisonAssessment {
         }
 
         /** {@code read}, with what it leaves undivided over what the declarations leave, and the
-         *  lines parting what settles it drawn {@code beside}, read on the applications it was. */
+         *  lines parting what settles it drawn {@code beside}. */
         static AgainstAnotherValue of(Cutting.Read.AgainstAnotherValue read,
                                       InputReading reading, Optional<DrawnBeside> beside,
                                       CountWitnesses.Lookup witnesses) {
-            ApplicationsReadOn on = read.readOn();
             return new AgainstAnotherValue(read.over(), read.relations(), Set.of(), List.of(),
-                    beside.map(drawn -> drawn.drawnOn(on)), Map.of(), Set.of(), Map.of(), Map.of())
+                    beside, Map.of(), Set.of(), Map.of(), Map.of())
                     .whereRowsArrive(reading, List.of(), witnesses);
         }
 
@@ -1257,15 +1238,50 @@ sealed interface ComparisonAssessment {
                                    boolean drawnByAnInvariant, WhatConditionsState conditions,
                                    Optional<ExpansionLineage> writtenIn,
                                    CountWitnesses.Lookup witnesses) {
+        return ofEach(behavior, comparison, at, read, reads, applying, answer, answering,
+                drawnByAnInvariant, conditions, writtenIn, witnesses).assessment();
+    }
+
+    /**
+     * What a comparison comes to on the input space ({@link #of}), and beside it which
+     * applications of the closures it stands in read each line and relation it drew
+     * ({@link Cutting.Drawn#readOn}).
+     */
+    record Assessed(ComparisonAssessment assessment, LinesReadOn readOn) {
+
+        public Assessed {
+            Objects.requireNonNull(assessment, "a comparison comes to something");
+            Objects.requireNonNull(readOn, "read on some applications, or on none");
+        }
+    }
+
+    /** {@link #of}, and which applications read each of its lines and relations. */
+    static Assessed ofEach(String behavior, StatedComparison comparison, Citation at,
+                           InputReading read, InputReads reads, ClosureApplications applying,
+                           BindingId answer, Arrivals answering, boolean drawnByAnInvariant,
+                           WhatConditionsState conditions, Optional<ExpansionLineage> writtenIn,
+                           CountWitnesses.Lookup witnesses) {
         // Asked first, and of the whole comparison. A rule that reads the answer anywhere in it is
         // one this reading does not put on the input space, whichever side the answer is on and
         // whatever else stands beside it: `value.n + query.offset <= 20` is about the answer and
         // about an input, and the input is no more measurable here for the input being named.
         if (readsAnswer(comparison.left(), answer) || readsAnswer(comparison.right(), answer)) {
-            return new AnswerDependent();
+            return new Assessed(new AnswerDependent(), LinesReadOn.NONE);
         }
-        Cutting.Read cut = Cutting.read(behavior, comparison, read, reads, applying, answering,
-                conditions, writtenIn);
+        Cutting.Drawn drawn = Cutting.drawn(behavior, comparison, read, reads, applying,
+                answering, conditions, writtenIn);
+        return new Assessed(assessed(behavior, comparison, at, read, reads, drawnByAnInvariant,
+                conditions, witnesses, drawn.read()), drawn.readOn());
+    }
+
+    /** What {@code cut}, the reading of {@code comparison} as lines, comes to on the input
+     *  space. */
+    private static ComparisonAssessment assessed(String behavior, StatedComparison comparison,
+                                                 Citation at, InputReading read,
+                                                 InputReads reads, boolean drawnByAnInvariant,
+                                                 WhatConditionsState conditions,
+                                                 CountWitnesses.Lookup witnesses,
+                                                 Cutting.Read cut) {
         return switch (cut) {
             case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
                  Cutting.Read.NumberNoRatioHolds _ -> aLine(cut, at, read, drawnByAnInvariant,

@@ -71,14 +71,16 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                     "expanded");
     private static final Account COUNTED_OF_A_LINE =
             new Account("souther/compiler/meaning/CasesOfALineAsked$NotWorkedOut", "counted");
-    private static final Account READ_ON_BY_A_LINE =
-            new Account("souther/compiler/partition/Cutting", "readOn");
-    private static final Account READ_ON_BY_A_RELATION =
-            new Account("souther/compiler/partition/Cutting$Read$AgainstAnotherValue", "readOn");
-    private static final Account READ_ON_BESIDE_A_RELATION =
-            new Account("souther/compiler/partition/ComparisonAssessment$DrawnBeside", "readOn");
-    private static final Account READ_ON_BY_AN_ORIGIN =
-            new Account("souther/compiler/partition/LineOrigin$ComparisonOrigin$Read", "readOn");
+    private static final Account READ_ON_BY_THE_LINES_DRAWN =
+            new Account("souther/compiler/partition/Cutting$Drawn", "readOn");
+    private static final Account READ_ON_BY_THE_LINES_ASSESSED =
+            new Account("souther/compiler/partition/ComparisonAssessment$Assessed", "readOn");
+    private static final Account READ_ON_BY_A_COMPARISON_READ =
+            new Account("souther/compiler/partition/ComparisonReadings$Reading", "readOn");
+    private static final Account READ_ON_BY_THE_GUARDS =
+            new Account("souther/compiler/partition/GuardThresholds$Guards", "readOn");
+    private static final Account READ_ON_BY_THE_PARTITION =
+            new Account("souther/compiler/partition/Partitions$Partitioning", "readOn");
     private static final Account READ_ON_BY_A_READING =
             new Account("souther/compiler/query/BorderAssessment", "readOn");
 
@@ -95,11 +97,12 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
      * application a reading is inside, and the derivations an assessment holds, are read by their
      * carrier alone, which is where they are handed on.
      *
-     * <p>The applications a line was drawn on are handed from the line to the lines parting the
-     * values that settle it and to the line's origin; from a relation to what those lines are drawn
-     * beside, and from there to each of them; from the origin to its reading, which puts them
-     * together where the readings of one line are put together and is told where an obligation's
-     * readings are written, and where the calls they name are placed.
+     * <p>Which applications read each line is held beside the lines and never in them: from the
+     * reading of a comparison as lines to its assessment, to the comparison's reading, to the
+     * body's guards — which file it under each line's origin as the origin is made — to the
+     * partition, and from there to each reading of a line, which puts them together where the
+     * readings of one line are put together and is told where an obligation's readings are
+     * written, and where the calls they name are placed.
      */
     private static final Map<Account, Set<String>> READ_BY = expected();
 
@@ -136,39 +139,49 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                         + "Lsouther/compiler/partition/WaysToACase;Ljava/util/List;Z"
                         + "Lsouther/compiler/inputs/InputReading;"
                         + "Lsouther/compiler/partition/CountWitnesses$Lookup;)Ljava/util/List;")));
-        String settling = AMethod.of("souther/compiler/partition/ComparisonAssessment",
-                "settlingLines", "(Lsouther/compiler/partition/ComparisonAssessment$DrawnBeside;"
-                        + "Ljava/util/Map;Lsouther/compiler/inputs/InputReading;"
-                        + "Lsouther/compiler/partition/CountWitnesses$Lookup;)Ljava/util/List;");
-        by.put(READ_ON_BY_A_LINE, Set.of(
-                AMethod.of("souther/compiler/partition/ComparisonAssessment$AcrossPositions",
-                        "leaving", "(Lsouther/compiler/partition/Cutting;"
-                                + "Lsouther/compiler/diag/Citation;"
-                                + "Lsouther/compiler/partition/ComparisonAssessment$Places;"
-                                + "Lsouther/compiler/partition/UndividedByARelation;"
-                                + "Lsouther/compiler/partition/UndividedByARelation$WhatItLeaves;"
-                                + "Lsouther/compiler/meaning/AuthoredPointMapping;"
-                                + "Lsouther/compiler/inputs/InputReading;"
-                                + "Lsouther/compiler/partition/CountWitnesses$Lookup;)"
-                                + "Lsouther/compiler/partition/ComparisonAssessment$AcrossPositions;"),
-                AMethod.of("souther/compiler/partition/GuardThresholds", "originOf",
-                        "(Ljava/lang/String;Lsouther/compiler/types/ModelOccurrence;"
-                                + "Lsouther/compiler/coverage/EmittedComparisonState$Instrumented;"
-                                + "Lsouther/compiler/types/SourceConstructOrigin;"
-                                + "Lsouther/compiler/check/RuleReportAnchor;"
-                                + "Lsouther/compiler/partition/ElementsMetOn;Ljava/util/Optional;"
-                                + "Lsouther/compiler/partition/Cutting;"
-                                + "Lsouther/compiler/meaning/AuthoredPointMapping;)"
-                                + "Lsouther/compiler/partition/LineOrigin$ComparisonOrigin;")));
-        by.put(READ_ON_BY_A_RELATION, Set.of(AMethod.of(
-                "souther/compiler/partition/ComparisonAssessment$AgainstAnotherValue", "of",
-                "(Lsouther/compiler/partition/Cutting$Read$AgainstAnotherValue;"
-                        + "Lsouther/compiler/inputs/InputReading;Ljava/util/Optional;"
+        by.put(READ_ON_BY_THE_LINES_DRAWN, Set.of(AMethod.of(
+                "souther/compiler/partition/ComparisonAssessment", "ofEach",
+                "(Ljava/lang/String;Lsouther/compiler/check/StatedComparison;"
+                        + "Lsouther/compiler/diag/Citation;Lsouther/compiler/inputs/InputReading;"
+                        + "Lsouther/compiler/inputs/InputReads;"
+                        + "Lsouther/compiler/partition/ClosureApplications;"
+                        + "Lsouther/compiler/types/BindingId;Lsouther/compiler/coverage/Arrivals;Z"
+                        + "Lsouther/compiler/partition/WhatConditionsState;Ljava/util/Optional;"
                         + "Lsouther/compiler/partition/CountWitnesses$Lookup;)"
-                        + "Lsouther/compiler/partition/ComparisonAssessment$AgainstAnotherValue;")));
-        by.put(READ_ON_BESIDE_A_RELATION, Set.of(settling));
-        by.put(READ_ON_BY_AN_ORIGIN, Set.of(AMethod.of("souther/compiler/partition/LineOrigin",
-                "readOn", "()Lsouther/compiler/types/ApplicationsReadOn;")));
+                        + "Lsouther/compiler/partition/ComparisonAssessment$Assessed;")));
+        by.put(READ_ON_BY_THE_LINES_ASSESSED, Set.of(AMethod.of(
+                "souther/compiler/partition/ComparisonReadings", "walk",
+                "(Lsouther/compiler/core/Core;Lsouther/compiler/partition/ComparisonReadings$Body;"
+                        + "Lsouther/compiler/inputs/InputReads;"
+                        + "Lsouther/compiler/partition/ClosureApplications;"
+                        + "Lsouther/compiler/partition/LiveFlow;Ljava/util/List;ZLjava/util/List;"
+                        + "Ljava/util/List;Lsouther/compiler/partition/ConditionNumbering;)V")));
+        by.put(READ_ON_BY_A_COMPARISON_READ, Set.of(AMethod.of(
+                "souther/compiler/partition/GuardThresholds", "guardsOf",
+                "(Ljava/lang/String;Lsouther/compiler/check/AnalysisBody;"
+                        + "Lsouther/compiler/core/Core;"
+                        + "Lsouther/compiler/coverage/CoverageSites$Plan;"
+                        + "Lsouther/compiler/inputs/InputReading;"
+                        + "Lsouther/compiler/check/ElementBindings;"
+                        + "Lsouther/compiler/check/PathReachability$Arrivals;"
+                        + "Lsouther/compiler/partition/RuleReachNumbering;"
+                        + "Lsouther/compiler/partition/CountWitnesses$AtComparisons;)"
+                        + "Lsouther/compiler/partition/GuardThresholds$Guards;")));
+        by.put(READ_ON_BY_THE_GUARDS, Set.of(AMethod.of(
+                "souther/compiler/query/Coverages", "partitioningOf",
+                "(Lsouther/compiler/ast/Hir$SpecBehavior;Lsouther/compiler/inputs/InputReading;"
+                        + "Lsouther/compiler/partition/BodyReading;"
+                        + "Lsouther/compiler/coverage/CoverageSites$Plan;"
+                        + "Lsouther/compiler/check/PathReachability$Arrivals;"
+                        + "Lsouther/compiler/check/StatedContract;"
+                        + "Lsouther/compiler/values/Allowance;"
+                        + "Lsouther/compiler/query/Coverages$WitnessesOfACount;)"
+                        + "Lsouther/compiler/query/Coverages$Partitioned;")));
+        by.put(READ_ON_BY_THE_PARTITION, Set.of(AMethod.of(
+                "souther/compiler/query/Adequacy$Readings", "assess",
+                "(Lsouther/compiler/partition/MeasuredInput;"
+                        + "Lsouther/compiler/query/Adequacy$RowReading;Ljava/util/Optional;)"
+                        + "Lsouther/compiler/query/LineReadings;")));
         by.put(READ_ON_BY_A_READING, Set.of(
                 AMethod.of("souther/compiler/query/Coverages", "asOneLine",
                         "(Ljava/util/List;)Lsouther/compiler/query/BorderAssessment;"),

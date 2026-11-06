@@ -97,43 +97,33 @@ import java.util.stream.Stream;
  * @param heldIn the data the number the comparison is held against is read out of, where it is
  *               read out of data: the table a helper was handed, which is written once however
  *               alike the bounds of another table are
- * @param readOn the applications of closures the line was drawn on, where the comparison stands
- *               inside closures whose applications some source's calls made: what the line is read
- *               on and nothing it is. A line is one line however many applications draw it, and is
- *               drawn on these alone only once they have been told apart by everything else
  */
 record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                NumericDomain.Bounds within, Optional<ExactRatio> written,
-               Optional<BoundHeldIn> heldIn, ApplicationsReadOn readOn) {
+               Optional<BoundHeldIn> heldIn) {
 
     Cutting {
         Objects.requireNonNull(written, "a number is written against, or none is");
         Objects.requireNonNull(heldIn, "a bound is held in data, or in none");
-        Objects.requireNonNull(readOn, "a line is read on some applications, or on none");
     }
 
     Cutting(BorderQuantity of, Level at, ComparisonClaim claim, NumericDomain.Bounds within) {
-        this(of, at, claim, within, Optional.empty(), Optional.empty(), ApplicationsReadOn.NONE);
+        this(of, at, claim, within, Optional.empty(), Optional.empty());
     }
 
     Cutting(BorderQuantity of, Level at, ComparisonClaim claim, NumericDomain.Bounds within,
             Optional<ExactRatio> written) {
-        this(of, at, claim, within, written, Optional.empty(), ApplicationsReadOn.NONE);
+        this(of, at, claim, within, written, Optional.empty());
     }
 
     /** This line as a comparison written against {@code level}. */
     Cutting writtenAgainst(Optional<ExactRatio> level) {
-        return new Cutting(of, at, claim, within, level, heldIn, readOn);
+        return new Cutting(of, at, claim, within, level, heldIn);
     }
 
     /** This line as a comparison whose bound is held in {@code data}. */
     Cutting heldIn(Optional<BoundHeldIn> data) {
-        return new Cutting(of, at, claim, within, written, data, readOn);
-    }
-
-    /** This line, drawn on {@code applications}. */
-    Cutting drawnOn(ApplicationsReadOn applications) {
-        return new Cutting(of, at, claim, within, written, heldIn, applications);
+        return new Cutting(of, at, claim, within, written, data);
     }
 
     /**
@@ -193,26 +183,17 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
          * @param over      the coordinates of the input's numbers it relates
          * @param relations what it states, one relation for each reading of it — a closure's
          *                  statement is read once for each application
-         * @param readOn    the applications of closures it was read on, which the lines parting
-         *                  the values settling it are read on too ({@link Cutting#readOn})
          */
         record AgainstAnotherValue(List<FilingCoordinate> over,
-                                   List<UndividedByARelation> relations,
-                                   ApplicationsReadOn readOn) implements Read {
+                                   List<UndividedByARelation> relations) implements Read {
 
             public AgainstAnotherValue {
                 over = List.copyOf(over);
                 relations = List.copyOf(relations);
-                Objects.requireNonNull(readOn, "read on some applications, or on none");
                 if (over.isEmpty() || relations.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a relation against another value relates some number of the input");
                 }
-            }
-
-            /** Read on no application a source's call made. */
-            AgainstAnotherValue(List<FilingCoordinate> over, List<UndividedByARelation> relations) {
-                this(over, relations, ApplicationsReadOn.NONE);
             }
         }
 
@@ -588,6 +569,32 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                      InputReading read, InputReads reads, ClosureApplications applying,
                      Arrivals answering, WhatConditionsState conditions,
                      Optional<ExpansionLineage> writtenIn) {
+        return drawn(behavior, comparison, read, reads, applying, answering, conditions,
+                writtenIn).read();
+    }
+
+    /**
+     * What reading {@code comparison} came to ({@link #read}), and beside it which applications
+     * of the closures it stands in read each of its lines and relations.
+     *
+     * @param read   what it came to
+     * @param readOn which applications read each line and relation, kept apart from them: a line
+     *               is one line however many applications read it, and what it is does not turn on
+     *               which. Nothing where it was read once
+     */
+    record Drawn(Read read, LinesReadOn readOn) {
+
+        Drawn {
+            Objects.requireNonNull(read, "a comparison read comes to something");
+            Objects.requireNonNull(readOn, "read on some applications, or on none");
+        }
+    }
+
+    /** {@link #read}, and which applications read each of its lines and relations. */
+    static Drawn drawn(String behavior, StatedComparison comparison,
+                       InputReading read, InputReads reads, ClosureApplications applying,
+                       Arrivals answering, WhatConditionsState conditions,
+                       Optional<ExpansionLineage> writtenIn) {
         List<ClosureApplications.Application> each = switch (applying) {
             case ClosureApplications.Each(var made) -> made;
             // A comparison inside a closure no run applies is read on no application, and comes
@@ -596,11 +603,22 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case ClosureApplications.Outside _, ClosureApplications.NotSaid _ -> null;
         };
         if (each == null) {
-            return readOnce(behavior, comparison, read, reads, answering,
-                    conditions.comparison(comparison, reads, read), false, writtenIn);
+            return new Drawn(readOnce(behavior, comparison, read, reads, answering,
+                    conditions.comparison(comparison, reads, read), false, writtenIn),
+                    LinesReadOn.NONE);
         }
-        Read drawn = onEachApplication(behavior, comparison, read, reads, each, answering,
-                conditions, writtenIn);
+        LinesReadOn.Taking readOn = new LinesReadOn.Taking();
+        return new Drawn(severalOrStopped(comparison, read, reads, answering,
+                onEachApplication(behavior, comparison, read, reads, each, answering, conditions,
+                        writtenIn, readOn)), readOn.taken());
+    }
+
+    /**
+     * {@code drawn}, the lines a comparison's applications drew: drawn where a row can be asked
+     * whether it is somewhere each decides, and otherwise what stopped them or that none is drawn.
+     */
+    private static Read severalOrStopped(StatedComparison comparison, InputReading read,
+                                         InputReads reads, Arrivals answering, Read drawn) {
         // Where an application is made, and where a line decides on it, is part of what the line
         // is; said in anything but what a row's own numbers answer, a row could not be asked
         // whether it is somewhere the line decides, and none of the lines is drawn. Where some
@@ -692,7 +710,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         List<OnAnApplication> out = new ArrayList<>();
         for (ClosureApplications.Application one : made) {
-            if (one.reached() instanceof Proposition.Always(boolean holds) && !holds) {
+            if (!one.isMadeOnSomeRow()) {
                 continue;
             }
             Pullback.OnTheInput onTheInput = conditions.comparison(comparison, one.reads(), read);
@@ -740,7 +758,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                           InputReading read, InputReads reads,
                                           List<ClosureApplications.Application> each,
                                           Arrivals answering, WhatConditionsState conditions,
-                                          Optional<ExpansionLineage> writtenIn) {
+                                          Optional<ExpansionLineage> writtenIn,
+                                          LinesReadOn.Taking readOn) {
         // What stopped, in the order the applications are made: a whole application's reading, or
         // a part of one read beside the lines it drew. Said only where some application stopped
         // whole, and then with every stop before and after it.
@@ -754,16 +773,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
         Map<ALineRead, List<UndividedByARelation.Working>> workings = new HashMap<>();
         Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> relating = new LinkedHashMap<>();
-        // The applications each line and each relation was read on, told apart from the line by
-        // the key: two applications drawing one line are one line read on both.
-        Map<ALineRead, ApplicationsReadOn> readOn = new HashMap<>();
+        // The applications that read each line and relation, by the line as the key tells it
+        // apart: two applications drawing one line are one line read on both.
+        Map<ALineRead, ApplicationsReadOn> readBy = new HashMap<>();
         boolean relatedOnlySomewhere = false;
         InputReads statingNoRelation = null;
         // How each application's statement was derived, said to be that application's, for where
         // the lines its applications draw are past the cases taken apart.
         List<Derivation> derived = new ArrayList<>();
         for (ClosureApplications.Application one : each) {
-            if (one.reached() instanceof Proposition.Always(boolean made) && !made) {
+            if (!one.isMadeOnSomeRow()) {
                 continue;
             }
             Pullback.OnTheInput onTheInput = conditions.comparison(comparison, one.reads(), read);
@@ -803,7 +822,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             .add(WhereAnApplicationIsMade.OnOne.wherever(one.reached()));
                     workings.computeIfAbsent(key, _ -> new ArrayList<>())
                             .add(workingOf(onTheInput));
-                    readOn.merge(key, one.readOn(), ApplicationsReadOn::and);
+                    readBy.merge(key, one.readOn(), ApplicationsReadOn::and);
                     relatedOnlySomewhere |= !(one.reached() instanceof Proposition.Always(
                             boolean holds) && holds);
                 }
@@ -818,7 +837,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                 new WhereAnApplicationIsMade.OnOne(part.cases(), one.reached()));
                         workings.computeIfAbsent(key, _ -> new ArrayList<>())
                                 .add(part.working());
-                        readOn.merge(key, one.readOn(), ApplicationsReadOn::and);
+                        readBy.merge(key, one.readOn(), ApplicationsReadOn::and);
                     }
                 }
                 case Read line -> {
@@ -831,10 +850,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             .add(WhereAnApplicationIsMade.OnOne.wherever(one.reached()));
                     workings.computeIfAbsent(key, _ -> new ArrayList<>())
                             .add(workingOf(onTheInput));
-                    readOn.merge(key, one.readOn(), ApplicationsReadOn::and);
+                    readBy.merge(key, one.readOn(), ApplicationsReadOn::and);
                 }
             }
         }
+        // Told by what each line and relation is: a line by the place of its author's line it is
+        // read as, which is what a part of the statement keeps through every reading of it after
+        // this, and a relation by itself.
+        readBy.forEach((key, by) -> readOn.read(key.id(), key.read(), by));
         if (stoppedWhole) {
             return new Read.Stopped(stopped, stoppedWhere);
         }
@@ -849,20 +872,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // parting its values is read wherever a row arrives.
         if (!against.isEmpty()) {
             List<Read.Several.Part> parts = new ArrayList<>();
-            ApplicationsReadOn related = ApplicationsReadOn.NONE;
-            for (Map.Entry<ALineRead, List<WhereAnApplicationIsMade.OnOne>> relation
-                    : relating.entrySet()) {
-                ALineRead key = relation.getKey();
-                related = related.and(readOn.get(key));
-                parts.add(new Read.Several.Part(key.id(), drawnOn(key.read(), readOn.get(key)),
-                        WhereAnApplicationIsMade.decidesOn(relation.getValue()),
-                        UndividedByARelation.Working.together(workings.get(key))));
-            }
+            relating.forEach((relation, readings) -> parts.add(new Read.Several.Part(
+                    relation.id(), relation.read(), WhereAnApplicationIsMade.decidesOn(readings),
+                    UndividedByARelation.Working.together(workings.get(relation)))));
             return relatedOnlySomewhere && lines.isEmpty() && parts.stream().allMatch(part ->
                     part.cases().stream().allMatch(one -> AStatementAtARow.askable(
                             one.condition()) && saysNothingOfAnElement(one.condition())))
                     ? derivedOnEach(new Read.Several(parts), derived)
-                    : new Read.AgainstAnotherValue(against, relations, related);
+                    : new Read.AgainstAnotherValue(against, relations);
         }
         // A statement of no relation on some application is no line there, and the lines the
         // others draw would be drawn as though the comparison were only them.
@@ -883,8 +900,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         List<Read.Several.Part> parts = new ArrayList<>();
         // A relation of a statement that is no line, and relates no other value, is read in no
         // case on any application.
-        lines.forEach((line, readings) -> parts.add(new Read.Several.Part(line.id(),
-                drawnOn(line.read(), readOn.get(line)),
+        lines.forEach((line, readings) -> parts.add(new Read.Several.Part(line.id(), line.read(),
                 Read.Several.Part.isReadInCases(line.read())
                         ? WhereAnApplicationIsMade.decidesOn(readings) : List.of(),
                 UndividedByARelation.Working.together(workings.get(line)))));
@@ -897,23 +913,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return parts.getFirst().line();
         }
         return derivedOnEach(new Read.Several(parts), derived);
-    }
-
-    /**
-     * {@code drawn}, read on {@code applications}: the line, and the relation the lines parting
-     * its settling values are drawn beside. What is no line or relation is read on nothing a
-     * reading of it is owed.
-     */
-    private static Read drawnOn(Read drawn, ApplicationsReadOn applications) {
-        return switch (drawn) {
-            case Read.Cuts cuts -> new Read.Cuts(cuts.cutting().drawnOn(applications),
-                    cuts.authored());
-            case Read.AgainstAnotherValue against -> new Read.AgainstAnotherValue(against.over(),
-                    against.relations(), applications);
-            case Read.CutsNothing _, Read.AnswersNowhere _, Read.StatesNoRelation _,
-                 Read.Stopped _, Read.NoOrderToCountOn _, Read.NumberNoRatioHolds _,
-                 Read.Several _ -> drawn;
-        };
     }
 
     /**
@@ -2764,7 +2763,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return null;
         }
         return new Cutting(moved, at, claim, quantities.runsBetween(moved.direction()), written,
-                heldIn, readOn);
+                heldIn);
     }
 
     /**

@@ -88,7 +88,7 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
     public BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
                             AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart) {
         this(border, items, beside, toldApart, border.origin().readAt(), SaidOnTheWay.NONE,
-                border.origin().readOn());
+                ApplicationsReadOn.NONE);
     }
 
     /**

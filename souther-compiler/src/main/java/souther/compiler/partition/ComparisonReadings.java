@@ -19,7 +19,6 @@ import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.coverage.Arrivals;
-import souther.compiler.types.AnApplicationOfAClosure;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
@@ -327,6 +326,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   conditions state, and an operator answering is none of them. Nothing
      *                   where the comparison stands in a closure or a helper read at a call,
      *                   whose applications are not one run
+     * @param readOn     which applications of the closures the comparison stands in read each
+     *                   line and relation it drew, beside them; nothing where it was read once
      */
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
@@ -336,13 +337,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    Optional<StopEvidence> stopsIn, List<StopEvidence.OnAnArm> onTheArms,
                    ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context,
                    SaidOnTheWay saidOnTheWay, CountWitnesses.Lookup witnesses,
-                   DemandReading.Answered getsPast) {
+                   DemandReading.Answered getsPast, LinesReadOn readOn) {
 
         Reading {
             if (occurrence == null || statement == null || at == null
                     || statedAsACondition == null || stopsWhere == null || worksOutOnEach == null
                     || stopsIn == null || onTheArms == null || metOn == null || runsAs == null || context == null
-                    || saidOnTheWay == null || witnesses == null || getsPast == null) {
+                    || saidOnTheWay == null || witnesses == null || getsPast == null
+                    || readOn == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
@@ -869,22 +871,30 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // Read only where the policy admits it, and under the names in force here, which is
             // the one environment the comparison is about. `answer` is null: a body has nothing
             // that is the answer.
-            BoundaryPolicy.Standing standing = BoundaryPolicy.refuses(live)
-                    .<BoundaryPolicy.Standing>map(BoundaryPolicy.Standing.Refused::new)
-                    .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
-                            switch (stated.statement()) {
-                                case Stated.AComparison(var comparison) -> onItsRunsWhereUnread(
-                                        in.behavior(), comparison, stands, where,
-                                        ComparisonAssessment.of(in.behavior(), comparison, where,
-                                                in.read(), reads, applying, null,
-                                                in.answering(), false, in.conditions(),
-                                                Optional.of(stands.lineage()
-                                                        .expansionProjection()),
-                                                witnesses), in.read(), witnesses);
-                                case Stated.AnApplication(var _, var answered) ->
-                                        ComparisonAssessment.ofAnApplication(in.behavior(),
-                                                answered, where, in.read(), witnesses);
-                            }));
+            // And which applications read each line it draws, beside it.
+            LinesReadOn readOn = LinesReadOn.NONE;
+            BoundaryPolicy.Standing standing;
+            Optional<NotABoundary> refused = BoundaryPolicy.refuses(live);
+            if (refused.isPresent()) {
+                standing = new BoundaryPolicy.Standing.Refused(refused.get());
+            } else {
+                switch (stated.statement()) {
+                    case Stated.AComparison(var comparison) -> {
+                        ComparisonAssessment.Assessed assessed = ComparisonAssessment.ofEach(
+                                in.behavior(), comparison, where, in.read(), reads, applying,
+                                null, in.answering(), false, in.conditions(),
+                                Optional.of(stands.lineage().expansionProjection()), witnesses);
+                        readOn = assessed.readOn();
+                        standing = new BoundaryPolicy.Standing.Admitted(onItsRunsWhereUnread(
+                                in.behavior(), comparison, stands, where, assessed.assessment(),
+                                in.read(), witnesses));
+                    }
+                    case Stated.AnApplication(var _, var answered) ->
+                            standing = new BoundaryPolicy.Standing.Admitted(
+                                    ComparisonAssessment.ofAnApplication(in.behavior(), answered,
+                                            where, in.read(), witnesses));
+                }
+            }
             // Where a run stops in it, which is no part of the lines it draws. Only a comparison
             // the policy admits is read, and an application states no comparison to stop in.
             Optional<Proposition> stopsWhere = standing instanceof BoundaryPolicy.Standing.Admitted
@@ -916,7 +926,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             numbering), stopsWhere,
                     worksOutOnEach, stopsIn, onTheArms, applying.elementsMetOn(), stated.written(), in.context(),
                     numbering.saidOnTheWay(List.of(assumed)), witnesses,
-                    pastOf(standing, e, in, reads)));
+                    pastOf(standing, e, in, reads), readOn));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.
@@ -1270,7 +1280,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 new ClosureApplications.Each(List.of(new ClosureApplications.Application(step,
                         WhereAnApplicationIsMade.nothingAsked(), Map.of(),
                         metOn.madeWhere(made.stated()).stoppingIn(list, onward.denied()),
-                        AnApplicationOfAClosure.OF_NO_CALL_WRITTEN))));
+                        List.of()))));
     }
 
     /**

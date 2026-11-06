@@ -119,6 +119,8 @@ public final class GuardThresholds {
      * @param throughADerivedValue the lines on single positions that part the values settling a
      *                           comparison of a value derived from several positions, held apart
      *                           for {@link DerivedValues#decide}
+     * @param readOn             which applications of the closures its comparisons stand in read
+     *                           each line they drew, by the line's origin
      */
     public record Guards(List<LineEvidence> evidence,
                          RulesWithNoLine noLine,
@@ -128,11 +130,13 @@ public final class GuardThresholds {
                          Map<ConditionOccurrence, Citation> conditionsMet,
                          WhereTheOperationsStand operationsStanding,
                          List<BehaviorSetStatements.Partnered> partnered,
-                         List<DerivedValues.Settling> throughADerivedValue) {
+                         List<DerivedValues.Settling> throughADerivedValue,
+                         ReadingsReadOn readOn) {
 
         public static final Guards NONE =
                 new Guards(List.of(), RulesWithNoLine.NONE, List.of(), ReachingCuts.NONE,
-                        List.of(), Map.of(), WhereTheOperationsStand.NONE, List.of(), List.of());
+                        List.of(), Map.of(), WhereTheOperationsStand.NONE, List.of(), List.of(),
+                        ReadingsReadOn.NONE);
 
         public Guards {
             evidence = List.copyOf(evidence);
@@ -234,6 +238,7 @@ public final class GuardThresholds {
         InputDomain inputs = read.domain();
         List<LineEvidence> found = new ArrayList<>();
         RulesWithNoLine.Gathered withoutALine = new RulesWithNoLine.Gathered();
+        ReadingsReadOn.Taking readOn = new ReadingsReadOn.Taking();
         List<LineDrawn> between = new ArrayList<>();
         List<DerivedValues.Settling> throughADerivedValue = new ArrayList<>();
         List<BehaviorSetStatements.Partnered> partnered = new ArrayList<>();
@@ -385,8 +390,9 @@ public final class GuardThresholds {
                             lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
                                             called -> plan.runsOnce(called, emitted))),
-                                    reaches, arrived, aRunStops, stops, found, between,
-                                    throughADerivedValue, partnered, withoutALine);
+                                    reaches, arrived, each.readOn(), aRunStops, stops, found,
+                                    between, throughADerivedValue, partnered, withoutALine,
+                                    readOn);
                         }
                         // Not a rule with no line here: its outcome is about no row, whichever of
                         // the reasons refused it ({@link NotABoundary}), so there is nothing for a
@@ -438,7 +444,8 @@ public final class GuardThresholds {
         }
         return new Guards(found, withoutALine.found(), between, cuts.made(),
                 comparisons.forks(), comparisons.conditionsMet(),
-                comparisons.operationsStanding(), partnered, throughADerivedValue);
+                comparisons.operationsStanding(), partnered, throughADerivedValue,
+                readOn.taken());
     }
 
     /**
@@ -1054,13 +1061,15 @@ public final class GuardThresholds {
                                EmittedComparisonState.Instrumented at,
                                SourceConstructOrigin wrote, Citation where,
                                ElementsMetOn metOn, RuleReachNumbering reaches,
-                               ComparisonAssessment read, boolean aRunStops,
+                               ComparisonAssessment read, LinesReadOn linesReadOn,
+                               boolean aRunStops,
                                List<EveryRunStops> stops,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
                                List<DerivedValues.Settling> throughADerivedValue,
                                List<BehaviorSetStatements.Partnered> partnered,
-                               RulesWithNoLine.Gathered withoutALine) {
+                               RulesWithNoLine.Gathered withoutALine,
+                               ReadingsReadOn.Taking readOn) {
         // Which question places this comparison, asked once here. The two readers below say the
         // same thing about one rule, and asking apiece would let them come to say two.
         RuleReportAnchor anchor = reaches.anchorOf(wrote, where);
@@ -1077,9 +1086,14 @@ public final class GuardThresholds {
         // The geometry itself is not this reader's own — {@link ComparisonGeometry} reads it the
         // same way a clause does. Only where a line's origin comes from is: a guard's is where
         // the run meets the comparison, which is this reading's own place to say.
+        // And which applications read each line, told of the origin made for it.
         ComparisonGeometry geometry = ComparisonGeometry.of(read,
-                (cutting, part, authored) -> originOf(behavior, stated, at, wrote, anchor, metOn,
-                        part, cutting, authored));
+                (cutting, part, authored, by) -> {
+                    LineOrigin.ComparisonOrigin origin = originOf(behavior, stated, at, wrote,
+                            anchor, metOn, part, cutting, authored);
+                    readOn.read(origin, by);
+                    return origin;
+                }, linesReadOn);
         out.addAll(geometry.evidence());
         between.addAll(geometry.between());
         throughADerivedValue.addAll(geometry.throughADerivedValue());
@@ -1259,7 +1273,7 @@ public final class GuardThresholds {
                         new RuleRef.Comparison(behavior, wrote), stated, anchor,
                         at.observations().stream().map(EmittedComparisonState.Observation::site)
                                 .toList(), metOn, stopsBefore(at.observations()),
-                        cutting.written(), cutting.heldIn(), cutting.readOn()),
+                        cutting.written(), cutting.heldIn()),
                 part, new LineFacts(cutting.claim()), authored);
     }
 

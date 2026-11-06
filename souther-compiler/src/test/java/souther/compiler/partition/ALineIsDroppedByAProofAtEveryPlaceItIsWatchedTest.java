@@ -48,7 +48,6 @@ import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.Runs;
 import souther.compiler.coverage.SeenConditionOutcome;
-import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.ConstructOccurrence;
 
 import java.math.BigDecimal;
@@ -195,8 +194,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         return new ComparisonAssessment.AgainstAnotherValue(line().cutting().over(), List.of(),
                 Set.of(), List.of(), Optional.of(new ComparisonAssessment.DrawnBeside("f",
                         Citation.of(new SourcePos(1, 1)), WrittenLine.THE_COMPARISON,
-                        Optional.empty(), ApplicationsReadOn.NONE)), Map.of(), Set.of(), Map.of(),
-                Map.of());
+                        Optional.empty())), Map.of(), Set.of(), Map.of(), Map.of());
     }
 
     private static final Reachability NOT_TAKEN = new Reachability.NothingReaches(
