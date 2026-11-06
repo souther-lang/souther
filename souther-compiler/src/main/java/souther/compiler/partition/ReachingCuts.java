@@ -506,7 +506,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                     read, each.readOff(), by, Optional.empty(),
                     NamedElements.of(each.where().occurrence(), each.named())));
         }
-        return new Stating(entries, by.said());
+        return Stating.filedWhenAsked(entries, by::said);
     }
 
     /**
@@ -576,7 +576,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         static Stating of(List<OnTheWay> entries, ModelOccurrences readIn) {
             SaidOnTheWay.Filing by = new SaidOnTheWay.Filing();
             by.each(entries, readIn);
-            return new Stating(entries, by.said());
+            return Stating.filedWhenAsked(entries, by::said);
         }
     }
 
@@ -872,7 +872,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             entries.add(onTheWay(met, at, each, read, made.readOff(), by, entered,
                     NamedElements.of(met, named.elements().and(made.namedOf(each)))));
         }
-        return new Stating(entries, by.said());
+        return Stating.filedWhenAsked(entries, by::said);
     }
 
     /** The copy of the model's code {@code fork} stands in, or none where the model states
@@ -948,7 +948,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             entries.add(onTheWay(at.occurrence(), at.anchor(), each.read(), read, each.readOff(),
                     by, Optional.empty(), NamedElements.of(at.occurrence(), each.named())));
         }
-        return new Stating(entries, by.said());
+        return Stating.filedWhenAsked(entries, by::said);
     }
 
     /** {@code stated}, with what follows from its statements only a run checks, put by whoever

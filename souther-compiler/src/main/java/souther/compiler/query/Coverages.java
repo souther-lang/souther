@@ -84,6 +84,7 @@ import souther.compiler.partition.ReadTogether;
 import souther.compiler.partition.InputClassifications;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.Reachability;
+import souther.compiler.partition.ReadingsReadOn;
 import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.partition.WhyKept;
@@ -295,7 +296,9 @@ final class Coverages {
                 // turn on, and which forks are within one application of the closures around
                 // them, which the walk of the comparisons reads where the reading of the runs may
                 // not.
-                guards.operationsStanding(), derived.replaced()), quantities,
+                guards.operationsStanding(), derived.replaced(),
+                // And which applications read each line the guards drew, by its origin.
+                guards.readOn()), quantities,
                 // Where this reading met each condition it places itself, beside the geometry and
                 // not inside it. A report points at a condition and an answer says which condition
                 // it is, and the two are kept apart so that moving one leaves the other alone.
@@ -1331,7 +1334,8 @@ final class Coverages {
                     settled(border.border(), tellingApart(border, search), read);
             out.add(new BorderAssessment(border.border(), items,
                     shownArriving(border.beside(), toldApart), toldApart,
-                    border.readAt(), reaching.saidOnTheWayTo(border.border().origin())));
+                    border.readAt(), reaching.saidOnTheWayTo(border.border().origin()),
+                    border.readOn()));
         }
         return new LineReadings(out, measured.tilts());
     }
@@ -1912,9 +1916,13 @@ final class Coverages {
      * reading's own is its points and its way, which the search made per reading next is made
      * along. Whether the points are met is the line's too: a point is met where a row is at it at
      * any reading ({@link #together}), which is what the readings put together say of it.
+     *
+     * <p>And each reading read on the applications {@code readOn} says read its line, asked of
+     * the line's origin, which is what tells the reading apart.
      */
     static LineReadings besideEachLine(List<ReadingOfALine> readings,
-                                       List<DerivedValue.Replaced> replaced) {
+                                       List<DerivedValue.Replaced> replaced,
+                                       ReadingsReadOn readOn) {
         SequencedMap<BoundaryLine, List<ReadingOfALine>> byLine = new LinkedHashMap<>();
         for (ReadingOfALine each : readings) {
             byLine.computeIfAbsent(BoundaryLine.of(each.border()), _ -> new ArrayList<>())
@@ -1925,7 +1933,9 @@ final class Coverages {
         List<BorderAssessment> out = new ArrayList<>();
         for (ReadingOfALine each : readings) {
             out.add(new BorderAssessment(each.border(), each.items(),
-                    beside.get(BoundaryLine.of(each.border()))));
+                    beside.get(BoundaryLine.of(each.border())), ARowTellingTheLinesApart.notAsked(),
+                    each.border().origin().readAt(), SaidOnTheWay.NONE,
+                    readOn.of(each.border().origin())));
         }
         return new LineReadings(out, tiltsOfEachComputation(readings, replaced));
     }
@@ -2229,7 +2239,8 @@ final class Coverages {
         }
         return new BorderAssessment(kept.border(), kept.items(), kept.beside(), kept.toldApart(),
                 kept.readAt(), SaidOnTheWay.allOf(
-                        ofOneLine.stream().map(BorderAssessment::saidOnTheWay).toList()));
+                        ofOneLine.stream().map(BorderAssessment::saidOnTheWay).toList()),
+                kept.readOn());
     }
 
     /**
@@ -2976,7 +2987,9 @@ final class Coverages {
                 // And both readings' copies, which is what tells the calls of a helper that read
                 // one line apart. What put things on each one's way is put together once for every
                 // reading of the line, by whoever holds them all.
-                readAt, a.saidOnTheWay());
+                readAt, a.saidOnTheWay(),
+                // And both readings' applications, every one kept.
+                a.readOn().and(b.readOn()));
     }
 
     /**

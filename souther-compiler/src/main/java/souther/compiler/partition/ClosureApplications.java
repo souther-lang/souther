@@ -15,8 +15,10 @@ import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.semantics.HowAClosureIsApplied;
-import souther.compiler.types.BindingId;
 import souther.compiler.types.ACallOfAnOperation;
+import souther.compiler.types.AnApplicationOfAClosure;
+import souther.compiler.types.ApplicationsReadOn;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -174,6 +176,25 @@ sealed interface ClosureApplications {
                         madeBy.get(at).ordinal(), out);
             }
             return out;
+        }
+
+        /**
+         * This application, as what a line drawn on it is read on: told by each call on the way
+         * to it that is a construct of the model ({@link AnApplicationOfAClosure.Made#of}), and
+         * nothing where none is.
+         */
+        ApplicationsReadOn readOn() {
+            List<AnApplicationOfAClosure.Made> by = new ArrayList<>();
+            for (MadeBy each : madeBy) {
+                AnApplicationOfAClosure.Made.of(each.call(), each.ordinal()).ifPresent(by::add);
+            }
+            return ApplicationsReadOn.of(List.of(new AnApplicationOfAClosure(by)));
+        }
+
+        /** Whether a run makes it on some row: one the operation stops before on every row is
+         *  made on none. */
+        boolean isMadeOnSomeRow() {
+            return !(reached instanceof Proposition.Always(boolean made) && !made);
         }
     }
 

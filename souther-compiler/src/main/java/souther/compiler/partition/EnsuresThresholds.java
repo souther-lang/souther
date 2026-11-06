@@ -257,7 +257,7 @@ public final class EnsuresThresholds {
         // where a line's origin comes from is this reader's own — a clause's is which conjunct
         // stated it, not a place a run met.
         ComparisonGeometry geometry = ComparisonGeometry.of(assessed,
-                (cutting, _, _) -> originOf(said, cutting));
+                (cutting, _, _, _) -> originOf(said, cutting));
         out.evidence().addAll(geometry.evidence());
         out.between().addAll(geometry.between());
         out.throughADerivedValue().addAll(geometry.throughADerivedValue());

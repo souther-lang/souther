@@ -3,12 +3,15 @@ package souther.architecture;
 import org.junit.jupiter.api.Test;
 
 import java.lang.classfile.ClassModel;
+import java.lang.classfile.CodeElement;
 import java.lang.classfile.CodeModel;
 import java.lang.classfile.FieldModel;
 import java.lang.classfile.MethodModel;
 import java.lang.classfile.instruction.FieldInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -18,11 +21,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Who reads what a value carries only to tell an author what multiplied the cases of a line.
+ * Who reads what a value carries only to tell an author what multiplied the cases of a line, or
+ * which applications of a closure a reading of a line was read on.
  *
  * <p>Which call handed a closure its parameter, which application of it a statement was read on,
- * how the statement was derived on each, and how many ways each case asked stood for: none of these
- * decides what a body states or which rows a line asks for. Which call handed what is read off the
+ * how the statement was derived on each, how many ways each case asked stood for, and which
+ * applications drew a line: none of these decides what a body states or which rows a line asks
+ * for. Which call handed what is read off the
  * applications a body's bindings already hold, and is no part of them. The rest are carried inside
  * the values a reading is made of — an application, a derivation, an assessment — and so are part
  * of what makes two of those values equal. That is on purpose. A value left equal to one carrying
@@ -66,6 +71,18 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                     "expanded");
     private static final Account COUNTED_OF_A_LINE =
             new Account("souther/compiler/meaning/CasesOfALineAsked$NotWorkedOut", "counted");
+    private static final Account READ_ON_BY_THE_LINES_DRAWN =
+            new Account("souther/compiler/partition/Cutting$Drawn", "readOn");
+    private static final Account READ_ON_BY_THE_LINES_ASSESSED =
+            new Account("souther/compiler/partition/ComparisonAssessment$Assessed", "readOn");
+    private static final Account READ_ON_BY_A_COMPARISON_READ =
+            new Account("souther/compiler/partition/ComparisonReadings$Reading", "readOn");
+    private static final Account READ_ON_BY_THE_GUARDS =
+            new Account("souther/compiler/partition/GuardThresholds$Guards", "readOn");
+    private static final Account READ_ON_BY_THE_PARTITION =
+            new Account("souther/compiler/partition/Partitions$Partitioning", "readOn");
+    private static final Account READ_ON_BY_A_READING =
+            new Account("souther/compiler/query/BorderAssessment", "readOn");
 
     /**
      * Every method outside its carrier that reads each account.
@@ -79,6 +96,13 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
      * its parts are narrowed, and told where the assessment says what each line was told. The
      * application a reading is inside, and the derivations an assessment holds, are read by their
      * carrier alone, which is where they are handed on.
+     *
+     * <p>Which applications read each line is held beside the lines and never in them: from the
+     * reading of a comparison as lines to its assessment, to the comparison's reading, to the
+     * body's guards — which file it under each line's origin as the origin is made — to the
+     * partition, and from there to each reading of a line, which puts them together where the
+     * readings of one line are put together and is told where an obligation's readings are
+     * written, and where the calls they name are placed.
      */
     private static final Map<Account, Set<String>> READ_BY = expected();
 
@@ -115,14 +139,129 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                         + "Lsouther/compiler/partition/WaysToACase;Ljava/util/List;Z"
                         + "Lsouther/compiler/inputs/InputReading;"
                         + "Lsouther/compiler/partition/CountWitnesses$Lookup;)Ljava/util/List;")));
+        by.put(READ_ON_BY_THE_LINES_DRAWN, Set.of(AMethod.of(
+                "souther/compiler/partition/ComparisonAssessment", "ofEach",
+                "(Ljava/lang/String;Lsouther/compiler/check/StatedComparison;"
+                        + "Lsouther/compiler/diag/Citation;Lsouther/compiler/inputs/InputReading;"
+                        + "Lsouther/compiler/inputs/InputReads;"
+                        + "Lsouther/compiler/partition/ClosureApplications;"
+                        + "Lsouther/compiler/types/BindingId;Lsouther/compiler/coverage/Arrivals;Z"
+                        + "Lsouther/compiler/partition/WhatConditionsState;Ljava/util/Optional;"
+                        + "Lsouther/compiler/partition/CountWitnesses$Lookup;)"
+                        + "Lsouther/compiler/partition/ComparisonAssessment$Assessed;")));
+        by.put(READ_ON_BY_THE_LINES_ASSESSED, Set.of(AMethod.of(
+                "souther/compiler/partition/ComparisonReadings", "walk",
+                "(Lsouther/compiler/core/Core;Lsouther/compiler/partition/ComparisonReadings$Body;"
+                        + "Lsouther/compiler/inputs/InputReads;"
+                        + "Lsouther/compiler/partition/ClosureApplications;"
+                        + "Lsouther/compiler/partition/LiveFlow;Ljava/util/List;ZLjava/util/List;"
+                        + "Ljava/util/List;Lsouther/compiler/partition/ConditionNumbering;)V")));
+        by.put(READ_ON_BY_A_COMPARISON_READ, Set.of(AMethod.of(
+                "souther/compiler/partition/GuardThresholds", "guardsOf",
+                "(Ljava/lang/String;Lsouther/compiler/check/AnalysisBody;"
+                        + "Lsouther/compiler/core/Core;"
+                        + "Lsouther/compiler/coverage/CoverageSites$Plan;"
+                        + "Lsouther/compiler/inputs/InputReading;"
+                        + "Lsouther/compiler/check/ElementBindings;"
+                        + "Lsouther/compiler/check/PathReachability$Arrivals;"
+                        + "Lsouther/compiler/partition/RuleReachNumbering;"
+                        + "Lsouther/compiler/partition/CountWitnesses$AtComparisons;)"
+                        + "Lsouther/compiler/partition/GuardThresholds$Guards;")));
+        by.put(READ_ON_BY_THE_GUARDS, Set.of(AMethod.of(
+                "souther/compiler/query/Coverages", "partitioningOf",
+                "(Lsouther/compiler/ast/Hir$SpecBehavior;Lsouther/compiler/inputs/InputReading;"
+                        + "Lsouther/compiler/partition/BodyReading;"
+                        + "Lsouther/compiler/coverage/CoverageSites$Plan;"
+                        + "Lsouther/compiler/check/PathReachability$Arrivals;"
+                        + "Lsouther/compiler/check/StatedContract;"
+                        + "Lsouther/compiler/values/Allowance;"
+                        + "Lsouther/compiler/query/Coverages$WitnessesOfACount;)"
+                        + "Lsouther/compiler/query/Coverages$Partitioned;")));
+        by.put(READ_ON_BY_THE_PARTITION, Set.of(AMethod.of(
+                "souther/compiler/query/Adequacy$Readings", "assess",
+                "(Lsouther/compiler/partition/MeasuredInput;"
+                        + "Lsouther/compiler/query/Adequacy$RowReading;Ljava/util/Optional;)"
+                        + "Lsouther/compiler/query/LineReadings;")));
+        by.put(READ_ON_BY_A_READING, Set.of(
+                AMethod.of("souther/compiler/query/Coverages", "asOneLine",
+                        "(Ljava/util/List;)Lsouther/compiler/query/BorderAssessment;"),
+                AMethod.of("souther/compiler/query/Coverages", "asOneLine",
+                        "(Lsouther/compiler/query/BorderAssessment;"
+                                + "Lsouther/compiler/query/BorderAssessment;)"
+                                + "Lsouther/compiler/query/BorderAssessment;"),
+                AMethod.of("souther/compiler/query/Coverages", "searched",
+                        "(Lsouther/compiler/query/LineReadings;"
+                                + "Lsouther/compiler/partition/MeasuredInput;"
+                                + "Lsouther/compiler/query/Coverages$Probe;"
+                                + "Lsouther/compiler/partition/ReachingCuts;Ljava/util/Set;)"
+                                + "Lsouther/compiler/query/LineReadings;"),
+                AMethod.of("souther/compiler/report/AdequacyReport", "obligations",
+                        "(Lsouther/compiler/publish/DocumentArray;Ljava/util/List;Ljava/util/Map;"
+                                + "Lsouther/compiler/report/DocumentSources;"
+                                + "Lsouther/compiler/publish/PublishedRuleHandle$WhereARuleIs;"
+                                + "Lsouther/compiler/report/AdequacyReport$WhereARowIs;"
+                                + "Ljava/util/Optional;)V"),
+                AMethod.of("souther/compiler/report/AdequacyReport", "partPlaces",
+                        "(Lsouther/compiler/query/Compilation;"
+                                + "Lsouther/compiler/query/PartitionEvidence;Ljava/util/List;"
+                                + "Ljava/util/List;)Ljava/util/Map;")));
         return by;
+    }
+
+    /**
+     * What the compiled classes say of every account: who reads it outside its carrier, whether
+     * its carrier reads it, and the carrier.
+     *
+     * <p>Read off in one walk over every method's code, which is the whole of what either test
+     * costs: each instruction is matched against every account at once, so a row added to the list
+     * adds a lookup and not a walk.
+     */
+    private record Walked(Map<Account, Set<String>> outside, Set<Account> inside,
+                          Map<Account, ClassModel> carriers) {}
+
+    private static final Walked WALKED = walked();
+
+    private static Walked walked() {
+        Map<Account, Set<String>> outside = new LinkedHashMap<>();
+        READ_BY.keySet().forEach(account -> outside.put(account, new TreeSet<>()));
+        Set<Account> inside = new HashSet<>();
+        Map<Account, ClassModel> carriers = new HashMap<>();
+        for (Path module : COMPILED.modules()) {
+            for (ClassModel each : COMPILED.classesOf(module)) {
+                String owner = each.thisClass().asInternalName();
+                READ_BY.keySet().stream().filter(account -> account.owner().equals(owner))
+                        .forEach(account -> carriers.put(account, each));
+                for (MethodModel method : each.methods()) {
+                    CodeModel code = method.code().orElse(null);
+                    if (code == null) {
+                        continue;
+                    }
+                    for (CodeElement element : code) {
+                        Account read = switch (element) {
+                            case FieldInstruction it -> new Account(
+                                    it.owner().name().stringValue(), it.name().stringValue());
+                            case InvokeInstruction it -> new Account(
+                                    it.owner().name().stringValue(), it.name().stringValue());
+                            default -> null;
+                        };
+                        if (read == null || !outside.containsKey(read)) {
+                            continue;
+                        }
+                        if (read.owner().equals(owner)) {
+                            inside.add(read);
+                        } else {
+                            outside.get(read).add(AMethod.of(each, method));
+                        }
+                    }
+                }
+            }
+        }
+        return new Walked(outside, inside, carriers);
     }
 
     @Test
     void eachAccountIsReadOnlyWhereItIsHandedOnOrTold() {
-        Map<Account, Set<String>> found = new LinkedHashMap<>();
-        READ_BY.keySet().forEach(account -> found.put(account, readersOutside(account)));
-        assertEquals(sorted(READ_BY), found,
+        assertEquals(sorted(READ_BY), WALKED.outside(),
                 "what a value carries to tell an author what multiplied a line is read to decide"
                         + " nothing: a reader not written here is one that may");
     }
@@ -136,7 +275,8 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
     void andEachAccountIsAComponentTheWalkSeesBeingRead() {
         for (Account account : READ_BY.keySet()) {
             assertTrue(declares(account), account + " is declared by its carrier");
-            assertTrue(!readersOutside(account).isEmpty() || readInside(account),
+            assertTrue(!WALKED.outside().get(account).isEmpty()
+                            || WALKED.inside().contains(account),
                     account + " is read somewhere, or the walk sees no read of it at all");
         }
     }
@@ -147,58 +287,15 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
         return sorted;
     }
 
-    private static Set<String> readersOutside(Account account) {
-        Set<String> found = new TreeSet<>();
-        for (Path module : COMPILED.modules()) {
-            for (ClassModel each : COMPILED.classesOf(module)) {
-                if (each.thisClass().asInternalName().equals(account.owner())) {
-                    continue;
-                }
-                for (MethodModel method : each.methods()) {
-                    if (reads(method, account)) {
-                        found.add(AMethod.of(each, method));
-                    }
-                }
-            }
-        }
-        return found;
-    }
-
-    private static boolean readInside(Account account) {
-        return carrier(account).methods().stream().anyMatch(method -> reads(method, account));
-    }
-
     /** Whether the carrier holds the account as a field, or works it out in a method. */
     private static boolean declares(Account account) {
-        ClassModel carrier = carrier(account);
+        ClassModel carrier = WALKED.carriers().get(account);
+        if (carrier == null) {
+            throw new AssertionError(account.owner() + " is compiled in no module");
+        }
         return carrier.fields().stream().map(FieldModel::fieldName)
                 .anyMatch(name -> name.equalsString(account.name()))
                 || carrier.methods().stream().map(MethodModel::methodName)
                         .anyMatch(name -> name.equalsString(account.name()));
-    }
-
-    private static ClassModel carrier(Account account) {
-        for (Path module : COMPILED.modules()) {
-            for (ClassModel each : COMPILED.classesOf(module)) {
-                if (each.thisClass().asInternalName().equals(account.owner())) {
-                    return each;
-                }
-            }
-        }
-        throw new AssertionError(account.owner() + " is compiled in no module");
-    }
-
-    private static boolean reads(MethodModel method, Account account) {
-        CodeModel code = method.code().orElse(null);
-        if (code == null) {
-            return false;
-        }
-        return code.elementStream().anyMatch(element -> switch (element) {
-            case FieldInstruction it -> account.owner().equals(it.owner().name().stringValue())
-                    && account.name().equals(it.name().stringValue());
-            case InvokeInstruction it -> account.owner().equals(it.owner().name().stringValue())
-                    && account.name().equals(it.name().stringValue());
-            default -> false;
-        });
     }
 }
