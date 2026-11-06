@@ -15,18 +15,18 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Where two names stand for elements of one container, what each point of a line on the element
  * read second is owed is what it is owed where that line stands alone.
  *
  * <p>Every value the declarations allow an element is held by some element of some list, so a row
- * reaches every point of {@code b.n >= 1} past {@code a.n < 0} as it does where {@code b.n >= 1}
+ * reaches every point of {@code b.n >= 3} past {@code a.n < -3} as it does where {@code b.n >= 3}
  * is all the body asks. What the other name asks changes where the points are reached from and not
  * what they are owed, so the two lines are compared point by point: a point refuted on one and not
- * on the other is the way kept to a name the point is not at. A class below the line is owed only
- * where the line decides alone, so the points compared are the ones both are owed. How the
+ * on the other is the way kept to a name the point is not at. The two edges are apart, since
+ * two edges of one quantity with no value between them owe no class between them. How the
  * way to a line is kept to the elements the line reads is asked of its owner
  * ({@link TheWayToALineIsKeptToTheElementsTheLineReadsTest}); this asks that a report made of the
  * line says the same of it.
@@ -45,10 +45,10 @@ class APointOfALineOnOneNamesElementIsNotRefutedByWhatIsAskedOfAnotherTest {
 
             behavior joined : (x: Input) -> Int
             let joined (x) = List.sum(List.map(a -> List.sum(List.map(b ->
-                if a.n < 0 && b.n >= 1 then 1 else 0, x.items)), x.items))
+                if a.n < -3 && b.n >= 3 then 1 else 0, x.items)), x.items))
 
             behavior alone : (x: Input) -> Int
-            let alone (x) = List.sum(List.map(b -> if b.n >= 1 then 1 else 0, x.items))
+            let alone (x) = List.sum(List.map(b -> if b.n >= 3 then 1 else 0, x.items))
             """;
 
     @Test
@@ -65,11 +65,8 @@ class APointOfALineOnOneNamesElementIsNotRefutedByWhatIsAskedOfAnotherTest {
 
         Map<String, String> joined = dispositionsOf(obligations, "joined", 2);
         Map<String, String> alone = dispositionsOf(obligations, "alone", 1);
-        assertTrue(joined.keySet().containsAll(List.of("on", "off below", "in above")),
-                () -> "the line is owed its points: " + joined);
-        Map<String, String> sameAlone = new LinkedHashMap<>(alone);
-        sameAlone.keySet().retainAll(joined.keySet());
-        assertEquals(sameAlone, joined);
+        assertFalse(alone.isEmpty(), "the line is owed points");
+        assertEquals(alone, joined);
     }
 
     /** Each point of the comparison numbered {@code ordinal} in {@code behavior}, by which point

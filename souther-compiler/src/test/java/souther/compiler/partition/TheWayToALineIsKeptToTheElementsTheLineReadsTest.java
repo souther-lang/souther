@@ -124,9 +124,9 @@ class TheWayToALineIsKeptToTheElementsTheLineReadsTest {
                 wayToTheLine(reads(A), List.of(truth(0, A), truth(1, B))));
     }
 
-    /** What a line reads nothing of is the way as the case put it. */
+    /** A line that reads no element names none to keep, so the first name met is kept. */
     @Test
-    void aLineThatReadsNoElementTakesTheCaseAsItStands() {
+    void aLineThatReadsNoElementKeepsTheFirstNameMet() {
         assertEquals(List.of(truth(0, A), declined(1)),
                 wayToTheLine(ElementsNamed.NONE, List.of(truth(0, A), truth(1, B))));
     }

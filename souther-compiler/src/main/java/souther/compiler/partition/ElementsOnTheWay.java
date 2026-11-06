@@ -117,16 +117,16 @@ final class ElementsOnTheWay {
         if (kept == way) {
             return new Kept(way, said);
         }
-        SaidOnTheWay.Filing filing = new SaidOnTheWay.Filing();
-        filing.all(said);
+        Map<OnTheWay, ModelOccurrences> entries = new LinkedHashMap<>(said.entries());
         for (int at = 0; at < way.size(); at++) {
             if (kept.get(at) != way.get(at)) {
-                filing.alone(kept.get(at),
-                        said.entries().getOrDefault(way.get(at), ModelOccurrences.NONE));
+                ModelOccurrences by = entries.remove(way.get(at));
+                if (by != null) {
+                    entries.put(kept.get(at), by);
+                }
             }
         }
-        return new Kept(kept, new SaidOnTheWay(filing.said().entries(), said.stated(),
-                said.unstated()));
+        return new Kept(kept, new SaidOnTheWay(entries, said.stated(), said.unstated()));
     }
 
     /** Whether every element {@code named} reads is read through the name kept for it: none
