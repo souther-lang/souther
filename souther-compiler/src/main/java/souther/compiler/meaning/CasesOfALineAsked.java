@@ -10,6 +10,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -116,18 +117,32 @@ public final class CasesOfALineAsked {
      * are as many as the stops; nor are two such cases joined into one, whose condition would be
      * as long as they are many and asked of every row read at the line.
      *
+     * <p>And, where they were more ways of choosing one than are taken apart, how many ways they
+     * were ({@link CaseCount}), for a reader telling an author why. The count is of every case the
+     * case asked stands for, whichever of them were reached, and is no part of why they were not
+     * worked out.
+     *
      * @param in        the case asked
      * @param stoppedAt the figures its cases were stopped at; one or more
+     * @param counted   how many ways of choosing its cases there were, where their number is what
+     *                  stopped them; empty where none was taken apart for another reason
      */
-    public record NotWorkedOut(DecidingCase in, Set<CompositionBudget> stoppedAt) {
+    public record NotWorkedOut(DecidingCase in, Set<CompositionBudget> stoppedAt,
+                               Optional<CaseCount> counted) {
 
         public NotWorkedOut {
             Objects.requireNonNull(in, "cases nobody worked out are some case's");
+            Objects.requireNonNull(counted, "the ways were counted or not");
             if (stoppedAt.isEmpty()) {
                 throw new IllegalArgumentException(
                         "cases nobody worked out were stopped at some figure");
             }
             stoppedAt = Collections.unmodifiableSet(EnumSet.copyOf(stoppedAt));
+        }
+
+        /** The same, with the ways not counted. */
+        public NotWorkedOut(DecidingCase in, Set<CompositionBudget> stoppedAt) {
+            this(in, stoppedAt, Optional.empty());
         }
     }
 
@@ -170,6 +185,9 @@ public final class CasesOfALineAsked {
     private boolean droppedNonDividing;
 
     private final Set<CompositionBudget> stopped = EnumSet.noneOf(CompositionBudget.class);
+
+    /** How many ways of choosing the cases asked there were, where their number stopped them. */
+    private Optional<CaseCount> counted = Optional.empty();
 
     /** The figures each case was never taken apart at, for the cases already asked of. */
     private final Map<DecidingCase.Cases, Set<CompositionBudget>> figuresOf =
@@ -305,6 +323,7 @@ public final class CasesOfALineAsked {
         }
         if (said.standsFor().waysOfChoosing(most) > most) {
             moreWaysThanAreTakenApart(said);
+            counted = Optional.of(CaseCount.of(said.standsFor()));
             return new Found(List.of(), notWorkedOutIn(said));
         }
         DecidingCase.Cases cases = heldFirst(said.standsFor());
@@ -324,7 +343,7 @@ public final class CasesOfALineAsked {
     /** Where the cases of {@code said} nobody worked out are, if there are any: where it holds,
      *  stopped at every figure the asking met ({@link NotWorkedOut}). */
     private List<NotWorkedOut> notWorkedOutIn(DecidingCase said) {
-        return stopped.isEmpty() ? List.of() : List.of(new NotWorkedOut(said, stopped));
+        return stopped.isEmpty() ? List.of() : List.of(new NotWorkedOut(said, stopped, counted));
     }
 
     /** The cases of {@code said} were more ways of choosing one than are taken apart: none is

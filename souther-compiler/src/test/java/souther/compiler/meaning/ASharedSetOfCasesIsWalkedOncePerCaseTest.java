@@ -135,6 +135,7 @@ class ASharedSetOfCasesIsWalkedOncePerCaseTest {
         }));
         asked.put("holdingInSome", () -> cases.holdingInSome(1000));
         asked.put("waysOfChoosing", () -> cases.waysOfChoosing(1000));
+        asked.put("structuralWays", () -> cases.structuralWays(CaseCount.WAYS_A_COUNT_IS_HELD_TO));
         asked.put("eachSaid", () -> cases.eachSaid(DecidingCase.Cases.One::new));
         asked.put("notTakenApartAt", cases::notTakenApartAt);
         asked.put("references", cases::references);

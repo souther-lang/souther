@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 27,
+  "schemaVersion" : 28,
   "compilerVersion" : "<version>",
   "status" : "partial",
   "weakening" : [ "body_not_in_evaluation", "rule_unread" ],
@@ -1686,7 +1686,8 @@
           "unknown" : 0
         },
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -3578,7 +3579,8 @@
           "reason" : "no_rows"
         },
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -5264,7 +5266,8 @@
           "reason" : "no_rows"
         },
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -5402,7 +5405,8 @@
         "boundaries" : [ ],
         "obligations" : [ ],
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -5521,7 +5525,8 @@
             "ordinal" : 2,
             "lowered" : 0
           }
-        } ]
+        } ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -6808,7 +6813,8 @@
             "declaredOn" : "Stay",
             "clause" : 0
           }
-        } ]
+        } ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",

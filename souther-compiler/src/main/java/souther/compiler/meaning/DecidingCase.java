@@ -4,6 +4,7 @@ import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.partition.CompositionBudget;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -451,6 +452,53 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
                 @Override
                 public Long notTakenApart(NotTakenApart notTakenApart) {
                     return 1L;
+                }
+            });
+        }
+
+        /**
+         * How many ways there are of choosing one case of these, or {@code past} and one more
+         * where there are more than {@code past}.
+         *
+         * <p>What {@link #waysOfChoosing} counts, at a figure a reader telling an author how many
+         * ways there were may name exactly: one past which the number is longer than anybody reads,
+         * and past which working it out would cost as much as it is long. Cases held together
+         * twice at each of many steps are as many ways as two to the power of two to the power of
+         * the steps. Worked out once for each case however many ways lead to it.
+         */
+        default BigInteger structuralWays(BigInteger past) {
+            BigInteger beyond = past.add(BigInteger.ONE);
+            return fold(new Fold<BigInteger>() {
+
+                @Override
+                public BigInteger one(One one) {
+                    return BigInteger.ONE;
+                }
+
+                @Override
+                public BigInteger eachOf(EachOf node, List<BigInteger> alternatives) {
+                    BigInteger ways = BigInteger.ZERO;
+                    for (BigInteger these : alternatives) {
+                        ways = ways.add(these).min(beyond);
+                    }
+                    return ways;
+                }
+
+                @Override
+                public BigInteger together(Together node, List<BigInteger> factors) {
+                    BigInteger ways = BigInteger.ONE;
+                    for (BigInteger these : factors) {
+                        if (these.signum() == 0) {
+                            return BigInteger.ZERO;
+                        }
+                        ways = ways.multiply(these).min(beyond);
+                    }
+                    return ways;
+                }
+
+                @Override
+                public BigInteger notTakenApart(NotTakenApart notTakenApart) {
+                    return BigInteger.ONE;
                 }
             });
         }

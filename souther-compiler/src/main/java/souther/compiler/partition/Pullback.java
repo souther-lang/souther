@@ -130,6 +130,7 @@ import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
+import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
@@ -11157,14 +11158,23 @@ final class Pullback {
                     yield partOf(at, new Derivation.Stopped(past, fixed));
                 }
                 Derivation ending = again.apply(on -> on.taking(walk, seed, candidates));
-                for (InputReads application : applications) {
+                // Each application said to be the walk's, numbered as the elements are written:
+                // the step is one construct on every one of them.
+                ACallOfAnOperation applying = aCallMadeBy(walk);
+                if (applying != null) {
+                    applying = ClosureApplications.asWritten(applying, read.rules().symbols());
+                }
+                for (int ordinal = 0; ordinal < applications.size(); ordinal++) {
+                    InputReads application = applications.get(ordinal);
                     Derivation before = ending;
                     Derivation condition = observe(step.cond(), AnswerAspect.TRUTH, application);
                     ArmsLeft left = armsLeftBy(condition);
-                    ending = madeBy(step, armsOf(step, application, condition, left, arm ->
-                            Core.withoutStanding(arm.value()) instanceof Core.Read name
+                    Derivation chosen = madeBy(step, armsOf(step, application, condition, left,
+                            arm -> Core.withoutStanding(arm.value()) instanceof Core.Read name
                                     && name.binding().equals(carried) ? before
                                     : again.apply(on -> on.taking(walk, arm, candidates))));
+                    ending = applying == null ? chosen
+                            : new Derivation.AnApplication(applying, ordinal, chosen);
                 }
                 yield applications.isEmpty() ? ending : new Derivation.AComparisonOfAChoice(ending);
             }
@@ -13601,6 +13611,20 @@ final class Pullback {
     private static Derivation madeBy(Core node, Derivation choice) {
         ConstructOccurrence at = occurrenceMadeBy(node);
         return at == null ? choice : new Derivation.AChoiceAt(at, choice);
+    }
+
+    /** The call of one of the language's operations some source wrote that {@code node} is, or
+     *  null where it is none. */
+    private static ACallOfAnOperation aCallMadeBy(Core node) {
+        ConstructOccurrence at = occurrenceMadeBy(node);
+        ValueName operation = switch (Core.withoutStanding(node)) {
+            case Core.PreservedCall kept -> kept.declared().operation();
+            case Core.Call call when call.fn() instanceof Core.Reached reached ->
+                    reached.denotes();
+            default -> null;
+        };
+        return at == null || !(operation instanceof ValueName.Stdlib library) ? null
+                : new ACallOfAnOperation(library, at);
     }
 
     /** The construct some source wrote that {@code node} is, or null where it is none. */

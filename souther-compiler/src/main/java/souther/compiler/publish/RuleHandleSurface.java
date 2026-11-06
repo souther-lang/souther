@@ -42,6 +42,10 @@ public enum RuleHandleSurface {
     NOT_READ_RULE("/$defs/partition/properties/notRead/items/properties/rule",
             "rule", Carries.THE_HANDLE_ALONE),
 
+    /** The rule whose line's cases were too many to be taken apart, beside what they were. */
+    CASE_EXPANSION_RULE("/$defs/partition/properties/caseExpansions/items/properties/rule",
+            "rule", Carries.THE_HANDLE_ALONE),
+
     /** The rule that drew the line a point is owed for. */
     OBLIGATION_RULE("/$defs/obligations/items/properties/rule",
             "rule", Carries.THE_HANDLE_ALONE),

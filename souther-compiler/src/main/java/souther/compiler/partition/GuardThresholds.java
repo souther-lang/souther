@@ -1238,6 +1238,8 @@ public final class GuardThresholds {
         // comparison raises — a line it comes to owes its rows by having been read — so where the
         // reading stopped there is nothing that was determined and nothing that could have been.
         read.whatEachPlaceIsLeftWith().forEach(left -> left.filedIn(cited, readAt, out));
+        // And, beside what a line not worked out leaves, what its cases were.
+        read.caseExpansions().forEach(each -> out.expanded(cited, readAt, each));
     }
 
     /** How a row meets a line a body's condition drew, which is a guard's own answer: what it takes

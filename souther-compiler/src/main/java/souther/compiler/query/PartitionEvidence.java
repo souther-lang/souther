@@ -6,9 +6,14 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.CasesExpandedAtARule;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputQuestion;
+import souther.compiler.inputs.PositionReadingBlocked;
+import souther.compiler.inputs.PositionValuesNotSeparated;
 import souther.compiler.inputs.RuleSite;
+import souther.compiler.inputs.RuleWhereARunMayStop;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.WhatAQuestionStandsOn;
 import souther.compiler.observe.Figure;
@@ -73,6 +78,9 @@ import java.util.Set;
  *                     is why they are two things and not one wider count. Not a report's list of
  *                     reasons: these are what classification observed, and joining them to
  *                     everything else a module could not read happens where that list is built
+ * @param caseExpansions what each rule's line not worked out because its cases were too many was
+ *                     told of those cases: no measure, and nothing any measure went without, but
+ *                     what a reader is told beside the finding about that line
  */
 public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 PairSpace pairs,
@@ -82,7 +90,22 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                 List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                 List<Unanswered> unanswered,
-                                List<Incompleteness> whyUnclassified) implements RuleCitations {
+                                List<Incompleteness> whyUnclassified,
+                                List<CasesExpandedAtARule> caseExpansions) implements RuleCitations {
+
+    /** The same, with no rule's cases told of. */
+    public PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
+                             PairSpace pairs,
+                             List<UndividedPosition> notDerivable,
+                             List<RuleWithoutALine> rulesWithoutALine,
+                             List<RuleWhereARunMayStop> rulesWhereARunMayStop,
+                             List<PositionReadingBlocked> blocked,
+                             List<PositionValuesNotSeparated> notSeparated,
+                             List<Unanswered> unanswered,
+                             List<Incompleteness> whyUnclassified) {
+        this(partitioned, pairs, notDerivable, rulesWithoutALine, rulesWhereARunMayStop, blocked,
+                notSeparated, unanswered, whyUnclassified, List.of());
+    }
 
 
     /**
@@ -138,6 +161,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         blocked = List.copyOf(blocked);
         unanswered = List.copyOf(unanswered);
         whyUnclassified = List.copyOf(whyUnclassified);
+        caseExpansions = List.copyOf(caseExpansions);
     }
 
     /**

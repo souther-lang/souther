@@ -5,10 +5,12 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.partition.CompositionBudget;
 
+import java.math.BigInteger;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -596,11 +598,16 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
                 beside.notWorkedOutIn(), "and the cases nobody took apart beside it, in the case"
                         + " asked, which holds a with c too");
 
+        // Only where their number is what stopped them are they counted, every one of them: as
+        // many as there are, and no comparison of a number among them to refute any.
         DecidingCase.Cases many = manyCases(TAKEN_APART + 1);
+        BigInteger ways = BigInteger.valueOf(TAKEN_APART + 1);
         assertEquals(List.of(new CasesOfALineAsked.NotWorkedOut(new DecidingCase(SAID, many),
-                        Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO))),
+                        Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO),
+                        Optional.of(new CaseCount(new CaseCount.Ways.Exactly(ways),
+                                new NumericallyConsistentWays.Counted.AtMost(ways))))),
                 new Asking(_ -> true).found(many).notWorkedOutIn(),
-                "more ways than are taken apart");
+                "more ways than are taken apart, each of them counted");
         DecidingCase.Cases deep = deepCases(TAKEN_APART, DEPTH);
         assertEquals(List.of(new CasesOfALineAsked.NotWorkedOut(new DecidingCase(SAID, deep),
                         Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN))),

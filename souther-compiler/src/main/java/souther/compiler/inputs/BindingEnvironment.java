@@ -5,6 +5,7 @@ import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.OrderOfElements;
 import souther.compiler.core.Core;
+import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.BindingId;
 
 import java.util.Collections;
@@ -13,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -440,6 +442,12 @@ final class BindingEnvironment {
      *  container and how, whatever else the name has come to stand for on the way here. */
     List<HeldIn> handedFrom(BindingId binding) {
         return elements.containersOf(binding);
+    }
+
+    /** Which calls of the language's operations handed the closure {@code binding} is a
+     *  parameter of what it holds ({@link ElementBindings#handedBy}). */
+    Set<ACallOfAnOperation> handedBy(BindingId binding) {
+        return elements.handedBy(binding);
     }
 
     /** The containers the closure {@code binding} is a parameter of is applied over, where every

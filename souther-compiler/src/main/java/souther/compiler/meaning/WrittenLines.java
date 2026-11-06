@@ -407,6 +407,7 @@ public final class WrittenLines {
             case Derivation.OverElementsWrittenOut(var each, var _, var _) -> each;
             case Derivation.SomeElementOfTheListsAnswered(var each) -> each;
             case Derivation.OnEachApplication(var each) -> each;
+            case Derivation.AnApplication applied -> List.of(applied.derived());
             case Derivation.SomeElementMeeting(var _, var element, var _, var holds, var _) ->
                     holds.map(something -> List.of(element, something))
                             .orElseGet(() -> List.of(element));

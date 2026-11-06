@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 27,
+  "schemaVersion" : 28,
   "compilerVersion" : "<version>",
   "status" : "complete",
   "adequacy" : "not_satisfied",
@@ -2754,7 +2754,8 @@
           "reason" : "no_rows"
         },
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -3830,7 +3831,8 @@
           "reason" : "no_rows"
         },
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -4243,7 +4245,8 @@
           "unknown" : 0
         },
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
