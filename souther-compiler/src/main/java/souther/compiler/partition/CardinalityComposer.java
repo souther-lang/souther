@@ -1977,11 +1977,11 @@ final class CardinalityComposer {
                 return new AStatementAtARow.HowManyAtARow(meet, unread, why);
             }
 
-            /** Where the number this asks of is a place the value is held at, inside it or
-             *  holds it. */
+            /** Where what reads the number this asks of reads the value
+             *  ({@link Quantity.TheValue#isReadAlong}). */
             @Override
             public boolean readsTheValueAt(TermPath container, Quantity.TheValue place) {
-                return place.overlaps(at);
+                return place.isReadAlong(at);
             }
             /** A number at one place inside the element. */
             @Override

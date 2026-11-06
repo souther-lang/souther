@@ -1,5 +1,7 @@
 package souther.compiler.inputs;
 
+import java.util.List;
+
 /**
  * Which number of a position a reading was after, as far as that reading got.
  *
@@ -30,14 +32,48 @@ public sealed interface FilingCoordinate {
     TermPath path();
 
     /**
-     * Whether the two are filed at one place, or one inside the other.
+     * Whether the numbers at the two may move together: what is asked of one can say something of
+     * the other.
      *
-     * <p>Of where a report files them, and not of what they depend on: a number is filed under one
-     * place and may be read off several, so two numbers that do not overlap here may still move
-     * together. Whether two numbers are apart is {@link NumericTerm#sharesAPlaceWith}.
+     * <p>Of what each number is read off, and not of where a report files it ({@link #path}): a
+     * number is filed under one place and may be read off several, so two filed apart may still
+     * move together. Two numbers named are asked of {@link NumericTerm#sharesAPlaceWith}; a
+     * position the reading did not get as far as a number at is the value there.
      */
-    default boolean overlaps(FilingCoordinate other) {
-        return path().isAtOrUnder(other.path()) || other.path().isAtOrUnder(path());
+    default boolean sharesAPlaceWith(FilingCoordinate other) {
+        return switch (this) {
+            case OfTerm(NumericTerm term) -> switch (other) {
+                case OfTerm(NumericTerm theirs) -> term.sharesAPlaceWith(theirs);
+                case AtPosition(TermPath at) -> term.isReadOffAPlaceBearingOn(at);
+            };
+            case AtPosition(TermPath at) -> other.isReadOffAPlaceBearingOn(at);
+        };
+    }
+
+    /**
+     * Whether the number here is read off a place bearing on {@code place}
+     * ({@link TermPath#bearsOn}): asked of every place it is read off ({@link #placesReadOff}).
+     */
+    default boolean isReadOffAPlaceBearingOn(TermPath place) {
+        for (TermPath here : placesReadOff()) {
+            if (here.bearsOn(place)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Every place the number here is read off: those of a number named
+     * ({@link NumericTerm#placesReadOff}), and the position itself where no number was named. What
+     * the number depends on — a place another bears on, a rule of the declarations ties it by — is
+     * asked of these, never of where a report files it ({@link #path}).
+     */
+    default List<TermPath> placesReadOff() {
+        return switch (this) {
+            case OfTerm(NumericTerm term) -> term.placesReadOff();
+            case AtPosition(TermPath at) -> List.of(at);
+        };
     }
 
     /**

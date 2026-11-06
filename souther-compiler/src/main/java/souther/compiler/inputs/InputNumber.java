@@ -1384,8 +1384,10 @@ public final class InputNumber {
      *
      * <p>Of the element as {@code walked} says it was made, read through the names the walks on
      * the way hand it by. A number stands the same for every element where it is read in
-     * {@code reads} as a position and that position is not at or under where the elements stand:
-     * where the walk is, it holds one value, whichever element is being handed.
+     * {@code reads} as a position neither at, under nor around where the elements stand as the
+     * value is reached ({@link TermPath#standsAtUnderOrAround}): where the walk is, it holds one
+     * value, whichever element is being handed. A narrowing to a case is no step into the value,
+     * and a place under another case of a value the elements are in does not move with them.
      *
      * <p>Where the arm making an element is chosen by its case, the number is read of each arm and
      * is the choice by that case ({@link ElementValue.OfItsCase}), so it is chosen as the key read
@@ -1404,7 +1406,7 @@ public final class InputNumber {
                     new ElementAnswer(walked.element(), value, null), arm.standing(), arm.held(),
                     source, new ElementValue.ElementsAt(elements, reads.declared()),
                     e -> reads.pathOf(e, source.newtypes()) instanceof PathResolution.At(
-                            TermPath at) && !at.isAtOrUnder(elements) && !elements.isAtOrUnder(at)
+                            TermPath at) && !at.standsAtUnderOrAround(elements)
                             ? new NumericTerm.ValueOf(at) : null);
             if (read == null || (beside != null && !beside.equals(read.invariant()))) {
                 return null;
