@@ -1123,13 +1123,20 @@ final class Terms {
 
     /**
      * Every element {@code container}, read in {@code at} and followed through the names it was
-     * given, holds on every run, each with where it is read ({@link #writtenElements}) — or null
-     * where it is not written out, or one of them is there on some runs and not others.
+     * given, holds on every run, each with where it is read and its place among what a walk of the
+     * container writes out ({@link PlacedElement}) — or null where it is not written out, or one of
+     * them is there on some runs and not others.
      */
-    List<ElementsWrittenOut.Stood<Denotations>> elementsOnEveryRun(Core container,
-                                                                   Denotations at) {
+    List<PlacedElement> elementsOnEveryRun(Core container, Denotations at) {
         Given written = given(container, at);
-        return writtenElements(written.value(), written.at());
+        return placedElements(written.value(), written.at());
+    }
+
+    /** Whether the walk handing {@code element} its elements is the one an operation applies its
+     *  closure by to every element it was handed
+     *  ({@link ElementBindings#walksWhatItsOperationHandsEachElementOf}). */
+    boolean walksWhatItsOperationHandsEachElementOf(BindingId element) {
+        return walksWrittenDown.walksWhatItsOperationHandsEachElementOf(element);
     }
 
     /** How a walk of the elements of a container ({@link ElementsWrittenOut}) reads names here. */
@@ -1860,18 +1867,35 @@ final class Terms {
      * of them is there on some runs and not others.
      */
     List<ElementsWrittenOut.Stood<Denotations>> writtenElements(Core container, Denotations at) {
+        List<PlacedElement> placed = placedElements(container, at);
+        return placed == null ? null : placed.stream().map(PlacedElement::value).toList();
+    }
+
+    /**
+     * One element a container holds on every run, and which of the elements a walk of the container
+     * writes out it is, counting from nought and counting those there on no run too.
+     *
+     * <p>The place is the walk's and not the count of what is left: which elements are left is
+     * decided by whoever reads them, and two readers deciding apart would number one element two
+     * ways.
+     */
+    record PlacedElement(int written, ElementsWrittenOut.Stood<Denotations> value) {}
+
+    /** The same as {@link #writtenElements}, each element with its place ({@link PlacedElement}). */
+    private List<PlacedElement> placedElements(Core container, Denotations at) {
         if (!(ElementsWrittenOut.of(new ElementsWrittenOut.Stood<>(container, at), elements)
                 instanceof ElementsWrittenOut.Walked.Each<Denotations>(var each))) {
             return null;
         }
-        List<ElementsWrittenOut.Stood<Denotations>> there = new ArrayList<>();
-        for (ElementsWrittenOut.Occurrence<Denotations> one : each) {
+        List<PlacedElement> there = new ArrayList<>();
+        for (int written = 0; written < each.size(); written++) {
+            ElementsWrittenOut.Occurrence<Denotations> one = each.get(written);
             Boolean kept = ElementsWrittenOut.onEveryRun(one, elements);
             if (kept == null) {
                 return null;
             }
             if (kept) {
-                there.add(one.value());
+                there.add(new PlacedElement(written, one.value()));
             }
         }
         return there;

@@ -876,13 +876,11 @@ public final class InputReads {
     }
 
     /**
-     * Which application of {@code block} the one handed each of {@code handed} is, as the call of
-     * the model applying it counts them in the order a run makes them
-     * ({@link ClosureUses.Application#callOfTheModel}): the one operation applying the closure
-     * hands one parameter every element in turn, so the application handed the {@code p}th element
-     * there is its {@code p}th. Only up to an element that is there on some rows and not others,
-     * past which a run makes fewer and which application an element is handed on is not said; and
-     * none where no one operation alone applies the closure.
+     * Which application of {@code block} the one handed each of {@code handed} is: the call of the
+     * model applying it ({@link ClosureUses.Application#callOfTheModel}) and the place the element
+     * is written at among its container's ({@link ReadMeaning.Occurrence#written}). Told apart
+     * whatever keeps an element on some rows only, since where it is written does not turn on
+     * that; none where no one operation alone applies the closure.
      */
     private List<Optional<AnApplicationOfACall>> counted(Core.Block block,
                                                          List<ReadMeaning.Occurrence> handed) {
@@ -890,11 +888,8 @@ public final class InputReads {
         Optional<ModelOccurrence> call = uses == null ? Optional.empty()
                 : uses.theOnlyApplication().flatMap(ClosureUses.Application::callOfTheModel);
         List<Optional<AnApplicationOfACall>> out = new ArrayList<>();
-        boolean countable = call.isPresent();
-        for (int at = 0; at < handed.size(); at++) {
-            countable = countable && handed.get(at).keptWhere().isEmpty();
-            out.add(countable ? Optional.of(new AnApplicationOfACall(call.get(), at))
-                    : Optional.empty());
+        for (ReadMeaning.Occurrence each : handed) {
+            out.add(call.map(model -> new AnApplicationOfACall(model, each.written())));
         }
         return out;
     }
@@ -1117,7 +1112,7 @@ public final class InputReads {
     private ReadMeaning.Occurrence carryingWhatIsTaken(ReadMeaning.Occurrence occurrence) {
         return new ReadMeaning.Occurrence(carryingWhatIsTaken(occurrence.value()),
                 occurrence.keptWhere().stream().map(this::carryingWhatIsTaken).toList(),
-                occurrence.answered(), occurrence.within());
+                occurrence.answered(), occurrence.within(), occurrence.written());
     }
 
     private ReadMeaning.Occurrence.Kept carryingWhatIsTaken(ReadMeaning.Occurrence.Kept kept) {
@@ -1244,12 +1239,12 @@ public final class InputReads {
          * each parameter handed one ({@link ReadMeaning.Occurrence}). An application handed an
          * element a filter dropped is one no run makes.
          *
-         * @param which which application this is, as the call of the model that makes it counts
-         *              them — the one thing a reader of another tree, where the call and the
-         *              closure stand as other nodes and its parameters as other bindings, can tell
-         *              it by. Empty where it is not said: a closure handed values on several
-         *              parameters, or by an operation that makes some of its applications only,
-         *              or past an element a filter keeps on some rows
+         * @param which which application this is: the call of the model that makes it and the
+         *              element it is handed, by where that is written ({@link AnApplicationOfACall})
+         *              — the one thing a reader of another tree, where the call and the closure
+         *              stand as other nodes and its parameters as other bindings, can tell it by.
+         *              Empty where it is not said: a closure handed values on several parameters,
+         *              or by an operation that makes some of its applications only
          */
         record Made(InputReads reads, List<ReadMeaning.Occurrence.Kept> keptWhere,
                     Optional<AnApplicationOfACall> which) {
@@ -2638,7 +2633,7 @@ public final class InputReads {
             if (WrittenCase.of(stands.value()).isEmpty()) {
                 return denotingWhatWasMatched(scrutinee, arm, symbols, newtypes);
             }
-            values = List.of(ReadMeaning.Occurrence.always(stands));
+            values = List.of(ReadMeaning.Occurrence.always(stands, 0));
         }
         for (CaseSelector selector : arm.pattern().selectors()) {
             if (!(selector.refinement() instanceof souther.compiler.types.Refinement.Direct)) {

@@ -5,6 +5,8 @@ import souther.compiler.core.TheWalk;
 import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ClosurePositions;
+import souther.compiler.semantics.Combinator;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.StructuralCost;
@@ -220,8 +222,12 @@ public final class HelperInliner {
      *                   container was handed, against the binding of that container and what the
      *                   piece is, read where {@code pointwise} is and for the same reason
      *                   ({@link BoundOperationFacts#assembles})
+     * @param handing the lambdas an operation applies to every element of a container was handed,
+     *                against the binding of that container and which of the lambda's parameters
+     *                the element arrives on, read where {@code pointwise} is and for the same
+     *                reason ({@link ElementProvenance.Builder#handedEachElementOf})
      *
-     * <p>The last two are of one operation's copy and of the copies inside it, and of nothing
+     * <p>The last three are of one operation's copy and of the copies inside it, and of nothing
      * after: a lambda handed over by name is one binding however many operations are handed it, and
      * what one of them makes of it is not what the next does. So they are made where the copy is
      * ({@link #inside}) and go when it does, whether the copy was finished or refused partway.
@@ -233,7 +239,8 @@ public final class HelperInliner {
                            Map<BindingId, ScopedLambda> scopedLambdas,
                            Map<BindingId, ExpansionSite.Supplied.Handover> suppliedFrom,
                            Map<BindingId, BindingId> pointwise,
-                           Map<BindingId, ElementProvenance.AssembledFrom> assembling) {
+                           Map<BindingId, ElementProvenance.AssembledFrom> assembling,
+                           Map<BindingId, HandingEach> handing) {
 
         /**
          * The same writing, one copy deeper.
@@ -256,7 +263,8 @@ public final class HelperInliner {
         Writing inside(BindingOwner copy, ExpansionLineage deeper,
                        Map<BindingId, ExpansionSite.Supplied.Handover> supplied,
                        Map<BindingId, BindingId> walksEach,
-                       Map<BindingId, ElementProvenance.AssembledFrom> assembles) {
+                       Map<BindingId, ElementProvenance.AssembledFrom> assembles,
+                       Map<BindingId, HandingEach> handsEach) {
             // Where the callables in scope crossed in. A boundary in force outside this copy is
             // still in force inside it — the copy being written is code the caller's callable was
             // handed to, and where that callable came from is not changed by being handed on. What
@@ -271,7 +279,8 @@ public final class HelperInliner {
             // applications here are the steps of. Only read once made, so shared where this call
             // adds nothing.
             return new Writing(destination, root, copy, deeper, binders, dependencies,
-                    scopedLambdas, here, joined(pointwise, walksEach), joined(assembling, assembles));
+                    scopedLambdas, here, joined(pointwise, walksEach), joined(assembling, assembles),
+                    joined(handing, handsEach));
         }
 
         /** {@code outer} with {@code here} over it, or {@code outer} itself where this adds none.
@@ -300,19 +309,20 @@ public final class HelperInliner {
     private Hir.Expr insideThisCopy(BindingOwner copy, ExpansionLineage deeper,
                                     Map<BindingId, ExpansionSite.Supplied.Handover> supplied,
                                     java.util.function.Supplier<Hir.Expr> work) {
-        return insideThisCopy(copy, deeper, supplied, Map.of(), Map.of(), work);
+        return insideThisCopy(copy, deeper, supplied, Map.of(), Map.of(), Map.of(), work);
     }
 
-    /** The same, inside the copy of an operation that proved {@code walksEach} and
-     *  {@code assembles} of the lambdas it was handed ({@link Writing#pointwise},
-     *  {@link Writing#assembling}). */
+    /** The same, inside the copy of an operation that proved {@code walksEach},
+     *  {@code assembles} and {@code handsEach} of the lambdas it was handed
+     *  ({@link Writing#pointwise}, {@link Writing#assembling}, {@link Writing#handing}). */
     private Hir.Expr insideThisCopy(BindingOwner copy, ExpansionLineage deeper,
                                     Map<BindingId, ExpansionSite.Supplied.Handover> supplied,
                                     Map<BindingId, BindingId> walksEach,
                                     Map<BindingId, ElementProvenance.AssembledFrom> assembles,
+                                    Map<BindingId, HandingEach> handsEach,
                                     java.util.function.Supplier<Hir.Expr> work) {
         Writing outer = writing;
-        writing = outer.inside(copy, deeper, supplied, walksEach, assembles);
+        writing = outer.inside(copy, deeper, supplied, walksEach, assembles, handsEach);
         try {
             return work.get();
         } finally {
@@ -1507,7 +1517,7 @@ public final class HelperInliner {
         // the body instead, two writings into one body would place one call's copy in one spot
         // twice — the body cannot tell them apart, and which writing this is is exactly what does.
         writing = new Writing(into, root, mine, ExpansionLineage.ORIGINAL, new Hir.Binders(mine),
-                dependencies, new HashMap<>(), new LinkedHashMap<>(), Map.of(), Map.of());
+                dependencies, new HashMap<>(), new LinkedHashMap<>(), Map.of(), Map.of(), Map.of());
         try {
             return expansion.get();
         } finally {
@@ -1860,7 +1870,7 @@ public final class HelperInliner {
         // two of everything inside it. The body being written into is the same for both and cannot
         // tell them apart. What this call proved of the lambdas it was handed is this copy's.
         Hir.Expr body = insideThisCopy(mine, deeper, arguments.supplied(),
-                arguments.pointwise(), arguments.assembling(),
+                arguments.pointwise(), arguments.assembling(), arguments.handing(),
                 () -> inline(rename(helper.writtenBody(), renaming)));
         List<Hir.Bound> bound = new ArrayList<>(arguments.bound());
         // A scoped lambda the body still names was passed rather than applied, so nothing
@@ -2113,7 +2123,15 @@ public final class HelperInliner {
                              List<Hir.Given> given, Map<BindingId, Hir.Bound> unreduced,
                              Map<BindingId, ExpansionSite.Supplied.Handover> supplied,
                              Map<BindingId, BindingId> pointwise,
-                             Map<BindingId, ElementProvenance.AssembledFrom> assembling) {}
+                             Map<BindingId, ElementProvenance.AssembledFrom> assembling,
+                             Map<BindingId, HandingEach> handing) {}
+
+    /**
+     * What an operation applying the lambda it was handed to every element of a container, from
+     * the first and once each, proved of it: the binding of that container in the operation's copy,
+     * and which of the lambda's parameters the element arrives on ({@link Combinators}).
+     */
+    private record HandingEach(BindingId container, int elementParam) {}
 
     /**
      * Binds one call's arguments against the callee's parameters, this call's variables written in.
@@ -2144,6 +2162,15 @@ public final class HelperInliner {
         // with, the parameter bound below is the one each element arrives under.
         ElementProvenance.AssembledFrom pieces =
                 lambdaApplied == null ? null : writing.assembling().get(lambdaApplied);
+        // And where it is the application of a lambda an operation hands every element of a
+        // container, the parameter the element arrives on is the one bound below at that place.
+        HandingEach handingHere =
+                lambdaApplied == null ? null : writing.handing().get(lambdaApplied);
+        // Where this call is such an operation, the lambda at its closure and the binding its
+        // container is given, joined once the loop has both.
+        Combinator handsEveryElement = handingEveryElement(calleeOf(call));
+        BindingId theHandedLambda = null;
+        BindingId theHandedContainer = null;
         // Where this call is such an operation, the lambda at the closure it declares and the
         // binding the container at its source is given, joined once the loop has both.
         BoundOperationFacts.Assembled assembledByCallee =
@@ -2215,6 +2242,11 @@ public final class HelperInliner {
                             theAssembler = named.id();
                         }
                     }
+                    if (handsEveryElement != null && i == handsEveryElement.closureArg()
+                            && fnName.denotes() instanceof ValueName.Local named
+                            && writing.scopedLambdas().containsKey(named.id())) {
+                        theHandedLambda = named.id();
+                    }
                     // A name handed to a function parameter is substituted through: what
                     // applies it applies what it stands for. What it stands for is declared
                     // somewhere — a helper's own parameter, a binding, a function an
@@ -2256,6 +2288,9 @@ public final class HelperInliner {
                     stands(f.id(), ruleOf(lambda));
                     unreduced.put(f.id(),
                             new Hir.Bound(f, instantiated(p.type(), applied), lambda, i));
+                    if (handsEveryElement != null && i == handsEveryElement.closureArg()) {
+                        theHandedLambda = f.id();
+                    }
                     // Only where the lambda takes the one value an element arrives as. A closure
                     // given more — an index beside the element — answers about a pair, and one
                     // answer per element says nothing about which of the two a projection is of.
@@ -2293,6 +2328,12 @@ public final class HelperInliner {
                 if (pieces != null) {
                     provenance.assemblesThePiecesOf(f.id(), pieces.source(), pieces.piece());
                 }
+                if (handingHere != null && i == handingHere.elementParam()) {
+                    provenance.handedEachElementOf(f.id(), handingHere.container());
+                }
+                if (handsEveryElement != null && i == handsEveryElement.containerArg()) {
+                    theHandedContainer = f.id();
+                }
                 if (mapsEach != null
                         && i == CallArguments.positionOf(mapsEach, calleeOf(call))) {
                     theContainer = f.id();
@@ -2310,8 +2351,24 @@ public final class HelperInliner {
                 theAssembler == null || theSource == null ? Map.of()
                         : Map.of(theAssembler, new ElementProvenance.AssembledFrom(theSource,
                                 assembledByCallee.piece()));
+        Map<BindingId, HandingEach> handsEach =
+                theHandedLambda == null || theHandedContainer == null ? Map.of()
+                        : Map.of(theHandedLambda,
+                                new HandingEach(theHandedContainer, handsEveryElement.elementParam()));
         return new Arguments(subst, bound, given, unreduced, Map.copyOf(handedHere), walksEach,
-                assembles);
+                assembles, handsEach);
+    }
+
+    /**
+     * How {@code callee} hands its closure the elements of a container, where it applies it to every
+     * one of them from the first, once each and in the order they are written out, and hands it no
+     * key — or null where it applies it any other way or to nothing a container holds.
+     */
+    private static Combinator handingEveryElement(ValueName callee) {
+        Combinator rule = Combinators.of(callee);
+        return rule == null || rule.applied() != HowAClosureIsApplied.TO_EVERY_ELEMENT
+                || rule.startsFrom() != Combinator.FROM_THE_FIRST || rule.handsAKey()
+                ? null : rule;
     }
 
     /** The binding a lambda this call applies was registered under, or null where the call applies

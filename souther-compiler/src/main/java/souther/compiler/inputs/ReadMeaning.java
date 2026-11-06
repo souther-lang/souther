@@ -111,7 +111,11 @@ public sealed interface ReadMeaning {
 
         /** Every occurrence handed in turn, each where nothing keeps it out. */
         public static OneOf ofEvery(List<Denotation> values) {
-            return new OneOf(values.stream().map(Occurrence::always).toList());
+            List<Occurrence> each = new ArrayList<>();
+            for (int written = 0; written < values.size(); written++) {
+                each.add(Occurrence.always(values.get(written), written));
+            }
+            return new OneOf(each);
         }
 
         /**
@@ -164,7 +168,8 @@ public sealed interface ReadMeaning {
             List<Occurrence.Kept> open = kept.stillOpen(each.keptWhere());
             if (open != null) {
                 out.add(open == each.keptWhere() ? each
-                        : new Occurrence(each.value(), open, each.answered(), each.within()));
+                        : new Occurrence(each.value(), open, each.answered(), each.within(),
+                                each.written()));
             }
         }
         return out;
@@ -211,9 +216,13 @@ public sealed interface ReadMeaning {
      *                 ({@link ElementsWrittenOut.Occurrence#answered})
      * @param within   the applications that wrote it out, outermost first
      *                 ({@link ElementsWrittenOut.Occurrence#within})
+     * @param written  which of the elements a walk of its container writes out this is, counting
+     *                 from nought and counting those dropped on every row too: kept as it was by a
+     *                 reader that leaves some out, so that an element is the same element whichever
+     *                 reader is asked, and two written alike are two
      */
     record Occurrence(Denotation value, List<Kept> keptWhere, OptionalInt answered,
-                      List<ElementsWrittenOut.Applied> within) {
+                      List<ElementsWrittenOut.Applied> within, int written) {
 
         public Occurrence {
             Objects.requireNonNull(value, "an occurrence is of some value");
@@ -221,11 +230,14 @@ public sealed interface ReadMeaning {
             Objects.requireNonNull(answered,
                     "an occurrence is answered by some application or none");
             within = List.copyOf(within);
+            if (written < 0) {
+                throw new IllegalArgumentException("elements are counted from nought: " + written);
+            }
         }
 
-        /** An occurrence nothing keeps out. */
-        public static Occurrence always(Denotation value) {
-            return new Occurrence(value, List.of(), OptionalInt.empty(), List.of());
+        /** The {@code written}th element of its container, which nothing keeps out. */
+        public static Occurrence always(Denotation value, int written) {
+            return new Occurrence(value, List.of(), OptionalInt.empty(), List.of(), written);
         }
 
         /** The same occurrence, kept also where every one of {@code more} holds — those decided
@@ -233,7 +245,7 @@ public sealed interface ReadMeaning {
         public Occurrence keptAlsoWhere(List<Kept> more) {
             List<Kept> all = new ArrayList<>(more);
             all.addAll(keptWhere);
-            return new Occurrence(value, all, answered, within);
+            return new Occurrence(value, all, answered, within, written);
         }
 
         /**

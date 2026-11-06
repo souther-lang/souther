@@ -1193,12 +1193,16 @@ public final class PathReachability {
      *
      * <p>What a condition in the body states is what it states on that application, read off the
      * reading of the body made on it ({@link MeaningsOfABody#onTheApplication}). That reading tells
-     * the application by the call of the model that makes it and which of its applications it is
-     * ({@link ClosureUses.Application#callOfTheModel}), since the call, the closure and its
-     * parameters are other nodes and other bindings here; the application handed the {@code i}th
-     * element is the call's {@code i}th, since every element is there on every run. Where the body
-     * was not read on that application alone, a condition states what it states on some
-     * application, which a path declines.
+     * the application by the call of the model that makes it and the place of the element it is
+     * handed among what the call's container is written out as ({@link AnApplicationOfACall}),
+     * since the call, the closure and its parameters are other nodes and other bindings here
+     * ({@link ClosureUses.Application#callOfTheModel}). The walk's applications are the call's only
+     * where this walk is the one the operation applies its closure by to every element it was
+     * handed, which the expansion proved where the operation stood
+     * ({@link Terms#walksWhatItsOperationHandsEachElementOf}); then the element written in a place
+     * here is the element written in that place there. Where it is not, or the body was not read on
+     * that application alone, a condition states what it states on some application, which a path
+     * declines.
      *
      * <p>Only what arrives is read off these walks. Where a comparison in the body arrives is the
      * one walk of the body's to say, made under no element in particular, so what one application
@@ -1223,13 +1227,15 @@ public final class PathReachability {
                     || applied.position() != null || applied.held().size() != 1) {
                 continue;
             }
-            List<ElementsWrittenOut.Stood<Denotations>> elements =
+            List<Terms.PlacedElement> elements =
                     engine.terms().elementsOnEveryRun(applied.container(), at);
             if (elements == null) {
                 continue;
             }
             BindingId element = applied.held().iterator().next();
-            Optional<ModelOccurrence> by = applied.callOfTheModel();
+            Optional<ModelOccurrence> by =
+                    engine.terms().walksWhatItsOperationHandsEachElementOf(element)
+                            ? applied.callOfTheModel() : Optional.empty();
             InputReads inside = reads.entering(new ScopeStep.Block(block), symbols, newtypes);
             Walked from = new Walked(operands.known(), operands.decided(), operands.mayStop(),
                     false, true, WhyNone.BY_THE_WAY, false);
@@ -1237,11 +1243,11 @@ public final class PathReachability {
                 if (applicationsLeft[0]-- <= 0) {
                     return null;
                 }
-                int ordinal = i;
+                Terms.PlacedElement handedHere = elements.get(i);
                 MeaningsOfABody onIt = by.flatMap(model -> meanings.onTheApplication(
-                        new AnApplicationOfACall(model, ordinal))).orElse(meanings);
+                        new AnApplicationOfACall(model, handedHere.written()))).orElse(meanings);
                 Walked body = new PathReachability(this, onIt).walk(block.body(), from,
-                        engine.terms().elementsReading().handing(at, element, elements.get(i)),
+                        engine.terms().elementsReading().handing(at, element, handedHere.value()),
                         inside);
                 if (nothingReaches(body.known())) {
                     int handed = i;

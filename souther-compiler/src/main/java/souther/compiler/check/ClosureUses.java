@@ -115,12 +115,13 @@ public record ClosureUses(List<Application> applications, boolean usedElsewhere)
         }
 
         /**
-         * The call of the model that makes these, which tells each of them apart by which of its
-         * applications it is ({@link AnApplicationOfACall}): the call itself where the model wrote
-         * it, and otherwise the call of one of the language's operations that made the one copy of
-         * the operation's body it stands in. There the operation applies the closure by this call,
-         * once on each element it is handed, in turn. Empty where the call stands in an operation
-         * another operation called.
+         * The call of the model that makes these, which tells each of them apart by the element it
+         * is handed ({@link AnApplicationOfACall}): the call itself where the model wrote it, and
+         * otherwise the call of one of the language's operations that made the one copy of the
+         * operation's body it stands in. Empty where the call stands in an operation another
+         * operation called. Whether this call's applications are that operation's, one for one, is
+         * not said here: the expansion proves it of a walk where it does
+         * ({@link ElementBindings#walksWhatItsOperationHandsEachElementOf}).
          *
          * <p>Told by the call and not by the closure or its parameters. A reading where the
          * language's operations stand and one where they are expanded hold the call, the closure
