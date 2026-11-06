@@ -2,16 +2,23 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
+
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * One place stands at or under another ({@link TermPath#standsAtOrUnder}) where its value is the
- * other's or one inside it as the value is reached: a narrowing to cases on one side only is
- * skipped, and two narrowings of one value to different cases are neither inside the other.
+ * other's or one inside it as the value is reached: the cases each requires holding together, and
+ * the steps that go somewhere one within the other. Narrowings that leave some value no case in
+ * common are neither inside the other.
  */
 class AValueStandsAtOrUnderAnotherAsTheValueIsReachedTest {
 
@@ -64,37 +71,104 @@ class AValueStandsAtOrUnderAnotherAsTheValueIsReachedTest {
         assertTrue(R.then("a").standsAtUnderOrAround(PRESENT.then("a").then("b")));
     }
 
+    private static final TypeSymbol HOSPITAL = TypeSymbols.declared(new TypeKey("probe", "Hospital"));
+    private static final TypeSymbol STATION = TypeSymbols.declared(new TypeKey("probe", "Station"));
+    private static final TypeSymbol DEPOT = TypeSymbols.declared(new TypeKey("probe", "Depot"));
+
+    private static CasesLeft casesOf(TypeSymbol... leaves) {
+        return CasesLeft.ofEach(Arrays.stream(leaves)
+                .map(leaf -> Refinement.of(new Case.SumCase(leaf, true))).toList());
+    }
+
+    private static final TermPath KIND = TermPath.of("x");
+    private static final TermPath EITHER = KIND.refine(casesOf(HOSPITAL, STATION));
+    private static final TermPath A_STATION = KIND.refine(casesOf(STATION));
+    private static final TermPath A_HOSPITAL = KIND.refine(casesOf(HOSPITAL));
+    private static final TermPath NOT_A_HOSPITAL = KIND.refine(casesOf(STATION, DEPOT));
+
     /**
-     * Over every pair of a set of places: a place at or under another step for step stands at or
-     * under it; one stands at, under or around another where one of the two stands at or under the
-     * other; and that bears on it ({@link TermPath#bearsOn}) — which, where neither stands at,
-     * under or around the other, is two cases of one value.
+     * A narrowing to several cases holds together with one to a case among them, as the meet of the
+     * two says ({@link CasesLeft#meet}): a value left {@code Hospital} or {@code Station} may be a
+     * {@code Station}, so a name read under each is one place.
+     */
+    @Test
+    void aNarrowingToSeveralCasesHoldsTogetherWithOneToACaseAmongThem() {
+        assertNotNull(casesOf(HOSPITAL, STATION).meet(casesOf(STATION)));
+        assertTrue(EITHER.standsAtUnderOrAround(A_STATION));
+        assertTrue(A_STATION.standsAtUnderOrAround(EITHER));
+        assertTrue(EITHER.then("code").standsAtOrUnder(A_STATION.then("code")));
+        assertTrue(A_STATION.then("code").standsAtOrUnder(EITHER.then("code")));
+        assertTrue(EITHER.then("code").bearsOn(A_STATION.then("code")));
+    }
+
+    /** Two narrowings that leave one case in common hold together, and two that leave none are
+     *  two cases of the value. */
+    @Test
+    void narrowingsThatShareACaseHoldTogetherAndOnesThatShareNoneDoNot() {
+        assertTrue(EITHER.then("code").standsAtOrUnder(NOT_A_HOSPITAL.then("code")));
+        assertFalse(EITHER.then("code").standsAtOrUnder(NOT_A_HOSPITAL.then("name")));
+        assertFalse(EITHER.then("code").bearsOn(NOT_A_HOSPITAL.then("name")));
+        assertFalse(A_HOSPITAL.then("code").standsAtUnderOrAround(NOT_A_HOSPITAL.then("code")));
+        assertTrue(A_HOSPITAL.then("code").bearsOn(NOT_A_HOSPITAL.then("name")));
+    }
+
+    /**
+     * A narrowing taken under another is of another position: {@code r@Some@Some} says the value
+     * the outer optional holds is present as well, and asks nothing of the outer one that
+     * {@code r@Some} does not.
+     */
+    @Test
+    void aNarrowingTakenUnderAnotherIsOfTheValueTheOtherLeaves() {
+        TermPath inner = PRESENT.refine(Refinement.of(new Case.Presence(true)));
+        TermPath innerAbsent = PRESENT.refine(Refinement.of(new Case.Presence(false)));
+        assertTrue(inner.isAtOrUnder(PRESENT));
+        assertTrue(inner.standsAtOrUnder(PRESENT));
+        assertTrue(inner.standsAtUnderOrAround(PRESENT));
+        assertTrue(inner.then("code").standsAtOrUnder(PRESENT));
+        assertFalse(inner.standsAtUnderOrAround(innerAbsent));
+        assertTrue(inner.bearsOn(innerAbsent));
+        assertFalse(inner.standsAtUnderOrAround(ABSENT));
+    }
+
+    /**
+     * Over every pair of a set of places, against what owns each half of the question: two stand
+     * at, under or around each other exactly where the cases each requires hold together
+     * ({@link Requirements#compatibleWith}) and the steps that go somewhere, narrowings taken out,
+     * are one within the other ({@link TermPath#isAtOrUnder}); they bear on each other where that
+     * holds or the cases do not; and the one-way half extends being inside step for step.
      */
     @Test
     void itIsTheOneWayHalfOfBearingThatExtendsBeingInsideStepForStep() {
+        TermPath inner = PRESENT.refine(Refinement.of(new Case.Presence(true)));
         List<TermPath> places = List.of(R, ITEMS, ITEMS.element(), ITEMS.element().then("price"),
                 R.then("code"), R.then("code").then("digit"), PRESENT, ABSENT,
                 PRESENT.then("code"), PRESENT.then("a"), ABSENT.then("b"), R.then("total"),
-                TermPath.of("s"));
+                TermPath.of("s"), inner, inner.then("code"),
+                PRESENT.refine(Refinement.of(new Case.Presence(false))),
+                KIND, EITHER, A_STATION, A_HOSPITAL, NOT_A_HOSPITAL, EITHER.then("code"),
+                A_STATION.then("code"), A_HOSPITAL.then("code"), NOT_A_HOSPITAL.then("name"),
+                KIND.then("code"));
         for (TermPath one : places) {
             for (TermPath other : places) {
                 String pair = one + " and " + other;
+                boolean together = one.requirements().compatibleWith(other.requirements());
+                TermPath here = withoutNarrowings(one);
+                TermPath there = withoutNarrowings(other);
+                assertEquals(together && here.isAtOrUnder(there), one.standsAtOrUnder(other),
+                        pair);
+                assertEquals(together && (here.isAtOrUnder(there) || there.isAtOrUnder(here)),
+                        one.standsAtUnderOrAround(other), pair);
+                assertEquals(!together || one.standsAtUnderOrAround(other), one.bearsOn(other),
+                        pair);
                 if (one.isAtOrUnder(other)) {
                     assertTrue(one.standsAtOrUnder(other), pair);
-                }
-                assertEquals(one.standsAtOrUnder(other) || other.standsAtOrUnder(one),
-                        one.standsAtUnderOrAround(other), pair);
-                if (one.standsAtUnderOrAround(other)) {
-                    assertTrue(one.bearsOn(other), pair);
-                }
-                if (one.bearsOn(other) && !one.standsAtUnderOrAround(other)) {
-                    assertTrue(narrows(one) && narrows(other), pair);
                 }
             }
         }
     }
 
-    private static boolean narrows(TermPath path) {
-        return path.steps().stream().anyMatch(step -> step instanceof TermPath.Step.Refine);
+    private static TermPath withoutNarrowings(TermPath path) {
+        return TermPath.of(path.head(), path.steps().stream()
+                .filter(step -> !(step instanceof TermPath.Step.Refine)).toList());
     }
 }

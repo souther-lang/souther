@@ -1251,8 +1251,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                 StringContainment where) {
         ConvertedText looked = ConvertedText.of(inner);
         ConvertedText in = ConvertedText.of(outer);
-        if (looked == null || in == null || bearOnEachOther(FilingCoordinate.of(looked.place()),
-                FilingCoordinate.of(in.place()))) {
+        if (looked == null || in == null || looked.place().sharesAPlaceWith(in.place())) {
             return SHOWING_NOTHING;
         }
         Kind kind = switch (where) {
@@ -1801,7 +1800,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             EachWayItComesOut each = WhatARelationLeavesUndivided.eachWayItComesOut(terms, at,
-                    constant, relation, UndividedByARelation::bearOnEachOther, independent,
+                    constant, relation, FilingCoordinate::sharesAPlaceWith, independent,
                     granularityOf(carriers.get(at)), greatestOf(carriers.get(at)), operations);
             if (each != null) {
                 out.put(sides.get(at).number(), each);
@@ -2823,8 +2822,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         && terms.get(one).realizes() != null && terms.get(other).realizes() != null)
                         || onTheWay.between(one, other);
         BiPredicate<FilingCoordinate, FilingCoordinate> overlapping = byTheFormat == null
-                ? UndividedByARelation::bearOnEachOther
-                : (one, other) -> !apartByTheFormat(one, other) && bearOnEachOther(one, other);
+                ? FilingCoordinate::sharesAPlaceWith
+                : (one, other) -> !apartByTheFormat(one, other) && one.sharesAPlaceWith(other);
         if (kind == Kind.PRODUCT) {
             for (int at = 0; at < 2; at++) {
                 int other = 1 - at;
@@ -3176,8 +3175,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                              Optional<Set<String>> declined, InputReading read,
                                              PiecesOfAString piece) {
         if (piece != null || past.narrowing().stream().anyMatch(constraint ->
-                constraint.terms().stream().anyMatch(term -> term.subjectPath().bearsOn(mine)
-                        || term.subjectPath().bearsOn(theirs)))) {
+                constraint.terms().stream().anyMatch(term -> term.isReadOffAPlaceBearingOn(mine)
+                        || term.isReadOffAPlaceBearingOn(theirs)))) {
             return leavesTheStringsOf(mine, theirs, written, past.narrowing(), piece)
                     ? RoomOnTheWay.UNTOUCHED : null;
         }
@@ -3228,7 +3227,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             List<TermPath> asked = beside;
             for (TakenConstraint each : past.narrowing()) {
                 if (narrowed.contains(each) || each.terms().stream().noneMatch(term ->
-                        asked.stream().anyMatch(place -> term.subjectPath().bearsOn(place)))) {
+                        asked.stream().anyMatch(term::isReadOffAPlaceBearingOn))) {
                     continue;
                 }
                 if (!(each instanceof TakenConstraint.Affine)) {
@@ -3924,8 +3923,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return narrowing.stream().noneMatch(constraint -> constraint.terms().stream()
-                .anyMatch(term -> term.subjectPath().bearsOn(mine)
-                        || term.subjectPath().bearsOn(theirs)));
+                .anyMatch(term -> term.isReadOffAPlaceBearingOn(mine)
+                        || term.isReadOffAPlaceBearingOn(theirs)));
     }
 
     /**
@@ -4551,7 +4550,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             for (TakenConstraint narrowing : past.narrowing()) {
                 if (narrowing.terms().stream().anyMatch(term ->
-                        term.subjectPath().bearsOn(place))) {
+                        term.isReadOffAPlaceBearingOn(place))) {
                     return false;
                 }
             }
@@ -5984,7 +5983,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static boolean overlapping(Side one, Side other) {
         for (FilingCoordinate each : one.madeOf()) {
             for (FilingCoordinate that : other.madeOf()) {
-                if (bearOnEachOther(each, that)) {
+                if (each.sharesAPlaceWith(that)) {
                     return true;
                 }
             }
@@ -7356,7 +7355,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         for (FilingCoordinate each : first) {
             for (FilingCoordinate that : second) {
-                if (bearOnEachOther(each, that)
+                if (each.sharesAPlaceWith(that)
                         || tiedByARule(each.path(), that.path(), read, ignoring)) {
                     return false;
                 }
@@ -7489,7 +7488,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : on.whereItStops();
         return WhatARelationLeavesUndivided.ofTheirDifference(terms, pair.beside(), relation, held,
                 new WhatARelationLeavesUndivided.WhereTheRepresentationStops(run),
-                UndividedByARelation::bearOnEachOther, greatestOf(on), operations,
+                FilingCoordinate::sharesAPlaceWith, greatestOf(on), operations,
                 sizesAreRowsComputed);
     }
 
@@ -7548,10 +7547,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             out.add(null);
         }
         out.set(pair.first(), WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 0,
-                pair.beside(), relation, held, UndividedByARelation::bearOnEachOther,
+                pair.beside(), relation, held, FilingCoordinate::sharesAPlaceWith,
                 greatestOf(on), operations, pair.standing(), sizesAreRowsComputed));
         out.set(pair.second(), WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 1,
-                pair.beside(), relation, held, UndividedByARelation::bearOnEachOther,
+                pair.beside(), relation, held, FilingCoordinate::sharesAPlaceWith,
                 greatestOf(on), operations, pair.standing(), sizesAreRowsComputed));
         return out;
     }
@@ -7830,7 +7829,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return false;
         }
         for (NumericTerm each : over) {
-            if (!each.equals(term) && touches(term, Set.of(each.subjectPath()))) {
+            if (!each.equals(term) && term.sharesAPlaceWith(each)) {
                 return false;
             }
         }
@@ -7850,7 +7849,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (OnAWay each : conditions) {
             boolean about = side.readOff() == null
                     ? side.madeOf().stream().anyMatch(place -> each.positions().stream()
-                            .anyMatch(that -> place.path().bearsOn(that)))
+                            .anyMatch(place::isReadOffAPlaceBearingOn))
                     : touches(side.readOff(), each.positions()) && !saysNothingOfTheValuesOf(
                             side.readOff(), each, mayBeNamed(at, sources));
             // What was kept of a seed the input holds is tied by what the way states of the seed.
@@ -9928,15 +9927,5 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return null;
-    }
-
-    /**
-     * Whether what is asked of the number at one place can say something of the number at the
-     * other ({@link TermPath#bearsOn}): the question every reader here asks of two numbers it would
-     * take as chosen apart. A number filed under one place is read off that place, so two numbers
-     * of one place by different operations bear on each other.
-     */
-    private static boolean bearOnEachOther(FilingCoordinate one, FilingCoordinate other) {
-        return one.path().bearsOn(other.path());
     }
 }

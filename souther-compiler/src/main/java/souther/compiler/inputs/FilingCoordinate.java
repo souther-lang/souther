@@ -30,6 +30,38 @@ public sealed interface FilingCoordinate {
     TermPath path();
 
     /**
+     * Whether the numbers at the two may move together: what is asked of one can say something of
+     * the other.
+     *
+     * <p>Of what each number is read off, and not of where a report files it ({@link #path}): a
+     * number is filed under one place and may be read off several, so two filed apart may still
+     * move together. Two numbers named are asked of {@link NumericTerm#sharesAPlaceWith}; a
+     * position the reading did not get as far as a number at is the value there.
+     */
+    default boolean sharesAPlaceWith(FilingCoordinate other) {
+        return switch (this) {
+            case OfTerm(NumericTerm term) -> switch (other) {
+                case OfTerm(NumericTerm theirs) -> term.sharesAPlaceWith(theirs);
+                case AtPosition(TermPath at) -> term.isReadOffAPlaceBearingOn(at);
+            };
+            case AtPosition(TermPath at) -> other.isReadOffAPlaceBearingOn(at);
+        };
+    }
+
+    /**
+     * Whether the number here is read off a place bearing on {@code place}
+     * ({@link TermPath#bearsOn}): asked of every place a number named is read off
+     * ({@link NumericTerm#isReadOffAPlaceBearingOn}), and of the position itself where no number
+     * was named.
+     */
+    default boolean isReadOffAPlaceBearingOn(TermPath place) {
+        return switch (this) {
+            case OfTerm(NumericTerm term) -> term.isReadOffAPlaceBearingOn(place);
+            case AtPosition(TermPath at) -> at.bearsOn(place);
+        };
+    }
+
+    /**
      * The number itself, where the reading named it.
      *
      * <p>Every reader that reached the canonical quantity has one, and so does one that named a

@@ -2280,8 +2280,8 @@ public sealed interface NumericTerm
 
     /**
      * Whether this number and {@code other} are read off places that bear on each other
-     * ({@link TermPath#bearsOn}): a place in common, one inside the other, or one value narrowed
-     * to a case.
+     * ({@link TermPath#bearsOn}): a place in common, one inside the other, or cases of one value
+     * that leave it none in common.
      *
      * <p>What two numbers being apart comes to, asked of every place each is read off and not of
      * the place a report files it under ({@link #subjectPath}): a count of the times a value
@@ -2290,11 +2290,23 @@ public sealed interface NumericTerm
      * apart only when this is false.
      */
     default boolean sharesAPlaceWith(NumericTerm other) {
+        for (TermPath there : other.placesReadOff()) {
+            if (isReadOffAPlaceBearingOn(there)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether some place this number is read off bears on {@code place} ({@link TermPath#bearsOn}):
+     * what is asked of the place can say something of the number. Asked of every place it is read
+     * off and not of the place a report files it under, as {@link #sharesAPlaceWith} is.
+     */
+    default boolean isReadOffAPlaceBearingOn(TermPath place) {
         for (TermPath here : placesReadOff()) {
-            for (TermPath there : other.placesReadOff()) {
-                if (here.bearsOn(there)) {
-                    return true;
-                }
+            if (here.bearsOn(place)) {
+                return true;
             }
         }
         return false;

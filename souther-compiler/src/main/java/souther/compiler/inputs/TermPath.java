@@ -673,17 +673,19 @@ public record TermPath(String head, List<Step> steps) {
 
     /**
      * Whether what is asked of the value at this path can say something of the value at
-     * {@code other}: one stands at, under or around the other, each narrowing to cases set aside.
+     * {@code other}: one stands at, under or around the other, or the cases each requires of some
+     * value leave it none in common.
      *
      * <p>A narrowing says which case the value is, and leaves it the same value: a name read at a
-     * sum is the name read at each case holding it, and two narrowings of one value to different
-     * cases bear on each other by excluding each other, whatever is asked under each. So the steps
-     * are matched as the value is reached: a narrowing on one side only is skipped, narrowings on
-     * both sides that differ bear on each other there, and otherwise the two bear on each other
-     * where one runs out within the other. This is the one answer to whether two things asked of
-     * the input are apart; a reader that sets them apart, to ask one without the other, asks it
-     * here. Whether one value moves with another, or is read by what reads it, is
-     * {@link #standsAtUnderOrAround}.
+     * sum is the name read at each case holding it. So the two are matched on two counts. Whether
+     * the cases each path requires hold together is asked of
+     * {@link Requirements#compatibleWith}, which every reader putting two requirements together
+     * asks: two that leave a value no case in common bear on each other by excluding each other,
+     * whatever is asked under each. Where they hold together, the steps that go somewhere are
+     * matched, and the two bear on each other where one runs out within the other. This is the one
+     * answer to whether two things asked of the input are apart; a reader that sets them apart, to
+     * ask one without the other, asks it here. Whether one value moves with another, or is read by
+     * what reads it, is {@link #standsAtUnderOrAround}.
      */
     public boolean bearsOn(TermPath other) {
         return reached(other) != Reached.APART;
@@ -691,8 +693,9 @@ public record TermPath(String head, List<Step> steps) {
 
     /**
      * Whether one of this path and {@code other} stands at, under or around the other as the value
-     * is reached: a narrowing to cases on one side only is skipped, and two narrowings of one value
-     * to different cases are two places apart.
+     * is reached: the cases each requires holding together, as {@link #bearsOn} asks, and the steps
+     * that go somewhere one within the other. Two that leave some value no case in common are two
+     * places apart.
      *
      * <p>For a reader asking whether the value at one place moves with the value at the other, or
      * is read by what reads the other — not whether two things stated of them can hold together,
@@ -708,9 +711,10 @@ public record TermPath(String head, List<Step> steps) {
 
     /**
      * Whether the value at this path is the value at {@code other}, or one inside it, as the value
-     * is reached: a narrowing to cases on one side only is skipped, as {@link #bearsOn} skips it.
-     * Two narrowings of one value to different cases are neither inside the other: each says which
-     * case the value is, and so stands around whatever is asked under the other.
+     * is reached: the cases each requires holding together, as {@link #bearsOn} asks, and the steps
+     * that go somewhere of {@code other} running out within this one's. Two that leave some value
+     * no case in common are neither inside the other: each says which case the value is, and so
+     * stands around whatever is asked under the other.
      *
      * <p>The one-way half of {@link #bearsOn}, for a reader that tells what is asked of a value
      * itself from what is asked of a value it sits in.
@@ -728,29 +732,41 @@ public record TermPath(String head, List<Step> steps) {
         UNDER,
         /** This runs out within the other. */
         AROUND,
-        /** The two narrow one value to different cases. */
+        /** The cases the two require leave some value none in common. */
         ANOTHER_CASE,
         /** Neither reaches the other. */
         APART
     }
 
-    /** Where this path stands to {@code other}, the steps matched as {@link #bearsOn} says. */
+    /**
+     * Where this path stands to {@code other}, on two counts.
+     *
+     * <p>The cases first, each refinement read as what it requires of the position it is taken at
+     * ({@link #requirements}) and the two put together by {@link Requirements#compatibleWith}, the
+     * one rule of which cases hold together: two narrowings of one position hold together where
+     * they leave it some case in common, so {@code x@{Hospital|Station}} and {@code x@Station} do
+     * and {@code x@Hospital} and {@code x@Station} do not; and narrowings at two positions, as
+     * {@code x@Some} and {@code x@Some@Some} are, ask nothing of each other. A path carries no
+     * account of where a name the cases share stands under each case, so a requirement at such a
+     * name is met against none stated under a case; two that this leaves holding together are
+     * matched as places, which says more of them bear on each other and never fewer.
+     *
+     * <p>Then the steps that go somewhere, narrowings set aside, matched step for step until one
+     * path runs out.
+     */
     private Reached reached(TermPath other) {
         if (!head.equals(other.head)) {
             return Reached.APART;
         }
+        if (narrowsAnywhere() && other.narrowsAnywhere()
+                && !requirements().compatibleWith(other.requirements())) {
+            return Reached.ANOTHER_CASE;
+        }
         int here = 0;
         int there = 0;
         while (true) {
-            int hereNarrowed = pastNarrowings(steps, here);
-            int thereNarrowed = pastNarrowings(other.steps, there);
-            if (hereNarrowed > here && thereNarrowed > there
-                    && !steps.subList(here, hereNarrowed)
-                            .equals(other.steps.subList(there, thereNarrowed))) {
-                return Reached.ANOTHER_CASE;
-            }
-            here = hereNarrowed;
-            there = thereNarrowed;
+            here = pastNarrowings(steps, here);
+            there = pastNarrowings(other.steps, there);
             boolean hereEnds = here == steps.size();
             boolean thereEnds = there == other.steps.size();
             if (hereEnds || thereEnds) {
@@ -763,6 +779,16 @@ public record TermPath(String head, List<Step> steps) {
             here++;
             there++;
         }
+    }
+
+    /** Whether some step of this path narrows a position to cases. */
+    private boolean narrowsAnywhere() {
+        for (Step step : steps) {
+            if (step instanceof Step.Refine) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The first of {@code steps} from {@code from} on that is no narrowing to cases. */
