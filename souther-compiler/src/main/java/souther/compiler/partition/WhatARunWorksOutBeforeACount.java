@@ -161,11 +161,11 @@ final class WhatARunWorksOutBeforeACount {
         private boolean aWalkOfItsElements(Core e) {
             Core.Block step = stepOf(e);
             ClosureUses uses = step == null ? null : reads.usesOf(step);
-            if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1
+            if (uses == null || uses.theOnlyApplication().isEmpty()
                     || WhatABodyReads.anyOf(step.body(), ofTheContainer)) {
                 return false;
             }
-            ClosureUses.Application applied = uses.applications().getFirst();
+            ClosureUses.Application applied = uses.theOnlyApplication().get();
             return applied.applied() == HowAClosureIsApplied.TO_EVERY_ELEMENT
                     && applied.call() == e
                     && applied.madeByTheApplicationsBefore().isEmpty()

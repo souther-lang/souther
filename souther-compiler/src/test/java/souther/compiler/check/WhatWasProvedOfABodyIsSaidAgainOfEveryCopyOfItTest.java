@@ -195,6 +195,7 @@ class WhatWasProvedOfABodyIsSaidAgainOfEveryCopyOfItTest {
             case KEEPS_THE_KEYS_OF -> builder::keepsTheKeysOf;
             case ASSEMBLES_THE_PIECES_OF -> (parameter, source) -> builder.assemblesThePiecesOf(
                     parameter, source, PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS);
+            case HANDED_EACH_ELEMENT_OF -> builder::handedEachElementOf;
         };
         into.accept(of, from);
     }

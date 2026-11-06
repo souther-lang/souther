@@ -49,6 +49,7 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.ReadThroughNames;
 import souther.compiler.meaning.ValueIdentity;
 import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.types.AnApplicationOfACall;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
@@ -759,8 +760,9 @@ public final class PathReachability {
     }
 
     /** A walk of the same body that files nothing where this one files: what it finds about
-     *  where a run gets is all it is asked. */
-    private PathReachability(PathReachability of) {
+     *  where a run gets is all it is asked. What the conditions it meets state is read off
+     *  {@code meanings}: what they state on the one application of a closure the walk is of. */
+    private PathReachability(PathReachability of, MeaningsOfABody meanings) {
         this.engine = of.engine;
         this.completion = of.completion;
         this.entry = of.entry;
@@ -772,7 +774,7 @@ public final class PathReachability {
         this.newtypes = of.newtypes;
         this.out = new LinkedHashMap<>();
         this.arriving = new LinkedHashMap<>();
-        this.meanings = of.meanings;
+        this.meanings = meanings;
         this.places = of.places;
         this.mayStopInside = of.mayStopInside;
         this.applicationsLeft = of.applicationsLeft;
@@ -1189,6 +1191,20 @@ public final class PathReachability {
      * handed that element, which nothing on the way to the call says: the same conditions read as
      * the way here would hold on the application to another element.
      *
+     * <p>What a condition in the body states is what it states on that application, read off the
+     * reading of the body made on it ({@link MeaningsOfABody#onTheApplication}). That reading tells
+     * the application by the call of the model that makes it and the place of the element it is
+     * handed among what the call's container is written out as ({@link AnApplicationOfACall}),
+     * since the call, the closure and its parameters are other nodes and other bindings here
+     * ({@link ClosureUses.Application#callOfTheModel}). An application of this walk is handed the
+     * element an application of the call is handed only where this walk is one the operation
+     * applies its closure by, over the container it was handed, which the expansion proved where
+     * the operation stood ({@link Terms#walksWhatItsOperationHandsEachElementOf}); then the element
+     * written in a place here is the element written in that place there, and what the closure
+     * states on it is what it states on that element however often the operation hands it over.
+     * Where it is not, or the body was not read on that application alone, a condition states
+     * what it states on some application, which a path declines.
+     *
      * <p>Only what arrives is read off these walks. Where a comparison in the body arrives is the
      * one walk of the body's to say, made under no element in particular, so what one application
      * finds is not filed under a place every application shares. Only a closure the one walk of
@@ -1212,12 +1228,15 @@ public final class PathReachability {
                     || applied.position() != null || applied.held().size() != 1) {
                 continue;
             }
-            List<ElementsWrittenOut.Stood<Denotations>> elements =
+            List<Terms.PlacedElement> elements =
                     engine.terms().elementsOnEveryRun(applied.container(), at);
             if (elements == null) {
                 continue;
             }
             BindingId element = applied.held().iterator().next();
+            Optional<ModelOccurrence> by =
+                    engine.terms().walksWhatItsOperationHandsEachElementOf(element)
+                            ? applied.callOfTheModel() : Optional.empty();
             InputReads inside = reads.entering(new ScopeStep.Block(block), symbols, newtypes);
             Walked from = new Walked(operands.known(), operands.decided(), operands.mayStop(),
                     false, true, WhyNone.BY_THE_WAY, false);
@@ -1225,8 +1244,11 @@ public final class PathReachability {
                 if (applicationsLeft[0]-- <= 0) {
                     return null;
                 }
-                Walked body = new PathReachability(this).walk(block.body(), from,
-                        engine.terms().elementsReading().handing(at, element, elements.get(i)),
+                Terms.PlacedElement handedHere = elements.get(i);
+                MeaningsOfABody onIt = by.flatMap(model -> meanings.onTheApplication(
+                        new AnApplicationOfACall(model, handedHere.written()))).orElse(meanings);
+                Walked body = new PathReachability(this, onIt).walk(block.body(), from,
+                        engine.terms().elementsReading().handing(at, element, handedHere.value()),
                         inside);
                 if (nothingReaches(body.known())) {
                     int handed = i;
@@ -1251,13 +1273,12 @@ public final class PathReachability {
      * the operation still stands as itself, and the walk this asks for reads the tree a rewrite
      * made of it, which keeps the bindings and not the nodes ({@link ElementProvenance}). A closure
      * the uses say one operation applies, and nothing else uses, is applied by the call it is
-     * handed to and by no other.
+     * handed to and by no other ({@link ClosureUses#theOnlyApplication}).
      */
     private static ClosureUses.Application theOneApplicationOf(Core.Block block,
                                                                InputReads reads) {
         ClosureUses uses = reads.usesOf(block);
-        return uses == null || uses.usedElsewhere() || uses.applications().size() != 1
-                ? null : uses.applications().getFirst();
+        return uses == null ? null : uses.theOnlyApplication().orElse(null);
     }
 
     /**
