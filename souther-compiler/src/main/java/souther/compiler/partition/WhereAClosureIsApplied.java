@@ -5,6 +5,8 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.ReadThroughNames;
+import souther.compiler.meaning.ValueIdentity;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 
 import java.util.ArrayList;
@@ -73,8 +75,16 @@ public record WhereAClosureIsApplied(List<String> containers, Proposition holdin
                         made));
                 continue;
             }
+            // The container a name's element holds is that element's: which one, the names it was
+            // read through say, as they say it of whatever else is read of the element. Read of
+            // no one value there, it is no one container, and nothing is said.
+            ValueIdentity which = ReadThroughNames.identityAt(at.get(), each.container().at()
+                    .elementsNamedIn(each.container().value(), read.rules().newtypes()));
+            if (which == null) {
+                return Optional.empty();
+            }
             containers.add(at.get().toString());
-            List<DecisionSubject> it = List.of(new DecisionSubject.AnInput(at.get()));
+            List<DecisionSubject> it = List.of(new DecisionSubject.AnInput(at.get(), which));
             holding.add(WhereAnApplicationIsMade.whereOneOfTheContainersHoldsSomething(
                     held.map(ElementsHeldFrom::where)
                             .orElseGet(WhereAnApplicationIsMade::nothingAsked),

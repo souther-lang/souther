@@ -23,6 +23,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -250,6 +251,28 @@ class WhatANameStoodForIsTheValueAPartIsAboutTest {
                         new Quantity.ProductOfTwo(gate, ValueIdentity.AT_THE_POSITION, n, of(A)),
                         ExactRatio.ZERO), Rel.GE), true),
                 readThrough(stated, named(A)));
+    }
+
+    /**
+     * A number read off places in two elements — the product of an item's number by a group's —
+     * holds which value it is about at the place it is filed under only: told the other element
+     * as well, it is no one number, and told none there, it is the one at its own.
+     */
+    @Test
+    void aNumberOfTwoElementsHoldsWhichValueAtOneOfThemOnly() {
+        TermPath ofAGroup = TermPath.of("x").then("groups").element().then("m");
+        NumericTerm.ProductOf product = NumericTerm.ProductOf.signed(
+                LinearForm.atom(new NumericTerm.ValueOf(N)),
+                LinearForm.atom(new NumericTerm.ValueOf(ofAGroup))).product();
+        Proposition stated = Proposition.compared(new Relation.Affine(LinearForm.atomMinusConstant(
+                new DecisionAtom.OfTheInput(product), ExactRatio.ZERO), Rel.GE), false);
+        ElementsNamed both = ElementsNamed.of(List.of(new ElementsNamed.Named(AN_ITEM, A),
+                new ElementsNamed.Named(ElementsNamed.Slot.innermostOf(ofAGroup), B)));
+        assertSame(TWO_AS_ONE, readThrough(stated, both));
+        ElementsNamed itsOwn = product.subjectPath().equals(N) ? named(A)
+                : ElementsNamed.of(List.of(new ElementsNamed.Named(
+                        ElementsNamed.Slot.innermostOf(ofAGroup), B)));
+        assertInstanceOf(Proposition.Compared.class, readThrough(stated, itsOwn));
     }
 
     /** A number that holds a position and no place to say which value there it is about is no

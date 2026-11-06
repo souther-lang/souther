@@ -8741,8 +8741,7 @@ final class Pullback {
         NumericTerm.GatheredUnderItsKey.Gathering by = gathered == null ? null
                 : gathering.apply(gathered);
         NumericTerm.GatheredUnderAKey term = by == null ? null
-                : gatheredUnderAKey(gathered, by, asked);
-        return term != null && readOnAnOrder(term)
+                : gatheredUnderAKey(gathered, by, asked);        return term != null && readOnAnOrder(term)
                 ? LinearForm.atom(new DecisionAtom.OfTheInput(term)) : null;
     }
 
@@ -8814,16 +8813,37 @@ final class Pullback {
             return one == left && other == right ? read
                     : new Derivation.Joined(how, one, other);
         }
+        Derivation asADifference = asADifferenceOfTwoOrderedValues(read);
+        return asADifference == null ? read : asADifference;
+    }
+
+    /**
+     * {@code read} as the difference of its two values being nought, where it concludes that two
+     * positions on an order are one value or are not — or null where it concludes anything else.
+     *
+     * <p>Asked of the step the names it was read through were taken off, as every part of it is
+     * until a wrapper tells it: so each value is the one at its position, and which element each
+     * is, the wrapper tells the difference's numbers as it would have told the statement's.
+     */
+    private Derivation asADifferenceOfTwoOrderedValues(Derivation read) {
         if (!(tried(read) instanceof Proposition.SameValue(
                 DecisionSubject.AnInput(TermPath one, ValueIdentity oneIs),
                 DecisionSubject.AnInput(TermPath other, ValueIdentity otherIs), boolean holds,
                 var _))) {
-            return read;
+            return null;
+        }
+        // One position inside an element, said of twice, is one number only where both are that
+        // one element, and which element each is, is not settled here: a law's statement of an
+        // element beside the element a name was handed is told by where each stands, and which of
+        // them is the quantifier's own is said only by what goes over them. Their difference is
+        // nought only where they are one, so it is not written for them.
+        if (one.equals(other) && ElementsNamed.Slot.innermostOf(one) != null) {
+            return null;
         }
         NumericTerm left = new NumericTerm.ValueOf(one);
         NumericTerm right = new NumericTerm.ValueOf(other);
         if (!readOnAnOrder(left) || !readOnAnOrder(right)) {
-            return read;
+            return null;
         }
         // Each the value its subject was about: two elements of one container are two numbers.
         return aRelation(Derivation.ComparisonReading.AS_A_CUT,
@@ -10241,6 +10261,14 @@ final class Pullback {
             Core asked, Consumer<LinearForm<Quantity>> composedAs) {
         return new AffineForms.Reading<>() {
 
+            // What a form read here holds is held to one element of each container, whether or
+            // not it is a side of a comparison: a form holds a number once, and two elements of
+            // one container stand at one position, so a form holding both would hold one number
+            // twice — and cancel or add up to what was not written. The comparison's own where
+            // one is being read, so that its sides are held together; else this form's.
+            private final ElementsMet held = elementsMet == ElementsMet.NONE ? new ElementsMet()
+                    : elementsMet;
+
             @Override
             public void composed(Core operation, LinearForm<Quantity> form) {
                 if (asked != null && Core.withoutStanding(operation) == asked) {
@@ -10280,8 +10308,24 @@ final class Pullback {
                 return leafOf(node, at, null);
             }
 
+            // Every leaf asked of its elements once, at the door, whichever reading of it answers,
+            // and the readings it goes on into held to the same: a reading of a leaf that returns
+            // before the number reading would otherwise put in what nothing held.
             @Override
             public LinearForm<Quantity> leafOf(
+                    Core node, InputReads at,
+                    AffineForms.Outcome.StoppedAt<Quantity, InputReads> inside) {
+                ElementsMet outer = elementsMet;
+                elementsMet = held;
+                try {
+                    return held.admits(node, at, read.rules().newtypes())
+                            ? leafHeld(node, at, inside) : null;
+                } finally {
+                    elementsMet = outer;
+                }
+            }
+
+            private LinearForm<Quantity> leafHeld(
                     Core node, InputReads at,
                     AffineForms.Outcome.StoppedAt<Quantity, InputReads> inside) {
                 if (Core.withoutStanding(node) instanceof Core.Read name
@@ -12909,8 +12953,11 @@ final class Pullback {
         if (written.type() != Type.INT && written.type() != Type.DECIMAL) {
             return null;
         }
-        LinearForm<NumericTerm> left = AffineReading.formOf(written.left(), at, read);
-        LinearForm<NumericTerm> right = AffineReading.formOf(written.right(), at, read);
+        // The two factors held to the same elements, and to those of the form the product stands
+        // in where one is being read: a product of two elements' numbers is no number of one.
+        ElementsMet met = elementsMet == ElementsMet.NONE ? new ElementsMet() : elementsMet;
+        LinearForm<NumericTerm> left = AffineReading.formOf(written.left(), at, read, met);
+        LinearForm<NumericTerm> right = AffineReading.formOf(written.right(), at, read, met);
         NumericTerm.ProductOf.Signed made = NumericTerm.ProductOf.signed(left, right);
         if (made == null) {
             return null;

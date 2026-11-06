@@ -284,9 +284,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * dividend is read as a side is, so the same expression is the same form wherever it stands.
      */
     static LinearForm<NumericTerm> formOf(Core expression, InputReads reads, InputReading read) {
+        return formOf(expression, reads, read, new ElementsMet());
+    }
+
+    /** The same, held to the elements {@code met} has met: for a reader that puts this form
+     *  beside another, whose numbers are to be of the same elements. */
+    static LinearForm<NumericTerm> formOf(Core expression, InputReads reads, InputReading read,
+                                          ElementsMet met) {
         AffineForms.Outcome<NumericTerm, InputReads> outcome = AffineForms.outcome(expression,
-                reads, reading(read, new LinkedHashSet<>(), new ElementsMet(),
-                        new WhatWasTold()));
+                reads, reading(read, new LinkedHashSet<>(), met, new WhatWasTold()));
         return outcome instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> composed
                 ? composed.form() : null;
     }

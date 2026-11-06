@@ -157,6 +157,17 @@ public record ElementsNamed(Map<Slot, Set<BindingId>> named, Set<Slot> unnamed) 
         return unnamed.contains(slot) || (names != null && names.size() > 1);
     }
 
+    /** Whether {@code name} stood for an element of some container here: of a name a part was
+     *  told, which a part read through a name whose element is not known never is. */
+    public boolean stoodFor(BindingId name) {
+        for (Set<BindingId> each : named.values()) {
+            if (each.contains(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Whether what was read at some element is of no one value there ({@link #noOneValueAt}). */
     public boolean readsNoOneValue() {
         if (!unnamed.isEmpty()) {
@@ -164,16 +175,6 @@ public record ElementsNamed(Map<Slot, Set<BindingId>> named, Set<Slot> unnamed) 
         }
         for (Set<BindingId> each : named.values()) {
             if (each.size() > 1) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** Whether {@code name} stood for an element of some container here. */
-    public boolean stoodFor(BindingId name) {
-        for (Set<BindingId> each : named.values()) {
-            if (each.contains(name)) {
                 return true;
             }
         }

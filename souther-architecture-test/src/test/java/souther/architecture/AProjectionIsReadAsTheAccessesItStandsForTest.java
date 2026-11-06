@@ -650,7 +650,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.STRUCTURE, BINDINGS);
         row(out, c + "partition/MeaningsOfABodyReading", "walk", "(" + core + reads + ")V",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
-        row(out, c + "partition/Pullback$1", "leafOf", "(" + core + reads + "L" + c
+        row(out, c + "partition/Pullback$1", "leafHeld", "(" + core + reads + "L" + c
                 + "check/AffineForms$Outcome$StoppedAt;)L" + c + "numeric/LinearForm;",
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/Pullback$1", "readsThrough",

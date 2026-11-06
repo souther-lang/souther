@@ -47,6 +47,16 @@ public final class ReadThroughNames {
     /** Which value at a position a number or a subject there is, or null where it is no one. */
     private interface Telling {
         ValueIdentity of(TermPath position, ValueIdentity had);
+
+        /**
+         * Whether a value read at {@code place}, beside the one a number holds which value it is
+         * about at, is told an element here or is of no one value: a number read off places in
+         * two elements has a place to say which value it is about at one of them only. Nothing is
+         * told but by a reading through names.
+         */
+        default boolean toldAnElementAt(TermPath place) {
+            return false;
+        }
     }
 
     /**
@@ -59,8 +69,19 @@ public final class ReadThroughNames {
         if (names.isEmpty()) {
             return stated;
         }
-        return told(stated, (position, had) -> had instanceof ValueIdentity.OfAnElement ? had
-                : identityAt(position, names), twoAsOne);
+        return told(stated, new Telling() {
+
+            @Override
+            public ValueIdentity of(TermPath position, ValueIdentity had) {
+                return had instanceof ValueIdentity.OfAnElement ? had
+                        : identityAt(position, names);
+            }
+
+            @Override
+            public boolean toldAnElementAt(TermPath place) {
+                return !(identityAt(place, names) instanceof ValueIdentity.AtThePosition);
+            }
+        }, twoAsOne);
     }
 
     /**
@@ -569,6 +590,16 @@ public final class ReadThroughNames {
     private static Quantity told(Quantity quantity, Telling telling) {
         return switch (quantity) {
             case DecisionAtom.OfTheInput(NumericTerm term, ValueIdentity had) -> {
+                // Which value it is about is held at the place it is filed under. Read off a place
+                // in another element as well, and that element told, it is the number of two
+                // elements with a place for one: no one number.
+                ElementsNamed.Slot held = ElementsNamed.Slot.innermostOf(term.subjectPath());
+                for (TermPath place : term.placesReadOff()) {
+                    ElementsNamed.Slot other = ElementsNamed.Slot.innermostOf(place);
+                    if (other != null && !other.equals(held) && telling.toldAnElementAt(place)) {
+                        yield null;
+                    }
+                }
                 ValueIdentity told = telling.of(term.subjectPath(), had);
                 yield told == null ? null : told.equals(had) ? quantity
                         : new DecisionAtom.OfTheInput(term, told);

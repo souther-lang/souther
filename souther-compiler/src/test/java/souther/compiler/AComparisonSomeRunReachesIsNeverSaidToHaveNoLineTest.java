@@ -102,6 +102,27 @@ class AComparisonSomeRunReachesIsNeverSaidToHaveNoLineTest {
                             }
                             List.sum(List.map(f, ITEMS)) + List.sum(List.map(f, List.reverse(ITEMS)))
                         }""".replace("GATE", GATE)),
+            // How many elements a counter filed under an element's own number holds, beside how
+            // many there are: the elements counted are each told from the one whose number is
+            // asked for, so the count is not every element.
+            new Shape("counted", """
+                    {
+                            let counts: Map<Int, Int> = List.fold((acc, e) -> Map.updateOrInsert(e.n, 1, c -> c + 1, acc), Map.empty, ITEMS)
+                            List.sum(List.map(%3$s -> if (match Map.get(%3$s.n, counts) with | Some c -> c | None -> 0) < List.length(ITEMS) then GATE else 0, ITEMS))
+                        }""".replace("GATE", GATE), true),
+            // What a map filed from the list holds under two elements' numbers, in one difference:
+            // two lookups by two elements' keys are two numbers.
+            new Shape("gathered", """
+                    {
+                            let sums: Map<Int, Int> = List.fold((acc, e) -> Map.updateOrInsert(e.n, e.id, s -> s + e.id, acc), Map.empty, ITEMS)
+                            List.sum(List.map(%3$s -> List.sum(List.map(%4$s -> if (match Map.get(%3$s.n, sums) with | Some s -> s | None -> 0) - (match Map.get(%4$s.n, sums) with | Some s -> s | None -> 0) /= 0 then GATE else 0, ITEMS)), ITEMS))
+                        }""".replace("GATE", GATE), true),
+            // A product of one element's number by another container's, and the same element's by
+            // a second one of that container: the second factors are two values.
+            new Shape("productAcross", "List.sum(List.map(e -> List.sum(List.map(a ->"
+                    + " List.sum(List.map(b -> if e.n * %3$s.n > 0 && Bool.not(e.n * %4$s.n > 0)"
+                    + " then " + GATE + " else 0, Map.values(x.byId))), Map.values(x.byId))),"
+                    + " ITEMS))", true),
             // And their numbers in one difference.
             new Shape("sharedDifference", """
                     {
