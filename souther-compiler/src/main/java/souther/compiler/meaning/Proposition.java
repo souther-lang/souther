@@ -2330,7 +2330,7 @@ public sealed interface Proposition {
 
     private static Proposition joined(List<Proposition> parts, boolean every) {
         // In the order of their spellings, a part whose spelling is already kept left out.
-        SortedMap<Spelling, Proposition> kept = new TreeMap<>();
+        List<Proposition> kept = new ArrayList<>();
         for (Proposition part : parts) {
             List<Proposition> flat = switch (part) {
                 case All all when every -> all.parts();
@@ -2344,24 +2344,62 @@ public sealed interface Proposition {
                     }
                     continue;
                 }
-                kept.putIfAbsent(one.spelling(), one);
+                keptInOrder(kept, one);
             }
         }
-        if (kept.size() > 1 && kept.values().stream().anyMatch(Some.class::isInstance)) {
-            List<Proposition> joinedAsKept = List.copyOf(kept.values());
-            kept.values().removeIf(one -> saidByAContainerHolding(one, joinedAsKept, every));
+        if (kept.size() > 1 && kept.stream().anyMatch(Some.class::isInstance)) {
+            List<Proposition> joinedAsKept = List.copyOf(kept);
+            kept.removeIf(one -> saidByAContainerHolding(one, joinedAsKept, every));
         }
         if (every && kept.size() > 1) {
-            Proposition byCases = byTheCases(List.copyOf(kept.values()));
+            Proposition byCases = byTheCases(List.copyOf(kept));
             if (byCases != null) {
                 return byCases;
             }
         }
         return switch (kept.size()) {
             case 0 -> new Always(every);
-            case 1 -> kept.firstEntry().getValue();
-            default -> SharedPropositions.shared(every ? new All(List.copyOf(kept.values()))
-                    : new Any(List.copyOf(kept.values())));
+            case 1 -> kept.getFirst();
+            default -> SharedPropositions.shared(every ? new All(List.copyOf(kept))
+                    : new Any(List.copyOf(kept)));
         };
+    }
+
+    /**
+     * {@code one} put among {@code kept}, which is in the order of its spellings with no two
+     * spelled alike, where its spelling puts it — left out where one spelled alike is kept.
+     *
+     * <p>Asked of the last first. Parts are mostly handed over in that order already — the parts of
+     * a conjunction this made, put through something that changes a few of them, or with one more
+     * beside them — and a part that goes after every one kept is placed by one comparison, where a
+     * search from the middle would take as many as the halvings. A part that does not is searched
+     * for.
+     */
+    private static void keptInOrder(List<Proposition> kept, Proposition one) {
+        Spelling spelled = one.spelling();
+        int last = kept.size() - 1;
+        int afterLast = last < 0 ? 1 : spelled.compareTo(kept.get(last).spelling());
+        if (afterLast > 0) {
+            kept.add(one);
+            return;
+        }
+        if (afterLast == 0) {
+            return;
+        }
+        int low = 0;
+        int high = last - 1;
+        while (low <= high) {
+            int middle = (low + high) >>> 1;
+            int against = spelled.compareTo(kept.get(middle).spelling());
+            if (against == 0) {
+                return;
+            }
+            if (against > 0) {
+                low = middle + 1;
+            } else {
+                high = middle - 1;
+            }
+        }
+        kept.add(low, one);
     }
 }
