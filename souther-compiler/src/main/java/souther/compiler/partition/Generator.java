@@ -13230,7 +13230,9 @@ public final class Generator {
                 Outcome first = null;
                 boolean firstSearched = false;
                 for (Refinement each : under) {
-                    if (!(additional.merge(where.refine(each).requirements())
+                    CasesLeft eachCase = CasesLeft.of(each);
+                    if (!where.admits(eachCase)
+                            || !(additional.merge(where.refine(eachCase).requirements())
                             instanceof Requirements.Merge.Merged(Requirements narrowed))) {
                         continue;
                     }

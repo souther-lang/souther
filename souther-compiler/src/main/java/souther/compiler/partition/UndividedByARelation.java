@@ -1251,8 +1251,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                 StringContainment where) {
         ConvertedText looked = ConvertedText.of(inner);
         ConvertedText in = ConvertedText.of(outer);
-        if (looked == null || in == null || overlap(FilingCoordinate.of(looked.place()),
-                FilingCoordinate.of(in.place()))) {
+        if (looked == null || in == null || looked.place().sharesAPlaceWith(in.place())) {
             return SHOWING_NOTHING;
         }
         Kind kind = switch (where) {
@@ -1801,7 +1800,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             EachWayItComesOut each = WhatARelationLeavesUndivided.eachWayItComesOut(terms, at,
-                    constant, relation, UndividedByARelation::overlap, independent,
+                    constant, relation, FilingCoordinate::sharesAPlaceWith, independent,
                     granularityOf(carriers.get(at)), greatestOf(carriers.get(at)), operations);
             if (each != null) {
                 out.put(sides.get(at).number(), each);
@@ -2285,21 +2284,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The parameters this relation reads a place under: those of its places, and those of what a
-     * walk handing a side its value walks or starts from — or empty where some side is read off
-     * no place this names, as what an operation answered of something unnamed is, since that side
-     * may be read off any of them.
+     * The parameters this relation reads a place under: those of every place it is read off
+     * ({@link #positionsRead}) — or empty where some side is read off no place this names, as what
+     * an operation answered of something unnamed is, since that side may be read off any of them.
      */
-    private Optional<Set<String>> parametersRead() {
-        Set<String> out = new HashSet<>();
-        amongThemselves.forEach(place -> out.add(place.path().head()));
-        for (Side each : sides) {
-            Optional<List<TermPath>> read = placesRead(each);
-            if (read.isEmpty()) {
-                return Optional.empty();
-            }
-            read.get().forEach(place -> out.add(place.head()));
+    Optional<Set<String>> parametersRead() {
+        Set<TermPath> read = positionsRead();
+        if (read == null) {
+            return Optional.empty();
         }
+        Set<String> out = new HashSet<>();
+        read.forEach(place -> out.add(place.head()));
         return Optional.of(out);
     }
 
@@ -2314,18 +2309,48 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The places of the input what {@code side} comes to is worked out from — its own, and those
-     * of what a walk handing it its value walks or starts from — or empty where some of them are no
-     * place this names: what an operation answered of something unnamed, or how many elements meet
-     * a statement that reads what was not read.
+     * Every place of the input what {@code side} comes to is read off: every place each of its
+     * numbers is read off ({@link FilingCoordinate#placesReadOff}), and those of what a walk
+     * handing it its value walks or starts from — or empty where some of them are no place this
+     * names: what an operation answered of something unnamed, or how many elements meet a
+     * statement that reads what was not read.
      *
-     * <p>Not where the relation is reported: a count of the elements meeting a statement is at no
-     * position, and is worked out from the container and from what the statement reads of each
-     * element.
+     * <p>What the side depends on, and the one answer to it: whether a place, a tie or a rule of
+     * the declarations can say something of the side is asked of these. Not where the relation is
+     * reported: a count of the elements meeting a statement is at no position, and is worked out
+     * from the container and from what the statement reads of each element.
      */
-    private static Optional<List<TermPath>> placesRead(Side side) {
+    private static Optional<List<TermPath>> placesItIsReadOff(Side side) {
+        return placesOf(side, FilingCoordinate::placesReadOff, true);
+    }
+
+    /**
+     * Where each number of {@code side} stands in an element, and the places of what a walk
+     * handing it its value walks or starts from — or empty as {@link #placesItIsReadOff} is.
+     *
+     * <p>For the one question that asks where a side stands rather than what it reads: whether
+     * a witness cutting a container down cuts a place the side reads whole ({@link Witness}). A
+     * number read among the elements beside its own, the end of a key's values, is read off the
+     * container too, and is kept by copies of its element where the container is cut
+     * ({@link #keptCutDown}); taken as a place read whole, the container would be read for every
+     * such side, and no cut would be shown to keep one.
+     */
+    private static Optional<List<TermPath>> whereItsNumbersStand(Side side) {
+        return placesOf(side, each -> List.of(each.path()), false);
+    }
+
+    /**
+     * The places of {@code side}: each of its numbers counted as {@code ofANumber} says, the
+     * number it is as well where {@code itsNumber}, and the places of what a walk handing it its
+     * value walks or starts from, which both questions count alike.
+     */
+    private static Optional<List<TermPath>> placesOf(
+            Side side, Function<FilingCoordinate, List<TermPath>> ofANumber, boolean itsNumber) {
         List<TermPath> out = new ArrayList<>();
-        side.madeOf().forEach(place -> out.add(place.path()));
+        side.madeOf().forEach(place -> out.addAll(ofANumber.apply(place)));
+        if (itsNumber && side.number() != null) {
+            out.addAll(ofANumber.apply(FilingCoordinate.of(side.number())));
+        }
         switch (side.along()) {
             case null -> {
                 if (side.madeOf().isEmpty() && side.number() == null) {
@@ -2336,7 +2361,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 out.add(kept.container());
                 out.addAll(kept.ofEach().placesReadOff());
                 if (kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)) {
-                    out.add(from.subjectPath());
+                    out.addAll(ofANumber.apply(FilingCoordinate.of(from)));
                 }
             }
             case Quantity.PositionInTheWalk position -> out.add(position.container());
@@ -2439,7 +2464,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return new AWayReadForARelation.Declarations() {
             @Override
             public boolean tie(TermPath one, TermPath other) {
-                return overlap(one, other) || tiedByARule(one, other, read);
+                return one.bearsOn(other) || tiedByARule(one, other, read);
             }
 
             @Override
@@ -2496,48 +2521,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The positions this relation reads: those of its places, and those a walk handing a side its
-     * value walks or starts from — or null where some side is read off places this cannot name,
-     * as what an operation answered of something unnamed is.
+     * Every place of the input this relation is read off: what the places it holds against each
+     * other are read off, and every place each side is ({@link #placesItIsReadOff}) — or null
+     * where some side is read off places this cannot name, as what an operation answered of
+     * something unnamed is.
      */
     private Set<TermPath> positionsRead() {
-        Set<TermPath> out = new LinkedHashSet<>();
-        places().forEach(place -> out.add(place.path()));
+        Set<TermPath> out = new LinkedHashSet<>(placesReadOff(amongThemselves));
         for (Side each : sides) {
-            if (each.number() != null) {
-                out.addAll(each.number().placesReadOff());
+            Optional<List<TermPath>> read = placesItIsReadOff(each);
+            if (read.isEmpty()) {
+                return null;
             }
-            switch (each.along()) {
-                case null -> {
-                    if (each.madeOf().isEmpty() && each.number() == null) {
-                        return null;
-                    }
-                }
-                case Quantity.KeptSoFar kept -> {
-                    out.add(kept.container());
-                    out.addAll(kept.ofEach().placesReadOff());
-                    if (kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)) {
-                        out.addAll(from.placesReadOff());
-                    }
-                }
-                case Quantity.PositionInTheWalk position -> out.add(position.container());
-                case Quantity.PickedAtAnIndex picked -> {
-                    out.add(picked.container());
-                    out.add(picked.element());
-                }
-                case Quantity.AWholeNumberInTurn number -> out.addAll(placesOfItsEnds(number));
-                case Quantity.HowManyMeet counted -> {
-                    Optional<List<TermPath>> reads =
-                            PositionsAStatementReads.of(counted.ofTheElement());
-                    if (reads.isEmpty()
-                            || !(counted.container() instanceof DecisionSubject.AnInput(
-                                    TermPath container, var _))) {
-                        return null;
-                    }
-                    out.add(container);
-                    out.addAll(reads.get());
-                }
-            }
+            out.addAll(read.get());
         }
         return out;
     }
@@ -2695,7 +2691,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             for (TermPath at : positions) {
                 if (!at.equals(elementsOf) && term.placesReadOff().stream()
-                        .anyMatch(place -> overlap(place, at))) {
+                        .anyMatch(place -> place.bearsOn(at))) {
                     return false;
                 }
             }
@@ -2823,8 +2819,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         && terms.get(one).realizes() != null && terms.get(other).realizes() != null)
                         || onTheWay.between(one, other);
         BiPredicate<FilingCoordinate, FilingCoordinate> overlapping = byTheFormat == null
-                ? UndividedByARelation::overlap
-                : (one, other) -> !apartByTheFormat(one, other) && overlap(one, other);
+                ? FilingCoordinate::sharesAPlaceWith
+                : (one, other) -> !apartByTheFormat(one, other) && one.sharesAPlaceWith(other);
         if (kind == Kind.PRODUCT) {
             for (int at = 0; at < 2; at++) {
                 int other = 1 - at;
@@ -3176,8 +3172,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                              Optional<Set<String>> declined, InputReading read,
                                              PiecesOfAString piece) {
         if (piece != null || past.narrowing().stream().anyMatch(constraint ->
-                constraint.terms().stream().anyMatch(term -> overlap(term.subjectPath(), mine)
-                        || overlap(term.subjectPath(), theirs)))) {
+                constraint.terms().stream().anyMatch(term -> term.isReadOffAPlaceBearingOn(mine)
+                        || term.isReadOffAPlaceBearingOn(theirs)))) {
             return leavesTheStringsOf(mine, theirs, written, past.narrowing(), piece)
                     ? RoomOnTheWay.UNTOUCHED : null;
         }
@@ -3228,7 +3224,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             List<TermPath> asked = beside;
             for (TakenConstraint each : past.narrowing()) {
                 if (narrowed.contains(each) || each.terms().stream().noneMatch(term ->
-                        asked.stream().anyMatch(place -> overlap(term.subjectPath(), place)))) {
+                        asked.stream().anyMatch(term::isReadOffAPlaceBearingOn))) {
                     continue;
                 }
                 if (!(each instanceof TakenConstraint.Affine)) {
@@ -3411,7 +3407,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         for (TermPath other : Stream.concat(places.stream(), Stream.of(mine, theirs)).toList()) {
-            if (!other.equals(value.subjectPath()) && (overlap(value.subjectPath(), other)
+            if (!other.equals(value.subjectPath()) && (value.subjectPath().bearsOn(other)
                     || tiedByARule(value.subjectPath(), other, read))) {
                 return null;
             }
@@ -3924,8 +3920,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return narrowing.stream().noneMatch(constraint -> constraint.terms().stream()
-                .anyMatch(term -> overlap(term.subjectPath(), mine)
-                        || overlap(term.subjectPath(), theirs)));
+                .anyMatch(term -> term.isReadOffAPlaceBearingOn(mine)
+                        || term.isReadOffAPlaceBearingOn(theirs)));
     }
 
     /**
@@ -4025,12 +4021,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * Whether {@code statement} turns on {@code place}, or on a place that holds it or is held by
-     * it. A statement of what stands at a value that holds the place, how many a container holds,
-     * says nothing of the place's values, so only what stands at the place or under it is theirs.
+     * it ({@link TermPath#bearsOn}). A statement of what stands at a value that holds the place, how
+     * many a container holds or which case it is, says nothing of the place's values, so only what
+     * stands at the place or under it is theirs ({@link TermPath#standsAtOrUnder}).
      */
     private static boolean reaches(OnAWay statement, TermPath place) {
         return statement.positions().stream().anyMatch(at -> statement.whatStands()
-                ? at.isAtOrUnder(place) : overlap(at, place));
+                ? at.standsAtOrUnder(place) : at.bearsOn(place));
     }
 
     /**
@@ -4166,19 +4163,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (past.tied().isEmpty() && past.owed().isEmpty() && past.before().isEmpty()) {
             return Optional.of(exact);
         }
-        List<TermPath> reads = new ArrayList<>();
-        amongThemselves.forEach(each -> reads.add(each.path()));
+        // What the relation is read off, which a tie or a stop is asked to touch; and where each of
+        // its numbers stands, which a witness cutting a container asks it does not read whole.
+        Set<TermPath> readOff = positionsRead();
+        if (readOff == null) {
+            return Optional.empty();
+        }
+        List<TermPath> reads = List.copyOf(readOff);
+        List<TermPath> standing = new ArrayList<>();
+        amongThemselves.forEach(each -> standing.add(each.path()));
         for (Side side : sides) {
-            Optional<List<TermPath>> placesOfTheSide = placesRead(side);
+            Optional<List<TermPath>> placesOfTheSide = whereItsNumbersStand(side);
             if (placesOfTheSide.isEmpty()) {
                 return Optional.empty();
             }
-            reads.addAll(placesOfTheSide.get());
+            standing.addAll(placesOfTheSide.get());
         }
-        Witness witness = new Witness(reads, read, region, conditions, declined, Set.of());
+        Witness witness = new Witness(reads, standing, read, region, conditions, declined,
+                Set.of());
         Optional<Set<TermPath>> walked = walkedByTheApplicationsBefore(past, read);
         if (walked.isPresent()) {
-            Witness ofOne = new Witness(reads, read, region, conditions, declined, walked.get());
+            Witness ofOne = new Witness(reads, standing, read, region, conditions, declined,
+                    walked.get());
             if (walked.get().stream()
                     .allMatch(each -> ofOne.holds(each).equals(Optional.of(BigInteger.ONE)))) {
                 return stopsOn(past, reads, ofOne, false, read, collecting, false, accountedFor)
@@ -4195,13 +4201,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * not shown left open.
      *
      * <p>Place by place and not tie by tie: what accounts for a place is a claim made of that
-     * place, and a tie that reads another place as well is not met by it.
+     * place, and a tie that reads another place as well is not met by it. So a read is accounted
+     * for by a place it stands at or inside on every row it stands anywhere
+     * ({@link TermPath#standsAtOrUnderOnEveryRow}). That a tie bears on it is a weaker question:
+     * what is shown of a value narrowed to one case is not shown of the value, nor of it narrowed
+     * to another, though each bears on the other; and what is shown of what a value holds is not
+     * shown of the value.
      */
     static boolean readsOnlyWhatIsAccountedFor(DemandReading.Tie tie, List<TermPath> reads,
                                                Set<TermPath> accountedFor) {
         for (TermPath read : reads) {
             if (touchesAny(tie.places(), List.of(read))
-                    && accountedFor.stream().noneMatch(place -> overlap(place, read))) {
+                    && accountedFor.stream().noneMatch(read::standsAtOrUnderOnEveryRow)) {
                 return false;
             }
         }
@@ -4460,11 +4471,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return Optional.of(out);
     }
 
-    /** Whether some place of {@code places} overlaps one of {@code reads}. */
+    /** Whether some place of {@code places} bears on one of {@code reads}. */
     private static boolean touchesAny(Set<TermPath> places, List<TermPath> reads) {
         for (TermPath place : places) {
             for (TermPath at : reads) {
-                if (overlap(place, at)) {
+                if (place.bearsOn(at)) {
                     return true;
                 }
             }
@@ -4498,6 +4509,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         private final List<TermPath> reads;
         private final InputReading read;
+        private final List<TermPath> standing;
         private final SearchRegion region;
         private final List<OnAWay> conditions;
         private final Optional<Set<String>> declined;
@@ -4529,12 +4541,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return false;
             }
             for (TermPath other : reads) {
-                if (overlap(other, place) || tiedByARule(place, other, read)) {
+                if (other.bearsOn(place) || tiedByARule(place, other, read)) {
                     return false;
                 }
             }
             for (TermPath other : convertedExactly.keySet()) {
-                if (!other.equals(place) && (overlap(other, place)
+                if (!other.equals(place) && (other.bearsOn(place)
                         || tiedByARule(place, other, read))) {
                     return false;
                 }
@@ -4546,13 +4558,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             for (TakenConstraint narrowing : past.narrowing()) {
                 if (narrowing.terms().stream().anyMatch(term ->
-                        overlap(term.subjectPath(), place))) {
+                        term.isReadOffAPlaceBearingOn(place))) {
                     return false;
                 }
             }
             for (OnAWay each : conditions) {
                 if (each.positions().isEmpty()
-                        || each.positions().stream().anyMatch(at -> overlap(at, place))) {
+                        || each.positions().stream().anyMatch(at -> at.bearsOn(place))) {
                     return false;
                 }
             }
@@ -4599,11 +4611,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             }
             for (Side side : sides) {
-                Optional<List<TermPath>> placesOfTheSide = placesRead(side);
+                Optional<List<TermPath>> placesOfTheSide = placesItIsReadOff(side);
                 if (placesOfTheSide.isEmpty()) {
                     return false;
                 }
-                if (placesOfTheSide.get().stream().anyMatch(at -> overlap(at, list))
+                if (placesOfTheSide.get().stream().anyMatch(at -> at.bearsOn(list))
                         && !keptByCopies(side)) {
                     return false;
                 }
@@ -4612,18 +4624,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /**
-         * @param reads     the places the relation reads
+         * @param reads     every place the relation is read off ({@link #positionsRead})
          * @param read      the reading of the input
          * @param region    the region the relation is read over
          * @param conditions what the way states
          * @param declined  the parameters what the way declined may name a position under, or
          *                  empty where it may name any
          * @param heldToOne the collections held to the one element the relation is read at
+         * @param standing  where each number the relation reads stands in an element
+         *                  ({@link #whereItsNumbersStand}), which a cut must not read whole
          */
-        Witness(List<TermPath> reads, InputReading read, SearchRegion region,
-                List<OnAWay> conditions, Optional<Set<String>> declined,
+        Witness(List<TermPath> reads, List<TermPath> standing, InputReading read,
+                SearchRegion region, List<OnAWay> conditions, Optional<Set<String>> declined,
                 Set<TermPath> heldToOne) {
             this.reads = reads;
+            this.standing = standing;
             this.read = read;
             this.region = region;
             this.conditions = conditions;
@@ -4655,14 +4670,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             // How many it holds is cut alone only where no rule relates it to another value the
             // run stands on here — another collection cut on this run, or a place the relation
-            // reads outside it. A place inside it is the side's to keep (keptCutDown).
+            // reads outside it. A place inside it on every row it stands anywhere is the side's to
+            // keep (keptCutDown); one the collection narrows to a case the place is not narrowed
+            // to is outside it on the rows of the other cases.
             for (TermPath other : reads) {
-                if (!overlap(other, collection) && tiedByARule(collection, other, read)) {
+                if (!other.standsAtOrUnderOnEveryRow(collection)
+                        && tiedByARule(collection, other, read)) {
                     return Optional.empty();
                 }
             }
             for (TermPath other : asked) {
-                if (!overlap(other, collection) && tiedByARule(collection, other, read)) {
+                if (tiedByARule(collection, other, read)) {
                     return Optional.empty();
                 }
             }
@@ -4674,7 +4692,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 if (each.positions().isEmpty()) {
                     return Optional.empty();
                 }
-                if (each.positions().stream().noneMatch(at -> overlap(at, collection))) {
+                if (each.positions().stream().noneMatch(at -> at.bearsOn(collection))) {
                     continue;
                 }
                 if (ofOne && ofTheElementAtHand(each, collection)) {
@@ -4694,9 +4712,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             boolean aTotal = false;
             for (Side side : sides) {
-                Optional<List<TermPath>> placesOfTheSide = placesRead(side);
+                Optional<List<TermPath>> placesOfTheSide = placesItIsReadOff(side);
                 boolean ofTheCollection = placesOfTheSide.isEmpty() || placesOfTheSide.get()
-                        .stream().anyMatch(at -> overlap(at, collection));
+                        .stream().anyMatch(at -> at.bearsOn(collection));
                 switch (keptCutDown(side)) {
                     case AT_ANY_SIZE -> { }
                     case AT_ONE -> aTotal |= ofTheCollection;
@@ -4708,7 +4726,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             }
             BigInteger inside = BigInteger.ZERO;
-            for (TermPath at : reads) {
+            for (TermPath at : standing) {
                 if (at.equals(collection) || collection.isAtOrUnder(at)) {
                     return Optional.empty();
                 }
@@ -4991,9 +5009,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static boolean picksOut(List<OnAWay> conditions, TermPath container,
                                     Set<TermPath> besides) {
         return conditions.stream().anyMatch(each -> each.positions().stream().anyMatch(at ->
-                besides.stream().anyMatch(other -> overlap(at, other)))
+                besides.stream().anyMatch(at::bearsOn))
                 || (!(each.whatStands() && each.positions().equals(Set.of(container)))
-                        && each.positions().stream().anyMatch(at -> overlap(at, container))));
+                        && each.positions().stream().anyMatch(at -> at.bearsOn(container))));
     }
 
     /**
@@ -5102,7 +5120,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * Whether {@code term} is a number nothing the way says of the input but {@code statement} may
-     * name — no side of the relation reads it ({@link #placesRead}), no other statement of
+     * name — no side of the relation reads it ({@link #placesItIsReadOff}), no other statement of
      * {@code conditions} does, nothing the way declined may ({@code declined}), no operator the
      * source works out on the way ties it to another place ({@code tied}), and no rule of a value
      * around it names it — and which is shown to take two values or more among those the
@@ -5120,9 +5138,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return false;
         }
         for (Side side : sides) {
-            Optional<List<TermPath>> reads = placesRead(side);
+            Optional<List<TermPath>> reads = placesItIsReadOff(side);
             if (reads.isEmpty() || reads.get().stream().anyMatch(place ->
-                    number.placesReadOff().stream().anyMatch(at -> overlap(place, at)))) {
+                    number.placesReadOff().stream().anyMatch(place::bearsOn))) {
                 return false;
             }
         }
@@ -5666,8 +5684,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Map<String, Set<RuleRef>> refs = new LinkedHashMap<>();
         Map<String, Set<PartId<RuleRef.Invariant>>> parts = new LinkedHashMap<>();
         for (Side side : sides) {
-            for (FilingCoordinate place : placesAsked(side)) {
-                for (Object node : reachedByTheDeclarations(place.path(), read).nodes().ties()) {
+            for (TermPath place : placesReadOff(placesAsked(side))) {
+                for (Object node : reachedByTheDeclarations(place, read).nodes().ties()) {
                     if (node instanceof TiedOnTheWay.Rule rule && rule.clause() >= 0
                             && asked(tried, rule)) {
                         ClauseMeaning.Stated stated = leavingRoomAroundTheLine(rule, asked, read,
@@ -5973,11 +5991,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return !overlapping(sides.get(one), sides.get(other)) && independent.between(one, other);
     }
 
-    /** Whether a place of one side is a place of the other, or part of one. */
+    /** Whether a place of one side bears on a place of the other ({@link TermPath#bearsOn}). */
     private static boolean overlapping(Side one, Side other) {
         for (FilingCoordinate each : one.madeOf()) {
             for (FilingCoordinate that : other.madeOf()) {
-                if (overlap(each, that)) {
+                if (each.sharesAPlaceWith(that)) {
                     return true;
                 }
             }
@@ -6445,7 +6463,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         boolean bounded = false;
         for (OnAWay each : conditions) {
             if (each.positions().stream().noneMatch(at -> ends.stream()
-                    .anyMatch(end -> overlap(at, end)))) {
+                    .anyMatch(at::bearsOn))) {
                 continue;
             }
             // A bound of the last end and of nothing else leaves a row any value between the
@@ -6459,9 +6477,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (other == side) {
                 continue;
             }
-            Optional<List<TermPath>> reads = placesRead(other);
+            Optional<List<TermPath>> reads = placesItIsReadOff(other);
             if (reads.isEmpty() || reads.get().stream().anyMatch(at -> ends.stream()
-                    .anyMatch(end -> overlap(at, end)))) {
+                    .anyMatch(at::bearsOn))) {
                 return null;
             }
         }
@@ -7348,8 +7366,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         for (FilingCoordinate each : first) {
             for (FilingCoordinate that : second) {
-                if (overlap(each, that)
-                        || tiedByARule(each.path(), that.path(), read, ignoring)) {
+                if (each.sharesAPlaceWith(that) || tiedByARule(each, that, read, ignoring)) {
                     return false;
                 }
             }
@@ -7481,7 +7498,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : on.whereItStops();
         return WhatARelationLeavesUndivided.ofTheirDifference(terms, pair.beside(), relation, held,
                 new WhatARelationLeavesUndivided.WhereTheRepresentationStops(run),
-                UndividedByARelation::overlap, greatestOf(on), operations, sizesAreRowsComputed);
+                FilingCoordinate::sharesAPlaceWith, greatestOf(on), operations,
+                sizesAreRowsComputed);
     }
 
     /**
@@ -7539,11 +7557,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             out.add(null);
         }
         out.set(pair.first(), WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 0,
-                pair.beside(), relation, held, UndividedByARelation::overlap, greatestOf(on),
-                operations, pair.standing(), sizesAreRowsComputed));
+                pair.beside(), relation, held, FilingCoordinate::sharesAPlaceWith,
+                greatestOf(on), operations, pair.standing(), sizesAreRowsComputed));
         out.set(pair.second(), WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 1,
-                pair.beside(), relation, held, UndividedByARelation::overlap, greatestOf(on),
-                operations, pair.standing(), sizesAreRowsComputed));
+                pair.beside(), relation, held, FilingCoordinate::sharesAPlaceWith,
+                greatestOf(on), operations, pair.standing(), sizesAreRowsComputed));
         return out;
     }
 
@@ -7717,7 +7735,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (TermPath at : statement.positions()) {
             for (TermPath place : term.placesReadOff()) {
                 if (place.head().equals(at.head())
-                        && (overlap(place, at) || tiedByARule(place, at, read))) {
+                        && (place.bearsOn(at) || tiedByARule(place, at, read))) {
                     return true;
                 }
             }
@@ -7821,7 +7839,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return false;
         }
         for (NumericTerm each : over) {
-            if (!each.equals(term) && touches(term, Set.of(each.subjectPath()))) {
+            if (!each.equals(term) && term.sharesAPlaceWith(each)) {
                 return false;
             }
         }
@@ -7841,7 +7859,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (OnAWay each : conditions) {
             boolean about = side.readOff() == null
                     ? side.madeOf().stream().anyMatch(place -> each.positions().stream()
-                            .anyMatch(that -> overlap(place.path(), that)))
+                            .anyMatch(place::isReadOffAPlaceBearingOn))
                     : touches(side.readOff(), each.positions()) && !saysNothingOfTheValuesOf(
                             side.readOff(), each, mayBeNamed(at, sources));
             // What was kept of a seed the input holds is tied by what the way states of the seed.
@@ -7856,8 +7874,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         if (mayBeNamed(at, sources)) {
-            for (FilingCoordinate place : placesAsked(side)) {
-                for (Object node : tiedByTheDeclarations(place.path(), read, ignoring)) {
+            for (TermPath place : placesReadOff(placesAsked(side))) {
+                for (Object node : tiedByTheDeclarations(place, read, ignoring)) {
                     out.add(tied.classOf(node));
                 }
             }
@@ -7945,7 +7963,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             List<TermPath> all = List.copyOf(places);
             for (int i = 0; i < all.size(); i++) {
                 for (int j = i + 1; j < all.size(); j++) {
-                    if (overlap(all.get(i), all.get(j))) {
+                    if (all.get(i).bearsOn(all.get(j))) {
                         out.join(all.get(i), all.get(j));
                     }
                 }
@@ -7971,12 +7989,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
     }
 
-    /** Whether one of {@code positions} is a place {@code term} is read off, or one around it or
-     *  under it. */
+    /** Whether one of {@code positions} bears on a place {@code term} is read off
+     *  ({@link TermPath#bearsOn}): the place, one around it or under it, or the value it is in
+     *  narrowed to another case. */
     private static boolean touches(NumericTerm.FromOnePosition term, Set<TermPath> positions) {
         for (TermPath place : term.placesReadOff()) {
             for (TermPath each : positions) {
-                if (place.isAtOrUnder(each) || each.isAtOrUnder(place)) {
+                if (place.bearsOn(each)) {
                     return true;
                 }
             }
@@ -7985,11 +8004,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /** Whether every one of {@code positions} that a place {@code term} is read off touches is a
-     *  value that place sits in, and not the place or one under it. */
+     *  value that place sits in, or that value narrowed to another case, and not the place or one
+     *  under it ({@link TermPath#standsAtOrUnder}). */
     private static boolean onlyAround(NumericTerm.FromOnePosition term, Set<TermPath> positions) {
         for (TermPath place : term.placesReadOff()) {
             for (TermPath each : positions) {
-                if (each.isAtOrUnder(place)) {
+                if (each.standsAtOrUnder(place)) {
                     return false;
                 }
             }
@@ -8183,7 +8203,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (way == null) {
             return null;
         }
-        if (tiedByARule(way.carrier().subjectPath(), way.fixed().subjectPath(), read)) {
+        if (tiedByARule(FilingCoordinate.of(way.carrier()), FilingCoordinate.of(way.fixed()), read,
+                Set.of())) {
             return null;
         }
         // What the way states of the product is a relation of the product and other numbers, which
@@ -8469,7 +8490,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             for (PlaceOfAnEnd each : places) {
                 TermPath place = each.place().position();
-                if (place.isAtOrUnder(subject) || subject.isAtOrUnder(place)) {
+                if (place.bearsOn(subject)) {
                     return false;
                 }
             }
@@ -8759,7 +8780,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static boolean keysRelated(List<TermPath> keys, InputReading read) {
         for (int one = 0; one < keys.size(); one++) {
             for (int other = one + 1; other < keys.size(); other++) {
-                if (overlap(keys.get(one), keys.get(other))
+                if (keys.get(one).bearsOn(keys.get(other))
                         || tiedByARule(keys.get(one), keys.get(other), read)) {
                     return true;
                 }
@@ -8772,7 +8793,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * Whether a rule keeping the elements of {@code container} apart keeps them apart at a place
      * a rule of the declarations holds {@code place} beside, or at {@code place} itself or a value
      * around it — or keeps them apart at runs this cannot name. Where it does, which values
-     * {@code place} takes on one element turns on which the others take there.
+     * {@code place} takes on one element turns on which the others take there. A key a rule of a
+     * sum reads under one case leaves alone what an element holds under another
+     * ({@link TermPath#standsAtUnderOrAround}).
      */
     private static boolean keptApartBeside(TermPath container, TermPath place,
                                            InputReading read) {
@@ -8781,7 +8804,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return true;
         }
         for (TermPath key : keys) {
-            if (overlap(key, place) || tiedByARule(key, place, read)) {
+            if (key.standsAtUnderOrAround(place) || tiedByARule(key, place, read)) {
                 return true;
             }
         }
@@ -9456,6 +9479,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return tiedByARule(one, other, read, Set.of());
     }
 
+    /** Every place the numbers at {@code coordinates} are read off, each once
+     *  ({@link FilingCoordinate#placesReadOff}). */
+    private static Set<TermPath> placesReadOff(Collection<FilingCoordinate> coordinates) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        for (FilingCoordinate each : coordinates) {
+            out.addAll(each.placesReadOff());
+        }
+        return out;
+    }
+
+    /**
+     * Whether a rule of the declarations relates the numbers at {@code one} and {@code other}:
+     * some place one is read off to some place the other is ({@link FilingCoordinate#placesReadOff}),
+     * without the rules in {@code ignoring}. Asked of what each number reads and not of where it is
+     * filed: a count of a value's occurrences is filed under the run and reads the value as well,
+     * and a rule relating the value to another place relates the count to it.
+     */
+    private static boolean tiedByARule(FilingCoordinate one, FilingCoordinate other,
+                                       InputReading read, Set<Object> ignoring) {
+        for (TermPath here : one.placesReadOff()) {
+            for (TermPath there : other.placesReadOff()) {
+                if (tiedByARule(here, there, read, ignoring)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /** The same, without the rules in {@code ignoring} ({@link #rulesLeavingRoomAroundTheLine}). */
     private static boolean tiedByARule(TermPath one, TermPath other, InputReading read,
                                        Set<Object> ignoring) {
@@ -9799,7 +9851,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * What a rule reading a run of each element says of {@code place}: nothing where the positions
      * it reads are neither the place, nor under it, nor a value it is a part of — the rule then
      * reads other fields of the elements — and unseen where they are, or where they are placed
-     * nowhere.
+     * nowhere. A rule of a sum reads each case under that case and says nothing of which case an
+     * element is, so what it reads under one case is apart from a place under another
+     * ({@link TermPath#standsAtUnderOrAround}).
      *
      * <p>Where {@code apart} is given, the clause cannot be true without the elements being apart
      * ({@link ClauseRead.Kind#ELEMENTS_THE_CLAUSE_NEEDS_APART}). If {@code place} is an element
@@ -9815,7 +9869,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return Named.UNSEEN;
         }
         for (TermPath each : reached) {
-            if (place.isAtOrUnder(each) || each.isAtOrUnder(place)) {
+            if (place.standsAtUnderOrAround(each)) {
                 if (apart != null && readsOnlyFieldsOfTheElement(place, each)) {
                     apart.found = true;
                     continue;
@@ -9913,14 +9967,5 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return null;
-    }
-
-    private static boolean overlap(FilingCoordinate one, FilingCoordinate other) {
-        return one.overlaps(other);
-    }
-
-    /** Whether two places are one, or one is inside the other. */
-    private static boolean overlap(TermPath one, TermPath other) {
-        return one.isAtOrUnder(other) || other.isAtOrUnder(one);
     }
 }

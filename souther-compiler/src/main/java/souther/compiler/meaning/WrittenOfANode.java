@@ -28,11 +28,19 @@ public final class WrittenOfANode {
 
     /**
      * Whether a place that stays put at {@code stays} is apart from the node at {@code node}:
-     * neither under the other. Asked of the places before anything is read of the node, since it
-     * turns on nothing else.
+     * neither stands at, under or around the other as the value is reached
+     * ({@link TermPath#standsAtUnderOrAround}), so moving the node moves nothing of the place. A
+     * narrowing to a case is no step into the value, and a place under another case of a value
+     * the node is in does not move with it. Asked of the places before anything is read of the
+     * node, since it turns on nothing else.
+     *
+     * <p>What a statement reads is then told the node's or the staying place's where it stands at
+     * or inside it on every row it stands anywhere ({@link TermPath#standsAtOrUnderOnEveryRow}): a
+     * place under the node narrowed further than the node is moves with it, and one the node is
+     * narrowed further than is the node's only on the rows of that case, so it is neither.
      */
     public static boolean apart(TermPath stays, TermPath node) {
-        return !stays.isAtOrUnder(node) && !node.isAtOrUnder(stays);
+        return !stays.standsAtUnderOrAround(node);
     }
 
     /** Whether {@code stated}, read of the node at {@code node}, says the same of any node. */
@@ -120,6 +128,7 @@ public final class WrittenOfANode {
     }
 
     private boolean reads(TermPath at) {
-        return at.isAtOrUnder(node) || staying.stream().anyMatch(at::isAtOrUnder);
+        return at.standsAtOrUnderOnEveryRow(node)
+                || staying.stream().anyMatch(at::standsAtOrUnderOnEveryRow);
     }
 }

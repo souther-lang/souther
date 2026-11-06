@@ -52,13 +52,16 @@ class AnOperationLeftOutOfARunThatReachesARelationIsWorkedOutByNoSuchRunTest {
     /** Which element of a list a step under it stands at: a row holds two. */
     private static final int ELEMENTS = 2;
 
+    /** {@code path} one step further, or null where that narrowing is no place: a value it narrowed
+     *  to several cases is none that shares no case with them ({@link TermPath#admits}). */
     private static TermPath extended(TermPath path, int step) {
         return switch (step) {
             case 0 -> path.then("a");
             case 1 -> path.then("b");
             case 2 -> path.element();
             case 3 -> path.key();
-            default -> path.refine(NARROWINGS[step - 4]);
+            default -> path.admits(NARROWINGS[step - 4]) ? path.refine(NARROWINGS[step - 4])
+                    : null;
         };
     }
 
@@ -77,7 +80,10 @@ class AnOperationLeftOutOfARunThatReachesARelationIsWorkedOutByNoSuchRunTest {
                         if (!withElements && (step == 2 || step == 3)) {
                             continue;
                         }
-                        next.add(extended(each, step));
+                        TermPath further = extended(each, step);
+                        if (further != null) {
+                            next.add(further);
+                        }
                     }
                 }
                 out.addAll(next);

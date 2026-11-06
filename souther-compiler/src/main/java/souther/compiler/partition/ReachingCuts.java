@@ -762,8 +762,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             return new DeclaredInput.Taking.Implied();
         }
         CasesLeft kept = selected.keeping(left::contains);
-        return kept == null ? new DeclaredInput.Taking.Excluded()
-                : new DeclaredInput.Taking.Narrows(DeclaredInput.narrowedTo(scrutinee, kept));
+        return kept == null || !scrutinee.admits(kept) ? new DeclaredInput.Taking.Excluded()
+                : new DeclaredInput.Taking.Narrows(scrutinee.refine(kept));
     }
 
     /**

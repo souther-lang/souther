@@ -418,7 +418,8 @@ public final class WhatARelationLeavesUndivided {
      * @param constant    what the terms are held against, or null where it is no number — a value
      *                    of the type the terms are values of, which only two terms weighed alike and
      *                    held against nought have
-     * @param overlap     whether two places are one, or one is part of the other
+     * @param overlap     whether what is asked of one place can say something of the other, so that
+     *                    terms made of the two are not apart ({@link TermPath#bearsOn})
      * @param independent whether nothing ties where the term at one place in {@code terms} lies to
      *                    where the term at another does
      * @param greatest    the greatest value the type the form is worked out in holds, or null
@@ -3392,7 +3393,8 @@ public final class WhatARelationLeavesUndivided {
      * @param held     every statement the rows arriving hold of either term, each about their
      *                 difference
      * @param extent   where the values the two take stop
-     * @param overlap  whether two places are one, or one is part of the other
+     * @param overlap  whether what is asked of one place can say something of the other
+     *                 ({@link TermPath#bearsOn})
      * @param greatest the greatest value the type the form is worked out in holds, or null where
      *                 it holds no greatest
      * @param operations what the program works out
@@ -3498,7 +3500,8 @@ public final class WhatARelationLeavesUndivided {
      *                 whose sizes the rows computed are counted by
      * @param held     every statement the rows arriving hold of either term, each about their
      *                 difference
-     * @param overlap  whether two places are one, or one is part of the other
+     * @param overlap  whether what is asked of one place can say something of the other
+     *                 ({@link TermPath#bearsOn})
      * @param greatest the greatest value the type the form is worked out in holds, or null where
      *                 it holds no greatest
      * @param operations what the program works out. Where every one is told and each reads only

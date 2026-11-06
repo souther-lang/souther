@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.collect.HeldOnce;
 import souther.compiler.core.EnteredArm;
 import souther.compiler.inputs.CasesLeft;
-import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.Refinement;
@@ -188,7 +187,7 @@ public sealed interface OnTheWay {
             List<List<OnTheWay>> out = new ArrayList<>();
             for (Refinement each : position.narrowing().atoms()) {
                 out.add(List.of(new Narrowed(anchor,
-                        DeclaredInput.narrowedTo(position, CasesLeft.of(each)), crossings,
+                        position.refine(CasesLeft.of(each)), crossings,
                         onItsOrder, named)));
             }
             return List.copyOf(out);

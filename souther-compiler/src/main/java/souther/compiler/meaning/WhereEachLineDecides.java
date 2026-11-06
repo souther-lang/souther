@@ -163,6 +163,11 @@ public final class WhereEachLineDecides {
     private static List<DecidingCase> whereItStands(Proposition.Compared line,
                                                     List<DecidingCase> cases) {
         Map<Place, CasesLeft> at = casesItIsOver(line);
+        if (at == null) {
+            // Its positions leave one value no case in common, so no row holds the line, and it
+            // decides nowhere.
+            return List.of();
+        }
         if (at.isEmpty()) {
             return cases;
         }
@@ -339,15 +344,24 @@ public final class WhereEachLineDecides {
         return out;
     }
 
-    /** Each value a position {@code line} is over narrows, with the cases it narrows it to. */
+    /**
+     * Each value a position {@code line} is over narrows, with the cases its positions narrow it
+     * to together ({@link CasesLeft#meet}) — or null where two of them narrow one value to cases
+     * that share none, which no row holds both of.
+     */
     private static Map<Place, CasesLeft> casesItIsOver(Proposition.Compared line) {
         Map<Place, CasesLeft> out = new LinkedHashMap<>();
         for (Place place : positionsOf(line)) {
             List<TermPath.Step> steps = place.position().steps();
             for (int at = 0; at < steps.size(); at++) {
                 if (steps.get(at) instanceof TermPath.Step.Refine(CasesLeft cases)) {
-                    out.merge(place.at(place.position().prefix(at)), cases,
-                            (one, other) -> one.meet(other) == null ? one : one.meet(other));
+                    Place value = place.at(place.position().prefix(at));
+                    CasesLeft had = out.get(value);
+                    CasesLeft both = had == null ? cases : had.meet(cases);
+                    if (both == null) {
+                        return null;
+                    }
+                    out.put(value, both);
                 }
             }
         }
