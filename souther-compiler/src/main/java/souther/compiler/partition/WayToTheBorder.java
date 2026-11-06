@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.collect.SharingMap;
+import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
@@ -62,8 +63,14 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * Said by the empty account rather than by the absence of one. */
     public static final WayToTheBorder UNTOUCHED = new WayToTheBorder(List.of());
 
+    /**
+     * Every condition on it, with the ones read of an element through another name than the one
+     * the way holds that element by declined ({@link ElementsOnTheWay}): what a way states is
+     * composed as statements of the values it names, whoever reads it.
+     */
     public WayToTheBorder {
-        onTheWay = List.copyOf(onTheWay);
+        onTheWay = ElementsOnTheWay.keptToOneElementEach(List.copyOf(onTheWay),
+                ElementsNamed.NONE);
     }
 
     /**
@@ -379,7 +386,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     public TruthsAsked.Merge truths() {
         List<RowDemand.ATruth> asked = new ArrayList<>();
         for (OnTheWay each : onTheWay) {
-            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.ATruth truth)) {
+            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.ATruth truth, var _)) {
                 asked.add(truth);
             }
         }
@@ -671,7 +678,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
          */
         Step<HeldTogether, Reachability> relating(OnTheWay entry) {
             if (!(entry instanceof OnTheWay.TakenIn(var _, RowDemand.Relational(
-                    TakenConstraint.Affine affine)))) {
+                    TakenConstraint.Affine affine), var _))) {
                 return new Step.Held<>(this);
             }
             // The ones taken in before have not been proved to leave none, since the way was
@@ -848,20 +855,21 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                 case Requirements.Merge.Conflict conflict -> new Step.Closed<>(
                         new Reachability.NothingReaches(new Reachability.TwoAtOnce.Cases(conflict)));
             };
-            case OnTheWay.TakenIn(var _, RowDemand.ATruth truth) -> so.asking(truth);
-            case OnTheWay.TakenIn(var _, RowDemand.Exists exists)
+            case OnTheWay.TakenIn(var _, RowDemand.ATruth truth, var _) -> so.asking(truth);
+            case OnTheWay.TakenIn(var _, RowDemand.Exists exists, var _)
                     when exists.counted().isPresent() ->
                     so.counting(exists.counted().get(), ONE_OR_MORE);
-            case OnTheWay.TakenIn(var _, RowDemand.ForAll every)
+            case OnTheWay.TakenIn(var _, RowDemand.ForAll every, var _)
                     when every.counted().isPresent() ->
                     so.counting(every.counted().get(), NONE);
-            case OnTheWay.TakenIn(var _, RowDemand.SoMany many) when !many.againstNumbers() ->
+            case OnTheWay.TakenIn(var _, RowDemand.SoMany many, var _)
+                    when !many.againstNumbers() ->
                     so.counting(many.count(), many.counts().values());
-            case OnTheWay.TakenIn(var _, RowDemand.OnARemainder remainder) ->
+            case OnTheWay.TakenIn(var _, RowDemand.OnARemainder remainder, var _) ->
                     so.leaving(remainder);
             // A relation over a number written under a case is a relation of a value that is
             // that case: the number is nowhere else.
-            case OnTheWay.TakenIn(var _, RowDemand.Relational relation) -> {
+            case OnTheWay.TakenIn(var _, RowDemand.Relational relation, var _) -> {
                 Requirements required = so.requirements();
                 for (NumericTerm term : relation.terms()) {
                     switch (required.merge(term.subjectPath().requirements())) {

@@ -7,6 +7,7 @@ import souther.compiler.inputs.Case;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.Distinctions;
+import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
@@ -22,6 +23,7 @@ import souther.compiler.meaning.PieceWitness;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.ReadThroughNames;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.Spelling;
 import souther.compiler.meaning.WhyNotTaken;
@@ -324,8 +326,27 @@ final class DemandReading {
      *                read off. A comparison over a value another call of a helper worked out asks
      *                what that call's fork decided beside what it compares, and the two parts are
      *                read off two calls
+     * @param named   which elements the names in the parts {@code read} was read off stood for:
+     *                what {@code read} says is said at positions, and the names are what tell two
+     *                elements of one container apart ({@link NamedElements})
      */
-    record Stated(Condition where, Read read, ReadOff readOff) {}
+    record Stated(Condition where, Read read, ReadOff readOff, ElementsNamed named) {
+
+        Stated {
+            Objects.requireNonNull(named, "the elements a read was read of, or none");
+        }
+
+        /** Which elements the names in every one of {@code these} stood for. */
+        static ElementsNamed namedIn(List<List<Stated>> these) {
+            ElementsNamed out = ElementsNamed.NONE;
+            for (List<Stated> each : these) {
+                for (Stated one : each) {
+                    out = out.and(one.named());
+                }
+            }
+            return out;
+        }
+    }
 
     /**
      * Which copies of the model's code each thing a condition asks was read off, by the read
@@ -512,6 +533,8 @@ final class DemandReading {
         /** The string each piece held to a language was read as a piece of, and how its pieces
          *  were taken, by the statement about some piece it is a piece of. */
         private final PartedStringsOfThePieces partedStrings;
+        /** Which elements the parts each read was made of are about ({@link ValueIdentity}). */
+        final Map<Read, ElementsNamed> namedIn = new IdentityHashMap<>();
 
         private Projection(Map<Spelling,ModelOccurrences> byPart, ModelOccurrences own,
                            PartedStringsOfThePieces parted) {
@@ -553,7 +576,8 @@ final class DemandReading {
             List<Derivation.APieceInALanguage> held = new ArrayList<>();
             if (pulled != null) {
                 for (Pullback.Leaf leaf : pulled.leaves()) {
-                    if (leaf.step() instanceof Derivation.APieceInALanguage piece) {
+                    if (Derivation.readOff(leaf.step())
+                            instanceof Derivation.APieceInALanguage piece) {
                         held.add(piece);
                     }
                 }
@@ -604,12 +628,19 @@ final class DemandReading {
          * reader to calls the part never read.
          */
         List<Read> readOff(List<Read> reads, Proposition from) {
-            if (byPart.isEmpty() || from instanceof Proposition.All
+            if (from instanceof Proposition.All
                     || from instanceof Proposition.Any
                     || from instanceof Proposition.OnAnApplication
                     || from instanceof Proposition.SoManyHold
                     || from instanceof Proposition.SomeReachable
                     || from instanceof Proposition.WhereItAnswers) {
+                return reads;
+            }
+            // Which elements the part is about, as its numbers and subjects say: what it asks is
+            // said at positions past here.
+            ElementsNamed named = ReadThroughNames.namedIn(from);
+            reads.forEach(each -> namedIn.putIfAbsent(each, named));
+            if (byPart.isEmpty()) {
                 return reads;
             }
             ModelOccurrences readOff = partsReadOff.computeIfAbsent(from, this::copiesOfThePartsOf);
@@ -703,7 +734,8 @@ final class DemandReading {
     static List<Stated> askedAt(Condition at, Proposition stated, InputReading read,
                                 WhatConditionsState conditions) {
         Projected made = projectedOff(pulledOf(at, read, conditions), stated, read, own(at));
-        return made.reads().stream().map(each -> new Stated(at, each, made.readOff())).toList();
+        return made.reads().stream()
+                .map(each -> new Stated(at, each, made.readOff(), made.namedOf(each))).toList();
     }
 
     /**
@@ -734,7 +766,8 @@ final class DemandReading {
                 // along one of them.
                 List<List<Stated>> halves = List.of(left, right);
                 yield keptAlike(oneOf(halves, Stated::read,
-                        (each, parts) -> new Stated(joined, each, ReadOff.joined(each, parts)),
+                        (each, parts) -> new Stated(joined, each, ReadOff.joined(each, parts),
+                                Stated.namedIn(parts)),
                         Optional.of(holdingAs(statedBy(joined, read, conditions), holding))),
                         halves);
             }
@@ -769,7 +802,8 @@ final class DemandReading {
                     Stated kept = out.get(at);
                     Stated other = half.get(at);
                     out.set(at, new Stated(kept.where(), kept.read(),
-                            kept.readOff().alike(kept.read(), other.read(), other.readOff())));
+                            kept.readOff().alike(kept.read(), other.read(), other.readOff()),
+                            kept.named().and(other.named())));
                 }
             }
         }
@@ -782,7 +816,8 @@ final class DemandReading {
                                           boolean holding, InputReading read) {
         Projected made = projectedOff(pulled, holdingAs(pulled.proposition(), holding), read,
                 own(where));
-        return made.reads().stream().map(each -> new Stated(where, each, made.readOff()))
+        return made.reads().stream().map(each -> new Stated(where, each, made.readOff(),
+                        made.namedOf(each)))
                 .toList();
     }
 
@@ -793,8 +828,20 @@ final class DemandReading {
      * @param reads   one entry for each thing it asks
      * @param readOff which copies each of them, and every read inside an alternative of one, was
      *                read off
+     * @param named   which elements the names in the parts each read was made of stood for, by
+     *                the read itself
+     * @param whole   which elements every part of the statement is about: what a
+     *                read nothing told of was read through, as far as anything says
      */
-    record Projected(List<Read> reads, ReadOff readOff) {}
+    record Projected(List<Read> reads, ReadOff readOff, Map<Read, ElementsNamed> named,
+                     ElementsNamed whole) {
+
+        /** Which elements the names in the parts {@code read} was made of stood for. */
+        ElementsNamed namedOf(Read read) {
+            ElementsNamed told = named.get(read);
+            return told != null ? told : whole;
+        }
+    }
 
     /**
      * What {@code stated} — a statement {@code pulled} read, or one about what it read — asks of a
@@ -813,7 +860,8 @@ final class DemandReading {
                     projected(written, read, projection);
             case CountsWrittenOut.PastAFigure(var figure) -> pastTheChoices(figure);
         };
-        return new Projected(reads, projection.told());
+        return new Projected(reads, projection.told(), projection.namedIn,
+                ReadThroughNames.namedIn(stated));
     }
 
     /**
@@ -1406,40 +1454,43 @@ final class DemandReading {
                     List.of(anAnswerARowStandsIn(compared));
             case Proposition.Compared compared -> List.of(RelationsAsked.of(read)
                     .of(compared, () -> ofARelation(compared, read)));
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at, var _), boolean holds,
+                                   var _) ->
                     List.of(new Read.Demands(new RowDemand.ATruth(at, holds)));
             case Proposition.Truth(DecisionSubject.AnAnswer _, boolean _, var _),
                  Proposition.InCases(DecisionSubject.AnAnswer _, var _, boolean _, var _),
                  Proposition.Present(DecisionSubject.AnAnswer _, boolean _, var _) ->
                     List.of(anAnswerARowStandsIn(stated));
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at, var _), CasesLeft cases,
                                      boolean holds, var _) ->
                     List.of(holds ? new Read.Narrows(at, cases) : notOfItsCases(at, cases, read));
             // Holding a value or holding none is which of an optional's two carriers stands there.
-            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
+            case Proposition.Present(DecisionSubject.AnInput(TermPath at, var _), boolean holds,
+                                     var _) ->
                     List.of(new Read.Narrows(at,
                             CasesLeft.of(Refinement.of(new Case.Presence(holds)))));
             // A map's key being another position's value, read at one element of the map: the
             // map holds an entry filed under it.
-            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
-                                       DecisionSubject.AnInput(TermPath other), boolean _, var _)
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
+                                       DecisionSubject.AnInput(TermPath other, var _), boolean _,
+                                       var _)
                     when keyOf(one, other) != null -> ofAnEntryKeyedAs(keyOf(one, other), stated,
                     read);
             // A part of an element being the value at a position outside it, both on an order: the
             // difference of the two held at nought, which a region places and a composer writes the
             // element toward as it does for any other relation between them.
-            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
-                                       DecisionSubject.AnInput(TermPath other), boolean holds,
-                                       var _)
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
+                                       DecisionSubject.AnInput(TermPath other, var _),
+                                       boolean holds, var _)
                     when aPartOfAnElementAgainstAnotherPosition(one, other, read) ->
                     List.of(ofAFormOfTheInput(LinearForm.difference(
                             new NumericTerm.ValueOf(one), new NumericTerm.ValueOf(other)),
                             holds ? Rel.EQ : Rel.NE, read));
             // Two positions of the row being one value, or not, which is what a row writes at
             // them.
-            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
-                                       DecisionSubject.AnInput(TermPath other), boolean holds,
-                                       var _)
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
+                                       DecisionSubject.AnInput(TermPath other, var _),
+                                       boolean holds, var _)
                     when RowDemand.OneValueAtBoth.of(one, other, holds) != null ->
                     List.of(new Read.Demands(RowDemand.OneValueAtBoth.of(one, other, holds)));
             case Proposition.SameValue _ ->
@@ -1574,8 +1625,9 @@ final class DemandReading {
             // a composer writes into the container and no region narrows by. The element itself:
             // the key a map files it under being a value is no value the map holds.
             List<AnElementsWay> these = part instanceof Proposition.SameValue(
-                    DecisionSubject.AnInput(TermPath one), DecisionSubject.AnInput(TermPath at),
-                    boolean holds, var _) && one.equals(held.element())
+                    DecisionSubject.AnInput(TermPath one, var _),
+                    DecisionSubject.AnInput(TermPath at, var _), boolean holds, var _)
+                    && one.equals(held.element())
                     ? List.of(AnElementsWay.asking(holds ? new RowDemand.SameAs(at)
                             : new RowDemand.DifferentFrom(at)))
                     : keyedWays(part, held, element);
@@ -1992,8 +2044,8 @@ final class DemandReading {
      */
     private static List<AnElementsWay> keyedWays(Proposition part, TermPath held,
                                                  List<TermPath> element) {
-        if (!(part instanceof Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
-                DecisionSubject.AnInput(TermPath other), boolean holds, var _))) {
+        if (!(part instanceof Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
+                DecisionSubject.AnInput(TermPath other, var _), boolean holds, var _))) {
             return null;
         }
         TermPath key = held.key();
@@ -2252,7 +2304,7 @@ final class DemandReading {
                 }
                 yield ofAFormOfTheInput(against, met, read);
             }
-            case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm.FromOnePosition term),
+            case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm.FromOnePosition term, var _),
                                   var at, Rel _) ->
                     new Read.Demands(new RowDemand.Relational(TakenConstraint.Ordered.isABound(met)
                             ? new TakenConstraint.Ordered(term, at, met)
@@ -2296,7 +2348,7 @@ final class DemandReading {
             if ((each instanceof Quantity.HowManyMeet
                     || each instanceof Quantity.HowManyDifferentMeet) && count == null) {
                 count = each;
-            } else if (each instanceof DecisionAtom.OfTheInput(NumericTerm term)
+            } else if (each instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)
                     && term.atOnePosition() != null) {
                 TermOrders orders = read.quantities().ordersOf(term);
                 if (orders == null || orders.observed() == null || orders.answered() == null
@@ -2328,7 +2380,7 @@ final class DemandReading {
         }
         Map<NumericTerm, ExactRatio> added = new LinkedHashMap<>();
         scaled.coefs().forEach((quantity, by) -> {
-            if (quantity instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+            if (quantity instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)) {
                 added.put(term, by);
             }
         });

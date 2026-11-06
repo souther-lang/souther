@@ -373,6 +373,8 @@ public final class WrittenLines {
     static List<Derivation> premisesOf(Derivation step) {
         return switch (step) {
             case Derivation.ThroughABinding(var value) -> List.of(value);
+            case Derivation.ReadThrough(var read, var _) -> List.of(read);
+            case Derivation.OfItsOwnElement(var _, var _, var read) -> List.of(read);
             case Derivation.OfWhatWasKept(var element, var kept) -> with(element, kept);
             case Derivation.ABehaviorsBody(var _, var body) -> List.of(body);
             case Derivation.ARecursionsBody(var _, var body) -> List.of(body);

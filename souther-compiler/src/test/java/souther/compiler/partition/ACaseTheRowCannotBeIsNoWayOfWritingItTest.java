@@ -109,7 +109,8 @@ class ACaseTheRowCannotBeIsNoWayOfWritingItTest {
                         List.of(new OnTheWay.TakenIn(new ConditionReportAnchor.WhereTheReadingMetIt(
                                 "m", new ConditionOccurrence(
                                         "b", ConditionOccurrence.Reading.DIVIDING, 0)),
-                                new RowDemand.Relational(ABOVE_TEN))), Reachability.Ways.ONE,
+                                new RowDemand.Relational(ABOVE_TEN), NamedElements.NONE)),
+                        Reachability.Ways.ONE,
                         List.of(), Optional.empty()),
                 Generator.CandidateCheck.ANY);
     }

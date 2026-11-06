@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.ElementsNamed.Slot;
 import souther.compiler.types.BindingId;
 
 import java.util.LinkedHashMap;
@@ -20,15 +21,18 @@ import java.util.Set;
  * {@code xs[*] - xs[*]}, which cancels to nothing and is read as a rule that cuts nothing, and
  * {@code x + y} is twice one number. Neither is what was written. A comparison is read of at most
  * one element of each container, and a name for another is one this refuses to take as a number of
- * the input rather than merge with the first.
+ * the input rather than merge with the first. Nor does it take a number read through a name whose
+ * element is not known ({@link ElementsNamed#unnamed}): which element that is, is no more said than
+ * which of two it is.
  *
  * <p>An element is told from another by the container it is held in and the part of the entry it
- * is — the key or the value — and by nothing of its position. The elements of what a walk answered
- * are not those of what it was given, though a position may say so; and the key and the value of
- * one entry are two names for one element, which is what an entry is.
+ * is — the key or the value. The container is the one the element stands in where it stands at a
+ * position, which is where what an operation hands on of a container's elements stands, and what a
+ * walk made otherwise; and the key and the value of one entry are two names for one element, which
+ * is what an entry is.
  *
  * <p>One of these for one comparison, shared by every number it names. Which element a name is of
- * is the environment's ({@link InputReads#elementsStoodForIn}); this holds what one comparison has
+ * is the environment's ({@link InputReads#elementsNamedIn}); this holds what one comparison has
  * met of it. A reading of a number that stands alone, and names no other, has no comparison to be
  * held to and is asked with {@link #NONE}.
  */
@@ -36,9 +40,6 @@ public final class ElementsMet {
 
     /** Holds a reading to nothing: for a number read by itself. */
     public static final ElementsMet NONE = new ElementsMet(false);
-
-    /** Which element of a container: the container and the part of the entry. */
-    private record Slot(InputReads.ContainerOf container, HeldIn.Part part) {}
 
     /**
      * The names of elements that {@code sides} are written through, whatever else they name: which
@@ -50,7 +51,7 @@ public final class ElementsMet {
                                                   DeclarationNewtypes newtypes) {
         Set<BindingId> names = new LinkedHashSet<>();
         for (Core side : sides) {
-            at.elementsStoodForIn(side, newtypes).forEach(stood -> names.add(stood.name()));
+            at.elementsNamedIn(side, newtypes).named().values().forEach(names::addAll);
         }
         return Set.copyOf(names);
     }
@@ -179,21 +180,34 @@ public final class ElementsMet {
     }
 
     /**
-     * Whether the number {@code node} names can be read beside what this comparison has met: it
-     * can where every name in it that is an element of a container is the name that stands for
-     * that element here, or the first to.
+     * Whether the number {@code node} names can be read beside what this comparison has met
+     * ({@link #admits(ElementsNamed)}), by the elements it is read of here.
      */
     public boolean admits(Core node, InputReads at, DeclarationNewtypes newtypes) {
+        return !holding || admits(at.elementsNamedIn(node, newtypes));
+    }
+
+    /**
+     * Whether a number read of the elements {@code named} can be read beside what this comparison
+     * has met: it can where each element it reads is read through one name, the one that stands
+     * for that element here or the first to, and none through a name whose element is not known.
+     */
+    public boolean admits(ElementsNamed named) {
         if (!holding) {
             return true;
         }
-        for (InputReads.ElementStood stood : at.elementsStoodForIn(node, newtypes)) {
-            Slot slot = new Slot(stood.container(), stood.part());
-            if (asked != null) {
-                asked.add(slot);
-            }
-            BindingId had = standingFor.putIfAbsent(slot, stood.name());
-            if (had != null && !had.equals(stood.name())) {
+        if (asked != null) {
+            asked.addAll(named.named().keySet());
+            asked.addAll(named.unnamed());
+        }
+        if (named.readsNoOneValue()) {
+            crowded = true;
+            return false;
+        }
+        for (Map.Entry<Slot, Set<BindingId>> each : named.named().entrySet()) {
+            BindingId name = each.getValue().iterator().next();
+            BindingId had = standingFor.putIfAbsent(each.getKey(), name);
+            if (had != null && !had.equals(name)) {
                 crowded = true;
                 return false;
             }

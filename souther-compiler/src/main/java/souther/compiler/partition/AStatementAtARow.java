@@ -19,6 +19,7 @@ import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.ReadThroughNames;
 import souther.compiler.meaning.Spelling;
 import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.numeric.Count;
@@ -96,6 +97,12 @@ final class AStatementAtARow {
     private final Map<Spelling,OverTheElements> elements;
     /** The positions a part asks of their own value: whether it is true, whether there is one. */
     private final Set<TermPath> positions;
+    /**
+     * Whether {@code stated} holds one value at each element's position, as a row does. One that
+     * holds two at one is no statement of a row, which hands each position one value, and is not
+     * known at any row ({@link ReadThroughNames#holdsOneValueAtEachElement}).
+     */
+    private final boolean ofARow;
     /** {@link #hashCode}, or {@code 0} before it is asked; the same whoever works it out. */
     private int hash;
     /** The parts numbered on the first row asked; the same whoever numbers them. */
@@ -104,6 +111,7 @@ final class AStatementAtARow {
     private AStatementAtARow(Proposition stated, Map<Relation, OneRelation> relations,
                              Map<Spelling,OverTheElements> elements, Set<TermPath> positions) {
         this.stated = stated;
+        this.ofARow = ReadThroughNames.holdsOneValueAtEachElement(stated);
         // In the order the relations were met, which is the order their containers are found in
         // when a row is walked for them.
         this.relations = Collections.unmodifiableMap(new LinkedHashMap<>(relations));
@@ -229,7 +237,8 @@ final class AStatementAtARow {
                         || remainderOfADividendIn(affine) != null
                         || (countIn(affine) instanceof Quantity count
                                 && askable(meetingOf(count)));
-                case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _, Rel _) ->
+                case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term, var _), Place _,
+                                      Rel _) ->
                         term.atOnePosition() != null;
                 case Relation.Ordered _ -> false;
             };
@@ -364,7 +373,7 @@ final class AStatementAtARow {
     static LinearForm<NumericTerm> otherNumbersWithTheRemainder(LinearForm<Quantity> form) {
         Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>();
         form.coefs().forEach((atom, weight) -> {
-            if (atom instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+            if (atom instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)) {
                 out.put(term, weight);
             }
         });
@@ -437,16 +446,17 @@ final class AStatementAtARow {
      */
     static List<TermPath> positionsAskedBy(Proposition part) {
         return switch (part) {
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, Spelling _) ->
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at, var _), boolean _,
+                                   Spelling _) ->
                     List.of(at);
-            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _,
+            case Proposition.Present(DecisionSubject.AnInput(TermPath at, var _), boolean _,
                                      Spelling _) -> List.of(at);
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft _,
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at, var _), CasesLeft _,
                                      boolean _, Spelling _) -> List.of(at);
             case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtAPosition(
-                    TermPath at), StringsLanguage _, boolean _, Spelling _) -> List.of(at);
-            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
-                                       DecisionSubject.AnInput(TermPath other), boolean _,
+                    TermPath at, var _), StringsLanguage _, boolean _, Spelling _) -> List.of(at);
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
+                                       DecisionSubject.AnInput(TermPath other, var _), boolean _,
                                        Spelling _) -> List.of(one, other);
             default -> null;
         };
@@ -553,7 +563,7 @@ final class AStatementAtARow {
                                     otherNumbersWithTheRemainder(affine.form()).coefs().keySet());
                         }
                     }
-                    case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _,
+                    case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term, var _), Place _,
                                           Rel _) -> into.add(term);
                     case Relation.Ordered _ -> { }
                 }
@@ -1009,6 +1019,10 @@ final class AStatementAtARow {
      * row wherever it stands.
      */
     Answer at(BorderQuantity.Observation row) {
+        if (!ofARow) {
+            return new Answer.CouldNotTell(Set.of(new ReadingGap.ReachNotRead(
+                    ReadingGap.ReachNotRead.Why.A_PART_NOT_READ)));
+        }
         PartsOfTheStatement numbered = parts;
         if (numbered == null) {
             numbered = PartsOfTheStatement.of(stated, relations, elements);
@@ -1191,7 +1205,7 @@ final class AStatementAtARow {
      */
     static ObservedValue valueAt(BorderQuantity.Observation element, Quantity.TheValue at) {
         TermPath place = switch (at) {
-            case Quantity.TheValue.AtAPlace(DecisionSubject.AnInput(TermPath path)) -> path;
+            case Quantity.TheValue.AtAPlace(DecisionSubject.AnInput(TermPath path, var _)) -> path;
             case Quantity.TheValue.AtAPlace _ -> null;
             case Quantity.TheValue.ChosenByCase(TermPath of, ElementKey.ByCase key) -> {
                 if (!(element.at(key.subject().from(of)) instanceof WalkResult.Reached<
@@ -1304,29 +1318,30 @@ final class AStatementAtARow {
             case Proposition.Always(boolean holds) -> holds ? Answer.HOLDS : Answer.FAILS;
             // Of the element this row is read with chosen: the last of those holding the value it
             // holds at the position.
-            case Proposition.LastToHold(DecisionSubject.AnInput(TermPath container),
-                                        DecisionSubject.AnInput(TermPath position), boolean holds,
-                                        Spelling _) -> heldAs(holds, switch (
+            case Proposition.LastToHold(DecisionSubject.AnInput(TermPath container, var _),
+                                        DecisionSubject.AnInput(TermPath position, var _),
+                                        boolean holds, Spelling _) -> heldAs(holds, switch (
                     row.lastToHold(container, position)) {
                 case BorderQuantity.Lastness.Last _ -> Said.TRUE;
                 case BorderQuantity.Lastness.NotLast _ -> Said.FALSE;
                 case BorderQuantity.Lastness.CouldNotTell(ReadingGap why) ->
                         new Said.NotRead(Set.of(why));
             });
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds,
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at, var _), boolean holds,
                                    Spelling _) -> heldAs(holds, ofItsValue(at, row,
                     value -> value instanceof ObservedValue.Bool(boolean truth) ? truth : null));
-            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean holds,
+            case Proposition.Present(DecisionSubject.AnInput(TermPath at, var _), boolean holds,
                                      Spelling _) -> heldAs(holds, ofItsValue(at, row,
                     value -> !(value instanceof ObservedValue.Absent)));
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at, var _), CasesLeft cases,
                                      boolean holds, Spelling _) when askable(part) ->
                     heldAs(holds, amongCases(at, cases, row));
-            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
-                                       DecisionSubject.AnInput(TermPath other), boolean holds,
-                                       Spelling _) -> heldAs(holds, theSame(one, other, row));
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
+                                       DecisionSubject.AnInput(TermPath other, var _),
+                                       boolean holds, Spelling _) ->
+                    heldAs(holds, theSame(one, other, row));
             case Proposition.InTheStrings(
-                    Proposition.InTheStrings.Strings.AtAPosition(TermPath at),
+                    Proposition.InTheStrings.Strings.AtAPosition(TermPath at, var _),
                     StringsLanguage language, boolean holds, Spelling _) ->
                     switch (textAt(at, row)) {
                         case TextAtARow.Written(String text) -> heldAs(holds, Recognizer
@@ -2478,7 +2493,8 @@ final class AStatementAtARow {
                     yield over == null ? new NoQuantity(form)
                             : new OfAForm(over, form, affine.proposition());
                 }
-                case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel rel)
+                case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term, var _), Place at,
+                                      Rel rel)
                         when term.atOnePosition() != null -> new OnAnOrder(
                                 Cutting.readAt(behavior, term.atOnePosition(), quantities),
                                 term, at, rel);

@@ -369,7 +369,7 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
         Proposition.Compared compared = assertInstanceOf(Proposition.Compared.class, flattened);
         assertTrue(((Relation.Affine) compared.relation()).form().coefs().keySet().stream()
                         .anyMatch(number -> number instanceof DecisionAtom.OfTheInput(
-                                NumericTerm.TakenOver over)
+                                NumericTerm.TakenOver over, var _)
                                 && over.source().equals(new RunSource.FlattenedOccurrences(
                                         TermPath.of("b").then("items").element().then("parts")
                                                 .element()))),

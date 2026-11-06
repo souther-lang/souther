@@ -158,7 +158,8 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
                         domain().quantities(rules()).ordersOf(fixed.term()).answered(), at))),
                 new Reachability.Reaching(domain().quantities(rules()).region(),
                         Requirements.NONE, TruthsAsked.NONE,
-                        List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(taken))),
+                        List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(taken),
+                                NamedElements.NONE)),
                         Reachability.Ways.ONE, List.of(), Optional.empty()),
                 Generator.CandidateCheck.ANY);
     }

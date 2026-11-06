@@ -32,6 +32,9 @@ final class ReadingRoles {
     static final Map<String, ReadingRole> OF_A_PULLBACK = Map.ofEntries(
             Map.entry("read", FIXED),
             Map.entry("where", FIXED),
+            Map.entry("freeInTheRoot", FIXED),
+            // The names a part is told: set for the extent of a call read about its own elements.
+            Map.entry("freeInTheScope", INPUT),
             Map.entry("subjects", FIXED),
             // The parts a reading met, which a rule set aside takes back out.
             Map.entry("met", LEDGER),

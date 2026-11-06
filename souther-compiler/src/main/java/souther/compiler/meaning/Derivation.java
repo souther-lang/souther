@@ -9,6 +9,7 @@ import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.RunSource;
@@ -75,9 +76,11 @@ public sealed interface Derivation {
      */
     Proposition conclusion(Conclusion numbering);
 
-    /** What this concludes, read at {@code where}. */
+    /** What this concludes, read at {@code where}, as it is handed to a reader of positions
+     *  ({@link Conclusion#atOneValueEach}). */
     default Proposition concludes(Optional<ModelOccurrence> where) {
-        return new Conclusion(where).of(this);
+        Conclusion numbering = new Conclusion(where);
+        return numbering.atOneValueEach(numbering.of(this));
     }
 
     /**
@@ -298,11 +301,12 @@ public sealed interface Derivation {
             Objects.requireNonNull(read, "a comparison is read as another");
         }
 
-        /** What {@code how} was read by, past every comparison it was read as. */
+        /** What {@code how} was read by, past every comparison it was read as and the names it
+         *  was read through ({@link ReadThrough}). */
         public static Derivation through(Derivation how) {
-            Derivation out = how;
+            Derivation out = readOff(how);
             while (out instanceof Restated(var inner)) {
-                out = inner;
+                out = readOff(inner);
             }
             return out;
         }
@@ -1112,7 +1116,9 @@ public sealed interface Derivation {
                 };
             }
 
-            boolean reads(LawProposition<DeclaredArgument> law, Derivation read) {
+            // Each of these asks which rule made the step, past the names it was read through.
+            boolean reads(LawProposition<DeclaredArgument> law, Derivation step) {
+                Derivation read = readOff(step);
                 if (read instanceof Stopped) {
                     return true;
                 }
@@ -1194,7 +1200,8 @@ public sealed interface Derivation {
              * is some element meeting it in its turn.
              */
             private boolean meets(LawProposition.SomeElement<DeclaredArgument> some,
-                                  Derivation read) {
+                                  Derivation step) {
+                Derivation read = readOff(step);
                 return switch (read) {
                     case Stopped _ -> true;
                     // What the container holding something was read as is a reading of what made
@@ -1261,7 +1268,9 @@ public sealed interface Derivation {
              * the two numbers, it is of the positions the call has them at — or on each of the
              * cases a value it is of is chosen by, as a comparison is.
              */
-            private boolean isTheSame(LawProposition.Same<DeclaredArgument> law, Derivation read) {
+            private boolean isTheSame(LawProposition.Same<DeclaredArgument> law,
+                                      Derivation step) {
+                Derivation read = readOff(step);
                 return switch (read) {
                     case Stopped _ -> true;
                     case TheSameValue(var part, var one, var other) -> part.equals(law)
@@ -1285,7 +1294,8 @@ public sealed interface Derivation {
              * comparison in its turn.
              */
             private boolean compares(LawProposition.Compared<DeclaredArgument> law,
-                                     Derivation read) {
+                                     Derivation step) {
+                Derivation read = readOff(step);
                 if (read instanceof Stopped) {
                     return true;
                 }
@@ -1306,9 +1316,12 @@ public sealed interface Derivation {
 
             /** Whether the container {@code argument} is, read at {@code container}, stands
              *  there: at the position the call has it at, where it has it at one. */
+            // Where a value was read is asked of where it stands, whichever element's value at
+            // the position it was told it is ({@link ReadThroughNames#atThePositions}).
             private boolean standsAt(DeclaredArgument argument, DecisionSubject container) {
                 TermPath at = call.standingAt().get(argument);
-                return at == null || new DecisionSubject.AnInput(at).equals(container);
+                return at == null || new DecisionSubject.AnInput(at)
+                        .equals(ReadThroughNames.atThePositions(container));
             }
 
             /**
@@ -1353,7 +1366,8 @@ public sealed interface Derivation {
                 if (at == null) {
                     return true;
                 }
-                Proposition concluded = seen.concludes(Optional.empty());
+                Proposition concluded = ReadThroughNames.atThePositions(
+                        seen.concludes(Optional.empty()));
                 if (concluded instanceof Proposition.Unread) {
                     return true;
                 }
@@ -1375,7 +1389,7 @@ public sealed interface Derivation {
             private boolean standsAsAString(LawSubject<DeclaredArgument> subject, Quantity read) {
                 TermPath at = positionOf(subject);
                 return at == null || new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(at))
-                        .equals(read);
+                        .equals(ReadThroughNames.atThePositions(read));
             }
 
             /** Whether {@code read}, the number {@code subject} was read as, is the value at the
@@ -1383,7 +1397,7 @@ public sealed interface Derivation {
             private boolean standsAsANumber(LawSubject<DeclaredArgument> subject,
                                             LinearForm<Quantity> read) {
                 TermPath at = positionOf(subject);
-                return at == null || read.equals(LinearForm.atom(
+                return at == null || ReadThroughNames.atThePositions(read).equals(LinearForm.atom(
                         new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(at))));
             }
 
@@ -1391,7 +1405,8 @@ public sealed interface Derivation {
              *  call has it at. */
             private boolean stands(LawSubject<DeclaredArgument> subject, DecisionSubject read) {
                 TermPath at = positionOf(subject);
-                return at == null || read.equals(new DecisionSubject.AnInput(at));
+                return at == null
+                        || ReadThroughNames.atThePositions(read).equals(new DecisionSubject.AnInput(at));
             }
 
             /**
@@ -1404,7 +1419,8 @@ public sealed interface Derivation {
              * statement: the way {@code leaf} read what the elements meet is a reading of it.
              */
             private boolean numberStands(LawNumber<DeclaredArgument> number,
-                                         LinearForm<Quantity> form, ALawComparison leaf) {
+                                         LinearForm<Quantity> read, ALawComparison leaf) {
+                LinearForm<Quantity> form = ReadThroughNames.atThePositions(read);
                 Quantity atom = soleAtom(form);
                 return switch (number) {
                     case LawNumber.AnArgument<DeclaredArgument>(var argument) -> {
@@ -1419,7 +1435,7 @@ public sealed interface Derivation {
                     case LawNumber.CodePointsOf<DeclaredArgument>(var of, var counted) -> {
                         TermPath at = positionOf(of);
                         yield at == null || (atom instanceof DecisionAtom.OfTheInput(
-                                NumericTerm term)
+                                NumericTerm term, var _)
                                 && term instanceof NumericTerm.CodePointClassCount count
                                 && count.position().equals(at)
                                 && count.through().equals(CaseMapping.NONE)
@@ -1491,8 +1507,9 @@ public sealed interface Derivation {
                 DecisionSubject container = new DecisionSubject.AnInput(at);
                 if (atom instanceof Quantity.HowManyMeet(DecisionSubject counted, var _)) {
                     return counted.equals(container) && leaf.counts().stream().anyMatch(count ->
-                            count.container().equals(container)
-                                    && atom.equals(count.counted(asked))
+                            ReadThroughNames.atThePositions(count.container()).equals(container)
+                                    && atom.equals(ReadThroughNames.atThePositions(
+                                            count.counted(asked)))
                                     && reads(statement, count.ofTheElement()));
                 }
                 return leaf.alike().stream().anyMatch(count -> count.container().equals(container)
@@ -1519,7 +1536,7 @@ public sealed interface Derivation {
              * of.
              */
             private static TermPath containerCountedInside(Quantity atom, TermPath at) {
-                if (!(atom instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOver over))
+                if (!(atom instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOver over, var _))
                         || !(over.takenAs() instanceof TakenAs.HowManyItHolds)
                         || !(over.source() instanceof RunSource.FlattenedOccurrences(
                                 TermPath every))) {
@@ -1532,7 +1549,7 @@ public sealed interface Derivation {
             /** Whether {@code atom} is how many what stands at {@code at} holds. */
             private static boolean howManyAt(Quantity atom, TermPath at) {
                 return atom instanceof DecisionAtom.OfTheInput(
-                        NumericTerm.TakenOf taken) && taken.position().equals(at)
+                        NumericTerm.TakenOf taken, var _) && taken.position().equals(at)
                         && taken.takenAs() instanceof TakenAs.HowManyItHolds;
             }
         }
@@ -1828,7 +1845,9 @@ public sealed interface Derivation {
             TermPath greater = call.standingAt().get(ordered.get(0));
             TermPath lesser = call.standingAt().get(ordered.get(1));
             if (greater != null && lesser != null) {
-                Proposition read = ofTheArguments.concludes(Optional.empty());
+                // Where the arguments stand, whichever element's values they were told they are.
+                Proposition read = ReadThroughNames.atThePositions(
+                        ofTheArguments.concludes(Optional.empty()));
                 if (!(read instanceof Proposition.Unread)
                         && !read.equals(theGreaterAgainstTheLesser(greater, lesser, between))) {
                     throw new IllegalArgumentException(ofTheArguments + " is not the order the"
@@ -2632,7 +2651,7 @@ public sealed interface Derivation {
 
         public SizeAboveNought {
             Objects.requireNonNull(size, "a size is taken of something");
-            if (size instanceof DecisionAtom.OfTheInput(var term)
+            if (size instanceof DecisionAtom.OfTheInput(var term, var _)
                     && !(term instanceof NumericTerm.TakenOf)) {
                 throw new IllegalArgumentException(size + " is no size of a container");
             }
@@ -3701,6 +3720,92 @@ public sealed interface Derivation {
         @Override
         public Proposition conclusion(Conclusion numbering) {
             return new Proposition.Always(holds);
+        }
+    }
+
+    /**
+     * {@code step}, read off an expression through names that stood for elements of containers
+     * ({@code names}): what it states of a value at an element's position is about the element its
+     * name stood for ({@link ReadThroughNames}).
+     *
+     * <p>A step and not a note beside one, so that whoever concludes the derivation — the reading
+     * that tries candidates, the one that files what a body states, the one that asks again on each
+     * application — concludes the same values. Told nowhere, a part at an element's position would
+     * be the one value at the position, and two names for two elements of one container one value.
+     */
+    record ReadThrough(Derivation step, ElementsNamed names) implements Derivation {
+
+        public ReadThrough {
+            Objects.requireNonNull(step, "a step is read through names");
+            if (names == null || names.isEmpty()) {
+                throw new IllegalArgumentException("a step read through no name is that step");
+            }
+        }
+
+        /** {@code step}, read through {@code names} — {@code step} itself where they are none. */
+        public static Derivation of(Derivation step, ElementsNamed names) {
+            return names.isEmpty() ? step : new ReadThrough(step, names);
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.readThrough(step, names);
+        }
+
+        /** It states what its step states, of the values the names stood for. */
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(step);
+        }
+    }
+
+    /**
+     * {@code step}, what a quantifier or a count over {@code container} states of the element it
+     * goes over, held to that element being its own: {@code given} are the elements the names
+     * free in the call that goes over it stood for, the names it was handed from outside.
+     *
+     * <p>At the element's position a name it was not given is one its own closures bound, read
+     * through a call inside it, and is its element whatever it was called; a name it was given is
+     * another element of the container, which a statement of its element has no place for, and
+     * that part is a part nothing read ({@link ReadThroughNames#ownedBy}). Held by the call that
+     * knows which names it was handed, and not guessed from where a name stands.
+     */
+    record OfItsOwnElement(DecisionSubject container, ElementsNamed given, Derivation step)
+            implements Derivation {
+
+        public OfItsOwnElement {
+            Objects.requireNonNull(container, "an element is of a container");
+            Objects.requireNonNull(given, "a call was handed some names or none");
+            Objects.requireNonNull(step, "what is stated of the element");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.ofItsOwnElement(container, given, step);
+        }
+
+        /** It states what its step states, of the element it goes over. */
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(step);
+        }
+    }
+
+    /**
+     * {@code step}, past the names it was read through ({@link ReadThrough}) and the element it is
+     * held to ({@link OfItsOwnElement}): the rule that made it, for a reader that asks which rule
+     * that was.
+     */
+    static Derivation readOff(Derivation step) {
+        Derivation out = step;
+        while (true) {
+            if (out instanceof ReadThrough(Derivation read, var _)) {
+                out = read;
+            } else if (out instanceof OfItsOwnElement(var _, var _, Derivation read)) {
+                out = read;
+            } else {
+                return out;
+            }
         }
     }
 

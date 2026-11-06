@@ -1,5 +1,6 @@
 package souther.compiler.meaning;
 
+import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.types.ModelOccurrence;
@@ -125,6 +126,31 @@ public final class Conclusion {
      */
     public static Conclusion reusing() {
         return new Conclusion(new Shared(Optional.empty(), true), Map.of());
+    }
+
+    /**
+     * {@code element}, what a quantifier over {@code container} says of its element, where no call
+     * said which names it was handed: every part at that element told a name a part nothing read
+     * ({@link ReadThroughNames#ownedBy}).
+     */
+    Proposition ownedBy(DecisionSubject container, Proposition element) {
+        return ReadThroughNames.ownedBy(container, _ -> true, element, this::twoElementsAsOne);
+    }
+
+    /** What {@code step} concludes of the element of {@code container}, held to being the
+     *  element of a call handed {@code given} ({@link Derivation.OfItsOwnElement}). */
+    Proposition ofItsOwnElement(DecisionSubject container, ElementsNamed given, Derivation step) {
+        return ReadThroughNames.ownedBy(container, given::stoodFor, of(step),
+                this::twoElementsAsOne);
+    }
+
+    /**
+     * What {@code step} concludes, read through {@code names} ({@link Derivation.ReadThrough}):
+     * each number and subject at an element of a container they hold told the name that stood
+     * for it, and a part at one more than one name stood for a part nothing read.
+     */
+    Proposition readThrough(Derivation step, ElementsNamed names) {
+        return ReadThroughNames.readThrough(of(step), names, this::twoElementsAsOne);
     }
 
     /** This concluding, with what {@code carried} stands for supposed to have come out as
@@ -407,7 +433,16 @@ public final class Conclusion {
 
     /** What {@code how} concludes, beside {@code how}: the one way a meaning is made. */
     public MeaningsOfABody.Meaning meaningOf(Derivation how) {
-        return new MeaningsOfABody.Meaning(of(how), how);
+        return new MeaningsOfABody.Meaning(atOneValueEach(of(how)), how);
+    }
+
+    /**
+     * {@code stated}, as it is handed to whoever reads it at positions: holding one value at each
+     * element's position, a part reading another a part nothing read
+     * ({@link ReadThroughNames#oneValueAtEachElement}).
+     */
+    public Proposition atOneValueEach(Proposition stated) {
+        return ReadThroughNames.oneValueAtEachElement(stated, this::twoElementsAsOne);
     }
 
     /** What {@code step} concluded the last time it was concluded here, or null where it was not. */
@@ -422,9 +457,10 @@ public final class Conclusion {
      * derivation concludes is made here, so no reading of two elements reaches a reader as one.
      */
     Proposition someElement(DecisionSubject container, Proposition element) {
-        return Proposition.Some.quantifiesOver(container, element)
+        Proposition owned = ownedBy(container, element);
+        return Proposition.Some.quantifiesOver(container, owned)
                 ? twoElementsAsOne()
-                : new Proposition.Some(container, element, true);
+                : new Proposition.Some(container, owned, true);
     }
 
     /**

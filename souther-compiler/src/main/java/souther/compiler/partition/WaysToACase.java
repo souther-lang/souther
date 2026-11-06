@@ -179,8 +179,8 @@ final class WaysToACase {
         List<OnTheWay> out = new ArrayList<>(putOn.size());
         for (int at = 0; at < putOn.size(); at++) {
             OnTheWay entry = putOn.get(at);
-            if (!(entry instanceof OnTheWay.TakenIn(var _, RowDemand.ATruth(TermPath of, var _))
-                    && aloneIn(of, putOn, at))) {
+            if (!(entry instanceof OnTheWay.TakenIn(var _, RowDemand.ATruth(TermPath of, var _),
+                    var _) && aloneIn(of, putOn, at))) {
                 out.add(entry);
             }
         }

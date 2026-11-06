@@ -6101,6 +6101,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         + " which a row stands in rather than writes";
                 case A_NODE_BELOW_WHAT_A_ROW_WRITES -> "a search that some node further down"
                         + " than a row is written meets the condition";
+                case ANOTHER_ELEMENT_THAN_THE_WAY_HOLDS -> "a condition on another element of a"
+                        + " container than the one the rest of the way is about";
                 case A_PLACE_THE_PATH_DOES_NOT_READ -> "a condition on a place the path does not"
                         + " read";
                 case A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT -> "a value being none of some cases,"
@@ -7044,82 +7046,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         switch (why) {
             case WhyNotTaken.MeaningUnread(WhyUnread unread) -> {
                 out.put("kind", "meaning_unread");
-                out.put("reason", switch (unread) {
-                    case WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place place) ->
-                            switch (place) {
-                                case CONTAINER -> "container_at_no_position";
-                                case VALUE -> "value_at_no_position";
-                                case STRING -> "string_at_no_position";
-                                case SCRUTINEE -> "scrutinee_at_no_position";
-                                case SUBJECT -> "subject_at_no_position";
-                            };
-                    case WhyUnread.NoMeasureOfItsSize _ -> "no_measure_of_its_size";
-                    case WhyUnread.OutsideTheLinearFragment _ -> "outside_the_linear_fragment";
-                    case WhyUnread.NotArithmetic _ -> "not_arithmetic";
-                    case WhyUnread.ANumberNotHeld _ -> "number_not_held";
-                    case WhyUnread.NoNumberOnARun _ -> "no_number_on_a_run";
-                    case WhyUnread.TwoElementsOfOneContainer _ -> "two_elements_of_one_container";
-                    case WhyUnread.NoLawFor _ -> "no_law_for_the_operation";
-                    case WhyUnread.NoWordsFor _ -> "no_words_for_what_it_comes_to";
-                    case WhyUnread.NotProvedOfItsBody _ -> "not_proved_of_its_body";
-                    case WhyUnread.NoFormOfWhatItAnswers _ -> "no_form_of_what_it_answers";
-                    case WhyUnread.ADateMovedByMonths _ -> "date_moved_by_months";
-                    case WhyUnread.APartOfADateMovedByMonths _ ->
-                            "part_of_a_date_moved_by_months";
-                    // A count of code points is a number of what the operation answered, and the
-                    // document's word for it is that one.
-                    case WhyUnread.ANumberOfWhatAnOperationAnswers _,
-                         WhyUnread.CodePointsOfWhatAnOperationAnswers _ ->
-                            "number_of_what_an_operation_answers";
-                    case WhyUnread.WhatARecursiveHelperAnswers _ ->
-                            "what_a_recursive_helper_answers";
-                    case WhyUnread.AClauseOfAnInvariant(var _, var how) -> switch (how) {
-                        case NO_FORM -> "clause_with_no_form";
-                        case A_FIELD_LEFT_OUT -> "clause_over_a_field_left_out";
-                    };
-                    case WhyUnread.AnInvariantNotReached _ -> "invariant_not_reached";
-                    case WhyUnread.InACalledBody(var what) -> switch (what) {
-                        case WHAT_ITS_DEPENDENCY_ANSWERS -> "called_body_asks_a_dependency";
-                        case ITSELF -> "called_body_reaches_itself";
-                        case AN_ANSWER_NOT_READ -> "called_body_not_read";
-                    };
-                    case WhyUnread.MoreReadingsThanAreMade _ -> "more_readings_than_are_made";
-                    case WhyUnread.MoreTotalReadingsThanAreMade _ ->
-                            "more_total_readings_than_are_made";
-                    case WhyUnread.MorePartsThanAreConcluded _ ->
-                            "more_parts_than_are_concluded";
-                    case WhyUnread.MoreWaysThanAreWrittenOut _ ->
-                            "more_ways_than_are_written_out";
-                    case WhyUnread.MoreElementsThanAreWrittenOut _ ->
-                            "more_elements_than_are_written_out";
-                    case WhyUnread.SeveralValuesNotGoneInto _ -> "several_values_not_gone_into";
-                    case WhyUnread.CopiesStateDifferentThings _ ->
-                            "copies_state_different_things";
-                    case WhyUnread.NotMetByTheReading _ -> "not_met_by_the_reading";
-                    case WhyUnread.WhichElementARunStopsAt _ ->
-                            "which_element_a_run_stops_at";
-                });
+                out.put("reason", meaningUnreadWord(unread));
             }
             case WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit limit) -> {
                 out.put("kind", "outside_domain");
-                out.put("reason", switch (limit) {
-                    case A_QUANTITY_ON_NO_ORDER -> "quantity_on_no_order";
-                    case A_PATH_KNOWS_NO_ALTERNATIVES -> "path_knows_no_alternatives";
-                    case AN_ANSWER_A_ROW_STANDS_IN -> "answer_a_row_stands_in";
-                    case A_NODE_BELOW_WHAT_A_ROW_WRITES -> "node_below_what_a_row_writes";
-                    case A_PLACE_THE_PATH_DOES_NOT_READ -> "place_the_path_does_not_read";
-                    case A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT -> "path_knows_no_case_a_value_is_not";
-                    case A_PATH_KNOWS_NO_SAMENESS_OF_VALUES -> "path_knows_no_sameness_of_values";
-                    case A_PATH_KNOWS_NO_STRING_INSIDE_ANOTHER ->
-                            "path_knows_no_string_inside_another";
-                    case A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER -> "path_knows_no_place_on_an_order";
-                    case A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS -> "path_knows_no_count_of_elements";
-                    case A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS ->
-                            "path_knows_no_number_over_elements";
-                    case A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN ->
-                            "path_holds_element_facts_as_written";
-                    case A_NUMBER_THE_PATH_CANNOT_HOLD -> "number_the_path_cannot_hold";
-                });
+                out.put("reason", outsideDomainWord(limit));
             }
             case WhyNotTaken.MoreWaysThanAreRead _ -> {
                 out.put("kind", "past_a_figure");
@@ -7135,6 +7066,78 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
         }
         return out;
+    }
+
+    /** The word a document writes for a condition whose meaning was not read, for
+     *  {@code unread}: what the schema's {@code meaning_unread} reasons are held to. */
+    public static String meaningUnreadWord(WhyUnread unread) {
+        return switch (unread) {
+            case WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place place) -> switch (place) {
+                case CONTAINER -> "container_at_no_position";
+                case VALUE -> "value_at_no_position";
+                case STRING -> "string_at_no_position";
+                case SCRUTINEE -> "scrutinee_at_no_position";
+                case SUBJECT -> "subject_at_no_position";
+            };
+            case WhyUnread.NoMeasureOfItsSize _ -> "no_measure_of_its_size";
+            case WhyUnread.OutsideTheLinearFragment _ -> "outside_the_linear_fragment";
+            case WhyUnread.NotArithmetic _ -> "not_arithmetic";
+            case WhyUnread.ANumberNotHeld _ -> "number_not_held";
+            case WhyUnread.NoNumberOnARun _ -> "no_number_on_a_run";
+            case WhyUnread.TwoElementsOfOneContainer _ -> "two_elements_of_one_container";
+            case WhyUnread.NoLawFor _ -> "no_law_for_the_operation";
+            case WhyUnread.NoWordsFor _ -> "no_words_for_what_it_comes_to";
+            case WhyUnread.NotProvedOfItsBody _ -> "not_proved_of_its_body";
+            case WhyUnread.NoFormOfWhatItAnswers _ -> "no_form_of_what_it_answers";
+            case WhyUnread.ADateMovedByMonths _ -> "date_moved_by_months";
+            case WhyUnread.APartOfADateMovedByMonths _ -> "part_of_a_date_moved_by_months";
+            // A count of code points is a number of what the operation answered, and the
+            // document's word for it is that one.
+            case WhyUnread.ANumberOfWhatAnOperationAnswers _,
+                 WhyUnread.CodePointsOfWhatAnOperationAnswers _ ->
+                    "number_of_what_an_operation_answers";
+            case WhyUnread.WhatARecursiveHelperAnswers _ -> "what_a_recursive_helper_answers";
+            case WhyUnread.AClauseOfAnInvariant(var _, var how) -> switch (how) {
+                case NO_FORM -> "clause_with_no_form";
+                case A_FIELD_LEFT_OUT -> "clause_over_a_field_left_out";
+            };
+            case WhyUnread.AnInvariantNotReached _ -> "invariant_not_reached";
+            case WhyUnread.InACalledBody(var what) -> switch (what) {
+                case WHAT_ITS_DEPENDENCY_ANSWERS -> "called_body_asks_a_dependency";
+                case ITSELF -> "called_body_reaches_itself";
+                case AN_ANSWER_NOT_READ -> "called_body_not_read";
+            };
+            case WhyUnread.MoreReadingsThanAreMade _ -> "more_readings_than_are_made";
+            case WhyUnread.MoreTotalReadingsThanAreMade _ -> "more_total_readings_than_are_made";
+            case WhyUnread.MorePartsThanAreConcluded _ -> "more_parts_than_are_concluded";
+            case WhyUnread.MoreWaysThanAreWrittenOut _ -> "more_ways_than_are_written_out";
+            case WhyUnread.MoreElementsThanAreWrittenOut _ -> "more_elements_than_are_written_out";
+            case WhyUnread.SeveralValuesNotGoneInto _ -> "several_values_not_gone_into";
+            case WhyUnread.CopiesStateDifferentThings _ -> "copies_state_different_things";
+            case WhyUnread.NotMetByTheReading _ -> "not_met_by_the_reading";
+            case WhyUnread.WhichElementARunStopsAt _ -> "which_element_a_run_stops_at";
+        };
+    }
+
+    /** The word a document writes for a condition the reader's domain has no words for, for
+     *  {@code limit}: what the schema's {@code outside_domain} reasons are held to. */
+    public static String outsideDomainWord(WhyNotTaken.DomainLimit limit) {
+        return switch (limit) {
+            case A_QUANTITY_ON_NO_ORDER -> "quantity_on_no_order";
+            case A_PATH_KNOWS_NO_ALTERNATIVES -> "path_knows_no_alternatives";
+            case AN_ANSWER_A_ROW_STANDS_IN -> "answer_a_row_stands_in";
+            case A_NODE_BELOW_WHAT_A_ROW_WRITES -> "node_below_what_a_row_writes";
+            case ANOTHER_ELEMENT_THAN_THE_WAY_HOLDS -> "another_element_than_the_way_holds";
+            case A_PLACE_THE_PATH_DOES_NOT_READ -> "place_the_path_does_not_read";
+            case A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT -> "path_knows_no_case_a_value_is_not";
+            case A_PATH_KNOWS_NO_SAMENESS_OF_VALUES -> "path_knows_no_sameness_of_values";
+            case A_PATH_KNOWS_NO_STRING_INSIDE_ANOTHER -> "path_knows_no_string_inside_another";
+            case A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER -> "path_knows_no_place_on_an_order";
+            case A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS -> "path_knows_no_count_of_elements";
+            case A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS -> "path_knows_no_number_over_elements";
+            case A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN -> "path_holds_element_facts_as_written";
+            case A_NUMBER_THE_PATH_CANNOT_HOLD -> "number_the_path_cannot_hold";
+        };
     }
 
     /**

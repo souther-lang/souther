@@ -35,11 +35,21 @@ public sealed interface DecisionAtom extends Quantity {
         return new LinearForm<>(form.constant(), coefs);
     }
 
-    /** A number of the behavior's input. */
-    record OfTheInput(NumericTerm term) implements DecisionAtom {
+    /**
+     * A number of the behavior's input.
+     *
+     * @param identity which value at the term's position it is: two names for two elements of one
+     *                 container read one position, and are two numbers
+     */
+    record OfTheInput(NumericTerm term, ValueIdentity identity) implements DecisionAtom {
+
+        /** The number at {@code term}, read through no name for an element. */
+        public OfTheInput(NumericTerm term) {
+            this(term, ValueIdentity.AT_THE_POSITION);
+        }
 
         public OfTheInput {
-            if (term == null) {
+            if (term == null || identity == null) {
                 throw new IllegalArgumentException("a number of the input is some term");
             }
         }
@@ -51,12 +61,13 @@ public sealed interface DecisionAtom extends Quantity {
 
         @Override
         public Spelling spelling() {
-            return term.spelling();
+            return identity instanceof ValueIdentity.AtThePosition ? term.spelling()
+                    : Spelling.of(term.spelling(), identity.spelled());
         }
 
         @Override
         public String spelled() {
-            return term.toString();
+            return term + identity.spelled();
         }
 
         @Override

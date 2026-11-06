@@ -180,7 +180,7 @@ class HowManyASearchAnswersIsCountedOverTheNodesItReachesTest {
         Relation.Affine affine = assertInstanceOf(Relation.Affine.class, compared.relation());
         Map<RunSource, ExactRatio> out = new LinkedHashMap<>();
         affine.form().coefs().forEach((number, by) -> {
-            if (number instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOver over)
+            if (number instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOver over, var _)
                     && over.source() instanceof RunSource.ReachableNodes) {
                 assertInstanceOf(TakenAs.HowManyItHolds.class, over.takenAs());
                 out.put(over.source(), by);

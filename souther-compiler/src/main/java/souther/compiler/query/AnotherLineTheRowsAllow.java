@@ -1455,7 +1455,7 @@ public sealed interface AnotherLineTheRowsAllow {
                     // position is an enumeration's, its number is the case's place on the order,
                     // and the narrowing is the places it leaves out: a step moving it still
                     // arrives where the place it moves to is none of those.
-                    case OnTheWay.Narrowed(var _, var _, var _, var onItsOrder) -> {
+                    case OnTheWay.Narrowed(var _, var _, var _, var onItsOrder, var _) -> {
                         for (TakenConstraint.AwayFrom hole : onItsOrder) {
                             if (Collections.disjoint(hole.terms(), moved)) {
                                 continue;
@@ -1466,7 +1466,7 @@ public sealed interface AnotherLineTheRowsAllow {
                             }
                         }
                     }
-                    case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken)) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken), var _) -> {
                         if (Collections.disjoint(taken.terms(), moved)) {
                             continue;   // the row's answer at it, unmoved
                         }
@@ -1480,26 +1480,26 @@ public sealed interface AnotherLineTheRowsAllow {
                     // element they are about, and which elements those are is nothing an input's
                     // numbers say — nor is whether an element is still the value it was compared
                     // with, once a number of either moved.
-                    case OnTheWay.TakenIn(var _, RowDemand.Exists exists) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.Exists exists, var _) -> {
                         if (movesAnyOf(exists.positions())) {
                             return false;
                         }
                     }
-                    case OnTheWay.TakenIn(var _, RowDemand.ForAll every) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.ForAll every, var _) -> {
                         if (movesAnyOf(every.positions())) {
                             return false;
                         }
                     }
                     // How many elements meet a statement, for the same reason: a step moving a
                     // number the statement reads may move which elements meet it.
-                    case OnTheWay.TakenIn(var _, RowDemand.SoMany many) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.SoMany many, var _) -> {
                         if (movesAnyOf(many.positions())) {
                             return false;
                         }
                     }
                     // What a division leaves of a form, worked out of the form where the input holds
                     // its numbers: still one of the remainders asked for, or the row turns away.
-                    case OnTheWay.TakenIn(var _, RowDemand.OnARemainder remainder) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.OnARemainder remainder, var _) -> {
                         if (Collections.disjoint(remainder.terms(), moved)) {
                             continue;
                         }
@@ -1515,21 +1515,21 @@ public sealed interface AnotherLineTheRowsAllow {
                     }
                     // Which of two values stands at a position, and a step moves numbers: what
                     // stands there is what the row had.
-                    case OnTheWay.TakenIn(var _, RowDemand.ATruth truth) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.ATruth truth, var _) -> {
                         if (movesAnyOf(truth.positions())) {
                             return false;
                         }
                     }
                     // Whether two positions hold one value, which a step moving a number of
                     // either may change.
-                    case OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth both) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth both, var _) -> {
                         if (movesAnyOf(both.positions())) {
                             return false;
                         }
                     }
                     // A statement no composer writes toward, which a step moving any number may
                     // turn: which numbers it turns on is the run's to say.
-                    case OnTheWay.TakenIn(var _, RowDemand.ForTheRun _) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.ForTheRun _, var _) -> {
                         if (!moved.isEmpty()) {
                             return false;
                         }

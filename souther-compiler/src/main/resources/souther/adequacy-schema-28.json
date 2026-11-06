@@ -4488,7 +4488,7 @@
     },
     "conditionNotReadReason": {
       "type": "object",
-      "description": "One reason a condition nothing read was not: which of the three kinds, and the word within it. The kinds are told apart by what lifts one — a rule of the reading of what a condition means, a wider domain, or a higher figure. `more_ways_than_are_read` is some or every element meeting the condition coming, taken apart, to more ways an element may meet it than a reading of one condition makes; `more_alternatives_than_are_tried` is a condition that is one of several things, whose parts a path takes alone to know which of them it leaves, coming — counted inside one another — to more parts than a reading of one condition takes alone; `more_choices_than_are_written_out` is a condition counting how many of some statements hold, taken apart into the choices of which of them hold, coming written out to more parts than a reader of them is handed. For none of them is anything about the model or about either domain short. Each `outside_domain` word names the reader whose domain stops: what a row is asked is written at the input's positions, so `answer_a_row_stands_in` is what a dependency answered and `node_below_what_a_row_writes` is a node a search reaches further down than a row is written; what a path knows is relations of numbers, truths and what every element was written to meet, about the places of the tree it walks, so the `path_` words and `place_the_path_does_not_read` are where that stops. `size_nothing_measures` and `position_the_reading_holds_no_place_for` are no longer written — every container a condition asks about has a size that is a number of the input, and the reading of the input holds every position a condition names — and a document of this version may still carry them.",
+      "description": "One reason a condition nothing read was not: which of the three kinds, and the word within it. The kinds are told apart by what lifts one — a rule of the reading of what a condition means, a wider domain, or a higher figure. `more_ways_than_are_read` is some or every element meeting the condition coming, taken apart, to more ways an element may meet it than a reading of one condition makes; `more_alternatives_than_are_tried` is a condition that is one of several things, whose parts a path takes alone to know which of them it leaves, coming — counted inside one another — to more parts than a reading of one condition takes alone; `more_choices_than_are_written_out` is a condition counting how many of some statements hold, taken apart into the choices of which of them hold, coming written out to more parts than a reader of them is handed. For none of them is anything about the model or about either domain short. Each `outside_domain` word names the reader whose domain stops: what a row is asked is written at the input's positions, so `answer_a_row_stands_in` is what a dependency answered and `node_below_what_a_row_writes` is a node a search reaches further down than a row is written; what a path knows is relations of numbers, truths and what every element was written to meet, about the places of the tree it walks, so the `path_` words and `place_the_path_does_not_read` are where that stops. `size_nothing_measures` and `position_the_reading_holds_no_place_for` are no longer written — every container a condition asks about has a size that is a number of the input, and the reading of the input holds every position a condition names — and a document of this version may still carry them. Nor is `path_knows_no_cases`: what a path has no words for is a value being none of some cases, written `path_knows_no_case_a_value_is_not`.",
       "required": [
         "kind",
         "reason"
@@ -4535,6 +4535,8 @@
                   "no_words_for_what_it_comes_to",
                   "not_proved_of_its_body",
                   "no_form_of_what_it_answers",
+                  "date_moved_by_months",
+                  "part_of_a_date_moved_by_months",
                   "number_of_what_an_operation_answers",
                   "what_a_recursive_helper_answers",
                   "clause_with_no_form",
@@ -4575,8 +4577,10 @@
                   "position_the_reading_holds_no_place_for",
                   "answer_a_row_stands_in",
                   "node_below_what_a_row_writes",
+                  "another_element_than_the_way_holds",
                   "place_the_path_does_not_read",
                   "path_knows_no_cases",
+                  "path_knows_no_case_a_value_is_not",
                   "path_knows_no_sameness_of_values",
                   "path_knows_no_string_inside_another",
                   "path_knows_no_place_on_an_order",

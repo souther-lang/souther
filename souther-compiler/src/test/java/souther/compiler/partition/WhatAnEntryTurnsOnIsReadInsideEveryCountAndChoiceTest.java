@@ -87,7 +87,7 @@ class WhatAnEntryTurnsOnIsReadInsideEveryCountAndChoiceTest {
     }
 
     private static OnTheWay truth(TermPath at, boolean holds) {
-        return new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, holds));
+        return new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, holds), NamedElements.NONE);
     }
 
     private static OnTheWay declined() {
@@ -106,6 +106,7 @@ class WhatAnEntryTurnsOnIsReadInsideEveryCountAndChoiceTest {
         Proposition stated = new Proposition.Compared(new Relation.Affine(
                 new LinearForm<>(ExactRatio.of(-1), Map.of(n, ExactRatio.ONE)), Rel.GE), true);
         return new OnTheWay.TakenIn(WHERE, new RowDemand.ForTheRun(stated,
-                RowDemand.NoComposer.A_REMAINDER_OF_A_FORM, List.of(), Optional.empty()));
+                RowDemand.NoComposer.A_REMAINDER_OF_A_FORM, List.of(), Optional.empty()),
+                NamedElements.NONE);
     }
 }

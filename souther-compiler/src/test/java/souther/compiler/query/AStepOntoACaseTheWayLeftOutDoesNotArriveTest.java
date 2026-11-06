@@ -8,6 +8,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.ConditionReportAnchor;
+import souther.compiler.partition.NamedElements;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.partition.WayToTheBorder;
@@ -51,7 +52,8 @@ class AStepOntoACaseTheWayLeftOutDoesNotArriveTest {
                 List.of(leaf("Low"), leaf("Mid"))));
         return new WayToTheBorder(List.of(new OnTheWay.Narrowed(
                 new ConditionReportAnchor.WhereTheReadingMetIt("m", MET), LEVEL.refine(lowish),
-                List.of(), List.of(new TakenConstraint.AwayFrom(THE_LEVEL, HIGH)))));
+                List.of(), List.of(new TakenConstraint.AwayFrom(THE_LEVEL, HIGH)),
+                NamedElements.NONE)));
     }
 
     @Test

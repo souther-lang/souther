@@ -184,7 +184,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             List<NumericTerm> out = new ArrayList<>();
             for (Quantity each : of) {
                 List<NumericTerm> these = switch (each) {
-                    case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                    case DecisionAtom.OfTheInput(NumericTerm term, var _) -> List.of(term);
                     case WhatAnOperationAnswers inner -> inner.positionsItIsMadeOf();
                     default -> throw new IllegalStateException("held out by the constructor");
                 };
@@ -264,7 +264,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         /** The numbers of the input the string is made of, each once. */
         public List<NumericTerm> positionsItIsMadeOf() {
             return switch (string) {
-                case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                case DecisionAtom.OfTheInput(NumericTerm term, var _) -> List.of(term);
                 case WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
                 default -> throw new IllegalStateException("held out by the constructor");
             };
@@ -323,7 +323,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         /** The numbers of the input the string is made of, each once. */
         public List<NumericTerm> positionsItIsMadeOf() {
             return switch (string) {
-                case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                case DecisionAtom.OfTheInput(NumericTerm term, var _) -> List.of(term);
                 case WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
                 default -> throw new IllegalStateException("held out by the constructor");
             };
@@ -391,7 +391,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             List<NumericTerm> out = new ArrayList<>();
             for (Quantity each : List.of(value, string)) {
                 List<NumericTerm> these = switch (each) {
-                    case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                    case DecisionAtom.OfTheInput(NumericTerm term, var _) -> List.of(term);
                     case WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
                     default -> throw new IllegalStateException("held out by the constructor");
                 };
@@ -476,15 +476,16 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         /**
          * The dividend as a form of the input's numbers — or null where some value of it is read
-         * off a binding, and so is no number a row holds.
+         * off a binding, and so is no number a row holds, or where it weighs two values at one
+         * position, two elements of one container, which a form over positions holds as one.
          */
         public LinearForm<NumericTerm> overTheInput() {
             Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
             for (Map.Entry<Quantity, ExactRatio> each : dividend.coefs().entrySet()) {
-                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))) {
+                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _))
+                        || coefs.put(term, each.getValue()) != null) {
                     return null;
                 }
-                coefs.put(term, each.getValue());
             }
             return new LinearForm<>(dividend.constant(), coefs);
         }
@@ -494,7 +495,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         public Map<NumericTerm, ExactRatio> numbersOfTheInput() {
             Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>();
             dividend.coefs().forEach((each, by) -> {
-                if (each instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+                if (each instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)) {
                     out.put(term, by);
                 }
             });
@@ -528,15 +529,26 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             out.add("floorMod(");
             LinearForm<NumericTerm> ofTheInput = overTheInput();
             List<Map.Entry<Object, ExactRatio>> terms = new ArrayList<>();
+            // Each number spelled with which value at its position it is: two elements' numbers
+            // are two numbers, and spelled alike they would be one wherever a spelling is a key.
+            Map<NumericTerm, ValueIdentity> which = new LinkedHashMap<>();
+            dividend.coefs().keySet().forEach(each -> {
+                if (each instanceof DecisionAtom.OfTheInput(var term, var identity)) {
+                    which.put(term, identity);
+                }
+            });
             if (ofTheInput != null) {
                 NumericTerms.entriesInOrder(ofTheInput.coefs()).forEach(each ->
-                        terms.add(Map.entry(each.getKey().spelling(), each.getValue())));
+                        terms.add(Map.entry(Spelling.of(each.getKey().spelling(),
+                                which.get(each.getKey()).spelled()), each.getValue())));
             } else {
                 dividend.coefs().entrySet().stream()
                         .sorted(Comparator.comparing(each -> each.getKey().spelled()))
                         .forEach(each -> terms.add(Map.entry(
-                                each.getKey() instanceof DecisionAtom.OfTheInput(var term)
-                                        ? term.spelling() : each.getKey().spelling(),
+                                each.getKey() instanceof DecisionAtom.OfTheInput(var term,
+                                        var identity)
+                                        ? Spelling.of(term.spelling(), identity.spelled())
+                                        : each.getKey().spelling(),
                                 each.getValue())));
             }
             terms.forEach(each -> {
@@ -580,17 +592,26 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * @param divisor   the number it is divided by
      */
     record RemainderByAnInput(ValueName operation, NumericTerm.FromOnePosition dividend,
-                              NumericTerm.FromOnePosition divisor) implements Quantity {
+                              ValueIdentity dividendIs, NumericTerm.FromOnePosition divisor,
+                              ValueIdentity divisorIs) implements Quantity {
 
         public RemainderByAnInput {
-            if (operation == null || dividend == null || divisor == null
-                    || dividend.position().equals(divisor.position())
+            if (operation == null || dividend == null || divisor == null || dividendIs == null
+                    || divisorIs == null || dividend.position().equals(divisor.position())
                     || DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(operation)
                             .isEmpty()) {
                 throw new IllegalArgumentException("a remainder by an input is a floor remainder"
                         + " of one number of the input by another of a different position: "
                         + operation + " of " + dividend + " by " + divisor);
             }
+        }
+
+        /** The remainder of the numbers at the two positions, read through no name for an
+         *  element. */
+        public RemainderByAnInput(ValueName operation, NumericTerm.FromOnePosition dividend,
+                                  NumericTerm.FromOnePosition divisor) {
+            this(operation, dividend, ValueIdentity.AT_THE_POSITION, divisor,
+                    ValueIdentity.AT_THE_POSITION);
         }
 
         /** Both numbers, the dividend first. */
@@ -600,7 +621,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return "floorMod(" + dividend + ", " + divisor + ")";
+            return "floorMod(" + dividend + dividendIs.spelled() + ", " + divisor
+                    + divisorIs.spelled() + ")";
         }
 
         @Override
@@ -629,11 +651,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * @param one   the factor first in the order of terms
      * @param other the other factor
      */
-    record ProductOfTwo(NumericTerm.FromOnePosition one, NumericTerm.FromOnePosition other)
+    record ProductOfTwo(NumericTerm.FromOnePosition one, ValueIdentity oneIs,
+                        NumericTerm.FromOnePosition other, ValueIdentity otherIs)
             implements Quantity {
 
         public ProductOfTwo {
-            if (one == null || other == null) {
+            if (one == null || other == null || oneIs == null || otherIs == null) {
                 throw new IllegalArgumentException("a product is of two numbers");
             }
             if (one.position().equals(other.position())) {
@@ -641,9 +664,20 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                         + " relation between two: " + one + " and " + other);
             }
             List<NumericTerm> ordered = NumericTerms.inOrder(List.of(one, other));
-            NumericTerm.FromOnePosition first = (NumericTerm.FromOnePosition) ordered.get(0);
-            other = first == one ? other : one;
-            one = first;
+            if (ordered.get(0) != one) {
+                NumericTerm.FromOnePosition first = other;
+                ValueIdentity firstIs = otherIs;
+                other = one;
+                otherIs = oneIs;
+                one = first;
+                oneIs = firstIs;
+            }
+        }
+
+        /** The product of the numbers at the two positions, read through no name for an
+         *  element. */
+        public ProductOfTwo(NumericTerm.FromOnePosition one, NumericTerm.FromOnePosition other) {
+            this(one, ValueIdentity.AT_THE_POSITION, other, ValueIdentity.AT_THE_POSITION);
         }
 
         /** Both factors, in their order. */
@@ -653,7 +687,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return one + " * " + other;
+            return one + oneIs.spelled() + " * " + other + otherIs.spelled();
         }
 
         @Override
@@ -846,7 +880,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         /** Whether this is the value at {@code place} of every element. */
         default boolean isAt(TermPath place) {
-            return this instanceof AtAPlace(DecisionSubject.AnInput(TermPath at))
+            return this instanceof AtAPlace(DecisionSubject.AnInput(TermPath at, var _))
                     && at.equals(place);
         }
 
@@ -883,7 +917,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
             @Override
             public List<TermPath> places() {
-                return at instanceof DecisionSubject.AnInput(TermPath path) ? List.of(path)
+                return at instanceof DecisionSubject.AnInput(TermPath path, var _) ? List.of(path)
                         : List.of();
             }
 
@@ -1106,7 +1140,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         private static DecisionSubject inside(DecisionSubject container, TheValue ofTheElement) {
             DecisionSubject where = ofTheElement.where();
             if (!(container instanceof DecisionSubject.AnInput)
-                    || !(where instanceof DecisionSubject.AnInput(TermPath at))
+                    || !(where instanceof DecisionSubject.AnInput(TermPath at, var _))
                     || !HowManyDifferentAcross.ofAContainerInside(container, where)) {
                 return null;
             }
@@ -1197,9 +1231,9 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                  */
                 public static boolean answersAlike(DecisionSubject container,
                                                    TheValue ofTheElement, Proposition stated) {
-                    if (!(container instanceof DecisionSubject.AnInput(TermPath held))
+                    if (!(container instanceof DecisionSubject.AnInput(TermPath held, var _))
                             || !(ofTheElement.where() instanceof DecisionSubject.AnInput(
-                                    TermPath where))) {
+                                    TermPath where, var _))) {
                         return false;
                     }
                     TermPath element = switch (ofTheElement) {
@@ -1270,7 +1304,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 /** Whether {@code subject} is the value itself or a place of the input outside
                  *  the elements. */
                 private static boolean alike(DecisionSubject subject, Apart apart) {
-                    return subject instanceof DecisionSubject.AnInput(TermPath at)
+                    return subject instanceof DecisionSubject.AnInput(TermPath at, var _)
                             && (apart.isTheValue(at) || !at.isAtOrUnder(apart.outermost()));
                 }
 
@@ -1278,7 +1312,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                  *  elements of one container, one gathered under it of every element, or a number
                  *  of the input outside the elements. */
                 private static boolean alike(Quantity number, Apart apart) {
-                    if (!(number instanceof DecisionAtom.OfTheInput(NumericTerm term))) {
+                    if (!(number instanceof DecisionAtom.OfTheInput(NumericTerm term, var _))) {
                         return false;
                     }
                     if (term instanceof NumericTerm.Multiplicity often) {

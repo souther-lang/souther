@@ -780,7 +780,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " computed. The figure it was is the answer, and the stop of the"
                             + " call names it"),
             Map.entry("souther.compiler.partition.Pullback#<init>("
-                            + "Lsouther/compiler/inputs/InputReading;Ljava/util/Optional;)V",
+                            + "Lsouther/compiler/inputs/InputReading;Ljava/util/Optional;"
+                            + "Lsouther/compiler/inputs/ElementsNamed;)V",
                     "how many readings one reading of a condition makes in all, which every split"
                             + " takes its readings from and past which it says which figure"),
             // What a step of a reading concludes, written out. Past the figure the step is

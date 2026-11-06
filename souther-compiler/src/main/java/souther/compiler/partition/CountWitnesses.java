@@ -143,7 +143,7 @@ public final class CountWitnesses {
     public static Sought of(Quantity.HowManyMeet count, String behavior, InputReading read,
                             List<List<FixtureTemplate>> named, List<List<ObservedValue>> taken,
                             Building building, Running running) {
-        if (!(count.container() instanceof DecisionSubject.AnInput(TermPath container))
+        if (!(count.container() instanceof DecisionSubject.AnInput(TermPath container, var _))
                 || !container.steps().isEmpty()
                 || !read.domain().holdsAnElementOverAgain(container, read.rules())) {
             return Sought.NOTHING;
@@ -319,7 +319,7 @@ public final class CountWitnesses {
     public static Optional<Integer> metOn(Quantity.HowManyMeet count, String behavior,
                                           InputReading read, List<FixtureTemplate> inputs,
                                           Building building) {
-        if (!(count.container() instanceof DecisionSubject.AnInput(TermPath container))
+        if (!(count.container() instanceof DecisionSubject.AnInput(TermPath container, var _))
                 || !container.steps().isEmpty()) {
             return Optional.empty();
         }
@@ -427,9 +427,9 @@ public final class CountWitnesses {
     private static void sameValuesIn(Proposition stated, TermPath element,
                                      Map<List<String>, TermPath> into) {
         switch (stated) {
-            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
-                                       DecisionSubject.AnInput(TermPath other), boolean holds,
-                                       var _) when holds -> {
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
+                                       DecisionSubject.AnInput(TermPath other, var _),
+                                       boolean holds, var _) when holds -> {
                 List<String> inOne = fieldsBelow(element, one);
                 List<String> inOther = fieldsBelow(element, other);
                 if (inOne != null && inOther == null && !other.isAtOrUnder(element)) {

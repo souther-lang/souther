@@ -78,7 +78,7 @@ class AWayWrittenAlikeThatLeftADemandUnchosenSaysWhyTest {
                 new RowDemand.AnElementMeets(List.of(one, other)),
                 new RowDemand.Relational(new TakenConstraint.Affine(
                         LinearForm.atom(new NumericTerm.ValueOf(container.then("n"))), Rel.GE)),
-                Optional.empty()));
+                Optional.empty()), NamedElements.NONE);
     }
 
     private static RowDemand.ATruth truth(TermPath container, String field, boolean held) {

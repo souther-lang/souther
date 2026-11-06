@@ -931,7 +931,7 @@ class HowLongThePathASearchAnswersIsReadTest {
         Map<RunSource, ExactRatio> out = new LinkedHashMap<>();
         List<Quantity> others = new ArrayList<>();
         affine.form().coefs().forEach((number, by) -> {
-            if (number instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOver over)
+            if (number instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOver over, var _)
                     && over.source() instanceof RunSource.SearchedLine) {
                 assertInstanceOf(TakenAs.HowManyItHolds.class, over.takenAs());
                 out.put(over.source(), by);

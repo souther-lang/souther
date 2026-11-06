@@ -531,7 +531,7 @@ public final class AnswerAsAnInput {
         Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
         ExactRatio constant = form.constant();
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
-            if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+            if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)) {
                 ExactRatio value = pinned.get(term);
                 if (value != null) {
                     ExactRatio before = constant;

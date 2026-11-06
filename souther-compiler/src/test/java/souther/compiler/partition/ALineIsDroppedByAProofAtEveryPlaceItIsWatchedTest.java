@@ -798,7 +798,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
 
     /** That the {@code Bool} at {@code at} is {@code held}, put on the way. */
     private static OnTheWay truth(TermPath at, boolean held) {
-        return new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, held));
+        return new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, held), NamedElements.NONE);
     }
 
     /** A condition this reading has no words for, which may ask anything of a row. */

@@ -46,6 +46,8 @@ import souther.compiler.reach.WhatMayStopARun;
 import souther.compiler.reach.WhyUnsettled;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.ReadThroughNames;
+import souther.compiler.meaning.ValueIdentity;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
@@ -794,7 +796,10 @@ public final class PathReachability {
         MeaningsOfABody.Site site = new MeaningsOfABody.Site(construct.get(), part);
         Optional<Proposition> stated = meanings.at(site);
         if (stated.isPresent()) {
-            return engine.assuming(stated.get(), cond, k, in, positive,
+            // What the site states was told the names of the copy it was read off; this copy
+            // reads the same elements through its own.
+            return engine.assuming(ReadThroughNames.toldAgain(stated.get(),
+                            reads.elementsNamedIn(cond, newtypes)), cond, k, in, positive,
                     readBy(cond, reads));
         }
         // A body with no analysis to read it off has its conditions read as they stand here,
@@ -813,20 +818,31 @@ public final class PathReachability {
      *
      * <p>Only what is read where the condition stands. Under a binding the condition makes, a name
      * is one the bindings in force here say nothing of, so nothing below one is taken.
+     *
+     * <p>Each by which value at the position it reads. A position inside a container's elements
+     * says an element and not which one, so {@code a.n} and {@code b.n} over one container are one
+     * position and two values, and a proposition about one is told which it is about
+     * ({@link ValueIdentity}). An expression reading an element more than one name stood for is
+     * no one value, and is no place.
      */
     private MeaningAssumptions.InputPlaces readBy(Core cond, InputReads reads) {
-        Map<TermPath, Core> positions = new HashMap<>();
+        Map<MeaningAssumptions.ReadAt, Core> positions = new HashMap<>();
         Map<MeaningAssumptions.AnswerPlace, Core> answers = new HashMap<>();
         gatherPlaces(cond, reads, positions, answers);
         return places.readBy(positions, answers);
     }
 
-    private void gatherPlaces(Core standing, InputReads reads, Map<TermPath, Core> positions,
+    private void gatherPlaces(Core standing, InputReads reads,
+                              Map<MeaningAssumptions.ReadAt, Core> positions,
                               Map<MeaningAssumptions.AnswerPlace, Core> answers) {
         Core e = Core.withoutStanding(standing);
         for (Core each : Core.subexpressionsAt(e)) {
             if (reads.pathOf(each, newtypes) instanceof PathResolution.At(TermPath at)) {
-                positions.putIfAbsent(at, each);
+                ValueIdentity identity = ReadThroughNames.identityAt(at,
+                        reads.elementsNamedIn(each, newtypes));
+                if (identity != null) {
+                    positions.putIfAbsent(new MeaningAssumptions.ReadAt(at, identity), each);
+                }
             } else if (reads.answerAt(each, symbols, newtypes) instanceof InputReads.AnAnswerAt(
                     var evaluation, var _, var _, var steps)) {
                 answers.putIfAbsent(new MeaningAssumptions.AnswerPlace(evaluation, steps), each);

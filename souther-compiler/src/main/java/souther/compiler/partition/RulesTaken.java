@@ -396,7 +396,8 @@ public final class RulesTaken {
             // not read off the values, which would be evaluating the body a second time.
             case ShownBy.NothingIsRecorded(var condition) -> switch (rule.at(condition)) {
                 case DecidedCondition.Stood(
-                        DecisionCondition.ATruth(DecisionSubject.AnInput(var at)), var held) ->
+                        DecisionCondition.ATruth(DecisionSubject.AnInput(var at, var _)),
+                        var held) ->
                         Optional.of(new ColumnWitness.AtAnInputTruth(at, held));
                 case null, default -> Optional.empty();
             };

@@ -65,7 +65,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
     private static final TermPath SHELF = TermPath.of("shelf");
 
     private static ContentsAsked asked(RowDemand.OfACondition demand) {
-        return ContentsAsked.of(List.of(new OnTheWay.TakenIn(WHERE, demand)));
+        return ContentsAsked.of(List.of(new OnTheWay.TakenIn(WHERE, demand, NamedElements.NONE)));
     }
 
     private static ContentsAsked everyKeyFiled() {

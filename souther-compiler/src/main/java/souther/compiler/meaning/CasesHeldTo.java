@@ -98,12 +98,14 @@ public final class CasesHeldTo {
                 }
                 yield out;
             }
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath of), CasesLeft cases,
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath of, var _), CasesLeft cases,
                     boolean holds, var _) -> one(of, holds ? new Held.OneOf(cases)
                     : new Held.NoneOf(cases));
-            case Proposition.Present(DecisionSubject.AnInput(TermPath of), boolean holds, var _) ->
+            case Proposition.Present(DecisionSubject.AnInput(TermPath of, var _), boolean holds,
+                    var _) ->
                     one(of, new Held.OneOf(CasesLeft.of(Refinement.of(new Case.Presence(holds)))));
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath of), boolean holds, var _) ->
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath of, var _), boolean holds,
+                    var _) ->
                     one(of, new Held.ATruth(holds));
             // A count of statements holds no value to anything here: less than it may, never more.
             case Proposition.InCases _, Proposition.Present _, Proposition.Truth _,

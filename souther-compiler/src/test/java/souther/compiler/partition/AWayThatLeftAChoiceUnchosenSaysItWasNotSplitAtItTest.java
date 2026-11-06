@@ -127,7 +127,7 @@ class AWayThatLeftAChoiceUnchosenSaysItWasNotSplitAtItTest {
 
     private static OnTheWay truth(String field, boolean held) {
         return new OnTheWay.TakenIn(WHERE,
-                new RowDemand.ATruth(TermPath.of("r").then(field), held));
+                new RowDemand.ATruth(TermPath.of("r").then(field), held), NamedElements.NONE);
     }
 
     private static InputReading reading() {
