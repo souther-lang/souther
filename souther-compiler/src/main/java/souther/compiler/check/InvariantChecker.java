@@ -1012,7 +1012,8 @@ public final class InvariantChecker {
             }
             written.set(each.reading(), written.get(each.reading()).alsoWorkedOut(needs));
         }
-        if (workedOut.reachesNothing() && !k.reachesNothing()) {
+        if (c.engine.reachability().reachesNothing(workedOut)
+                && !c.engine.reachability().reachesNothing(k)) {
             k = workedOut;
             for (Written each : written) {
                 each.view().present().forEach(part -> {
@@ -4622,7 +4623,7 @@ public final class InvariantChecker {
      * and again in the walk, because the walk is itself where the conditions can come to contradict.
      */
     private Known entering(Core e, Known given, Denotations at, ContextMultiplicity copies) {
-        if (given.reachesNothing()) {
+        if (engine.reachability().reachesNothing(given)) {
             return given;
         }
         return walk(e, given, at, copies);
@@ -4655,8 +4656,9 @@ public final class InvariantChecker {
      * making one is a different thing to build — and what stood before them is what they still
      * agree on.
      */
-    private static Known carriedOnFrom(Entered before, List<Entered> ways) {
-        List<Entered> left = ways.stream().filter(w -> !w.known().reachesNothing()).toList();
+    private Known carriedOnFrom(Entered before, List<Entered> ways) {
+        List<Entered> left = ways.stream()
+                .filter(w -> !engine.reachability().reachesNothing(w.known())).toList();
         if (left.isEmpty()) {
             return before.known().reachingNothing();
         }
@@ -4680,7 +4682,7 @@ public final class InvariantChecker {
                 if (answers == null) {
                     Known left = entering(template, engine.nothingKnown(), engine.insideATemplate(),
                             ONE_READING);
-                    answers = !left.reachesNothing();
+                    answers = !engine.reachability().reachesNothing(left);
                     templateAnswers.put(template, answers);
                 }
                 // What the value constructs is judged once, where it is held, and what was learned
@@ -4715,7 +4717,7 @@ public final class InvariantChecker {
      * it in the same region is handed one.
      */
     private Known walk(Core e, Known k, Denotations at, ContextMultiplicity copies) {
-        if (k.reachesNothing()) {
+        if (engine.reachability().reachesNothing(k)) {
             return k;
         }
         // Standing as a wider type evaluates nothing, constructs nothing and settles nothing: what
@@ -4798,7 +4800,7 @@ public final class InvariantChecker {
                 // answered — so it is judged after them and under what they left, and not before
                 // them under what stood outside.
                 Known out = evaluating(made, k, at, copies);
-                if (out.reachesNothing()) {
+                if (engine.reachability().reachesNothing(out)) {
                     yield out;
                 }
                 // A construction the value fails wherever it is built is one that aborts, so what
@@ -4822,7 +4824,7 @@ public final class InvariantChecker {
                 // possible one. Its field values are walked on their own so a construction nested
                 // inside an argument is still an ordinary, aborting one.
                 Known out = evaluating(ic.construct(), k, at, copies);
-                if (out.reachesNothing()) {
+                if (engine.reachability().reachesNothing(out)) {
                     yield out;
                 }
                 // An attempt is the one construction a failing invariant does not abort: the
@@ -4830,7 +4832,7 @@ public final class InvariantChecker {
                 // about whether anything is reached — but one no way reaches is reached by nothing,
                 // and neither is what follows it.
                 out = carriedOn(out, judge(ic.construct(), out, at, true, copies));
-                if (out.reachesNothing()) {
+                if (engine.reachability().reachesNothing(out)) {
                     yield out;
                 }
                 // Reaching `then` is the construction having held, so the binding carries the type's
@@ -4885,7 +4887,7 @@ public final class InvariantChecker {
             }
             default -> evaluating(e, k, at, copies);
         };
-        if (evaluated.reachesNothing()) {
+        if (engine.reachability().reachesNothing(evaluated)) {
             return evaluated;
         }
         // Between the values this was computed from and what it answers, which is the one point the
@@ -4894,7 +4896,8 @@ public final class InvariantChecker {
         // the transition and is given to the continuation alone — this evaluation was walked, and a
         // construction standing among the values it was waiting on was judged on the way.
         Known carried = carriedOn(evaluated, completion.of(e, evaluated, at));
-        return carried.reachesNothing() ? carried : engine.answeredHere(e, carried, at);
+        return engine.reachability().reachesNothing(carried) ? carried
+                : engine.answeredHere(e, carried, at);
     }
 
     /**
@@ -4982,7 +4985,7 @@ public final class InvariantChecker {
                 out = walk(arg, out, at, copies);
             }
         }
-        if (handed == null || out.reachesNothing()) {
+        if (handed == null || engine.reachability().reachesNothing(out)) {
             // Nothing leaves the arguments, so the operation is never entered and the closure is
             // never applied.
             return out;

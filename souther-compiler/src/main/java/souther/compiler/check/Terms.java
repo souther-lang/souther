@@ -406,19 +406,22 @@ final class Terms {
      * not the edge that stands for it.
      */
     Terms(Of reading, RuleReadingContext ruleReading, ValueTemplates templates) {
-        this(reading, ruleReading, templates, ElementBindings.NONE);
+        this(reading, ruleReading, templates, ElementBindings.NONE, ReachabilityAnswers.NONE);
     }
 
     /**
      * The same, over a tree whose walks the expansions that wrote it said what of
      * ({@code elements}): a list such a walk built is written out from that, where the operation
-     * that made it no longer stands.
+     * that made it no longer stands. And asking whether a state reaches nothing of
+     * {@code reachability}, which the engine this reads for owns.
      */
     Terms(Of reading, RuleReadingContext ruleReading, ValueTemplates templates,
-          ElementBindings elements) {
+          ElementBindings elements, ReachabilityAnswers reachability) {
         this.templates = templates;
         this.walksWrittenDown = Objects.requireNonNull(elements,
                 "a tree's walks were said what of, or nothing was");
+        this.reachability = Objects.requireNonNull(reachability,
+                "whether a state reaches nothing is kept somewhere, or nowhere");
         this.ruleReading = ruleReading;
         this.symbols = ruleReading.source().symbols();
         this.reading = reading;
@@ -426,6 +429,11 @@ final class Terms {
         this.predicates = new Predicates(this);
         this.guarantees = new TypeGuarantees(symbols, clauses, predicates);
         this.walk = new GuaranteeWalk(guarantees, newtypes());
+    }
+
+    /** Whether a state reaches nothing, for the readers walking with this one. */
+    ReachabilityAnswers reachability() {
+        return reachability;
     }
 
     /** The clauses this reading is over, for a reader beside it that asks what a declaration
@@ -460,6 +468,9 @@ final class Terms {
     /** What the expansions that wrote the tree this reads wrote down of its walks, which is what a
      *  list a walk built is written out from ({@link ElementBindings#assembledAt}). */
     private final ElementBindings walksWrittenDown;
+
+    /** Whether a state reaches nothing, as the readers this lends itself to ask it. */
+    private final ReachabilityAnswers reachability;
 
     /** What each template is called, by the reading it was asked for: named once however many
      *  builds of it there are. */

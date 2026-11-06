@@ -89,6 +89,13 @@ final class PathEngine {
     /** One closure per question for as long as this engine is held ({@link #nothingKnown}). */
     private final ClosedStates closures = ClosedStates.kept();
 
+    /**
+     * Whether each state asked reaches nothing, for as long as this engine is held: every reader
+     * walking under it asks the states it was handed again from each place deciding whether to go
+     * on.
+     */
+    private final ReachabilityAnswers reachability = ReachabilityAnswers.kept();
+
     /** The environment a value's body is read in, which is the same for every build of it. */
     Denotations insideATemplate() {
         return terms.insideATemplate();
@@ -131,7 +138,7 @@ final class PathEngine {
                Terms.Of reading, ValueTemplates templates, ElementBindings elements) {
         this.symbols = ruleReading.source().symbols();
         this.ruleReading = ruleReading;
-        this.terms = new Terms(reading, ruleReading, templates, elements);
+        this.terms = new Terms(reading, ruleReading, templates, elements, reachability);
         this.clauses = terms.clauses();
         this.predicates = terms.predicates();
         this.guarantees = terms.guarantees();
@@ -141,6 +148,11 @@ final class PathEngine {
 
     Symbols symbols() {
         return symbols;
+    }
+
+    /** Whether a state reaches nothing, as every reader under this engine asks it. */
+    ReachabilityAnswers reachability() {
+        return reachability;
     }
 
     /** The one reading of what a declaration guarantees, for a reader that wants the answer without
