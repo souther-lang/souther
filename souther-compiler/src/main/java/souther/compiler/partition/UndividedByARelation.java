@@ -6685,8 +6685,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         for (NumericTerm term : remainder.dividend().coefs().keySet()) {
-            TermOrders orders = read.quantities().ordersOf(term);
-            if (orders == null || !(orders.answered() instanceof Carrier.Whole)) {
+            if (!read.quantities().countsWhole(term)) {
                 return null;
             }
         }

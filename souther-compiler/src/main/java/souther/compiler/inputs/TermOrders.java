@@ -356,6 +356,12 @@ public final class TermOrders {
         return answered;
     }
 
+    /** Whether the number the term names is measured in whole numbers, and so is one on every
+     *  row. */
+    public boolean countsWhole() {
+        return answered instanceof Carrier.Whole;
+    }
+
     /**
      * Two of these are one where they are the orders of one term.
      *

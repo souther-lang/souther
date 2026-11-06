@@ -148,7 +148,7 @@ class WhereALineInsideAQuantifierDecidesTest {
                     compared(XS.element().then("n" + i), 0, Rel.GT))));
         }
         Proposition stated = new Proposition.Some(CONTAINER, Proposition.all(each), true);
-        List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
+        List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated, WholeNumbers.NONE);
 
         assertEquals(36, lines.size(), lines::toString);
         for (WhereEachLineDecides.Decides line : lines) {
@@ -173,7 +173,7 @@ class WhereALineInsideAQuantifierDecidesTest {
         }
         Proposition stated = new Proposition.Some(CONTAINER, Proposition.any(each), true);
 
-        for (WhereEachLineDecides.Decides line : WhereEachLineDecides.in(stated)) {
+        for (WhereEachLineDecides.Decides line : WhereEachLineDecides.in(stated, WholeNumbers.NONE)) {
             assertFalse(notTakenApartAt(line.cases())
                             .contains(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN),
                     () -> "read: " + line.line());
@@ -407,7 +407,7 @@ class WhereALineInsideAQuantifierDecidesTest {
 
     private static List<DecidingCase> decidingCasesOf(Proposition stated,
                                                       Proposition.Compared line) {
-        List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
+        List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated, WholeNumbers.NONE);
         for (WhereEachLineDecides.Decides each : lines) {
             if (each.line().spelledOut().equals(line.spelledOut())) {
                 return each.cases();

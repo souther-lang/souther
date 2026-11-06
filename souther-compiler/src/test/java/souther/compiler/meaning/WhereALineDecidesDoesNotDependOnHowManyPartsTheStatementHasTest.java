@@ -159,7 +159,7 @@ class WhereALineDecidesDoesNotDependOnHowManyPartsTheStatementHasTest {
 
     /** Where {@link #LINE} decides in {@code stated}. */
     static List<DecidingCase> casesOf(Proposition stated) {
-        for (WhereEachLineDecides.Decides each : WhereEachLineDecides.in(stated)) {
+        for (WhereEachLineDecides.Decides each : WhereEachLineDecides.in(stated, WholeNumbers.NONE)) {
             if (each.line().spelledOut().equals(LINE.spelledOut())) {
                 return each.cases();
             }
