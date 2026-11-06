@@ -692,6 +692,23 @@ final class Pullback {
         };
     }
 
+    /**
+     * {@code stated} of an occurrence, together with what it was kept by: an occurrence is one of
+     * the container's elements where each truth it was kept by came out as it did, and a
+     * statement about some element is about one that is there.
+     */
+    private Derivation whereItIsKept(Derivation stated,
+                                     List<ReadMeaning.Occurrence.Kept> keptWhere) {
+        if (keptWhere.isEmpty()) {
+            return stated;
+        }
+        List<Derivation> by = new ArrayList<>();
+        for (ReadMeaning.Occurrence.Kept kept : keptWhere) {
+            by.add(keeping(kept));
+        }
+        return new Derivation.OfWhatWasKept(stated, by);
+    }
+
     /** What {@code optional} holding a value states. */
     static Pulled ofAPresence(Core optional, InputReads reads, InputReading read,
                               Optional<ModelOccurrence> where) {
@@ -2485,15 +2502,9 @@ final class Pullback {
                 block.paramTypes().getFirst(), block.pos());
         List<Derivation.MatchArms.Arm> onEach = new ArrayList<>();
         for (InputReads.Applications.Made made : each) {
-            // An element of what was kept is the one found where it was kept and the closure
-            // holds of it, and no element before it was both.
-            Derivation holds = observe(block.body(), AnswerAspect.TRUTH, made.reads());
-            List<Derivation> keptBy = new ArrayList<>();
-            for (ReadMeaning.Occurrence.Kept kept : made.keptWhere()) {
-                keptBy.add(keeping(kept));
-            }
             onEach.add(new Derivation.MatchArms.Arm(
-                    keptBy.isEmpty() ? holds : new Derivation.OfWhatWasKept(holds, keptBy),
+                    whereItIsKept(observe(block.body(), AnswerAspect.TRUTH, made.reads()),
+                            made.keptWhere()),
                     states.apply(arm.body(), inside.holdingOneItMayHold(arm,
                             new Denotation(handed, made.reads()), read.rules().newtypes()))));
         }
@@ -5514,23 +5525,6 @@ final class Pullback {
          */
         private List<ReadMeaning.Occurrence> there(WrittenOutElements.Walked.Each each) {
             return each.occurrencesWhere(KeptTruths.readIn(read));
-        }
-
-        /**
-         * {@code stated} of an occurrence, together with what it was kept by: an occurrence is one
-         * of the container's elements where each truth it was kept by came out as it did, and a
-         * statement about some element is about one that is there.
-         */
-        private Derivation whereItIsKept(Derivation stated,
-                                         List<ReadMeaning.Occurrence.Kept> keptWhere) {
-            if (keptWhere.isEmpty()) {
-                return stated;
-            }
-            List<Derivation> by = new ArrayList<>();
-            for (ReadMeaning.Occurrence.Kept kept : keptWhere) {
-                by.add(keeping(kept));
-            }
-            return new Derivation.OfWhatWasKept(stated, by);
         }
 
         /**
