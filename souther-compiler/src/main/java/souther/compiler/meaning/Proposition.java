@@ -29,7 +29,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
-import java.util.function.Supplier;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
@@ -129,13 +129,19 @@ public sealed interface Proposition {
         Denial() {
         }
 
-        /** The denial kept, or {@code denying}'s, kept from now on. */
-        Proposition of(Supplier<Proposition> denying) {
+        /**
+         * The denial kept, or the one {@code denying} makes of {@code stated}, kept from now on.
+         *
+         * <p>Handed the proposition rather than asked to close over it, so what makes the denial
+         * holds nothing and is made once for the program, and a denial already kept is handed
+         * back without anything being made to ask for it.
+         */
+        <P extends Proposition> Proposition of(P stated, Function<P, Proposition> denying) {
             Proposition held = kept;
             if (held != null) {
                 return held;
             }
-            Proposition made = denying.get();
+            Proposition made = denying.apply(stated);
             synchronized (this) {
                 if (kept == null) {
                     kept = made;
@@ -364,10 +370,10 @@ public sealed interface Proposition {
          */
         @Override
         public Proposition denied() {
-            return denial.of(() -> {
-                Proposition kept = SharedPropositions.shared(this);
-                return kept != this ? kept.denied()
-                        : SharedPropositions.shared(new Compared(relation, !holds));
+            return denial.of(this, stated -> {
+                Proposition kept = SharedPropositions.shared(stated);
+                return kept != stated ? kept.denied()
+                        : SharedPropositions.shared(new Compared(stated.relation, !stated.holds));
             });
         }
 
@@ -931,7 +937,8 @@ public sealed interface Proposition {
 
         @Override
         public Proposition denied() {
-            return denial.of(() -> any(parts.stream().map(Proposition::denied).toList()));
+            return denial.of(this,
+                    stated -> any(stated.parts.stream().map(Proposition::denied).toList()));
         }
     }
 
@@ -975,7 +982,8 @@ public sealed interface Proposition {
          *  parts are cases of one ({@link #byTheCases}). */
         @Override
         public Proposition denied() {
-            return denial.of(() -> all(parts.stream().map(Proposition::denied).toList()));
+            return denial.of(this,
+                    stated -> all(stated.parts.stream().map(Proposition::denied).toList()));
         }
     }
 
@@ -1519,8 +1527,8 @@ public sealed interface Proposition {
 
         @Override
         public Proposition denied() {
-            return denial.of(
-                    () -> onAnApplication(each.stream().map(Proposition::denied).toList()));
+            return denial.of(this, stated ->
+                    onAnApplication(stated.each.stream().map(Proposition::denied).toList()));
         }
     }
 
@@ -1727,14 +1735,15 @@ public sealed interface Proposition {
 
         @Override
         public Proposition denied() {
-            return denial.of(() -> {
+            return denial.of(this, stated -> {
                 List<Integer> others = new ArrayList<>();
-                for (int count = 0; count <= weight(); count++) {
-                    if (Collections.binarySearch(admitted, count) < 0) {
+                for (int count = 0; count <= stated.weight(); count++) {
+                    if (Collections.binarySearch(stated.admitted, count) < 0) {
                         others.add(count);
                     }
                 }
-                return SharedPropositions.shared(new SoManyHold(statements, weights, others));
+                return SharedPropositions.shared(
+                        new SoManyHold(stated.statements, stated.weights, others));
             });
         }
 
