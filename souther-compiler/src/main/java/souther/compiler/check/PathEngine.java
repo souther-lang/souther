@@ -119,9 +119,19 @@ final class PathEngine {
     PathEngine(RuleReadingContext ruleReading,
                Map<ValueName.Behavior, AssumedContract> contracts,
                Terms.Of reading, ValueTemplates templates) {
+        this(ruleReading, contracts, reading, templates, ElementBindings.NONE);
+    }
+
+    /**
+     * The same, over a tree whose walks the expansions that wrote it said what of
+     * ({@code elements}), which a list such a walk built is written out from.
+     */
+    PathEngine(RuleReadingContext ruleReading,
+               Map<ValueName.Behavior, AssumedContract> contracts,
+               Terms.Of reading, ValueTemplates templates, ElementBindings elements) {
         this.symbols = ruleReading.source().symbols();
         this.ruleReading = ruleReading;
-        this.terms = new Terms(reading, ruleReading, templates);
+        this.terms = new Terms(reading, ruleReading, templates, elements);
         this.clauses = terms.clauses();
         this.predicates = terms.predicates();
         this.guarantees = terms.guarantees();

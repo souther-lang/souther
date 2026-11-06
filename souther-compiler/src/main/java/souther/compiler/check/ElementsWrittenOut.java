@@ -1,7 +1,9 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.core.GrowingFold;
 import souther.compiler.core.Kernel;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -20,9 +22,9 @@ import java.util.OptionalLong;
 /**
  * Every element a container holds, written out, in the order a walk of it meets them and each with
  * what it was kept by — where the container is a list written in the source, the code points of a
- * text written in the source, a list an operation put together of a piece of each element of one
- * ({@link ElementBindings#piecesOfEachElement}), or a list a choice answers ({@link Choice}), each
- * of its arms one of these.
+ * text written in the source, a list an operation put together of a piece of each element of one —
+ * the operation standing as itself or the walk it was expanded into ({@link #piecesOf}) — or a list
+ * a choice answers ({@link Choice}), each of its arms one of these.
  *
  * <p>One walk for every reader that writes a container out, whatever it reads names in. The reading
  * of an input and the discharge of a rule read names in two environments, and each hands this the
@@ -83,6 +85,11 @@ public final class ElementsWrittenOut {
         /** What {@code value} comes to at compile time where it stands ({@link FoldedValue}), or
          *  empty where it is no constant. */
         Optional<Object> folded(Stood<E> value);
+
+        /** What the walk handing {@code element} its elements answers, as the body the reading at
+         *  {@code at} is of says ({@link ElementBindings#assembledAt}), or null where it says
+         *  nothing. */
+        ElementBindings.AssembledWalk assembledAt(BindingId element, E at);
     }
 
     /** An expression and the environment its names are read in, which travel together. */
@@ -379,24 +386,13 @@ public final class ElementsWrittenOut {
                 && args.size() == 2) {
             return rangeOf(args, value, at, reading, enough, walked);
         }
-        // Each block the call's closures stand as, with where it was written: the step's body is
-        // read there, under the element it is handed, and not where the call stands.
-        Map<Core.Block, E> written = new IdentityHashMap<>();
-        ElementBindings.PiecesOfEachElement pieces = ElementBindings.piecesOfEachElement(value,
-                closure -> {
-                    Stood<E> stood = reading.standing(closure, at);
-                    if (!(Core.withoutStanding(stood.value()) instanceof Core.Block block)) {
-                        return null;
-                    }
-                    written.put(block, stood.at());
-                    return block;
-                });
-        if (pieces == null || pieces.element() == null || pieces.element().binding() == null) {
+        Pieces<E> pieces = piecesOf(value, at, reading);
+        if (pieces == null) {
             Choice choice = Choice.of(value);
             return choice == null ? new Walked.NotWrittenOut<>()
                     : chosen(value, choice, at, reading, enough, walked);
         }
-        E stepAt = written.getOrDefault(pieces.step(), at);
+        E stepAt = pieces.at();
         // A map's and a filter's pieces are one to an element, so as many elements are enough; a
         // flatMap's are any number to an element, so its elements are walked until enough pieces
         // are.
@@ -408,7 +404,7 @@ public final class ElementsWrittenOut {
         if (!(from instanceof Walked.Each<E>(List<Occurrence<E>> elements))) {
             return from;
         }
-        BindingId element = pieces.element().binding();
+        BindingId element = pieces.element();
         List<Occurrence<E>> out = new ArrayList<>();
         // The applications a run makes of the step, counted over the elements it is handed on
         // every run, for as long as which elements it is handed is settled. An element kept out on
@@ -431,7 +427,7 @@ public final class ElementsWrittenOut {
                 applied++;
             }
             // The step's body read on the application handing it this element.
-            Stood<E> answered = new Stood<>(pieces.step().body(),
+            Stood<E> answered = new Stood<>(pieces.body(),
                     reading.handing(stepAt, element, each.value()));
             switch (pieces.piece()) {
                 case THE_CLOSURES_ANSWER -> {
@@ -439,7 +435,7 @@ public final class ElementsWrittenOut {
                         return new Walked.PastTheFigure<>();
                     }
                     List<Applied> path = new ArrayList<>(each.within());
-                    path.add(new Applied(pieces.step().body(), position));
+                    path.add(new Applied(pieces.body(), position));
                     out.add(new Occurrence<>(answered, each.keptWhere(), number, path));
                 }
                 case THE_ELEMENT_WHERE_IT_HOLDS -> {
@@ -456,7 +452,7 @@ public final class ElementsWrittenOut {
                     if (!(inside instanceof Walked.Each<E>(List<Occurrence<E>> made))) {
                         return inside;
                     }
-                    Applied here = new Applied(pieces.step().body(), position);
+                    Applied here = new Applied(pieces.body(), position);
                     made.forEach(one -> {
                         List<Applied> path = new ArrayList<>(each.within());
                         path.add(here);
@@ -467,6 +463,71 @@ public final class ElementsWrittenOut {
             }
         }
         return new Walked.Each<>(out);
+    }
+
+    /**
+     * How a container is put together of a piece of each element of another: {@code body} read
+     * with {@code element} handed one of the elements of {@code walked}, in {@code at}, is what the
+     * piece is made of.
+     */
+    private record Pieces<E>(Core body, BindingId element, E at, Core walked,
+                             PieceOfAnElement piece) {}
+
+    /**
+     * How {@code value}, standing in {@code at}, is put together of a piece of each element of
+     * another container, or null where nothing says it is.
+     *
+     * <p>Two things can say so, and one answer comes of either. Where the operation still stands
+     * as itself, its declaration does ({@link ElementBindings#piecesOfEachElement}), and the step is
+     * the block the call was handed. Where it has been expanded and the walk it answered rewritten,
+     * the expansion wrote it down ({@link ElementBindings#assembledAt}): the walk is found by the
+     * element it hands ({@link GrowingFold#elementBindingOf}), and what the closure answers is what
+     * the {@code let} binding its parameter answers, wherever in the walk's step that stands. The
+     * walk is looked into for that binding and for nothing else: what its step does with the
+     * piece is what was proved and not read.
+     */
+    private static <E> Pieces<E> piecesOf(Core value, E at, Reading<E> reading) {
+        // Each block the call's closures stand as, with where it was written: the step's body is
+        // read there, under the element it is handed, and not where the call stands.
+        Map<Core.Block, E> written = new IdentityHashMap<>();
+        ElementBindings.PiecesOfEachElement declared = ElementBindings.piecesOfEachElement(value,
+                closure -> {
+                    Stood<E> stood = reading.standing(closure, at);
+                    if (!(Core.withoutStanding(stood.value()) instanceof Core.Block block)) {
+                        return null;
+                    }
+                    written.put(block, stood.at());
+                    return block;
+                });
+        if (declared != null) {
+            return declared.element() == null || declared.element().binding() == null ? null
+                    : new Pieces<>(declared.step().body(), declared.element().binding(),
+                            written.getOrDefault(declared.step(), at), declared.walked(),
+                            declared.piece());
+        }
+        BindingId handed = GrowingFold.elementBindingOf(value);
+        ElementBindings.AssembledWalk assembled =
+                handed == null ? null : reading.assembledAt(handed, at);
+        Core.LetIn applied = assembled == null ? null : bound(value, assembled.parameter());
+        // The closure is written where the walk stands, which is where its body is read.
+        return applied == null ? null
+                : new Pieces<>(applied.body(), assembled.parameter(), at, assembled.walked(),
+                        assembled.piece());
+    }
+
+    /** The {@code let} in {@code e} that binds {@code binding}, or null where none does. */
+    private static Core.LetIn bound(Core e, BindingId binding) {
+        if (e instanceof Core.LetIn let && let.binder() != null
+                && binding.equals(let.binder().binding())) {
+            return let;
+        }
+        Core.LetIn[] found = {null};
+        Core.forEachChild(e, child -> {
+            if (found[0] == null) {
+                found[0] = bound(child, binding);
+            }
+        });
+        return found[0];
     }
 
     /**

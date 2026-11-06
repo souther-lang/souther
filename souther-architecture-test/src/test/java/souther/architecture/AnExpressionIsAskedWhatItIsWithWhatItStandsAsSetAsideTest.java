@@ -519,7 +519,10 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + " a value is not widened where it is made");
         row(out, c + "check/ElementBindings", "walk",
                 "(" + core + "Ljava/util/Map;Ljava/util/Map;L" + c + "check/ElementProvenance;"
-                        + "Ljava/util/Map;Ljava/util/Map;)V", 3,
+                        + "Ljava/util/Map;Ljava/util/Map;Ljava/util/Set;Ljava/util/Map;)V", 3,
+                GOES_ON_INTO_IT);
+        row(out, c + "check/ElementsWrittenOut", "bound",
+                "(" + core + "L" + c + "types/BindingId;)L" + CORE + "$LetIn;", 1,
                 GOES_ON_INTO_IT);
         row(out, c + "check/InvariantChecker", "bindingIn",
                 "(" + core + ")L" + CORE + "$LetIn;", 1, GOES_ON_INTO_IT);

@@ -542,7 +542,7 @@ public final class PathReachability {
         }
         InputDomain read = reading.domain();
         PathEngine engine = new PathEngine(ruleReading, Map.of(), Terms.Of.THE_TREE_THAT_RUNS,
-                values.templates());
+                values.templates(), elements);
         Map<ControlPlace, Reachability> out = new LinkedHashMap<>();
         Map<ConstructOccurrence,
                 souther.compiler.reach.ComparisonArrival> arriving = new LinkedHashMap<>();

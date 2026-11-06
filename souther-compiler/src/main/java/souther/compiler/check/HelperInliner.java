@@ -573,6 +573,18 @@ public final class HelperInliner {
      * {@link #provenance}, which is what carries the fact onwards.
      */
     private final Map<BindingId, BindingId> pointwise = new LinkedHashMap<>();
+
+    /**
+     * The lambdas given to an operation whose answer is a piece of each element of a container,
+     * against the binding of that container and what the piece is.
+     *
+     * <p>Read where the lambda is applied, as {@link #pointwise} is and for the same reason: the
+     * parameter the fact is about is made there, after the operation that proves it is gone. In
+     * force only while that operation's body is spliced in, since a lambda handed over by name is
+     * the name's binding and not one this operation made.
+     */
+    private final Map<BindingId, ElementProvenance.AssembledFrom> assembling =
+            new LinkedHashMap<>();
     /** Which rule each expansion was handed, by the parameter it was handed to. Read here for the
      *  same reason the element bindings are: this is where the call site still stands. */
     private final souther.compiler.coverage.SuppliedRules.Builder supplied =
@@ -1819,12 +1831,25 @@ public final class HelperInliner {
         Renaming renaming = new Renaming(arguments.subst(), copy,
                 declaring == null ? null : call.pos().standingInFor(declaring),
                 declaring == null ? null : standingIn(call.region(), declaring));
+        // A lambda one operation makes pieces with is that operation's for as long as its body is
+        // spliced in and no longer: a lambda given a name is one binding however many operations
+        // are handed it, and what one of them makes of it is not what the next does.
+        Map<BindingId, ElementProvenance.AssembledFrom> outside = new HashMap<>();
+        arguments.assembling().forEach((lambda, from) ->
+                outside.put(lambda, assembling.put(lambda, from)));
         // The nested helpers too, and written under this copy: a call inside the callee's body
         // belongs to the copy of that body it stands in, so a helper expanded at two places holds
         // two of everything inside it. The body being written into is the same for both and cannot
         // tell them apart.
         Hir.Expr body = insideThisCopy(mine, deeper, arguments.supplied(),
                 () -> inline(rename(helper.writtenBody(), renaming)));
+        outside.forEach((lambda, was) -> {
+            if (was == null) {
+                assembling.remove(lambda);
+            } else {
+                assembling.put(lambda, was);
+            }
+        });
         List<Hir.Bound> bound = new ArrayList<>(arguments.bound());
         // A scoped lambda the body still names was passed rather than applied, so nothing
         // reduced it and the name would stand for nothing. It is bound to what it names, which
@@ -2066,10 +2091,15 @@ public final class HelperInliner {
      * <p>{@code supplied} is where each callable this call hands over crossed out of the code that
      * wrote it — this copy for one written or named here, and the boundary it already carried for
      * one this copy was itself handed. What the body being spliced in reads it under.
+     *
+     * <p>{@code assembling} is the lambda this call is an operation making a piece of each element
+     * with, against what it makes pieces of ({@link #assembling}): in force while the body is
+     * spliced in, which is where the lambda is applied as this operation's.
      */
     private record Arguments(Map<BindingId, Substituted> subst, List<Hir.Bound> bound,
                              List<Hir.Given> given, Map<BindingId, Hir.Bound> unreduced,
-                             Map<BindingId, ExpansionSite.Supplied.Handover> supplied) {}
+                             Map<BindingId, ExpansionSite.Supplied.Handover> supplied,
+                             Map<BindingId, ElementProvenance.AssembledFrom> assembling) {}
 
     /**
      * Binds one call's arguments against the callee's parameters, this call's variables written in.
@@ -2094,6 +2124,19 @@ public final class HelperInliner {
         // container, the element arrives under the parameter being bound below. Read before the
         // loop, since what it is about is the call and not any one argument.
         BindingId walked = pointwise.get(appliedLambda(call));
+        // And where it is the application of a lambda an operation makes a piece of each element
+        // with, the parameter bound below is the one each element arrives under.
+        ElementProvenance.AssembledFrom pieces = assembling.get(appliedLambda(call));
+        // Where this call is such an operation, the lambda at the closure it declares and the
+        // binding the container at its source is given, joined once the loop has both.
+        BoundOperationFacts.Assembled assembledByCallee =
+                DefaultBoundOperationFacts.get().assembles(calleeOf(call));
+        int assembledClosure = assembledByCallee == null ? -1
+                : CallArguments.positionOf(assembledByCallee.closure(), calleeOf(call));
+        int assembledSource = assembledByCallee == null ? -1
+                : CallArguments.positionOf(assembledByCallee.source(), calleeOf(call));
+        BindingId theAssembler = null;
+        BindingId theSource = null;
         // And where this call is the operation that hands such a lambda its elements, the two ends
         // of that fact are among the arguments: the lambda is one and the container is another. Both
         // are gathered as they are met and joined once the loop has them.
@@ -2144,6 +2187,14 @@ public final class HelperInliner {
                                     crossingInto, i));
                 }
                 if (arg instanceof Hir.Var.Denoting fnName) {
+                    // A lambda given a name is applied in the body under that name, and the
+                    // parameter each application binds is that application's own.
+                    if (i == assembledClosure
+                            && fnName.denotes() instanceof ValueName.Local named
+                            && writing.scopedLambdas().get(named.id()) instanceof ScopedLambda held
+                            && held.fn().params().size() == 1) {
+                        theAssembler = named.id();
+                    }
                     // A name handed to a function parameter is substituted through: what
                     // applies it applies what it stands for. What it stands for is declared
                     // somewhere — a helper's own parameter, a binding, a function an
@@ -2190,6 +2241,9 @@ public final class HelperInliner {
                     // answer per element says nothing about which of the two a projection is of.
                     if (lambda.params().size() == 1) {
                         theLambda = f.id();
+                        if (i == assembledClosure) {
+                            theAssembler = f.id();
+                        }
                     }
                 } else {
                     throw notAFunction(rawCall, p, i, arg);
@@ -2216,9 +2270,15 @@ public final class HelperInliner {
                 if (walked != null) {
                     provenance.projectsEachElementOf(f.id(), walked);
                 }
+                if (pieces != null) {
+                    provenance.assemblesThePiecesOf(f.id(), pieces.source(), pieces.piece());
+                }
                 if (mapsEach != null
                         && i == CallArguments.positionOf(mapsEach, calleeOf(call))) {
                     theContainer = f.id();
+                }
+                if (i == assembledSource) {
+                    theSource = f.id();
                 }
             }
         }
@@ -2227,7 +2287,11 @@ public final class HelperInliner {
         if (theLambda != null && theContainer != null) {
             pointwise.put(theLambda, theContainer);
         }
-        return new Arguments(subst, bound, given, unreduced, Map.copyOf(handedHere));
+        Map<BindingId, ElementProvenance.AssembledFrom> assembles =
+                theAssembler == null || theSource == null ? Map.of()
+                        : Map.of(theAssembler, new ElementProvenance.AssembledFrom(theSource,
+                                assembledByCallee.piece()));
+        return new Arguments(subst, bound, given, unreduced, Map.copyOf(handedHere), assembles);
     }
 
     /** The binding a lambda this call applies was registered under, or null where the call applies

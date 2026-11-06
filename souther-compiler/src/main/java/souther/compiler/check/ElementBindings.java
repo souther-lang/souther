@@ -2,8 +2,10 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ElementLineage;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.core.Core;
+import souther.compiler.core.GrowingFold;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.HeldIn;
 import souther.compiler.types.ACallOfAnOperation;
@@ -17,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -58,7 +61,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                               ValueTemplates templates,
                               Map<BindingId, ElementAnswer> answers,
                               Map<BindingId, ClosureUses> uses,
-                              OrderOfElements order) {
+                              OrderOfElements order,
+                              Map<BindingId, AssembledWalk> assembled) {
 
     /** Nothing was read, which is what a body with no combinator in it comes to. */
     public static final ElementBindings NONE =
@@ -70,6 +74,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         projected = Map.copyOf(projected);
         answers = Map.copyOf(answers);
         uses = Map.copyOf(uses);
+        assembled = Map.copyOf(assembled);
         if (templates == null) {
             throw new IllegalArgumentException("a body builds values it holds the meaning of, or"
                     + " none");
@@ -88,7 +93,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                            Map<BindingId, ElementAnswer> answers,
                            Map<BindingId, ClosureUses> uses) {
         this(containers, held, provenance, projected, templates, answers, uses,
-                OrderOfElements.NOT_KNOWN);
+                OrderOfElements.NOT_KNOWN, Map.of());
     }
 
     /** Of a body whose closures are asked for no more than what they answered. */
@@ -138,9 +143,49 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         joinedAnswers.putAll(other.answers);
         Map<BindingId, ClosureUses> joinedEntries = new LinkedHashMap<>(uses);
         joinedEntries.putAll(other.uses);
+        Map<BindingId, AssembledWalk> joinedAssembled = new LinkedHashMap<>(assembled);
+        joinedAssembled.putAll(other.assembled);
         return new ElementBindings(joinedContainers, joinedHeld, provenance.and(other.provenance),
                 joinedProjected, new ValueTemplates(joinedTemplates), joinedAnswers,
-                joinedEntries, order.and(other.order));
+                joinedEntries, order.and(other.order), joinedAssembled);
+    }
+
+    /**
+     * What the walk that hands {@code element} its elements answers, a piece of each of them put
+     * end to end, or null where nothing an expansion wrote says it answers that.
+     *
+     * <p>Keyed by the element because the element is what a walk the rewrite left still has: the
+     * binding is found from the walk ({@link GrowingFold#elementBindingOf}),
+     * and what the walk answers is this, proved where the operation stood.
+     */
+    public AssembledWalk assembledAt(BindingId element) {
+        return element == null ? null : assembled.get(element);
+    }
+
+    /**
+     * A walk whose answer is a piece of each element of {@code walked}, put end to end in the order
+     * of the elements: the operation an expansion wrote it for answers that
+     * ({@link ElementProvenance#assembledFrom}), and the walk is that operation's answer.
+     *
+     * @param parameter the closure's own parameter, which the element arrives under where the
+     *                  closure is applied in the walk's step: what the closure answers on an
+     *                  element is what the {@code let} binding it answers, with it handed the
+     *                  element
+     * @param walked    the container the walk is over, as the walk is handed it
+     * @param piece     what the piece of one element is
+     */
+    public record AssembledWalk(BindingId parameter, Core walked, PieceOfAnElement piece) {
+
+        public AssembledWalk {
+            Objects.requireNonNull(parameter, "a closure is applied under some parameter");
+            Objects.requireNonNull(walked, "a walk is over some container");
+            Objects.requireNonNull(piece, "and makes some piece of each element");
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(parameter, Core.hashWithoutWalking(walked), piece);
+        }
     }
 
     /**
@@ -279,9 +324,12 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Map<BindingId, Core> held = new LinkedHashMap<>();
         Map<BindingId, Core> answered = new LinkedHashMap<>();
         Map<BindingId, ElementAnswer> standing = new LinkedHashMap<>();
-        walk(body, found, held, provenance, answered, standing);
+        Set<BindingId> sources = new HashSet<>();
+        provenance.assembledFrom().values().forEach(from -> sources.add(from.source()));
+        Map<BindingId, Core> answeredUnder = new LinkedHashMap<>();
+        walk(body, found, held, provenance, answered, standing, sources, answeredUnder);
         for (Core template : templates) {
-            walk(template, found, held, provenance, answered, standing);
+            walk(template, found, held, provenance, answered, standing, sources, answeredUnder);
         }
         // What one walk hands its closure is what a licence and a projection are about, and a
         // binding taking elements of more than one container has no one walk to be about. The
@@ -309,7 +357,57 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Map<BindingId, ClosureUses> entered = ClosureEntries.of(roots, held);
         return found.isEmpty() && provenance.isEmpty() && values.templates().isEmpty() ? NONE
                 : new ElementBindings(found, held, provenance, projected, values, closures,
-                        entered, OrderOfElements.of(roots, held));
+                        entered, OrderOfElements.of(roots, held),
+                        assembledWalks(provenance, held, answeredUnder, entered));
+    }
+
+    /**
+     * The walks whose answer is what an operation an expansion wrote answers, a piece of each
+     * element of a container, keyed by the element each walk hands its step.
+     *
+     * <p>What was proved is of the operation: its answer is a walk over the container from its
+     * first element, every step of which puts the piece its closure makes of the element after
+     * what it carries ({@link BoundOperationFacts#assembles}). The tree says which walk that is, and
+     * each of the three things asked of it is asked of whoever holds it. The closure's parameter is
+     * bound to the element a walk hands, which is the one binding the walk and the fact have in
+     * common. That walk is the one application its step has, to every element of a container
+     * holding what the operation's container binding holds. And it is what the expansion answers:
+     * what the {@code let} giving that binding comes to, through the bindings after it.
+     *
+     * <p>A walk the third is not asked of would be any walk over the container that applies the
+     * closure, and nothing was proved of what such a walk answers. An element two parameters are
+     * bound to is one whose step applies the closure twice, and nothing is said of it.
+     */
+    private static Map<BindingId, AssembledWalk> assembledWalks(
+            ElementProvenance provenance, Map<BindingId, Core> held,
+            Map<BindingId, Core> answeredUnder, Map<BindingId, ClosureUses> uses) {
+        Map<BindingId, AssembledWalk> out = new LinkedHashMap<>();
+        Set<BindingId> twice = new HashSet<>();
+        provenance.assembledFrom().forEach((parameter, from) -> {
+            if (!(Core.withoutStanding(held.get(parameter)) instanceof Core.Read read)
+                    || read.binding() == null) {
+                return;
+            }
+            BindingId element = read.binding();
+            ClosureUses of = uses.get(element);
+            if (of == null || of.usedElsewhere() || of.applications().size() != 1) {
+                return;
+            }
+            ClosureUses.Application applied = of.applications().getFirst();
+            Core answer = answeredUnder.get(from.source());
+            if (applied.applied() != HowAClosureIsApplied.TO_EVERY_ELEMENT
+                    || applied.position() != null || !applied.held().equals(Set.of(element))
+                    || answer == null || Core.withoutStanding(applied.call()) != answer
+                    || !readsWhatIsHeldBy(applied.container(), from.source(), held)) {
+                return;
+            }
+            if (out.putIfAbsent(element,
+                    new AssembledWalk(parameter, applied.container(), from.piece())) != null) {
+                twice.add(element);
+            }
+        });
+        twice.forEach(out::remove);
+        return out;
     }
 
     /**
@@ -408,9 +506,20 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     private static void walk(Core e, Map<BindingId, List<HeldIn>> found,
                              Map<BindingId, Core> held,
                              ElementProvenance provenance, Map<BindingId, Core> answered,
-                             Map<BindingId, ElementAnswer> standing) {
+                             Map<BindingId, ElementAnswer> standing, Set<BindingId> sources,
+                             Map<BindingId, Core> answeredUnder) {
         if (e instanceof Core.LetIn let && let.binder() != null
                 && let.binder().binding() != null) {
+            // What a binding an expansion gave the container an operation makes pieces of answers
+            // is what the expansion answers, which is what its body comes to through the bindings
+            // after it.
+            if (sources.contains(let.binder().binding())) {
+                Core answer = Core.withoutStanding(let.body());
+                while (answer instanceof Core.LetIn after) {
+                    answer = Core.withoutStanding(after.body());
+                }
+                answeredUnder.putIfAbsent(let.binder().binding(), answer);
+            }
             // What a name was given, as it was written. A build of a value is held as the build:
             // what the value is defined as is read where definitions are read, by the one place
             // that says what a name stands for (InputReads#meaningOf), and what this table answers
@@ -438,8 +547,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
             // than from a fact an expansion would have had to leave behind.
             handed(preserved.declared().operation(), preserved.args(), found, standing, held);
         }
-        Core.forEachChild(e, child ->
-                walk(child, found, held, provenance, answered, standing));
+        Core.forEachChild(e, child -> walk(child, found, held, provenance, answered, standing,
+                sources, answeredUnder));
     }
 
     /**

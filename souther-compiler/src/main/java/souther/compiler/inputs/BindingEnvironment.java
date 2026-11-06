@@ -478,6 +478,12 @@ final class BindingEnvironment {
         return elements.answerAt(binding);
     }
 
+    /** What the walk handing {@code element} its elements answers, where an expansion wrote that
+     *  down ({@link ElementBindings#assembledAt}). */
+    ElementBindings.AssembledWalk assembledAt(BindingId element) {
+        return elements.assembledAt(element);
+    }
+
     /** What each binding the body made holds, over the whole of it. */
     Map<BindingId, Core> heldByTheBody() {
         return elements.held();
