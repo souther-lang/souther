@@ -34,9 +34,10 @@ public final class WrittenOfANode {
      * the node is in does not move with it. Asked of the places before anything is read of the
      * node, since it turns on nothing else.
      *
-     * <p>What a statement reads is then told the node's or the staying place's step for step: a
-     * place written with a narrowing the node is not written with is neither, and the statement is
-     * not moved.
+     * <p>What a statement reads is then told the node's or the staying place's where it stands at
+     * or inside it on every row it stands anywhere ({@link TermPath#standsAtOrUnderOnEveryRow}): a
+     * place under the node narrowed further than the node is moves with it, and one the node is
+     * narrowed further than is the node's only on the rows of that case, so it is neither.
      */
     public static boolean apart(TermPath stays, TermPath node) {
         return !stays.standsAtUnderOrAround(node);
@@ -127,6 +128,7 @@ public final class WrittenOfANode {
     }
 
     private boolean reads(TermPath at) {
-        return at.isAtOrUnder(node) || staying.stream().anyMatch(at::isAtOrUnder);
+        return at.standsAtOrUnderOnEveryRow(node)
+                || staying.stream().anyMatch(at::standsAtOrUnderOnEveryRow);
     }
 }

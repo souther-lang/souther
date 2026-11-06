@@ -4196,16 +4196,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>Place by place and not tie by tie: what accounts for a place is a claim made of that
      * place, and a tie that reads another place as well is not met by it. So a read is accounted
-     * for by a place it is, or is inside, step for step. That a tie bears on it is asked as the
-     * value is reached, and that something accounts for it is not: what is shown of a value
-     * narrowed to one case is not shown of the value, nor of it narrowed to another, though each
-     * bears on the other; and what is shown of what a value holds is not shown of the value.
+     * for by a place it stands at or inside on every row it stands anywhere
+     * ({@link TermPath#standsAtOrUnderOnEveryRow}). That a tie bears on it is a weaker question:
+     * what is shown of a value narrowed to one case is not shown of the value, nor of it narrowed
+     * to another, though each bears on the other; and what is shown of what a value holds is not
+     * shown of the value.
      */
     static boolean readsOnlyWhatIsAccountedFor(DemandReading.Tie tie, List<TermPath> reads,
                                                Set<TermPath> accountedFor) {
         for (TermPath read : reads) {
             if (touchesAny(tie.places(), List.of(read))
-                    && accountedFor.stream().noneMatch(read::isAtOrUnder)) {
+                    && accountedFor.stream().noneMatch(read::standsAtOrUnderOnEveryRow)) {
                 return false;
             }
         }
@@ -4659,11 +4660,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             // How many it holds is cut alone only where no rule relates it to another value the
             // run stands on here — another collection cut on this run, or a place the relation
-            // reads outside it. A place inside it is the side's to keep (keptCutDown): inside step
-            // for step, since a place narrowed to a case the collection is not narrowed to is
-            // inside it only on the rows of that case.
+            // reads outside it. A place inside it on every row it stands anywhere is the side's to
+            // keep (keptCutDown); one the collection narrows to a case the place is not narrowed
+            // to is outside it on the rows of the other cases.
             for (TermPath other : reads) {
-                if (!other.isAtOrUnder(collection) && tiedByARule(collection, other, read)) {
+                if (!other.standsAtOrUnderOnEveryRow(collection)
+                        && tiedByARule(collection, other, read)) {
                     return Optional.empty();
                 }
             }

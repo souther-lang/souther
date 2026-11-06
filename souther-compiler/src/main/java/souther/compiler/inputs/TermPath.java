@@ -724,6 +724,30 @@ public record TermPath(String head, List<Step> steps) {
         return reached == Reached.AT || reached == Reached.UNDER;
     }
 
+    /**
+     * Whether on every row this path stands anywhere, it stands at {@code other} or inside it: it
+     * stands at or under it ({@link #standsAtOrUnder}), and every case {@code other} requires of a
+     * value this requires too, or fewer of them. Put together by {@link Requirements#merge}, the
+     * other's requirements then add nothing to this one's.
+     *
+     * <p>For a reader that claims of this path what is shown of {@code other} — what accounts for a
+     * place, what is inside a container, what moves with a node. {@code x@Station.code} is within
+     * {@code x@{Hospital|Station}.code} and within {@code x.code}; {@code x.code} is within neither
+     * of the narrowed ones, since on a row where {@code x} is a {@code Hospital} it stands at no
+     * {@code x@Station}.
+     */
+    public boolean standsAtOrUnderOnEveryRow(TermPath other) {
+        if (!standsAtOrUnder(other)) {
+            return false;
+        }
+        if (!other.narrowsAnywhere()) {
+            return true;
+        }
+        Requirements mine = requirements();
+        return mine.merge(other.requirements()) instanceof Requirements.Merge.Merged(
+                Requirements both) && both.equals(mine);
+    }
+
     /** Where this path stands to another as the value is reached. */
     private enum Reached {
         /** Each runs out where the other does. */

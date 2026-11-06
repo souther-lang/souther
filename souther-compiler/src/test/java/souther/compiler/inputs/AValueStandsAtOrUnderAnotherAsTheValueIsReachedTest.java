@@ -131,6 +131,24 @@ class AValueStandsAtOrUnderAnotherAsTheValueIsReachedTest {
     }
 
     /**
+     * A place is within another on every row ({@link TermPath#standsAtOrUnderOnEveryRow}) where
+     * it is narrowed as far as the other is or further: on a row where {@code x} is a
+     * {@code Hospital}, {@code x.code} stands at no {@code x@Station.code}.
+     */
+    @Test
+    void aPlaceIsWithinAnotherOnEveryRowWhereItIsNarrowedAsFarOrFurther() {
+        assertTrue(A_STATION.then("code").standsAtOrUnderOnEveryRow(EITHER.then("code")));
+        assertTrue(A_STATION.then("code").standsAtOrUnderOnEveryRow(KIND.then("code")));
+        assertTrue(A_STATION.then("code").standsAtOrUnderOnEveryRow(KIND));
+        assertFalse(KIND.then("code").standsAtOrUnderOnEveryRow(A_STATION.then("code")));
+        assertFalse(EITHER.then("code").standsAtOrUnderOnEveryRow(A_STATION.then("code")));
+        assertFalse(A_HOSPITAL.then("code").standsAtOrUnderOnEveryRow(NOT_A_HOSPITAL.then("code")));
+        TermPath inner = PRESENT.refine(Refinement.of(new Case.Presence(true)));
+        assertTrue(inner.standsAtOrUnderOnEveryRow(PRESENT));
+        assertFalse(PRESENT.standsAtOrUnderOnEveryRow(inner));
+    }
+
+    /**
      * Over every pair of a set of places, against what owns each half of the question: two stand
      * at, under or around each other exactly where the cases each requires hold together
      * ({@link Requirements#compatibleWith}) and the steps that go somewhere, narrowings taken out,
@@ -161,10 +179,23 @@ class AValueStandsAtOrUnderAnotherAsTheValueIsReachedTest {
                 assertEquals(!together || one.standsAtUnderOrAround(other), one.bearsOn(other),
                         pair);
                 if (one.isAtOrUnder(other)) {
-                    assertTrue(one.standsAtOrUnder(other), pair);
+                    assertTrue(one.standsAtOrUnderOnEveryRow(other), pair);
                 }
+                assertEquals(one.standsAtOrUnder(other) && narrowedAsFar(one, other),
+                        one.standsAtOrUnderOnEveryRow(other), pair);
             }
         }
+    }
+
+    /** Whether every position {@code wider} narrows, {@code one} narrows to cases among those. */
+    private static boolean narrowedAsFar(TermPath one, TermPath wider) {
+        for (var each : wider.requirements().refinements().entrySet()) {
+            CasesLeft mine = one.requirements().at(each.getKey());
+            if (mine == null || !mine.within(each.getValue())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static TermPath withoutNarrowings(TermPath path) {

@@ -80,6 +80,17 @@ class AStopOfTheWayIsAccountedForOnlyAtThePlacesWhoseLengthsAreAccountedForTest 
                 List.of(TAG.element()), Set.of(TAG)));
     }
 
+    /** What is shown of a value is shown of it narrowed to any of its cases: a read narrowed
+     *  further than the place accounted for is accounted for by it. */
+    @Test
+    void whatAccountsForAValueAccountsForItNarrowedToACase() {
+        TermPath tagged = TermPath.of("t");
+        TermPath narrowed = tagged.refine(Refinement.of(new Case.Presence(true))).then("s");
+
+        assertTrue(UndividedByARelation.readsOnlyWhatIsAccountedFor(between(narrowed, COUNT),
+                List.of(narrowed), Set.of(tagged.then("s"))));
+    }
+
     /** A tie of a value narrowed to a case bears on the value read without the narrowing. */
     @Test
     void aTieBearsOnAReadAsTheValueIsReached() {
