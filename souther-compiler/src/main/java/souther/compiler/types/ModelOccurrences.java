@@ -87,10 +87,22 @@ public record ModelOccurrences(List<ModelOccurrence> inOrder)
         private ModelOccurrences only;
         private final Set<ModelOccurrence> held = new LinkedHashSet<>();
 
+        /**
+         * The value of copies last added, every copy of which is gathered: added again, it adds
+         * nothing, and its copies are not put into {@link #held} one by one again.
+         *
+         * <p>The last and not every one, so that what a gathering holds besides its copies does
+         * not grow with how many values it is handed. A reader handing one value to every place
+         * it gathers into hands it to one place over and over, so of the values added again,
+         * most are the one just added.
+         */
+        private ModelOccurrences last;
+
         public Gathering add(ModelOccurrences copies) {
-            if (copies.isEmpty()) {
+            if (copies.isEmpty() || copies == last) {
                 return this;
             }
+            last = copies;
             if (only == null && held.isEmpty()) {
                 only = copies;
                 return this;
