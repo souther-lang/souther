@@ -76,7 +76,7 @@ final class PathCompletion {
      * ({@link WhereAnOperatorAnswers}).
      */
     private Completion of(Core e, Known k, boolean answersNowhere, Denotations at) {
-        if (k.reachesNothing()) {
+        if (terms.reachability().reachesNothing(k)) {
             // Nothing stands here, so there is no run to say anything about. Answered as the
             // weaker of the two, since a state that holds nothing proves whatever it is asked.
             return Completion.MAY;
@@ -114,7 +114,8 @@ final class PathCompletion {
         // only where nothing here can come back as anything else.
         Core otherwise = TheOtherCase.conditionAt(called);
         if (otherwise != null
-                && !predicates.assumeCond(otherwise, k, at, true).known().reachesNothing()) {
+                && !terms.reachability().reachesNothing(
+                        predicates.assumeCond(otherwise, k, at, true).known())) {
             return Completion.MAY;
         }
         return new Completion.CannotComplete(
@@ -153,7 +154,8 @@ final class PathCompletion {
     Past past(Core e, Known k, Denotations at, List<WhatMayStopARun> mayStop) {
         Operated operated = operated(e, at);
         Known answered = answering(operated, k);
-        if (of(e, k, answered.reachesNothing(), at) instanceof Completion.CannotComplete) {
+        if (of(e, k, terms.reachability().reachesNothing(answered), at)
+                instanceof Completion.CannotComplete) {
             return new Past(k.reachingNothing(), mayStop, false);
         }
         if (readsWhereItAnswers(operated, k, at)) {
@@ -262,7 +264,7 @@ final class PathCompletion {
      * {@link #past} keeps include ones that stop at it.
      */
     private boolean readsWhereItAnswers(Operated operated, Known k, Denotations at) {
-        if (k.reachesNothing()) {
+        if (terms.reachability().reachesNothing(k)) {
             return true;
         }
         Core e = operated.e();

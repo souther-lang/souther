@@ -406,7 +406,22 @@ final class Terms {
      * not the edge that stands for it.
      */
     Terms(Of reading, RuleReadingContext ruleReading, ValueTemplates templates) {
+        this(reading, ruleReading, templates, ElementBindings.NONE, ReachabilityAnswers.NONE);
+    }
+
+    /**
+     * The same, over a tree whose walks the expansions that wrote it said what of
+     * ({@code elements}): a list such a walk built is written out from that, where the operation
+     * that made it no longer stands. And asking whether a state reaches nothing of
+     * {@code reachability}, which the engine this reads for owns.
+     */
+    Terms(Of reading, RuleReadingContext ruleReading, ValueTemplates templates,
+          ElementBindings elements, ReachabilityAnswers reachability) {
         this.templates = templates;
+        this.walksWrittenDown = Objects.requireNonNull(elements,
+                "a tree's walks were said what of, or nothing was");
+        this.reachability = Objects.requireNonNull(reachability,
+                "whether a state reaches nothing is kept somewhere, or nowhere");
         this.ruleReading = ruleReading;
         this.symbols = ruleReading.source().symbols();
         this.reading = reading;
@@ -414,6 +429,11 @@ final class Terms {
         this.predicates = new Predicates(this);
         this.guarantees = new TypeGuarantees(symbols, clauses, predicates);
         this.walk = new GuaranteeWalk(guarantees, newtypes());
+    }
+
+    /** Whether a state reaches nothing, for the readers walking with this one. */
+    ReachabilityAnswers reachability() {
+        return reachability;
     }
 
     /** The clauses this reading is over, for a reader beside it that asks what a declaration
@@ -444,6 +464,13 @@ final class Terms {
 
     /** What a value built in the tree this reads comes to. */
     private final ValueTemplates templates;
+
+    /** What the expansions that wrote the tree this reads wrote down of its walks, which is what a
+     *  list a walk built is written out from ({@link ElementBindings#assembledAt}). */
+    private final ElementBindings walksWrittenDown;
+
+    /** Whether a state reaches nothing, as the readers this lends itself to ask it. */
+    private final ReachabilityAnswers reachability;
 
     /** What each template is called, by the reading it was asked for: named once however many
      *  builds of it there are. */
@@ -1097,7 +1124,7 @@ final class Terms {
     /**
      * Every element {@code container}, read in {@code at} and followed through the names it was
      * given, holds on every run, each with where it is read ({@link #writtenElements}) — or null
-     * where it is not written out, or one of them is kept on a condition.
+     * where it is not written out, or one of them is there on some runs and not others.
      */
     List<ElementsWrittenOut.Stood<Denotations>> elementsOnEveryRun(Core container,
                                                                    Denotations at) {
@@ -1790,6 +1817,11 @@ final class Terms {
         }
 
         @Override
+        public ElementBindings.AssembledWalk assembledAt(BindingId element, Denotations at) {
+            return walksWrittenDown.assembledAt(element);
+        }
+
+        @Override
         public ElementsWrittenOut.Stood<Denotations> anElement(
                 ElementsWrittenOut.Stood<Denotations> element) {
             return element;
@@ -1823,16 +1855,26 @@ final class Terms {
 
     /**
      * Every element {@code container}, read in {@code at}, holds where it is written out with each
-     * of them there on every run ({@link ElementsWrittenOut}), each with where it is read — or null
-     * where it is not, or one of them is kept on a condition.
+     * of them there on every run or on none ({@link ElementsWrittenOut#onEveryRun}), each with where
+     * it is read and the ones there on none left out — or null where it is not written out, or one
+     * of them is there on some runs and not others.
      */
     List<ElementsWrittenOut.Stood<Denotations>> writtenElements(Core container, Denotations at) {
         if (!(ElementsWrittenOut.of(new ElementsWrittenOut.Stood<>(container, at), elements)
-                instanceof ElementsWrittenOut.Walked.Each<Denotations>(var each))
-                || each.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
+                instanceof ElementsWrittenOut.Walked.Each<Denotations>(var each))) {
             return null;
         }
-        return each.stream().map(ElementsWrittenOut.Occurrence::value).toList();
+        List<ElementsWrittenOut.Stood<Denotations>> there = new ArrayList<>();
+        for (ElementsWrittenOut.Occurrence<Denotations> one : each) {
+            Boolean kept = ElementsWrittenOut.onEveryRun(one, elements);
+            if (kept == null) {
+                return null;
+            }
+            if (kept) {
+                there.add(one.value());
+            }
+        }
+        return there;
     }
 
     /** {@code value} written down as the literal of {@code folded}, or null where it folded to none

@@ -40,7 +40,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
     private static final String GREATEST = "9223372036854775807";
 
     private static String report(String body) {
-        return moduleReport("""
+        return reportOf("""
                 module w1
                 behavior f : (n: Int, d: Date, b: Int, size: Int) -> Ok | No
                 let f (n, d, b, size) = {
@@ -50,9 +50,8 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                 """.formatted(body));
     }
 
-    /** The report on {@code module}, written whole. */
-    private static String moduleReport(String module) {
-        Compilation compilation = Compilation.ofSource(module, "Main");
+    private static String reportOf(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
@@ -231,7 +230,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
      */
     @Test
     void anElementIsReadWhereTheListHoldingItWasWritten() {
-        String report = moduleReport("""
+        String report = reportOf("""
                 module w1
                 let pair (x: Int): List<Int> = [0, x]
                 behavior f : (n: Int, d: Date, b: Int, size: Int) -> Ok | No
@@ -266,15 +265,209 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
     }
 
     /**
-     * A list another walk made is one the tree that runs holds as that walk's build, and no
-     * reading writes the elements of a build out, so the applications over it are not walked and
-     * the line after them stays drawn.
+     * A list another walk made is written out as the list the operation that made it answers, each
+     * element the step's answer on the element it was handed: the application to {@code 1} stops
+     * here as it does where {@code xs} is written {@code [0, 1, 2]}. Beside it, a walk making
+     * {@code 0} of every element hands the next one nothing it stops on.
      */
     @Test
-    void aListAnotherWalkMadeIsNotWrittenOutAndTheLineAfterItStays() {
+    void aListAnotherWalkMadeIsWrittenOutAndTheLineAfterItIsDropped() {
         String report = report("""
                     guard n == %s else No
                     let xs = List.map(x -> x, [0, 1, 2])
+                    let ys = List.map(k -> Date.addDays(k * n, d), xs)
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(report, "b"), report);
+        String control = report("""
+                    guard n == %s else No
+                    let xs = List.map(x -> 0, [0, 1, 2])
+                    let ys = List.map(k -> Date.addDays(k * n, d), xs)
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(control, "b"), control);
+    }
+
+    /**
+     * A closure given a name before it is handed over builds the list the one written there does,
+     * and two walks handed it build each the list of what that walk was handed.
+     */
+    @Test
+    void aWalkWhoseClosureWasNamedIsWrittenOutAsOneWrittenInPlace() {
+        String body = """
+                    guard n == %s else No
+                    let same = (x) -> x
+                    let zeros = List.map(same, [0, 0])
+                    let ones = List.map(same, [0, 1])
+                    let ys = List.map(k -> Date.addDays(k * n, d), %s)
+                    guard b > 3 else No""";
+        String fromOnes = report(body.formatted(GREATEST, "ones"));
+        assertTrue(nothingArrivesAbout(fromOnes, "b"), fromOnes);
+        String fromZeros = report(body.formatted(GREATEST, "zeros"));
+        assertTrue(aRunArrivesAbout(fromZeros, "b"), fromZeros);
+    }
+
+    /**
+     * What a closure reads beside its element is read where the closure was written: a named one
+     * reading a binding before it, and one a helper writes reading the helper's parameter. Each
+     * beside the same with the value it reads one less, where the list holds only {@code 0}.
+     */
+    @Test
+    void whatAClosureReadsBesideItsElementIsReadWhereTheClosureWasWritten() {
+        String named = """
+                    guard n == %s else No
+                    let offset = %s
+                    let shift = (x) -> x + offset
+                    let xs = List.map(shift, [0, 0])
+                    let ys = List.map(k -> Date.addDays(k * n, d), xs)
+                    guard b > 3 else No""";
+        String shifted = report(named.formatted(GREATEST, "1"));
+        assertTrue(nothingArrivesAbout(shifted, "b"), shifted);
+        String unshifted = report(named.formatted(GREATEST, "0"));
+        assertTrue(aRunArrivesAbout(unshifted, "b"), unshifted);
+        String helper = """
+                module w1
+                let shifted (xs: List<Int>, by: Int): List<Int> = List.map(x -> x + by, xs)
+                behavior f : (n: Int, d: Date, b: Int, size: Int) -> Ok | No
+                let f (n, d, b, size) = {
+                    guard n == %s else No
+                    let ys = List.map(k -> Date.addDays(k * n, d), shifted([0, 0], %s))
+                    guard b > 3 else No
+                    Ok
+                }
+                """;
+        String byOne = reportOf(helper.formatted(GREATEST, "1"));
+        assertTrue(nothingArrivesAbout(byOne, "b"), byOne);
+        String byNone = reportOf(helper.formatted(GREATEST, "0"));
+        assertTrue(aRunArrivesAbout(byNone, "b"), byNone);
+    }
+
+    /** A filter's list holds the elements its step held of, and none it did not. */
+    @Test
+    void aListAFilterMadeHoldsWhatItsStepHeldOf() {
+        String report = report("""
+                    guard n == %s else No
+                    let xs = List.filter(x -> x >= 0, [0, 1, 2])
+                    let ys = List.map(k -> Date.addDays(k * n, d), xs)
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(report, "b"), report);
+        String control = report("""
+                    guard n == %s else No
+                    let xs = List.filter(x -> x > 5, [0, 1, 2])
+                    let ys = List.map(k -> Date.addDays(k * n, d), xs)
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(control, "b"), control);
+    }
+
+    /**
+     * An element a filter keeps on some runs only is handed to the next step on those runs only:
+     * where {@code b} is past {@code 2} the list holds none, and the step that stops on every
+     * element is applied to none.
+     */
+    @Test
+    void anElementAFilterKeepsOnSomeRunsLeavesTheRunsThatKeepNoneOpen() {
+        String report = report("""
+                    guard n == %s else No
+                    let xs = List.filter(x -> x > b, [0, 1, 2])
+                    let ys = List.map(k -> Date.addDays(n, d), xs)
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(report, "b"), report);
+    }
+
+    /** Each element of a chain of builds is read where each step was handed it. */
+    @Test
+    void aChainOfTwoBuildsIsWrittenOut() {
+        String report = report("""
+                    guard n == %s else No
+                    let xs = List.map(x -> x, [0, 1, 2])
+                    let kept = List.filter(x -> x >= 0, xs)
+                    let ys = List.map(k -> Date.addDays(k * n, d), kept)
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(report, "b"), report);
+        String control = report("""
+                    guard n == %s else No
+                    let xs = List.map(x -> x - x, [0, 1, 2])
+                    let kept = List.filter(x -> x >= 0, xs)
+                    let ys = List.map(k -> Date.addDays(k * n, d), kept)
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(control, "b"), control);
+    }
+
+    /** A flatMap's list holds every element of each list its step answered. */
+    @Test
+    void aListAFlatMapMadeHoldsWhatEachStepAnswered() {
+        String report = report("""
+                    guard n == %s else No
+                    let xs = List.flatMap(x -> [0, x], [2])
+                    let ys = List.map(k -> Date.addDays(k * n, d), xs)
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(report, "b"), report);
+        String control = report("""
+                    guard n == %s else No
+                    let xs = List.flatMap(x -> [0, 0], [2])
+                    let ys = List.map(k -> Date.addDays(k * n, d), xs)
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(control, "b"), control);
+    }
+
+    /**
+     * Two walks over one list are two lists: the one the next step is handed is the one that made
+     * {@code 0} of every element, and the other is not read in its place.
+     */
+    @Test
+    void twoWalksOverOneListAreTwoLists() {
+        String report = report("""
+                    guard n == %s else No
+                    let xs = [0, 1, 2]
+                    let zeros = List.map(x -> 0, xs)
+                    let same = List.map(x -> x, xs)
+                    let ys = List.map(k -> Date.addDays(k * n, d), zeros)
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(report, "b"), report);
+        String other = report("""
+                    guard n == %s else No
+                    let xs = [0, 1, 2]
+                    let zeros = List.map(x -> 0, xs)
+                    let same = List.map(x -> x, xs)
+                    let ys = List.map(k -> Date.addDays(k * n, d), same)
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(other, "b"), other);
+    }
+
+    /**
+     * A helper whose body is a walk is copied where each call stands, and each copy's list is the
+     * one that copy was handed: the list made of {@code [0, 0]} holds nothing a step stops on, and
+     * the one made of {@code [0, 1]} does.
+     */
+    @Test
+    void eachCopyOfAHelperBuildsTheListItWasHanded() {
+        String body = """
+                module w1
+                let same (xs: List<Int>): List<Int> = List.map(x -> x, xs)
+                behavior f : (n: Int, d: Date, b: Int, size: Int) -> Ok | No
+                let f (n, d, b, size) = {
+                    guard n == %s else No
+                    let zeros = same([0, 0])
+                    let ones = same([0, 1])
+                    let ys = List.map(k -> Date.addDays(k * n, d), %s)
+                    guard b > 3 else No
+                    Ok
+                }
+                """;
+        String fromZeros = reportOf(body.formatted(GREATEST, "zeros"));
+        assertTrue(aRunArrivesAbout(fromZeros, "b"), fromZeros);
+        String fromOnes = reportOf(body.formatted(GREATEST, "ones"));
+        assertTrue(nothingArrivesAbout(fromOnes, "b"), fromOnes);
+    }
+
+    /**
+     * A list a fold the author wrote built is one nothing proved what it holds, even where it is
+     * built the way a map's is: what the walk answers is not read off its step, and the line after
+     * stays drawn.
+     */
+    @Test
+    void aListAFoldTheAuthorWroteBuiltIsNotWrittenOut() {
+        String report = report("""
+                    guard n == %s else No
+                    let xs = List.fold((acc, x) -> acc ++ [x], [], [0, 1, 2])
                     let ys = List.map(k -> Date.addDays(k * n, d), xs)
                     guard b > 3 else No""".formatted(GREATEST));
         assertTrue(aRunArrivesAbout(report, "b"), report);
@@ -343,7 +536,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
      */
     @Test
     void eachCopyOfAHelpersClosureIsDecidedOnItsOwnApplications() {
-        String report = moduleReport("""
+        String report = reportOf("""
                 module w1
                 let shifted (xs: List<Int>, n: Int, d: Date): List<Date> =
                     List.map(k -> if k > 0 then Date.addDays(n, d) else d, xs)
@@ -370,6 +563,53 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                         [0, 1]), [0])
                     guard b > 3 else No""".formatted(GREATEST));
         assertTrue(nothingArrivesAbout(report, "b"), report);
+    }
+
+    /**
+     * The inner closure is one construct on both outer applications and states different things
+     * on each: on the outer application to {@code 1} no inner one takes the arm, and on the one to
+     * {@code 0} the one that does shifts by none. What one outer application states, taken on the
+     * other, would stop every run.
+     */
+    @Test
+    void anInnerClosureIsDecidedOnTheOuterApplicationItStandsOn() {
+        String report = report("""
+                    guard n == %s else No
+                    let ys = List.map(j -> List.map(k -> if k > j
+                        then Date.addDays((k - j - 1) * n, d) else d, [0, 1]), [0, 1])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(report, "b"), report);
+    }
+
+    /**
+     * An element a filter drops on every run is handed to nothing, and the applications over what
+     * it keeps are of what it keeps: the one handed {@code 1} shifts by none and the one handed
+     * {@code 2} takes the other arm. Each element's statement taken on the element beside it would
+     * shift by {@code n} on the second.
+     */
+    @Test
+    void theApplicationsOverWhatAFilterKeepsAreOfTheElementsItKeeps() {
+        String report = report("""
+                    guard n == %s else No
+                    let xs = List.filter(x -> x > 0, [0, 1, 2])
+                    let ys = List.map(k -> if k > 1 then d else Date.addDays((k - 1) * n, d), xs)
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(report, "b"), report);
+    }
+
+    /**
+     * A right fold hands its step the elements last first: the step handed {@code 1} shifts by
+     * none and the one handed {@code 0} shifts nothing. Each element's statement taken on the
+     * other would shift by {@code -n}.
+     */
+    @Test
+    void aRightFoldIsDecidedOnTheElementEachApplicationIsHanded() {
+        String report = report("""
+                    guard n == %s else No
+                    let c = List.foldRight((x, acc) -> if x > 0
+                        then Date.addDays((x - 1) * n, acc) else acc, d, [1, 0])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(report, "b"), report);
     }
 
     /** A filter hands its step every element as a map does, and a step that stops on one stops

@@ -1022,7 +1022,7 @@ final class Predicates {
      * nor refuses.
      */
     private Choice choiceAt(ClauseExpr.Joined choice, Known k, Denotations at) {
-        if (k.reachesNothing()) {
+        if (terms.reachability().reachesNothing(k)) {
             return Choice.UNDECIDED;
         }
         // A path that leaves no run with the choice denied establishes it. Asking whether it also
@@ -1054,7 +1054,7 @@ final class Predicates {
      * are about, so asked alone it calls a part reachable that nothing can enter.
      */
     boolean leavesNoRun(Known asked) {
-        return asked.reachesNothing()
+        return terms.reachability().reachesNothing(asked)
                 || DerivedNumericFacts.refine(asked.numbers(), terms, Set.of()).isBottom();
     }
 
@@ -1320,7 +1320,7 @@ final class Predicates {
         Known after = read.known();
         // A path that holds no choice, or one the looking was given up along, has nothing more to
         // be asked here.
-        if (after.reachesNothing() || !after.holdsAChoice()
+        if (terms.reachability().reachesNothing(after) || !after.holdsAChoice()
                 || (k.holdsAChoice() && k.wayIn() == null)) {
             return read;
         }
@@ -1657,7 +1657,8 @@ final class Predicates {
         // saying they were named a value one of them computes is one nothing has ever spoken of.
         if (part instanceof ClauseExpr.Joined join) {
             Assumed whole = taking(cond, join.writtenHalves(), k, at, positive);
-            return join.how() != ConditionJoin.EITHER || whole.known().reachesNothing() ? whole
+            return join.how() != ConditionJoin.EITHER
+                    || terms.reachability().reachesNothing(whole.known()) ? whole
                     : takingOneOf(new Known.OneOf(join, at), whole, dead);
         }
         List<ComparisonReadings.Reading> readings =

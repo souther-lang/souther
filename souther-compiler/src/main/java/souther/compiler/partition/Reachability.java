@@ -293,7 +293,7 @@ public sealed interface Reachability {
         /** {@code onTheWay}, conditions some of which are this way's, read over the same
          *  declarations. */
         public Reachability readAs(List<OnTheWay> onTheWay) {
-            return Reachability.of(new WayToTheBorder(onTheWay), declarations);
+            return Reachability.of(WayToTheBorder.forArrival(onTheWay), declarations);
         }
     }
 

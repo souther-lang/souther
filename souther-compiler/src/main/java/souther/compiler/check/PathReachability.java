@@ -543,7 +543,7 @@ public final class PathReachability {
         }
         InputDomain read = reading.domain();
         PathEngine engine = new PathEngine(ruleReading, Map.of(), Terms.Of.THE_TREE_THAT_RUNS,
-                values.templates());
+                values.templates(), elements);
         Map<ControlPlace, Reachability> out = new LinkedHashMap<>();
         Map<ConstructOccurrence,
                 souther.compiler.reach.ComparisonArrival> arriving = new LinkedHashMap<>();
@@ -857,6 +857,11 @@ public final class PathReachability {
         Core.forEachChild(e, child -> gatherPlaces(child, reads, positions, answers));
     }
 
+    /** Whether {@code k} reaches nothing, as every reader under this walk's engine asks it. */
+    private boolean nothingReaches(Known k) {
+        return engine.reachability().reachesNothing(k);
+    }
+
     /**
      * Reads {@code e} under what holds where it stands.
      *
@@ -874,7 +879,7 @@ public final class PathReachability {
             return here;
         }
         Known k = here.known();
-        if (k.reachesNothing()) {
+        if (nothingReaches(k)) {
             // Nothing stands here, so nothing below is a place anything arrives at either. Where an
             // arm on the way made it so, the arms under this are left absent, which reads as
             // unsettled: that arm was answered where it was entered, and saying it again at every
@@ -899,7 +904,7 @@ public final class PathReachability {
                 Exits exits = exitsOf(iff.cond(), here, at, reads);
                 Walked cond = exits.completed();
                 ControlPlace.Arm[] arms = plan.armsOf(iff);
-                if (cond.known().reachesNothing()) {
+                if (nothingReaches(cond.known())) {
                     // No run gets past the condition, so neither arm is entered. An arm the
                     // condition shuts where the fork stands is proven by the condition, as it is
                     // anywhere; the other by what the way to it answered nothing at. What is inside
@@ -940,7 +945,7 @@ public final class PathReachability {
                 }
                 // No run gets past the arguments where they leave nothing, and then why is theirs
                 // and not the ways'.
-                if (given.known().reachesNothing()) {
+                if (nothingReaches(given.known())) {
                     given.whyNothingArrives().ifPresent(why -> noneEnters(plan.armsOf(ic), why));
                     yield given;
                 }
@@ -958,7 +963,7 @@ public final class PathReachability {
             case Core.Match match -> {
                 Walked scrutinee = walk(match.scrutinee(), here, at, reads);
                 Known before = scrutinee.known();
-                if (before.reachesNothing()) {
+                if (nothingReaches(before)) {
                     // No run gets past the value matched on, so no arm is entered. An arm the
                     // rules shut where the match stands is proven by the rules, as it is anywhere;
                     // the others by what the way to them answered nothing at. What is inside each
@@ -1016,32 +1021,32 @@ public final class PathReachability {
                 Known inside = applied.isEmpty() ? k
                         : engine.holding(applied.get().holdingSomething(), k, at, places).known();
                 WhyNone why = WhyNone.BY_THE_WAY;
-                if (inside.reachesNothing()) {
+                if (nothingReaches(inside)) {
                     Proof none = Proof.itsClosureIsAppliedToNothing(
                             applied.orElseThrow().containers(), here.decided());
                     appliedToNothing(block.body(), none);
                     why = new WhyNone.Because(none);
                 }
-                StepEntered step = inside.reachesNothing() ? null : entering(block, reads);
+                StepEntered step = nothingReaches(inside) ? null : entering(block, reads);
                 if (step != null) {
                     steps.add(step);
                 }
                 Walked body = walk(block.body(), new Walked(inside, here.decided(),
                                 here.mayStop(), here.nothingAbove() && applied.isEmpty(), true,
-                                why, inside.reachesNothing()), at,
+                                why, nothingReaches(inside)), at,
                         reads.entering(new ScopeStep.Block(block), symbols, newtypes));
                 if (step != null) {
                     steps.removeLast();
                     pastTheApplicationsBefore(step, body);
                 }
-                if (!body.noneStopped() || body.known().reachesNothing()) {
+                if (!body.noneStopped() || nothingReaches(body.known())) {
                     mayStopInside.add(block);
                 }
                 // Making the function value runs nothing of its body, so nothing it holds is
                 // carried on. What stopped a run in it is: the call that applies it is worked out
                 // before what follows. Whether some application stops every run is the call's to
                 // ask, under the value each is handed ({@link #noRunPastTheApplications}).
-                yield inside.reachesNothing() ? here : here.pastAnApplicationOf(body);
+                yield nothingReaches(inside) ? here : here.pastAnApplicationOf(body);
             }
             // Every other node evaluates its parts whichever run it is on, one after another and
             // each under what the one before it left — so a run that stopped in one of them is no
@@ -1097,7 +1102,7 @@ public final class PathReachability {
         }
         answeredAt(e, operands.known());
         mayStopBefore(e, operands);
-        if (operands.known().reachesNothing()) {
+        if (nothingReaches(operands.known())) {
             // No run worked the operands out, so none makes this evaluation either.
             return operands;
         }
@@ -1238,7 +1243,7 @@ public final class PathReachability {
                 Walked body = new PathReachability(this, onIt).walk(block.body(), from,
                         engine.terms().elementsReading().handing(at, element, elements.get(i)),
                         inside);
-                if (body.known().reachesNothing()) {
+                if (nothingReaches(body.known())) {
                     int handed = i;
                     return new Walked(operands.known().reachingNothing(), operands.decided(),
                             operands.mayStop(), false, false,
@@ -1294,7 +1299,7 @@ public final class PathReachability {
      * its own; any other condition leaves what it left whichever value it got.
      */
     private Exits exitsOf(Core e, Walked here, Denotations at, InputReads reads) {
-        if (here.known().reachesNothing()) {
+        if (nothingReaches(here.known())) {
             return Exits.of(walk(e, here, at, reads));
         }
         // A value standing as a wider type is the value it holds, with what the widening itself
@@ -1323,7 +1328,7 @@ public final class PathReachability {
     private Exits shortCircuitOperands(Core.Binary binary, Walked here, Denotations at,
                                        InputReads reads) {
         Exits left = exitsOf(binary.left(), here, at, reads);
-        if (left.completed().known().reachesNothing()) {
+        if (nothingReaches(left.completed().known())) {
             // No run gets past the left, so the right is a place nothing arrives at.
             walk(binary.right(), left.completed(), at, reads);
             return Exits.of(left.completed());
@@ -1347,7 +1352,7 @@ public final class PathReachability {
         // The left's own exit for that value and not what it left whichever value it got: where
         // the left gets the value from no run, nothing settles it here either.
         Walked settled = left.when(!reachedWhen);
-        if (right.completed().known().reachesNothing()) {
+        if (nothingReaches(right.completed().known())) {
             Predicates.Assumed settling = assuming(binary.occurrence(),
                     MeaningsOfABody.Part.Asked.LEFT, binary.left(), settled.known(), at,
                     reads, !reachedWhen);
@@ -1366,9 +1371,9 @@ public final class PathReachability {
      * What a run holds that left by any of {@code ways}: the one way where a single way leaves
      * anything, since there is nothing to join it with.
      */
-    private static Walked alternatives(Walked fork, List<Walked> ways) {
+    private Walked alternatives(Walked fork, List<Walked> ways) {
         Walked joined = leaving(fork, ways);
-        List<Walked> left = ways.stream().filter(way -> !way.known().reachesNothing()).toList();
+        List<Walked> left = ways.stream().filter(way -> !nothingReaches(way.known())).toList();
         return left.size() == 1 ? joined.at(left.get(0).known(), left.get(0).decided()) : joined;
     }
 
@@ -1480,8 +1485,8 @@ public final class PathReachability {
      * among them, where something it worked out answered nothing — and a way the fork shut is not
      * one: no run stopped there, they went the other way.
      */
-    private static Walked leaving(Walked fork, List<Walked> ways) {
-        List<Walked> left = ways.stream().filter(way -> !way.known().reachesNothing()).toList();
+    private Walked leaving(Walked fork, List<Walked> ways) {
+        List<Walked> left = ways.stream().filter(way -> !nothingReaches(way.known())).toList();
         if (left.isEmpty()) {
             List<Proof> each = new ArrayList<>();
             for (Walked way : ways) {
@@ -1510,7 +1515,7 @@ public final class PathReachability {
      * a row at the line is one some run makes needs, and one dropping a line does not.
      */
     private void mayStopBefore(Core e, Walked operands) {
-        if (operands.known().reachesNothing()) {
+        if (nothingReaches(operands.known())) {
             return;
         }
         List<ConstructOccurrence> at = new ArrayList<>(2);
@@ -1561,7 +1566,7 @@ public final class PathReachability {
      * past the first element is past it as well.
      */
     private void pastTheApplicationsBefore(StepEntered step, Walked body) {
-        if (body.noneStopped() && !body.known().reachesNothing()) {
+        if (body.noneStopped() && !nothingReaches(body.known())) {
             return;
         }
         for (ConstructOccurrence each : step.reading()) {
@@ -1639,7 +1644,7 @@ public final class PathReachability {
      */
     private void answeredAt(Core node, Known k) {
         plan.applicationAnsweringAt(node).ifPresent(application -> arriving.put(application,
-                k.reachesNothing()
+                nothingReaches(k)
                         ? new ComparisonArrival.NothingArrives()
                         : new ComparisonArrival.NoProjection()));
     }
@@ -1671,7 +1676,7 @@ public final class PathReachability {
             if (where.isEmpty()) {
                 continue;
             }
-            Optional<Proof> none = k.reachesNothing() ? here.whyNothingArrives() : Optional.empty();
+            Optional<Proof> none = nothingReaches(k) ? here.whyNothingArrives() : Optional.empty();
             if (none.isPresent()) {
                 // Neither way is one a run comes out of, for the reason nothing arrives.
                 out.put(where.get(), new Reachability.Unreachable(none.get()));
@@ -1679,7 +1684,7 @@ public final class PathReachability {
             }
             Predicates.Assumed taken = assuming(comparison.occurrence(),
                     MeaningsOfABody.Part.Asked.ITSELF, comparison, k, at, reads, result);
-            out.put(where.get(), taken.known().reachesNothing()
+            out.put(where.get(), nothingReaches(taken.known())
                     ? new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(
                             with(here.decided(), taken, comparison.pos(),
                                     comparison.lineage(), result)))
@@ -1703,7 +1708,7 @@ public final class PathReachability {
      */
     private souther.compiler.reach.ComparisonArrival arrivalAt(Core.Binary comparison, Known k,
                                                                Denotations at, InputReads reads) {
-        if (k.reachesNothing()) {
+        if (nothingReaches(k)) {
             return new souther.compiler.reach.ComparisonArrival.NothingArrives();
         }
         Core side = comparedSideIn(comparison, reads);
@@ -1731,8 +1736,8 @@ public final class PathReachability {
     private Proof why(Core.If iff, boolean holds,
                       List<PathDecision> under, InputReads reads) {
         Core cond = iff.cond();
-        if (assuming(iff.place().occurrence(), MeaningsOfABody.Part.Asked.CONDITION, cond, entry,
-                entered, reads, holds).known().reachesNothing()) {
+        if (nothingReaches(assuming(iff.place().occurrence(), MeaningsOfABody.Part.Asked.CONDITION,
+                cond, entry, entered, reads, holds).known())) {
             TermPath position = comparedPositionIn(cond, reads);
             NumericDomain.Bounds admits = position == null ? null : valueBoundsAt(position);
             ValuesNamed named = position == null || read.at(position) == null ? null
@@ -1891,7 +1896,7 @@ public final class PathReachability {
         List<PathDecision> under = with(fork.decided(), taken, iff.cond().pos(),
                 iff.lineage(), holds);
         if (arms != null && index < arms.length) {
-            out.put(arms[index], inside.reachesNothing()
+            out.put(arms[index], nothingReaches(inside)
                     ? new Reachability.Unreachable(why(iff, holds, under, reads))
                     : noRunPast.<Reachability>map(Reachability.Unreachable::new)
                             .orElseGet(() -> new Reachability.Unsettled(
@@ -1943,7 +1948,7 @@ public final class PathReachability {
                 out.put(arms[i], new Reachability.Unreachable(proof.get()));
                 continue;
             }
-            if (engine.takingItsCases(arm, match.scrutinee(), k, in).reachesNothing()) {
+            if (nothingReaches(engine.takingItsCases(arm, match.scrutinee(), k, in))) {
                 out.put(arms[i], new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(
                         taking(decided, match, arm, true))));
                 continue;

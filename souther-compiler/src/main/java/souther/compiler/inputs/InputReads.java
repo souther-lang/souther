@@ -2011,6 +2011,11 @@ public final class InputReads {
         }
 
         @Override
+        public ElementBindings.AssembledWalk assembledAt(BindingId element, InputReads at) {
+            return at.assembledAt(element);
+        }
+
+        @Override
         public WhatItHolds anElement(ElementsWrittenOut.Stood<InputReads> element) {
             return new WhatItHolds.AnElement(new Denotation(element.value(), element.at()));
         }
@@ -4069,6 +4074,12 @@ public final class InputReads {
      *  says it answered one value per element ({@link ElementAnswer}). */
     public ElementAnswer answerAt(BindingId binding) {
         return names.answerAt(binding);
+    }
+
+    /** What the walk handing {@code element} its elements answers, where an expansion wrote that
+     *  down ({@link ElementBindings#assembledAt}). */
+    public ElementBindings.AssembledWalk assembledAt(BindingId element) {
+        return names.assembledAt(element);
     }
 
     /** What each binding of the body holds, for reading a closure's answer through the names in it. */

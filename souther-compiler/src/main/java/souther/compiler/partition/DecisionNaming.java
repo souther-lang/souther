@@ -166,7 +166,7 @@ final class DecisionNaming implements Naming<DecisionPath> {
         return proved.whyNoInputTakes(path.rule(), () -> {
             List<OnTheWay> stated = new ArrayList<>();
             path.consulted().forEach(each -> stated.addAll(each.states()));
-            return new WayToTheBorder(stated)
+            return WayToTheBorder.forArrival(stated)
                     .takenByNoInput(meanings.states().read().quantities().region(),
                             proved::takesIn);
         });
