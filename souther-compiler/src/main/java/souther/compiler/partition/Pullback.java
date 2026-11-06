@@ -93,7 +93,6 @@ import souther.compiler.meaning.PieceWitness;
 import souther.compiler.meaning.MeaningsOfABody.Meaning;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
-import souther.compiler.meaning.ReadThroughNames;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.Spelling;
 import souther.compiler.meaning.StringsLanguage;
@@ -409,7 +408,14 @@ final class Pullback {
      * reading of the arm being taken ({@link #sizedByTheArmsOfAnElement}): what a count of the
      * elements taking it holds as how it was read.
      */
-    private final Map<Quantity, Derivation> armsTaken = new HashMap<>();
+    private final Map<Quantity, ArmTaken> armsTaken = new HashMap<>();
+
+    /**
+     * The reading of an arm an element takes, and what the walk that reads it was handed from
+     * outside: the names free in the walk's step, which the elements it goes over are not
+     * ({@link Derivation.OfItsOwnElement}).
+     */
+    private record ArmTaken(Derivation arm, ElementsNamed given) {}
     /**
      * Whether the elements of the lists a closure answered of each element of an outer list, put
      * end to end, are quantified as the elements of the one list the reading is in. A count of
@@ -2023,14 +2029,9 @@ final class Pullback {
                     : UndividedByARelation.Working.together(List.of(already, told)));
         }
 
-        /**
-         * What the candidate says of the rows of {@code relation}, or null where it says none.
-         * Kept as the derivation stated it, at positions, so a relation told which elements it is
-         * about is asked at its positions ({@link ReadThroughNames#atThePositions}).
-         */
+        /** What the candidate says of the rows of {@code relation}, or null where it says none. */
         UndividedByARelation.Working workingOf(Relation relation) {
-            return relations == null ? null
-                    : relations.get(ReadThroughNames.atThePositions(relation));
+            return relations == null ? null : relations.get(relation);
         }
 
         /** The relations the candidate kept under this one read, held as this one's. What it
@@ -3918,7 +3919,7 @@ final class Pullback {
                 return new Sized.NotSized(stopped);
             }
             Quantity.HowManyHold arrives = new Quantity.HowManyHold(List.of(stated));
-            armsTaken.putIfAbsent(arrives, oneOf);
+            armsTaken.putIfAbsent(arrives, new ArmTaken(oneOf, freeInTheScope));
             parts.add(new LinearForm<>(ExactRatio.ZERO, Map.of(arrives, each.getKey())));
         }
         LinearForm<Quantity> out = LinearForm.constant(ExactRatio.ZERO);
@@ -3939,13 +3940,18 @@ final class Pullback {
      * any count of them is — or null where it is no such arm, or no comparison keeps its counts.
      */
     private Quantity.HowManyMeet armTakenOver(DecisionSubject.AnInput held, Quantity arrives) {
-        if (counting == null || !(arrives instanceof Quantity.HowManyHold(List<Proposition> each))
-                || !(armsTaken.get(arrives) instanceof Derivation taken)
-                || !each.getFirst().mayTurnOnAnElementOf(held)) {
+        if (counting == null || !(arrives instanceof Quantity.HowManyHold)
+                || !(armsTaken.get(arrives) instanceof ArmTaken(Derivation arm, ElementsNamed given))) {
+            return null;
+        }
+        // The arm is of the element of the walk that took it, handed what its step was.
+        Derivation taken = new Derivation.OfItsOwnElement(held, given, arm);
+        Proposition element = tried(taken);
+        if (Proposition.firstStopIn(element) != null || !element.mayTurnOnAnElementOf(held)) {
             return null;
         }
         Quantity.HowManyMeet count = new Quantity.HowManyMeet(held,
-                Proposition.whereItHolds(each.getFirst()));
+                Proposition.whereItHolds(element));
         counting.putIfAbsent(count,
                 new Derivation.AComparisonRead.Counted(held, taken, Optional.empty()));
         return count;
@@ -4987,9 +4993,6 @@ final class Pullback {
                 return somePiece(some, located, over, in);
             }
             DecisionSubject heldAt = located.held();
-            if (readsAnotherElementOf(heldAt)) {
-                return unread(e, reads, new WhyUnread.TwoElementsOfOneContainer());
-            }
             Derivation answered = located.handed() == null
                     ? aboutAnElement(some.container(), heldAt, located.each(),
                             some.ofTheElement())
@@ -5410,20 +5413,6 @@ final class Pullback {
                 freeInTheScope = outer;
                 quantifying.remove(held);
             }
-        }
-
-        /**
-         * Whether the call reads an element of the container at {@code held} through a name bound
-         * outside it. Inside a quantifier over the container, what stands at its element is the
-         * quantifier's element, so the element that name stands for would be read as that one.
-         */
-        private boolean readsAnotherElementOf(DecisionSubject held) {
-            if (!(held instanceof DecisionSubject.AnInput(TermPath at, var _))) {
-                return false;
-            }
-            InputReads.ContainerOf container = new InputReads.ContainerOf.AtAPosition(at);
-            return reads.elementsNamedIn(e, read.rules().newtypes()).named().keySet().stream()
-                    .anyMatch(slot -> slot.container().equals(container));
         }
 
         /** {@code ofTheElement} read of {@code element}, the element of {@code container}. */
@@ -10958,14 +10947,20 @@ final class Pullback {
      */
     private void tellWhatItWorksOut(Derivation cut, UndividedByARelation.Working working) {
         if (beforeTheFork.isEmpty() || restatingAQuotient
-                || !(Derivation.readOff(cut) instanceof Derivation.AComparisonRead made)) {
+                || !(Derivation.readOff(cut) instanceof Derivation.AComparisonRead)) {
+            return;
+        }
+        // Kept by the relation as the reading will state it, of the values it was read through:
+        // two comparisons of two elements at one position work out two things.
+        if (!(new Conclusion(where).of(Derivation.ReadThrough.of(cut, freeInTheRoot))
+                instanceof Proposition.Compared(Relation said, var _, var _))) {
             return;
         }
         UndividedByARelation.Working told = working.notOnEveryRun();
         for (UndividedByARelation.Working earlier : beforeTheFork) {
             told = told.after(earlier);
         }
-        trial().tell(made.relation(), told);
+        trial().tell(said, told);
     }
 
     /**

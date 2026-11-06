@@ -39,7 +39,7 @@ final class ElementsOnTheWay {
      * Why a condition read of another element than the one the way holds was not taken in: what
      * it states was read, and the way has no place for a second element beside the first.
      */
-    private static final List<WhyNotTaken> ANOTHER_ELEMENT = List.of(new WhyNotTaken.OutsideDomain(
+    static final List<WhyNotTaken> ANOTHER_ELEMENT = List.of(new WhyNotTaken.OutsideDomain(
             WhyNotTaken.DomainLimit.ANOTHER_ELEMENT_THAN_THE_WAY_HOLDS));
 
     /**
@@ -133,7 +133,7 @@ final class ElementsOnTheWay {
     }
 
     /** The condition {@code entry} was read off: one that names an element names it. */
-    private static ConditionOccurrence conditionOf(OnTheWay entry) {
+    static ConditionOccurrence conditionOf(OnTheWay entry) {
         return switch (entry) {
             case OnTheWay.TakenIn taken -> taken.named().condition();
             case OnTheWay.Narrowed narrowed -> narrowed.named().condition();

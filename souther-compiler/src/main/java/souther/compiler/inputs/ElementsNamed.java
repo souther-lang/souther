@@ -113,6 +113,17 @@ public record ElementsNamed(Map<Slot, Set<BindingId>> named) {
         return named.isEmpty();
     }
 
+    /** Whether more than one name stood for one element here: what was read is of no one value
+     *  at that element's positions. */
+    public boolean readsTwoAtOnce() {
+        for (Set<BindingId> each : named.values()) {
+            if (each.size() > 1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Whether {@code name} stood for an element of some container here. */
     public boolean stoodFor(BindingId name) {
         for (Set<BindingId> each : named.values()) {

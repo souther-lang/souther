@@ -126,13 +126,16 @@ public final class ReadThroughNames {
     /**
      * The value at {@code at} that something read through {@code names} is about, as a subject:
      * told the name that stood for its element, as a statement read through the same names is
-     * ({@link #readThrough}). Where more than one name stood for it, it is the value at the
-     * position, which tells it from no other.
+     * ({@link #readThrough}). Asked only where no element was read through two names
+     * ({@link ElementsNamed#readsTwoAtOnce}): then it is no one value.
      */
     public static DecisionSubject.AnInput theInputAt(TermPath at, ElementsNamed names) {
         ValueIdentity identity = identityAt(at, names);
-        return new DecisionSubject.AnInput(at,
-                identity == null ? ValueIdentity.AT_THE_POSITION : identity);
+        if (identity == null) {
+            throw new IllegalArgumentException("two names for one element are no one value at "
+                    + at + ": " + names);
+        }
+        return new DecisionSubject.AnInput(at, identity);
     }
 
     /** The number at {@code term} that something read through {@code names} is about
