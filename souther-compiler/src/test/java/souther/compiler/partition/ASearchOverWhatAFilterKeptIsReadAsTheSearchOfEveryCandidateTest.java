@@ -25,7 +25,6 @@ import souther.compiler.report.AdequacyReport;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -72,23 +71,24 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
             List.find(d -> Bool.not(d == h), List.filter(d -> Int.floorMod(d, 7) >= 1
                     && Int.floorMod(d, 7) <= 5, List.map(k -> base + k, [0, 1])))""");
 
-    private static final List<Written> SEARCHES = List.of(OF_TWO,
-            new Written("""
-                    List.find(d -> Int.floorMod(d, 7) >= 1 && Int.floorMod(d, 7) <= 5
-                            && Bool.not(d == h), List.map(k -> base + k, [0, 1, 2]))""", """
-                    List.find(d -> Bool.not(d == h), List.filter(d -> Int.floorMod(d, 7) >= 1
-                            && Int.floorMod(d, 7) <= 5, List.map(k -> base + k, [0, 1, 2])))"""),
-            new Written("""
-                    List.find(d -> Int.floorMod(d, 7) >= 1 && Int.floorMod(d, 7) <= 5
-                            && Bool.not(d == h), List.map(k -> base + k, [0, 1, 2]))""", """
-                    List.find(d -> Bool.not(d == h), List.filter(d -> Int.floorMod(d, 7) <= 5,
-                            List.filter(d -> Int.floorMod(d, 7) >= 1,
-                                    List.map(k -> base + k, [0, 1, 2]))))"""),
-            new Written("""
-                    List.find(d -> Int.floorMod(d, h) == 0 && Bool.not(d == h),
-                            List.map(k -> base + k, [0, 1, 2]))""", """
-                    List.find(d -> Bool.not(d == h), List.filter(d -> Int.floorMod(d, h) == 0,
-                            List.map(k -> base + k, [0, 1, 2])))"""));
+    /** Over three, the third of which the search never reaches. */
+    private static final Written OF_THREE = new Written("""
+            List.find(d -> Int.floorMod(d, 7) >= 1 && Int.floorMod(d, 7) <= 5
+                    && Bool.not(d == h), List.map(k -> base + k, [0, 1, 2]))""", """
+            List.find(d -> Bool.not(d == h), List.filter(d -> Int.floorMod(d, 7) >= 1
+                    && Int.floorMod(d, 7) <= 5, List.map(k -> base + k, [0, 1, 2])))""");
+
+    /** Each candidate kept by two filters, one of each bound. */
+    private static final Written THROUGH_TWO_FILTERS = new Written(OF_TWO.everyCandidate(), """
+            List.find(d -> Bool.not(d == h), List.filter(d -> Int.floorMod(d, 7) <= 5,
+                    List.filter(d -> Int.floorMod(d, 7) >= 1, List.map(k -> base + k, [0, 1]))))""");
+
+    /** Kept by a statement that is not read: a remainder by a number of the input. */
+    private static final Written KEPT_BY_WHAT_IS_NOT_READ = new Written("""
+            List.find(d -> Int.floorMod(d, h) == 0 && Bool.not(d == h),
+                    List.map(k -> base + k, [0, 1]))""", """
+            List.find(d -> Bool.not(d == h), List.filter(d -> Int.floorMod(d, h) == 0,
+                    List.map(k -> base + k, [0, 1])))""");
 
     /** The rule compares a value of what was found, held in a field of a record built of it. */
     private static final String ITS_WEEKDAY_IN_A_RECORD = """
@@ -105,19 +105,11 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
     /** What was found, against a constant. */
     private static final String WHAT_WAS_FOUND = "first(base, h) > 2";
 
-    private static final List<String> RULES = List.of(ITS_WEEKDAY_IN_A_RECORD, ITS_WEEKDAY,
-            WHAT_WAS_FOUND);
+    /** Each model measured once, however many of the tests ask its report. */
+    private static final Map<String, JsonNode> PARTITIONS = new HashMap<>();
 
-    /** Each model compiled once, however many of the tests ask of it. */
-    private static final Map<String, Compilation> COMPILED = new HashMap<>();
-
-    private static final Map<Compilation, JsonNode> PARTITIONS = new IdentityHashMap<>();
-
+    /** The model, compiled and nothing asked of it yet. */
     private static Compilation compiled(String search, String rule) {
-        return COMPILED.computeIfAbsent(search + "\n" + rule, _ -> compiledNow(search, rule));
-    }
-
-    private static Compilation compiledNow(String search, String rule) {
         String source = """
                 module demo exposing (g, V)
 
@@ -129,11 +121,7 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
                 let g (base, h) = RULE
                 """.replace("SEARCH", search.indent(4).strip())
                 .replace("RULE", rule.indent(4).strip());
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), source);
-        return compilation;
+        return Compilation.ofSource(source, "Main");
     }
 
     /** What the body of {@code g} states, as the reading of it concludes. */
@@ -163,10 +151,17 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
         return out;
     }
 
-    private static JsonNode partition(Compilation compilation) {
-        return PARTITIONS.computeIfAbsent(compilation, _ -> JSON.readTree(AdequacyReport
-                .of(compilation).json(SourceRendering.namedByIdentity(SourceLayouts.NONE)))
-                .path("modules").get(0).path("behaviors").get(0).path("partition"));
+    /** The partition the report says of {@code g}, the model measured for its report alone. */
+    private static JsonNode partition(String search, String rule) {
+        return PARTITIONS.computeIfAbsent(search + "\n" + rule, _ -> {
+            Compilation compilation = compiled(search, rule);
+            compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
+            compilation.answerEverything();
+            assertEquals(List.of(), compilation.errors(), search + " " + rule);
+            return JSON.readTree(AdequacyReport.of(compilation)
+                    .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)))
+                    .path("modules").get(0).path("behaviors").get(0).path("partition");
+        });
     }
 
     private static String ruleOf(JsonNode rule) {
@@ -245,71 +240,66 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
         return out;
     }
 
+    private static void sameStatement(Written search, String rule) {
+        Proposition everyCandidate = stated(compiled(search.everyCandidate(), rule));
+        Proposition whatAFilterKept = stated(compiled(search.whatAFilterKept(), rule));
+        assertEquals(everyCandidate, whatAFilterKept, search + " " + rule);
+        assertEquals(casesOfEachLine(everyCandidate), casesOfEachLine(whatAFilterKept),
+                search + " " + rule);
+    }
+
+    /** Whatever the rule reads of what was found: itself, a remainder of it, or a field of a
+     *  record built of it. */
     @Test
     void theTwoSearchesStateOneStatementTakenApartIntoTheSameCases() {
-        for (Written search : SEARCHES) {
-            for (String rule : RULES) {
-                Proposition everyCandidate = stated(compiled(search.everyCandidate(), rule));
-                Proposition whatAFilterKept = stated(compiled(search.whatAFilterKept(), rule));
-                assertEquals(everyCandidate, whatAFilterKept, search + " " + rule);
-                assertEquals(casesOfEachLine(everyCandidate), casesOfEachLine(whatAFilterKept),
-                        search + " " + rule);
-            }
+        for (String rule : List.of(ITS_WEEKDAY_IN_A_RECORD, ITS_WEEKDAY, WHAT_WAS_FOUND)) {
+            sameStatement(OF_TWO, rule);
         }
     }
 
+    /** A candidate kept by several filters is kept by each; one kept by what is not read is kept
+     *  by a statement that says so. */
+    @Test
+    void soThroughTwoFiltersAndWhereWhatAFilterKeepsByIsNotRead() {
+        sameStatement(THROUGH_TWO_FILTERS, ITS_WEEKDAY);
+        sameStatement(KEPT_BY_WHAT_IS_NOT_READ, ITS_WEEKDAY);
+    }
+
+    /**
+     * A rule on what was found leaves every position the same lines and words, and, the helper
+     * drawing the same lines either way, its obligations are read alike: of the two rules that
+     * were left without lines, one on a remainder of what was found and one on itself.
+     */
     @Test
     void aRuleOnWhatWasFoundLeavesEveryPositionWhatItLeftSearchingEveryCandidate() {
-        for (Written search : SEARCHES) {
-            for (String rule : RULES) {
-                JsonNode everyCandidate = partition(compiled(search.everyCandidate(), rule));
-                JsonNode whatAFilterKept = partition(compiled(search.whatAFilterKept(), rule));
-                Map<String, Map<String, Set<String>>> left = leftAtEachPosition(everyCandidate);
-                assertFalse(left.isEmpty(), "the rule leaves something somewhere: " + rule);
-                assertEquals(left, leftAtEachPosition(whatAFilterKept), search + " " + rule);
-            }
+        for (String rule : List.of(ITS_WEEKDAY, WHAT_WAS_FOUND)) {
+            JsonNode everyCandidate = partition(OF_TWO.everyCandidate(), rule);
+            JsonNode whatAFilterKept = partition(OF_TWO.whatAFilterKept(), rule);
+            Map<String, Map<String, Set<String>>> left = leftAtEachPosition(whatAFilterKept);
+            assertTrue(left.values().stream().flatMap(each -> each.values().stream())
+                    .flatMap(Set::stream).anyMatch(each -> each.startsWith("draws ")),
+                    "the rule draws lines: " + left);
+            assertEquals(leftAtEachPosition(everyCandidate), left, rule);
+
+            assertEquals(drawnByTheHelper(everyCandidate), drawnByTheHelper(whatAFilterKept),
+                    "over two candidates the search reaches the second: " + rule);
+            Map<String, List<String>> readings = readingsOfEachObligation(whatAFilterKept);
+            assertFalse(readings.isEmpty(), "the behavior's obligations are read: " + rule);
+            assertEquals(readingsOfEachObligation(everyCandidate), readings, rule);
         }
     }
 
     /**
      * An obligation is read in the regions every line on its axis leaves, the helper's among them,
-     * so where the helper draws the same lines either way the readings of the behavior's
-     * obligations are the same — and where the filter draws a line the search never reaches, they
-     * are read in regions that line divides.
+     * and over three candidates the filter draws a line the search never reaches.
      */
     @Test
-    void whereTheHelperDrawsTheSameLinesTheObligationsAreReadAlike() {
-        for (String rule : RULES) {
-            JsonNode everyCandidate = partition(compiled(OF_TWO.everyCandidate(), rule));
-            JsonNode whatAFilterKept = partition(compiled(OF_TWO.whatAFilterKept(), rule));
-            assertEquals(drawnByTheHelper(everyCandidate), drawnByTheHelper(whatAFilterKept),
-                    "over two candidates the search reaches the second: " + rule);
-            Map<String, List<String>> readings = readingsOfEachObligation(everyCandidate);
-            assertFalse(readings.isEmpty(), "the behavior's obligations are read: " + rule);
-            assertEquals(readings, readingsOfEachObligation(whatAFilterKept), rule);
-
-            Written ofThree = SEARCHES.get(1);
-            Set<String> searched = drawnByTheHelper(partition(compiled(
-                    ofThree.everyCandidate(), rule)));
-            Set<String> filtered = drawnByTheHelper(partition(compiled(
-                    ofThree.whatAFilterKept(), rule)));
-            assertTrue(filtered.containsAll(searched) && filtered.size() > searched.size(),
-                    "the filter draws the third candidate's bound and the search does not: "
-                            + searched + " " + filtered);
-        }
-    }
-
-    @Test
-    void ofTheFirstSearchARuleOnWhatWasFoundDrawsLines() {
-        Written first = SEARCHES.getFirst();
-        for (String rule : RULES) {
-            Map<String, Map<String, Set<String>>> left =
-                    leftAtEachPosition(partition(compiled(first.whatAFilterKept(), rule)));
-            assertFalse(left.values().stream().flatMap(each -> each.values().stream())
-                    .flatMap(Set::stream).noneMatch(each -> each.startsWith("draws ")),
-                    "the rule draws lines: " + left);
-            assertFalse(readingsOfEachObligation(partition(compiled(first.whatAFilterKept(),
-                    rule))).isEmpty(), "and has obligations read: " + rule);
-        }
+    void overThreeTheFilterDrawsTheThirdCandidatesBoundAndTheSearchDoesNot() {
+        Set<String> searched = drawnByTheHelper(partition(OF_THREE.everyCandidate(),
+                WHAT_WAS_FOUND));
+        Set<String> filtered = drawnByTheHelper(partition(OF_THREE.whatAFilterKept(),
+                WHAT_WAS_FOUND));
+        assertTrue(filtered.containsAll(searched) && filtered.size() > searched.size(),
+                searched + " " + filtered);
     }
 }
