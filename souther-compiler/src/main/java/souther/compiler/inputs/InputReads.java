@@ -134,6 +134,11 @@ public final class InputReads {
     private Map<Core, ReadMeaning> meanings;
     private Symbols meaningsAmong;
     private DeclarationNewtypes meaningsUnder;
+    /** Which elements the names in each node {@link #elementsNamedIn} was asked of stood for
+     *  here, under the declarations {@link #namedUnder}; null until it is first asked. No part of
+     *  what this reading is. */
+    private Map<Core, ElementsNamed> named;
+    private DeclarationNewtypes namedUnder;
 
     /**
      * The applications of closures, the arms of choices and the calls of behaviors a reading here is
@@ -2318,9 +2323,10 @@ public final class InputReads {
      * read. Each name is followed once, which is what stops it.
      */
     List<ElementStood> elementsStoodForIn(Core e, DeclarationNewtypes newtypes) {
-        Set<ElementStood> out = new LinkedHashSet<>();
-        stoodForIn(e, newtypes, new HashSet<>(), out);
-        return List.copyOf(out);
+        List<ElementStood> out = new ArrayList<>();
+        elementsNamedIn(e, newtypes).named().forEach((slot, names) -> names.forEach(name ->
+                out.add(new ElementStood(name, slot.container(), slot.part()))));
+        return out;
     }
 
     /**
@@ -2329,7 +2335,28 @@ public final class InputReads {
      * the names it was written with.
      */
     public ElementsNamed elementsNamedIn(Core e, DeclarationNewtypes newtypes) {
-        return ElementsNamed.of(elementsStoodForIn(e, newtypes).stream()
+        // Answered once for each node asked here, as where a node stands is ({@link #pathOf}):
+        // the arithmetic of a comparison asks it of every node it reads a number of, and each
+        // part a reading meets asks it of the expression it was read off. What it comes to turns
+        // on nothing but the node and this reading.
+        if (named == null) {
+            named = new IdentityHashMap<>();
+            namedUnder = newtypes;
+        } else if (namedUnder != newtypes) {
+            return namesIn(e, newtypes);
+        }
+        ElementsNamed held = named.get(e);
+        if (held == null) {
+            held = namesIn(e, newtypes);
+            named.put(e, held);
+        }
+        return held;
+    }
+
+    private ElementsNamed namesIn(Core e, DeclarationNewtypes newtypes) {
+        Set<ElementStood> out = new LinkedHashSet<>();
+        stoodForIn(e, newtypes, new HashSet<>(), out);
+        return ElementsNamed.of(out.stream()
                 .map(each -> new ElementsNamed.Named(
                         new ElementsNamed.Slot(each.container(), each.part()), each.name()))
                 .toList());
