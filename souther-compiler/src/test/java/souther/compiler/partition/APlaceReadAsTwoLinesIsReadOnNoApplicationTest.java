@@ -53,6 +53,7 @@ class APlaceReadAsTwoLinesIsReadOnNoApplicationTest {
         LinesReadOn.Taking two = new LinesReadOn.Taking();
         two.read(PLACE, one, application(0));
         two.read(PLACE, other, application(1));
+        two.asAWhole(PLACE);
         assertEquals(Set.of(PLACE), two.taken().notToldApart());
         assertEquals(ApplicationsReadOn.NONE, two.taken().ofTheLine(PLACE));
         assertEquals(ApplicationsReadOn.NONE, two.taken().ofTheComparison());
@@ -61,6 +62,9 @@ class APlaceReadAsTwoLinesIsReadOnNoApplicationTest {
         alike.read(PLACE, one, application(0));
         alike.read(PLACE, one, application(1));
         assertEquals(application(0).and(application(1)), alike.taken().ofTheLine(PLACE));
+        assertEquals(ApplicationsReadOn.NONE, alike.taken().ofTheComparison(),
+                "a comparison not said to come to the line as a whole is no line of it");
+        alike.asAWhole(PLACE);
         assertEquals(application(0).and(application(1)), alike.taken().ofTheComparison());
     }
 

@@ -149,7 +149,7 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between,
             // settle it is one on its position, read on what read the relations about it.
             case ComparisonAssessment.AgainstAnotherValue against ->
                     settling(against.settling(),
-                            line -> readOn.ofTheRelationsAt(line.cutting().over()), originOf);
+                            line -> readOn.ofTheRelationsAbout(line.position()), originOf);
             case ComparisonAssessment.Several _ -> throw new IllegalArgumentException(
                     "a line of a statement is one line: " + assessed);
             case ComparisonAssessment.AnswerDependent _,

@@ -1,14 +1,16 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.types.ApplicationsReadOn;
 
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -24,7 +26,7 @@ import java.util.Set;
  * <p>Of each line and of each relation, and not of the comparison. A relation is a line of none
  * of the author's, and the lines parting the values that settle it are drawn where the relations
  * about a number settle it, so each is read on what read those relations and no other
- * ({@link #ofTheRelationsAt}).
+ * ({@link #ofTheRelationsAbout}).
  *
  * <p>A place two different lines were read as says nothing of either: which applications read
  * which of them is not told by the place, so neither is said to be read on any
@@ -33,17 +35,22 @@ import java.util.Set;
  * @param byLine       the applications that read the line read as each place
  * @param notToldApart the places read as more than one line
  * @param byRelation   the applications that read each relation
+ * @param asAWhole     the place whose line the comparison came to as a whole, where it came to one
+ *                     line and no statement of several ({@link #ofTheComparison}), as the reading
+ *                     that took it to be that line said
  */
 record LinesReadOn(Map<PlaceOfALine, ApplicationsReadOn> byLine, Set<PlaceOfALine> notToldApart,
-                   Map<UndividedByARelation, ApplicationsReadOn> byRelation) {
+                   Map<UndividedByARelation, ApplicationsReadOn> byRelation,
+                   Optional<PlaceOfALine> asAWhole) {
 
     /** Read once: on no application of a closure. */
-    static final LinesReadOn NONE = new LinesReadOn(Map.of(), Set.of(), Map.of());
+    static final LinesReadOn NONE = new LinesReadOn(Map.of(), Set.of(), Map.of(), Optional.empty());
 
     LinesReadOn {
         byLine = Collections.unmodifiableMap(new LinkedHashMap<>(byLine));
         notToldApart = Set.copyOf(notToldApart);
         byRelation = Collections.unmodifiableMap(new LinkedHashMap<>(byRelation));
+        Objects.requireNonNull(asAWhole, "the comparison came to one line, or to none");
     }
 
     /** The applications that read the line read as {@code place}: none where none did, or where
@@ -54,23 +61,26 @@ record LinesReadOn(Map<PlaceOfALine, ApplicationsReadOn> byLine, Set<PlaceOfALin
     }
 
     /**
-     * The applications that read the one line the comparison drew, where it drew one that is
-     * none of its parts: every application drew it, so it is the one line told. None where the
-     * lines told are not one.
+     * The applications that read the line the comparison came to as a whole, which is the line of
+     * the place the reading said it was ({@link #asAWhole}). None for a line drawn any other way
+     * — on the runs a reading that stopped is read off, say — which is no line any application
+     * was read as.
      */
     ApplicationsReadOn ofTheComparison() {
-        return byLine.size() == 1 && notToldApart.isEmpty()
-                ? byLine.values().iterator().next() : ApplicationsReadOn.NONE;
+        return asAWhole.map(this::ofTheLine).orElse(ApplicationsReadOn.NONE);
     }
 
     /**
-     * The applications that read a relation about one of {@code over}: what a line on those
-     * numbers parting the values that settle the relations about them is read on.
+     * The applications that read a relation about {@code term}: what a line on the term parting
+     * the values that settle the relations about it is read on. About it as the line is drawn
+     * of them — every relation whose places hold the term's coordinate settles it alike
+     * ({@code ComparisonAssessment.AgainstAnotherValue#settledByEvery}) — and no other.
      */
-    ApplicationsReadOn ofTheRelationsAt(Collection<FilingCoordinate> over) {
+    ApplicationsReadOn ofTheRelationsAbout(NumericTerm term) {
+        FilingCoordinate at = FilingCoordinate.of(term);
         ApplicationsReadOn out = ApplicationsReadOn.NONE;
         for (Map.Entry<UndividedByARelation, ApplicationsReadOn> each : byRelation.entrySet()) {
-            if (!Collections.disjoint(each.getKey().places(), over)) {
+            if (each.getKey().places().contains(at)) {
                 out = out.and(each.getValue());
             }
         }
@@ -85,6 +95,7 @@ record LinesReadOn(Map<PlaceOfALine, ApplicationsReadOn> byLine, Set<PlaceOfALin
         private final Set<PlaceOfALine> notToldApart = new HashSet<>();
         private final Map<UndividedByARelation, ApplicationsReadOn> byRelation =
                 new LinkedHashMap<>();
+        private PlaceOfALine asAWhole;
 
         /** {@code line}, read as {@code place}, read by {@code by}; and each relation it states,
          *  where it is a relation to another value, read by them too. */
@@ -100,8 +111,14 @@ record LinesReadOn(Map<PlaceOfALine, ApplicationsReadOn> byLine, Set<PlaceOfALin
             }
         }
 
+        /** The comparison came to the line read as {@code place}, as a whole: every application
+         *  that read it drew that one line. */
+        void asAWhole(PlaceOfALine place) {
+            asAWhole = place;
+        }
+
         LinesReadOn taken() {
-            return new LinesReadOn(byLine, notToldApart, byRelation);
+            return new LinesReadOn(byLine, notToldApart, byRelation, Optional.ofNullable(asAWhole));
         }
     }
 }

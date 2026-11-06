@@ -560,37 +560,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * <p>The reason a reading stopped is settled here, where it stopped, and not asked for
      * afterwards by whoever met the absence.
      *
+     * <p>And beside what it came to, which applications read each of its lines and relations
+     * ({@link Drawn#readOn}), told where each application's reading is put together with the
+     * others' and nowhere after.
+     *
      * @param writtenIn the copy of its body the comparison stands in, where it is a comparison a
      *                  body wrote: what tells the lines its author drew from the places a call put
      *                  them ({@link PartOfAComparison}). Nothing for a clause, whose several lines
      *                  are not drawn
      */
-    static Read read(String behavior, StatedComparison comparison,
-                     InputReading read, InputReads reads, ClosureApplications applying,
-                     Arrivals answering, WhatConditionsState conditions,
-                     Optional<ExpansionLineage> writtenIn) {
-        return drawn(behavior, comparison, read, reads, applying, answering, conditions,
-                writtenIn).read();
-    }
-
-    /**
-     * What reading {@code comparison} came to ({@link #read}), and beside it which applications
-     * of the closures it stands in read each of its lines and relations.
-     *
-     * @param read   what it came to
-     * @param readOn which applications read each line and relation, kept apart from them: a line
-     *               is one line however many applications read it, and what it is does not turn on
-     *               which. Nothing where it was read once
-     */
-    record Drawn(Read read, LinesReadOn readOn) {
-
-        Drawn {
-            Objects.requireNonNull(read, "a comparison read comes to something");
-            Objects.requireNonNull(readOn, "read on some applications, or on none");
-        }
-    }
-
-    /** {@link #read}, and which applications read each of its lines and relations. */
     static Drawn drawn(String behavior, StatedComparison comparison,
                        InputReading read, InputReads reads, ClosureApplications applying,
                        Arrivals answering, WhatConditionsState conditions,
@@ -611,6 +589,23 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return new Drawn(severalOrStopped(comparison, read, reads, answering,
                 onEachApplication(behavior, comparison, read, reads, each, answering, conditions,
                         writtenIn, readOn)), readOn.taken());
+    }
+
+    /**
+     * What reading a comparison came to ({@link #drawn}), and beside it which applications of the
+     * closures it stands in read each of its lines and relations.
+     *
+     * @param read   what it came to
+     * @param readOn which applications read each line and relation, kept apart from them: a line
+     *               is one line however many applications read it, and what it is does not turn on
+     *               which. Nothing where it was read once
+     */
+    record Drawn(Read read, LinesReadOn readOn) {
+
+        Drawn {
+            Objects.requireNonNull(read, "a comparison read comes to something");
+            Objects.requireNonNull(readOn, "read on some applications, or on none");
+        }
     }
 
     /**
@@ -910,6 +905,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (parts.size() == 1 && WhereAnApplicationIsMade.everywhere(parts.getFirst().cases())
                 && parts.getFirst().working().equals(
                         workingOf(conditions.comparison(comparison, reads, read)))) {
+            readOn.asAWhole(parts.getFirst().id());
             return parts.getFirst().line();
         }
         return derivedOnEach(new Read.Several(parts), derived);

@@ -78,7 +78,7 @@ class ALineIsReadOnTheApplicationsThatReadWhatItIsAboutTest {
         for (Set<Integer> each : onN) {
             assertFalse(each.contains(2), "the third application read nothing about n: " + onN);
         }
-        // A line on m is drawn where the relation is read once, which says no application.
+        // A line on m is drawn by the comparison of the total, which stands in no closure.
         for (Set<Integer> each : readOnAlong(partitioning, "g/o.items[*].m")) {
             assertTrue(Set.of(2).containsAll(each), "only the third application read m: " + each);
         }
