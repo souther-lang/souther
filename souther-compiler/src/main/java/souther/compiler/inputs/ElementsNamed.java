@@ -40,6 +40,30 @@ public record ElementsNamed(Map<Slot, Set<BindingId>> named) {
             Objects.requireNonNull(container, "an element is of some container");
             Objects.requireNonNull(part, "an element is the element or the key of its entry");
         }
+
+        /**
+         * The innermost element of a container of the input {@code position} is in, or null where
+         * it is in none.
+         *
+         * <p>The one place a position is said to be in an element: both where a name for an
+         * element is filed and where what was read at a position asks which name stood for it,
+         * so that the two cannot part.
+         */
+        public static Slot innermostOf(TermPath position) {
+            List<TermPath.Step> steps = position.steps();
+            for (int at = steps.size() - 1; at >= 0; at--) {
+                HeldIn.Part part = switch (steps.get(at)) {
+                    case TermPath.Step.Element _ -> HeldIn.Part.ELEMENT;
+                    case TermPath.Step.Key _ -> HeldIn.Part.KEY;
+                    case TermPath.Step.Field _, TermPath.Step.Refine _ -> null;
+                };
+                if (part != null) {
+                    return new Slot(new InputReads.ContainerOf.AtAPosition(position.prefix(at)),
+                            part);
+                }
+            }
+            return null;
+        }
     }
 
     /** One name standing for an element at {@code slot}. */

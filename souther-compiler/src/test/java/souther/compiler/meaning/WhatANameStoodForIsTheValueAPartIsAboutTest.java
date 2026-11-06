@@ -309,6 +309,22 @@ class WhatANameStoodForIsTheValueAPartIsAboutTest {
         assertSame(stated, ReadThroughNames.toldAgain(stated, oneName));
     }
 
+    /** And where it had three: however many names of the site the copy's one name meets, none of
+     *  them is told it. */
+    @Test
+    void threeValuesAreNeverToldAgainAsOne() {
+        TermPath ofAGroup = TermPath.of("x").then("groups").element().then("m");
+        TermPath ofATag = TermPath.of("x").then("tags").element().then("m");
+        BindingId third = new BindingId(new BindingOwner.OfValue("probe", "c"), 1);
+        BindingId copy = new BindingId(new BindingOwner.OfValue("probe", "g"), 1);
+        Proposition stated = Proposition.all(List.of(below(N, of(A)), below(ofAGroup, of(B)),
+                below(ofATag, of(third))));
+        ElementsNamed oneName = ElementsNamed.of(List.of(new ElementsNamed.Named(AN_ITEM, copy),
+                new ElementsNamed.Named(ElementsNamed.Slot.innermostOf(ofAGroup), copy),
+                new ElementsNamed.Named(ElementsNamed.Slot.innermostOf(ofATag), copy)));
+        assertSame(stated, ReadThroughNames.toldAgain(stated, oneName));
+    }
+
     /** Which value at a position: the row's where no name stood for its element, the one name's
      *  where one did, and none where two did. */
     @Test

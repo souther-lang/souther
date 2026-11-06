@@ -1,8 +1,6 @@
 package souther.compiler.meaning;
 
 import souther.compiler.inputs.ElementsNamed;
-import souther.compiler.inputs.HeldIn;
-import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
@@ -118,29 +116,27 @@ public final class ReadThroughNames {
         // Each name the site was told, and the copy's name for the element it stood for: a name
         // given two, or two names given one, are no one element to one element, and are not told
         // again — two values are never told one name.
-        Map<BindingId, BindingId> again = new LinkedHashMap<>();
-        Set<BindingId> notOneToOne = new HashSet<>();
+        Map<BindingId, Set<BindingId>> copiesOf = new LinkedHashMap<>();
+        Map<BindingId, Set<BindingId>> namesOf = new HashMap<>();
+        Set<BindingId> toNone = new HashSet<>();
         told(stated, (position, had) -> {
             if (had instanceof ValueIdentity.OfAnElement(BindingId name)) {
                 Set<BindingId> stood = innermost(position, names);
-                BindingId copy = stood != null && stood.size() == 1 ? stood.iterator().next()
-                        : null;
-                BindingId before = again.putIfAbsent(name, copy);
-                if (copy == null || (before != null && !before.equals(copy))) {
-                    notOneToOne.add(name);
+                if (stood != null && stood.size() == 1) {
+                    BindingId copy = stood.iterator().next();
+                    copiesOf.computeIfAbsent(name, _ -> new HashSet<>()).add(copy);
+                    namesOf.computeIfAbsent(copy, _ -> new HashSet<>()).add(name);
+                } else {
+                    toNone.add(name);
                 }
             }
             return had;
         }, () -> stated);
-        Map<BindingId, BindingId> given = new LinkedHashMap<>();
-        again.forEach((name, copy) -> {
-            if (!notOneToOne.contains(name) && copy != null) {
-                given.merge(copy, name, (one, other) -> null);
-            }
-        });
         Map<BindingId, BindingId> renamed = new LinkedHashMap<>();
-        again.forEach((name, copy) -> {
-            if (copy != null && name.equals(given.get(copy))) {
+        copiesOf.forEach((name, copies) -> {
+            BindingId copy = copies.iterator().next();
+            if (!toNone.contains(name) && copies.size() == 1
+                    && namesOf.get(copy).size() == 1) {
                 renamed.put(name, copy);
             }
         });
@@ -167,7 +163,7 @@ public final class ReadThroughNames {
                                                     Supplier<Proposition> twoAsOne) {
         Map<ElementsNamed.Slot, ValueIdentity> first = new HashMap<>();
         return told(stated, (position, had) -> {
-            ElementsNamed.Slot slot = innermostSlot(position);
+            ElementsNamed.Slot slot = ElementsNamed.Slot.innermostOf(position);
             if (slot == null) {
                 return had;
             }
@@ -316,7 +312,7 @@ public final class ReadThroughNames {
         List<ElementsNamed.Named> found = new ArrayList<>();
         told(stated, (position, had) -> {
             if (had instanceof ValueIdentity.OfAnElement(BindingId name)) {
-                ElementsNamed.Slot slot = innermostSlot(position);
+                ElementsNamed.Slot slot = ElementsNamed.Slot.innermostOf(position);
                 if (slot != null) {
                     found.add(new ElementsNamed.Named(slot, name));
                 }
@@ -324,28 +320,6 @@ public final class ReadThroughNames {
             return had;
         }, () -> stated);
         return ElementsNamed.of(found);
-    }
-
-    /** The innermost element of a container {@code position} is in, or null where it is in
-     *  none. */
-    private static ElementsNamed.Slot innermostSlot(TermPath position) {
-        List<TermPath.Step> steps = position.steps();
-        for (int at = steps.size() - 1; at >= 0; at--) {
-            HeldIn.Part part = partAt(steps.get(at));
-            if (part != null) {
-                return new ElementsNamed.Slot(
-                        new InputReads.ContainerOf.AtAPosition(position.prefix(at)), part);
-            }
-        }
-        return null;
-    }
-
-    private static HeldIn.Part partAt(TermPath.Step step) {
-        return switch (step) {
-            case TermPath.Step.Element _ -> HeldIn.Part.ELEMENT;
-            case TermPath.Step.Key _ -> HeldIn.Part.KEY;
-            case TermPath.Step.Field _, TermPath.Step.Refine _ -> null;
-        };
     }
 
     /**
@@ -358,7 +332,7 @@ public final class ReadThroughNames {
      * element of whatever goes over it, and is told nothing.
      */
     private static Set<BindingId> innermost(TermPath position, ElementsNamed names) {
-        ElementsNamed.Slot slot = innermostSlot(position);
+        ElementsNamed.Slot slot = ElementsNamed.Slot.innermostOf(position);
         return slot == null ? null : names.named().get(slot);
     }
 

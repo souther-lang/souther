@@ -2259,9 +2259,10 @@ public final class InputReads {
      * Which part of which container a name is the element of, and the name that was given it.
      *
      * @param name      the binding that was handed the element, which is not an alias of another
-     * @param container the container it is held in: by its position where it has one, and by what
-     *                  it is made of otherwise, so that the elements of what a walk answered are
-     *                  not the elements of what the walk was given
+     * @param container the container it is held in: by the position of the container its element
+     *                  stands in where it stands at one, and by what the container is made of
+     *                  otherwise, so that the elements of what a walk made are not the elements of
+     *                  what the walk was given
      * @param part      whether the name is the element or the key of its entry
      */
     record ElementStood(BindingId name, ContainerOf container, HeldIn.Part part) {
@@ -2393,11 +2394,23 @@ public final class InputReads {
             return;
         }
         switch (names.roleOf(name)) {
-            case BindingRole.Element(HeldIn held) -> into.add(new ElementStood(name,
-                    pathOf(held.container(), newtypes) instanceof PathResolution.At(TermPath at)
-                            ? new ContainerOf.AtAPosition(at)
-                            : new ContainerOf.Made(Core.withoutStanding(held.container())),
-                    held.part()));
+            // Filed at the element its own position is in, asked as every read through it is
+            // asked where it stands ({@link #elementAt}): an operation that hands the container's
+            // elements on, in another order or some of them, hands the same elements, and a read
+            // of one lands in that element and nowhere the name was not filed. A name whose
+            // element stands at no one position is read at none, and is told by its container.
+            case BindingRole.Element(HeldIn held) -> {
+                if (elementAt(name, newtypes) instanceof PathResolution.At(TermPath at)) {
+                    ElementsNamed.Slot slot = ElementsNamed.Slot.innermostOf(at);
+                    if (slot != null) {
+                        into.add(new ElementStood(name, slot.container(), slot.part()));
+                    }
+                } else {
+                    into.add(new ElementStood(name,
+                            new ContainerOf.Made(Core.withoutStanding(held.container())),
+                            held.part()));
+                }
+            }
             // A name given the position of an element, as the value of an entry a lookup
             // answered is.
             // And a name standing at a place inside an element, taken off a value that stands for

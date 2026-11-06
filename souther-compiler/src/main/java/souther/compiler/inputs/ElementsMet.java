@@ -23,9 +23,10 @@ import java.util.Set;
  * the input rather than merge with the first.
  *
  * <p>An element is told from another by the container it is held in and the part of the entry it
- * is — the key or the value — and by nothing of its position. The elements of what a walk answered
- * are not those of what it was given, though a position may say so; and the key and the value of
- * one entry are two names for one element, which is what an entry is.
+ * is — the key or the value. The container is the one the element stands in where it stands at a
+ * position, which is where what an operation hands on of a container's elements stands, and what a
+ * walk made otherwise; and the key and the value of one entry are two names for one element, which
+ * is what an entry is.
  *
  * <p>One of these for one comparison, shared by every number it names. Which element a name is of
  * is the environment's ({@link InputReads#elementsStoodForIn}); this holds what one comparison has
