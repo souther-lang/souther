@@ -3,7 +3,9 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.HowAClosureIsApplied;
+import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.ValueName;
 
@@ -11,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -94,6 +97,19 @@ public record ClosureUses(List<Application> applications, boolean usedElsewhere)
                 }
             }
             return out;
+        }
+
+        /** The call that makes this application, where it is a call of one of the language's
+         *  operations that some source wrote. */
+        public Optional<ACallOfAnOperation> written() {
+            ConstructOccurrence at = switch (Core.withoutStanding(call)) {
+                case Core.Call it -> it.occurrence();
+                case Core.PreservedCall it -> it.occurrence();
+                default -> null;
+            };
+            return at == null || !at.isWritten()
+                    || !(operation instanceof ValueName.Stdlib library) ? Optional.empty()
+                    : Optional.of(new ACallOfAnOperation(library, at));
         }
 
         private static boolean parameterOf(Core.Block step, BindingId binding) {

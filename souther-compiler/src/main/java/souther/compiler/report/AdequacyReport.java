@@ -4083,10 +4083,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             for (int at = 0; at < expanded.size(); at++) {
                 CasesExpandedAtARule each = expanded.get(at);
                 out.append(String.format(
-                        "      case expansion: %s, on `%s` at %s, case %d of %d — %s%n",
+                        "      case expansion: %s, on `%s` at %s%s, case %d of %d — %s%n",
                         cited(each.cited(), rendering, declaredIn, places),
                         each.expansion().line(), each.expansion().cutAt(),
-                        numbered.get(at).ordinal(),
+                        armsSaid(each.expansion().written()), numbered.get(at).ordinal(),
                         numbered.get(at).of(), caseExpansionSaid(each.expansion())));
             }
         }
@@ -8967,6 +8967,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         ruleId(said.putObject("ruleId"), each.rule());
         said.put("line", each.expansion().line());
         said.put("cutAt", each.expansion().cutAt());
+        // Which of the author's lines, as the arms on the way to it: two lines written apart can
+        // come to one relation, and these are told apart by it.
+        ArrayNode arms = said.putArray("arms");
+        each.expansion().written().arms().forEach(arm -> writtenArm(arms.addObject(), arm));
         said.put("case", which.ordinal());
         said.put("casesOfTheLine", which.of());
         caseExpansion(said.putObject("caseExpansion"), each.expansion());
@@ -8979,21 +8983,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * Each entry numbered among those about the same rule and line, in the order they stand. Two
      * entries are two cases ({@link CasesExpandedAtARule#key}), which is all the number says: the
      * condition a case was said as is what tells it apart, and it is too long to be read. A line
-     * is told apart as the reading tells it apart, by its relation, and not by the name a report
-     * gives the quantity it is on, which two lines may share.
+     * is told apart as the reading tells its places apart, by which of the author's lines it is
+     * and the relation it came to, and not by the name a report gives the quantity it is on,
+     * which two lines may share.
      */
     private static List<CaseOfALine> casesNumbered(List<CasesExpandedAtARule> expanded) {
         Map<List<Object>, Integer> of = new HashMap<>();
         for (CasesExpandedAtARule each : expanded) {
-            of.merge(List.of(each.rule(), each.expansion().relation()), 1, Integer::sum);
+            of.merge(placeOf(each), 1, Integer::sum);
         }
         Map<List<Object>, Integer> sofar = new HashMap<>();
         List<CaseOfALine> out = new ArrayList<>();
         for (CasesExpandedAtARule each : expanded) {
-            List<Object> line = List.of(each.rule(), each.expansion().relation());
+            List<Object> line = placeOf(each);
             out.add(new CaseOfALine(sofar.merge(line, 1, Integer::sum), of.get(line)));
         }
         return out;
+    }
+
+    /** Which of the author's lines, as the arms on the way to it, in a clause: nothing for the
+     *  comparison itself. */
+    private static String armsSaid(WrittenLine written) {
+        return written.arms().isEmpty() ? "" : written.arms().stream()
+                .map(arm -> String.format(Locale.ROOT, "arm %d of the %s in %s", arm.arm() + 1,
+                        word(arm.at().origin().kind()),
+                        WrittenOwner.theBodyThatWrote(arm.at().origin().owner()).definition()))
+                .collect(Collectors.joining(", then ", ", down ", ""));
+    }
+
+    /** The rule, and the place of its line an entry is about: the author's line and the
+     *  relation it came to. */
+    private static List<Object> placeOf(CasesExpandedAtARule each) {
+        return List.of(each.rule(), each.expansion().written(), each.expansion().relation());
     }
 
     /**

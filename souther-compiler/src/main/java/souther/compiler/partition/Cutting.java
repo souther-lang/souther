@@ -351,8 +351,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
 
             /** The same lines, of a statement derived as {@code derived}. */
-            Several derivedBy(List<Derivation> derived) {
+            Several derivedAs(List<Derivation> derived) {
                 return new Several(parts, derived);
+            }
+
+            /** Each line made into what {@code each} makes of it, of the statement derived as
+             *  these lines' statement was. */
+            Several eachPart(UnaryOperator<Part> each) {
+                return new Several(parts.stream().map(each).toList(), derivedBy);
             }
 
             /** Whether some line's cases are more ways of choosing one than are taken apart,
@@ -867,7 +873,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * what made their parts is read off the application each was read on.
      */
     private static Read.Several derivedOnEach(Read.Several lines, List<Derivation> derived) {
-        return lines.pastTheCasesTakenApart() ? lines.derivedBy(derived) : lines;
+        return lines.pastTheCasesTakenApart() ? lines.derivedAs(derived) : lines;
     }
 
     /**
@@ -1259,10 +1265,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Read.Cuts cuts -> cuts.cutting().of().derivedFromSeveralPositions().isPresent()
                     ? new Read.Cuts(cuts.cutting().writtenAgainst(level), cuts.authored())
                     : cuts;
-            case Read.Several several -> new Read.Several(several.parts().stream()
-                    .map(part -> new Read.Several.Part(part.id(),
-                            writtenAgainst(part.line(), level), part.cases(), part.working()))
-                    .toList(), several.derivedBy());
+            case Read.Several several -> several.eachPart(part -> new Read.Several.Part(
+                    part.id(), writtenAgainst(part.line(), level), part.cases(), part.working()));
             default -> drawn;
         };
     }
@@ -1276,10 +1280,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static Read heldIn(Read drawn, Optional<BoundHeldIn> data) {
         return switch (drawn) {
             case Read.Cuts cuts -> new Read.Cuts(cuts.cutting().heldIn(data), cuts.authored());
-            case Read.Several several -> new Read.Several(several.parts().stream()
-                    .map(part -> new Read.Several.Part(part.id(), heldIn(part.line(), data),
-                            part.cases(), part.working()))
-                    .toList(), several.derivedBy());
+            case Read.Several several -> several.eachPart(part -> new Read.Several.Part(
+                    part.id(), heldIn(part.line(), data), part.cases(), part.working()));
             default -> drawn;
         };
     }
@@ -1298,7 +1300,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // How the statement was derived is held only where some line's cases are too many to be
         // taken apart, which is the one place a reader reads what made their parts off it.
         if (drawn instanceof Read.Several several && several.pastTheCasesTakenApart()) {
-            return several.derivedBy(List.of(stated.meaning().how()));
+            return several.derivedAs(List.of(stated.meaning().how()));
         }
         if (writtenIn.isEmpty() || !(stated.proposition() instanceof Proposition.Compared compared)
                 || !(drawn instanceof Read.Cuts || drawn instanceof Read.NoOrderToCountOn

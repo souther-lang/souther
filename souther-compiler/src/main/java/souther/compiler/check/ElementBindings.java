@@ -8,7 +8,6 @@ import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.HeldIn;
 import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -18,7 +17,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -60,22 +58,12 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                               ValueTemplates templates,
                               Map<BindingId, ElementAnswer> answers,
                               Map<BindingId, ClosureUses> uses,
-                              OrderOfElements order,
-                              Map<BindingId, Set<ACallOfAnOperation>> handedBy) {
+                              OrderOfElements order) {
 
     /** Nothing was read, which is what a body with no combinator in it comes to. */
     public static final ElementBindings NONE =
             new ElementBindings(Map.of(), Map.of(), ElementProvenance.NONE, Map.of());
 
-    /**
-     * {@code handedBy} is which calls of the language's operations handed a binding what it holds,
-     * every one of them: the applications of a closure are a call's, and a reader telling which
-     * construct of the model made them names the call. Beside {@code containers} and not in a
-     * {@link HeldIn}, because it is a fact about the handing and not about what was handed — one
-     * container handed by two calls is one thing held, and the calls are two — so nothing that
-     * tells what a binding holds tells it by which call. A function of the body, as everything
-     * here is: environments of one body share one of these, so it tells no two of them apart.
-     */
     public ElementBindings {
         containers = Map.copyOf(containers);
         held = Map.copyOf(held);
@@ -90,24 +78,6 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
             throw new IllegalArgumentException("a body reads the order of its lists or not, or is"
                     + " not known to");
         }
-        Map<BindingId, Set<ACallOfAnOperation>> calls = new LinkedHashMap<>();
-        handedBy.forEach((binding, by) -> calls.put(binding, Set.copyOf(by)));
-        handedBy = Map.copyOf(calls);
-    }
-
-    /** Of a body whose calls handing its closures nothing read. */
-    public ElementBindings(Map<BindingId, List<HeldIn>> containers, Map<BindingId, Core> held,
-                           ElementProvenance provenance,
-                           Map<BindingId, ElementProjection> projected,
-                           ValueTemplates templates,
-                           Map<BindingId, ElementAnswer> answers,
-                           Map<BindingId, ClosureUses> uses, OrderOfElements order) {
-        this(containers, held, provenance, projected, templates, answers, uses, order, Map.of());
-    }
-
-    /** Which calls handed {@code binding} what it holds: none where none did. */
-    public Set<ACallOfAnOperation> handedBy(BindingId binding) {
-        return binding == null ? Set.of() : handedBy.getOrDefault(binding, Set.of());
     }
 
     /** Of a body whose order of elements nothing read. */
@@ -168,11 +138,9 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         joinedAnswers.putAll(other.answers);
         Map<BindingId, ClosureUses> joinedEntries = new LinkedHashMap<>(uses);
         joinedEntries.putAll(other.uses);
-        Map<BindingId, Set<ACallOfAnOperation>> joinedCalls = new LinkedHashMap<>(handedBy);
-        joinedCalls.putAll(other.handedBy);
         return new ElementBindings(joinedContainers, joinedHeld, provenance.and(other.provenance),
                 joinedProjected, new ValueTemplates(joinedTemplates), joinedAnswers,
-                joinedEntries, order.and(other.order), joinedCalls);
+                joinedEntries, order.and(other.order));
     }
 
     /**
@@ -245,6 +213,29 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         return binding == null ? null : uses.get(binding);
     }
 
+    /**
+     * Which calls of the language's operations handed {@code binding} what it holds, every one of
+     * them: none where none did, or where no source wrote the call.
+     *
+     * <p>Read off the applications of the closure it is a parameter of ({@link #usesOf}), each of
+     * which is a call, and not kept apart from them: which call handed what is a fact of the
+     * applications, and kept beside them it would be a second account of one fact that two bodies'
+     * bindings could be told apart by when nothing else tells them apart.
+     */
+    public Set<ACallOfAnOperation> handedBy(BindingId binding) {
+        ClosureUses of = usesOf(binding);
+        if (of == null) {
+            return Set.of();
+        }
+        Set<ACallOfAnOperation> by = new LinkedHashSet<>();
+        for (ClosureUses.Application each : of.applications()) {
+            if (each.held().contains(binding)) {
+                each.written().ifPresent(by::add);
+            }
+        }
+        return by;
+    }
+
     public boolean isEmpty() {
         return containers.isEmpty();
     }
@@ -288,10 +279,9 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Map<BindingId, Core> held = new LinkedHashMap<>();
         Map<BindingId, Core> answered = new LinkedHashMap<>();
         Map<BindingId, ElementAnswer> standing = new LinkedHashMap<>();
-        Map<BindingId, Set<ACallOfAnOperation>> handedBy = new LinkedHashMap<>();
-        walk(body, found, held, provenance, answered, standing, handedBy);
+        walk(body, found, held, provenance, answered, standing);
         for (Core template : templates) {
-            walk(template, found, held, provenance, answered, standing, handedBy);
+            walk(template, found, held, provenance, answered, standing);
         }
         // What one walk hands its closure is what a licence and a projection are about, and a
         // binding taking elements of more than one container has no one walk to be about. The
@@ -319,7 +309,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Map<BindingId, ClosureUses> entered = ClosureEntries.of(roots, held);
         return found.isEmpty() && provenance.isEmpty() && values.templates().isEmpty() ? NONE
                 : new ElementBindings(found, held, provenance, projected, values, closures,
-                        entered, OrderOfElements.of(roots, held), handedBy);
+                        entered, OrderOfElements.of(roots, held));
     }
 
     /**
@@ -418,8 +408,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     private static void walk(Core e, Map<BindingId, List<HeldIn>> found,
                              Map<BindingId, Core> held,
                              ElementProvenance provenance, Map<BindingId, Core> answered,
-                             Map<BindingId, ElementAnswer> standing,
-                             Map<BindingId, Set<ACallOfAnOperation>> handedBy) {
+                             Map<BindingId, ElementAnswer> standing) {
         if (e instanceof Core.LetIn let && let.binder() != null
                 && let.binder().binding() != null) {
             // What a name was given, as it was written. A build of a value is held as the build:
@@ -441,19 +430,16 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         // expanded away, and the operation standing as itself where it has not. What is asked of it
         // is the same question, so it is asked once.
         if (e instanceof Core.Call call && call.fn() instanceof Core.Reached reached) {
-            handed(reached.denotes(), call.args(),
-                    written(reached.denotes(), call.occurrence()), found, null, held, handedBy);
+            handed(reached.denotes(), call.args(), found, null, held);
         }
         if (e instanceof Core.PreservedCall preserved) {
             // Where the operation still stands, what it answers of what it was handed is still
             // there to be asked, so the licence a run needs is read from the declaration rather
             // than from a fact an expansion would have had to leave behind.
-            handed(preserved.declared().operation(), preserved.args(),
-                    written(preserved.declared().operation(), preserved.occurrence()), found,
-                    standing, held, handedBy);
+            handed(preserved.declared().operation(), preserved.args(), found, standing, held);
         }
         Core.forEachChild(e, child ->
-                walk(child, found, held, provenance, answered, standing, handedBy));
+                walk(child, found, held, provenance, answered, standing));
     }
 
     /**
@@ -471,11 +457,9 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
      */
     private static void handed(ValueName operation,
                                List<Core> args,
-                               Optional<ACallOfAnOperation> call,
                                Map<BindingId, List<HeldIn>> found,
                                Map<BindingId, ElementAnswer> standing,
-                               Map<BindingId, Core> held,
-                               Map<BindingId, Set<ACallOfAnOperation>> handedBy) {
+                               Map<BindingId, Core> held) {
         Combinators.Handed handed = Combinators.handedTo(operation, args,
                 closure -> blockOf(closure, held));
         if (handed == null) {
@@ -487,7 +471,6 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         if (handed.key() != null && handed.key().binding() != null) {
             takes(found, handed.key().binding(),
                     new HeldIn(handed.container(), HeldIn.Part.KEY, handed.applied(), false));
-            handedBy(handedBy, handed.key().binding(), call);
         }
         if (handed.element().binding() == null) {
             return;
@@ -497,28 +480,10 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                 DefaultBoundOperationFacts.get().answersTheClosureOnWhatItHolds(operation) != null;
         takes(found, element, new HeldIn(handed.container(), HeldIn.Part.ELEMENT,
                 handed.applied(), ofAnOption));
-        handedBy(handedBy, element, call);
         if (standing != null && answersOnePerElementOf(operation, handed.container(), args)) {
             standing.putIfAbsent(element, new ElementAnswer(element, handed.step().body(),
                     handed.position() == null ? null : handed.position().binding()));
         }
-    }
-
-    /** That {@code call} handed {@code binding} what it holds, beside every other call that did:
-     *  whatever {@link #takes} keeps of what was handed, no call is dropped. */
-    private static void handedBy(Map<BindingId, Set<ACallOfAnOperation>> handedBy,
-                                 BindingId binding, Optional<ACallOfAnOperation> call) {
-        call.ifPresent(one -> handedBy.computeIfAbsent(binding, _ -> new LinkedHashSet<>())
-                .add(one));
-    }
-
-    /** The call of {@code operation} at {@code occurrence}, where it is one of the language's
-     *  operations and some source wrote the call. */
-    private static Optional<ACallOfAnOperation> written(ValueName operation,
-                                                        ConstructOccurrence occurrence) {
-        return occurrence == null || !occurrence.isWritten()
-                || !(operation instanceof ValueName.Stdlib library) ? Optional.empty()
-                : Optional.of(new ACallOfAnOperation(library, occurrence));
     }
 
     /**

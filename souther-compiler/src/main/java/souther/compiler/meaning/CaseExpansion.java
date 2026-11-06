@@ -16,12 +16,16 @@ import java.util.Optional;
  * <p>About one case and not about the stop. Why the line was not worked out is a reason a report
  * gathers and puts together with others like it; this is a count of one case of one line, which
  * nothing puts together with another, so it is kept beside the reason and never in it. Which case
- * it is, is what the reading that asked it tells cases apart by: the line's relation, and the
- * condition the case was said as ({@link DecidingCase#eachByItsOwnCondition}).
+ * it is, is what the reading that asked it tells cases apart by, whole: the place of the line —
+ * which of the author's lines, and the relation it came to there, both of them, since two lines an
+ * author wrote can come to one relation and one line comes to a relation for each case of what a
+ * call hands it — and the condition the case was said as
+ * ({@link DecidingCase#eachByItsOwnCondition}).
  *
  * @param line       the quantity the line is on, named the way a report names a border on it
  * @param cutAt      where on the quantity the line is, written as a border's level is: what tells
  *                   a reader two lines on one quantity apart
+ * @param written    which of the author's lines it is
  * @param relation   the relation the line came to, as the reading spelled it
  * @param ofTheCase  the condition the case was said as
  * @param counted    how many ways there were of choosing one of what the case stands for
@@ -30,13 +34,14 @@ import java.util.Optional;
  *                   one number ({@link WhatTheNumbersOfACaseLeave}): what the numbers leave, and
  *                   no count of cases nor of what a rewrite would leave
  */
-public record CaseExpansion(String line, String cutAt, Spelling relation, Proposition ofTheCase,
-                            CaseCount counted, Attribution attributed,
+public record CaseExpansion(String line, String cutAt, WrittenLine written, Spelling relation,
+                            Proposition ofTheCase, CaseCount counted, Attribution attributed,
                             List<Diagnosis> diagnosed) {
 
     public CaseExpansion {
         Objects.requireNonNull(line, "cases are a line's");
         Objects.requireNonNull(cutAt, "a line is somewhere on its quantity");
+        Objects.requireNonNull(written, "one of the author's lines");
         Objects.requireNonNull(relation, "of some relation");
         Objects.requireNonNull(ofTheCase, "a case is said as some condition");
         Objects.requireNonNull(counted, "cases are some number of ways");
@@ -50,16 +55,18 @@ public record CaseExpansion(String line, String cutAt, Spelling relation, Propos
      *
      * @param line     the quantity the line is on
      * @param cutAt    where on it the line is
+     * @param written  which of the author's lines it is
      * @param relation the relation the line came to
      * @param asked    the case
      * @param counted  how many ways there were of choosing one of what it stands for
      */
-    public record Counted(String line, String cutAt, Spelling relation, DecidingCase asked,
-                          CaseCount counted) {
+    public record Counted(String line, String cutAt, WrittenLine written, Spelling relation,
+                          DecidingCase asked, CaseCount counted) {
 
         public Counted {
             Objects.requireNonNull(line, "cases are a line's");
             Objects.requireNonNull(cutAt, "a line is somewhere on its quantity");
+            Objects.requireNonNull(written, "one of the author's lines");
             Objects.requireNonNull(relation, "of some relation");
             Objects.requireNonNull(asked, "a case asked");
             Objects.requireNonNull(counted, "cases are some number of ways");
@@ -67,7 +74,7 @@ public record CaseExpansion(String line, String cutAt, Spelling relation, Propos
 
         /** This case, with what made its parts and what the numbers they compare leave. */
         CaseExpansion attributed(Attribution attributed) {
-            return new CaseExpansion(line, cutAt, relation, asked.condition(), counted,
+            return new CaseExpansion(line, cutAt, written, relation, asked.condition(), counted,
                     attributed, WhatTheNumbersOfACaseLeave.of(asked.standsFor()));
         }
 

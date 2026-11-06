@@ -1313,7 +1313,7 @@ final class Pullback {
             operated.neverApplied.add(block);
             return;
         }
-        if (!(applications instanceof InputReads.Applications.Each(var each, var how, var _))
+        if (!(applications instanceof InputReads.Applications.Each(var each, var how))
                 || how != HowAClosureIsApplied.TO_EVERY_ELEMENT
                 || each.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
             return;
@@ -2423,7 +2423,7 @@ final class Pullback {
                 || block.params().size() != 1 || block.params().getFirst() == null
                 || block.params().getFirst().binding() == null
                 || !(applicationsOf(block, closure.at(), read)
-                        instanceof InputReads.Applications.Each(var each, var how, var _))
+                        instanceof InputReads.Applications.Each(var each, var how))
                 || how != HowAClosureIsApplied.UNTIL_ONE_HOLDS || each.isEmpty()
                 || each.stream().anyMatch(made -> !made.keptWhere().isEmpty())
                 || splitInto(inside, each.size(), looked) != null) {
@@ -5995,7 +5995,7 @@ final class Pullback {
             // not said as much as where it is — each where the element it is handed is kept.
             List<InputReads.Applications.Made> applications;
             switch (applicationsOf(block, closure.at(), read)) {
-                case InputReads.Applications.Each(var each, var _, var _) -> applications = each;
+                case InputReads.Applications.Each(var each, var _) -> applications = each;
                 case InputReads.Applications.Unsaid(var each) -> applications = each;
                 case InputReads.Applications.NoneHanded _ -> applications =
                         List.of(new InputReads.Applications.Made(closure.at(), List.of()));

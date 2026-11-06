@@ -1,0 +1,204 @@
+package souther.architecture;
+
+import org.junit.jupiter.api.Test;
+
+import java.lang.classfile.ClassModel;
+import java.lang.classfile.CodeModel;
+import java.lang.classfile.FieldModel;
+import java.lang.classfile.MethodModel;
+import java.lang.classfile.instruction.FieldInstruction;
+import java.lang.classfile.instruction.InvokeInstruction;
+import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * Who reads what a value carries only to tell an author what multiplied the cases of a line.
+ *
+ * <p>Which call handed a closure its parameter, which application of it a statement was read on,
+ * how the statement was derived on each, and how many ways each case asked stood for: none of these
+ * decides what a body states or which rows a line asks for. Which call handed what is read off the
+ * applications a body's bindings already hold, and is no part of them. The rest are carried inside
+ * the values a reading is made of — an application, a derivation, an assessment — and so are part
+ * of what makes two of those values equal. That is on purpose. A value left equal to one carrying
+ * another account of where it came from would let a cache hand the first account out for the
+ * second, and an author would be told what multiplied a line by a call that never made it.
+ *
+ * <p>What equality cannot say is that the account is nothing more. That is held here: each is read
+ * outside the type that carries it by the methods written below and by none other, each of which
+ * either hands it on to the next carrier or tells it. A method reading one to decide something
+ * would be a row this list does not have.
+ *
+ * <p>Read off the compiled classes, field reads and calls alike, since a class in the same file
+ * reads the field. A record pattern calls every accessor of the record it takes apart, so taking
+ * one of these apart is a read and a row.
+ */
+class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
+
+    private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
+
+    /** A component a value carries for an author's sake: its type, and its name. */
+    private record Account(String owner, String name) {}
+
+    private static final Account WRITTEN_CALL_OF_A_USE =
+            new Account("souther/compiler/check/ClosureUses$Application", "written");
+    private static final Account HANDED_BY_A_BODY =
+            new Account("souther/compiler/check/ElementBindings", "handedBy");
+    private static final Account HANDED_BY_AN_ENVIRONMENT =
+            new Account("souther/compiler/inputs/BindingEnvironment", "handedBy");
+    private static final Account MADE_BY_AN_APPLICATION =
+            new Account("souther/compiler/partition/ClosureApplications$Application", "madeBy");
+    private static final Account MADE_BY_A_DERIVATION =
+            new Account("souther/compiler/meaning/Derivation$AnApplication", "madeBy");
+    private static final Account ORDINAL_OF_A_DERIVATION =
+            new Account("souther/compiler/meaning/Derivation$AnApplication", "ordinal");
+    private static final Account DERIVED_BY_THE_LINES_DRAWN =
+            new Account("souther/compiler/partition/Cutting$Read$Several", "derivedBy");
+    private static final Account DERIVED_BY_THE_LINES_ASSESSED =
+            new Account("souther/compiler/partition/ComparisonAssessment$Several", "derivedBy");
+    private static final Account EXPANDED_OF_A_LINE =
+            new Account("souther/compiler/partition/ComparisonAssessment$Several$Part",
+                    "expanded");
+    private static final Account COUNTED_OF_A_LINE =
+            new Account("souther/compiler/meaning/CasesOfALineAsked$NotWorkedOut", "counted");
+
+    /**
+     * Every method outside its carrier that reads each account.
+     *
+     * <p>Which call made an application of a closure is read by the body's bindings, for the calls
+     * that handed one of its parameters; which calls those are is asked of an environment, and the
+     * environment asks the bindings; the closure's reading asks it once, at the block, for the one
+     * call that made its applications. Which application a derivation was made on is read where the
+     * choices a case is made of are told apart. The statement's derivations are handed from the
+     * lines drawn to the lines assessed as they are made; the counts are put beside the line where
+     * its parts are narrowed, and told where the assessment says what each line was told. The
+     * application a reading is inside, and the derivations an assessment holds, are read by their
+     * carrier alone, which is where they are handed on.
+     */
+    private static final Map<Account, Set<String>> READ_BY = expected();
+
+    private static Map<Account, Set<String>> expected() {
+        Map<Account, Set<String>> by = new LinkedHashMap<>();
+        by.put(WRITTEN_CALL_OF_A_USE, Set.of(AMethod.of("souther/compiler/check/ElementBindings",
+                "handedBy", "(Lsouther/compiler/types/BindingId;)Ljava/util/Set;")));
+        by.put(HANDED_BY_A_BODY, Set.of(AMethod.of("souther/compiler/inputs/BindingEnvironment",
+                "handedBy", "(Lsouther/compiler/types/BindingId;)Ljava/util/Set;")));
+        by.put(HANDED_BY_AN_ENVIRONMENT, Set.of(AMethod.of("souther/compiler/inputs/InputReads",
+                "handingCall", "(Lsouther/compiler/core/Core$Block;)Ljava/util/Optional;")));
+        by.put(MADE_BY_AN_APPLICATION, Set.of());
+        String choices = AMethod.of("souther/compiler/meaning/TheChoicesACaseIsMadeOf$Reading",
+                "visit", "(Lsouther/compiler/meaning/Derivation;"
+                        + "Lsouther/compiler/meaning/TheChoicesACaseIsMadeOf$Context;)Z");
+        by.put(MADE_BY_A_DERIVATION, Set.of(choices));
+        by.put(ORDINAL_OF_A_DERIVATION, Set.of(choices));
+        by.put(DERIVED_BY_THE_LINES_DRAWN, Set.of(AMethod.of(
+                "souther/compiler/partition/ComparisonAssessment", "eachLineOf",
+                "(Ljava/lang/String;Ljava/util/Optional;"
+                        + "Lsouther/compiler/partition/Cutting$Read$Several;"
+                        + "Lsouther/compiler/diag/Citation;Lsouther/compiler/inputs/InputReading;Z"
+                        + "Ljava/util/function/Supplier;"
+                        + "Lsouther/compiler/partition/CountWitnesses$Lookup;)"
+                        + "Lsouther/compiler/partition/ComparisonAssessment;")));
+        by.put(DERIVED_BY_THE_LINES_ASSESSED, Set.of());
+        by.put(EXPANDED_OF_A_LINE, Set.of(AMethod.of(
+                "souther/compiler/partition/ComparisonAssessment$Several", "caseExpansions",
+                "()Ljava/util/List;")));
+        by.put(COUNTED_OF_A_LINE, Set.of(AMethod.of(
+                "souther/compiler/partition/ComparisonAssessment", "aPartNarrowed",
+                "(Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
+                        + "Lsouther/compiler/partition/Reachability;"
+                        + "Lsouther/compiler/partition/WaysToACase;Ljava/util/List;Z"
+                        + "Lsouther/compiler/inputs/InputReading;"
+                        + "Lsouther/compiler/partition/CountWitnesses$Lookup;)Ljava/util/List;")));
+        return by;
+    }
+
+    @Test
+    void eachAccountIsReadOnlyWhereItIsHandedOnOrTold() {
+        Map<Account, Set<String>> found = new LinkedHashMap<>();
+        READ_BY.keySet().forEach(account -> found.put(account, readersOutside(account)));
+        assertEquals(sorted(READ_BY), found,
+                "what a value carries to tell an author what multiplied a line is read to decide"
+                        + " nothing: a reader not written here is one that may");
+    }
+
+    /**
+     * And the walk sees each account where it is: every one is something its carrier declares,
+     * and read somewhere, its carrier included. Matched on a name nothing has, every row would be
+     * absent and the list above equal to itself.
+     */
+    @Test
+    void andEachAccountIsAComponentTheWalkSeesBeingRead() {
+        for (Account account : READ_BY.keySet()) {
+            assertTrue(declares(account), account + " is declared by its carrier");
+            assertTrue(!readersOutside(account).isEmpty() || readInside(account),
+                    account + " is read somewhere, or the walk sees no read of it at all");
+        }
+    }
+
+    private static Map<Account, Set<String>> sorted(Map<Account, Set<String>> by) {
+        Map<Account, Set<String>> sorted = new LinkedHashMap<>();
+        by.forEach((account, readers) -> sorted.put(account, new TreeSet<>(readers)));
+        return sorted;
+    }
+
+    private static Set<String> readersOutside(Account account) {
+        Set<String> found = new TreeSet<>();
+        for (Path module : COMPILED.modules()) {
+            for (ClassModel each : COMPILED.classesOf(module)) {
+                if (each.thisClass().asInternalName().equals(account.owner())) {
+                    continue;
+                }
+                for (MethodModel method : each.methods()) {
+                    if (reads(method, account)) {
+                        found.add(AMethod.of(each, method));
+                    }
+                }
+            }
+        }
+        return found;
+    }
+
+    private static boolean readInside(Account account) {
+        return carrier(account).methods().stream().anyMatch(method -> reads(method, account));
+    }
+
+    /** Whether the carrier holds the account as a field, or works it out in a method. */
+    private static boolean declares(Account account) {
+        ClassModel carrier = carrier(account);
+        return carrier.fields().stream().map(FieldModel::fieldName)
+                .anyMatch(name -> name.equalsString(account.name()))
+                || carrier.methods().stream().map(MethodModel::methodName)
+                        .anyMatch(name -> name.equalsString(account.name()));
+    }
+
+    private static ClassModel carrier(Account account) {
+        for (Path module : COMPILED.modules()) {
+            for (ClassModel each : COMPILED.classesOf(module)) {
+                if (each.thisClass().asInternalName().equals(account.owner())) {
+                    return each;
+                }
+            }
+        }
+        throw new AssertionError(account.owner() + " is compiled in no module");
+    }
+
+    private static boolean reads(MethodModel method, Account account) {
+        CodeModel code = method.code().orElse(null);
+        if (code == null) {
+            return false;
+        }
+        return code.elementStream().anyMatch(element -> switch (element) {
+            case FieldInstruction it -> account.owner().equals(it.owner().name().stringValue())
+                    && account.name().equals(it.name().stringValue());
+            case InvokeInstruction it -> account.owner().equals(it.owner().name().stringValue())
+                    && account.name().equals(it.name().stringValue());
+            default -> false;
+        });
+    }
+}

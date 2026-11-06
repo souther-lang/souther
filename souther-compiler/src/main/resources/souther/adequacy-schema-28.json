@@ -8603,6 +8603,7 @@
               "ruleId",
               "line",
               "cutAt",
+              "arms",
               "case",
               "casesOfTheLine",
               "caseExpansion"
@@ -8625,10 +8626,17 @@
                 "type": "string",
                 "description": "Where on the quantity the line is, written as a boundary's level is written. Two lines of a rule on one quantity are at different places, and this is what tells them apart to a reader."
               },
+              "arms": {
+                "type": "array",
+                "description": "Which of the author's lines it is, as the arms the comparison's definition takes on the way to it, the way an obligation's `part_of_comparison` says it; empty for the comparison itself. Two lines the author wrote can come to one relation at one place, and are two lines.",
+                "items": {
+                  "$ref": "#/$defs/writtenArm"
+                }
+              },
               "case": {
                 "type": "integer",
                 "minimum": 1,
-                "description": "Which of the cases of this rule's line the entry is, counted from one in the order the entries stand. Two entries of one rule and line are two cases, whatever they came to; the condition a case was said as is what tells them apart, and it is not written. A line is told apart by its relation, not by `line`, which two lines of a rule may share; `cutAt` is where it is."
+                "description": "Which of the cases of this rule's line the entry is, counted from one in the order the entries stand. Two entries of one rule and line are two cases, whatever they came to; the condition a case was said as is what tells them apart, and it is not written. A line is told apart by which of the author's lines it is (`arms`) and the relation it came to, not by `line`, which two lines of a rule may share; `cutAt` is where it is."
               },
               "casesOfTheLine": {
                 "type": "integer",

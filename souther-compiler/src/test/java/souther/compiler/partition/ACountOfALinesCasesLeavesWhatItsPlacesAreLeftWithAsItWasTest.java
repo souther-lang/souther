@@ -43,7 +43,7 @@ class ACountOfALinesCasesLeavesWhatItsPlacesAreLeftWithAsItWasTest {
 
     private static CaseExpansion.Counted expansion(CaseCount.Ways structural,
                                                    NumericallyConsistentWays.Counted consistent) {
-        return new CaseExpansion.Counted("g/x", "3", LINE.relation(),
+        return new CaseExpansion.Counted("g/x", "3", LINE.line().line(), LINE.relation(),
                 DecidingCase.alone(new Proposition.Always(true)),
                 new CaseCount(structural, consistent));
     }

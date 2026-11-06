@@ -725,6 +725,13 @@ sealed interface ComparisonAssessment {
             this(parts, List.of());
         }
 
+        /** Each line made into the parts {@code each} makes of it, of the statement derived as
+         *  these lines' statement was. */
+        Several eachPart(Function<Part, List<Part>> each) {
+            return new Several(parts.stream().flatMap(part -> each.apply(part).stream())
+                    .toList(), derivedBy);
+        }
+
         /**
          * What each line not worked out because its cases were too many was told of them: each
          * case asked counted on its own, with what made the parts it is taken apart on read off
@@ -733,7 +740,9 @@ sealed interface ComparisonAssessment {
         @Override
         public List<CaseExpansion> caseExpansions() {
             List<CaseExpansion.Counted> counted = new ArrayList<>();
-            parts.forEach(part -> counted.addAll(part.expanded()));
+            for (Part part : parts) {
+                counted.addAll(part.expanded());
+            }
             return counted.isEmpty() ? List.of()
                     : CaseExpansion.Counted.attributedTo(counted, derivedBy);
         }
@@ -1019,6 +1028,15 @@ sealed interface ComparisonAssessment {
             }
 
             /**
+             * This line not drawn in any case, as {@code stopped} says, and still the line it was:
+             * one not worked out for the number of its cases is so still, and what was counted of
+             * them is kept.
+             */
+            Part drawnInNoCase(Unread stopped) {
+                return new Part(id, stopped, List.of(), Map.of(), CasesWorkedOut.SHOWN, expanded);
+            }
+
+            /**
              * {@code line} where it comes to a line, read in {@code cases}; and with no case where
              * it does not.
              */
@@ -1099,10 +1117,7 @@ sealed interface ComparisonAssessment {
                 } else {
                     places = places.and(stopped.places());
                     where = where.and(stopped.where());
-                    // Not drawn in any case, and still the line it was: one not worked out for
-                    // the number of its cases is so still, and what was counted of them is kept.
-                    each.add(new Part(part.id(), stopped, List.of(), Map.of(),
-                            CasesWorkedOut.SHOWN, part.expanded()));
+                    each.add(part.drawnInNoCase(stopped));
                 }
             }
             return allStopped ? new Unread(places, where) : new Several(each, derivedBy);
@@ -1437,10 +1452,8 @@ sealed interface ComparisonAssessment {
             InputReading reading,
             CountWitnesses.Lookup witnesses) {
         if (read instanceof Several several) {
-            return new Several(several.parts().stream()
-                    .flatMap(part -> aPartNarrowed(part, way, wayToACase, arrivals,
-                            drawnByAnInvariant, reading, witnesses).stream())
-                    .toList(), several.derivedBy());
+            return several.eachPart(part -> aPartNarrowed(part, way, wayToACase, arrivals,
+                    drawnByAnInvariant, reading, witnesses));
         }
         return arrivedAt(read, way, arrivals, drawnByAnInvariant, reading, witnesses, true);
     }
@@ -1558,13 +1571,12 @@ sealed interface ComparisonAssessment {
                     List.copyOf(unread.why().keySet()));
             // A line nothing arrives at the stop of is no line not worked out any more, so what
             // was counted of its cases goes with the reason it was counted beside.
-            case Several several -> new Several(several.parts().stream()
-                    .map(part -> part.line() instanceof Unread unread
+            case Several several -> several.eachPart(part -> List.of(
+                    part.line() instanceof Unread unread
                             ? new Several.Part(part.id(), new NothingArrivesAtItsStop(
                                     List.copyOf(unread.why().keySet())), List.of(), Map.of(),
                                     CasesWorkedOut.SHOWN, List.of())
-                            : part)
-                    .toList(), several.derivedBy());
+                            : part));
             default -> read;
         };
     }
@@ -1731,8 +1743,8 @@ sealed interface ComparisonAssessment {
             List<CaseExpansion.Counted> expanded = new ArrayList<>();
             for (CasesOfALineAsked.NotWorkedOut each : found.notWorkedOut()) {
                 each.counted().ifPresent(counted -> expanded.add(new CaseExpansion.Counted(
-                        cutting.of().named(), cutting.at().toString(), part.id().relation(),
-                        each.in(), counted)));
+                        cutting.of().named(), cutting.at().toString(), part.id().line().line(),
+                        part.id().relation(), each.in(), counted)));
             }
             out.add(new Several.Part(part.id(), new Unread(atEachOf(cutting.over(),
                     new BlockReason.WhereALineDecidesNotWorkedOut(stoppedAt.stream()

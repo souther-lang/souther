@@ -129,34 +129,44 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
         assertEquals(Set.of("g/x", "g/y", "g/x + y"), lines, "a line of each number compared");
     }
 
+    /** Where an entry's line is: the quantity, where on it, and which of the author's lines. */
+    private static String placeOf(JsonNode entry) {
+        return entry.path("line").asString() + " at " + entry.path("cutAt").asString() + " "
+                + entry.path("arms");
+    }
+
     /**
      * Two lines of one rule are one finding about why, at a place, and an entry for each case of
-     * each: a count is the cases of one case of one line, which is put together with no other.
-     * Here two lines on the sum, at two of the thresholds, come to the same counts and the same
-     * makers, and are two entries told apart by where they cut the sum.
+     * each place: a count is the cases of one case of one line, which is put together with no
+     * other. Here the comparison is read on each arm of the default the search's answer is taken
+     * through, so each line the author wrote comes to the same relation twice, once on each arm —
+     * two places, with the same quantity, the same level and the same counts, told apart only by
+     * the arms; and two lines on the sum at two thresholds are two places as well.
      */
     @Test
-    void theCountsOfTwoLinesAreNeverPutTogetherAsTheirReasonIs() {
+    void theCountsOfTwoPlacesOfALineAreNeverPutTogetherAsTheirReasonIs() {
         JsonNode partition = partition(compiled(FIND));
         List<String> told = new ArrayList<>();
         List<String> came = new ArrayList<>();
+        Set<String> levels = new TreeSet<>();
         for (JsonNode each : partition.path("caseExpansions")) {
-            String line = each.path("line").asString();
-            told.add(line + " at " + each.path("cutAt").asString() + " case "
-                    + each.path("case").asInt() + " of " + each.path("casesOfTheLine").asInt());
-            came.add(line + " " + each.path("caseExpansion"));
+            told.add(placeOf(each) + " case " + each.path("case").asInt() + " of "
+                    + each.path("casesOfTheLine").asInt());
+            came.add(each.path("line").asString() + " " + each.path("caseExpansion"));
+            levels.add(each.path("line").asString() + " at " + each.path("cutAt").asString());
         }
-        assertEquals(told.size(), new TreeSet<>(told).size(), "each case of each line once: "
+        assertEquals(told.size(), new TreeSet<>(told).size(), "each case of each place once: "
                 + told);
+        assertTrue(levels.size() < told.size(),
+                "places of one quantity at one level, told apart by the author's arms: " + told);
         assertTrue(came.size() > new TreeSet<>(came).size(),
-                "two lines on one quantity that came to the same are two entries still: "
-                        + came);
-        // And numbered among their own line's cases only: a line on the same quantity elsewhere
-        // counts none of them.
+                "places that came to the same are two entries still: " + came);
+        // And numbered among their own place's cases only: another place on the same quantity,
+        // at the same level or another, counts none of them.
         java.util.Map<String, List<Integer>> numbered = new java.util.TreeMap<>();
         java.util.Map<String, Integer> claimed = new java.util.TreeMap<>();
         for (JsonNode each : partition.path("caseExpansions")) {
-            String line = each.path("line").asString() + " at " + each.path("cutAt").asString();
+            String line = placeOf(each);
             numbered.computeIfAbsent(line, _ -> new ArrayList<>()).add(each.path("case").asInt());
             claimed.put(line, each.path("casesOfTheLine").asInt());
         }

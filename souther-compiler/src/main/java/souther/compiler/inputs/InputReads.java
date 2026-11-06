@@ -31,8 +31,8 @@ import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ACallOfAnOperation;
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -745,6 +745,25 @@ public final class InputReads {
     }
 
     /**
+     * The call of one of the language's operations whose applications of {@code block} these are,
+     * where one call some source wrote handed its parameters what they hold
+     * ({@link ElementBindings#handedBy}): of two, which made an application is not one.
+     *
+     * <p>For a reader telling which construct of the model made the applications, and for nothing
+     * that reads them: what an application states is the same whichever call made it, so no
+     * reading of one asks this.
+     */
+    public Optional<ACallOfAnOperation> handingCall(Core.Block block) {
+        Set<ACallOfAnOperation> by = new LinkedHashSet<>();
+        for (Core.Binder param : block.params()) {
+            if (param != null && param.binding() != null) {
+                by.addAll(names.handedBy(param.binding()));
+            }
+        }
+        return by.size() == 1 ? Optional.of(by.iterator().next()) : Optional.empty();
+    }
+
+    /**
      * What reading {@code block}'s body on each application of it that hands a parameter one of the
      * values a container was written with comes to.
      *
@@ -770,7 +789,6 @@ public final class InputReads {
         List<Core.Binder> handed = new ArrayList<>();
         List<List<ReadMeaning.Occurrence>> occurrencesOf = new ArrayList<>();
         HowAClosureIsApplied how = HowAClosureIsApplied.TO_EVERY_ELEMENT;
-        Optional<ACallOfAnOperation> madeBy = Optional.empty();
         long readings = applied.readings();
         for (int at = 0; at < block.params().size(); at++) {
             Core.Binder param = block.params().get(at);
@@ -789,12 +807,6 @@ public final class InputReads {
                             && names.roleOf(param.binding())
                                     instanceof BindingRole.Element(var held)) {
                         how = held.applied();
-                        // The call whose applications these are, where one call handed the
-                        // parameter what it holds: of two, which made an application is not one.
-                        Set<ACallOfAnOperation> by = names.handedBy(param.binding());
-                        if (madeBy.isEmpty() && by.size() == 1) {
-                            madeBy = Optional.of(by.iterator().next());
-                        }
                     }
                     handed.add(param);
                     occurrencesOf.add(occurrences);
@@ -847,7 +859,7 @@ public final class InputReads {
                 || (handed.size() > 1 && how != HowAClosureIsApplied.TO_EVERY_ELEMENT)) {
             return new Applications.Unsaid(each);
         }
-        return new Applications.Each(each, how, madeBy);
+        return new Applications.Each(each, how);
     }
 
     /**
@@ -1205,19 +1217,15 @@ public final class InputReads {
 
         /**
          * One application per occurrence, in the order a walk of the container meets them, which
-         * is the order a run makes them in, how far the operation goes making them, and the call
-         * that makes them, where one call some source wrote handed the closure what it holds
-         * ({@link ElementBindings#handedBy}).
+         * is the order a run makes them in, and how far the operation goes making them.
          */
-        record Each(List<Made> each, HowAClosureIsApplied how,
-                    Optional<ACallOfAnOperation> madeBy) implements Applications {
+        record Each(List<Made> each, HowAClosureIsApplied how) implements Applications {
 
             public Each {
                 each = List.copyOf(each);
                 if (how == null) {
                     throw new IllegalArgumentException("applications are made some way");
                 }
-                Objects.requireNonNull(madeBy, "by some call written somewhere, or by none");
             }
         }
 

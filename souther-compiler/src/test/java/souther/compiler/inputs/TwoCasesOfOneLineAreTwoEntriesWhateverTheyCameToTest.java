@@ -10,6 +10,8 @@ import souther.compiler.meaning.CaseExpansion;
 import souther.compiler.meaning.NumericallyConsistentWays;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Spelling;
+import souther.compiler.meaning.WrittenChoice;
+import souther.compiler.meaning.WrittenLine;
 import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
@@ -36,8 +38,17 @@ class TwoCasesOfOneLineAreTwoEntriesWhateverTheyCameToTest {
             new CaseCount.Ways.Exactly(BigInteger.valueOf(300)),
             new NumericallyConsistentWays.Counted.AtMost(BigInteger.valueOf(20)));
 
+    /** The first arm of an {@code if} the author wrote in {@code g}. */
+    private static final WrittenLine AN_ARM = new WrittenLine(List.of(new WrittenLine.Arm(
+            new WrittenChoice(new SourceConstructOrigin(new WrittenOwner.Body("m", "g"), 2, 2,
+                    SourceConstruct.IF), List.of()), 0, false)));
+
     private static CaseExpansion ofTheCase(Proposition condition) {
-        return new CaseExpansion("g/x", "3", Spelling.of("x"), condition, COUNTED,
+        return ofTheCase(WrittenLine.THE_COMPARISON, condition);
+    }
+
+    private static CaseExpansion ofTheCase(WrittenLine written, Proposition condition) {
+        return new CaseExpansion("g/x", "3", written, Spelling.of("x"), condition, COUNTED,
                 new CaseExpansion.Attributed(List.of(), 4, 4), List.of());
     }
 
@@ -54,6 +65,15 @@ class TwoCasesOfOneLineAreTwoEntriesWhateverTheyCameToTest {
         assertEquals(2, gathered(ofTheCase(new Proposition.Always(true)),
                 ofTheCase(new Proposition.Always(false))).size(),
                 "one entry for each case the reading told apart");
+    }
+
+    /** Two of the author's lines coming to one relation are two places, and their cases two. */
+    @Test
+    void twoLinesTheAuthorWroteComingToOneRelationAreTwoEntries() {
+        assertEquals(2, gathered(ofTheCase(WrittenLine.THE_COMPARISON,
+                        new Proposition.Always(true)),
+                ofTheCase(AN_ARM, new Proposition.Always(true))).size(),
+                "the same relation and condition, of two lines the author wrote");
     }
 
     @Test
