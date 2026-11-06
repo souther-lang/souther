@@ -8241,9 +8241,9 @@ final class Pullback {
      * <p>{@code d == String.lowercase(s)} relates {@code d} to {@code s} as {@code d == s} does:
      * whatever {@code s} holds, some {@code d} meets it and some does not. Under {@code
      * String.lowercase(s) == String.uppercase(s)} both values are made of {@code s}, and what holds
-     * there is which values {@code s} holds — a division of {@code s} this does not read. A position
-     * under the other is the same position for this: a field of {@code s} is a part of what
-     * {@code s} holds.
+     * there is which values {@code s} holds — a division of {@code s} this does not read. Positions
+     * bearing on each other ({@link TermPath#bearsOn}) are the same position for this: a field of
+     * {@code s} is a part of what {@code s} holds, and {@code s} narrowed to a case is {@code s}.
      */
     private static boolean relatesPositionsApart(LinearForm<Quantity> form) {
         if (form.constant().signum() != 0 || form.coefs().size() != 2) {
@@ -8274,7 +8274,7 @@ final class Pullback {
         }
         for (TermPath p : sides.get(0)) {
             for (TermPath q : sides.get(1)) {
-                if (p.isAtOrUnder(q) || q.isAtOrUnder(p)) {
+                if (p.bearsOn(q)) {
                     return false;
                 }
             }

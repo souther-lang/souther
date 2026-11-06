@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.Case;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 
 import java.util.LinkedHashSet;
@@ -53,6 +55,39 @@ class AStopOfTheWayIsAccountedForOnlyAtThePlacesWhoseLengthsAreAccountedForTest 
                 List.of(TAG, OTHER), Set.of(TAG)));
         assertTrue(UndividedByARelation.readsOnlyWhatIsAccountedFor(between(TAG, OTHER),
                 List.of(TAG, OTHER), Set.of(TAG, OTHER)));
+    }
+
+    /**
+     * A tie bears on a read as the value is reached, and what accounts for a place accounts only
+     * for what is that place or inside it step for step: what is shown of a value narrowed to one
+     * case is not shown of it narrowed to another, nor of the value, though each bears on the
+     * other; and what is shown of what a value holds is not shown of the value.
+     */
+    @Test
+    void whatAccountsForAPlaceAccountsForNoPlaceItOnlyBearsOn() {
+        TermPath tagged = TermPath.of("t");
+        TermPath one = tagged.refine(Refinement.of(new Case.Presence(true))).then("s");
+        TermPath other = tagged.refine(Refinement.of(new Case.Presence(false))).then("s");
+        TermPath unnarrowed = tagged.then("s");
+
+        assertFalse(UndividedByARelation.readsOnlyWhatIsAccountedFor(between(other, COUNT),
+                List.of(other), Set.of(one)));
+        assertFalse(UndividedByARelation.readsOnlyWhatIsAccountedFor(between(unnarrowed, COUNT),
+                List.of(unnarrowed), Set.of(one)));
+        assertFalse(UndividedByARelation.readsOnlyWhatIsAccountedFor(between(TAG, COUNT),
+                List.of(TAG), Set.of(TAG.element())));
+        assertTrue(UndividedByARelation.readsOnlyWhatIsAccountedFor(between(TAG, COUNT),
+                List.of(TAG.element()), Set.of(TAG)));
+    }
+
+    /** A tie of a value narrowed to a case bears on the value read without the narrowing. */
+    @Test
+    void aTieBearsOnAReadAsTheValueIsReached() {
+        TermPath tagged = TermPath.of("t");
+        TermPath narrowed = tagged.refine(Refinement.of(new Case.Presence(true))).then("s");
+
+        assertFalse(UndividedByARelation.readsOnlyWhatIsAccountedFor(between(narrowed, COUNT),
+                List.of(tagged.then("s")), Set.of()));
     }
 
     @Test

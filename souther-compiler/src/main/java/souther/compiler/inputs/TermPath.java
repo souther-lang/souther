@@ -682,11 +682,62 @@ public record TermPath(String head, List<Step> steps) {
      * both sides that differ bear on each other there, and otherwise the two bear on each other
      * where one runs out within the other. This is the one answer to whether two things asked of
      * the input are apart; a reader that sets them apart, to ask one without the other, asks it
-     * here.
+     * here. Whether one value moves with another, or is read by what reads it, is
+     * {@link #standsAtUnderOrAround}.
      */
     public boolean bearsOn(TermPath other) {
+        return reached(other) != Reached.APART;
+    }
+
+    /**
+     * Whether one of this path and {@code other} stands at, under or around the other as the value
+     * is reached: a narrowing to cases on one side only is skipped, and two narrowings of one value
+     * to different cases are two places apart.
+     *
+     * <p>For a reader asking whether the value at one place moves with the value at the other, or
+     * is read by what reads the other — not whether two things stated of them can hold together,
+     * which is {@link #bearsOn}. A narrowing stated of a value excludes another case of it, so two
+     * statements under two cases cannot both hold; but the value under one case neither moves with
+     * nor reads the value under another, and a place read under a case, as a rule of a sum reads
+     * each case, says nothing of which case the value is.
+     */
+    public boolean standsAtUnderOrAround(TermPath other) {
+        Reached reached = reached(other);
+        return reached != Reached.APART && reached != Reached.ANOTHER_CASE;
+    }
+
+    /**
+     * Whether the value at this path is the value at {@code other}, or one inside it, as the value
+     * is reached: a narrowing to cases on one side only is skipped, as {@link #bearsOn} skips it.
+     * Two narrowings of one value to different cases are neither inside the other: each says which
+     * case the value is, and so stands around whatever is asked under the other.
+     *
+     * <p>The one-way half of {@link #bearsOn}, for a reader that tells what is asked of a value
+     * itself from what is asked of a value it sits in.
+     */
+    public boolean standsAtOrUnder(TermPath other) {
+        Reached reached = reached(other);
+        return reached == Reached.AT || reached == Reached.UNDER;
+    }
+
+    /** Where this path stands to another as the value is reached. */
+    private enum Reached {
+        /** Each runs out where the other does. */
+        AT,
+        /** The other runs out within this. */
+        UNDER,
+        /** This runs out within the other. */
+        AROUND,
+        /** The two narrow one value to different cases. */
+        ANOTHER_CASE,
+        /** Neither reaches the other. */
+        APART
+    }
+
+    /** Where this path stands to {@code other}, the steps matched as {@link #bearsOn} says. */
+    private Reached reached(TermPath other) {
         if (!head.equals(other.head)) {
-            return false;
+            return Reached.APART;
         }
         int here = 0;
         int there = 0;
@@ -696,15 +747,18 @@ public record TermPath(String head, List<Step> steps) {
             if (hereNarrowed > here && thereNarrowed > there
                     && !steps.subList(here, hereNarrowed)
                             .equals(other.steps.subList(there, thereNarrowed))) {
-                return true;
+                return Reached.ANOTHER_CASE;
             }
             here = hereNarrowed;
             there = thereNarrowed;
-            if (here == steps.size() || there == other.steps.size()) {
-                return true;
+            boolean hereEnds = here == steps.size();
+            boolean thereEnds = there == other.steps.size();
+            if (hereEnds || thereEnds) {
+                return hereEnds && thereEnds ? Reached.AT
+                        : thereEnds ? Reached.UNDER : Reached.AROUND;
             }
             if (!steps.get(here).equals(other.steps.get(there))) {
-                return false;
+                return Reached.APART;
             }
             here++;
             there++;

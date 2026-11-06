@@ -773,8 +773,8 @@ final class AStatementAtARow {
      * Whether what an element of {@code container} answers of this may turn on which value stands
      * at {@code at}, and not only on which elements hold one value there: some number it reads
      * reads that place ({@link WhatItReads#theValue}), or some position it asks of its own value
-     * is that place, inside it or holds it — or it reads other elements, of which nothing is
-     * shown.
+     * reads it along ({@link Quantity.TheValue#isReadAlong}) — or it reads other elements, of which
+     * nothing is shown.
      *
      * @param across as {@link #turnsOnAmong} has it
      */
@@ -790,7 +790,7 @@ final class AStatementAtARow {
             }
         }
         for (TermPath each : positions) {
-            if (at.overlaps(each)) {
+            if (at.isReadAlong(each)) {
                 return true;
             }
         }
@@ -836,7 +836,7 @@ final class AStatementAtARow {
                               Optional<TermPath> across) {
         return switch (term) {
             case NumericTerm.FromOnePosition one ->
-                    new WhatItReads(TurnsOn.THE_ELEMENT, overlaps(one.subjectPath(), under));
+                    new WhatItReads(TurnsOn.THE_ELEMENT, readsTheValue(one.subjectPath(), under));
             case NumericTerm.TakenOver taken ->
                     new WhatItReads(overTheRun(taken.source(), container), false);
             case NumericTerm.Multiplicity often -> new WhatItReads(underItsValue(
@@ -844,7 +844,7 @@ final class AStatementAtARow {
                     TurnsOn.THOSE_UNDER_ITS_VALUE), false);
             case NumericTerm.ExtremeOfItsKey end -> new WhatItReads(underItsValue(
                     List.of(end.container()), container, across, isAt(under, end.key()),
-                    TurnsOn.THOSE_UNDER_ITS_VALUE), overlaps(end.value(), under));
+                    TurnsOn.THOSE_UNDER_ITS_VALUE), readsTheValue(end.value(), under));
             case NumericTerm.OccurrencesOfItsValue often -> {
                 List<TermPath> ranged = often.run().subjectPath().containersHoldingIt();
                 yield new WhatItReads(ranged.size() == 1 || ranged.equals(over(container, across))
@@ -858,7 +858,7 @@ final class AStatementAtARow {
             case NumericTerm.GatheredUnderItsKey gathered -> {
                 List<TermPath> ranged = gathered.elements().containersHoldingIt();
                 boolean readsIt = gathered.value().reads().stream()
-                        .anyMatch(each -> overlaps(each.from(gathered.elements()), under));
+                        .anyMatch(each -> readsTheValue(each.from(gathered.elements()), under));
                 if (ranged.size() != 1 && !ranged.equals(over(container, across))) {
                     yield new WhatItReads(among(ranged, container) ? TurnsOn.OTHER_ELEMENTS
                             : TurnsOn.THE_ELEMENT, readsIt)
@@ -901,10 +901,10 @@ final class AStatementAtARow {
                                 && kept.perElement().readsTheValueAt(container, under, across));
     }
 
-    /** Whether {@code path} is where the value the elements are grouped under is held, inside it
-     *  or holds it; never where they stand alone. */
-    private static boolean overlaps(TermPath path, Quantity.TheValue under) {
-        return under != null && under.overlaps(path);
+    /** Whether what reads {@code path} reads the value the elements are grouped under
+     *  ({@link Quantity.TheValue#isReadAlong}); never where they stand alone. */
+    private static boolean readsTheValue(TermPath path, Quantity.TheValue under) {
+        return under != null && under.isReadAlong(path);
     }
 
     /** Whether the elements are grouped under the value at {@code place} of every element. */

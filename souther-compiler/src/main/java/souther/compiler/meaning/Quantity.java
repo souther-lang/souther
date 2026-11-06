@@ -884,9 +884,14 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                     && at.equals(place);
         }
 
-        /** Whether some place the value is held at is {@code path}, inside it or holds it. */
-        default boolean overlaps(TermPath path) {
-            return heldAt().stream().anyMatch(at -> at.isAtOrUnder(path) || path.isAtOrUnder(at));
+        /**
+         * Whether what reads {@code path} reads the value: some place it is held at is the path,
+         * inside it or holds it as the value is reached ({@link TermPath#standsAtUnderOrAround}).
+         * A place each case reads is read under that case, and which case an element is is not
+         * the value, so a path under another case reads none of it.
+         */
+        default boolean isReadAlong(TermPath path) {
+            return heldAt().stream().anyMatch(at -> at.standsAtUnderOrAround(path));
         }
 
         /** Whether {@code key}, read from the elements at {@code elements}, is where this
