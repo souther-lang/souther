@@ -760,13 +760,8 @@ public final class PathReachability {
     }
 
     /** A walk of the same body that files nothing where this one files: what it finds about
-     *  where a run gets is all it is asked. */
-    private PathReachability(PathReachability of) {
-        this(of, of.meanings);
-    }
-
-    /** The same, reading what the conditions it meets state off {@code meanings}: what they state
-     *  on the one application of a closure the walk is of. */
+     *  where a run gets is all it is asked. What the conditions it meets state is read off
+     *  {@code meanings}: what they state on the one application of a closure the walk is of. */
     private PathReachability(PathReachability of, MeaningsOfABody meanings) {
         this.engine = of.engine;
         this.completion = of.completion;

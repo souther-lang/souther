@@ -37,33 +37,38 @@ import java.util.function.Supplier;
  * application a run meets it on ({@link Proposition.OnAnApplication}), which says what can come out
  * and not which application states what. What each application's reading of the body states is
  * kept beside it, filed by which application it is ({@link #onTheApplication}), for a reader that
- * knows which application it stands on.
+ * knows which application it stands on. Each is filed as this is, a site met again on it compared
+ * by what it states ({@link Filing#metAll}), so what an application states is the same question
+ * as what a site states and is answered one way.
  *
- * @param stated    what is stated at each site read to one statement, and how
+ * @param stated    what is stated at each site read to one statement, and how — never a site
+ *                  whose copies state different things, so nothing read off this is one of them
  * @param ambiguous the sites whose copies state different things
  * @param piecesAttempted the pieces of a string of the input that the body builds a newtype of,
  *                  in the order the walk met them
  * @param applications what the body of a closure read on each of its applications states on that
  *                  application, by which application it is
  *                  ({@link InputReads.Applications.Made#which})
- * @param applicationsMetTwice the applications met again stating something else, which are filed
- *                  as nothing
  */
 public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
                               Set<PieceDemand> piecesAttempted,
-                              Map<AnApplicationOfACall, MeaningsOfABody> applications,
-                              Set<AnApplicationOfACall> applicationsMetTwice) {
+                              Map<AnApplicationOfACall, MeaningsOfABody> applications) {
 
     /** A body nothing was read of. */
     public static final MeaningsOfABody NONE =
-            new MeaningsOfABody(Map.of(), Set.of(), Set.of(), Map.of(), Set.of());
+            new MeaningsOfABody(Map.of(), Set.of(), Set.of(), Map.of());
 
     public MeaningsOfABody {
         stated = Map.copyOf(stated);
         ambiguous = Set.copyOf(ambiguous);
         piecesAttempted = Collections.unmodifiableSet(new LinkedHashSet<>(piecesAttempted));
         applications = Map.copyOf(applications);
-        applicationsMetTwice = Set.copyOf(applicationsMetTwice);
+        for (Site each : ambiguous) {
+            if (stated.containsKey(each)) {
+                throw new IllegalArgumentException(
+                        "a site whose copies state different things states none of them: " + each);
+            }
+        }
     }
 
     /**
@@ -349,16 +354,14 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
      *
      * <p>A site met again is compared by what the copy states: the same proposition derived another
      * way is the same statement and leaves the first derivation where it is, and another proposition
-     * makes the site ambiguous.
+     * makes the site ambiguous, which it stays whatever is met there after.
      */
     public static final class Filing {
 
         private final Map<Site, Meaning> stated = new LinkedHashMap<>();
         private final Set<Site> ambiguous = new HashSet<>();
         private final Set<PieceDemand> piecesAttempted = new LinkedHashSet<>();
-        private final Map<AnApplicationOfACall, MeaningsOfABody> applications =
-                new LinkedHashMap<>();
-        private final Set<AnApplicationOfACall> applicationsMetTwice = new HashSet<>();
+        private final Map<AnApplicationOfACall, Filing> applications = new LinkedHashMap<>();
 
         /** {@code demands}, met where a construction is attempted of the pieces of a string. */
         public void metAsPieces(List<PieceDemand> demands) {
@@ -372,11 +375,40 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
          * different things ({@link ReadThroughNames#sameUpToTheNames}).
          */
         public void met(Site site, Meaning meaning) {
+            if (ambiguous.contains(site)) {
+                return;
+            }
             Meaning before = stated.putIfAbsent(site, meaning);
             if (before != null
                     && !ReadThroughNames.sameUpToTheNames(before.states(), meaning.states())) {
-                ambiguous.add(site);
+                ambiguousAt(site);
             }
+        }
+
+        /**
+         * Everything {@code reading} filed, met as this filing meets what it reads itself: each
+         * site it states as a copy met here, each site it found ambiguous as ambiguous here, the
+         * pieces it attempted, and what it filed under each application, under that application.
+         *
+         * <p>The one way a reading made apart from this one is taken into it, so that what makes two
+         * readings of a site, or of an application, one statement is decided by {@link #met} alone.
+         */
+        public void metAll(MeaningsOfABody reading) {
+            reading.stated().forEach(this::met);
+            reading.ambiguous().forEach(this::ambiguousAt);
+            piecesAttempted.addAll(reading.piecesAttempted());
+            reading.applications().forEach((which, on) -> onTheApplication(which).metAll(on));
+        }
+
+        /** {@code site} as one whose copies state different things, which states none of them. */
+        private void ambiguousAt(Site site) {
+            stated.remove(site);
+            ambiguous.add(site);
+        }
+
+        /** What is filed under the application {@code which}. */
+        private Filing onTheApplication(AnApplicationOfACall which) {
+            return applications.computeIfAbsent(which, _ -> new Filing());
         }
 
         /**
@@ -389,10 +421,12 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
          * met with one value and then another, and stating different things on each is what such a
          * site does. A site with copies on some application is still a site with copies.
          *
-         * <p>Each reading told apart from the others is kept as well, under which application it
-         * is. The call that makes them is in the copy of the body it stands in, so the applications
-         * a copy of a helper makes are not the ones another copy makes. One met again stating
-         * something else is one no reader can take either reading for, and is filed as nothing.
+         * <p>Each reading told apart from the others is filed as well, under which application it
+         * is ({@link #metAll}), so a site met again on one application is what a site met again
+         * anywhere is. The call that makes them is in the copy of the body it stands in, so the
+         * applications a copy of a helper makes are not the ones another copy makes; a call that
+         * applies two closures applies each of them on its first element, and the two readings
+         * filed there state the sites of two bodies.
          */
         public void metOnEachApplication(List<ReadOnAnApplication> each) {
             List<MeaningsOfABody> readings =
@@ -405,7 +439,7 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
             });
             for (Site site : sites) {
                 if (readings.stream().anyMatch(one -> one.ambiguous().contains(site))) {
-                    ambiguous.add(site);
+                    ambiguousAt(site);
                     continue;
                 }
                 List<Derivation> how = readings.stream().map(one -> one.stated().get(site))
@@ -413,22 +447,15 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
                 met(site, new Conclusion(Optional.of(site.construct()))
                         .meaningOf(new Derivation.OnEachApplication(how)));
             }
-            for (ReadOnAnApplication one : each) {
-                if (one.which().isEmpty()) {
-                    continue;
-                }
-                MeaningsOfABody before = applications.putIfAbsent(one.which().get(),
-                        one.reading());
-                if (before != null && !before.equals(one.reading())) {
-                    applicationsMetTwice.add(one.which().get());
-                }
-            }
+            each.forEach(one -> one.which()
+                    .ifPresent(which -> onTheApplication(which).metAll(one.reading())));
         }
 
         /** What was filed. */
         public MeaningsOfABody filed() {
-            return new MeaningsOfABody(stated, ambiguous, piecesAttempted, applications,
-                    applicationsMetTwice);
+            Map<AnApplicationOfACall, MeaningsOfABody> onEach = new LinkedHashMap<>();
+            applications.forEach((which, filing) -> onEach.put(which, filing.filed()));
+            return new MeaningsOfABody(stated, ambiguous, piecesAttempted, onEach);
         }
     }
 
@@ -454,8 +481,7 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
      * particular reads {@link #at} as it is.
      */
     public Optional<MeaningsOfABody> onTheApplication(AnApplicationOfACall which) {
-        return applicationsMetTwice.contains(which) ? Optional.empty()
-                : Optional.ofNullable(applications.get(which));
+        return Optional.ofNullable(applications.get(which));
     }
 
     /** What is stated at {@code site}, or empty where nothing was read there or its copies state
@@ -466,7 +492,7 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
 
     /** What is stated at {@code site} and how, or empty as {@link #at} is. */
     public Optional<Meaning> meaningAt(Site site) {
-        return ambiguous.contains(site) ? Optional.empty() : Optional.ofNullable(stated.get(site));
+        return Optional.ofNullable(stated.get(site));
     }
 
     /** Why nothing is stated at {@code site}, where {@link #at} answers nothing. */

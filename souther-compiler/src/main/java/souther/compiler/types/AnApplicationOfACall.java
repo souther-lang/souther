@@ -13,6 +13,11 @@ import java.util.Objects;
  * call is the construct of the model the copy was made at ({@link ModelOccurrence}). A helper
  * called twice is two constructs of the model, so the applications each copy makes are its own.
  *
+ * <p>An application of the call, and not of one closure: a call handed two closures it applies to
+ * each element makes its {@code n}th application of both, and this names the two. What is read on
+ * one is read at the sites of its own body, so what is filed under this is the sites of both, each
+ * stating what its closure states there.
+ *
  * @param call    the call of the model that makes it
  * @param ordinal which of the call's applications it is
  */

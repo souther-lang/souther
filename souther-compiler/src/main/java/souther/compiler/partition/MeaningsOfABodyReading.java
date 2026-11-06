@@ -104,7 +104,7 @@ public final class MeaningsOfABodyReading {
                 MeaningsOfABodyReading inside = inside(declinedAt);
                 inside.walk(block.body(), reads);
                 read = inside.read;
-                inside.filed.filed().stated().forEach(filed::met);
+                filed.metAll(inside.filed.filed());
                 return;
             }
             // Where which of the applications a run makes is not said, what a condition states on
