@@ -40,6 +40,8 @@ class EveryObjectTheStateOfAReadingHoldsIsAsItWasMadeTest {
             "an ordered map of this compiler's, which has no way to put or remove",
             "souther.compiler.inputs.ElementsNamed.named",
             "an ordered map of this compiler's of ordered sets, which have no way to put or remove",
+            "souther.compiler.inputs.ElementsNamed.unnamed",
+            "an ordered set of this compiler's, which has no way to put or remove",
             "souther.compiler.inputs.TermPath.steps",
             "the steps of a path, an immutable list that works its hash out once");
 

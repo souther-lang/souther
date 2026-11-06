@@ -1261,7 +1261,7 @@ public final class InputReads {
     private static boolean namesSomething(Core e) {
         Set<BindingId> made = new HashSet<>();
         Set<BindingId> read = new HashSet<>();
-        walkNames(e, made, read);
+        namesReadIn(e, made, read);
         read.removeAll(made);
         return !read.isEmpty();
     }
@@ -1271,16 +1271,10 @@ public final class InputReads {
      * name it makes read and not made, which says the value names something — the answer that hands
      * nothing, and never a wrong one.
      */
-    private static void walkNames(Core e, Set<BindingId> made, Set<BindingId> read) {
-        switch (e) {
-            case Core.Read r -> read.add(r.binding());
-            case Core.LetIn let -> madeBy(let.binder(), made);
-            case Core.Block block -> block.params().forEach(each -> madeBy(each, made));
-            case Core.Match match -> match.cases().forEach(arm -> madeBy(arm.binder(), made));
-            case Core.IfConstructed fork -> madeBy(fork.binder(), made);
-            default -> { }
-        }
-        Core.forEachChild(e, child -> walkNames(child, made, read));
+    private static void namesReadIn(Core e, Set<BindingId> made, Set<BindingId> read) {
+        List<Core.Read> reads = new ArrayList<>();
+        walkNames(e, made, reads);
+        reads.forEach(each -> read.add(each.binding()));
     }
 
     private static void madeBy(Core.Binder binder, Set<BindingId> made) {
@@ -2354,20 +2348,70 @@ public final class InputReads {
         return held;
     }
 
+    /**
+     * The names {@code e} reads elements through, each read asked on its own: what the name was
+     * filed at, and where the read itself stands.
+     *
+     * <p>A read that stands inside an element of the input stands where the name's element does,
+     * and what it is about is that element's one value only where the name was filed there. Where
+     * nothing was filed there for it, which element it is is not known, and the element is
+     * {@linkplain ElementsNamed#unnamed one of no one value} rather than the value at the
+     * position: a read is never told less than its own name says by being told nothing.
+     */
     private ElementsNamed namesIn(Core e, DeclarationNewtypes newtypes) {
-        Set<ElementStood> out = new LinkedHashSet<>();
-        stoodForIn(e, newtypes, new HashSet<>(), out);
-        return ElementsNamed.of(out.stream()
+        List<ElementsNamed.Named> out = new ArrayList<>();
+        Set<ElementsNamed.Slot> unnamed = new LinkedHashSet<>();
+        Set<BindingId> made = new HashSet<>();
+        List<Core.Read> reads = new ArrayList<>();
+        walkNames(e, made, reads);
+        for (Core.Read read : reads) {
+            // A name bound inside the expression is a different value on each application of
+            // what binds it, as a closure's parameter is on each element it is handed, and so no
+            // one element the comparison is read of.
+            if (read.binding() == null || made.contains(read.binding())) {
+                continue;
+            }
+            ElementsNamed mine = namesOfTheRead(read, newtypes);
+            mine.named().forEach((slot, names) -> names.forEach(name ->
+                    out.add(new ElementsNamed.Named(slot, name))));
+            unnamed.addAll(mine.unnamed());
+            if (pathOf(read, newtypes) instanceof PathResolution.At(TermPath at)
+                    && ElementsNamed.Slot.innermostOf(at) instanceof ElementsNamed.Slot slot
+                    && !mine.named().containsKey(slot)) {
+                unnamed.add(slot);
+            }
+        }
+        return ElementsNamed.of(out, unnamed);
+    }
+
+    /** What the one read {@code read} names, through the names it was only given. */
+    private ElementsNamed namesOfTheRead(Core.Read read, DeclarationNewtypes newtypes) {
+        Set<ElementStood> stood = new LinkedHashSet<>();
+        stoodBy(read.binding(), newtypes, new HashSet<>(), stood);
+        return ElementsNamed.of(stood.stream()
                 .map(each -> new ElementsNamed.Named(
                         new ElementsNamed.Slot(each.container(), each.part()), each.name()))
                 .toList());
+    }
+
+    /** Every read of a name in {@code e}, in the order written, and the names {@code e} binds. */
+    private static void walkNames(Core e, Set<BindingId> made, List<Core.Read> reads) {
+        switch (e) {
+            case Core.Read r -> reads.add(r);
+            case Core.LetIn let -> madeBy(let.binder(), made);
+            case Core.Block block -> block.params().forEach(each -> madeBy(each, made));
+            case Core.Match match -> match.cases().forEach(arm -> madeBy(arm.binder(), made));
+            case Core.IfConstructed fork -> madeBy(fork.binder(), made);
+            default -> { }
+        }
+        Core.forEachChild(e, child -> walkNames(child, made, reads));
     }
 
     private void stoodForIn(Core e, DeclarationNewtypes newtypes, Set<BindingId> followed,
                             Set<ElementStood> into) {
         Set<BindingId> made = new HashSet<>();
         Set<BindingId> read = new LinkedHashSet<>();
-        walkNames(e, made, read);
+        namesReadIn(e, made, read);
         // A name bound inside the expression is a different value on each application of what
         // binds it, as a closure's parameter is on each element it is handed, and so no one
         // element the comparison is read of.
@@ -2399,18 +2443,17 @@ public final class InputReads {
             // elements on, in another order or some of them, hands the same elements, and a read
             // of one lands in that element and nowhere the name was not filed. A name whose
             // element stands at no one position is read at none, and is told by its container.
+            // Handed the elements of several containers, all of which stand at one position, it
+            // is one element there on each application, whichever container handed it.
             case BindingRole.Element(HeldIn held) -> {
-                if (elementAt(name, newtypes) instanceof PathResolution.At(TermPath at)) {
-                    ElementsNamed.Slot slot = ElementsNamed.Slot.innermostOf(at);
-                    if (slot != null) {
-                        into.add(new ElementStood(name, slot.container(), slot.part()));
-                    }
-                } else {
+                if (!filedWhereItsElementStands(name, newtypes, into)) {
                     into.add(new ElementStood(name,
                             new ContainerOf.Made(Core.withoutStanding(held.container())),
                             held.part()));
                 }
             }
+            case BindingRole.ElementOfSeveral _ ->
+                    filedWhereItsElementStands(name, newtypes, into);
             // A name given the position of an element, as the value of an entry a lookup
             // answered is.
             // And a name standing at a place inside an element, taken off a value that stands for
@@ -2432,7 +2475,39 @@ public final class InputReads {
                     stoodForIn(given, newtypes, followed, into);
                 }
             }
-            case BindingRole.ElementOfSeveral _, BindingRole.Unknown _ -> { }
+            case BindingRole.Unknown _ -> { }
+        }
+    }
+
+    /**
+     * Files {@code name} at the element its own element stands in ({@link #elementAt}), and says
+     * whether its element stands at one position.
+     *
+     * <p>An element that is a pair is no position, and its places may each stand at one: a list of
+     * a map's entries holds the map's keys at the first place of each and its values at the second
+     * ({@link InputPath#placesOfTheElementAt}). A read of a place stands there, and the name is
+     * filed at each element its places stand in.
+     */
+    private boolean filedWhereItsElementStands(BindingId name, DeclarationNewtypes newtypes,
+                                               Set<ElementStood> into) {
+        if (elementAt(name, newtypes) instanceof PathResolution.At(TermPath at)) {
+            filedAt(name, at, into);
+            return true;
+        }
+        boolean placed = false;
+        for (PathResolution place : InputPath.placesOfTheElementAt(name, names, newtypes, this)) {
+            if (place.heldAt() instanceof PathResolution.At(TermPath at)) {
+                filedAt(name, at, into);
+                placed = true;
+            }
+        }
+        return placed;
+    }
+
+    private static void filedAt(BindingId name, TermPath at, Set<ElementStood> into) {
+        ElementsNamed.Slot slot = ElementsNamed.Slot.innermostOf(at);
+        if (slot != null) {
+            into.add(new ElementStood(name, slot.container(), slot.part()));
         }
     }
 
@@ -4530,7 +4605,7 @@ public final class InputReads {
                 && read.binding().equals(element);
         Set<BindingId> made = new HashSet<>();
         Set<BindingId> read = new HashSet<>();
-        walkNames(value, made, read);
+        namesReadIn(value, made, read);
         read.removeAll(made);
         return read.stream().allMatch(binding -> (keyIsTheElement && binding.equals(element))
                 || at.names.roleOf(binding) instanceof BindingRole.Root);

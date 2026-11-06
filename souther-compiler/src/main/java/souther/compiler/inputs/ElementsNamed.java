@@ -22,13 +22,15 @@ import java.util.Set;
  * <p>Only what the names say. Two names may be handed one element on some run, so two names are
  * never a proof that two values differ; one name is one value.
  *
- * @param named for each container and part of an entry, the names it was read through, in the
- *              order met. Empty where nothing was read through a name for an element
+ * @param named   for each container and part of an entry, the names it was read through, in the
+ *                order met. Empty where nothing was read through a name for an element
+ * @param unnamed the elements read through a name whose element is not known: what was read at
+ *                one of these is of no one value there, as what two names were read through is
  */
-public record ElementsNamed(Map<Slot, Set<BindingId>> named) {
+public record ElementsNamed(Map<Slot, Set<BindingId>> named, Set<Slot> unnamed) {
 
     /** Read through no name for an element. */
-    public static final ElementsNamed NONE = new ElementsNamed(Map.of());
+    public static final ElementsNamed NONE = new ElementsNamed(Map.of(), Set.of());
 
     /**
      * Which element of a container: the container and the part of the entry. The key and the value
@@ -85,36 +87,47 @@ public record ElementsNamed(Map<Slot, Set<BindingId>> named) {
             copy.put(slot, InTheOrderGiven.set(names));
         });
         named = InTheOrderGiven.map(copy);
+        unnamed = InTheOrderGiven.set(unnamed);
     }
 
-    /** What {@code names}, in the order met, say. */
+    /** What {@code names}, in the order met, say, where every element was read through a name
+     *  that is known to stand for it — as what a statement was told is. */
     public static ElementsNamed of(List<Named> names) {
-        if (names.isEmpty()) {
+        return of(names, Set.of());
+    }
+
+    /** What {@code names}, in the order met, say, and the elements {@code unnamed} read through
+     *  a name whose element is not known. */
+    public static ElementsNamed of(List<Named> names, Set<Slot> unnamed) {
+        if (names.isEmpty() && unnamed.isEmpty()) {
             return NONE;
         }
         Map<Slot, Set<BindingId>> out = new LinkedHashMap<>();
         for (Named each : names) {
             out.computeIfAbsent(each.slot(), _ -> new LinkedHashSet<>()).add(each.name());
         }
-        return new ElementsNamed(out);
+        return new ElementsNamed(out, unnamed);
     }
 
     /** These and {@code other}, each slot with the names of both. */
     public ElementsNamed and(ElementsNamed other) {
-        if (other.named.isEmpty()) {
+        if (other.isEmpty()) {
             return this;
         }
-        if (named.isEmpty()) {
+        if (isEmpty()) {
             return other;
         }
         Map<Slot, Set<BindingId>> out = new LinkedHashMap<>();
         named.forEach((slot, names) -> out.put(slot, new LinkedHashSet<>(names)));
         other.named.forEach((slot, names) ->
                 out.computeIfAbsent(slot, _ -> new LinkedHashSet<>()).addAll(names));
-        return new ElementsNamed(out);
+        Set<Slot> notKnown = new LinkedHashSet<>(unnamed);
+        notKnown.addAll(other.unnamed);
+        return new ElementsNamed(out, notKnown);
     }
 
-    /** These, with only the names {@code of} holds: a slot left with no name is left out. */
+    /** These, with only the names {@code of} holds: a slot left with no name is left out. An
+     *  element read through a name not known to stand for it stays so. */
     public ElementsNamed keepingTheNamesOf(ElementsNamed of) {
         if (named.isEmpty()) {
             return this;
@@ -129,17 +142,26 @@ public record ElementsNamed(Map<Slot, Set<BindingId>> named) {
                 out.put(slot, left);
             }
         });
-        return out.isEmpty() ? NONE : new ElementsNamed(out);
+        return out.isEmpty() && unnamed.isEmpty() ? NONE : new ElementsNamed(out, unnamed);
     }
 
     /** Whether nothing was read through a name for an element. */
     public boolean isEmpty() {
-        return named.isEmpty();
+        return named.isEmpty() && unnamed.isEmpty();
     }
 
-    /** Whether more than one name stood for one element here: what was read is of no one value
-     *  at that element's positions. */
-    public boolean readsTwoAtOnce() {
+    /** Whether what was read at {@code slot} is of no one value there: more than one name stood
+     *  for the element, or a name whose element is not known. */
+    public boolean noOneValueAt(Slot slot) {
+        Set<BindingId> names = named.get(slot);
+        return unnamed.contains(slot) || (names != null && names.size() > 1);
+    }
+
+    /** Whether what was read at some element is of no one value there ({@link #noOneValueAt}). */
+    public boolean readsNoOneValue() {
+        if (!unnamed.isEmpty()) {
+            return true;
+        }
         for (Set<BindingId> each : named.values()) {
             if (each.size() > 1) {
                 return true;

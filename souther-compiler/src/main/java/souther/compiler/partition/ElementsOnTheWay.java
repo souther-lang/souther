@@ -59,6 +59,7 @@ final class ElementsOnTheWay {
                 keptNone.add(slot);
             }
         });
+        keptNone.addAll(border.unnamed());
         boolean anyNamed = !border.isEmpty();
         for (OnTheWay each : way) {
             ElementsNamed named = namedIn(each);
@@ -89,8 +90,12 @@ final class ElementsOnTheWay {
         return out == null ? way : List.copyOf(out);
     }
 
-    /** Whether every element {@code named} reads is read through the name kept for it. */
+    /** Whether every element {@code named} reads is read through the name kept for it: none
+     *  through a name whose element is not known. */
     private static boolean agrees(ElementsNamed named, Map<ElementsNamed.Slot, BindingId> kept) {
+        if (!named.unnamed().isEmpty()) {
+            return false;
+        }
         for (Map.Entry<ElementsNamed.Slot, Set<BindingId>> each : named.named().entrySet()) {
             BindingId one = kept.get(each.getKey());
             if (one == null || !each.getValue().equals(Set.of(one))) {

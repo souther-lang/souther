@@ -198,12 +198,15 @@ final class InputPath {
      * given, so the name it arrives under stands at that container's position, inside it. Asked of
      * the binding rather than of the container's expression: a container built by one operation and
      * handed to the next names no position of its own, and the elements are the same elements.
+     * Handed the elements of several, it stands where each of them does, as a read of it does.
      */
     static PathResolution elementAt(BindingId binding, BindingEnvironment names,
                                     DeclarationNewtypes newtypes,
                                     InputReads reads) {
-        return new InputPath(newtypes, ElementQuestion.NAMED_POSITION, reads)
-                .elementOf(binding, names);
+        InputPath walk = new InputPath(newtypes, ElementQuestion.NAMED_POSITION, reads);
+        return names.roleOf(binding) instanceof BindingRole.ElementOfSeveral(var containers)
+                ? walk.oneOfTheElementsOf(binding, containers, names)
+                : walk.elementOf(binding, names);
     }
 
     /**
@@ -661,26 +664,56 @@ final class InputPath {
         if (!(Core.withoutStanding(get.tuple()) instanceof Core.Read r)) {
             return new PathResolution.NotAPosition();
         }
-        Wanted place = new Wanted.APlaceOfAnElement(get.index());
-        return switch (names.roleOf(r.binding())) {
+        if (names.roleOf(r.binding()) instanceof BindingRole.Alias(var value)) {
+            return trail.through(r.binding(),
+                    () -> placeOfAnElementsPair(new Core.TupleGet(value, get.index(), get.arity(),
+                            get.type(), get.pos()), names));
+        }
+        return placeOfTheElement(r.binding(), get.index(), names);
+    }
+
+    /**
+     * Where the place at {@code index} of the pair handed to {@code binding} stands: of the pair
+     * an element of its container is, or of each container's where it was handed the elements of
+     * several. A name that is no element's names no place of one.
+     */
+    private PathResolution placeOfTheElement(BindingId binding, int index,
+                                             BindingEnvironment names) {
+        Wanted place = new Wanted.APlaceOfAnElement(index);
+        return switch (names.roleOf(binding)) {
             case BindingRole.Element(var held) -> held.part() != HeldIn.Part.ELEMENT
                     ? new PathResolution.NotAPosition()
-                    : trail.through(r.binding(), () -> heldAt(held.container(), place, names));
+                    : trail.through(binding, () -> heldAt(held.container(), place, names));
             case BindingRole.ElementOfSeveral(var held) -> {
                 List<PathResolution> each = new ArrayList<>();
                 for (HeldIn one : held) {
                     if (one.part() == HeldIn.Part.ELEMENT) {
-                        each.add(trail.through(r.binding(),
+                        each.add(trail.through(binding,
                                 () -> heldAt(one.container(), place, names)));
                     }
                 }
                 yield PathResolution.anyOf(each);
             }
-            case BindingRole.Alias(var value) -> trail.through(r.binding(),
-                    () -> placeOfAnElementsPair(new Core.TupleGet(value, get.index(), get.arity(),
-                            get.type(), get.pos()), names));
-            case BindingRole.Root _, BindingRole.Unknown _ -> new PathResolution.NotAPosition();
+            case BindingRole.Alias _, BindingRole.Root _, BindingRole.Unknown _ ->
+                    new PathResolution.NotAPosition();
         };
+    }
+
+    /** The places of an entry of a map a pair stands for: its key and the value filed under it. */
+    private static final int PLACES_OF_AN_ENTRY = 2;
+
+    /** Where each place of the pair an element handed to {@code binding} is stands, as a read of
+     *  that place does ({@link #placeOfTheElement}): a place stands at a position only as a place
+     *  of a map's entry, and there are as many as an entry has. */
+    static List<PathResolution> placesOfTheElementAt(BindingId binding, BindingEnvironment names,
+                                                     DeclarationNewtypes newtypes,
+                                                     InputReads reads) {
+        InputPath walk = new InputPath(newtypes, ElementQuestion.NAMED_POSITION, reads);
+        List<PathResolution> out = new ArrayList<>();
+        for (int index = 0; index < PLACES_OF_AN_ENTRY; index++) {
+            out.add(walk.placeOfTheElement(binding, index, names));
+        }
+        return out;
     }
 
     /**
@@ -1111,7 +1144,8 @@ final class InputPath {
             }
             // The first place of an entry is its key and the second the value filed under it.
             case Wanted.APlaceOfAnElement(int index) when listed != null ->
-                    listed.part() != MapPart.ENTRIES || index < 0 || index > 1 ? null
+                    listed.part() != MapPart.ENTRIES || index < 0 || index >= PLACES_OF_AN_ENTRY
+                            ? null
                             : new Crossing(listed.map(), new Wanted.APart(
                                     index == 0 ? HeldIn.Part.KEY : HeldIn.Part.ELEMENT));
             // The same elements are the same pairs, so a place of one is a place of the other.

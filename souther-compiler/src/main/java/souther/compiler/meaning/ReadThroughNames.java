@@ -60,8 +60,7 @@ public final class ReadThroughNames {
             return stated;
         }
         return told(stated, (position, had) -> had instanceof ValueIdentity.OfAnElement ? had
-                : innermost(position, names) == null ? had : identityAt(position, names),
-                twoAsOne);
+                : identityAt(position, names), twoAsOne);
     }
 
     /**
@@ -111,39 +110,68 @@ public final class ReadThroughNames {
      * the site reads at that position, so the copy's name there is that element's. One the copy
      * reads through no one name keeps the name it was told, which is no name of the copy's: a
      * reader of the copy finds nothing it is about.
+     *
+     * <p>Where the names told again would tell two values one name — two of the site's met by one
+     * of the copy's, or one told the copy's name a name the site keeps already has — the site keeps
+     * all its names ({@link #renamedOneToOne}).
      */
     public static Proposition toldAgain(Proposition stated, ElementsNamed names) {
-        // Each name the site was told, and the copy's name for the element it stood for: a name
-        // given two, or two names given one, are no one element to one element, and are not told
-        // again — two values are never told one name.
+        // Each name the site was told and the copy's name for the element it stood for, where the
+        // copy reads that element through one name wherever the site was told it.
         Map<BindingId, Set<BindingId>> copiesOf = new LinkedHashMap<>();
-        Map<BindingId, Set<BindingId>> namesOf = new HashMap<>();
         Set<BindingId> toNone = new HashSet<>();
         told(stated, (position, had) -> {
             if (had instanceof ValueIdentity.OfAnElement(BindingId name)) {
-                Set<BindingId> stood = innermost(position, names);
-                if (stood != null && stood.size() == 1) {
-                    BindingId copy = stood.iterator().next();
+                if (identityAt(position, names) instanceof ValueIdentity.OfAnElement(
+                        BindingId copy)) {
                     copiesOf.computeIfAbsent(name, _ -> new HashSet<>()).add(copy);
-                    namesOf.computeIfAbsent(copy, _ -> new HashSet<>()).add(name);
                 } else {
                     toNone.add(name);
                 }
             }
             return had;
         }, () -> stated);
-        Map<BindingId, BindingId> renamed = new LinkedHashMap<>();
+        Map<BindingId, BindingId> renaming = new LinkedHashMap<>();
         copiesOf.forEach((name, copies) -> {
-            BindingId copy = copies.iterator().next();
-            if (!toNone.contains(name) && copies.size() == 1
-                    && namesOf.get(copy).size() == 1) {
-                renamed.put(name, copy);
+            if (!toNone.contains(name) && copies.size() == 1) {
+                renaming.put(name, copies.iterator().next());
             }
         });
+        Proposition again = renamedOneToOne(stated, renaming);
+        return again == null ? stated : again;
+    }
+
+    /**
+     * {@code stated} with each name {@code renaming} holds told the name it maps to and every other
+     * name kept, or null where that tells two of its values one name: where the names it holds come
+     * to fewer once renamed, counted over all of them, the ones kept as well as the ones renamed.
+     *
+     * <p>The one place a statement's names are told others, so that every reader that renames asks
+     * the same of the statement it makes and not of a list of names beside it.
+     */
+    private static Proposition renamedOneToOne(Proposition stated,
+                                               Map<BindingId, BindingId> renaming) {
+        if (renaming.isEmpty()) {
+            return stated;
+        }
+        Set<BindingId> before = new HashSet<>();
+        told(stated, (position, had) -> {
+            if (had instanceof ValueIdentity.OfAnElement(BindingId name)) {
+                before.add(name);
+            }
+            return had;
+        }, () -> stated);
+        Set<BindingId> after = new HashSet<>();
+        for (BindingId each : before) {
+            after.add(renaming.getOrDefault(each, each));
+        }
+        if (after.size() != before.size()) {
+            return null;
+        }
         return told(stated, (position, had) ->
                 had instanceof ValueIdentity.OfAnElement(BindingId name)
-                        && renamed.get(name) instanceof BindingId copy
-                        ? new ValueIdentity.OfAnElement(copy) : had, () -> stated);
+                        && renaming.get(name) instanceof BindingId to
+                        ? new ValueIdentity.OfAnElement(to) : had, () -> stated);
     }
 
     /**
@@ -189,10 +217,19 @@ public final class ReadThroughNames {
      * places one to one — the same value wherever one has the same value, and another wherever it
      * has another. A value at the position stands only for itself.
      *
+     * <p>Shown by telling {@code one} the names of {@code other} one to one and finding the very
+     * statement {@code other} is, each part told the name the same part of {@code other} is. The
+     * names are paired in the order they stand, and that order is only where the pairing comes
+     * from: a statement orders its parts by what they spell, names and all, so the same place can
+     * come at another turn. A pairing that does not make {@code other} shows nothing.
+     *
      * <p>Where that cannot be shown they are said to differ, which is never the wrong way round:
      * two statements of different values taken for one would be one value's two names.
      */
     public static boolean sameUpToTheNames(Proposition one, Proposition other) {
+        if (one.equals(other)) {
+            return true;
+        }
         if (!atThePositions(one).equals(atThePositions(other))) {
             return false;
         }
@@ -201,23 +238,18 @@ public final class ReadThroughNames {
         if (ofOne.size() != ofOther.size()) {
             return false;
         }
-        Map<ValueIdentity, ValueIdentity> there = new LinkedHashMap<>();
-        Map<ValueIdentity, ValueIdentity> back = new LinkedHashMap<>();
+        Map<BindingId, BindingId> renaming = new LinkedHashMap<>();
         for (int at = 0; at < ofOne.size(); at++) {
-            ValueIdentity mine = ofOne.get(at);
-            ValueIdentity theirs = ofOther.get(at);
-            if ((mine instanceof ValueIdentity.AtThePosition)
-                    != (theirs instanceof ValueIdentity.AtThePosition)) {
-                return false;
-            }
-            ValueIdentity wasThere = there.putIfAbsent(mine, theirs);
-            ValueIdentity wasBack = back.putIfAbsent(theirs, mine);
-            if ((wasThere != null && !wasThere.equals(theirs))
-                    || (wasBack != null && !wasBack.equals(mine))) {
-                return false;
+            if (ofOne.get(at) instanceof ValueIdentity.OfAnElement(BindingId mine)
+                    && ofOther.get(at) instanceof ValueIdentity.OfAnElement(BindingId theirs)) {
+                BindingId was = renaming.putIfAbsent(mine, theirs);
+                if (was != null && !was.equals(theirs)) {
+                    return false;
+                }
             }
         }
-        return true;
+        Proposition told = renamedOneToOne(one, renaming);
+        return told != null && told.equals(other);
     }
 
     /** The value each number and subject of {@code stated} was told, in the order they stand. */
@@ -233,14 +265,14 @@ public final class ReadThroughNames {
     /**
      * The value at {@code at} that something read through {@code names} is about, as a subject:
      * told the name that stood for its element, as a statement read through the same names is
-     * ({@link #readThrough}). Asked only where no element was read through two names
-     * ({@link ElementsNamed#readsTwoAtOnce}): then it is no one value.
+     * ({@link #readThrough}). Asked only where every element was read as one value
+     * ({@link ElementsNamed#readsNoOneValue}).
      */
     public static DecisionSubject.AnInput theInputAt(TermPath at, ElementsNamed names) {
         ValueIdentity identity = identityAt(at, names);
         if (identity == null) {
-            throw new IllegalArgumentException("two names for one element are no one value at "
-                    + at + ": " + names);
+            throw new IllegalArgumentException("what was read is of no one value at " + at
+                    + ": " + names);
         }
         return new DecisionSubject.AnInput(at, identity);
     }
@@ -293,14 +325,25 @@ public final class ReadThroughNames {
     /**
      * Which value at {@code position} an expression read through {@code names} is about: the one
      * the name of its innermost element stood for, the value at the position where it is in no
-     * element a name stood for, and null where more than one name stood for that element.
+     * element a name stood for, and null where that element is of no one value — more than one
+     * name stood for it, or a name whose element is not known ({@link ElementsNamed#noOneValueAt}).
+     *
+     * <p>That element and no outer one: a value inside an element of a container held by another
+     * element is a value of the inner element, and the outer element's name says which outer
+     * element it is in and not which inner one. Where no name stood for the inner element it is the
+     * element of whatever goes over it, and is told nothing.
      */
     public static ValueIdentity identityAt(TermPath position, ElementsNamed names) {
-        Set<BindingId> stood = innermost(position, names);
-        if (stood == null) {
+        ElementsNamed.Slot slot = ElementsNamed.Slot.innermostOf(position);
+        if (slot == null) {
             return ValueIdentity.AT_THE_POSITION;
         }
-        return stood.size() == 1 ? new ValueIdentity.OfAnElement(stood.iterator().next()) : null;
+        if (names.noOneValueAt(slot)) {
+            return null;
+        }
+        Set<BindingId> stood = names.named().get(slot);
+        return stood == null ? ValueIdentity.AT_THE_POSITION
+                : new ValueIdentity.OfAnElement(stood.iterator().next());
     }
 
     /**
@@ -320,20 +363,6 @@ public final class ReadThroughNames {
             return had;
         }, () -> stated);
         return ElementsNamed.of(found);
-    }
-
-    /**
-     * The names {@code names} holds for the innermost element of a container {@code position} is
-     * in, or null where it holds none for that one or the position is in no element.
-     *
-     * <p>That element and no outer one: a value inside an element of a container held by another
-     * element is a value of the inner element, and the outer element's name says which outer
-     * element it is in and not which inner one. Where no name stood for the inner element it is the
-     * element of whatever goes over it, and is told nothing.
-     */
-    private static Set<BindingId> innermost(TermPath position, ElementsNamed names) {
-        ElementsNamed.Slot slot = ElementsNamed.Slot.innermostOf(position);
-        return slot == null ? null : names.named().get(slot);
     }
 
     private static Proposition told(Proposition stated, Telling telling,

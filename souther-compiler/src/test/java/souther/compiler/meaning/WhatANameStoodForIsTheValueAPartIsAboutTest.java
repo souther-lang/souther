@@ -295,6 +295,41 @@ class WhatANameStoodForIsTheValueAPartIsAboutTest {
         assertTrue(ReadThroughNames.sameUpToTheNames(twoValues, twoRenamed));
     }
 
+    private static Proposition startsWith(String text, ValueIdentity identity) {
+        return new Proposition.InTheStrings(new Proposition.InTheStrings.Strings.AtAPosition(TEXT,
+                identity), new StringsLanguage(PatternMeaning.text(text)), true);
+    }
+
+    /**
+     * Which statement a name stands in is what is compared, and not the order the names come in:
+     * a statement puts its parts in an order its names have a part in, so one asking the first
+     * value twice and another asking the second twice can list their names alike.
+     */
+    @Test
+    void twoStatementsAreOneOnlyWhereEachPartIsToldTheNameTheOtherIs() {
+        BindingId c = new BindingId(OWNER, 4);
+        BindingId d = new BindingId(OWNER, 3);
+        Proposition xAndYOfOne = Proposition.all(List.of(startsWith("X", of(A)),
+                startsWith("Y", of(A)), startsWith("Z", of(B))));
+        Proposition yAndZOfOne = Proposition.all(List.of(startsWith("X", of(c)),
+                startsWith("Y", of(d)), startsWith("Z", of(d))));
+        Proposition xAndYRenamed = Proposition.all(List.of(startsWith("X", of(d)),
+                startsWith("Y", of(d)), startsWith("Z", of(c))));
+        assertFalse(ReadThroughNames.sameUpToTheNames(xAndYOfOne, yAndZOfOne));
+        assertFalse(ReadThroughNames.sameUpToTheNames(yAndZOfOne, xAndYOfOne));
+        assertTrue(ReadThroughNames.sameUpToTheNames(xAndYOfOne, xAndYRenamed));
+        assertTrue(ReadThroughNames.sameUpToTheNames(xAndYRenamed, xAndYOfOne));
+    }
+
+    /** Told again where the copy's name for one element is the name the site has for another,
+     *  which the copy has no name for: the two stay two. */
+    @Test
+    void aNameIsNeverToldAgainOntoOneTheSiteKeeps() {
+        TermPath ofAGroup = TermPath.of("x").then("groups").element().then("m");
+        Proposition stated = Proposition.all(List.of(below(N, of(A)), below(ofAGroup, of(B))));
+        assertSame(stated, ReadThroughNames.toldAgain(stated, named(B)));
+    }
+
     /** Told again through a copy that has one name where the site had two, the site keeps its
      *  names: two values are never told one. */
     @Test

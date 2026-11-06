@@ -170,6 +170,9 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == Map.class) {
             return Map.of();
         }
+        if (type == Set.class) {
+            return Set.of();
+        }
         if (type == TermPath.class) {
             return TermPath.of("x");
         }

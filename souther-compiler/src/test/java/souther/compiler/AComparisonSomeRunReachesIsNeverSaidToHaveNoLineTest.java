@@ -92,6 +92,26 @@ class AComparisonSomeRunReachesIsNeverSaidToHaveNoLineTest {
             new Shape("lookedUp", "(match Map.get(0, List.indexBy(.id, ITEMS)) with | Some a ->"
                     + " (match Map.get(1, List.indexBy(.id, ITEMS)) with | Some b -> (if %1$s &&"
                     + " Bool.not(%2$s) then " + GATE + " else 0) | None -> 0) | None -> 0)"),
+            // One closure handed the elements of two containers, each of them the list's: the
+            // name is one element on each application, whichever container handed it.
+            new Shape("shared", """
+                    {
+                            let f = (a) -> {
+                                let g = (b) -> if %1$s && Bool.not(%2$s) then GATE else 0
+                                List.sum(List.map(g, ITEMS)) + List.sum(List.map(g, List.reverse(ITEMS)))
+                            }
+                            List.sum(List.map(f, ITEMS)) + List.sum(List.map(f, List.reverse(ITEMS)))
+                        }""".replace("GATE", GATE)),
+            // Two entries of the input's map, each taken apart into its key and value: an entry is
+            // a pair and no position, and its value stands at the map's values.
+            new Shape("entries", """
+                    List.sum(List.map(p -> {
+                                let (ka, a) = p
+                                List.sum(List.map(q -> {
+                                        let (kb, b) = q
+                                        if %1$s && Bool.not(%2$s) then GATE else 0
+                                    }, Map.toList(x.byId)))
+                            }, Map.toList(x.byId)))""".replace("GATE", GATE)),
             // Two numbers of two elements in one difference, which is no number where they are
             // taken for one, over the list and what an operation made of it.
             new Shape("difference", "List.sum(List.map(a -> List.sum(List.map(b -> if %3$s.n -"
@@ -113,7 +133,7 @@ class AComparisonSomeRunReachesIsNeverSaidToHaveNoLineTest {
 
             data Item = { id: Int, n: Int, paid: Bool, text: String }
                 invariant n >= -10 && n <= 10
-            data Input = { items: List<Item>, gate: Int }
+            data Input = { items: List<Item>, byId: Map<String, Item>, gate: Int }
                 invariant gate >= -10 && gate <= 10
             behavior readItems : (x: Input) -> List<Item>
             """;
@@ -127,6 +147,10 @@ class AComparisonSomeRunReachesIsNeverSaidToHaveNoLineTest {
         List<Body> bodies = new ArrayList<>();
         for (Source source : SOURCES) {
             for (Shape shape : SHAPES) {
+                // A shape over the input's map and not the list is the same body from any source.
+                if (source.answered() && !shape.written().contains("ITEMS")) {
+                    continue;
+                }
                 for (Kind kind : KINDS) {
                     if (shape.ofNumbers() && !kind.field().equals("n")) {
                         continue;
@@ -192,8 +216,10 @@ class AComparisonSomeRunReachesIsNeverSaidToHaveNoLineTest {
                 item.put(body.kind().field(), value);
                 items.add(item);
             }
+            Map<String, Object> byId = new LinkedHashMap<>();
+            items.forEach(each -> byId.put(String.valueOf(each.get("id")), each));
             Object out = Codecs.apply(behavior(loader, body), Codecs.decoded(loader,
-                    MODULE + ".Input", Map.of("items", items, "gate", 1L)));
+                    MODULE + ".Input", Map.of("items", items, "byId", byId, "gate", 1L)));
             if (((Number) out).longValue() >= 100) {
                 return true;
             }

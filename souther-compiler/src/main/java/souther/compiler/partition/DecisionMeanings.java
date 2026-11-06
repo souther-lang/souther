@@ -324,10 +324,11 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
      * compiler read nothing of, which the rule carries as that rather than leaving off.
      */
     private DecidedCondition answerOf(Condition condition, OnTheWay one, boolean held) {
-        // What was read through two names for one element is of no one value at the position, so
-        // no column over the position is: the column is what the condition states, which tells
-        // the two apart, and where no condition stands one this reading has no column for.
-        if (ElementsOnTheWay.namedIn(one).readsTwoAtOnce()) {
+        // What was read through two names for one element, or a name whose element is not known,
+        // is of no one value at the position, so no column over the position is: the column is
+        // what the condition states, which tells the two apart, and where no condition stands one
+        // this reading has no column for.
+        if (ElementsOnTheWay.namedIn(one).readsNoOneValue()) {
             return condition != null ? asOneColumn(condition, held)
                     : new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
                             ElementsOnTheWay.conditionOf(one), ElementsOnTheWay.ANOTHER_ELEMENT),
@@ -448,7 +449,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
         // fork on a value the body computed is what the arm comes to for the input, which is no
         // answer to the question about the computed value.
         if (onTheWay.size() == 1 && onTheWay.getFirst() instanceof OnTheWay.Narrowed narrowed
-                && !narrowed.named().elements().readsTwoAtOnce()
+                && !narrowed.named().elements().readsNoOneValue()
                 && states.narrowsItsOwnPosition(match, part, reads)) {
             TermPath at = narrowed.position();
             // Where the value the fork is on stands: a name read on a value left several cases is
