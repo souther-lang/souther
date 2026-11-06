@@ -2446,6 +2446,8 @@ final class Pullback {
      * closure holds of ({@link BoundOperationFacts#answersAnElementWhereTheClosureHolds}), and
      * the operation applies the closure no further than the first that holds
      * ({@link HowAClosureIsApplied#UNTIL_ONE_HOLDS}): of any element after it, nothing was asked.
+     * Over what an operation kept, an element is one of them where it was kept, so the arm taken
+     * on it is where it was kept and the closure holds of it, and of none before it were both.
      */
     private Derivation onTheElementFound(Core.Match match, Core.Case arm, InputReads reads,
                                          InputReads inside,
@@ -2475,7 +2477,6 @@ final class Pullback {
                 || !(applicationsOf(block, closure.at(), read)
                         instanceof InputReads.Applications.Each(var each, var how))
                 || how != HowAClosureIsApplied.UNTIL_ONE_HOLDS || each.isEmpty()
-                || each.stream().anyMatch(made -> !made.keptWhere().isEmpty())
                 || splitInto(inside, each.size(), looked) != null) {
             return null;
         }
@@ -2484,8 +2485,15 @@ final class Pullback {
                 block.paramTypes().getFirst(), block.pos());
         List<Derivation.MatchArms.Arm> onEach = new ArrayList<>();
         for (InputReads.Applications.Made made : each) {
+            // An element of what was kept is the one found where it was kept and the closure
+            // holds of it, and no element before it was both.
+            Derivation holds = observe(block.body(), AnswerAspect.TRUTH, made.reads());
+            List<Derivation> keptBy = new ArrayList<>();
+            for (ReadMeaning.Occurrence.Kept kept : made.keptWhere()) {
+                keptBy.add(keeping(kept));
+            }
             onEach.add(new Derivation.MatchArms.Arm(
-                    observe(block.body(), AnswerAspect.TRUTH, made.reads()),
+                    keptBy.isEmpty() ? holds : new Derivation.OfWhatWasKept(holds, keptBy),
                     states.apply(arm.body(), inside.holdingOneItMayHold(arm,
                             new Denotation(handed, made.reads()), read.rules().newtypes()))));
         }
