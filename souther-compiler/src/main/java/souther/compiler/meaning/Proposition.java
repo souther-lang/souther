@@ -111,8 +111,14 @@ public sealed interface Proposition {
      * parts of a conjunction joined and ordered by their spellings, a comparison spelled from its
      * form atom by atom. Kept here it is made once. A map from each statement to its denial would
      * either let the denial go while the statement is still held or hold the two of them for ever,
-     * since each is the other's denial; held by the statement, the two are let go together once
-     * nothing else holds either.
+     * since a denial's denial may be the statement; held by the statement, the two are let go
+     * together once nothing else holds either.
+     *
+     * <p>What is kept is the statement's: while it is held, its denial is the one made first. Not
+     * the other way round. The denial's own cell keeps the denial's denial, which is equal to the
+     * statement and is the statement itself only where the statement is the equal one kept
+     * ({@link SharedPropositions#shared}) — a statement made directly has its denial's denial made
+     * as the one kept instead, and a denial held without its statement denies to that one.
      *
      * <p>Nothing a proposition is. What is kept is equal to what any other making would make, so
      * every cell is equal to every other and hashes alike: a proposition compares and hashes as it

@@ -221,6 +221,23 @@ class ADenialIsKeptForAsLongAsItsStatementIsHeldTest {
         assertSame(one.denied(), other.denied());
     }
 
+    /**
+     * What is kept is the statement's, and not the other way round: denied twice, a statement made
+     * directly comes back equal and is not asked to come back as itself, while one made as the
+     * equal one kept does.
+     */
+    @Test
+    void deniedTwiceAStatementIsEqualAndItselfOnlyWhereItIsTheOneKept() {
+        List<Proposition> parts =
+                List.of(CompoundSamples.truth("twice.a"), CompoundSamples.truth("twice.b"));
+        Proposition direct = new Proposition.All(parts);
+        assertEquals(direct, direct.denied().denied());
+
+        Proposition kept = Proposition.all(parts);
+        assertSame(kept, kept.denied().denied());
+        assertSame(kept, direct.denied().denied(), "the direct one's comes back as the one kept");
+    }
+
     /** Written out, a proposition whose denial of its denial is itself is written out once. */
     @Test
     void aStatementHeldByItsOwnDenialIsWrittenOutOnce() {
