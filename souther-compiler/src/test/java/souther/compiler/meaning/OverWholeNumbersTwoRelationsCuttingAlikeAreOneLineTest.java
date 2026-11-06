@@ -43,10 +43,11 @@ class OverWholeNumbersTwoRelationsCuttingAlikeAreOneLineTest {
     private static final Quantity N = new Quantity.HowManyHold(List.of(
             positive("p"), positive("q")));
 
-    /** Over the input's {@code x} alone, measured in whole numbers. */
-    private static final Predicate<NumericTerm> ONLY_X = X_TERM::equals;
-    /** Every number of the input measured in whole numbers. */
-    private static final Predicate<NumericTerm> EVERY_ONE = term -> true;
+    /** Whether the input measures {@code term} in whole numbers, where it measures {@code x} so
+     *  and nothing else. */
+    private static boolean onlyX(NumericTerm term) {
+        return term.equals(X_TERM);
+    }
 
     /**
      * {@code first · a + second · b + constant} above or at nought, held, each weight a number of
@@ -134,8 +135,9 @@ class OverWholeNumbersTwoRelationsCuttingAlikeAreOneLineTest {
         Set<String> wrong = new TreeSet<>();
         for (Written one : grid) {
             for (Written other : grid) {
-                boolean oneLine = overWholeNumbers.test(one) && overWholeNumbers.test(other)
-                        ? !aWholePointTellsThemApart(one, other) : one.atAPositiveScaleOf(other);
+                boolean bothWhole = overWholeNumbers.test(one) && overWholeNumbers.test(other);
+                boolean oneLine = bothWhole ? !aWholePointTellsThemApart(one, other)
+                        : one.atAPositiveScaleOf(other);
                 if (linesOfEither(one, other, measuredWhole) != (oneLine ? 1 : 2)) {
                     wrong.add(one.stated().spelledOut() + " | " + other.stated().spelledOut());
                 }
@@ -146,12 +148,14 @@ class OverWholeNumbersTwoRelationsCuttingAlikeAreOneLineTest {
 
     @Test
     void overWholeNumbersOneLineExactlyWhereNoWholeNumbersTellThemApart() {
-        assertEquals(Set.of(), readWrongly(grid(X, Y), EVERY_ONE, _ -> true));
+        assertEquals(Set.of(), readWrongly(grid(X, Y), _ -> true, _ -> true));
     }
 
     @Test
     void besideANumberNotKnownWholeOneLineExactlyWhereOneIsTheOtherAtAPositiveScale() {
-        assertEquals(Set.of(), readWrongly(grid(X, Y), ONLY_X, each -> each.second() == 0));
+        assertEquals(Set.of(), readWrongly(grid(X, Y),
+                OverWholeNumbersTwoRelationsCuttingAlikeAreOneLineTest::onlyX,
+                each -> each.second() == 0));
     }
 
     @Test
