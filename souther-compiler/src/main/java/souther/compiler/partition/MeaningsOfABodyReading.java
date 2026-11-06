@@ -5,11 +5,9 @@ import souther.compiler.check.Choice;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.DeclarationNewtypes;
-import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.Conclusion;
@@ -17,8 +15,6 @@ import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyUnread;
-import souther.compiler.revision.RevisionKnowledge;
-import souther.compiler.revision.RevisionWork;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
@@ -26,7 +22,6 @@ import souther.compiler.types.ModelOccurrence;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -74,79 +69,6 @@ public final class MeaningsOfABodyReading {
         MeaningsOfABodyReading reading = new MeaningsOfABodyReading(read, symbols, newtypes);
         reading.walk(analysis.core(), reads);
         return reading.filed.filed();
-    }
-
-    /**
-     * What each condition of {@code analysis} states against {@code input}, worked out once for
-     * the revision {@code revision} and lent to every reader that asks for it.
-     *
-     * <p>Two readers of a body ask this: where a run of it gets to, and what the run meets. Each
-     * building the walk for itself reads every truth in the body twice, of one reading of one
-     * input.
-     *
-     * <p>The input is read where a condition is met and not before, as in the walk this lends:
-     * {@code reading} and {@code reads} are carried to do the work with and are no part of which
-     * work this is. {@code reads} is a supplier because making it walks the body for the bindings
-     * it holds, which the reader that is lent the answer has no use for.
-     */
-    public static MeaningsOfABody of(AnalysisBody analysis, InputDomain input,
-                                     Supplier<InputReading> reading, Supplier<InputReads> reads,
-                                     RuleReadingSource source, RevisionKnowledge revision) {
-        return revision.settled(new ForOneBody(analysis, input, reading, reads, source));
-    }
-
-    /**
-     * The meanings of one body against one input, as work settled by the body, the input and the
-     * source its rules are read from — by its origin, as {@link AnInputRead} is.
-     *
-     * <p>The body by identity: the two readers are handed the one tree the check made, and
-     * comparing it by what it holds would walk it to say so.
-     */
-    public static final class ForOneBody implements RevisionWork<MeaningsOfABody> {
-
-        private final AnalysisBody analysis;
-
-        private final InputDomain input;
-
-        private final RuleReadingSource.Origin origin;
-
-        private final Supplier<InputReading> reading;
-
-        private final Supplier<InputReads> reads;
-
-        private final RuleReadingSource source;
-
-        ForOneBody(AnalysisBody analysis, InputDomain input, Supplier<InputReading> reading,
-                   Supplier<InputReads> reads, RuleReadingSource source) {
-            this.analysis = Objects.requireNonNull(analysis, "a body is what is read");
-            this.input = Objects.requireNonNull(input, "an input is what it is read against");
-            this.origin = source.origin();
-            this.reading = reading;
-            this.reads = reads;
-            this.source = source;
-        }
-
-        @Override
-        public MeaningsOfABody workedOut(RevisionKnowledge revision) {
-            return MeaningsOfABodyReading.of(analysis, reading, reads.get(), source.symbols(),
-                    source.newtypes());
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            return other instanceof ForOneBody it && analysis == it.analysis
-                    && input.equals(it.input) && origin.equals(it.origin);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(System.identityHashCode(analysis), input, origin);
-        }
-
-        @Override
-        public String toString() {
-            return "ForOneBody[" + input.parameters() + "]";
-        }
     }
 
     private InputReading read() {

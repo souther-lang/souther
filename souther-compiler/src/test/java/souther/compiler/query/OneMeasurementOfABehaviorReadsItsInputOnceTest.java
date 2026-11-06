@@ -3,7 +3,7 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.AnInputRead;
-import souther.compiler.partition.MeaningsOfABodyReading;
+import souther.compiler.reading.WhatABodyStates;
 import souther.compiler.revision.RevisionKnowledge;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,7 +52,7 @@ class OneMeasurementOfABehaviorReadsItsInputOnceTest {
     @Test
     void theInputIsReadOnceForEveryMeasureOfTheBehavior() {
         long before = RevisionKnowledge.timesDone(AnInputRead.class);
-        long meaningsBefore = RevisionKnowledge.timesDone(MeaningsOfABodyReading.ForOneBody.class);
+        long meaningsBefore = RevisionKnowledge.timesDone(WhatABodyStates.class);
 
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -74,7 +74,7 @@ class OneMeasurementOfABehaviorReadsItsInputOnceTest {
 
         assertEquals(1, RevisionKnowledge.timesDone(AnInputRead.class) - before,
                 "one behavior, one reading of its input");
-        assertEquals(1, RevisionKnowledge.timesDone(MeaningsOfABodyReading.ForOneBody.class)
+        assertEquals(1, RevisionKnowledge.timesDone(WhatABodyStates.class)
                         - meaningsBefore,
                 "one body against one input, one reading of what its conditions state");
     }

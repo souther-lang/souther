@@ -20,7 +20,6 @@ import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.ComposedRow;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.LineOrigin;
-import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.partition.ReadingSeat;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
@@ -180,6 +179,7 @@ import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.WayIn;
+import souther.compiler.reading.WhatABodyStates;
 import souther.compiler.types.Type;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.TypeSymbol;
@@ -1289,16 +1289,11 @@ public final class Adequacy {
      * off, which is a body whose conditions a path takes in as it reads them.
      */
     static MeaningsOfABody meaningsOf(AnalysisBody analysis, InputDomain read,
-                                      Supplier<InputReading> reading, RuleReadingSource source,
-                                      RuleReadingContext ruleReading) {
+                                      RuleReadingSource source, RuleReadingContext ruleReading) {
         if (analysis == null) {
             return MeaningsOfABody.NONE;
         }
-        return MeaningsOfABodyReading.of(analysis, read, reading,
-                () -> InputReads.ofParametersWhereCallsStand(read.parameterReads(),
-                        read.declared(source), ElementBindings.of(analysis, source.newtypes()),
-                        read.dependencies()),
-                source, ruleReading.revision());
+        return WhatABodyStates.of(analysis, read, source, ruleReading.revision());
     }
 
     /**
@@ -1445,8 +1440,7 @@ public final class Adequacy {
                 out.put(spec.name(), souther.compiler.check.PathReachability.of(
                         both.emitted(), SpecImplementation.align(spec, fn), plan,
                         readingOf(db, read, reading.value()),
-                        ruleReading, meaningsOf(both.analysis(), read,
-                                () -> readingOf(db, read, reading.value()), reading.value(),
+                        ruleReading, meaningsOf(both.analysis(), read, reading.value(),
                                 ruleReading),
                         checked.value().elementBindings()
                                 .getOrDefault(spec.name(), ElementBindings.NONE),

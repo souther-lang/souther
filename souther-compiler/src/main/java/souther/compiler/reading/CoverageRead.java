@@ -20,7 +20,6 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.meaning.PieceDemand;
-import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.types.ConstructOccurrence;
 
 import java.util.ArrayList;
@@ -349,8 +348,8 @@ public final class CoverageRead {
                         input.domain().parameterReads(), input.declared(),
                         analysed.orElseThrow(), input.domain().dependencies()));
         MeaningsOfABody meanings = run.analysis()
-                .map(analysis -> MeaningsOfABodyReading.of(analysis, input.domain(), () -> input,
-                        analysisReads::orElseThrow, source, input.ruleReading().revision()))
+                .map(analysis -> WhatABodyStates.of(analysis, input.domain(), source,
+                        input.ruleReading().revision()))
                 .orElse(MeaningsOfABody.NONE);
         Meetings meetings = new Meetings(plan, new KeptElements(plan,
                 run.analysis().orElse(null), analysisReads.orElse(null), symbols,
