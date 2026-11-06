@@ -149,8 +149,7 @@ final class MeaningAssumptions {
     }
 
     private final Terms terms;
-    /** Whether a state reaches nothing, as the engine these terms were lent by keeps it, or kept
-     *  nowhere where this reads with no terms. */
+    /** Whether a state reaches nothing, as the engine these terms were lent by keeps it. */
     private final ReachabilityAnswers reachability;
     private final InputPlaces places;
     /** What the bindings in force where the condition stands are, which is where a value the body
@@ -171,8 +170,8 @@ final class MeaningAssumptions {
 
     private MeaningAssumptions(Terms terms, InputPlaces places, Denotations at, Known known,
                                Tries tries) {
-        this.terms = terms;
-        this.reachability = terms == null ? ReachabilityAnswers.NONE : terms.reachability();
+        this.terms = Objects.requireNonNull(terms, "a condition is read in some terms");
+        this.reachability = terms.reachability();
         this.places = places;
         this.at = at;
         this.known = known;

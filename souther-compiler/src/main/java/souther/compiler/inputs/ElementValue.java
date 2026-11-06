@@ -1927,8 +1927,9 @@ public sealed interface ElementValue {
                 return Optional.empty();
             }
 
-            // Names are read here through what the body bound and nothing else, so a list a walk
-            // built is one whose elements this does not write out.
+            // What this reads is a closure's answer and the bindings of its body as they were read
+            // before a fold was rewritten into a build (ElementBindings), so no build reaches here
+            // to be asked about.
             @Override
             public ElementBindings.AssembledWalk assembledAt(BindingId element,
                                                              Map<BindingId, Core> at) {

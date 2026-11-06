@@ -3,6 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import net.unit8.notation199x.pattern.PatternMeaning;
+import souther.compiler.DefaultStdlib;
 import souther.compiler.meaning.StringsLanguage;
 
 import souther.compiler.inputs.Case;
@@ -23,6 +24,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Text;
+import souther.compiler.query.ReadAs;
 import souther.compiler.semantics.StringContainment;
 
 import java.util.Arrays;
@@ -119,8 +121,12 @@ class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
         });
     }
 
+    /** A reading of terms that states no rules, which is all a proposition written out here asks. */
+    private static final Terms TERMS = RuleReadings.termsOfNoClauseFiled(
+            Symbols.none(DefaultStdlib.get()), ReadAs.THE_COMPILATION_DOES);
+
     private static List<WhyNotTaken> notTaken(Proposition stated, boolean positive) {
-        return MeaningAssumptions.assumed(stated, positive, Known.top(), null,
+        return MeaningAssumptions.assumed(stated, positive, Known.top(), TERMS,
                 MeaningAssumptions.InputPlaces.NONE, null).notTaken();
     }
 

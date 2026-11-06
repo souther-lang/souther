@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
@@ -61,19 +62,40 @@ class TheStepAfterABuildIsHandedWhatTheBuildMadeTest {
 
     /**
      * An element of a filter's list is handed where the filter's step held of it: every element
-     * is an application, each kept by that one truth, which a reader decides as it decides any.
+     * is an application, each kept where the step's answer on that element holds — which comes
+     * out false for {@code 0} and true for the others, as a reader decides it.
      */
     @Test
     void anElementAFilterMadeIsHandedWhereItsStepHeld() {
         String filtered = "List.filter(x -> x > 0, [0, 1, 2])";
         assertEquals(List.of(Optional.of(0L), Optional.of(1L), Optional.of(2L)),
                 handedToTheLastStep(filtered));
+        Reading read = read(filtered);
         InputReads.Applications.Each each = assertInstanceOf(InputReads.Applications.Each.class,
-                applicationsOfTheLastStep(filtered));
-        assertEquals(List.of(1, 1, 1), each.each().stream()
-                .map(made -> made.keptWhere().size()).toList());
-        each.each().forEach(made -> assertInstanceOf(ReadMeaning.Occurrence.Kept.ATruth.class,
-                made.keptWhere().getFirst()));
+                read.applications());
+        List<Optional<Object>> keptWhere = new ArrayList<>();
+        for (InputReads.Applications.Made made : each.each()) {
+            ReadMeaning.Occurrence.Kept.ATruth truth = assertInstanceOf(
+                    ReadMeaning.Occurrence.Kept.ATruth.class,
+                    made.keptWhere().stream().reduce((only, more) -> {
+                        throw new AssertionError("one truth keeps one application: "
+                                + made.keptWhere());
+                    }).orElseThrow());
+            keptWhere.add(truth.holds() ? truth.truth().at().folded(truth.truth().value(),
+                    read.rules().symbols(), read.rules().newtypes()) : Optional.empty());
+        }
+        assertEquals(List.of(Optional.of(false), Optional.of(true), Optional.of(true)), keptWhere);
+    }
+
+    /** A list a walk built over more elements than are written out is said to be that, and not
+     *  read as some of them. */
+    @Test
+    void aBuildOverMoreThanAreWrittenOutIsSaidToBePastThem() {
+        assertInstanceOf(InputReads.Applications.PastWhatIsWrittenOut.class,
+                applicationsOfTheLastStep("List.map(x -> x, List.rangeInclusive(0, %d))"
+                        .formatted(ElementsWrittenOut.MOST_WALKED)));
+        assertInstanceOf(InputReads.Applications.Each.class,
+                applicationsOfTheLastStep("List.map(x -> x, List.rangeInclusive(0, 2))"));
     }
 
     /** A walk an author wrote is one nothing proved what it answers, and the step after it is

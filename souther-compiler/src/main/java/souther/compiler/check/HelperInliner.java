@@ -2205,12 +2205,15 @@ public final class HelperInliner {
                 }
                 if (arg instanceof Hir.Var.Denoting fnName) {
                     // A lambda given a name is applied in the body under that name, and the
-                    // parameter each application binds is that application's own.
-                    if (i == assembledClosure
-                            && fnName.denotes() instanceof ValueName.Local named
+                    // parameter each application binds is that application's own: what this call
+                    // proves of it is the same as of the lambda written in its place.
+                    if (fnName.denotes() instanceof ValueName.Local named
                             && writing.scopedLambdas().get(named.id()) instanceof ScopedLambda held
                             && held.fn().params().size() == 1) {
-                        theAssembler = named.id();
+                        theLambda = named.id();
+                        if (i == assembledClosure) {
+                            theAssembler = named.id();
+                        }
                     }
                     // A name handed to a function parameter is substituted through: what
                     // applies it applies what it stands for. What it stands for is declared

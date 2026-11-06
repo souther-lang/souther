@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.Compiler;
-import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.PathReachability;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticPlace;
@@ -476,23 +475,6 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                     let ys = List.map(k -> Date.addDays(k * n, d), xs)
                     guard b > 3 else No""".formatted(GREATEST));
         assertTrue(aRunArrivesAbout(report, "b"), report);
-    }
-
-    /** A walk over more elements than are written out builds a list that is not written out. */
-    @Test
-    void aBuildOverMoreThanAreWrittenOutIsNotWrittenOut() {
-        String report = report("""
-                    guard n == %s else No
-                    let xs = List.map(x -> x, List.rangeInclusive(0, %d))
-                    let ys = List.map(k -> Date.addDays(k * n, d), xs)
-                    guard b > 3 else No""".formatted(GREATEST, ElementsWrittenOut.MOST_WALKED));
-        assertTrue(aRunArrivesAbout(report, "b"), report);
-        String control = report("""
-                    guard n == %s else No
-                    let xs = List.map(x -> x, List.rangeInclusive(0, 2))
-                    let ys = List.map(k -> Date.addDays(k * n, d), xs)
-                    guard b > 3 else No""".formatted(GREATEST));
-        assertTrue(nothingArrivesAbout(control, "b"), control);
     }
 
     /**
