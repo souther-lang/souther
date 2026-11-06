@@ -8,6 +8,7 @@ import souther.compiler.core.EnteredArm;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
+import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -264,9 +265,9 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         List<OnTheWay> asked = held ? met.holding() : met.failing();
         List<OnTheWay> onTheWay = new ArrayList<>(met.assumed());
         onTheWay.addAll(asked);
-        WayToTheBorder whole = new WayToTheBorder(onTheWay);
+        WayToTheBorder whole = WayToTheBorder.forArrival(onTheWay);
         List<HeldOutcome.Bringing> each = new ArrayList<>();
-        switch (new WayToTheBorder(asked).along()) {
+        switch (WayToTheBorder.forArrival(asked).along()) {
             case OneOfEach.Walked.Closed<OnTheWay, Reachability> _ -> {
                 return new HeldOutcome.Bringing.NoValueCanStandThere();
             }
@@ -432,7 +433,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         }
         List<OnTheWay> joined = new ArrayList<>(first.onTheWay());
         joined.addAll(second.onTheWay());
-        WayToTheBorder both = new WayToTheBorder(joined);
+        WayToTheBorder both = WayToTheBorder.forArrival(joined);
         TermPath twice = switch (both.requirements()) {
             case Requirements.Merge.Conflict conflict -> conflict.at();
             case Requirements.Merge.Merged _ ->
@@ -1169,8 +1170,13 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
          * told of a call a row at it never goes through.
          *
          * @param said who put each entry of {@code assumed} there
+         * @param readsTheElements the elements the comparison reads, which the way to a line is
+         *                         kept to once the case where the line decides is on it: a case
+         *                         names the elements of the conditions it is made of, and a line
+         *                         is looked for as a statement of the ones the comparison reads
          */
         void reached(ModelOccurrence states, List<OnTheWay> assumed,
+                     ElementsNamed readsTheElements,
                      Map<WhereAPartDecides, Stating> whereEachDecides,
                      SaidOnTheWay said) {
             // And who put each entry there, beside the entries: every way that reaches the line
@@ -1187,9 +1193,11 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             whereEachDecides.forEach((part, decides) -> {
                 List<OnTheWay> way = new ArrayList<>(assumed);
                 way.addAll(decides.entries());
-                byLine.merge(new ALine(states, Optional.of(part)), List.copyOf(way),
+                ElementsOnTheWay.Kept kept = ElementsOnTheWay.keptToOneElementEach(
+                        List.copyOf(way), readsTheElements, said.and(decides.by()));
+                byLine.merge(new ALine(states, Optional.of(part)), kept.way(),
                         Collected::commonTo);
-                saidByLine.merge(new ALine(states, Optional.of(part)), said.and(decides.by()),
+                saidByLine.merge(new ALine(states, Optional.of(part)), kept.said(),
                         SaidOnTheWay::and);
             });
         }

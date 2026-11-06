@@ -159,7 +159,7 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
         for (HeldOutcome each : held) {
             entries.addAll(each.way().choosing(chosen).onTheWay());
         }
-        return Reachability.of(new WayToTheBorder(List.copyOf(entries)), declarations);
+        return Reachability.of(WayToTheBorder.forArrival(List.copyOf(entries)), declarations);
     }
 
     /**

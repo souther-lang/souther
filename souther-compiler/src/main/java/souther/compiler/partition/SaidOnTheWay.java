@@ -42,7 +42,8 @@ public record SaidOnTheWay(Map<OnTheWay, ModelOccurrences> entries,
     public ModelOccurrences of(ConditionGap gap) {
         ModelOccurrences by = switch (gap) {
             case ConditionGap.OfTheInput(ReachabilityGap.Unstated(var declined)) ->
-                    entries.get(declined);
+                    entries.containsKey(declined) ? entries.get(declined)
+                            : ofTheConditionsOfThePlaceOf(declined);
             case ConditionGap.OfTheInput(ReachabilityGap.Uncomposed(var taken, var _)) ->
                     entries.get(taken);
             case ConditionGap.OfTheInput(ReachabilityGap.LookedAlongWhole(var oneOf, var _)) ->
@@ -54,6 +55,33 @@ public record SaidOnTheWay(Map<OnTheWay, ModelOccurrences> entries,
                     stated.get(demand);
         };
         return by == null ? ModelOccurrences.NONE : by;
+    }
+
+    /**
+     * What put the conditions of the place {@code declined} stands for on the way, for a declined
+     * condition that was made after who put things on the way was told.
+     *
+     * <p>A way kept for arrival declines a condition for another element where it is made, and has
+     * no account of who put things on it to carry over. The condition declined is the one a place
+     * made, so it is told of what put any condition of that place.
+     */
+    private ModelOccurrences ofTheConditionsOfThePlaceOf(OnTheWay.Declined declined) {
+        ModelOccurrences.Gathering out = new ModelOccurrences.Gathering();
+        entries.forEach((entry, by) -> {
+            ConditionOccurrence place = switch (entry) {
+                case OnTheWay.TakenIn taken -> taken.named().condition();
+                case OnTheWay.Narrowed narrowed -> narrowed.named().condition();
+                case OnTheWay.OneOf several -> several.condition();
+                case OnTheWay.Counted counted -> counted.condition();
+                case OnTheWay.Declined other -> other.condition();
+                case OnTheWay.Settled _ -> null;
+            };
+            if (declined.condition().equals(place)) {
+                out.add(by);
+            }
+        });
+        ModelOccurrences gathered = out.gathered();
+        return gathered.isEmpty() ? null : gathered;
     }
 
     /** Every copy anything on the way was read off, each once, in the order met. */

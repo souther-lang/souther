@@ -106,7 +106,7 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
         /** The same conditions in the words a composer of a row works from, which is what a row
          *  standing in this rule would have to satisfy of the input. */
         public WayToTheBorder states() {
-            return new WayToTheBorder(steps.stream()
+            return WayToTheBorder.forArrival(steps.stream()
                     .flatMap(each -> each.states().stream()).toList());
         }
 
@@ -121,7 +121,7 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
         public WayToTheBorder statesToACase(CaseWay toACase) {
             List<OnTheWay> entries = new ArrayList<>(states().onTheWay());
             entries.addAll(toACase.puts());
-            return new WayToTheBorder(entries);
+            return WayToTheBorder.forArrival(entries);
         }
 
         /**

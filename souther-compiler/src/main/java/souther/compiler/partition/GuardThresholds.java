@@ -476,7 +476,8 @@ public final class GuardThresholds {
                                 Function<Proposition, ReachingCuts.Stating> aPart) {
         Map<WhereAPartDecides, ReachingCuts.Stating> decides = new LinkedHashMap<>();
         readings.forEach(reading -> decides.put(reading, aCase.apply(reading.decides())));
-        cuts.reached(stated, each.assumed(), decides, each.saidOnTheWay());
+        cuts.reached(stated, each.assumed(), each.readsTheElements(), decides,
+                each.saidOnTheWay());
         Set<Proposition> asked = new HashSet<>();
         for (WhereAPartDecides reading : readings) {
             for (Proposition atom : WhereAPartDecides.atomsOf(reading.decides())) {
