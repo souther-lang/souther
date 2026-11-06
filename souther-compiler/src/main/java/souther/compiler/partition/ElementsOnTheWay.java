@@ -120,16 +120,41 @@ final class ElementsOnTheWay {
         if (kept == way) {
             return new Kept(way, said);
         }
-        Map<OnTheWay, ModelOccurrences> entries = new LinkedHashMap<>(said.entries());
+        SaidOnTheWay.Filing filing = new SaidOnTheWay.Filing();
         for (int at = 0; at < way.size(); at++) {
-            if (kept.get(at) != way.get(at)) {
-                ModelOccurrences by = entries.remove(way.get(at));
-                if (by != null) {
-                    entries.put(kept.get(at), by);
-                }
-            }
+            carried(kept.get(at), way.get(at), said, filing);
         }
-        return new Kept(kept, new SaidOnTheWay(entries, said.stated(), said.unstated()));
+        return new Kept(kept, new SaidOnTheWay(filing.said().entries(), said.stated(),
+                said.unstated()));
+    }
+
+    /**
+     * What put {@code was} on the way, told of {@code now}, the entry that stands for it, and of
+     * what is inside {@code now} where it is {@code was} as it stood.
+     *
+     * <p>Filed as the way is told, which is in its order, and together where several entries have
+     * become one: two conditions of one place declined for one reason are one declined condition,
+     * put there by whatever put either. What was inside a condition that is declined whole is not
+     * on the way, so it is not told of.
+     */
+    private static void carried(OnTheWay now, OnTheWay was, SaidOnTheWay said,
+                                SaidOnTheWay.Filing into) {
+        ModelOccurrences by = said.entries().get(was);
+        if (by != null) {
+            into.alone(now, by);
+        }
+        if (now != was) {
+            return;
+        }
+        switch (now) {
+            case OnTheWay.OneOf several -> several.alternatives().forEach(
+                    one -> one.forEach(each -> carried(each, each, said, into)));
+            case OnTheWay.Counted counted -> counted.statements().forEach(one -> {
+                one.holding().forEach(each -> carried(each, each, said, into));
+                one.failing().forEach(each -> carried(each, each, said, into));
+            });
+            default -> { }
+        }
     }
 
     /** Whether every element {@code named} reads is read through the name kept for it: none
