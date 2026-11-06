@@ -4,6 +4,7 @@ import souther.compiler.collect.HeldOnce;
 import souther.compiler.core.EnteredArm;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
+import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
@@ -259,6 +260,9 @@ public sealed interface OnTheWay {
         private final List<List<OnTheWay>> alternatives;
         private final Optional<Proposition> stated;
         private final int hash;
+        /** The elements the names inside every alternative stood for, worked out once from the
+         *  alternatives as the hash is: no part of which condition this is. */
+        private final ElementsNamed elementsNamed;
 
         /**
          * The ways made last. Every path through a condition of several ways reads the condition
@@ -292,6 +296,16 @@ public sealed interface OnTheWay {
             this.alternatives = alternatives.stream().map(List::copyOf).toList();
             this.stated = stated;
             this.hash = Objects.hash(condition, anchor, this.alternatives, stated);
+            List<ElementsNamed> inside = new ArrayList<>();
+            this.alternatives.forEach(one -> one.forEach(each ->
+                    inside.add(ElementsOnTheWay.namedIn(each))));
+            this.elementsNamed = ElementsNamed.allOf(inside);
+        }
+
+        /** The elements the names inside every alternative stood for
+         *  ({@link ElementsOnTheWay#namedIn}). */
+        ElementsNamed elementsNamed() {
+            return elementsNamed;
         }
 
         public ConditionOccurrence condition() {

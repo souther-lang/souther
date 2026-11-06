@@ -15,6 +15,7 @@ import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.partition.WhereAPartDecides;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
+import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.ModelOccurrences;
 
 import java.util.List;
@@ -59,10 +60,14 @@ import java.util.Set;
  *               {@link #border} is the first copy's alone where two copies were read as one line
  * @param saidOnTheWay which copies put each entry on the way the line's points were searched along,
  *               of that way alone; nobody where no search was made
+ * @param readOn the applications of closures the line was read on, every reading's put together
+ *               as {@link #readAt} is: what a reader is told the readings of an obligation came
+ *               from, and nothing the line or its rows turn on
  */
 public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
                                AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart,
-                               ModelOccurrences readAt, SaidOnTheWay saidOnTheWay)
+                               ModelOccurrences readAt, SaidOnTheWay saidOnTheWay,
+                               ApplicationsReadOn readOn)
         implements RuleCitations {
 
     /** One reading of a line, before anybody asked for a row that would tell it from the lines
@@ -82,7 +87,8 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
      */
     public BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
                             AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart) {
-        this(border, items, beside, toldApart, border.origin().readAt(), SaidOnTheWay.NONE);
+        this(border, items, beside, toldApart, border.origin().readAt(), SaidOnTheWay.NONE,
+                ApplicationsReadOn.NONE);
     }
 
     /**
@@ -205,6 +211,7 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
     }
 
     public BorderAssessment {
+        Objects.requireNonNull(readOn, "read on some applications, or on none");
         if (beside == null) {
             throw new IllegalArgumentException("a border says what the rows leave standing beside"
                     + " it, and a border that was not asked says that: " + border);

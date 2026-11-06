@@ -61,8 +61,10 @@ final class ElementsOnTheWay {
         });
         keptNone.addAll(border.unnamed());
         boolean anyNamed = !border.isEmpty();
+        List<ElementsNamed> namedInEach = new ArrayList<>(way.size());
         for (OnTheWay each : way) {
             ElementsNamed named = namedIn(each);
+            namedInEach.add(named);
             anyNamed |= !named.isEmpty();
             named.named().forEach((slot, names) -> {
                 if (names.size() == 1 && !keptNone.contains(slot)) {
@@ -76,7 +78,7 @@ final class ElementsOnTheWay {
         List<OnTheWay> out = null;
         for (int at = 0; at < way.size(); at++) {
             OnTheWay each = way.get(at);
-            if (agrees(namedIn(each), kept)) {
+            if (agrees(namedInEach.get(at), kept)) {
                 if (out != null) {
                     out.add(each);
                 }
@@ -111,22 +113,10 @@ final class ElementsOnTheWay {
         return switch (entry) {
             case OnTheWay.TakenIn taken -> taken.named().elements();
             case OnTheWay.Narrowed narrowed -> narrowed.named().elements();
-            case OnTheWay.OneOf several -> {
-                ElementsNamed out = ElementsNamed.NONE;
-                for (List<OnTheWay> one : several.alternatives()) {
-                    for (OnTheWay each : one) {
-                        out = out.and(namedIn(each));
-                    }
-                }
-                yield out;
-            }
-            case OnTheWay.Counted counted -> {
-                ElementsNamed out = ElementsNamed.NONE;
-                for (OnTheWay each : counted.parts()) {
-                    out = out.and(namedIn(each));
-                }
-                yield out;
-            }
+            // Worked out once, where the condition of several ways was made.
+            case OnTheWay.OneOf several -> several.elementsNamed();
+            case OnTheWay.Counted counted -> ElementsNamed.allOf(
+                    counted.parts().stream().map(ElementsOnTheWay::namedIn).toList());
             case OnTheWay.Settled _, OnTheWay.Declined _ -> ElementsNamed.NONE;
         };
     }

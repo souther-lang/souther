@@ -1238,15 +1238,50 @@ sealed interface ComparisonAssessment {
                                    boolean drawnByAnInvariant, WhatConditionsState conditions,
                                    Optional<ExpansionLineage> writtenIn,
                                    CountWitnesses.Lookup witnesses) {
+        return ofEach(behavior, comparison, at, read, reads, applying, answer, answering,
+                drawnByAnInvariant, conditions, writtenIn, witnesses).assessment();
+    }
+
+    /**
+     * What a comparison comes to on the input space ({@link #of}), and beside it which
+     * applications of the closures it stands in read each line and relation it drew
+     * ({@link Cutting.Drawn#readOn}).
+     */
+    record Assessed(ComparisonAssessment assessment, LinesReadOn readOn) {
+
+        public Assessed {
+            Objects.requireNonNull(assessment, "a comparison comes to something");
+            Objects.requireNonNull(readOn, "read on some applications, or on none");
+        }
+    }
+
+    /** {@link #of}, and which applications read each of its lines and relations. */
+    static Assessed ofEach(String behavior, StatedComparison comparison, Citation at,
+                           InputReading read, InputReads reads, ClosureApplications applying,
+                           BindingId answer, Arrivals answering, boolean drawnByAnInvariant,
+                           WhatConditionsState conditions, Optional<ExpansionLineage> writtenIn,
+                           CountWitnesses.Lookup witnesses) {
         // Asked first, and of the whole comparison. A rule that reads the answer anywhere in it is
         // one this reading does not put on the input space, whichever side the answer is on and
         // whatever else stands beside it: `value.n + query.offset <= 20` is about the answer and
         // about an input, and the input is no more measurable here for the input being named.
         if (readsAnswer(comparison.left(), answer) || readsAnswer(comparison.right(), answer)) {
-            return new AnswerDependent();
+            return new Assessed(new AnswerDependent(), LinesReadOn.NONE);
         }
-        Cutting.Read cut = Cutting.read(behavior, comparison, read, reads, applying, answering,
-                conditions, writtenIn);
+        Cutting.Drawn drawn = Cutting.drawn(behavior, comparison, read, reads, applying,
+                answering, conditions, writtenIn);
+        return new Assessed(assessed(behavior, comparison, at, read, reads, drawnByAnInvariant,
+                conditions, witnesses, drawn.read()), drawn.readOn());
+    }
+
+    /** What {@code cut}, the reading of {@code comparison} as lines, comes to on the input
+     *  space. */
+    private static ComparisonAssessment assessed(String behavior, StatedComparison comparison,
+                                                 Citation at, InputReading read,
+                                                 InputReads reads, boolean drawnByAnInvariant,
+                                                 WhatConditionsState conditions,
+                                                 CountWitnesses.Lookup witnesses,
+                                                 Cutting.Read cut) {
         return switch (cut) {
             case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
                  Cutting.Read.NumberNoRatioHolds _ -> aLine(cut, at, read, drawnByAnInvariant,

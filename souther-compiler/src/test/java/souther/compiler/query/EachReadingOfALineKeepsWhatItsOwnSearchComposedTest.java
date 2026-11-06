@@ -13,6 +13,7 @@ import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.publish.PublicationOrders;
+import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.ModelOccurrence;
@@ -188,7 +189,8 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
                                 false)));
         return new BorderAssessment(line, items,
                 new AnotherLineTheRowsAllow.ByDirection(List.of(BESIDE)),
-                ARowTellingTheLinesApart.notAsked(), ModelOccurrences.of(copy), SaidOnTheWay.NONE);
+                ARowTellingTheLinesApart.notAsked(), ModelOccurrences.of(copy), SaidOnTheWay.NONE,
+                ApplicationsReadOn.NONE);
     }
 
     /** The {@code n}th call of a helper, as a copy of its code. */

@@ -111,19 +111,62 @@ public record ElementsNamed(Map<Slot, Set<BindingId>> named, Set<Slot> unnamed) 
 
     /** These and {@code other}, each slot with the names of both. */
     public ElementsNamed and(ElementsNamed other) {
-        if (other.isEmpty()) {
-            return this;
+        return allOf(List.of(this, other));
+    }
+
+    /**
+     * Every one of {@code these} together, each slot with the names of all of them in the order
+     * met, put together at once.
+     *
+     * <p>One of them where the rest add nothing to it, which is what most of the ways of a
+     * condition of several ways name: the same elements through the same names, so a condition of
+     * many ways is not built again for each.
+     */
+    public static ElementsNamed allOf(List<ElementsNamed> these) {
+        ElementsNamed first = null;
+        int at = 0;
+        for (; at < these.size(); at++) {
+            if (!these.get(at).isEmpty()) {
+                first = these.get(at);
+                break;
+            }
         }
-        if (isEmpty()) {
-            return other;
+        if (first == null) {
+            return NONE;
+        }
+        int adding = at + 1;
+        while (adding < these.size() && first.holds(these.get(adding))) {
+            adding++;
+        }
+        if (adding == these.size()) {
+            return first;
         }
         Map<Slot, Set<BindingId>> out = new LinkedHashMap<>();
-        named.forEach((slot, names) -> out.put(slot, new LinkedHashSet<>(names)));
-        other.named.forEach((slot, names) ->
-                out.computeIfAbsent(slot, _ -> new LinkedHashSet<>()).addAll(names));
-        Set<Slot> notKnown = new LinkedHashSet<>(unnamed);
-        notKnown.addAll(other.unnamed);
+        Set<Slot> notKnown = new LinkedHashSet<>();
+        for (int each = at; each < these.size(); each++) {
+            these.get(each).named.forEach((slot, names) ->
+                    out.computeIfAbsent(slot, _ -> new LinkedHashSet<>()).addAll(names));
+            notKnown.addAll(these.get(each).unnamed);
+        }
         return new ElementsNamed(out, notKnown);
+    }
+
+    /** Whether every name {@code other} says of a slot is one these say of it, and every element
+     *  it read through a name not known is one these did: put together, it adds nothing. */
+    private boolean holds(ElementsNamed other) {
+        if (other == this || other.isEmpty()) {
+            return true;
+        }
+        if (!unnamed.containsAll(other.unnamed)) {
+            return false;
+        }
+        for (Map.Entry<Slot, Set<BindingId>> each : other.named.entrySet()) {
+            Set<BindingId> mine = named.get(each.getKey());
+            if (mine == null || !mine.containsAll(each.getValue())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** These, with only the names {@code of} holds: a slot left with no name is left out. An
