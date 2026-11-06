@@ -151,6 +151,20 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
         assertTrue(came.size() > new TreeSet<>(came).size(),
                 "two lines on one quantity that came to the same are two entries still: "
                         + came);
+        // And numbered among their own line's cases only: a line on the same quantity elsewhere
+        // counts none of them.
+        java.util.Map<String, List<Integer>> numbered = new java.util.TreeMap<>();
+        java.util.Map<String, Integer> claimed = new java.util.TreeMap<>();
+        for (JsonNode each : partition.path("caseExpansions")) {
+            String line = each.path("line").asString() + " at " + each.path("cutAt").asString();
+            numbered.computeIfAbsent(line, _ -> new ArrayList<>()).add(each.path("case").asInt());
+            claimed.put(line, each.path("casesOfTheLine").asInt());
+        }
+        numbered.forEach((line, cases) -> {
+            assertEquals(cases.size(), claimed.get(line), "the cases of " + line);
+            assertEquals(java.util.stream.IntStream.rangeClosed(1, cases.size()).boxed()
+                    .toList(), cases, "numbered from one: " + line);
+        });
         for (String section : List.of("notRead", "unanswered")) {
             for (JsonNode each : partition.path(section)) {
                 assertFalse(each.has("caseExpansion"), "why is said with no count in it: " + each);

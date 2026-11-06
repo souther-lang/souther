@@ -18,7 +18,6 @@ import souther.compiler.types.Type;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -157,8 +156,7 @@ class AnElementIsAnsweredByItsContainerAndNotByWhatItHoldsTest {
     private static ElementBindings handedAnElementOf(Core container) {
         return new ElementBindings(
                 Map.of(ELEMENT, List.of(new HeldIn(container, HeldIn.Part.ELEMENT,
-                        HowAClosureIsApplied.TO_EVERY_ELEMENT, false, Optional.empty()))),
-                Map.of(),
+                        HowAClosureIsApplied.TO_EVERY_ELEMENT, false))), Map.of(),
                 ElementProvenance.NONE, Map.of());
     }
 }

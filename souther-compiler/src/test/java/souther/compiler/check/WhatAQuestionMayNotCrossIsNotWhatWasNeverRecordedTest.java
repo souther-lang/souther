@@ -19,7 +19,6 @@ import souther.compiler.types.Type;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -66,7 +65,7 @@ class WhatAQuestionMayNotCrossIsNotWhatWasNeverRecordedTest {
     private static InputReads reads(ElementProvenance provenance) {
         ElementBindings elements = new ElementBindings(
                 Map.of(ELEMENT, List.of(new HeldIn(read("xs", CONTAINER), HeldIn.Part.ELEMENT,
-                        HowAClosureIsApplied.TO_EVERY_ELEMENT, false, Optional.empty()))),
+                        HowAClosureIsApplied.TO_EVERY_ELEMENT, false))),
                 Map.of(CONTAINER, read("held", HELD)),
                 provenance, Map.of());
         return InputReads.ofParameters(Map.of(HELD, "held", MADE_FROM, "made"),

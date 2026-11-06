@@ -789,8 +789,11 @@ public final class InputReads {
                             && names.roleOf(param.binding())
                                     instanceof BindingRole.Element(var held)) {
                         how = held.applied();
-                        if (madeBy.isEmpty()) {
-                            madeBy = held.handedBy();
+                        // The call whose applications these are, where one call handed the
+                        // parameter what it holds: of two, which made an application is not one.
+                        Set<ACallOfAnOperation> by = names.handedBy(param.binding());
+                        if (madeBy.isEmpty() && by.size() == 1) {
+                            madeBy = Optional.of(by.iterator().next());
                         }
                     }
                     handed.add(param);
@@ -1203,7 +1206,8 @@ public final class InputReads {
         /**
          * One application per occurrence, in the order a walk of the container meets them, which
          * is the order a run makes them in, how far the operation goes making them, and the call
-         * that makes them where some source wrote it ({@link HeldIn#handedBy}).
+         * that makes them, where one call some source wrote handed the closure what it holds
+         * ({@link ElementBindings#handedBy}).
          */
         record Each(List<Made> each, HowAClosureIsApplied how,
                     Optional<ACallOfAnOperation> madeBy) implements Applications {

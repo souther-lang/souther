@@ -2,10 +2,8 @@ package souther.compiler.inputs;
 
 import souther.compiler.core.Core;
 import souther.compiler.semantics.HowAClosureIsApplied;
-import souther.compiler.types.ACallOfAnOperation;
 
 import java.util.Objects;
-import java.util.Optional;
 
 /**
  * What an operation of the language handed a closure out of a container: the container, and which
@@ -24,17 +22,13 @@ import java.util.Optional;
  * to answer its closure on what an option holds hands it. The closure's parameter is then that
  * value, and what it is is whatever the option holding it says.
  *
- * <p>And which call handed them, where some source wrote it: the applications of a closure are the
- * call's, and a reader telling which construct of the model made them names that call.
- *
- * @param container  the expression the container was handed as
- * @param part       which of the things it holds the closure was handed
- * @param applied    how far the operation goes applying the closure
+ * @param container the expression the container was handed as
+ * @param part      which of the things it holds the closure was handed
+ * @param applied   how far the operation goes applying the closure
  * @param ofAnOption whether the container is an option and the closure is handed its value
- * @param handedBy   the call of the operation that handed them, where some source wrote it
  */
 public record HeldIn(Core container, Part part, HowAClosureIsApplied applied,
-                     boolean ofAnOption, Optional<ACallOfAnOperation> handedBy) {
+                     boolean ofAnOption) {
 
     /** Which part of what a container holds. */
     public enum Part {
@@ -61,12 +55,10 @@ public record HeldIn(Core container, Part part, HowAClosureIsApplied applied,
         Objects.requireNonNull(container, "something held came from a container");
         Objects.requireNonNull(part, "and is some part of what it holds");
         Objects.requireNonNull(applied, "handed over some way");
-        Objects.requireNonNull(handedBy, "by some call written somewhere, or by none");
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(Core.hashWithoutWalking(container), part, applied, ofAnOption,
-                handedBy);
+        return Objects.hash(Core.hashWithoutWalking(container), part, applied, ofAnOption);
     }
 }
