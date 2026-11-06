@@ -110,23 +110,22 @@ public final class MeaningsOfABodyReading {
             // Where which of the applications a run makes is not said, what a condition states on
             // each is said all the same — and so of an application handed an element a filter
             // keeps on some rows, which is one the closure may be handed.
-            List<InputReads> applications = switch (applied) {
-                case InputReads.Applications.Each(var made, var _) ->
-                        made.stream().map(InputReads.Applications.Made::reads).toList();
-                case InputReads.Applications.Unsaid(var mayBeMade) ->
-                        mayBeMade.stream().map(InputReads.Applications.Made::reads).toList();
+            List<InputReads.Applications.Made> applications = switch (applied) {
+                case InputReads.Applications.Each(var made, var _) -> made;
+                case InputReads.Applications.Unsaid(var mayBeMade) -> mayBeMade;
                 case InputReads.Applications.MoreThanAreRead _,
                      InputReads.Applications.PastWhatIsWrittenOut _,
                      InputReads.Applications.NoneHanded _,
                      InputReads.Applications.NoneMade _ -> List.of();
             };
             if (!applications.isEmpty()) {
-                List<MeaningsOfABody> each = new ArrayList<>();
-                for (InputReads application : applications) {
+                List<MeaningsOfABody.ReadOnAnApplication> each = new ArrayList<>();
+                for (InputReads.Applications.Made application : applications) {
                     MeaningsOfABodyReading inside = inside(null);
-                    inside.walk(block.body(), application);
+                    inside.walk(block.body(), application.reads());
                     read = inside.read;
-                    each.add(inside.filed.filed());
+                    each.add(new MeaningsOfABody.ReadOnAnApplication(application.which(),
+                            inside.filed.filed()));
                 }
                 filed.metOnEachApplication(each);
                 return;

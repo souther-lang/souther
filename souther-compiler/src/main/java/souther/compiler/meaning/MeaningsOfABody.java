@@ -1,6 +1,8 @@
 package souther.compiler.meaning;
 
 import souther.compiler.check.ClauseName;
+import souther.compiler.inputs.InputReads;
+import souther.compiler.types.AnApplicationOfACall;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
@@ -31,22 +33,37 @@ import java.util.function.Supplier;
  * statement. How the first was derived is the one kept, and it is part of what this is equal by:
  * a reader explaining a fork from it would otherwise be handed an account a revision ago.
  *
+ * <p>A site inside a closure read once for each application states, here, what it states on the
+ * application a run meets it on ({@link Proposition.OnAnApplication}), which says what can come out
+ * and not which application states what. What each application's reading of the body states is
+ * kept beside it, filed by which application it is ({@link #onTheApplication}), for a reader that
+ * knows which application it stands on.
+ *
  * @param stated    what is stated at each site read to one statement, and how
  * @param ambiguous the sites whose copies state different things
  * @param piecesAttempted the pieces of a string of the input that the body builds a newtype of,
  *                  in the order the walk met them
+ * @param applications what the body of a closure read on each of its applications states on that
+ *                  application, by which application it is
+ *                  ({@link InputReads.Applications.Made#which})
+ * @param applicationsMetTwice the applications met again stating something else, which are filed
+ *                  as nothing
  */
 public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
-                              Set<PieceDemand> piecesAttempted) {
+                              Set<PieceDemand> piecesAttempted,
+                              Map<AnApplicationOfACall, MeaningsOfABody> applications,
+                              Set<AnApplicationOfACall> applicationsMetTwice) {
 
     /** A body nothing was read of. */
     public static final MeaningsOfABody NONE =
-            new MeaningsOfABody(Map.of(), Set.of(), Set.of());
+            new MeaningsOfABody(Map.of(), Set.of(), Set.of(), Map.of(), Set.of());
 
     public MeaningsOfABody {
         stated = Map.copyOf(stated);
         ambiguous = Set.copyOf(ambiguous);
         piecesAttempted = Collections.unmodifiableSet(new LinkedHashSet<>(piecesAttempted));
+        applications = Map.copyOf(applications);
+        applicationsMetTwice = Set.copyOf(applicationsMetTwice);
     }
 
     /**
@@ -339,6 +356,9 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
         private final Map<Site, Meaning> stated = new LinkedHashMap<>();
         private final Set<Site> ambiguous = new HashSet<>();
         private final Set<PieceDemand> piecesAttempted = new LinkedHashSet<>();
+        private final Map<AnApplicationOfACall, MeaningsOfABody> applications =
+                new LinkedHashMap<>();
+        private final Set<AnApplicationOfACall> applicationsMetTwice = new HashSet<>();
 
         /** {@code demands}, met where a construction is attempted of the pieces of a string. */
         public void metAsPieces(List<PieceDemand> demands) {
@@ -368,30 +388,74 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
          * copies stating different things are a site that says nothing; applications are one place
          * met with one value and then another, and stating different things on each is what such a
          * site does. A site with copies on some application is still a site with copies.
+         *
+         * <p>Each reading told apart from the others is kept as well, under which application it
+         * is. The call that makes them is in the copy of the body it stands in, so the applications
+         * a copy of a helper makes are not the ones another copy makes. One met again stating
+         * something else is one no reader can take either reading for, and is filed as nothing.
          */
-        public void metOnEachApplication(List<MeaningsOfABody> each) {
-            each.forEach(one -> piecesAttempted.addAll(one.piecesAttempted()));
+        public void metOnEachApplication(List<ReadOnAnApplication> each) {
+            List<MeaningsOfABody> readings =
+                    each.stream().map(ReadOnAnApplication::reading).toList();
+            readings.forEach(one -> piecesAttempted.addAll(one.piecesAttempted()));
             Set<Site> sites = new LinkedHashSet<>();
-            each.forEach(one -> {
+            readings.forEach(one -> {
                 sites.addAll(one.stated().keySet());
                 sites.addAll(one.ambiguous());
             });
             for (Site site : sites) {
-                if (each.stream().anyMatch(one -> one.ambiguous().contains(site))) {
+                if (readings.stream().anyMatch(one -> one.ambiguous().contains(site))) {
                     ambiguous.add(site);
                     continue;
                 }
-                List<Derivation> how = each.stream().map(one -> one.stated().get(site))
+                List<Derivation> how = readings.stream().map(one -> one.stated().get(site))
                         .filter(Objects::nonNull).map(Meaning::how).toList();
                 met(site, new Conclusion(Optional.of(site.construct()))
                         .meaningOf(new Derivation.OnEachApplication(how)));
+            }
+            for (ReadOnAnApplication one : each) {
+                if (one.which().isEmpty()) {
+                    continue;
+                }
+                MeaningsOfABody before = applications.putIfAbsent(one.which().get(),
+                        one.reading());
+                if (before != null && !before.equals(one.reading())) {
+                    applicationsMetTwice.add(one.which().get());
+                }
             }
         }
 
         /** What was filed. */
         public MeaningsOfABody filed() {
-            return new MeaningsOfABody(stated, ambiguous, piecesAttempted);
+            return new MeaningsOfABody(stated, ambiguous, piecesAttempted, applications,
+                    applicationsMetTwice);
         }
+    }
+
+    /**
+     * What one reading of a closure's body states, and which application it was made on where
+     * that is told ({@link InputReads.Applications.Made#which}).
+     */
+    public record ReadOnAnApplication(Optional<AnApplicationOfACall> which,
+                                      MeaningsOfABody reading) {
+
+        public ReadOnAnApplication {
+            Objects.requireNonNull(which, "an application is told apart or is not");
+            Objects.requireNonNull(reading, "a reading of the body was made on it");
+        }
+    }
+
+    /**
+     * What the body of a closure states on the application {@code which}: that application's own
+     * reading, or empty where the body was not read on it alone.
+     *
+     * <p>For a reader that stands on that application, where a site states what the application
+     * states and not what some application may. A reader that stands on no application in
+     * particular reads {@link #at} as it is.
+     */
+    public Optional<MeaningsOfABody> onTheApplication(AnApplicationOfACall which) {
+        return applicationsMetTwice.contains(which) ? Optional.empty()
+                : Optional.ofNullable(applications.get(which));
     }
 
     /** What is stated at {@code site}, or empty where nothing was read there or its copies state

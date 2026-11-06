@@ -3,13 +3,16 @@ package souther.compiler.meaning;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.TermPath;
+import souther.compiler.types.AnApplicationOfACall;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.WrittenOwner;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -63,6 +66,52 @@ class ACopyIsOneStatementWhereItStatesOneThingTest {
         MeaningsOfABody filed = filing.filed();
         assertTrue(filed.ambiguous().contains(SITE));
         assertEquals(Optional.empty(), filed.at(SITE));
+    }
+
+    /** What each application states is kept under it, beside what the site states on some
+     *  application, and an application not told apart is kept under none. */
+    @Test
+    void eachApplicationToldApartIsKeptUnderItself() {
+        MeaningsOfABody.Filing filing = new MeaningsOfABody.Filing();
+        filing.metOnEachApplication(List.of(
+                new MeaningsOfABody.ReadOnAnApplication(Optional.of(application(0)),
+                        reading(meaning(DIRECTLY))),
+                new MeaningsOfABody.ReadOnAnApplication(Optional.of(application(1)),
+                        reading(meaning(new Derivation.UnderADenial(DIRECTLY, true)))),
+                new MeaningsOfABody.ReadOnAnApplication(Optional.empty(),
+                        reading(meaning(DIRECTLY)))));
+        MeaningsOfABody filed = filing.filed();
+        assertTrue(filed.at(SITE).orElseThrow() instanceof Proposition.OnAnApplication);
+        assertEquals(Optional.of(meaning(DIRECTLY).states()),
+                filed.onTheApplication(application(0)).orElseThrow().at(SITE));
+        assertEquals(Optional.of(meaning(DIRECTLY).states().denied()),
+                filed.onTheApplication(application(1)).orElseThrow().at(SITE));
+        assertEquals(Set.of(application(0), application(1)), filed.applications().keySet());
+    }
+
+    /** One application met again stating something else is one neither reading is taken for. */
+    @Test
+    void anApplicationMetTwiceStatingTwoThingsIsKeptAsNothing() {
+        MeaningsOfABody.Filing filing = new MeaningsOfABody.Filing();
+        filing.metOnEachApplication(List.of(new MeaningsOfABody.ReadOnAnApplication(
+                Optional.of(application(0)), reading(meaning(DIRECTLY)))));
+        filing.metOnEachApplication(List.of(new MeaningsOfABody.ReadOnAnApplication(
+                Optional.of(application(0)),
+                reading(meaning(new Derivation.UnderADenial(DIRECTLY, true))))));
+        assertEquals(Optional.empty(), filing.filed().onTheApplication(application(0)));
+    }
+
+    private static AnApplicationOfACall application(int ordinal) {
+        return new AnApplicationOfACall(new ModelOccurrence(new SourceConstructOrigin(
+                new WrittenOwner.Body("m", "b"), 1, 0, SourceConstruct.CALL),
+                ExpansionLineage.ORIGINAL), ordinal);
+    }
+
+    /** A reading of a body that states {@code meaning} at the site and nothing else. */
+    private static MeaningsOfABody reading(MeaningsOfABody.Meaning meaning) {
+        MeaningsOfABody.Filing filing = new MeaningsOfABody.Filing();
+        filing.met(SITE, meaning);
+        return filing.filed();
     }
 
     @Test

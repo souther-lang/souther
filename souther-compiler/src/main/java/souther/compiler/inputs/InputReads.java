@@ -32,6 +32,7 @@ import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ACallOfAnOperation;
+import souther.compiler.types.AnApplicationOfACall;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.TypeSymbol;
@@ -833,7 +834,8 @@ public final class InputReads {
         if (handed.isEmpty()) {
             return new Applications.NoneHanded();
         }
-        List<Applications.Made> applications = List.of(new Applications.Made(this, List.of()));
+        List<Applications.Made> applications =
+                List.of(new Applications.Made(this, List.of(), Optional.empty()));
         for (int at = 0; at < handed.size(); at++) {
             List<Applications.Made> wider = new ArrayList<>();
             for (Applications.Made each : applications) {
@@ -841,7 +843,8 @@ public final class InputReads {
                     List<ReadMeaning.Occurrence.Kept> keptBy = new ArrayList<>(each.keptWhere());
                     keptBy.addAll(occurrence.keptWhere());
                     wider.add(new Applications.Made(each.reads().handing(
-                            handed.get(at).binding(), occurrence.value(), newtypes), keptBy));
+                            handed.get(at).binding(), occurrence.value(), newtypes), keptBy,
+                            Optional.empty()));
                 }
             }
             applications = wider;
@@ -851,10 +854,15 @@ public final class InputReads {
         for (int at = 0; at < handed.size(); at++) {
             through.put(handed.get(at).binding(), (long) occurrencesOf.get(at).size());
         }
-        List<Applications.Made> each = applications.stream()
-                .map(one -> new Applications.Made(one.reads().readAsApplication(counted, through),
-                        one.keptWhere()))
-                .toList();
+        List<Optional<AnApplicationOfACall>> which = handed.size() == 1
+                && how == HowAClosureIsApplied.TO_EVERY_ELEMENT
+                ? counted(block, occurrencesOf.getFirst()) : null;
+        List<Applications.Made> each = new ArrayList<>();
+        for (int at = 0; at < applications.size(); at++) {
+            Applications.Made one = applications.get(at);
+            each.add(new Applications.Made(one.reads().readAsApplication(counted, through),
+                    one.keptWhere(), which == null ? Optional.empty() : which.get(at)));
+        }
         // An operation applying its closure to one element at most picks it out by something else
         // it was handed, and one applying it to some of them says not which; and applications made
         // of every value of each of several parameters are made in an order no operation here
@@ -865,6 +873,29 @@ public final class InputReads {
             return new Applications.Unsaid(each);
         }
         return new Applications.Each(each, how);
+    }
+
+    /**
+     * Which application of {@code block} the one handed each of {@code handed} is, as the call of
+     * the model applying it counts them in the order a run makes them
+     * ({@link ClosureUses.Application#ofTheModel}): the one operation applying the closure hands
+     * one parameter every element in turn, so the application handed the {@code p}th element there
+     * is its {@code p}th. Only up to an element that is there on some rows and not others, past
+     * which a run makes fewer and which application an element is handed on is not said; and none
+     * where no one operation alone applies the closure.
+     */
+    private List<Optional<AnApplicationOfACall>> counted(Core.Block block,
+                                                         List<ReadMeaning.Occurrence> handed) {
+        ClosureUses uses = usesOf(block);
+        Optional<ClosureUses.Application> by = uses == null ? Optional.empty()
+                : uses.theOnlyApplication();
+        List<Optional<AnApplicationOfACall>> out = new ArrayList<>();
+        boolean countable = by.isPresent();
+        for (int at = 0; at < handed.size(); at++) {
+            countable = countable && handed.get(at).keptWhere().isEmpty();
+            out.add(countable ? by.get().ofTheModel(at) : Optional.empty());
+        }
+        return out;
     }
 
     /**
@@ -1211,12 +1242,21 @@ public final class InputReads {
          * container to hold the element it is handed — every truth the element was kept by, for
          * each parameter handed one ({@link ReadMeaning.Occurrence}). An application handed an
          * element a filter dropped is one no run makes.
+         *
+         * @param which which application this is, as the call of the model that makes it counts
+         *              them — the one thing a reader of another tree, where the call and the
+         *              closure stand as other nodes and its parameters as other bindings, can tell
+         *              it by. Empty where it is not said: a closure handed values on several
+         *              parameters, or by an operation that makes some of its applications only,
+         *              or past an element a filter keeps on some rows
          */
-        record Made(InputReads reads, List<ReadMeaning.Occurrence.Kept> keptWhere) {
+        record Made(InputReads reads, List<ReadMeaning.Occurrence.Kept> keptWhere,
+                    Optional<AnApplicationOfACall> which) {
 
             public Made {
                 Objects.requireNonNull(reads, "an application is read in some names");
                 keptWhere = List.copyOf(keptWhere);
+                Objects.requireNonNull(which, "an application is told apart or is not");
             }
         }
 

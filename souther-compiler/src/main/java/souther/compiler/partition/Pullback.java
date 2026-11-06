@@ -6066,7 +6066,8 @@ final class Pullback {
                 case InputReads.Applications.Each(var each, var _) -> applications = each;
                 case InputReads.Applications.Unsaid(var each) -> applications = each;
                 case InputReads.Applications.NoneHanded _ -> applications =
-                        List.of(new InputReads.Applications.Made(closure.at(), List.of()));
+                        List.of(new InputReads.Applications.Made(closure.at(), List.of(),
+                                Optional.empty()));
                 // Applied to nothing, so nothing it states is part of what is read.
                 case InputReads.Applications.NoneMade _ -> applications = List.of();
                 case InputReads.Applications.MoreThanAreRead _ -> {
