@@ -59,6 +59,10 @@ public final class NumericTerms {
     }
 
     private static <T> List<T> walked(List<T> these, Function<T, Spelling> naming) {
+        // One term has no other to come before or after, and no name to be mistaken for.
+        if (these.size() < 2) {
+            return List.copyOf(these);
+        }
         // Each named once. A name is spelled out of the term's whole path, and the sort asks for
         // the names of two terms at every comparison; spelled there, one walk of a form of a few
         // terms spelled each of them several times over.

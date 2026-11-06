@@ -188,9 +188,10 @@ public sealed interface ValueName extends SettledAnswer {
 
             @Override
             public boolean equals(Object other) {
-                return other instanceof Operation that && hash == that.hash
+                return this == other
+                        || (other instanceof Operation that && hash == that.hash
                         && parts.alias().equals(that.parts.alias())
-                        && parts.name().equals(that.parts.name());
+                        && parts.name().equals(that.parts.name()));
             }
 
             @Override
