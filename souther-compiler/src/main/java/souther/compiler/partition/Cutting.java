@@ -870,9 +870,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 }
             }
         }
-        // Told by what each line and relation is: a line by the place of its author's line it is
-        // read as, which is what a part of the statement keeps through every reading of it after
-        // this, and a relation by itself.
+        // Told by what each line and relation is, as the key above tells them apart: a line by
+        // the place it is read as and the line drawn there, and a relation by itself.
         readBy.forEach((key, by) -> readOn.read(key.id(), key.read(), by));
         if (stoppedWhole) {
             return new Read.Stopped(stopped, stoppedWhere);
@@ -926,7 +925,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (parts.size() == 1 && WhereAnApplicationIsMade.everywhere(parts.getFirst().cases())
                 && parts.getFirst().working().equals(
                         workingOf(conditions.comparison(comparison, reads, read)))) {
-            readOn.asAWhole(parts.getFirst().id());
+            readOn.asAWhole(parts.getFirst().id(), parts.getFirst().line());
             return parts.getFirst().line();
         }
         return derivedOnEach(new Read.Several(parts), derived);

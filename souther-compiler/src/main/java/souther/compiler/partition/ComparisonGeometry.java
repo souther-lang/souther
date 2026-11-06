@@ -81,6 +81,13 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between,
         LineOrigin of(Cutting cutting, AuthoredPointMapping authored, ApplicationsReadOn readOn);
     }
 
+    /** Which applications read the line drawn on a cutting, standing to its author's line some
+     *  way, once which part of the comparison it is is settled. */
+    private interface ReadBy {
+
+        ApplicationsReadOn of(Cutting cutting, AuthoredPointMapping authored);
+    }
+
     /** {@link #of(ComparisonAssessment, OriginOf, LinesReadOn)} of a comparison read once. */
     static ComparisonGeometry of(ComparisonAssessment assessed, OriginOf originOf) {
         return of(assessed, originOf, LinesReadOn.NONE);
@@ -89,14 +96,14 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between,
     /**
      * The geometry {@code assessed} adds, with {@code originOf} answering where a line drawn on
      * one cutting comes from, told which applications read it as {@code readOn} says: a part's
-     * line by the place it is read as, the one line of a comparison that is no part by the
-     * comparison's one line, and a line parting what settles a relation by the relations about
-     * its numbers.
+     * line by the place it is read as and the line drawn there, the one line of a comparison
+     * that is no part by the line the comparison came to as a whole, and a line parting what
+     * settles a relation by the relations about its numbers.
      */
     static ComparisonGeometry of(ComparisonAssessment assessed, OriginOf originOf,
                                  LinesReadOn readOn) {
         if (!(assessed instanceof ComparisonAssessment.Several several)) {
-            return ofALine(assessed, readOn.ofTheComparison(), readOn,
+            return ofALine(assessed, readOn::ofTheComparison, readOn,
                     (cutting, authored, by) -> originOf.of(cutting, Optional.empty(), authored,
                             by));
         }
@@ -107,9 +114,10 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between,
         List<DerivedValues.Settling> throughADerivedValue = new ArrayList<>();
         for (ComparisonAssessment.Several.Part part : several.parts()) {
             for (WhereAPartDecides reading : part.readings()) {
-                ComparisonGeometry line = ofALine(part.line(), readOn.ofTheLine(part.id()), readOn,
-                        (cutting, authored, by) -> originOf.of(cutting, Optional.of(reading),
-                                authored, by));
+                ComparisonGeometry line = ofALine(part.line(),
+                        (cutting, authored) -> readOn.ofTheLine(part.id(), cutting, authored),
+                        readOn, (cutting, authored, by) -> originOf.of(cutting,
+                                Optional.of(reading), authored, by));
                 evidence.addAll(line.evidence());
                 between.addAll(line.between());
                 throughADerivedValue.addAll(line.throughADerivedValue());
@@ -118,18 +126,19 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between,
         return new ComparisonGeometry(evidence, between, throughADerivedValue);
     }
 
-    /** What one line adds, read by {@code drawnBy}, its origin answered by {@code originOf}. */
-    private static ComparisonGeometry ofALine(ComparisonAssessment assessed,
-                                              ApplicationsReadOn drawnBy, LinesReadOn readOn,
-                                              OfALine originOf) {
+    /** What one line adds, read by what {@code readBy} says, its origin answered by
+     *  {@code originOf}. */
+    private static ComparisonGeometry ofALine(ComparisonAssessment assessed, ReadBy readBy,
+                                              LinesReadOn readOn, OfALine originOf) {
         return switch (assessed) {
-            case ComparisonAssessment.AtAPosition at ->
-                    atAPosition(at, originOf.of(at.cutting(), at.authored(), drawnBy));
+            case ComparisonAssessment.AtAPosition at -> atAPosition(at, originOf.of(at.cutting(),
+                    at.authored(), readBy.of(at.cutting(), at.authored())));
             // A value singled out on such a quantity is a line as an order is, where the quantity
             // counts: no position holds it as a class, so the line is where the rule is measured.
             // And each line parting values that settle the relation is a line on its position,
             // read on what read the line it parts the values of.
             case ComparisonAssessment.AcrossPositions over -> {
+                ApplicationsReadOn drawnBy = readBy.of(over.cutting(), over.authored());
                 LineOrigin by = originOf.of(over.cutting(), over.authored(), drawnBy);
                 List<LineDrawn> between = over.drawsABorder()
                         ? List.of(new LineDrawn(over.cutting(), by))
