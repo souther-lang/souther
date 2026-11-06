@@ -149,6 +149,8 @@ final class MeaningAssumptions {
     }
 
     private final Terms terms;
+    /** Whether a state reaches nothing, as the engine these terms were lent by keeps it. */
+    private final ReachabilityAnswers reachability;
     private final InputPlaces places;
     /** What the bindings in force where the condition stands are, which is where a value the body
      *  bound is found. */
@@ -168,7 +170,8 @@ final class MeaningAssumptions {
 
     private MeaningAssumptions(Terms terms, InputPlaces places, Denotations at, Known known,
                                Tries tries) {
-        this.terms = terms;
+        this.terms = Objects.requireNonNull(terms, "a condition is read in some terms");
+        this.reachability = terms.reachability();
         this.places = places;
         this.at = at;
         this.known = known;
@@ -252,7 +255,7 @@ final class MeaningAssumptions {
     private void settleWhatWasLeftUndecided() {
         Tries settling = new Tries(known.settlingLeft());
         boolean settled = true;
-        while (settled && !known.reachesNothing() && known.awaitsSettling()
+        while (settled && !reachability.reachesNothing(known) && known.awaitsSettling()
                 && settling.left() > 0) {
             settled = false;
             for (Known.Declined choice : known.declinedChoices()) {
@@ -292,7 +295,7 @@ final class MeaningAssumptions {
     /** Why each choice this reading leaves undecided, and no earlier one, was not taken in — none
      *  where nothing is reached, since no part of a choice is then left unread. */
     private void sayWhatIsStillUndecided() {
-        if (known.reachesNothing()) {
+        if (reachability.reachesNothing(known)) {
             return;
         }
         Set<Known.Declined> before = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -798,7 +801,7 @@ final class MeaningAssumptions {
             }
             MeaningAssumptions alone = new MeaningAssumptions(terms, places, at, known, tries);
             alone.take(part);
-            if (!alone.known.reachesNothing()) {
+            if (!reachability.reachesNothing(alone.known)) {
                 left.add(alone);
                 if (left.size() == 2) {
                     break;

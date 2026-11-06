@@ -2,11 +2,13 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
+import souther.compiler.query.ReadAs;
 
 import java.util.List;
 import java.util.Optional;
@@ -39,8 +41,12 @@ class WhatAPathCannotHoldSaysWhatStoppedItsPartsTest {
         return new Proposition.Unread(Optional.empty(), ordinal, why, false, true);
     }
 
+    /** A reading of terms that states no rules, which is all a proposition written out here asks. */
+    private static final Terms TERMS = RuleReadings.termsOfNoClauseFiled(
+            Symbols.none(DefaultStdlib.get()), ReadAs.THE_COMPILATION_DOES);
+
     private static List<WhyNotTaken> notTaken(Proposition stated, boolean positive) {
-        Predicates.Assumed assumed = MeaningAssumptions.assumed(stated, positive, Known.top(), null,
+        Predicates.Assumed assumed = MeaningAssumptions.assumed(stated, positive, Known.top(), TERMS,
                 MeaningAssumptions.InputPlaces.NONE, null);
         assertFalse(assumed.shapeRead(), () -> stated.spelledOut() + " is not read to the end");
         return assumed.notTaken();

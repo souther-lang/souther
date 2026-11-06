@@ -47,6 +47,12 @@ class ARunIsReadOnlyWhereBothHalvesAreProvedTest {
                 if List.sum(List.map(line -> line.amount.value, lines)) >= 100000
                     then Needed else NotNeeded
 
+            behavior projectedByName : (lines: List<Item>) -> Verdict
+            let projectedByName (lines) = {
+                let valueOf = (line) -> line.amount.value
+                if List.sum(List.map(valueOf, lines)) >= 100000 then Needed else NotNeeded
+            }
+
             behavior branching : (lines: List<Item>) -> Verdict
             let branching (lines) =
                 if List.sum(List.map(line -> if line.free then 0 else line.amount.value, lines))
@@ -74,6 +80,17 @@ class ARunIsReadOnlyWhereBothHalvesAreProvedTest {
         assertEquals(1, elements("projected").provenance().projectedFrom().size(),
                 "a `map` answers what the closure made of each element and as many as it was"
                         + " given, so the pair is recorded");
+    }
+
+    /** A closure given a name before it is handed over is the closure written in its place, and
+     *  the same pair is written down, and answers the same place. */
+    @Test
+    void aWalkWhoseClosureWasNamedIsWrittenDownAsOneWrittenInPlace() {
+        ElementBindings named = elements("projectedByName");
+        assertEquals(1, named.provenance().projectedFrom().size(),
+                "the parameter the named closure is applied under is that application's own");
+        assertEquals(elements("projected").projected().values().toString(),
+                named.projected().values().toString(), "and what it answers is the same place");
     }
 
     /**

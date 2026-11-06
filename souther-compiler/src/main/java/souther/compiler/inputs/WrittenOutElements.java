@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.LawAtACall;
 import souther.compiler.check.Symbols;
@@ -204,6 +205,11 @@ public final class WrittenOutElements {
         @Override
         public Optional<Object> folded(ElementsWrittenOut.Stood<InputReads> value) {
             return value.at().folded(value.value(), symbols, newtypes);
+        }
+
+        @Override
+        public ElementBindings.AssembledWalk assembledAt(BindingId element, InputReads at) {
+            return at.assembledAt(element);
         }
     }
 }

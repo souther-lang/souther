@@ -2,9 +2,11 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.query.ReadAs;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,8 +33,12 @@ class ADisjunctionPastWhatAPathTakesAloneProvesNothingTest {
     private static final WhyNotTaken PAST_THE_FIGURE =
             new WhyNotTaken.MoreAlternativesThanAreTried();
 
+    /** A reading of terms that states no rules, which is all a proposition written out here asks. */
+    private static final Terms TERMS = RuleReadings.termsOfNoClauseFiled(
+            Symbols.none(DefaultStdlib.get()), ReadAs.THE_COMPILATION_DOES);
+
     private static Predicates.Assumed assumed(Proposition stated) {
-        return MeaningAssumptions.assumed(stated, true, Known.top(), null,
+        return MeaningAssumptions.assumed(stated, true, Known.top(), TERMS,
                 MeaningAssumptions.InputPlaces.NONE, null);
     }
 

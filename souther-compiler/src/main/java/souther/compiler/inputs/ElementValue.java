@@ -4,6 +4,7 @@ import souther.compiler.check.AffineForms;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.ARounding;
 import souther.compiler.check.Choice;
+import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.Location;
 import souther.compiler.check.WhatAnOptionHolds;
@@ -1924,6 +1925,15 @@ public sealed interface ElementValue {
             @Override
             public Optional<Object> folded(ElementsWrittenOut.Stood<Map<BindingId, Core>> value) {
                 return Optional.empty();
+            }
+
+            // What this reads is a closure's answer and the bindings of its body as they were read
+            // before a fold was rewritten into a build (ElementBindings), so no build reaches here
+            // to be asked about.
+            @Override
+            public ElementBindings.AssembledWalk assembledAt(BindingId element,
+                                                             Map<BindingId, Core> at) {
+                return null;
             }
 
             @Override
