@@ -194,7 +194,7 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
             if (each.demand() instanceof RowDemand.OfACondition condition) {
                 for (NumericTerm term : condition.terms()) {
                     if (term instanceof NumericTerm.OccurrencesOfAKey asked) {
-                        reads.add(new Reads(asked.subjectPath().outermostContainer(), asked.key()));
+                        reads.add(new Reads(asked.containersReadAcross().getFirst(), asked.key()));
                     }
                 }
             }
@@ -857,9 +857,10 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
             grew = false;
             for (RowDemand.OneValueAtBoth each : related) {
                 // A position held to one under itself has nothing to give the other that is not
-                // already its own, and copying would go one level deeper every time round.
-                if (each.same() && !each.one().isAtOrUnder(each.other())
-                        && !each.other().isAtOrUnder(each.one())) {
+                // already its own, and copying would go one level deeper every time round. Under
+                // it as the value is reached, so a narrowing of the one is not taken for a place
+                // apart from it.
+                if (each.same() && !each.one().standsAtUnderOrAround(each.other())) {
                     grew |= copiedUnder(out, each.one(), each.other());
                     grew |= copiedUnder(out, each.other(), each.one());
                 }

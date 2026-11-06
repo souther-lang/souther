@@ -720,7 +720,7 @@ final class AStatementAtARow {
             out = out.orMore(readOf(each, container, under, across).turnsOn());
         }
         for (TermPath each : positions) {
-            if (container.isAtOrUnder(each)) {
+            if (acrossTheElements(each, container)) {
                 out = TurnsOn.OTHER_ELEMENTS;
             }
         }
@@ -762,10 +762,15 @@ final class AStatementAtARow {
                 .anyMatch(place -> aroundTheElement(place, container, across));
     }
 
-    /** Whether {@code place} is in {@code across} and not in an element of {@code container}:
-     *  the outer container, one of its elements, or the container inside one. */
+    /**
+     * Whether {@code place} may be in {@code across} and not in an element of {@code container}:
+     * the outer container, one of its elements, or the container inside one. False only where the
+     * place is shown apart from {@code across} or inside an element of {@code container}
+     * ({@link TermPath#toTheElementsOf}).
+     */
     private static boolean aroundTheElement(TermPath place, TermPath container, TermPath across) {
-        return place.isAtOrUnder(across) && !place.isAtOrUnder(container.element());
+        return place.toTheElementsOf(across) != TermPath.ToTheElements.APART
+                && place.toTheElementsOf(container) != TermPath.ToTheElements.INSIDE_ONE;
     }
 
     /**
@@ -819,7 +824,9 @@ final class AStatementAtARow {
      * part it is made of: where it is read among, the key it is gathered under, the value it
      * gathers, and the statement keeping the elements it is of.
      *
-     * <p>A number of one position is the element's, and reads the value where it is that place. One
+     * <p>A number of one position is the element's, and reads the value where it is that place —
+     * save one at a place holding the container, or not shown apart from it nor inside the
+     * element, which turns on the other elements ({@link #acrossTheElements}). One
      * read among the elements of a container is the element's where that container is inside it
      * or elsewhere, and turns on other elements where it is this one or holds it — save how often
      * the value at {@code under} occurs and what is gathered under it, which turn on those holding
@@ -834,8 +841,9 @@ final class AStatementAtARow {
     static WhatItReads readOf(NumericTerm term, TermPath container, Quantity.TheValue under,
                               Optional<TermPath> across) {
         return switch (term) {
-            case NumericTerm.FromOnePosition one ->
-                    new WhatItReads(TurnsOn.THE_ELEMENT, readsTheValue(one.subjectPath(), under));
+            case NumericTerm.FromOnePosition one -> new WhatItReads(
+                    acrossTheElements(one.position(), container) ? TurnsOn.OTHER_ELEMENTS
+                            : TurnsOn.THE_ELEMENT, readsTheValue(one.position(), under));
             case NumericTerm.TakenOver taken ->
                     new WhatItReads(overTheRun(taken.source(), container), false);
             case NumericTerm.Multiplicity often -> new WhatItReads(underItsValue(
@@ -935,8 +943,7 @@ final class AStatementAtARow {
      *  reaches across the elements of {@code container}, and the element's own otherwise. */
     private static TurnsOn overTheRun(RunSource run, TermPath container) {
         if (run instanceof RunSource.ReachableNodes nodes) {
-            return nodes.root().isAtOrUnder(container.element()) ? TurnsOn.THE_ELEMENT
-                    : container.isAtOrUnder(nodes.root()) ? TurnsOn.OTHER_ELEMENTS
+            return acrossTheElements(nodes.root(), container) ? TurnsOn.OTHER_ELEMENTS
                     : TurnsOn.THE_ELEMENT;
         }
         return among(run.subjectPath().containersHoldingIt(), container)
@@ -946,8 +953,20 @@ final class AStatementAtARow {
     /** Whether reading across the elements of any of {@code counted} reads across those of
      *  {@code container}: one of them is it, or holds it inside its elements. */
     private static boolean among(List<TermPath> counted, TermPath container) {
-        return counted.stream().anyMatch(each -> each.equals(container)
-                || container.isAtOrUnder(each.element()));
+        return counted.stream().anyMatch(each -> acrossTheElements(each, container));
+    }
+
+    /**
+     * Whether what is read at {@code read} may be read across the elements of {@code container}
+     * rather than off one of them: it is shown neither inside one nor apart from them
+     * ({@link TermPath#toTheElementsOf}). The container itself, a place holding it, and a place
+     * narrowed to cases the container is not on every row all are.
+     */
+    private static boolean acrossTheElements(TermPath read, TermPath container) {
+        return switch (read.toTheElementsOf(container)) {
+            case INSIDE_ONE, APART -> false;
+            case HOLDING_THEM, NOT_SHOWN -> true;
+        };
     }
 
     /**
@@ -1420,13 +1439,13 @@ final class AStatementAtARow {
         if (!readsOf(stated, about, read)) {
             return null;
         }
-        // Every place a number is read off, which for a number read across a container's elements
-        // is the container as well, and for one of the elements a statement keeps is what the
-        // statement reads.
+        // Every place a number is read off: a container it is read across the elements of is
+        // one it is about, and any other place one it reads — for a number of the elements a
+        // statement keeps, what the statement reads.
         for (NumericTerm term : numbersOf(stated)) {
-            TermPath filed = term.subjectPath();
+            List<TermPath> across = term.containersReadAcross();
             for (TermPath place : term.placesReadOff()) {
-                if (filed.insideAContainer() && place.equals(filed.outermostContainer())) {
+                if (across.contains(place) && !place.insideAContainer()) {
                     about.add(place);
                 } else {
                     read.add(place);

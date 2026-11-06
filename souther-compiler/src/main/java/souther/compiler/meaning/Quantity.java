@@ -897,7 +897,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 throw new IllegalArgumentException(
                         "a search goes down each field once: " + through);
             }
-            if (map.isAtOrUnder(root) || root.isAtOrUnder(map)) {
+            if (map.standsAtUnderOrAround(root)) {
                 throw new IllegalArgumentException(
                         "the map is apart from the tree it is looked up for: " + map + ", " + root);
             }
@@ -1346,11 +1346,6 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                  */
                 private record Apart(TermPath element, TermPath counted, TheValue value) {
 
-                    /** The element of the container counted over. */
-                    TermPath outermost() {
-                        return counted.element();
-                    }
-
                     /** Whether {@code at} is the value itself, which one place is only where the
                      *  value stands at one place of every element. */
                     boolean isTheValue(TermPath at) {
@@ -1405,7 +1400,23 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                  *  the elements. */
                 private static boolean alike(DecisionSubject subject, Apart apart) {
                     return subject instanceof DecisionSubject.AnInput(TermPath at, var _)
-                            && (apart.isTheValue(at) || !at.isAtOrUnder(apart.outermost()));
+                            && (apart.isTheValue(at) || outsideTheElements(at, apart));
+                }
+
+                /**
+                 * Whether the value at {@code at} is shown to be no value of one element of the
+                 * container counted over: read off none of them, or off what holds them all
+                 * ({@link NumericTerm.AmongTheElements#ofOnePlace}). A place nothing shows apart
+                 * from the elements is not.
+                 */
+                private static boolean outsideTheElements(TermPath at, Apart apart) {
+                    return switch (NumericTerm.AmongTheElements.ofOnePlace(at, apart.counted())) {
+                        case NumericTerm.AmongTheElements.NoneOfThem _,
+                             NumericTerm.AmongTheElements.AllOfThem _ -> true;
+                        case NumericTerm.AmongTheElements.ItAlone _,
+                             NumericTerm.AmongTheElements.ThoseUnderItsKey _,
+                             NumericTerm.AmongTheElements.Otherwise _ -> false;
+                    };
                 }
 
                 /**
@@ -1427,7 +1438,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                              NumericTerm.AmongTheElements.AllOfThem _ -> true;
                         case NumericTerm.AmongTheElements.ThoseUnderItsKey key ->
                                 key.selection() == null
-                                        && NumericTerm.AmongTheElements.onePlace(key.elements(),
+                                        && key.elements().standsAtTheSamePlaceOnEveryRow(
                                                 apart.element())
                                         && apart.filesUnderIt(key.key());
                         case NumericTerm.AmongTheElements.Otherwise _ -> false;

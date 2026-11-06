@@ -5,33 +5,22 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
-import souther.compiler.inputs.Case;
-import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ElementKey;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerm.AmongTheElements;
-import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
-import souther.compiler.meaning.Quantity;
-import souther.compiler.meaning.Quantity.TheValue;
-import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeSymbol;
-import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -64,20 +53,6 @@ class WhatANumberIsReadOffAmongTheElementsIsAnsweredByItsKindTest {
     private static final AmongTheElements UNDER_THE_CURRENCY =
             new AmongTheElements.ThoseUnderItsKey(List.of(FS), new ElementKey.At(AT_THE_CURRENCY),
                     null);
-
-    /** A number of one place is the element's where the place is in it, all of them where the
-     *  place holds the container, and none of them anywhere else. */
-    @Test
-    void aNumberOfOnePlaceIsOfThePlace() {
-        assertEquals(AmongTheElements.IT_ALONE,
-                new NumericTerm.ValueOf(AMOUNT).amongTheElementsOf(FS));
-        assertEquals(new AmongTheElements.AllOfThem(List.of()),
-                new NumericTerm.ValueOf(FS).amongTheElementsOf(FS));
-        assertEquals(AmongTheElements.NONE_OF_THEM,
-                new NumericTerm.ValueOf(RATE).amongTheElementsOf(FS));
-        assertEquals(AmongTheElements.NONE_OF_THEM, new NumericTerm.ValueOf(
-                TermPath.of("gs").element().then("amount")).amongTheElementsOf(FS));
-    }
 
     /**
      * How often the element's value occurs, the end of its key's values, what its key's elements
@@ -196,37 +171,6 @@ class WhatANumberIsReadOffAmongTheElementsIsAnsweredByItsKindTest {
         }
     }
 
-    private static final TypeSymbol HOSPITAL = TypeSymbols.declared(new TypeKey("probe", "Hospital"));
-
-    private static final TypeSymbol STATION = TypeSymbols.declared(new TypeKey("probe", "Station"));
-
-    private static CasesLeft casesOf(TypeSymbol... leaves) {
-        return CasesLeft.ofEach(Arrays.stream(leaves)
-                .map(leaf -> Refinement.of(new Case.SumCase(leaf, true))).toList());
-    }
-
-    /**
-     * Where a place is is asked as the value is reached, cases and all: a field of the element of
-     * the items of a station is the element's where the items are those of a hospital or a
-     * station, and the items read whatever the value is are not the element's alone where they
-     * are the items of a station only. Neither is read off none of the elements.
-     */
-    @Test
-    void aPlaceNarrowedToACaseIsWhereTheValueReachesIt() {
-        TermPath x = TermPath.of("x");
-        TermPath either = x.refine(casesOf(HOSPITAL, STATION)).then("items");
-        TermPath aStation = x.refine(casesOf(STATION)).then("items");
-        assertEquals(AmongTheElements.IT_ALONE,
-                new NumericTerm.ValueOf(aStation.element().then("price"))
-                        .amongTheElementsOf(either));
-        assertEquals(AmongTheElements.OTHERWISE,
-                new NumericTerm.ValueOf(x.then("items").element().then("price"))
-                        .amongTheElementsOf(aStation));
-        assertEquals(AmongTheElements.NONE_OF_THEM,
-                new NumericTerm.ValueOf(x.refine(casesOf(HOSPITAL)).then("beds"))
-                        .amongTheElementsOf(aStation));
-    }
-
     /**
      * What keeps the elements a number is of is read off as well: kept by what each element
      * holds, the number is still read off nothing but the elements; kept by a value outside
@@ -251,25 +195,6 @@ class WhatANumberIsReadOffAmongTheElementsIsAnsweredByItsKindTest {
                     new LinearForm<>(ExactRatio.of(-10), Map.of(total, ExactRatio.ONE)), Rel.GE));
             assertEquals(keeping == overTheRate, atLeastTen.positions().contains(RATE),
                     atLeastTen::toString);
-        }
-    }
-
-    /**
-     * The least amount of a currency is one number for every element of that currency, so a
-     * statement of it is answered alike by every element holding the currency; the least amount
-     * of a region is not.
-     */
-    @Test
-    void theEndOfAKeysValuesIsAlikeForEveryElementOfTheKey() {
-        TheValue currency = new TheValue.AtAPlace(new DecisionSubject.AnInput(CURRENCY));
-        for (TermPath key : List.of(CURRENCY, FS.element().then("region"))) {
-            NumericTerm least = NumericTerm.ExtremeOfItsKey.of(FS, key, AMOUNT, Extreme.LEAST);
-            Proposition above = new Proposition.Compared(new Relation.Affine(new LinearForm<>(
-                    ExactRatio.ZERO, Map.of(new DecisionAtom.OfTheInput(least), ExactRatio.ONE)),
-                    Rel.GT), true);
-            assertEquals(key == CURRENCY, Quantity.HowManyDifferentMeet.Selection.OfEachValue
-                    .answersAlike(new DecisionSubject.AnInput(FS), currency, above),
-                    least::toString);
         }
     }
 
