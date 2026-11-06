@@ -195,7 +195,17 @@ public record CaseExpansion(String line, String cutAt, WrittenLine written, Spel
     }
 
     /** One thing in the model that made some of the parts a case is taken apart on. */
-    public sealed interface Factor {}
+    public sealed interface Factor {
+
+        /** The constructs of the model it is, which is where an author goes about it. */
+        default List<ModelOccurrence> constructs() {
+            return switch (this) {
+                case Choice choice -> List.of(choice.construct());
+                case Applications applications -> List.of(applications.call());
+                case KeptWays kept -> kept.keptBy();
+            };
+        }
+    }
 
     /**
      * A choice the model writes: an {@code if}, a {@code match}, or an operation of the language

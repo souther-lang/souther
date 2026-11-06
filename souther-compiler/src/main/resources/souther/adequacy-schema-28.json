@@ -8850,6 +8850,10 @@
                   "construct": {
                     "$ref": "#/$defs/constructOccurrence"
                   },
+                  "at": {
+                    "$ref": "#/$defs/at",
+                    "description": "Where the author wrote the choice: the construct and not the copy of it, so every copy `construct` names through a helper's calls is at the one place. Absent where it is in a text this document cannot point at."
+                  },
                   "choice": {
                     "type": "string",
                     "enum": [
@@ -8891,6 +8895,10 @@
                   "call": {
                     "$ref": "#/$defs/constructOccurrence"
                   },
+                  "at": {
+                    "$ref": "#/$defs/at",
+                    "description": "Where the author wrote the call, as `at` of a `choice` is."
+                  },
                   "operation": {
                     "type": "string",
                     "description": "The operation called, as the library publishes it."
@@ -8917,9 +8925,21 @@
                   },
                   "keptBy": {
                     "type": "array",
-                    "description": "The constructs of the model the truths keeping the elements are.",
+                    "description": "The constructs of the model the truths keeping the elements are, each with where the author wrote it, as `at` of a `choice` is.",
                     "items": {
-                      "$ref": "#/$defs/constructOccurrence"
+                      "type": "object",
+                      "required": [
+                        "construct"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "construct": {
+                          "$ref": "#/$defs/constructOccurrence"
+                        },
+                        "at": {
+                          "$ref": "#/$defs/at"
+                        }
+                      }
                     }
                   },
                   "ways": {

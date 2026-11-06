@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -67,8 +66,20 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
 
     private static JsonNode partition(Compilation compilation) {
         JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
         return report.path("modules").get(0).path("behaviors").get(0).path("partition");
+    }
+
+    /**
+     * What {@code model} has written from where {@code construct}'s place is to the end of its
+     * line, so that a place is held to the construct and not to a number.
+     */
+    private static String writtenAt(String model, JsonNode construct) {
+        JsonNode at = construct.path("at");
+        assertTrue(at.has("line") && at.has("column"),
+                "where the author wrote it, as a line and a column: " + construct);
+        String line = model.lines().toList().get(at.path("line").asInt() - 1);
+        return line.substring(at.path("column").asInt() - 1);
     }
 
     /** The factors of {@code kind} in {@code factors}. */
@@ -111,6 +122,8 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
             assertEquals("List.find", find.path("operation").asString());
             assertEquals(7, find.path("applications").asInt(), "one on each threshold");
             assertEquals("g", find.path("call").path("definition").asString());
+            assertTrue(writtenAt(FIND, find).startsWith("List.find("),
+                    "at the call the author wrote: " + find);
             assertEquals(each.path("ruleId"), expansions.get(0).path("ruleId"),
                     "one rule, whose lines these are");
             for (JsonNode diagnosis : counted.path("diagnosed")) {
@@ -193,7 +206,8 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
         for (String each : lines) {
             assertTrue(each.contains("729 structural ways; at most "), each);
             assertTrue(each.contains(
-                    "Its parts were made by: the call of List.find in g, on 7 applications"),
+                    "Its parts were made by: the call of List.find in g, at 5:27, on 7"
+                            + " applications"),
                     each);
             assertFalse(each.contains("×"), "what made them is not multiplied: " + each);
         }
@@ -212,7 +226,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
      */
     @Test
     void aFoldIsNamedByItsApplicationsAndTheChoiceInItsStepByHowOftenItIsMade() {
-        JsonNode expansions = partition(compiled("""
+        String model = """
                 module demo exposing (g)
 
                 data Row = { grade: Int, lowerBound: Int }
@@ -225,7 +239,8 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
 
                 behavior g : (a: Int, h: Int) -> Bool
                 let g (a, h) = Int.abs(gradeFor(a) - h) < 2
-                """.replace("ROWS", gradeTable(GRADES)))).path("caseExpansions");
+                """.replace("ROWS", gradeTable(GRADES));
+        JsonNode expansions = partition(compiled(model)).path("caseExpansions");
         assertFalse(expansions.isEmpty(), "the line on the grade is past the figure");
         for (JsonNode each : expansions) {
             JsonNode factors = each.path("caseExpansion").path("factors");
@@ -237,17 +252,24 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
                     "one application on each row: " + factors);
             assertEquals("gradeFor", applied.getFirst().path("call").path("definition")
                     .asString());
+            assertTrue(writtenAt(model, applied.getFirst()).startsWith("List.fold("),
+                    "at the fold in the helper, which every copy of it is: " + factors);
             List<JsonNode> chosen = ofKind(factors, "choice");
             JsonNode iff = chosen.stream()
                     .filter(one -> one.path("choice").asString().equals("if")).findFirst()
                     .orElseThrow(() -> new AssertionError("the if in the step: " + factors));
+            assertTrue(writtenAt(model, iff).startsWith("if r.lowerBound <= monthly"),
+                    "at the if the author wrote: " + iff);
             assertEquals(2, iff.path("alternatives").asInt(), "an if chooses between two");
             assertTrue(iff.path("times").asInt() > 1 && iff.path("times").asInt() <= GRADES,
                     "chosen on the applications whose bounds the case is taken apart on: " + iff);
-            assertTrue(chosen.stream().anyMatch(one -> one.path("choice").asString()
+            JsonNode abs = chosen.stream().filter(one -> one.path("choice").asString()
                             .equals("cases") && one.path("operation").asString().equals("Int.abs")
-                            && one.path("alternatives").asInt() == 2),
-                    "and the cases of the absolute value, between two: " + factors);
+                            && one.path("alternatives").asInt() == 2).findFirst()
+                    .orElseThrow(() -> new AssertionError(
+                            "and the cases of the absolute value, between two: " + factors));
+            assertTrue(writtenAt(model, abs).startsWith("Int.abs("),
+                    "at the call whose cases they are: " + abs);
             assertEquals(0, each.path("caseExpansion").path("unattributed").asInt(),
                     "every part made by one of them: " + each);
         }
@@ -265,7 +287,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
      */
     @Test
     void aLineReadOnEveryApplicationNamesWhatMadeItsCasesAcrossThem() {
-        JsonNode expansions = partition(compiled("""
+        String model = """
                 module demo exposing (g, R, W)
 
                 data R = { paidBaseDays: Int, pay: Int }
@@ -288,7 +310,8 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
                     gradeFor(Rational.toInt(DOWN, List.sum(List.map(r -> r.pay, payable))
                             / List.length(payable)))
                 }
-                """.replace("ROWS", gradeTable(37)))).path("caseExpansions");
+                """.replace("ROWS", gradeTable(37));
+        JsonNode expansions = partition(compiled(model)).path("caseExpansions");
         assertFalse(expansions.isEmpty(), "the lines past the figure across the applications");
         for (JsonNode each : expansions) {
             JsonNode factors = each.path("caseExpansion").path("factors");
@@ -301,6 +324,9 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
                     .filter(one -> one.path("operation").asString().equals("List.filter"))
                     .findFirst().orElseThrow(() -> new AssertionError("the filter: " + factors));
             assertEquals("payableMonths", filter.path("call").path("definition").asString());
+            assertTrue(writtenAt(model, fold).startsWith("List.fold("), fold::toString);
+            assertTrue(writtenAt(model, filter).startsWith("List.filter("),
+                    "at the filter in the helper, not at the call of the helper: " + filter);
             assertEquals(2, filter.path("applications").asInt(),
                     "the two months besides the one the line is on, whose truths the case is"
                             + " taken apart on — read again on every application of the fold and"
@@ -309,6 +335,10 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
             assertEquals(1, kept.size(), "the ways the months are kept: " + factors);
             assertEquals(7, kept.getFirst().path("ways").asInt(),
                     "every way of keeping some of three months");
+            JsonNode keptBy = kept.getFirst().path("keptBy");
+            assertEquals(1, keptBy.size(), "the filter's one condition: " + keptBy);
+            assertTrue(writtenAt(model, keptBy.get(0)).startsWith(">= 17"),
+                    "at the comparison that keeps a month: " + keptBy);
             assertEquals(37, kept.getFirst().path("times").asInt(),
                     "written out on each application of the fold, against its row's bound");
             assertEquals(0, each.path("caseExpansion").path("unattributed").asInt(),
