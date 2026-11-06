@@ -3640,10 +3640,10 @@ final class Pullback {
      */
     private Optional<Quantity.ReadOffABinding> wholeNumberInTurn(Core.Read name, InputReads at) {
         ClosureUses uses = at.usesOfTheClosureTaking(name.binding());
-        if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1) {
+        if (uses == null || uses.theOnlyApplication().isEmpty()) {
             return Optional.empty();
         }
-        ClosureUses.Application applied = uses.applications().getFirst();
+        ClosureUses.Application applied = uses.theOnlyApplication().get();
         if (!applied.held().contains(name.binding())) {
             return Optional.empty();
         }
@@ -10093,10 +10093,10 @@ final class Pullback {
     private Optional<Quantity.HandedToTheStep> positionInTheWalk(Core.Read name,
                                                                  InputReads at) {
         ClosureUses uses = at.usesOfTheClosureTaking(name.binding());
-        if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1) {
+        if (uses == null || uses.theOnlyApplication().isEmpty()) {
             return Optional.empty();
         }
-        ClosureUses.Application applied = uses.applications().getFirst();
+        ClosureUses.Application applied = uses.theOnlyApplication().get();
         if (!name.binding().equals(applied.position())
                 || applied.applied() != HowAClosureIsApplied.TO_EVERY_ELEMENT
                 || !Evaluated.runsWhenever(applied.step().body(), name)
@@ -10126,10 +10126,10 @@ final class Pullback {
      */
     private Optional<Quantity.KeptSoFar> keptSoFar(Core.Read name, InputReads at) {
         ClosureUses uses = at.usesOfTheClosureTaking(name.binding());
-        if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1) {
+        if (uses == null || uses.theOnlyApplication().isEmpty()) {
             return Optional.empty();
         }
-        Denotation call = new Denotation(uses.applications().getFirst().call(), at);
+        Denotation call = new Denotation(uses.theOnlyApplication().get().call(), at);
         SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
         if (walk == null || !name.binding().equals(walk.accumulator().binding())) {
             return Optional.empty();
@@ -10179,10 +10179,10 @@ final class Pullback {
             asked = opened.lookup();
         } else {
             ClosureUses uses = at.usesOfTheClosureTaking(name.binding());
-            if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1) {
+            if (uses == null || uses.theOnlyApplication().isEmpty()) {
                 return Optional.empty();
             }
-            asked = uses.applications().getFirst().call();
+            asked = uses.theOnlyApplication().get().call();
         }
         Core map = AnOperationApplied.of(asked) instanceof AnOperationApplied applied
                 ? KeyedAccumulation.mapOf(applied) : null;
@@ -10191,10 +10191,10 @@ final class Pullback {
             return Optional.empty();
         }
         ClosureUses folds = at.usesOfTheClosureTaking(answerSoFar.binding());
-        if (folds == null || folds.usedElsewhere() || folds.applications().size() != 1) {
+        if (folds == null || folds.theOnlyApplication().isEmpty()) {
             return Optional.empty();
         }
-        Denotation whole = at.standing(folds.applications().getFirst().call(), symbols, newtypes);
+        Denotation whole = at.standing(folds.theOnlyApplication().get().call(), symbols, newtypes);
         KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), whole.at(), sides(),
                 blocksAt(whole));
         if (filed == null || !(filed.filed() instanceof KeyedAccumulation.Filed.Kept kept)

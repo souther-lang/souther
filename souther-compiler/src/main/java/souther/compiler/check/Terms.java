@@ -579,11 +579,18 @@ final class Terms {
      * environment, so the sign is read once for all of them. Asked by those nodes and that
      * environment as the objects they are, as a name's answer is ({@link BindingWalk}): the same
      * question asked of equal ones is worked out again and answers alike.
+     *
+     * <p>Worked out before it is held, and not inside the table: reading the sides reads names
+     * and arithmetic through this, and nothing promises that none of that asks a sign again.
      */
     TheSignOfAnOrder.Read<Denotations> signOf(StatedComparison stated, Denotations at) {
-        return signs.computeIfAbsent(new SignAsked(stated, at),
-                asked -> Optional.ofNullable(TheSignOfAnOrder.read(stated, at, signSides)))
-                .orElse(null);
+        SignAsked asked = new SignAsked(stated, at);
+        Optional<TheSignOfAnOrder.Read<Denotations>> held = signs.get(asked);
+        if (held == null) {
+            held = Optional.ofNullable(TheSignOfAnOrder.read(stated, at, signSides));
+            signs.put(asked, held);
+        }
+        return held.orElse(null);
     }
 
     private final Map<SignAsked, Optional<TheSignOfAnOrder.Read<Denotations>>> signs =
