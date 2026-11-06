@@ -930,10 +930,11 @@ final class Pullback {
             if (!seen.add(each)) {
                 continue;
             }
-            Proposition concluded = conclusion.concludedAt(each.step());
-            if (concluded == null) {
+            Proposition part = conclusion.concludedAt(each.step());
+            if (part == null) {
                 continue;
             }
+            Proposition concluded = conclusion.atOneValueEach(part);
             if (!(concluded instanceof Proposition.Always)) {
                 leaves.add(new Leaf(concluded, each.from(), each.step()));
             }
@@ -13839,9 +13840,13 @@ final class Pullback {
         return leaf(step, new Denotation(from, reads));
     }
 
-    /** What {@code step} states, as this reading tries its candidates. */
+    /**
+     * What {@code step} states, as this reading tries its candidates: of one value at each
+     * element's position, as everything a reading hands on to a reader of positions is
+     * ({@link Conclusion#atOneValueEach}).
+     */
     private Proposition tried(Derivation step) {
-        return trying.of(step);
+        return trying.atOneValueEach(trying.of(step));
     }
 
     /**

@@ -11,8 +11,10 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.StringContainment;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,8 +22,10 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a statement is told of the names it was read through ({@link ReadThroughNames}), asked of
@@ -215,6 +219,94 @@ class WhatANameStoodForIsTheValueAPartIsAboutTest {
                         new Quantity.HowManyMeet(new DecisionSubject.AnInput(subs, of(A)), each),
                         ExactRatio.ONE), Rel.GE), true),
                 readThrough(stated, named(A)));
+    }
+
+    private static Quantity uppercased(ValueIdentity identity) {
+        return new Quantity.WhatAnOperationAnswers(ValueName.Stdlib.operation("String",
+                "uppercase"), List.of(number(TEXT, identity)));
+    }
+
+    /** A string an operation made of an element's string is told the element's name inside it,
+     *  so two elements' made strings are two values, however deep the making. */
+    @Test
+    void aStringMadeOfAnElementsStringIsToldItsName() {
+        Proposition stated = new Proposition.StringInside(uppercased(ValueIdentity.AT_THE_POSITION),
+                number(GATE, ValueIdentity.AT_THE_POSITION), StringContainment.ANYWHERE, true);
+        assertEquals(new Proposition.StringInside(uppercased(of(A)),
+                        number(GATE, ValueIdentity.AT_THE_POSITION), StringContainment.ANYWHERE,
+                        true),
+                readThrough(stated, named(A)));
+    }
+
+    /** A product of two numbers is told which value each factor is, whichever order the factors
+     *  are held in. */
+    @Test
+    void aProductIsToldWhichValueEachFactorIs() {
+        NumericTerm.ValueOf n = new NumericTerm.ValueOf(N);
+        NumericTerm.ValueOf gate = new NumericTerm.ValueOf(GATE);
+        Proposition stated = Proposition.compared(new Relation.Affine(LinearForm.atomMinusConstant(
+                new Quantity.ProductOfTwo(n, gate), ExactRatio.ZERO), Rel.GE), true);
+        assertEquals(Proposition.compared(new Relation.Affine(LinearForm.atomMinusConstant(
+                        new Quantity.ProductOfTwo(gate, ValueIdentity.AT_THE_POSITION, n, of(A)),
+                        ExactRatio.ZERO), Rel.GE), true),
+                readThrough(stated, named(A)));
+    }
+
+    /** A number that holds a position and no place to say which value there it is about is no
+     *  one number where a name was told that position: a part nothing read. */
+    @Test
+    void aNumberWithNoPlaceForWhichValueIsNoOneNumberWhereANameWasTold() {
+        Proposition stated = Proposition.compared(new Relation.Affine(LinearForm.atomMinusConstant(
+                new Quantity.HowManyDifferentBelow(ITEMS.element().then("tree"), List.of("next"),
+                        GATE, List.of(), List.of()), ExactRatio.ZERO), Rel.GE), true);
+        assertSame(TWO_AS_ONE, readThrough(stated, named(A)));
+        assertSame(stated, readThrough(stated, ElementsNamed.NONE));
+    }
+
+    /** One value at each element's position: the first met is kept and a part reading another
+     *  there is a part nothing read, the rest as it stood. */
+    @Test
+    void aStatementHandedOnHoldsOneValueAtEachElement() {
+        Proposition stated = Proposition.all(List.of(truth(PAID, of(A)), truth(PAID, of(B)),
+                below(GATE, ValueIdentity.AT_THE_POSITION)));
+        Proposition kept = ReadThroughNames.oneValueAtEachElement(stated, () -> TWO_AS_ONE);
+        assertEquals(Proposition.all(List.of(truth(PAID, of(A)), TWO_AS_ONE,
+                below(GATE, ValueIdentity.AT_THE_POSITION))), kept);
+        assertTrue(ReadThroughNames.holdsOneValueAtEachElement(kept));
+        assertFalse(ReadThroughNames.holdsOneValueAtEachElement(stated));
+    }
+
+    /**
+     * Two statements are one statement whatever they named their values only where the names
+     * stand one to one: {@code a.paid && !a.paid} and {@code a.paid && !b.paid} are one statement
+     * at positions and two in what they say.
+     */
+    @Test
+    void twoStatementsAreOneOnlyWhereTheirNamesStandOneToOne() {
+        Proposition oneValue = Proposition.all(List.of(truth(PAID, of(A)),
+                truth(PAID, of(A)).denied()));
+        Proposition twoValues = Proposition.all(List.of(truth(PAID, of(A)),
+                truth(PAID, of(B)).denied()));
+        BindingId c = new BindingId(OWNER, 3);
+        BindingId d = new BindingId(OWNER, 4);
+        Proposition twoRenamed = Proposition.all(List.of(truth(PAID, of(c)),
+                truth(PAID, of(d)).denied()));
+        assertFalse(ReadThroughNames.sameUpToTheNames(oneValue, twoValues));
+        assertTrue(ReadThroughNames.sameUpToTheNames(twoValues, twoRenamed));
+    }
+
+    /** Told again through a copy that has one name where the site had two, the site keeps its
+     *  names: two values are never told one. */
+    @Test
+    void twoValuesAreNeverToldAgainAsOne() {
+        TermPath other = TermPath.of("x").then("groups").element().then("m");
+        ElementsNamed.Slot aGroup = new ElementsNamed.Slot(new InputReads.ContainerOf.AtAPosition(
+                TermPath.of("x").then("groups")), HeldIn.Part.ELEMENT);
+        BindingId copy = new BindingId(new BindingOwner.OfValue("probe", "g"), 1);
+        Proposition stated = Proposition.all(List.of(below(N, of(A)), below(other, of(B))));
+        ElementsNamed oneName = ElementsNamed.of(List.of(new ElementsNamed.Named(AN_ITEM, copy),
+                new ElementsNamed.Named(aGroup, copy)));
+        assertSame(stated, ReadThroughNames.toldAgain(stated, oneName));
     }
 
     /** Which value at a position: the row's where no name stood for its element, the one name's

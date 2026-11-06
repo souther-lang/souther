@@ -433,7 +433,16 @@ public final class Conclusion {
 
     /** What {@code how} concludes, beside {@code how}: the one way a meaning is made. */
     public MeaningsOfABody.Meaning meaningOf(Derivation how) {
-        return new MeaningsOfABody.Meaning(of(how), how);
+        return new MeaningsOfABody.Meaning(atOneValueEach(of(how)), how);
+    }
+
+    /**
+     * {@code stated}, as it is handed to whoever reads it at positions: holding one value at each
+     * element's position, a part reading another a part nothing read
+     * ({@link ReadThroughNames#oneValueAtEachElement}).
+     */
+    public Proposition atOneValueEach(Proposition stated) {
+        return ReadThroughNames.oneValueAtEachElement(stated, this::twoElementsAsOne);
     }
 
     /** What {@code step} concluded the last time it was concluded here, or null where it was not. */

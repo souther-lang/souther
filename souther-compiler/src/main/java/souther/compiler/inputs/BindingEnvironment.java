@@ -436,6 +436,16 @@ final class BindingEnvironment {
                 && roleOf(binding) instanceof BindingRole.Alias(Core value) ? value : null;
     }
 
+    /**
+     * What the body gave {@code binding}, a name standing at a position of the input — or null
+     * where it stands at none or was given nothing. A name taken off a value standing for an
+     * element stands at a place inside the element, and is that element's: the position says the
+     * place, and what it was given says whose.
+     */
+    Core givenWhereItStands(BindingId binding) {
+        return roots.containsKey(binding) ? boundTo(binding) : null;
+    }
+
     /** What the operations applying the closure {@code binding} is a parameter of hand it, each
      *  container and how, whatever else the name has come to stand for on the way here. */
     List<HeldIn> handedFrom(BindingId binding) {

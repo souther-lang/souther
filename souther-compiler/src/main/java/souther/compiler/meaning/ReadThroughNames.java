@@ -11,6 +11,8 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -113,14 +115,123 @@ public final class ReadThroughNames {
      * reader of the copy finds nothing it is about.
      */
     public static Proposition toldAgain(Proposition stated, ElementsNamed names) {
+        // Each name the site was told, and the copy's name for the element it stood for: a name
+        // given two, or two names given one, are no one element to one element, and are not told
+        // again — two values are never told one name.
+        Map<BindingId, BindingId> again = new LinkedHashMap<>();
+        Set<BindingId> notOneToOne = new HashSet<>();
+        told(stated, (position, had) -> {
+            if (had instanceof ValueIdentity.OfAnElement(BindingId name)) {
+                Set<BindingId> stood = innermost(position, names);
+                BindingId copy = stood != null && stood.size() == 1 ? stood.iterator().next()
+                        : null;
+                BindingId before = again.putIfAbsent(name, copy);
+                if (copy == null || (before != null && !before.equals(copy))) {
+                    notOneToOne.add(name);
+                }
+            }
+            return had;
+        }, () -> stated);
+        Map<BindingId, BindingId> given = new LinkedHashMap<>();
+        again.forEach((name, copy) -> {
+            if (!notOneToOne.contains(name) && copy != null) {
+                given.merge(copy, name, (one, other) -> null);
+            }
+        });
+        Map<BindingId, BindingId> renamed = new LinkedHashMap<>();
+        again.forEach((name, copy) -> {
+            if (copy != null && name.equals(given.get(copy))) {
+                renamed.put(name, copy);
+            }
+        });
+        return told(stated, (position, had) ->
+                had instanceof ValueIdentity.OfAnElement(BindingId name)
+                        && renamed.get(name) instanceof BindingId copy
+                        ? new ValueIdentity.OfAnElement(copy) : had, () -> stated);
+    }
+
+    /**
+     * {@code stated} holding one value at each element's position: the first value met at it is
+     * kept, and a part that reads another value there is {@code twoAsOne} — that part, and the
+     * rest as it stood. What a quantifier or a count says of its own element is its own and is
+     * left out.
+     *
+     * <p>What a statement is handed on to is read at positions — a row a reading writes holds one
+     * value at each, a region is of the values at positions, a form is over the numbers at them —
+     * so a statement holding two values at one position is said there as one value asked two
+     * things, which is a run that takes both read as none. Held to one value at each before it is
+     * handed on, no reader of positions can meet two, whatever it keys by; the values it holds are
+     * still told apart, so what two statements hold of two elements stays two.
+     */
+    public static Proposition oneValueAtEachElement(Proposition stated,
+                                                    Supplier<Proposition> twoAsOne) {
+        Map<ElementsNamed.Slot, ValueIdentity> first = new HashMap<>();
         return told(stated, (position, had) -> {
-            if (!(had instanceof ValueIdentity.OfAnElement)) {
+            ElementsNamed.Slot slot = innermostSlot(position);
+            if (slot == null) {
                 return had;
             }
-            Set<BindingId> stood = innermost(position, names);
-            return stood != null && stood.size() == 1
-                    ? new ValueIdentity.OfAnElement(stood.iterator().next()) : had;
+            ValueIdentity was = first.putIfAbsent(slot, had);
+            return was == null || was.equals(had) ? had : null;
+        }, twoAsOne);
+    }
+
+    /** Whether {@code stated} holds one value at each element's position
+     *  ({@link #oneValueAtEachElement}): what a reader of positions can be handed. */
+    public static boolean holdsOneValueAtEachElement(Proposition stated) {
+        boolean[] two = {false};
+        oneValueAtEachElement(stated, () -> {
+            two[0] = true;
+            return stated;
+        });
+        return !two[0];
+    }
+
+    /**
+     * Whether {@code one} and {@code other} state the same thing of the same values, whatever the
+     * names each was told: the same at positions, and the values each was told met in the same
+     * places one to one — the same value wherever one has the same value, and another wherever it
+     * has another. A value at the position stands only for itself.
+     *
+     * <p>Where that cannot be shown they are said to differ, which is never the wrong way round:
+     * two statements of different values taken for one would be one value's two names.
+     */
+    public static boolean sameUpToTheNames(Proposition one, Proposition other) {
+        if (!atThePositions(one).equals(atThePositions(other))) {
+            return false;
+        }
+        List<ValueIdentity> ofOne = identitiesIn(one);
+        List<ValueIdentity> ofOther = identitiesIn(other);
+        if (ofOne.size() != ofOther.size()) {
+            return false;
+        }
+        Map<ValueIdentity, ValueIdentity> there = new LinkedHashMap<>();
+        Map<ValueIdentity, ValueIdentity> back = new LinkedHashMap<>();
+        for (int at = 0; at < ofOne.size(); at++) {
+            ValueIdentity mine = ofOne.get(at);
+            ValueIdentity theirs = ofOther.get(at);
+            if ((mine instanceof ValueIdentity.AtThePosition)
+                    != (theirs instanceof ValueIdentity.AtThePosition)) {
+                return false;
+            }
+            ValueIdentity wasThere = there.putIfAbsent(mine, theirs);
+            ValueIdentity wasBack = back.putIfAbsent(theirs, mine);
+            if ((wasThere != null && !wasThere.equals(theirs))
+                    || (wasBack != null && !wasBack.equals(mine))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The value each number and subject of {@code stated} was told, in the order they stand. */
+    private static List<ValueIdentity> identitiesIn(Proposition stated) {
+        List<ValueIdentity> out = new ArrayList<>();
+        told(stated, (position, had) -> {
+            out.add(had);
+            return had;
         }, () -> stated);
+        return out;
     }
 
     /**
@@ -154,6 +265,27 @@ public final class ReadThroughNames {
         form.coefs().forEach((term, coefficient) ->
                 coefs.put(theNumberAt(term, names), coefficient));
         return new LinearForm<>(form.constant(), coefs);
+    }
+
+    /**
+     * {@code quantity} said at positions alone ({@link #atThePositions(Proposition)}): for a reader
+     * asking where a number stands, and not which value there it is. A number made of two values
+     * at one position is no number at positions, and is as it was.
+     */
+    public static Quantity atThePositions(Quantity quantity) {
+        Quantity out = told(quantity, (position, had) -> ValueIdentity.AT_THE_POSITION);
+        return out == null ? quantity : out;
+    }
+
+    /** {@code form} said at positions alone ({@link #atThePositions(Quantity)}). */
+    public static LinearForm<Quantity> atThePositions(LinearForm<Quantity> form) {
+        LinearForm<Quantity> out = told(form, (position, had) -> ValueIdentity.AT_THE_POSITION);
+        return out == null ? form : out;
+    }
+
+    /** {@code subject} said at its position alone ({@link #atThePositions(Quantity)}). */
+    public static DecisionSubject atThePositions(DecisionSubject subject) {
+        return told(subject, (position, had) -> ValueIdentity.AT_THE_POSITION);
     }
 
     /** {@code relation} said at positions alone ({@link #atThePositions(Proposition)}). */
@@ -323,11 +455,29 @@ public final class ReadThroughNames {
                 yield statements == null ? stated : Proposition.SoManyHold.counting(statements,
                         many.weights(), many.admitted());
             }
-            // Shapes over elements of their own: the end a walk keeps, the nodes a search
-            // reaches, the ways a statement is written. What they go over is theirs, as a
-            // quantifier's element is, and they are left as they stand.
-            case Proposition.LastToHold _, Proposition.OfTheWays _, Proposition.Carried _,
-                 Proposition.SomeReachable _ -> stated;
+            // The end a walk keeps is of the walk's own elements; the container it walks is a
+            // subject as any other.
+            case Proposition.LastToHold last -> {
+                DecisionSubject container = told(last.container(), telling);
+                yield container == null ? twoAsOne.get() : container == last.container() ? stated
+                        : new Proposition.LastToHold(container, last.position(), last.holds());
+            }
+            // Statements that hold their places with no word of which value at them they are
+            // about — the nodes a search reaches, the ways a statement is written: as they stand
+            // where none of their places is one a name was told, and a part nothing read where
+            // one is, rather than said of the value at the place.
+            case Proposition.OfTheWays _, Proposition.SomeReachable _ -> {
+                List<TermPath> places = PositionsAStatementReads.everyPlaceOf(stated)
+                        .orElse(List.of());
+                for (TermPath at : places) {
+                    if (!ValueIdentity.AT_THE_POSITION.equals(
+                            telling.of(at, ValueIdentity.AT_THE_POSITION))) {
+                        yield twoAsOne.get();
+                    }
+                }
+                yield stated;
+            }
+            case Proposition.Carried _ -> stated;
         };
     }
 
@@ -400,10 +550,15 @@ public final class ReadThroughNames {
     }
 
     /**
-     * {@code quantity} told which value it is, or null where it is no one: a number of the input,
-     * the numbers a remainder is of, the container a count counts the elements of. What a count
-     * asks of each element is about its own element, as a quantifier's is; a number of another
-     * kind — an end a walk keeps, the values a count takes apart — is over elements of its own.
+     * {@code quantity} told which value it is, or null where it is no one.
+     *
+     * <p>Every kind of number, named one by one: a number of the input, and every number made of
+     * one — what an operation answers of one, a piece of a string, a remainder, a count of the
+     * elements of a container, a sum over them. What a count or a sum asks of each element is about
+     * its own element, as a quantifier's is, and is left as it is there. A kind that holds a
+     * position and has no place to say which value there it is about is no one number where the
+     * position is one a name was told: it is read as nothing rather than as the value at the
+     * position, which another element's number would be too.
      */
     private static Quantity told(Quantity quantity, Telling telling) {
         return switch (quantity) {
@@ -411,6 +566,35 @@ public final class ReadThroughNames {
                 ValueIdentity told = telling.of(term.subjectPath(), had);
                 yield told == null ? null : told.equals(had) ? quantity
                         : new DecisionAtom.OfTheInput(term, told);
+            }
+            // Of what a dependency answered, or of nothing a row writes.
+            case DecisionAtom.TakenOfAnAnswer _, DecisionAtom.ComputedOverAnAnswer _,
+                 DecisionAtom.OfAnAnswer _, Quantity.HowManyCarried _, Quantity.TheKeptTotal _,
+                 Quantity.CodePointsOfAPiece _ -> quantity;
+            case Quantity.WhatAnOperationAnswers(var operation, List<Quantity> of) -> {
+                List<Quantity> told = told(of, telling);
+                yield told == null ? null : told == of ? quantity
+                        : new Quantity.WhatAnOperationAnswers(operation, told);
+            }
+            case Quantity.APieceOf(var operation, var separator, Quantity string, var within,
+                                   int from, int among) -> {
+                Quantity told = told(string, telling);
+                yield told == null ? null : told == string ? quantity
+                        : new Quantity.APieceOf(operation, separator, told, within, from, among);
+            }
+            case Quantity.ThePieceAt(var operation, int separator, Quantity string, int index) -> {
+                Quantity told = told(string, telling);
+                yield told == null ? null : told == string ? quantity
+                        : new Quantity.ThePieceAt(operation, separator, told, index);
+            }
+            case Quantity.IsAmongThePieces(Quantity value, var operation, var separator,
+                                           Quantity string, int from, int among) -> {
+                Quantity toldValue = told(value, telling);
+                Quantity toldString = told(string, telling);
+                yield toldValue == null || toldString == null ? null
+                        : toldValue == value && toldString == string ? quantity
+                        : new Quantity.IsAmongThePieces(toldValue, operation, separator,
+                                toldString, from, among);
             }
             case Quantity.RemainderOfADividend(var operation, LinearForm<Quantity> dividend,
                                                var divisor) -> {
@@ -420,16 +604,144 @@ public final class ReadThroughNames {
             }
             case Quantity.HowManyMeet(DecisionSubject container, Proposition ofTheElement) -> {
                 DecisionSubject told = told(container, telling);
-                if (told == null) {
-                    yield null;
-                }
-                Proposition element = told(ofTheElement, ownElementLeftAlone(container, telling),
-                        () -> null);
-                yield element == null ? null
+                Proposition element = toldWhole(ofTheElement,
+                        ownElementLeftAlone(container, telling));
+                yield told == null || element == null ? null
                         : told == container && element == ofTheElement ? quantity
                         : new Quantity.HowManyMeet(told, element);
             }
-            default -> quantity;
+            case Quantity.HowManyHold(List<Proposition> each) -> {
+                List<Proposition> told = new ArrayList<>(each.size());
+                boolean changed = false;
+                for (Proposition one : each) {
+                    Proposition toldOne = toldWhole(one, telling);
+                    if (toldOne == null) {
+                        yield null;
+                    }
+                    changed |= toldOne != one;
+                    told.add(toldOne);
+                }
+                yield changed ? new Quantity.HowManyHold(told) : quantity;
+            }
+            case Quantity.SumOver(DecisionSubject container, Quantity ofTheElement) -> {
+                DecisionSubject told = told(container, telling);
+                Quantity element = told(ofTheElement, ownElementLeftAlone(container, telling));
+                yield told == null || element == null ? null
+                        : told == container && element == ofTheElement ? quantity
+                        : new Quantity.SumOver(told, element);
+            }
+            // The values counted are of the count's own elements, and left as they are.
+            case Quantity.HowManyDifferent(DecisionSubject container, var ofTheElement) -> {
+                DecisionSubject told = told(container, telling);
+                yield told == null ? null : told == container ? quantity
+                        : new Quantity.HowManyDifferent(told, ofTheElement);
+            }
+            case Quantity.HowManyDifferentAcross(DecisionSubject container, var occurrence) -> {
+                DecisionSubject told = told(container, telling);
+                yield told == null ? null : told == container ? quantity
+                        : new Quantity.HowManyDifferentAcross(told, occurrence);
+            }
+            case Quantity.HowManyDifferentMeet(DecisionSubject container, var ofTheElement,
+                                               Quantity.HowManyDifferentMeet.Selection meeting) -> {
+                DecisionSubject told = told(container, telling);
+                Proposition statement = toldWhole(meeting.statement(),
+                        ownElementLeftAlone(container, telling));
+                if (told == null || statement == null) {
+                    yield null;
+                }
+                yield told == container && statement == meeting.statement() ? quantity
+                        : Quantity.HowManyDifferentMeet.of(told, ofTheElement,
+                                meeting instanceof Quantity.HowManyDifferentMeet.Selection
+                                        .OfEachValue
+                                        ? new Quantity.HowManyDifferentMeet.Selection.OfEachValue(
+                                                statement)
+                                        : new Quantity.HowManyDifferentMeet.Selection
+                                                .OfEachElement(statement));
+            }
+            case Quantity.RemainderByAnInput(var operation, var dividend, ValueIdentity dividendIs,
+                                             var divisor, ValueIdentity divisorIs) -> {
+                ValueIdentity one = telling.of(dividend.subjectPath(), dividendIs);
+                ValueIdentity other = telling.of(divisor.subjectPath(), divisorIs);
+                yield one == null || other == null ? null
+                        : one.equals(dividendIs) && other.equals(divisorIs) ? quantity
+                        : new Quantity.RemainderByAnInput(operation, dividend, one, divisor,
+                                other);
+            }
+            case Quantity.ProductOfTwo(var one, ValueIdentity oneIs, var other,
+                                       ValueIdentity otherIs) -> {
+                ValueIdentity first = telling.of(one.subjectPath(), oneIs);
+                ValueIdentity second = telling.of(other.subjectPath(), otherIs);
+                yield first == null || second == null ? null
+                        : first.equals(oneIs) && second.equals(otherIs) ? quantity
+                        : new Quantity.ProductOfTwo(one, first, other, second);
+            }
+            // Kinds that hold positions with no place for which value: the nodes below a node,
+            // what a recursion carries.
+            case Quantity.HowManyDifferentBelow below ->
+                    untold(quantity, List.of(below.root(), below.map()), telling);
+            case Quantity.OfABinding binding -> untold(quantity,
+                    binding.handed().map(ReadThroughNames::positionsHandedFrom).orElse(List.of()),
+                    telling);
         };
+    }
+
+    /**
+     * {@code stated}, a statement a number is made of, told — or null where some part of it is no
+     * one value, which makes the number no one number rather than one holding a part nothing read.
+     */
+    private static Proposition toldWhole(Proposition stated, Telling telling) {
+        boolean[] noOne = {false};
+        Proposition out = told(stated, telling, () -> {
+            noOne[0] = true;
+            return stated;
+        });
+        return noOne[0] ? null : out;
+    }
+
+    /** {@code each} told, itself where none of them is told anything, or null where one is no
+     *  one number. */
+    private static List<Quantity> told(List<Quantity> each, Telling telling) {
+        List<Quantity> out = new ArrayList<>(each.size());
+        boolean changed = false;
+        for (Quantity one : each) {
+            Quantity told = told(one, telling);
+            if (told == null) {
+                return null;
+            }
+            changed |= told != one;
+            out.add(told);
+        }
+        return changed ? out : each;
+    }
+
+    /**
+     * {@code quantity}, which holds {@code positions} and no word of which value at them it is
+     * about: itself where none of them is one a name was told, and null — no one number — where
+     * one is.
+     */
+    private static Quantity untold(Quantity quantity, List<TermPath> positions, Telling telling) {
+        for (TermPath at : positions) {
+            if (at != null && !ValueIdentity.AT_THE_POSITION.equals(
+                    telling.of(at, ValueIdentity.AT_THE_POSITION))) {
+                return null;
+            }
+        }
+        return quantity;
+    }
+
+    /** The positions a value read off a binding was handed from outside the walk that binds it:
+     *  the container it walks, and the numbers it starts and ends at. */
+    private static List<TermPath> positionsHandedFrom(Quantity.ReadOffABinding handed) {
+        List<TermPath> out = new ArrayList<>();
+        switch (handed) {
+            case Quantity.PickedAtAnIndex picked -> out.add(picked.container());
+            case Quantity.PositionInTheWalk walk -> out.add(walk.container());
+            case Quantity.KeptSoFar kept -> out.add(kept.container());
+            case Quantity.AWholeNumberInTurn turn -> {
+                turn.from().coefs().keySet().forEach(term -> out.add(term.subjectPath()));
+                turn.to().coefs().keySet().forEach(term -> out.add(term.subjectPath()));
+            }
+        }
+        return out;
     }
 }

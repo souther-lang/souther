@@ -529,15 +529,26 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             out.add("floorMod(");
             LinearForm<NumericTerm> ofTheInput = overTheInput();
             List<Map.Entry<Object, ExactRatio>> terms = new ArrayList<>();
+            // Each number spelled with which value at its position it is: two elements' numbers
+            // are two numbers, and spelled alike they would be one wherever a spelling is a key.
+            Map<NumericTerm, ValueIdentity> which = new LinkedHashMap<>();
+            dividend.coefs().keySet().forEach(each -> {
+                if (each instanceof DecisionAtom.OfTheInput(var term, var identity)) {
+                    which.put(term, identity);
+                }
+            });
             if (ofTheInput != null) {
                 NumericTerms.entriesInOrder(ofTheInput.coefs()).forEach(each ->
-                        terms.add(Map.entry(each.getKey().spelling(), each.getValue())));
+                        terms.add(Map.entry(Spelling.of(each.getKey().spelling(),
+                                which.get(each.getKey()).spelled()), each.getValue())));
             } else {
                 dividend.coefs().entrySet().stream()
                         .sorted(Comparator.comparing(each -> each.getKey().spelled()))
                         .forEach(each -> terms.add(Map.entry(
-                                each.getKey() instanceof DecisionAtom.OfTheInput(var term, var _)
-                                        ? term.spelling() : each.getKey().spelling(),
+                                each.getKey() instanceof DecisionAtom.OfTheInput(var term,
+                                        var identity)
+                                        ? Spelling.of(term.spelling(), identity.spelled())
+                                        : each.getKey().spelling(),
                                 each.getValue())));
             }
             terms.forEach(each -> {
@@ -581,17 +592,26 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * @param divisor   the number it is divided by
      */
     record RemainderByAnInput(ValueName operation, NumericTerm.FromOnePosition dividend,
-                              NumericTerm.FromOnePosition divisor) implements Quantity {
+                              ValueIdentity dividendIs, NumericTerm.FromOnePosition divisor,
+                              ValueIdentity divisorIs) implements Quantity {
 
         public RemainderByAnInput {
-            if (operation == null || dividend == null || divisor == null
-                    || dividend.position().equals(divisor.position())
+            if (operation == null || dividend == null || divisor == null || dividendIs == null
+                    || divisorIs == null || dividend.position().equals(divisor.position())
                     || DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(operation)
                             .isEmpty()) {
                 throw new IllegalArgumentException("a remainder by an input is a floor remainder"
                         + " of one number of the input by another of a different position: "
                         + operation + " of " + dividend + " by " + divisor);
             }
+        }
+
+        /** The remainder of the numbers at the two positions, read through no name for an
+         *  element. */
+        public RemainderByAnInput(ValueName operation, NumericTerm.FromOnePosition dividend,
+                                  NumericTerm.FromOnePosition divisor) {
+            this(operation, dividend, ValueIdentity.AT_THE_POSITION, divisor,
+                    ValueIdentity.AT_THE_POSITION);
         }
 
         /** Both numbers, the dividend first. */
@@ -601,7 +621,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return "floorMod(" + dividend + ", " + divisor + ")";
+            return "floorMod(" + dividend + dividendIs.spelled() + ", " + divisor
+                    + divisorIs.spelled() + ")";
         }
 
         @Override
@@ -630,11 +651,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * @param one   the factor first in the order of terms
      * @param other the other factor
      */
-    record ProductOfTwo(NumericTerm.FromOnePosition one, NumericTerm.FromOnePosition other)
+    record ProductOfTwo(NumericTerm.FromOnePosition one, ValueIdentity oneIs,
+                        NumericTerm.FromOnePosition other, ValueIdentity otherIs)
             implements Quantity {
 
         public ProductOfTwo {
-            if (one == null || other == null) {
+            if (one == null || other == null || oneIs == null || otherIs == null) {
                 throw new IllegalArgumentException("a product is of two numbers");
             }
             if (one.position().equals(other.position())) {
@@ -642,9 +664,20 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                         + " relation between two: " + one + " and " + other);
             }
             List<NumericTerm> ordered = NumericTerms.inOrder(List.of(one, other));
-            NumericTerm.FromOnePosition first = (NumericTerm.FromOnePosition) ordered.get(0);
-            other = first == one ? other : one;
-            one = first;
+            if (ordered.get(0) != one) {
+                NumericTerm.FromOnePosition first = other;
+                ValueIdentity firstIs = otherIs;
+                other = one;
+                otherIs = oneIs;
+                one = first;
+                oneIs = firstIs;
+            }
+        }
+
+        /** The product of the numbers at the two positions, read through no name for an
+         *  element. */
+        public ProductOfTwo(NumericTerm.FromOnePosition one, NumericTerm.FromOnePosition other) {
+            this(one, ValueIdentity.AT_THE_POSITION, other, ValueIdentity.AT_THE_POSITION);
         }
 
         /** Both factors, in their order. */
@@ -654,7 +687,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return one + " * " + other;
+            return one + oneIs.spelled() + " * " + other + otherIs.spelled();
         }
 
         @Override

@@ -347,13 +347,14 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
 
         /**
          * {@code meaning}, met at {@code site}. Two copies of a site are read through the names
-         * of their own copies, which is no difference in what the site states, so the two are
-         * compared at positions ({@link ReadThroughNames#atThePositions}).
+         * of their own copies, which is no difference in what the site states where the names of
+         * one stand one to one for the names of the other; where they do not, the copies state
+         * different things ({@link ReadThroughNames#sameUpToTheNames}).
          */
         public void met(Site site, Meaning meaning) {
             Meaning before = stated.putIfAbsent(site, meaning);
-            if (before != null && !ReadThroughNames.atThePositions(before.states())
-                    .equals(ReadThroughNames.atThePositions(meaning.states()))) {
+            if (before != null
+                    && !ReadThroughNames.sameUpToTheNames(before.states(), meaning.states())) {
                 ambiguous.add(site);
             }
         }

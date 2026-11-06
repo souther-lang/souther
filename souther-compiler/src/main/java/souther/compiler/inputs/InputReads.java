@@ -1732,8 +1732,11 @@ public final class InputReads {
         // can be asked, and it cannot be built without knowing which paths the body names. Asking
         // only the first here is what breaks that circle, and the cost of asking it alone is a name
         // that stands for a place no row reaches — which the reading refuses when it is asked.
-        return new InputReads(names.naming(arm.binder().binding(), narrowed), alternatives,
-                declared, dependencies, applied);
+        // And the name is the value matched, read as that case: whose element it is, where the
+        // value is one's, is the scrutinee's ({@link BindingEnvironment#givenWhereItStands}).
+        return new InputReads(names.inside(arm.binder(), scrutinee)
+                .naming(arm.binder().binding(), narrowed), alternatives, declared, dependencies,
+                applied);
     }
 
     /**
@@ -2370,10 +2373,14 @@ public final class InputReads {
                     held.part()));
             // A name given the position of an element, as the value of an entry a lookup
             // answered is.
+            // And a name standing at a place inside an element, taken off a value that stands for
+            // the element, is that element's: what it was given says which.
             case BindingRole.Root(TermPath path) -> {
                 ElementStood stood = stoodAt(name, path);
                 if (stood != null) {
                     into.add(stood);
+                } else if (names.givenWhereItStands(name) instanceof Core given) {
+                    stoodForIn(given, newtypes, followed, into);
                 }
             }
             // A name only given another is that one, so that the same element met under two names

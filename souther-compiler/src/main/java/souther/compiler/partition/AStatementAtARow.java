@@ -19,6 +19,7 @@ import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.ReadThroughNames;
 import souther.compiler.meaning.Spelling;
 import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.numeric.Count;
@@ -96,6 +97,12 @@ final class AStatementAtARow {
     private final Map<Spelling,OverTheElements> elements;
     /** The positions a part asks of their own value: whether it is true, whether there is one. */
     private final Set<TermPath> positions;
+    /**
+     * Whether {@code stated} holds one value at each element's position, as a row does. One that
+     * holds two at one is no statement of a row, which hands each position one value, and is not
+     * known at any row ({@link ReadThroughNames#holdsOneValueAtEachElement}).
+     */
+    private final boolean ofARow;
     /** {@link #hashCode}, or {@code 0} before it is asked; the same whoever works it out. */
     private int hash;
     /** The parts numbered on the first row asked; the same whoever numbers them. */
@@ -104,6 +111,7 @@ final class AStatementAtARow {
     private AStatementAtARow(Proposition stated, Map<Relation, OneRelation> relations,
                              Map<Spelling,OverTheElements> elements, Set<TermPath> positions) {
         this.stated = stated;
+        this.ofARow = ReadThroughNames.holdsOneValueAtEachElement(stated);
         // In the order the relations were met, which is the order their containers are found in
         // when a row is walked for them.
         this.relations = Collections.unmodifiableMap(new LinkedHashMap<>(relations));
@@ -1011,6 +1019,10 @@ final class AStatementAtARow {
      * row wherever it stands.
      */
     Answer at(BorderQuantity.Observation row) {
+        if (!ofARow) {
+            return new Answer.CouldNotTell(Set.of(new ReadingGap.ReachNotRead(
+                    ReadingGap.ReachNotRead.Why.A_PART_NOT_READ)));
+        }
         PartsOfTheStatement numbered = parts;
         if (numbered == null) {
             numbered = PartsOfTheStatement.of(stated, relations, elements);

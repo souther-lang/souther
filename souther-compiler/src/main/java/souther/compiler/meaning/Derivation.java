@@ -75,9 +75,11 @@ public sealed interface Derivation {
      */
     Proposition conclusion(Conclusion numbering);
 
-    /** What this concludes, read at {@code where}. */
+    /** What this concludes, read at {@code where}, as it is handed to a reader of positions
+     *  ({@link Conclusion#atOneValueEach}). */
     default Proposition concludes(Optional<ModelOccurrence> where) {
-        return new Conclusion(where).of(this);
+        Conclusion numbering = new Conclusion(where);
+        return numbering.atOneValueEach(numbering.of(this));
     }
 
     /**
@@ -1313,9 +1315,12 @@ public sealed interface Derivation {
 
             /** Whether the container {@code argument} is, read at {@code container}, stands
              *  there: at the position the call has it at, where it has it at one. */
+            // Where a value was read is asked of where it stands, whichever element's value at
+            // the position it was told it is ({@link ReadThroughNames#atThePositions}).
             private boolean standsAt(DeclaredArgument argument, DecisionSubject container) {
                 TermPath at = call.standingAt().get(argument);
-                return at == null || new DecisionSubject.AnInput(at).equals(container);
+                return at == null || new DecisionSubject.AnInput(at)
+                        .equals(ReadThroughNames.atThePositions(container));
             }
 
             /**
@@ -1360,7 +1365,8 @@ public sealed interface Derivation {
                 if (at == null) {
                     return true;
                 }
-                Proposition concluded = seen.concludes(Optional.empty());
+                Proposition concluded = ReadThroughNames.atThePositions(
+                        seen.concludes(Optional.empty()));
                 if (concluded instanceof Proposition.Unread) {
                     return true;
                 }
@@ -1382,7 +1388,7 @@ public sealed interface Derivation {
             private boolean standsAsAString(LawSubject<DeclaredArgument> subject, Quantity read) {
                 TermPath at = positionOf(subject);
                 return at == null || new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(at))
-                        .equals(read);
+                        .equals(ReadThroughNames.atThePositions(read));
             }
 
             /** Whether {@code read}, the number {@code subject} was read as, is the value at the
@@ -1390,7 +1396,7 @@ public sealed interface Derivation {
             private boolean standsAsANumber(LawSubject<DeclaredArgument> subject,
                                             LinearForm<Quantity> read) {
                 TermPath at = positionOf(subject);
-                return at == null || read.equals(LinearForm.atom(
+                return at == null || ReadThroughNames.atThePositions(read).equals(LinearForm.atom(
                         new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(at))));
             }
 
@@ -1398,7 +1404,8 @@ public sealed interface Derivation {
              *  call has it at. */
             private boolean stands(LawSubject<DeclaredArgument> subject, DecisionSubject read) {
                 TermPath at = positionOf(subject);
-                return at == null || read.equals(new DecisionSubject.AnInput(at));
+                return at == null
+                        || ReadThroughNames.atThePositions(read).equals(new DecisionSubject.AnInput(at));
             }
 
             /**
@@ -1411,7 +1418,8 @@ public sealed interface Derivation {
              * statement: the way {@code leaf} read what the elements meet is a reading of it.
              */
             private boolean numberStands(LawNumber<DeclaredArgument> number,
-                                         LinearForm<Quantity> form, ALawComparison leaf) {
+                                         LinearForm<Quantity> read, ALawComparison leaf) {
+                LinearForm<Quantity> form = ReadThroughNames.atThePositions(read);
                 Quantity atom = soleAtom(form);
                 return switch (number) {
                     case LawNumber.AnArgument<DeclaredArgument>(var argument) -> {
@@ -1498,8 +1506,9 @@ public sealed interface Derivation {
                 DecisionSubject container = new DecisionSubject.AnInput(at);
                 if (atom instanceof Quantity.HowManyMeet(DecisionSubject counted, var _)) {
                     return counted.equals(container) && leaf.counts().stream().anyMatch(count ->
-                            count.container().equals(container)
-                                    && atom.equals(count.counted(asked))
+                            ReadThroughNames.atThePositions(count.container()).equals(container)
+                                    && atom.equals(ReadThroughNames.atThePositions(
+                                            count.counted(asked)))
                                     && reads(statement, count.ofTheElement()));
                 }
                 return leaf.alike().stream().anyMatch(count -> count.container().equals(container)
@@ -1835,7 +1844,9 @@ public sealed interface Derivation {
             TermPath greater = call.standingAt().get(ordered.get(0));
             TermPath lesser = call.standingAt().get(ordered.get(1));
             if (greater != null && lesser != null) {
-                Proposition read = ofTheArguments.concludes(Optional.empty());
+                // Where the arguments stand, whichever element's values they were told they are.
+                Proposition read = ReadThroughNames.atThePositions(
+                        ofTheArguments.concludes(Optional.empty()));
                 if (!(read instanceof Proposition.Unread)
                         && !read.equals(theGreaterAgainstTheLesser(greater, lesser, between))) {
                     throw new IllegalArgumentException(ofTheArguments + " is not the order the"
