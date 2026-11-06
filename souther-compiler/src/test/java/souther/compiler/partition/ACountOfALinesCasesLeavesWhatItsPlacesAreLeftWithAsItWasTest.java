@@ -43,7 +43,7 @@ class ACountOfALinesCasesLeavesWhatItsPlacesAreLeftWithAsItWasTest {
 
     private static CaseExpansion.Counted expansion(CaseCount.Ways structural,
                                                    NumericallyConsistentWays.Counted consistent) {
-        return new CaseExpansion.Counted("g/x", "3", LINE.line().line(), LINE.relation(),
+        return new CaseExpansion.Counted(LINE.ofItsCases(), "g/x", "3",
                 DecidingCase.alone(new Proposition.Always(true)),
                 new CaseCount(structural, consistent));
     }
@@ -70,7 +70,7 @@ class ACountOfALinesCasesLeavesWhatItsPlacesAreLeftWithAsItWasTest {
             assertEquals(uncounted, read.whatEachPlaceIsLeftWith(),
                     "why the line was not worked out, whatever was counted beside it: " + each);
             assertEquals(each.stream().map(CaseExpansion.Counted::counted).toList(),
-                    read.caseExpansions().stream().map(CaseExpansion::counted).toList(),
+                    read.caseExpansions().stream().map(one -> one.cameTo().counted()).toList(),
                     "and the counts, each as it was");
         }
     }

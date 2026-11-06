@@ -8606,7 +8606,7 @@
               "arms",
               "case",
               "casesOfTheLine",
-              "caseExpansion"
+              "readings"
             ],
             "additionalProperties": false,
             "properties": {
@@ -8636,15 +8636,37 @@
               "case": {
                 "type": "integer",
                 "minimum": 1,
-                "description": "Which of the cases of this rule's line the entry is, counted from one in the order the entries stand. Two entries of one rule and line are two cases, whatever they came to; the condition a case was said as is what tells them apart, and it is not written. A line is told apart by which of the author's lines it is (`arms`) and the relation it came to, not by `line`, which two lines of a rule may share; `cutAt` is where it is."
+                "description": "Which of the cases of this rule's line the entry is, counted from one in the order the entries stand. Two entries of one rule and line are two cases; the condition a case was said as is what tells them apart, and it is not written. What a case came to tells no two apart: one case read at two copies of the rule is one entry with two `readings`. A line is told apart by which of the author's lines it is (`arms`) and the relation it came to, not by `line`, which two lines of a rule may share; `cutAt` is where it is."
               },
               "casesOfTheLine": {
                 "type": "integer",
                 "minimum": 1,
                 "description": "How many entries there are for this rule and line, the line told apart as `case` says."
               },
-              "caseExpansion": {
-                "$ref": "#/$defs/caseExpansion"
+              "readings": {
+                "type": "array",
+                "minItems": 1,
+                "description": "What the case came to, an answer for each copy of the rule that answered it differently — a comparison written in a helper is read once per call, and what made the parts is that copy's — in the order the copies were first read. Copies whose answers are the same are one reading, read at each of them; no copy is in two.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "readAt",
+                    "caseExpansion"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "readAt": {
+                      "type": "array",
+                      "description": "The copies of the rule's comparison this answer was read at, as `constructOccurrence` names a copy.",
+                      "items": {
+                        "$ref": "#/$defs/constructOccurrence"
+                      }
+                    },
+                    "caseExpansion": {
+                      "$ref": "#/$defs/caseExpansion"
+                    }
+                  }
+                }
               }
             }
           }
@@ -8653,7 +8675,7 @@
     },
     "caseExpansion": {
       "type": "object",
-      "description": "How many ways there were of choosing one of the cases one case of a line was said for, and what in the model made the parts that case is taken apart on. Neither is how much work a reading did: a reading of the cases stops a choosing early, and at a figure. One entry is one case: the reading tells cases apart by the line's relation and the condition the case was said as, so two cases of one line coming to the same counts and the same makers are two entries.",
+      "description": "How many ways there were of choosing one of the cases one case of a line was said for, and what in the model made the parts that case is taken apart on. Neither is how much work a reading did: a reading of the cases stops a choosing early, and at a figure. One reading of one case, at the copies `readAt` names.",
       "required": [
         "structuralWays",
         "numericallyConsistentWays",

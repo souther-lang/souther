@@ -1141,7 +1141,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             : claims.getOrDefault(behavior.name(), ClaimAnnotations.NONE),
                     reported,
                     armPlaces(compilation, branch),
-                    conditionPlaces(compilation, name, linesOf(read), requirements, reported),
+                    conditionPlaces(compilation, name, linesOf(read), requirements, reported,
+                            partition == null ? List.of() : partition.caseExpansions()),
                     rulePlaces(compilation, citedBy(evidence, reported)),
                     partPlaces(compilation, partition, reported),
                     ruleReadings(compilation, name, behavior.name(),
@@ -1173,7 +1174,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // under are the debts' rather than any behavior's.
                 new DeclarationsShown(declared,
                         conditionPlaces(compilation, name, declaredLines(declared), Map.of(),
-                                List.of()),
+                                List.of(), List.of()),
                         rulePlaces(compilation, citedByDeclarations(declared, owed)),
                         rowPlaces),
                 Adequacy.ToldApart.of(compilation.db(), name));
@@ -1612,7 +1613,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static Map<ModelOccurrence, CopyShown> copiesShown(
             Compilation compilation, String module, Map<DecisionRule, SettledAcross> settled,
-            List<BorderAssessment> lines, List<ReportedFinding> reported) {
+            List<BorderAssessment> lines, List<ReportedFinding> reported,
+            List<CasesExpandedAtARule> expanded) {
         ModelOccurrences.Gathering copies = new ModelOccurrences.Gathering();
         for (SettledAcross rule : settled.values()) {
             for (SettledAt each : rule.places()) {
@@ -1636,6 +1638,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 default -> ModelOccurrences.NONE;
             });
         }
+        // And the copies each case of a line not worked out was read at.
+        expanded.forEach(each -> each.readings().forEach(reading -> copies.add(reading.readAt())));
         Map<ModelOccurrence, CopyShown> out = new LinkedHashMap<>();
         for (ModelOccurrence copy : copies.gathered()) {
             out.computeIfAbsent(copy, _ -> new CopyShown(
@@ -1931,7 +1935,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static ConditionsShown conditionPlaces(
             Compilation compilation, String module, List<BorderAssessment> lines,
-            Map<DecisionRule, SettledAcross> settled, List<ReportedFinding> reported) {
+            Map<DecisionRule, SettledAcross> settled, List<ReportedFinding> reported,
+            List<CasesExpandedAtARule> expanded) {
         Map<ConditionReportAnchor, Citation> places = new LinkedHashMap<>();
         // What a search for a rule of the decision was arrived at without, which is named on the
         // decision's own line and is about the same conditions the points below name. Every
@@ -1968,7 +1973,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
         }
         return new ConditionsShown(places,
-                copiesShown(compilation, module, settled, lines, reported));
+                copiesShown(compilation, module, settled, lines, reported, expanded));
     }
 
     /**
@@ -2150,12 +2155,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             });
             // And each construct a count of a line's cases says made its parts.
-            partition.caseExpansions().forEach(each -> {
-                if (each.expansion().attributed() instanceof CaseExpansion.Attributed attributed) {
+            partition.caseExpansions().forEach(each -> each.readings().forEach(reading -> {
+                if (reading.cameTo().attributed()
+                        instanceof CaseExpansion.Attributed attributed) {
                     attributed.factors().forEach(factor -> factor.constructs().forEach(
                             construct -> whereItIsWritten(construct).ifPresent(take)));
                 }
-            });
+            }));
         }
         if (found != null) {
             found.stream().map(ReportedFinding::finding).map(Adequacy.Finding::about)
@@ -4089,14 +4095,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             List<CaseOfALine> numbered = casesNumbered(expanded);
             for (int at = 0; at < expanded.size(); at++) {
                 CasesExpandedAtARule each = expanded.get(at);
-                out.append(String.format(
-                        "      case expansion: %s, on `%s` at %s%s, case %d of %d — %s%n",
-                        cited(each.cited(), rendering, declaredIn, places),
-                        each.expansion().line(), each.expansion().cutAt(),
-                        armsSaid(each.expansion().written()), numbered.get(at).ordinal(),
-                        numbered.get(at).of(), caseExpansionSaid(each.expansion(),
-                                construct -> writtenIn(construct, parts, rendering,
-                                        declaredIn))));
+                // A line for each reading of the case, each with the calls it was read in: one
+                // case, which the number says, and what it came to at each copy of the rule.
+                for (CasesExpandedAtARule.Reading reading : each.readings()) {
+                    out.append(String.format(
+                            "      case expansion: %s, on `%s` at %s%s, case %d of %d%s — %s%n",
+                            cited(each.cited(), rendering, declaredIn, places), each.line(),
+                            each.cutAt(), armsSaid(each.which().line().written()),
+                            numbered.get(at).ordinal(), numbered.get(at).of(),
+                            inCopies(reading.readAt(), behavior.conditionPlaces().copies(),
+                                    rendering, declaredIn),
+                            caseExpansionSaid(reading.cameTo(), construct -> writtenIn(
+                                    construct, parts, rendering, declaredIn))));
+                }
             }
         }
         // And a position whose rules this reading never arrived at, which names no rule because
@@ -8974,37 +8985,45 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 PublishedRuleHandle.of(handle(each.cited(), places), places),
                 sources.rendering(), null);
         ruleId(said.putObject("ruleId"), each.rule());
-        said.put("line", each.expansion().line());
-        said.put("cutAt", each.expansion().cutAt());
+        said.put("line", each.line());
+        said.put("cutAt", each.cutAt());
         // Which of the author's lines, as the arms on the way to it: two lines written apart can
         // come to one relation, and these are told apart by it.
         ArrayNode arms = said.putArray("arms");
-        each.expansion().written().arms().forEach(arm -> writtenArm(arms.addObject(), arm));
+        each.which().line().written().arms().forEach(arm -> writtenArm(arms.addObject(), arm));
         said.put("case", which.ordinal());
         said.put("casesOfTheLine", which.of());
-        caseExpansion(said.putObject("caseExpansion"), each.expansion(), parts, sources);
+        // What the case came to, at each copy of the rule it was read at: one case, and an
+        // answer for each copy that answered it differently.
+        ArrayNode readings = said.putArray("readings");
+        for (CasesExpandedAtARule.Reading reading : each.readings()) {
+            ObjectNode one = readings.addObject();
+            ArrayNode copies = one.putArray("readAt");
+            reading.readAt().forEach(copy -> copyId(copies.addObject(), copy));
+            caseExpansion(one.putObject("caseExpansion"), reading.cameTo(), parts, sources);
+        }
     }
 
     /** Which of the cases a rule's line was told of an entry is, from one, and of how many. */
     private record CaseOfALine(int ordinal, int of) {}
 
     /**
-     * Each entry numbered among those about the same rule and line, in the order they stand. Two
-     * entries are two cases ({@link CasesExpandedAtARule#key}), which is all the number says: the
-     * condition a case was said as is what tells it apart, and it is too long to be read. A line
-     * is told apart as the reading tells its places apart, by which of the author's lines it is
-     * and the relation it came to, and not by the name a report gives the quantity it is on,
-     * which two lines may share.
+     * Each entry numbered among those about the same line of the same rule, in the order they
+     * stand. Two entries are two cases ({@link CasesExpandedAtARule#key}), which is all the number
+     * says: the condition a case was said as is what tells it apart, and it is too long to be
+     * read. The line is the entry's own ({@link CasesExpandedAtARule#lineOfTheRule}), the half of
+     * its key a case is not, so what the number counts and what tells entries apart are one
+     * identity.
      */
     private static List<CaseOfALine> casesNumbered(List<CasesExpandedAtARule> expanded) {
-        Map<List<Object>, Integer> of = new HashMap<>();
+        Map<CasesExpandedAtARule.LineOfARule, Integer> of = new HashMap<>();
         for (CasesExpandedAtARule each : expanded) {
-            of.merge(placeOf(each), 1, Integer::sum);
+            of.merge(each.lineOfTheRule(), 1, Integer::sum);
         }
-        Map<List<Object>, Integer> sofar = new HashMap<>();
+        Map<CasesExpandedAtARule.LineOfARule, Integer> sofar = new HashMap<>();
         List<CaseOfALine> out = new ArrayList<>();
         for (CasesExpandedAtARule each : expanded) {
-            List<Object> line = placeOf(each);
+            CasesExpandedAtARule.LineOfARule line = each.lineOfTheRule();
             out.add(new CaseOfALine(sofar.merge(line, 1, Integer::sum), of.get(line)));
         }
         return out;
@@ -9020,17 +9039,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 .collect(Collectors.joining(", then ", ", down ", ""));
     }
 
-    /** The rule, and the place of its line an entry is about: the author's line and the
-     *  relation it came to. */
-    private static List<Object> placeOf(CasesExpandedAtARule each) {
-        return List.of(each.rule(), each.expansion().written(), each.expansion().relation());
-    }
-
     /**
      * How many ways one case of a line was and what made the parts it is taken apart on. What made
      * them is not a factoring of the count, which is why it is a list beside it and not a product.
      */
-    private static void caseExpansion(ObjectNode into, CaseExpansion expansion,
+    private static void caseExpansion(ObjectNode into, CaseExpansion.CameTo expansion,
                                       WhereAPartIs parts, DocumentSources sources) {
         ObjectNode structural = into.putObject("structuralWays");
         switch (expansion.counted().structuralWays()) {
@@ -9144,7 +9157,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * One case in a sentence: the two counts, then what made its parts as a list. Never joined by
      * a sign of multiplication, which would say the count is their product.
      */
-    private static String caseExpansionSaid(CaseExpansion expansion,
+    private static String caseExpansionSaid(CaseExpansion.CameTo expansion,
                                             Function<ModelOccurrence, String> writtenIn) {
         StringBuilder out = new StringBuilder(switch (expansion.counted().structuralWays()) {
             case CaseCount.Ways.Exactly(var ways) ->

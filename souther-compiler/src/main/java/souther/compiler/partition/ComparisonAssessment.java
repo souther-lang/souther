@@ -1743,8 +1743,8 @@ sealed interface ComparisonAssessment {
             List<CaseExpansion.Counted> expanded = new ArrayList<>();
             for (CasesOfALineAsked.NotWorkedOut each : found.notWorkedOut()) {
                 each.counted().ifPresent(counted -> expanded.add(new CaseExpansion.Counted(
-                        cutting.of().named(), cutting.at().toString(), part.id().line().line(),
-                        part.id().relation(), each.in(), counted)));
+                        part.id().ofItsCases(), cutting.of().named(), cutting.at().toString(),
+                        each.in(), counted)));
             }
             out.add(new Several.Part(part.id(), new Unread(atEachOf(cutting.over(),
                     new BlockReason.WhereALineDecidesNotWorkedOut(stoppedAt.stream()

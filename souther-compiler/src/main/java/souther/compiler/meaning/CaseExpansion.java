@@ -15,67 +15,106 @@ import java.util.Optional;
  *
  * <p>About one case and not about the stop. Why the line was not worked out is a reason a report
  * gathers and puts together with others like it; this is a count of one case of one line, which
- * nothing puts together with another, so it is kept beside the reason and never in it. Which case
- * it is, is what the reading that asked it tells cases apart by, whole: the place of the line —
- * which of the author's lines, and the relation it came to there, both of them, since two lines an
- * author wrote can come to one relation and one line comes to a relation for each case of what a
- * call hands it — and the condition the case was said as
- * ({@link DecidingCase#eachByItsOwnCondition}).
+ * nothing puts together with another, so it is kept beside the reason and never in it.
  *
- * @param line       the quantity the line is on, named the way a report names a border on it
- * @param cutAt      where on the quantity the line is, written as a border's level is: what tells
- *                   a reader two lines on one quantity apart
- * @param written    which of the author's lines it is
- * @param relation   the relation the line came to, as the reading spelled it
- * @param ofTheCase  the condition the case was said as
- * @param counted    how many ways there were of choosing one of what the case stands for
- * @param attributed what the parts the case is taken apart on came from
- * @param diagnosed  how many ways some of those parts can come out together, where they compare
- *                   one number ({@link WhatTheNumbersOfACaseLeave}): what the numbers leave, and
- *                   no count of cases nor of what a rewrite would leave
+ * <p>Three things of different owners, held apart: which case it is ({@link Which}), how a
+ * reader names its line, and what the case came to ({@link CameTo}). Which case is the reading's
+ * own identity of it and nothing else, so whatever gathers these tells two apart by it alone;
+ * what a case came to is an answer about it, and two readings of one case are two answers, never
+ * two cases.
+ *
+ * @param which  which case of which line it is
+ * @param line   the quantity the line is on, named the way a report names a border on it
+ * @param cutAt  where on the quantity the line is, written as a border's level is: what tells a
+ *               reader two lines on one quantity apart
+ * @param cameTo how many ways the case was, what made its parts, and what the numbers leave
  */
-public record CaseExpansion(String line, String cutAt, WrittenLine written, Spelling relation,
-                            Proposition ofTheCase, CaseCount counted, Attribution attributed,
-                            List<Diagnosis> diagnosed) {
+public record CaseExpansion(Which which, String line, String cutAt, CameTo cameTo) {
 
     public CaseExpansion {
+        Objects.requireNonNull(which, "some case of some line");
         Objects.requireNonNull(line, "cases are a line's");
         Objects.requireNonNull(cutAt, "a line is somewhere on its quantity");
-        Objects.requireNonNull(written, "one of the author's lines");
-        Objects.requireNonNull(relation, "of some relation");
-        Objects.requireNonNull(ofTheCase, "a case is said as some condition");
-        Objects.requireNonNull(counted, "cases are some number of ways");
-        Objects.requireNonNull(attributed, "what they came from, or why that was not said");
-        diagnosed = List.copyOf(diagnosed);
+        Objects.requireNonNull(cameTo, "and came to something");
+    }
+
+    /**
+     * One place an author's line was put: which of their lines, and the relation it came to
+     * there — the place of a line as the reading that put it there tells places apart
+     * ({@code PlaceOfALine}), both halves, since two lines an author wrote can come to one
+     * relation and one line comes to a relation for each case of what a call hands it.
+     *
+     * @param written  which of the author's lines it is
+     * @param relation the relation the line came to, as the reading spelled it
+     */
+    public record Line(WrittenLine written, Spelling relation) {
+
+        public Line {
+            Objects.requireNonNull(written, "one of the author's lines");
+            Objects.requireNonNull(relation, "of some relation");
+        }
+    }
+
+    /**
+     * Which case of which line: the place of the line, and the condition the case was said as,
+     * which is what a case is told apart by wherever it is read ({@link
+     * DecidingCase#eachByItsOwnCondition}).
+     *
+     * @param line      the place of the line
+     * @param condition the condition the case was said as
+     */
+    public record Which(Line line, Proposition condition) {
+
+        public Which {
+            Objects.requireNonNull(line, "a case is of some line");
+            Objects.requireNonNull(condition, "a case is said as some condition");
+        }
+    }
+
+    /**
+     * What one reading of a case came to.
+     *
+     * @param counted    how many ways there were of choosing one of what the case stands for
+     * @param attributed what the parts the case is taken apart on came from
+     * @param diagnosed  how many ways some of those parts can come out together, where they compare
+     *                   one number ({@link WhatTheNumbersOfACaseLeave}): what the numbers leave,
+     *                   and no count of cases nor of what a rewrite would leave
+     */
+    public record CameTo(CaseCount counted, Attribution attributed, List<Diagnosis> diagnosed) {
+
+        public CameTo {
+            Objects.requireNonNull(counted, "cases are some number of ways");
+            Objects.requireNonNull(attributed, "what they came from, or why that was not said");
+            diagnosed = List.copyOf(diagnosed);
+        }
     }
 
     /**
      * A case counted, before what its parts came from is read: that is read off how the statement
      * was derived, which the reading that counted it does not hold.
      *
-     * @param line     the quantity the line is on
-     * @param cutAt    where on it the line is
-     * @param written  which of the author's lines it is
-     * @param relation the relation the line came to
-     * @param asked    the case
-     * @param counted  how many ways there were of choosing one of what it stands for
+     * @param of      the place of the line
+     * @param line    the quantity the line is on
+     * @param cutAt   where on it the line is
+     * @param asked   the case
+     * @param counted how many ways there were of choosing one of what it stands for
      */
-    public record Counted(String line, String cutAt, WrittenLine written, Spelling relation,
-                          DecidingCase asked, CaseCount counted) {
+    public record Counted(Line of, String line, String cutAt, DecidingCase asked,
+                          CaseCount counted) {
 
         public Counted {
+            Objects.requireNonNull(of, "cases are of some place of a line");
             Objects.requireNonNull(line, "cases are a line's");
             Objects.requireNonNull(cutAt, "a line is somewhere on its quantity");
-            Objects.requireNonNull(written, "one of the author's lines");
-            Objects.requireNonNull(relation, "of some relation");
             Objects.requireNonNull(asked, "a case asked");
             Objects.requireNonNull(counted, "cases are some number of ways");
         }
 
         /** This case, with what made its parts and what the numbers they compare leave. */
         CaseExpansion attributed(Attribution attributed) {
-            return new CaseExpansion(line, cutAt, written, relation, asked.condition(), counted,
-                    attributed, WhatTheNumbersOfACaseLeave.of(asked.standsFor()));
+            return new CaseExpansion(new Which(of, asked.condition()), line, cutAt,
+                    new CameTo(counted, attributed,
+                            WhatTheNumbersOfACaseLeave.of(asked.standsFor())));
         }
 
         /**

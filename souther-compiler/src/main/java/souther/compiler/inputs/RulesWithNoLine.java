@@ -159,7 +159,8 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
         private final Map<Object, RuleWithoutALine> reported = new LinkedHashMap<>();
         private final Map<Object, StandingQuestion.Unclassified> unclassified = new LinkedHashMap<>();
         private final Map<RuleRef, RuleWhereARunMayStop> stopping = new LinkedHashMap<>();
-        private final Map<Object, CasesExpandedAtARule> expanded = new LinkedHashMap<>();
+        private final Map<CasesExpandedAtARule.Key, CasesExpandedAtARule> expanded =
+                new LinkedHashMap<>();
 
         /**
          * What a rule's line not worked out because its cases were too many was told of those

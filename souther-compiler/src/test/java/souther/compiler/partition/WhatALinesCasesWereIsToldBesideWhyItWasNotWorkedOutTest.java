@@ -82,6 +82,14 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
         return line.substring(at.path("column").asInt() - 1);
     }
 
+    /** What {@code entry}'s case came to, read at one copy of its rule, which every model here
+     *  that writes its rule outside a helper reads it at. */
+    private static JsonNode onlyReading(JsonNode entry) {
+        JsonNode readings = entry.path("readings");
+        assertEquals(1, readings.size(), "one copy of the rule, one reading: " + entry);
+        return readings.get(0).path("caseExpansion");
+    }
+
     /** The factors of {@code kind} in {@code factors}. */
     private static List<JsonNode> ofKind(JsonNode factors, String kind) {
         List<JsonNode> out = new ArrayList<>();
@@ -103,7 +111,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
         Set<String> lines = new TreeSet<>();
         for (JsonNode each : expansions) {
             lines.add(each.path("line").asString());
-            JsonNode counted = each.path("caseExpansion");
+            JsonNode counted = onlyReading(each);
             assertEquals(structural.toString(),
                     counted.path("structuralWays").path("exactly").asString(),
                     "every way of choosing, three failing comparisons at each of six thresholds");
@@ -165,7 +173,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
         for (JsonNode each : partition.path("caseExpansions")) {
             told.add(placeOf(each) + " case " + each.path("case").asInt() + " of "
                     + each.path("casesOfTheLine").asInt());
-            came.add(each.path("line").asString() + " " + each.path("caseExpansion"));
+            came.add(each.path("line").asString() + " " + onlyReading(each));
             levels.add(each.path("line").asString() + " at " + each.path("cutAt").asString());
         }
         assertEquals(told.size(), new TreeSet<>(told).size(), "each case of each place once: "
@@ -190,8 +198,53 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
         });
         for (String section : List.of("notRead", "unanswered")) {
             for (JsonNode each : partition.path(section)) {
-                assertFalse(each.has("caseExpansion"), "why is said with no count in it: " + each);
+                assertFalse(each.has("readings") || each.has("caseExpansion"),
+                        "why is said with no count in it: " + each);
             }
+        }
+    }
+
+    /** The search of {@link #FIND} written in a helper, which the behavior calls on each arm. */
+    private static final String FIND_IN_A_HELPER_CALLED_TWICE = """
+            module demo exposing (g)
+
+            let h (x: Int, y: Int): Bool =
+                Option.withDefault(0, List.find(t -> x > t && y > t && x + y > t,
+                    [1, 2, 3, 4, 5, 6, 7])) > 3
+
+            behavior g : (b: Bool, x: Int, y: Int) -> Bool
+            let g (b, x, y) = if b then h(x, y) else h(x, y)
+            """;
+
+    /**
+     * A rule written in a helper is read once for each call, and both calls here hand it the same
+     * values, so each of its cases is the same case at both: one entry, numbered among its line's
+     * cases as though the helper were called once, with what it came to at each call — where what
+     * made its parts is that call's copy of the search.
+     */
+    @Test
+    void aCaseReadAtEachCallOfAHelperIsOneCaseWithAReadingAtEach() {
+        JsonNode expansions = partition(compiled(FIND_IN_A_HELPER_CALLED_TWICE))
+                .path("caseExpansions");
+        assertFalse(expansions.isEmpty(), "the helper's lines past the figure");
+        for (JsonNode each : expansions) {
+            assertEquals(1, each.path("casesOfTheLine").asInt(),
+                    "one case of each place, whichever call it was read in: " + each);
+            JsonNode readings = each.path("readings");
+            assertEquals(2, readings.size(), "an answer at each call: " + each);
+            Set<String> copies = new TreeSet<>();
+            Set<String> searches = new TreeSet<>();
+            for (JsonNode reading : readings) {
+                assertEquals(1, reading.path("readAt").size(), reading::toString);
+                copies.add(reading.path("readAt").get(0).toString());
+                JsonNode find = reading.path("caseExpansion").path("factors").get(0);
+                assertEquals("List.find", find.path("operation").asString());
+                searches.add(find.path("call").toString());
+                assertTrue(writtenAt(FIND_IN_A_HELPER_CALLED_TWICE, find)
+                        .startsWith("List.find("), "the one search the author wrote: " + find);
+            }
+            assertEquals(2, copies.size(), "read at the two calls: " + readings);
+            assertEquals(2, searches.size(), "each naming its own call's copy: " + readings);
         }
     }
 
@@ -243,7 +296,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
         JsonNode expansions = partition(compiled(model)).path("caseExpansions");
         assertFalse(expansions.isEmpty(), "the line on the grade is past the figure");
         for (JsonNode each : expansions) {
-            JsonNode factors = each.path("caseExpansion").path("factors");
+            JsonNode factors = onlyReading(each).path("factors");
             List<JsonNode> applied = ofKind(factors, "applications");
             assertEquals(1, applied.size(), "the fold, once: " + factors);
             assertEquals("List.fold", applied.getFirst().path("operation").asString(),
@@ -270,7 +323,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
                             "and the cases of the absolute value, between two: " + factors));
             assertTrue(writtenAt(model, abs).startsWith("Int.abs("),
                     "at the call whose cases they are: " + abs);
-            assertEquals(0, each.path("caseExpansion").path("unattributed").asInt(),
+            assertEquals(0, onlyReading(each).path("unattributed").asInt(),
                     "every part made by one of them: " + each);
         }
     }
@@ -314,7 +367,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
         JsonNode expansions = partition(compiled(model)).path("caseExpansions");
         assertFalse(expansions.isEmpty(), "the lines past the figure across the applications");
         for (JsonNode each : expansions) {
-            JsonNode factors = each.path("caseExpansion").path("factors");
+            JsonNode factors = onlyReading(each).path("factors");
             List<JsonNode> applied = ofKind(factors, "applications");
             JsonNode fold = applied.stream()
                     .filter(one -> one.path("operation").asString().equals("List.fold"))
@@ -341,7 +394,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
                     "at the comparison that keeps a month: " + keptBy);
             assertEquals(37, kept.getFirst().path("times").asInt(),
                     "written out on each application of the fold, against its row's bound");
-            assertEquals(0, each.path("caseExpansion").path("unattributed").asInt(),
+            assertEquals(0, onlyReading(each).path("unattributed").asInt(),
                     "every part made by one of them: " + each);
         }
     }
