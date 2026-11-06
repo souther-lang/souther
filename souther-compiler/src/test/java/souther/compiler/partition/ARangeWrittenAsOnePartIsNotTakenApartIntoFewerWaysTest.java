@@ -13,13 +13,13 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhereEachLineDecides;
-import souther.compiler.meaning.WholeNumbers;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -74,10 +75,10 @@ class ARangeWrittenAsOnePartIsNotTakenApartIntoFewerWaysTest {
     }
 
     /** The numbers of {@code g}'s input the model measures in whole numbers. */
-    private static WholeNumbers wholeNumbers(Compilation compilation) {
+    private static Predicate<NumericTerm> wholeNumbers(Compilation compilation) {
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("g");
-        return WholeNumbers.ofTheInput(inputs.reading(rules).quantities());
+        return inputs.reading(rules).quantities()::countsWhole;
     }
 
     /** What the body of {@code g} states, as the reading of it concludes. */
@@ -95,7 +96,8 @@ class ARangeWrittenAsOnePartIsNotTakenApartIntoFewerWaysTest {
     }
 
     /** Every way of choosing a case where some line of {@code stated} decides, over its lines. */
-    private static BigInteger waysOverEveryLine(Proposition stated, WholeNumbers whole) {
+    private static BigInteger waysOverEveryLine(Proposition stated,
+                                                Predicate<NumericTerm> whole) {
         BigInteger out = BigInteger.ZERO;
         for (WhereEachLineDecides.Decides line : WhereEachLineDecides.in(stated, whole)) {
             for (DecidingCase one : line.cases()) {

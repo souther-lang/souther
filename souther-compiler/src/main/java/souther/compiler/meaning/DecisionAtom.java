@@ -1,5 +1,6 @@
 package souther.compiler.meaning;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.NumericTerm;
@@ -12,6 +13,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.Predicate;
 
 /**
  * One quantity a comparison of a decision is written over.
@@ -42,6 +44,12 @@ public sealed interface DecisionAtom extends Quantity {
      *                 container read one position, and are two numbers
      */
     record OfTheInput(NumericTerm term, ValueIdentity identity) implements DecisionAtom {
+
+        /** Whole where the input measures the term in whole numbers. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return measuredWhole.test(term);
+        }
 
         /** The number at {@code term}, read through no name for an element. */
         public OfTheInput(NumericTerm term) {
@@ -92,6 +100,13 @@ public sealed interface DecisionAtom extends Quantity {
     record TakenOfAnAnswer(ValueName.Stdlib operation, TakenArguments arguments,
                            DecisionSubject.AnAnswer of, Type at) implements DecisionAtom {
 
+        /** Not shown: what the library takes of a value is the operation's own, and {@code at}
+         *  is the value's type and not the number's. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return false;
+        }
+
         public TakenOfAnAnswer {
             if (operation == null || arguments == null || of == null || at == null) {
                 throw new IllegalArgumentException("a number taken of an answer is some"
@@ -133,6 +148,13 @@ public sealed interface DecisionAtom extends Quantity {
                                 ElementValue computation, Type each,
                                 TraversalDirection direction) implements DecisionAtom {
 
+        /** Whole where each value it adds up is counted in whole numbers. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return Carrier.ofPrimitive(each) instanceof Carrier carrier
+                    && carrier.countsInWholeNumbers();
+        }
+
         public ComputedOverAnAnswer {
             if (operation == null || list == null || computation == null || each == null
                     || direction == null) {
@@ -164,6 +186,12 @@ public sealed interface DecisionAtom extends Quantity {
 
     /** A number a dependency answered with, at the place inside its answer the body read. */
     record OfAnAnswer(DecisionSubject.AnAnswer at) implements DecisionAtom {
+
+        /** Not shown: nothing here says what the dependency answers with. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return false;
+        }
 
         public OfAnAnswer {
             if (at == null) {

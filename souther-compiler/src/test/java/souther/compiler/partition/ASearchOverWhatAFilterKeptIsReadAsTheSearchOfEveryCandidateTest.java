@@ -14,10 +14,10 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereEachLineDecides;
-import souther.compiler.meaning.WholeNumbers;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -32,6 +32,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -146,14 +147,15 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
     }
 
     /** The numbers of {@code g}'s input the model measures in whole numbers. */
-    private static WholeNumbers wholeNumbers(Compilation compilation) {
+    private static Predicate<NumericTerm> wholeNumbers(Compilation compilation) {
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("g");
-        return WholeNumbers.ofTheInput(inputs.reading(rules).quantities());
+        return inputs.reading(rules).quantities()::countsWhole;
     }
 
     /** Each line of {@code stated}, with how many ways of choosing each case it decides in has. */
-    private static List<String> casesOfEachLine(Proposition stated, WholeNumbers whole) {
+    private static List<String> casesOfEachLine(Proposition stated,
+                                                Predicate<NumericTerm> whole) {
         List<String> out = new ArrayList<>();
         for (WhereEachLineDecides.Decides line : WhereEachLineDecides.in(stated, whole)) {
             List<BigInteger> ways = new ArrayList<>();

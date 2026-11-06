@@ -1,6 +1,7 @@
 package souther.compiler.meaning;
 
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.AdditiveImage;
@@ -23,6 +24,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Predicate;
 
 /**
  * Where each relation a statement of several holds together decides what the statement comes to.
@@ -126,12 +128,15 @@ public final class WhereEachLineDecides {
      * cases nobody took apart.
      *
      * <p>A line written several ways is one line ({@link OneSpellingPerLine}): at several scales,
-     * and over numbers {@code whole} says are whole numbers, as either side of one cut.
+     * and over whole numbers as either side of one cut. Which numbers are whole is each number's to
+     * say ({@link Quantity#wholeOnEveryRow}), and of a number of the input, {@code measuredWhole}'s:
+     * whether the input measures it in whole numbers, which is the reading of the input's and no
+     * statement's.
      */
-    public static List<Decides> in(Proposition writtenAs, WholeNumbers whole) {
+    public static List<Decides> in(Proposition writtenAs, Predicate<NumericTerm> measuredWhole) {
         Map<Spelling, Proposition.Compared> lines = new TreeMap<>();
         Map<Spelling, List<List<List<DecidingCase>>>> standings = new TreeMap<>();
-        OneSpellingPerLine spellings = new OneSpellingPerLine(whole);
+        OneSpellingPerLine spellings = new OneSpellingPerLine(measuredWhole);
         Proposition stated = spellings.of(writtenAs);
         Proposition lifted = new Lifting().of(stated);
         if (lifted != null) {
@@ -434,8 +439,8 @@ public final class WhereEachLineDecides {
         private record Alike(Rel proposition, Set<Quantity> atoms) {}
 
         /**
-         * Where a form of whole numbers is cut: the form taken to the least whole weights it is a
-         * multiple of, at least {@code atLeast}. Every relation above or at a line of such a form
+         * Where a form of whole numbers is cut: the form divided by the largest its weights are
+         * all whole multiples of, at least {@code atLeast}. Every relation above or at a line of such a form
          * says that of it, whatever scale and whichever of the two it was written as.
          */
         private record ACut(Map<Quantity, ExactRatio> weighing, BigInteger atLeast) {
@@ -445,14 +450,14 @@ public final class WhereEachLineDecides {
             }
         }
 
-        private final WholeNumbers whole;
+        private final Predicate<NumericTerm> measuredWhole;
         private final Map<Alike, List<Relation.Affine>> written = new HashMap<>();
         private final Map<ACut, Relation.Affine> cuts = new HashMap<>();
         /** Each relation written first, and every way it was written, itself first. */
         private final Map<Relation.Affine, List<Relation.Affine>> scales = new HashMap<>();
 
-        OneSpellingPerLine(WholeNumbers whole) {
-            this.whole = whole;
+        OneSpellingPerLine(Predicate<NumericTerm> measuredWhole) {
+            this.measuredWhole = measuredWhole;
         }
 
         /** {@code line} held at every scale the statement wrote it at, itself first. */
@@ -546,14 +551,18 @@ public final class WhereEachLineDecides {
         }
 
         /**
-         * Where {@code affine} cuts its form, where the form is whole numbers weighed by whole
-         * numbers — or null where it is not, or is an equality, which is no cut. The form at or
-         * above nought is the least weights at or above the constant taken off and divided by what
-         * they were multiplied by, and above nought is past it: the least whole number that is.
+         * Where {@code affine} cuts its form, where every number the form weighs is whole — or
+         * null where one is not shown to be, or it is an equality, which is no cut. Weighed by
+         * whatever ratios: divided by the largest they are all whole multiples of, the weights are
+         * whole, so the form so divided is a whole number on every row. That at or above the
+         * constant taken off and so divided is the form at or above nought, and above it, the
+         * form above nought: each at least the least whole number it is.
          */
         private ACut cutOf(Relation.Affine affine) {
             LinearForm<Quantity> form = affine.form();
-            if (affine.proposition() == Rel.EQ || !whole.weighsOnlyWholeNumbers(form)) {
+            if (affine.proposition() == Rel.EQ || form.coefs().isEmpty()
+                    || !form.coefs().keySet().stream()
+                            .allMatch(atom -> atom.wholeOnEveryRow(measuredWhole))) {
                 return null;
             }
             ExactRatio common = AdditiveImage.divisorOf(form.coefs().values());

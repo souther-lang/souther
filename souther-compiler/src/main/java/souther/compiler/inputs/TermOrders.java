@@ -359,7 +359,7 @@ public final class TermOrders {
     /** Whether the number the term names is measured in whole numbers, and so is one on every
      *  row. */
     public boolean countsWhole() {
-        return answered instanceof Carrier.Whole;
+        return answered != null && answered.countsInWholeNumbers();
     }
 
     /**

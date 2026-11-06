@@ -7327,7 +7327,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return true;
         }
         Endpoint last = greatest ? seed.max() : seed.min();
-        if (!(carrier instanceof Carrier.Whole) || last == null || !last.inclusive()
+        if (carrier == null || !carrier.countsInWholeNumbers() || last == null || !last.inclusive()
                 || !(last.at() instanceof Count count)) {
             return false;
         }

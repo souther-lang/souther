@@ -13,7 +13,6 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhereEachLineDecides;
-import souther.compiler.meaning.WholeNumbers;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.query.Adequacy;
@@ -79,7 +78,7 @@ class AWeekdayWrittenAsOneRemainderDrawsTheLinesOfItsTwoBoundsTest {
                 inputs.reading(rules), Optional.empty()).proposition();
         List<Proposition.Compared> out = new ArrayList<>();
         for (WhereEachLineDecides.Decides each : WhereEachLineDecides.in(stated,
-                WholeNumbers.ofTheInput(inputs.reading(rules).quantities()))) {
+                inputs.reading(rules).quantities()::countsWhole)) {
             out.add(each.line());
         }
         return out;
