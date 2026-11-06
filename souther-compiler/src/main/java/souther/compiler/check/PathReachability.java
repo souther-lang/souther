@@ -49,6 +49,7 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.ReadThroughNames;
 import souther.compiler.meaning.ValueIdentity;
 import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.types.AnApplicationOfACall;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
@@ -1193,8 +1194,8 @@ public final class PathReachability {
      * <p>What a condition in the body states is what it states on that application, read off the
      * reading of the body made on it ({@link MeaningsOfABody#onTheApplication}). That reading tells
      * the application by the call of the model that makes it and which of its applications it is
-     * ({@link ClosureUses.Application#ofTheModel}), since the call, the closure and its parameters
-     * are other nodes and other bindings here; the application handed the {@code i}th
+     * ({@link ClosureUses.Application#callOfTheModel}), since the call, the closure and its
+     * parameters are other nodes and other bindings here; the application handed the {@code i}th
      * element is the call's {@code i}th, since every element is there on every run. Where the body
      * was not read on that application alone, a condition states what it states on some
      * application, which a path declines.
@@ -1228,6 +1229,7 @@ public final class PathReachability {
                 continue;
             }
             BindingId element = applied.held().iterator().next();
+            Optional<ModelOccurrence> by = applied.callOfTheModel();
             InputReads inside = reads.entering(new ScopeStep.Block(block), symbols, newtypes);
             Walked from = new Walked(operands.known(), operands.decided(), operands.mayStop(),
                     false, true, WhyNone.BY_THE_WAY, false);
@@ -1235,8 +1237,9 @@ public final class PathReachability {
                 if (applicationsLeft[0]-- <= 0) {
                     return null;
                 }
-                MeaningsOfABody onIt = applied.ofTheModel(i).flatMap(meanings::onTheApplication)
-                        .orElse(meanings);
+                int ordinal = i;
+                MeaningsOfABody onIt = by.flatMap(model -> meanings.onTheApplication(
+                        new AnApplicationOfACall(model, ordinal))).orElse(meanings);
                 Walked body = new PathReachability(this, onIt).walk(block.body(), from,
                         engine.terms().elementsReading().handing(at, element, elements.get(i)),
                         inside);

@@ -115,19 +115,19 @@ public record ClosureUses(List<Application> applications, boolean usedElsewhere)
         }
 
         /**
-         * The {@code ordinal}th application, counting in the order a run makes them, of the call
-         * of the model that makes these ({@link AnApplicationOfACall}): the call itself where the
-         * model wrote it, and otherwise the call of one of the language's operations that made the
-         * one copy of the operation's body it stands in. There the operation applies the closure by
-         * this call, once on each element it is handed, in turn. Empty where the call stands in an
-         * operation another operation called.
+         * The call of the model that makes these, which tells each of them apart by which of its
+         * applications it is ({@link AnApplicationOfACall}): the call itself where the model wrote
+         * it, and otherwise the call of one of the language's operations that made the one copy of
+         * the operation's body it stands in. There the operation applies the closure by this call,
+         * once on each element it is handed, in turn. Empty where the call stands in an operation
+         * another operation called.
          *
          * <p>Told by the call and not by the closure or its parameters. A reading where the
          * language's operations stand and one where they are expanded hold the call, the closure
          * and its parameters as other nodes and other bindings, and agree only about which
          * construct of the model the call is.
          */
-        public Optional<AnApplicationOfACall> ofTheModel(int ordinal) {
+        public Optional<ModelOccurrence> callOfTheModel() {
             ConstructOccurrence at = switch (Core.withoutStanding(call)) {
                 case Core.Call it -> it.occurrence();
                 case Core.PreservedCall it -> it.occurrence();
@@ -137,10 +137,8 @@ public record ClosureUses(List<Application> applications, boolean usedElsewhere)
                 return Optional.empty();
             }
             Optional<ModelOccurrence> stated = ModelOccurrence.statedAt(at);
-            Optional<ModelOccurrence> made = stated.isPresent()
-                    || !ModelOccurrence.calledByTheModel(at) ? stated
+            return stated.isPresent() || !ModelOccurrence.calledByTheModel(at) ? stated
                     : ModelOccurrence.operationCalledAround(at);
-            return made.map(model -> new AnApplicationOfACall(model, ordinal));
         }
 
         private static boolean parameterOf(Core.Block step, BindingId binding) {

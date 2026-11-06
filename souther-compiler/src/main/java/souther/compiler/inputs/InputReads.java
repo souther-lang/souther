@@ -878,22 +878,23 @@ public final class InputReads {
     /**
      * Which application of {@code block} the one handed each of {@code handed} is, as the call of
      * the model applying it counts them in the order a run makes them
-     * ({@link ClosureUses.Application#ofTheModel}): the one operation applying the closure hands
-     * one parameter every element in turn, so the application handed the {@code p}th element there
-     * is its {@code p}th. Only up to an element that is there on some rows and not others, past
-     * which a run makes fewer and which application an element is handed on is not said; and none
-     * where no one operation alone applies the closure.
+     * ({@link ClosureUses.Application#callOfTheModel}): the one operation applying the closure
+     * hands one parameter every element in turn, so the application handed the {@code p}th element
+     * there is its {@code p}th. Only up to an element that is there on some rows and not others,
+     * past which a run makes fewer and which application an element is handed on is not said; and
+     * none where no one operation alone applies the closure.
      */
     private List<Optional<AnApplicationOfACall>> counted(Core.Block block,
                                                          List<ReadMeaning.Occurrence> handed) {
         ClosureUses uses = usesOf(block);
-        Optional<ClosureUses.Application> by = uses == null ? Optional.empty()
-                : uses.theOnlyApplication();
+        Optional<ModelOccurrence> call = uses == null ? Optional.empty()
+                : uses.theOnlyApplication().flatMap(ClosureUses.Application::callOfTheModel);
         List<Optional<AnApplicationOfACall>> out = new ArrayList<>();
-        boolean countable = by.isPresent();
+        boolean countable = call.isPresent();
         for (int at = 0; at < handed.size(); at++) {
             countable = countable && handed.get(at).keptWhere().isEmpty();
-            out.add(countable ? by.get().ofTheModel(at) : Optional.empty());
+            out.add(countable ? Optional.of(new AnApplicationOfACall(call.get(), at))
+                    : Optional.empty());
         }
         return out;
     }
