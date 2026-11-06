@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.collect.InTheOrderGiven;
+import souther.compiler.identity.DecidedByTheRest;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -166,18 +167,22 @@ final class AnswerShape {
      * field by field compares.
      *
      * <p>Without what is static, which belongs to the class rather than to a thing of it, and
-     * without what is {@code volatile}, which is an answer worked out later from the rest and
-     * kept beside it: writing one changes nothing anybody can observe, so two things equal in the
-     * rest are equal whichever of them has worked it out, and a walk into it would be a walk into
-     * what the rest already holds. That is what a store's identity says of the same fields
-     * ({@code AnAnswersIdentityCoversEverythingItAnswersWithTest}).
+     * without what says the rest decides it ({@link DecidedByTheRest}): what the identity around a
+     * field like that does not read, a walk asking what the identity means has nothing to ask of.
+     * Said at the field by whoever wrote it, and every such field an answer holds is written down
+     * where the walks are held to the store ({@code AnswerClosure#passedOver}).
      */
     static List<Field> madeOf(Class<?> type) {
         return MADE_OF.get(type);
     }
 
-    /** What {@link #fieldsOf} and {@link #madeOf} say of each class, read once a class for the
-     *  same reason. */
+    /** The fields of this type a walk passes over, being decided by the rest ({@link #madeOf}). */
+    static List<Field> passedOver(Class<?> type) {
+        return PASSED_OVER.get(type);
+    }
+
+    /** What {@link #fieldsOf}, {@link #madeOf} and {@link #passedOver} say of each class, read
+     *  once a class for the same reason. */
     private static final ClassValue<List<Field>> FIELDS = new ClassValue<>() {
         @Override
         protected List<Field> computeValue(Class<?> type) {
@@ -188,16 +193,25 @@ final class AnswerShape {
     private static final ClassValue<List<Field>> MADE_OF = new ClassValue<>() {
         @Override
         protected List<Field> computeValue(Class<?> type) {
-            return fieldsDeclaredUnder(type);
+            return fieldsDeclaredUnder(type, false);
         }
     };
 
-    private static List<Field> fieldsDeclaredUnder(Class<?> type) {
+    private static final ClassValue<List<Field>> PASSED_OVER = new ClassValue<>() {
+        @Override
+        protected List<Field> computeValue(Class<?> type) {
+            return fieldsDeclaredUnder(type, true);
+        }
+    };
+
+    /** The instance fields this type and what it extends declare, the ones the rest decides or
+     *  the others. */
+    private static List<Field> fieldsDeclaredUnder(Class<?> type, boolean decidedByTheRest) {
         List<Field> out = new ArrayList<>();
         for (Class<?> at = type; at != null && at != Object.class; at = at.getSuperclass()) {
             for (Field field : at.getDeclaredFields()) {
                 if (!Modifier.isStatic(field.getModifiers())
-                        && !Modifier.isVolatile(field.getModifiers())) {
+                        && field.isAnnotationPresent(DecidedByTheRest.class) == decidedByTheRest) {
                     out.add(field);
                 }
             }

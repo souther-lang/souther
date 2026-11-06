@@ -1,6 +1,7 @@
 package souther.compiler.meaning;
 
 import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.identity.DecidedByTheRest;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PlacesMoved;
@@ -115,9 +116,9 @@ public sealed interface Proposition {
      *
      * <p>Nothing a proposition is. What is kept is equal to what any other making would make, so
      * every cell is equal to every other and hashes alike: a proposition compares and hashes as it
-     * would without one, whether its {@code equals} is written out or the record's own. The
-     * denial is the one {@code volatile} field, which is what a field worked out later from the
-     * rest says of itself to a reader of what a value is made of.
+     * would without one, whether its {@code equals} is written out or the record's own. Each kind
+     * holding one says so at the component ({@link DecidedByTheRest}), so a walk of what an answer
+     * is made of does not go into it.
      *
      * <p>Made outside the lock, since making it asks for the denial of every part. Two readers
      * asking at once may both make one, and both are handed the one kept first.
@@ -328,8 +329,8 @@ public sealed interface Proposition {
      * @param spelling spelled from the rest when it is made, whatever is handed in
      * @param denial   a new one when it is made, whatever is handed in
      */
-    record Compared(Relation relation, boolean holds, Spelling spelling, Denial denial)
-            implements Proposition {
+    record Compared(Relation relation, boolean holds, Spelling spelling,
+                    @DecidedByTheRest Denial denial) implements Proposition {
 
         @Override
         public int hashCode() {
@@ -901,7 +902,8 @@ public sealed interface Proposition {
      * @param spelling spelled from the parts' own when it is made, whatever is handed in
      * @param denial   a new one when it is made, whatever is handed in
      */
-    record All(List<Proposition> parts, Spelling spelling, Denial denial) implements Proposition {
+    record All(List<Proposition> parts, Spelling spelling, @DecidedByTheRest Denial denial)
+            implements Proposition {
 
         @Override
         public int hashCode() {
@@ -948,7 +950,8 @@ public sealed interface Proposition {
      * @param spelling spelled from the parts' own when it is made, whatever is handed in
      * @param denial   a new one when it is made, whatever is handed in
      */
-    record Any(List<Proposition> parts, Spelling spelling, Denial denial) implements Proposition {
+    record Any(List<Proposition> parts, Spelling spelling, @DecidedByTheRest Denial denial)
+            implements Proposition {
 
         @Override
         public int hashCode() {
@@ -1493,8 +1496,8 @@ public sealed interface Proposition {
      * @param spelling spelled from the statements' own when it is made, whatever is handed in
      * @param denial   a new one when it is made, whatever is handed in
      */
-    record OnAnApplication(List<Proposition> each, Spelling spelling, Denial denial)
-            implements Proposition {
+    record OnAnApplication(List<Proposition> each, Spelling spelling,
+                           @DecidedByTheRest Denial denial) implements Proposition {
 
         @Override
         public int hashCode() {
@@ -1560,7 +1563,8 @@ public sealed interface Proposition {
      * @param denial         a new one when it is made, whatever is handed in
      */
     record SoManyHold(List<Proposition> statements, List<Integer> weights, List<Integer> admitted,
-                      Spelling spelling, Denial denial) implements Proposition {
+                      Spelling spelling, @DecidedByTheRest Denial denial)
+            implements Proposition {
 
         @Override
         public int hashCode() {

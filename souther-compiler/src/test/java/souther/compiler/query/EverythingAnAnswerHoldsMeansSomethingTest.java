@@ -222,6 +222,24 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
     }
 
     /**
+     * And what the walk passed over is what is written down as passed over, and nothing else.
+     *
+     * <p>A field the rest decides is not gone into, so whatever it holds is never asked whether it
+     * means something. That is a claim about the field, and the walk that honours it says here
+     * which fields it honoured it for, so that a field marked so is one somebody read.
+     */
+    @Test
+    void whatTheWalkPassesOverIsWrittenDown() {
+        Set<String> passedOver = new TreeSet<>();
+        for (AnswerClosure.Scenario scenario : AnswerClosure.Scenario.values()) {
+            for (AnswerWalk.Walked walked : walkedStoresOf(scenario)) {
+                passedOver.addAll(walked.passedOver());
+            }
+        }
+        assertEquals(new TreeSet<>(AnswerClosure.passedOver()), passedOver);
+    }
+
+    /**
      * And the walk reaches the answers this is about.
      *
      * <p>The control the two assertions below need. Every object a walk visits passing says nothing
