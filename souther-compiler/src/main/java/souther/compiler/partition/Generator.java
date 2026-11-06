@@ -7495,9 +7495,10 @@ public final class Generator {
         // condition is placed, so a condition whose numbers are written at the same container is
         // composed beside them rather than finding out once they are placed. Not a count held
         // against numbers of the row, nor one whose statement reads a number of anything but the
-        // container's own elements — another position, or the elements of another container:
-        // which elements meet it turns on where those are put, which is decided after, and
-        // composed before them it would be composed for none of them.
+        // container's own elements ({@link NumericTerm.AmongTheElements#readsOnlyTheElementsOf})
+        // — another position, the elements of another container, or those of every occurrence
+        // of this one: which elements meet it turns on where those are put, which is decided
+        // after, and composed before them it would be composed for none of them.
         Map<CountedElements.Identity, CountedElements> countedBefore = new LinkedHashMap<>();
         Set<CountedElements.Identity> readingOutside = new HashSet<>();
         for (OnTheWay.TakenIn cut : cuts) {
@@ -7507,8 +7508,8 @@ public final class Generator {
                 if (itemCounts.containsKey(count.identity())) {
                     continue;
                 }
-                if (count.numbers().stream().anyMatch(
-                        term -> !term.subjectPath().isAtOrUnder(count.container().element()))) {
+                if (count.numbers().stream().anyMatch(term -> !term.amongTheElementsOf(
+                        count.container()).readsOnlyTheElementsOf(count.container()))) {
                     readingOutside.add(count.identity());
                 }
                 countedBefore.merge(count.identity(), count, CountedElements::and);
@@ -7840,8 +7841,9 @@ public final class Generator {
      * chosen there — and a bound left out of that composing is a condition on every element the
      * chosen ones were never held to.
      *
-     * <p>Over nothing but the element, because a bound is part of what the container is composed
-     * under, and a number outside it is one the composing does not choose. And along one way: a
+     * <p>Over nothing but the container's own elements — the element, or how often its value
+     * occurs among them — because a bound is part of what the container is composed under, and a
+     * number read off anything else is one the composing does not choose. And along one way: a
      * statement an element meets one of several ways is no conjunction to narrow by, and it is said
      * where it is met ({@link ElementsWrittenAlike}).
      */
@@ -7880,7 +7882,8 @@ public final class Generator {
             List<TakenConstraint> ofEachElement = constraints(every.relations());
             boolean overTheElement = ofEachElement.stream()
                     .flatMap(each -> each.terms().stream())
-                    .allMatch(term -> term.subjectPath().isAtOrUnder(every.container().element()));
+                    .allMatch(term -> term.amongTheElementsOf(every.container())
+                            .readsOnlyTheElementsOf(every.container()));
             if (overTheElement && writtenAtOneLocation(List.of(every.container()), writtenBesides)) {
                 out.put(cut, new ElementBound(every.container(), ofEachElement,
                         every.holdingNone().constraint()));

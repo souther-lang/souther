@@ -1539,10 +1539,16 @@ public sealed interface AnotherLineTheRowsAllow {
             return true;
         }
 
-        /** Whether the step moves a number at or under one of {@code positions}. */
+        /**
+         * Whether the step moves a number read off a place at, under or around one of
+         * {@code positions} ({@link TermPath#standsAtUnderOrAround}): every place it is read off
+         * and not the one it is filed under, since how often a value occurs among a container's
+         * elements moves with which elements the container holds.
+         */
         private boolean movesAnyOf(Set<TermPath> positions) {
-            return moved.stream().anyMatch(term -> positions.stream()
-                    .anyMatch(position -> term.subjectPath().isAtOrUnder(position)));
+            return moved.stream().anyMatch(term -> term.placesReadOff().stream()
+                    .anyMatch(place -> positions.stream()
+                            .anyMatch(place::standsAtUnderOrAround)));
         }
     }
 
