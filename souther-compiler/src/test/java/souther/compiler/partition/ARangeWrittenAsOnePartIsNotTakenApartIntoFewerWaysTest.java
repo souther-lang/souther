@@ -13,6 +13,7 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.DecisionSubject;
@@ -29,6 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -72,6 +74,13 @@ class ARangeWrittenAsOnePartIsNotTakenApartIntoFewerWaysTest {
         return compilation;
     }
 
+    /** The numbers of {@code g}'s input the model measures in whole numbers. */
+    private static Predicate<NumericTerm> wholeNumbers(Compilation compilation) {
+        RuleReadingSource rules = RuleReadings.of(compilation, "demo");
+        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("g");
+        return inputs.reading(rules).quantities()::countsWhole;
+    }
+
     /** What the body of {@code g} states, as the reading of it concludes. */
     private static Proposition stated(Compilation compilation) {
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
@@ -87,9 +96,10 @@ class ARangeWrittenAsOnePartIsNotTakenApartIntoFewerWaysTest {
     }
 
     /** Every way of choosing a case where some line of {@code stated} decides, over its lines. */
-    private static BigInteger waysOverEveryLine(Proposition stated) {
+    private static BigInteger waysOverEveryLine(Proposition stated,
+                                                Predicate<NumericTerm> whole) {
         BigInteger out = BigInteger.ZERO;
-        for (WhereEachLineDecides.Decides line : WhereEachLineDecides.in(stated)) {
+        for (WhereEachLineDecides.Decides line : WhereEachLineDecides.in(stated, whole)) {
             for (DecidingCase one : line.cases()) {
                 out = out.add(one.standsFor().structuralWays(BigInteger.TWO.pow(64)));
             }
@@ -143,14 +153,16 @@ class ARangeWrittenAsOnePartIsNotTakenApartIntoFewerWaysTest {
      */
     @Test
     void writtenWithTheTwoBoundsTheCasesComeToFewerWays() {
-        Proposition bounds = stated(compiled(model(BOUNDS)));
-        BigInteger asWritten = waysOverEveryLine(bounds);
-        BigInteger onePart = waysOverEveryLine(boundsAsOnePart(bounds, new int[1]));
-        BigInteger oneComparison = waysOverEveryLine(stated(compiled(
-                model("Int.abs(2 * (x - k) - 6) <= 4"))));
+        Compilation written = compiled(model(BOUNDS));
+        Proposition bounds = stated(written);
+        BigInteger asWritten = waysOverEveryLine(bounds, wholeNumbers(written));
+        BigInteger onePart = waysOverEveryLine(boundsAsOnePart(bounds, new int[1]),
+                wholeNumbers(written));
+        Compilation absolute = compiled(model("Int.abs(2 * (x - k) - 6) <= 4"));
+        BigInteger oneComparison = waysOverEveryLine(stated(absolute), wholeNumbers(absolute));
         assertEquals(BigInteger.valueOf(162), asWritten);
         assertEquals(BigInteger.valueOf(740), onePart);
-        assertEquals(BigInteger.valueOf(540), oneComparison);
+        assertEquals(BigInteger.valueOf(438), oneComparison);
         assertTrue(asWritten.compareTo(onePart) < 0 && asWritten.compareTo(oneComparison) < 0,
                 "fewer comparisons, more ways: " + asWritten + ", " + onePart + ", "
                         + oneComparison);

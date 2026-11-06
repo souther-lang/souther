@@ -135,6 +135,13 @@ public sealed interface Quantities permits ReadQuantities {
      */
     TermOrders ordersOf(NumericTerm term);
 
+    /** Whether the number {@code term} names is measured in whole numbers
+     *  ({@link TermOrders#countsWhole}); not where nothing orders it. */
+    default boolean countsWhole(NumericTerm term) {
+        TermOrders orders = ordersOf(term);
+        return orders != null && orders.countsWhole();
+    }
+
     /**
      * The same number named at {@code at}, or null where what it takes is not taken there.
      *

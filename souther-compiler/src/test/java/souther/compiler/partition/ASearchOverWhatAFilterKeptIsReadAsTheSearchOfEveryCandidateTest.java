@@ -14,6 +14,7 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereEachLineDecides;
@@ -31,6 +32,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -144,10 +146,18 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
                 inputs.reading(rules), Optional.empty()).proposition();
     }
 
+    /** The numbers of {@code g}'s input the model measures in whole numbers. */
+    private static Predicate<NumericTerm> wholeNumbers(Compilation compilation) {
+        RuleReadingSource rules = RuleReadings.of(compilation, "demo");
+        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("g");
+        return inputs.reading(rules).quantities()::countsWhole;
+    }
+
     /** Each line of {@code stated}, with how many ways of choosing each case it decides in has. */
-    private static List<String> casesOfEachLine(Proposition stated) {
+    private static List<String> casesOfEachLine(Proposition stated,
+                                                Predicate<NumericTerm> whole) {
         List<String> out = new ArrayList<>();
-        for (WhereEachLineDecides.Decides line : WhereEachLineDecides.in(stated)) {
+        for (WhereEachLineDecides.Decides line : WhereEachLineDecides.in(stated, whole)) {
             List<BigInteger> ways = new ArrayList<>();
             for (DecidingCase one : line.cases()) {
                 ways.add(one.standsFor().structuralWays(BigInteger.TWO.pow(64)));
@@ -264,11 +274,13 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
     }
 
     private static void sameStatement(Written search, String rule) {
-        Proposition everyCandidate = stated(compiled(search.everyCandidate(), rule));
-        Proposition whatAFilterKept = stated(compiled(search.whatAFilterKept(), rule));
+        Compilation one = compiled(search.everyCandidate(), rule);
+        Compilation other = compiled(search.whatAFilterKept(), rule);
+        Proposition everyCandidate = stated(one);
+        Proposition whatAFilterKept = stated(other);
         assertEquals(everyCandidate, whatAFilterKept, search + " " + rule);
-        assertEquals(casesOfEachLine(everyCandidate), casesOfEachLine(whatAFilterKept),
-                search + " " + rule);
+        assertEquals(casesOfEachLine(everyCandidate, wholeNumbers(one)),
+                casesOfEachLine(whatAFilterKept, wholeNumbers(other)), search + " " + rule);
     }
 
     /** Whatever the rule reads of what was found: itself, a remainder of it, a field of a record

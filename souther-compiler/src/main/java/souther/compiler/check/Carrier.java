@@ -294,6 +294,16 @@ public sealed interface Carrier extends ValueOrder {
     }
 
     /**
+     * Whether a value on this order is a whole number, so that no value stands between a number
+     * and the next. Asked here and not by testing for the carrier where it is asked, so a number of
+     * the input and a value named in the body, each asked what it is counted on, are answered by
+     * one table.
+     */
+    default boolean countsInWholeNumbers() {
+        return this instanceof Whole;
+    }
+
+    /**
      * Whether a value written out on this order is a constant of the arithmetic over the input's
      * numbers.
      *

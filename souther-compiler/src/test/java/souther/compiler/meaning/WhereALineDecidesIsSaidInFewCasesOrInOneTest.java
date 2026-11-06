@@ -110,7 +110,7 @@ class WhereALineDecidesIsSaidInFewCasesOrInOneTest {
     /** Where {@link #LINE} decides, held together with one of {@code ways}. */
     private static List<DecidingCase> casesOf(List<Proposition> ways) {
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(
-                Proposition.all(List.of(LINE, Proposition.any(ways))));
+                Proposition.all(List.of(LINE, Proposition.any(ways))), term -> false);
         assertEquals(1, lines.size(), () -> "one relation is a line: " + lines);
         return lines.getFirst().cases();
     }

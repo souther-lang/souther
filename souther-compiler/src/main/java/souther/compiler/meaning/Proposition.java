@@ -286,9 +286,15 @@ public sealed interface Proposition {
         public Spelling heldSpelling() {
             return holds ? spelling : spelling.denied();
         }
+
+        /**
+         * The comparison failing, made once while this is held ({@link SharedPropositions#denied}).
+         * Its spelling is put together from the form's, atom by atom, so made again for each
+         * reader it is spelled again and compared with the one kept a character at a time.
+         */
         @Override
         public Proposition denied() {
-            return new Compared(relation, !holds);
+            return SharedPropositions.denied(this, () -> new Compared(relation, !holds));
         }
 
         @Override

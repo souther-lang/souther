@@ -13012,8 +13012,7 @@ final class Pullback {
 
     /** Whether the reading counts {@code term} in whole numbers. */
     private boolean countsWhole(NumericTerm term) {
-        TermOrders orders = read.quantities().ordersOf(term);
-        return orders != null && orders.answered() instanceof Carrier.Whole;
+        return read.quantities().countsWhole(term);
     }
 
     /**

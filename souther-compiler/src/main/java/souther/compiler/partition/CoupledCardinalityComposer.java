@@ -197,7 +197,7 @@ final class CoupledCardinalityComposer {
             }
             TermOrders orders = measuring.ordersOf(own);
             Carrier carrier = orders == null ? null : orders.observed();
-            if (!(carrier instanceof Carrier.Whole)) {
+            if (carrier == null || !carrier.countsInWholeNumbers()) {
                 return null;
             }
             return new Coupled(List.copyOf(counts), own, total, List.copyOf(relations), carrier,

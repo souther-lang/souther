@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Carrier;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NonAffineOperation;
@@ -1186,7 +1185,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Map<NumericTerm, ExactRatio> each = new LinkedHashMap<>();
         for (NumericTerm number : remainder.operands()) {
             TermOrders orders = read.quantities().ordersOf(number);
-            if (orders == null || !(orders.answered() instanceof Carrier.Whole)) {
+            if (orders == null || !orders.countsWhole()) {
                 return null;
             }
             on.put(number, orders);
@@ -2446,7 +2445,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         : AStatementAtARow.askableBesideItsRelations(stated)))) {
             return TheParts.READ_TO_THE_END;
         }
-        List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
+        List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated,
+                read.quantities()::countsWhole);
         if (lines.isEmpty()) {
             return TheParts.READ_TO_THE_END;
         }
