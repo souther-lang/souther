@@ -596,6 +596,112 @@ final class Terms {
     private final FoldedValue.Kept affineFolds = new FoldedValue.Kept();
 
     /**
+     * What {@code stated}, read in {@code at}, states of the arguments of the operation one of its
+     * sides is the sign of ({@link TheSignOfAnOrder#read}), read in this check's environment
+     * ({@link #signSides}) — or null where it states nothing of them.
+     *
+     * <p>Held for as long as this is, for the reason {@link #affineAnswers} is. A clause is read
+     * again wherever the check reads it — on every path that owes it, at every leaf a reading of
+     * the clauses meets — and each time its comparison is the same nodes read in the same
+     * environment, so the sign is read once for all of them. Asked by those nodes and that
+     * environment as the objects they are, as a name's answer is ({@link BindingWalk}): the same
+     * question asked of equal ones is worked out again and answers alike.
+     *
+     * <p>Worked out before it is held, and not inside the table: reading the sides reads names
+     * and arithmetic through this, and nothing promises that none of that asks a sign again.
+     */
+    TheSignOfAnOrder.Read<Denotations> signOf(StatedComparison stated, Denotations at) {
+        SignAsked asked = new SignAsked(stated, at);
+        Optional<TheSignOfAnOrder.Read<Denotations>> held = signs.get(asked);
+        if (held == null) {
+            held = Optional.ofNullable(TheSignOfAnOrder.read(stated, at, signSides));
+            signs.put(asked, held);
+        }
+        return held.orElse(null);
+    }
+
+    private final Map<SignAsked, Optional<TheSignOfAnOrder.Read<Denotations>>> signs =
+            new HashMap<>();
+
+    /** A comparison and the environment it is read in, the nodes and the environment by what
+     *  object they are, and what it claims by what it claims. */
+    private static final class SignAsked {
+        private final StatedComparison stated;
+        private final Denotations at;
+
+        SignAsked(StatedComparison stated, Denotations at) {
+            this.stated = stated;
+            this.at = at;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof SignAsked asked && asked.stated.left() == stated.left()
+                    && asked.stated.right() == stated.right()
+                    && asked.stated.reading() == stated.reading()
+                    && asked.stated.claim().equals(stated.claim()) && asked.at == at;
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * (31 * (31 * System.identityHashCode(stated.left())
+                    + System.identityHashCode(stated.right())) + stated.claim().hashCode())
+                    + System.identityHashCode(at);
+        }
+    }
+
+    /**
+     * What this check answers about its environment for a comparison of a sign: a name is what it
+     * was given, as everywhere a value is read here ({@link #readThrough}), and the number against
+     * it is read and not matched, so {@code compare(a, b) > zero} under {@code let zero = 0} is the
+     * condition it looks like.
+     *
+     * <p>Where a name was given is where its value is read, which for this check is the environment
+     * at the comparison: a binding tells itself from every other, so nothing bound later answers
+     * for a name the arguments hold.
+     */
+    private final TheSignOfAnOrder.Sides<Denotations> signSides = new SignSides();
+
+    /** {@link #signSides}. */
+    private final class SignSides implements TheSignOfAnOrder.Sides<Denotations> {
+
+        @Override
+        public ValueStanding.ReadThrough<Denotations> standing(Core e, Denotations at) {
+            Core value = e;
+            Denotations in = at;
+            while (Core.withoutStanding(value) instanceof Core.Read name
+                    && readThrough(name, in)
+                            instanceof ValueStanding.ReadThrough<Denotations> through) {
+                value = through.value();
+                in = through.at();
+            }
+            return new ValueStanding.ReadThrough<>(value, in);
+        }
+
+        @Override
+        public ExactRatio constant(Core e, Denotations at) {
+            LinearForm<FactSubject> read = affineOf(e, at);
+            return read == null || !read.coefs().isEmpty() ? null : read.constant();
+        }
+
+        @Override
+        public LinearForm<AffineForms.ACall<Denotations>> overTheCalls(
+                Core e, Denotations at, Predicate<Core> taken) {
+            return Terms.this.overTheCalls(e, at, taken);
+        }
+
+        @Override
+        public DeclarationAccess declarations() {
+            return Terms.this.declarations();
+        }
+
+        @Override
+        public DeclarationNewtypes newtypes() {
+            return Terms.this.newtypes();
+        }
+    }
+
+    /**
      * The same, saying where the reading stopped where it did, and naming only the atoms
      * {@code names} accepts.
      *
@@ -1017,13 +1123,20 @@ final class Terms {
 
     /**
      * Every element {@code container}, read in {@code at} and followed through the names it was
-     * given, holds on every run, each with where it is read ({@link #writtenElements}) — or null
-     * where it is not written out, or one of them is there on some runs and not others.
+     * given, holds on every run, each with where it is read and its place among what a walk of the
+     * container writes out ({@link PlacedElement}) — or null where it is not written out, or one of
+     * them is there on some runs and not others.
      */
-    List<ElementsWrittenOut.Stood<Denotations>> elementsOnEveryRun(Core container,
-                                                                   Denotations at) {
+    List<PlacedElement> elementsOnEveryRun(Core container, Denotations at) {
         Given written = given(container, at);
-        return writtenElements(written.value(), written.at());
+        return placedElements(written.value(), written.at());
+    }
+
+    /** Whether the walk handing {@code element} its elements is the one an operation applies its
+     *  closure by to every element it was handed
+     *  ({@link ElementBindings#walksWhatItsOperationHandsEachElementOf}). */
+    boolean walksWhatItsOperationHandsEachElementOf(BindingId element) {
+        return walksWrittenDown.walksWhatItsOperationHandsEachElementOf(element);
     }
 
     /** How a walk of the elements of a container ({@link ElementsWrittenOut}) reads names here. */
@@ -1754,18 +1867,35 @@ final class Terms {
      * of them is there on some runs and not others.
      */
     List<ElementsWrittenOut.Stood<Denotations>> writtenElements(Core container, Denotations at) {
+        List<PlacedElement> placed = placedElements(container, at);
+        return placed == null ? null : placed.stream().map(PlacedElement::value).toList();
+    }
+
+    /**
+     * One element a container holds on every run, and which of the elements a walk of the container
+     * writes out it is, counting from nought and counting those there on no run too.
+     *
+     * <p>The place is the walk's and not the count of what is left: which elements are left is
+     * decided by whoever reads them, and two readers deciding apart would number one element two
+     * ways.
+     */
+    record PlacedElement(int written, ElementsWrittenOut.Stood<Denotations> value) {}
+
+    /** The same as {@link #writtenElements}, each element with its place ({@link PlacedElement}). */
+    private List<PlacedElement> placedElements(Core container, Denotations at) {
         if (!(ElementsWrittenOut.of(new ElementsWrittenOut.Stood<>(container, at), elements)
                 instanceof ElementsWrittenOut.Walked.Each<Denotations>(var each))) {
             return null;
         }
-        List<ElementsWrittenOut.Stood<Denotations>> there = new ArrayList<>();
-        for (ElementsWrittenOut.Occurrence<Denotations> one : each) {
+        List<PlacedElement> there = new ArrayList<>();
+        for (int written = 0; written < each.size(); written++) {
+            ElementsWrittenOut.Occurrence<Denotations> one = each.get(written);
             Boolean kept = ElementsWrittenOut.onEveryRun(one, elements);
             if (kept == null) {
                 return null;
             }
             if (kept) {
-                there.add(one.value());
+                there.add(new PlacedElement(written, one.value()));
             }
         }
         return there;

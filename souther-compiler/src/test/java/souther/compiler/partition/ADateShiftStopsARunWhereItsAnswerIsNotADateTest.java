@@ -230,7 +230,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
      */
     @Test
     void anElementIsReadWhereTheListHoldingItWasWritten() {
-        Compilation compilation = Compilation.ofSource("""
+        String report = reportOf("""
                 module w1
                 let pair (x: Int): List<Int> = [0, x]
                 behavior f : (n: Int, d: Date, b: Int, size: Int) -> Ok | No
@@ -240,11 +240,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
                     guard b > 3 else No
                     Ok
                 }
-                """.formatted(GREATEST), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                """.formatted(GREATEST));
         assertTrue(nothingArrivesAbout(report, "b"), report);
     }
 
@@ -478,16 +474,159 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
     }
 
     /**
-     * A condition in the step is what the model's condition means, which says what it states on
-     * each application without saying which application states which; a path takes in what must
-     * hold, so a fork the handed value decides is not decided by these walks, and the line after
-     * stays drawn.
+     * A condition in the step states, on each application, what it states on that one: on the
+     * application to {@code 1} the arm that shifts {@code d} by {@code n} is taken, and every run
+     * stops there, whichever element comes first.
      */
     @Test
-    void aForkTheHandedValueDecidesIsNotDecidedOnTheApplication() {
+    void aForkTheHandedValueDecidesIsDecidedOnTheApplication() {
         String report = report("""
                     guard n == %s else No
                     let ys = List.map(k -> if k > 0 then Date.addDays(n, d) else d, [0, 1])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(report, "b"), report);
+        String turned = report("""
+                    guard n == %s else No
+                    let ys = List.map(k -> if k > 0 then Date.addDays(n, d) else d, [1, 0])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(turned, "b"), turned);
+    }
+
+    /** The same fork, where no application takes the arm that stops: each takes its own
+     *  statement, and the line after stays drawn. */
+    @Test
+    void aForkNoApplicationTakesTheStoppingArmOfLeavesTheRunOpen() {
+        String report = report("""
+                    guard n == %s else No
+                    let ys = List.map(k -> if k > 0 then Date.addDays(n, d) else d, [0, -1])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(report, "b"), report);
+    }
+
+    /**
+     * What an application states is taken on that application and no other: the arm that shifts by
+     * {@code (k - 1) * n} is taken on {@code 1}, where it shifts by none, and the arm taken on
+     * {@code 0} shifts nothing. Taken on {@code 0}, the first would stop every run.
+     */
+    @Test
+    void aStatementIsTakenOnTheApplicationThatStatesItAndNoOther() {
+        String report = report("""
+                    guard n == %s else No
+                    let ys = List.map(k -> if k > 0 then Date.addDays((k - 1) * n, d) else d,
+                        [1, 0])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(report, "b"), report);
+    }
+
+    /** A condition that reads nothing handed states one thing on every application, and is read
+     *  as that one statement. */
+    @Test
+    void aForkEveryApplicationStatesAlikeIsReadAsOneStatement() {
+        String report = report("""
+                    guard n == %s else No
+                    let ys = List.map(k -> if n > 0 then Date.addDays(n, d) else d, [0, 1])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(report, "b"), report);
+    }
+
+    /**
+     * Two copies of a helper's closure are two closures, each with applications of its own: the
+     * copy over {@code [0, 0]} takes the shifting arm on none and the one over {@code [0, 1]} on
+     * its second, and that one is taken for no application of the other.
+     */
+    @Test
+    void eachCopyOfAHelpersClosureIsDecidedOnItsOwnApplications() {
+        String report = reportOf("""
+                module w1
+                let shifted (xs: List<Int>, n: Int, d: Date): List<Date> =
+                    List.map(k -> if k > 0 then Date.addDays(n, d) else d, xs)
+                behavior f : (n: Int, d: Date, b: Int, size: Int) -> Ok | No
+                let f (n, d, b, size) = {
+                    guard n == %s else No
+                    let xs = shifted([0, 0], n, d)
+                    guard size > 3 else No
+                    let ys = shifted([0, 1], n, d)
+                    guard b > 3 else No
+                    Ok
+                }
+                """.formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(report, "size"), report);
+        assertTrue(nothingArrivesAbout(report, "b"), report);
+    }
+
+    /** A closure inside a closure is decided on the application of each it stands on. */
+    @Test
+    void aForkInsideAClosureInsideAClosureIsDecidedOnTheApplicationsOfBoth() {
+        String report = report("""
+                    guard n == %s else No
+                    let ys = List.map(j -> List.map(k -> if k > j then Date.addDays(n, d) else d,
+                        [0, 1]), [0])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(report, "b"), report);
+    }
+
+    /**
+     * The inner closure is one construct on both outer applications and states different things
+     * on each: on the outer application to {@code 1} no inner one takes the arm, and on the one to
+     * {@code 0} the one that does shifts by none. What one outer application states, taken on the
+     * other, would stop every run.
+     */
+    @Test
+    void anInnerClosureIsDecidedOnTheOuterApplicationItStandsOn() {
+        String report = report("""
+                    guard n == %s else No
+                    let ys = List.map(j -> List.map(k -> if k > j
+                        then Date.addDays((k - j - 1) * n, d) else d, [0, 1]), [0, 1])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(report, "b"), report);
+    }
+
+    /**
+     * An element a filter drops on every run is handed to nothing, and the applications over what
+     * it keeps are of what it keeps: the one handed {@code 1} shifts by none and the one handed
+     * {@code 2} takes the other arm. Each element's statement taken on the element beside it would
+     * shift by {@code n} on the second.
+     */
+    @Test
+    void theApplicationsOverWhatAFilterKeepsAreOfTheElementsItKeeps() {
+        String report = report("""
+                    guard n == %s else No
+                    let xs = List.filter(x -> x > 0, [0, 1, 2])
+                    let ys = List.map(k -> if k > 1 then d else Date.addDays((k - 1) * n, d), xs)
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(report, "b"), report);
+    }
+
+    /**
+     * An operation that applies its closure twice to each element hands each application the
+     * element it hands it: on the element {@code 1} both take the arm that shifts by {@code n}, and
+     * a run stops there; where no element takes it, none does.
+     */
+    @Test
+    void aClosureAppliedTwiceToAnElementStatesOnBothWhatItStatesOnTheElement() {
+        String report = report("""
+                    guard n == %s else No
+                    let ys = List.distinctBy(k -> if k > 0 then Date.addDays(n, d) else d, [0, 1])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(report, "b"), report);
+        String control = report("""
+                    guard n == %s else No
+                    let ys = List.distinctBy(k -> if k > 0 then Date.addDays(n, d) else d, [0, -1])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(control, "b"), control);
+    }
+
+    /**
+     * A right fold hands its step the elements last first: the step handed {@code 1} shifts by
+     * none and the one handed {@code 0} shifts nothing. Each element's statement taken on the
+     * other would shift by {@code -n}.
+     */
+    @Test
+    void aRightFoldIsDecidedOnTheElementEachApplicationIsHanded() {
+        String report = report("""
+                    guard n == %s else No
+                    let c = List.foldRight((x, acc) -> if x > 0
+                        then Date.addDays((x - 1) * n, acc) else acc, d, [1, 0])
                     guard b > 3 else No""".formatted(GREATEST));
         assertTrue(aRunArrivesAbout(report, "b"), report);
     }

@@ -1403,7 +1403,9 @@ public sealed interface Proposition {
      * reaches. Read for what can hold, that is a statement too many and never one too few; read for
      * what must, it would be a claim about a run that never happens. So a reader takes this only
      * for what can come out, and one that needs what must — what a path assumes, what a row is
-     * asked for — declines it.
+     * asked for — declines it. Which application states which is not held here; a reader standing
+     * on one application takes what that one states off the reading of the body made on it
+     * ({@link MeaningsOfABody#onTheApplication}).
      *
      * @param spelling spelled from the statements' own when it is made, whatever is handed in
      */
