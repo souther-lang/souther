@@ -171,6 +171,9 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == Map.class) {
             return Map.of();
         }
+        if (type == Set.class) {
+            return Set.of();
+        }
         if (type == Optional.class) {
             return Optional.empty();
         }

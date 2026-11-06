@@ -154,13 +154,13 @@ public final class WhereEachLineDecides {
      */
     private static List<DecidingCase> whereItStands(Proposition.Compared line,
                                                     List<DecidingCase> cases) {
-        Map<TermPath, CasesLeft> at = casesItIsOver(line);
+        Map<Place, CasesLeft> at = casesItIsOver(line);
         if (at.isEmpty()) {
             return cases;
         }
         List<Proposition> stands = new ArrayList<>();
-        at.forEach((position, narrowed) -> {
-            Proposition standing = standing(position, narrowed);
+        at.forEach((place, narrowed) -> {
+            Proposition standing = standing(place, narrowed);
             if (standing != null) {
                 stands.add(standing);
             }
@@ -189,7 +189,7 @@ public final class WhereEachLineDecides {
      * {@code each}, without the parts of it that ask the value the line is at what only another
      * case of it has — or null where a part of it asks the value to be a case it is not.
      */
-    private static Proposition there(Proposition each, Map<TermPath, CasesLeft> at) {
+    private static Proposition there(Proposition each, Map<Place, CasesLeft> at) {
         List<Proposition> parts = new ArrayList<>();
         for (Proposition part : each instanceof Proposition.All all ? all.parts()
                 : List.of(each)) {
@@ -205,12 +205,36 @@ public final class WhereEachLineDecides {
     }
 
     /**
-     * That the value at {@code position} is {@code narrowed}, in the words a row is asked it in:
+     * A value a line or a part of a case is about: a position, and which value there
+     * ({@link ValueIdentity}). Two names for elements of one container are one position and two
+     * values, and the case one of them is narrowed to says nothing of the other's.
+     */
+    private record Place(TermPath position, ValueIdentity identity) {
+
+        /** The value at {@code prefix}, a position {@code this} is under: the same element's
+         *  where {@code prefix} still reaches into it, the row's value where it stops above. */
+        Place at(TermPath prefix) {
+            List<TermPath.Step> steps = position.steps();
+            int element = -1;
+            for (int step = 0; step < steps.size(); step++) {
+                if (steps.get(step) instanceof TermPath.Step.Element
+                        || steps.get(step) instanceof TermPath.Step.Key) {
+                    element = step;
+                }
+            }
+            return new Place(prefix, prefix.steps().size() > element ? identity
+                    : ValueIdentity.AT_THE_POSITION);
+        }
+    }
+
+    /**
+     * That the value at {@code place} is {@code narrowed}, in the words a row is asked it in:
      * one of some cases of a sum, or holding a value or none — or null where it is neither, which
      * leaves the case unsaid and the line no narrower.
      */
-    private static Proposition standing(TermPath position, CasesLeft narrowed) {
-        DecisionSubject.AnInput value = new DecisionSubject.AnInput(position);
+    private static Proposition standing(Place place, CasesLeft narrowed) {
+        DecisionSubject.AnInput value = new DecisionSubject.AnInput(place.position(),
+                place.identity());
         List<Refinement> atoms = narrowed.atoms();
         if (atoms.stream().allMatch(Refinement.SumCase.class::isInstance)) {
             return new Proposition.InCases(value, narrowed, true);
@@ -233,10 +257,11 @@ public final class WhereEachLineDecides {
 
     /** What {@code part} comes to of a value that is the cases {@code at} says, position by
      *  position. */
-    private static AskedOfTheValue asked(Proposition part, Map<TermPath, CasesLeft> at) {
-        if (part instanceof Proposition.InCases(DecisionSubject.AnInput(TermPath of),
-                CasesLeft cases, boolean holds, var _) && at.containsKey(of)) {
-            CasesLeft stands = at.get(of);
+    private static AskedOfTheValue asked(Proposition part, Map<Place, CasesLeft> at) {
+        if (part instanceof Proposition.InCases(DecisionSubject.AnInput(TermPath of,
+                ValueIdentity identity), CasesLeft cases, boolean holds, var _)
+                && at.containsKey(new Place(of, identity))) {
+            CasesLeft stands = at.get(new Place(of, identity));
             boolean meets = stands.meet(cases) != null;
             if ((holds && !meets) || (!holds && stands.within(cases))) {
                 return AskedOfTheValue.NOT_THERE;
@@ -245,16 +270,18 @@ public final class WhereEachLineDecides {
         }
         // Whether an optional holds a value, asked of one the line stands under holding one or
         // none.
-        if (part instanceof Proposition.Present(DecisionSubject.AnInput(TermPath of),
-                boolean holds, var _) && at.containsKey(of)
-                && at.get(of).atoms().size() == 1
-                && at.get(of).atoms().getFirst() instanceof Refinement.Presence presence) {
+        if (part instanceof Proposition.Present(DecisionSubject.AnInput(TermPath of,
+                ValueIdentity identity), boolean holds, var _)
+                && at.get(new Place(of, identity)) instanceof CasesLeft stands
+                && stands.atoms().size() == 1
+                && stands.atoms().getFirst() instanceof Refinement.Presence presence) {
             return presence.present() == holds ? AskedOfTheValue.THERE : AskedOfTheValue.NOT_THERE;
         }
-        for (TermPath position : positionsOf(part)) {
+        for (Place place : positionsOf(part)) {
+            TermPath position = place.position();
             List<TermPath.Step> steps = position.steps();
             for (int step = 0; step < steps.size(); step++) {
-                CasesLeft stands = at.get(position.prefix(step));
+                CasesLeft stands = at.get(place.at(position.prefix(step)));
                 if (stands != null && steps.get(step) instanceof TermPath.Step.Refine(
                         CasesLeft cases) && stands.meet(cases) == null) {
                     return AskedOfTheValue.OF_ANOTHER_CASE;
@@ -264,32 +291,34 @@ public final class WhereEachLineDecides {
         return AskedOfTheValue.THERE;
     }
 
-    /** The positions of the input a part of a case is about, where it is one thing of one value;
+    /** The values of the input a part of a case is about, where it is one thing of one value;
      *  none for a part that is more than that. */
-    private static List<TermPath> positionsOf(Proposition part) {
-        List<TermPath> out = new ArrayList<>();
+    private static List<Place> positionsOf(Proposition part) {
+        List<Place> out = new ArrayList<>();
         switch (part) {
             case Proposition.Compared compared -> {
                 switch (compared.relation()) {
                     case Relation.Affine affine -> affine.form().coefs().keySet()
                             .forEach(quantity -> {
-                                if (quantity instanceof DecisionAtom.OfTheInput(var term)) {
-                                    out.add(term.subjectPath());
+                                if (quantity instanceof DecisionAtom.OfTheInput(var term,
+                                        var identity)) {
+                                    out.add(new Place(term.subjectPath(), identity));
                                 }
                             });
                     case Relation.Ordered ordered -> {
-                        if (ordered.term() instanceof DecisionAtom.OfTheInput(var term)) {
-                            out.add(term.subjectPath());
+                        if (ordered.term() instanceof DecisionAtom.OfTheInput(var term,
+                                var identity)) {
+                            out.add(new Place(term.subjectPath(), identity));
                         }
                     }
                 }
             }
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath of), var _, var _) ->
-                    out.add(of);
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath of), var _, var _, var _) ->
-                    out.add(of);
-            case Proposition.Present(DecisionSubject.AnInput(TermPath of), var _, var _) ->
-                    out.add(of);
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath of, var identity), var _,
+                    var _) -> out.add(new Place(of, identity));
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath of, var identity), var _,
+                    var _, var _) -> out.add(new Place(of, identity));
+            case Proposition.Present(DecisionSubject.AnInput(TermPath of, var identity), var _,
+                    var _) -> out.add(new Place(of, identity));
             case Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
                  Proposition.InTheStrings _, Proposition.Always _, Proposition.SameValue _, Proposition.StringInside _,
                  Proposition.LastToHold _,
@@ -302,14 +331,14 @@ public final class WhereEachLineDecides {
         return out;
     }
 
-    /** Each position a position {@code line} is over narrows, with the cases it narrows it to. */
-    private static Map<TermPath, CasesLeft> casesItIsOver(Proposition.Compared line) {
-        Map<TermPath, CasesLeft> out = new LinkedHashMap<>();
-        for (TermPath position : positionsOf(line)) {
-            List<TermPath.Step> steps = position.steps();
+    /** Each value a position {@code line} is over narrows, with the cases it narrows it to. */
+    private static Map<Place, CasesLeft> casesItIsOver(Proposition.Compared line) {
+        Map<Place, CasesLeft> out = new LinkedHashMap<>();
+        for (Place place : positionsOf(line)) {
+            List<TermPath.Step> steps = place.position().steps();
             for (int at = 0; at < steps.size(); at++) {
                 if (steps.get(at) instanceof TermPath.Step.Refine(CasesLeft cases)) {
-                    out.merge(position.prefix(at), cases,
+                    out.merge(place.at(place.position().prefix(at)), cases,
                             (one, other) -> one.meet(other) == null ? one : one.meet(other));
                 }
             }
@@ -1750,7 +1779,7 @@ public final class WhereEachLineDecides {
     /** Whether {@code value} is one value of the row, and not one inside the elements or the keys
      *  of a container. */
     private static boolean aValueOfTheRow(DecisionSubject value) {
-        return value instanceof DecisionSubject.AnInput(TermPath at)
+        return value instanceof DecisionSubject.AnInput(TermPath at, var _)
                 && at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Element
                         || step instanceof TermPath.Step.Key);
     }

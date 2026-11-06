@@ -25,6 +25,7 @@ import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.partition.Level;
 import souther.compiler.partition.LineFacts;
 import souther.compiler.partition.LineOrigin;
+import souther.compiler.partition.NamedElements;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.RowDemand;
 import souther.compiler.partition.TakenConstraint;
@@ -94,10 +95,12 @@ final class TheLinesBesideABorder {
         return new WayToTheBorder(List.of(
                 new OnTheWay.TakenIn(anchor(), new RowDemand.Relational(
                         new TakenConstraint.Affine(
-                                new LinearForm<>(ExactRatio.ZERO, onlyX), Rel.LE))),
+                                new LinearForm<>(ExactRatio.ZERO, onlyX), Rel.LE)),
+                        NamedElements.NONE),
                 new OnTheWay.TakenIn(anchor(), new RowDemand.Relational(
                         new TakenConstraint.Affine(
-                                new LinearForm<>(ExactRatio.ZERO, onlyX), Rel.GE)))));
+                                new LinearForm<>(ExactRatio.ZERO, onlyX), Rel.GE)),
+                        NamedElements.NONE)));
     }
 
     /**
@@ -116,7 +119,8 @@ final class TheLinesBesideABorder {
         return new WayToTheBorder(List.of(
                 new OnTheWay.TakenIn(anchor(), new RowDemand.Relational(
                         new TakenConstraint.Affine(
-                                new LinearForm<>(ExactRatio.of(-10), xAndZ), Rel.LE)))));
+                                new LinearForm<>(ExactRatio.of(-10), xAndZ), Rel.LE)),
+                        NamedElements.NONE)));
     }
 
     /** And one holding a condition nothing turned into something a row can be held against. */

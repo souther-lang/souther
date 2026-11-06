@@ -514,7 +514,8 @@ public final class AnAnswerComposed {
                         asked.add(written);
                     }
                     ofStatements.add(new Taken(
-                            new OnTheWay.TakenIn(each.statement().anchor(), demand),
+                            new OnTheWay.TakenIn(each.statement().anchor(), demand,
+                                    NamedElements.NONE),
                             each.statement()));
                 }
                 case DemandReading.Read.Settled(boolean thisWay) -> {
@@ -569,7 +570,7 @@ public final class AnAnswerComposed {
                     region = taken;
                     cuts.add(new Taken(
                             new OnTheWay.TakenIn(anchor, new RowDemand.Relational(
-                                    new TakenConstraint.Affine(over, rel))),
+                                    new TakenConstraint.Affine(over, rel)), NamedElements.NONE),
                             each));
                 }
                 case SearchRegion.Assumption.Refused(var why) ->

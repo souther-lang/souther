@@ -1128,7 +1128,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *  the relation is one of two strings ({@link #twoTextsOneConverted}). */
     private static Side sideOf(Quantity quantity, ExactRatio weight, boolean texts) {
         return switch (quantity) {
-            case DecisionAtom.OfTheInput(NumericTerm term) -> ofTheInput(term, weight);
+            case DecisionAtom.OfTheInput(NumericTerm term, var _) -> ofTheInput(term, weight);
             // Two numbers of the input multiplied and held against another value: the product
             // is a number of its own, made of the numbers of both.
             case Quantity.ProductOfTwo product -> NumericTerm.ProductOf.signed(
@@ -1188,7 +1188,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         List<NumericTerm> ofTheString = switch (among.string()) {
-            case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+            case DecisionAtom.OfTheInput(NumericTerm term, var _) -> List.of(term);
             case Quantity.WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
             default -> null;
         };
@@ -2349,7 +2349,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case Quantity.HowManyMeet counted -> {
                 Optional<List<TermPath>> read = PositionsAStatementReads.of(counted.ofTheElement());
                 if (read.isEmpty() || !(counted.container() instanceof DecisionSubject.AnInput(
-                        TermPath container))) {
+                        TermPath container, var _))) {
                     return Optional.empty();
                 }
                 out.add(container);
@@ -2531,7 +2531,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             PositionsAStatementReads.of(counted.ofTheElement());
                     if (reads.isEmpty()
                             || !(counted.container() instanceof DecisionSubject.AnInput(
-                                    TermPath container))) {
+                                    TermPath container, var _))) {
                         return null;
                     }
                     out.add(container);
@@ -4944,7 +4944,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (int part = 0; part < 2; part++) {
             Quantity.HowManyMeet counted = sides.get(part).counted();
             if (counted == null
-                    || !(counted.container() instanceof DecisionSubject.AnInput(TermPath container))
+                    || !(counted.container() instanceof DecisionSubject.AnInput(
+                            TermPath container, var _))
                     || container.insideAContainer()
                     || !Quantity.PositionInTheWalk.counts(sides.get(1 - part).number(),
                             container)) {

@@ -36,6 +36,7 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.ReadThroughNames;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.Spelling;
 import souther.compiler.meaning.TheWholeNumbersAListStartsWith;
@@ -454,7 +455,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     Optional<Boolean> risesWith(Relation relation) {
         // A term against a place on its order rises as the term does, which is the position's own
         // values where the line is on them.
-        if (relation instanceof Relation.Ordered(DecisionAtom.OfTheInput(var term), var _, var _)
+        if (relation instanceof Relation.Ordered(DecisionAtom.OfTheInput(var term, var _), var _,
+                var _)
                 && of instanceof BorderQuantity.OfACoordinate coordinate) {
             return coordinate.term().equals(term) ? Optional.of(true) : Optional.empty();
         }
@@ -489,12 +491,31 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             default -> Map.of();
         };
         for (Map.Entry<NumericTerm, ExactRatio> each : mine.entrySet()) {
-            ExactRatio theirs = affine.form().coefs().get(new DecisionAtom.OfTheInput(each.getKey()));
+            ExactRatio theirs = coefficientOf(each.getKey(), affine.form());
             if (theirs != null && theirs.signum() != 0 && each.getValue().signum() != 0) {
                 return Optional.of(theirs.signum() == each.getValue().signum());
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * What {@code form} weighs the number at {@code term} by, whichever value at its position it
+     * is told it is about — or null where it weighs none, or more than one value there and so no
+     * one number.
+     */
+    private static ExactRatio coefficientOf(NumericTerm term, LinearForm<Quantity> form) {
+        ExactRatio found = null;
+        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+            if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm at, var _)
+                    && at.equals(term)) {
+                if (found != null) {
+                    return null;
+                }
+                found = each.getValue();
+            }
+        }
+        return found;
     }
 
     /**
@@ -937,7 +958,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     ofTheElement instanceof Proposition.Always(boolean holds) && holds;
             case Proposition.Compared(Relation.Affine(var form, var _), var _, var _) ->
                     form.coefs().keySet().stream().allMatch(each ->
-                            each instanceof DecisionAtom.OfTheInput(var term)
+                            each instanceof DecisionAtom.OfTheInput(var term, var _)
                                     && !term.subjectPath().insideAContainer());
             default -> false;
         };
@@ -1241,7 +1262,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 }
                 count = each.getKey();
                 weight = each.getValue();
-            } else if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+            } else if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)) {
                 TermOrders orders = read.quantities().ordersOf(term);
                 if (orders == null || orders.answered() == null || !orders.answered().counts()) {
                     return null;
@@ -1262,7 +1283,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         Map<NumericTerm, ExactRatio> added = new LinkedHashMap<>();
         for (Map.Entry<Quantity, ExactRatio> each : scaled.coefs().entrySet()) {
-            if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+            if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)) {
                 added.put(term, each.getValue());
             }
         }
@@ -1392,7 +1413,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             AuthorsLines lines, List<Proposition.Compared> scales, ComparisonClaim written) {
         Map<PartOfAComparison, AuthoredPointMapping> out = new LinkedHashMap<>();
         for (Proposition.Compared relation : scales) {
-            Map<WrittenLine, AuthoredPointMapping> under = lines.of(relation.heldSpelling());
+            // The author's lines were read at positions, before any name was told.
+            Map<WrittenLine, AuthoredPointMapping> under = lines.of(((Proposition.Compared)
+                    ReadThroughNames.atThePositions(relation)).heldSpelling());
             if (under != null) {
                 under.forEach((line, mapping) ->
                         out.putIfAbsent(PartOfAComparison.of(line), mapping));
@@ -1449,7 +1472,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     when againstAnotherValueOnEach(applied) instanceof Read.AgainstAnotherValue
                     each -> each;
             case Proposition.Compared(Relation.Ordered(
-                    DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel proposition),
+                    DecisionAtom.OfTheInput(NumericTerm term, var _), Place at, Rel proposition),
                     boolean holds, Spelling _) when term.atOnePosition() != null ->
                     onAnOrder(behavior, term.atOnePosition(), at,
                             holds ? proposition : proposition.denied(), read.quantities());
@@ -1718,7 +1741,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         boolean another = false;
         for (Quantity each : affine.form().coefs().keySet()) {
             switch (each) {
-                case DecisionAtom.OfTheInput(NumericTerm term) -> input.add(term);
+                case DecisionAtom.OfTheInput(NumericTerm term, var _) -> input.add(term);
                 case Quantity.OfABinding bound when bound.madeOf().isEmpty() -> another = true;
                 case Quantity.WhatAnOperationAnswers answers -> {
                     input.addAll(answers.positionsItIsMadeOf());
@@ -1809,7 +1832,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         List<FilingCoordinate> related = new ArrayList<>();
         for (Quantity each : affine.form().coefs().keySet()) {
             switch (each) {
-                case DecisionAtom.OfTheInput(NumericTerm term) -> input.add(term);
+                case DecisionAtom.OfTheInput(NumericTerm term, var _) -> input.add(term);
                 case Quantity.HowManyMeet count
                         when valuesItRelates(count.ofTheElement()) instanceof List<FilingCoordinate>
                         values -> related.addAll(values);
@@ -2152,7 +2175,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *  or those the operation that answered it was handed — or null where it is neither. */
     private static List<NumericTerm> stringsOf(Quantity quantity) {
         return switch (quantity) {
-            case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+            case DecisionAtom.OfTheInput(NumericTerm term, var _) -> List.of(term);
             case Quantity.WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
             default -> null;
         };
@@ -2239,8 +2262,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         List<Proposition.SameValue> same = new ArrayList<>();
         sameValuesIn(stated, same);
         if (same.size() == 1 && same.getFirst() instanceof Proposition.SameValue(
-                DecisionSubject.AnInput(TermPath one), DecisionSubject.AnInput(TermPath other),
-                boolean _, Spelling _)) {
+                DecisionSubject.AnInput(TermPath one, var _),
+                DecisionSubject.AnInput(TermPath other, var _), boolean _, Spelling _)) {
             return UndividedByARelation.ofTwoPositions(one, other);
         }
         List<Proposition.StringInside> inside = new ArrayList<>();
@@ -2331,8 +2354,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     private static boolean relates(Proposition stated, List<FilingCoordinate> out) {
         return switch (stated) {
-            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
-                                       DecisionSubject.AnInput(TermPath other), boolean _,
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
+                                       DecisionSubject.AnInput(TermPath other, var _), boolean _,
                                        Spelling _) -> {
                 for (TermPath each : List.of(one, other)) {
                     if (!out.contains(FilingCoordinate.at(each))) {
@@ -2653,7 +2676,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                InputReading read, InputReads reads) {
         return switch (line.relation()) {
             case Relation.Affine affine -> lineOn(behavior, affine, true, written, read, reads);
-            case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel rel)
+            case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term, var _), Place at,
+                                  Rel rel)
                     when term.atOnePosition() != null ->
                     onAnOrder(behavior, term.atOnePosition(), at, rel, read.quantities());
             case Relation.Ordered _ -> null;

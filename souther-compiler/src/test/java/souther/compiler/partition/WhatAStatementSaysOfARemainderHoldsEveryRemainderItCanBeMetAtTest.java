@@ -231,7 +231,8 @@ class WhatAStatementSaysOfARemainderHoldsEveryRemainderItCanBeMetAtTest {
                     parts.stream().allMatch(each -> holds(each, d, s, truths));
             case Proposition.Any(var parts, var _) ->
                     parts.stream().anyMatch(each -> holds(each, d, s, truths));
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at, var _), boolean holds,
+                    var _) ->
                     (((truths >> TRUTHS.indexOf(at.toString())) & 1) == 1) == holds;
             case Proposition.Compared(Relation.Affine affine, boolean holds, var _) -> {
                 long sum = whole(affine.form().constant());

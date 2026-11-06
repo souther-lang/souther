@@ -216,7 +216,8 @@ public final class InputNumbersAnAnswerTurnsOn {
             for (DemandReading.Read read : reads) {
                 switch (read) {
                     case DemandReading.Read.Demands(var demand) ->
-                            held.add(new OnTheWay.TakenIn(statement.anchor(), demand));
+                            held.add(new OnTheWay.TakenIn(statement.anchor(), demand,
+                                    NamedElements.NONE));
                     case DemandReading.Read.Settled(var thisWay) -> {
                         if (!thisWay) {
                             return null;
@@ -316,7 +317,7 @@ public final class InputNumbersAnAnswerTurnsOn {
             List<ExactRatio> weights = new ArrayList<>();
             boolean solvable = true;
             for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
-                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm other))
+                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm other, var _))
                         || other.equals(term)) {
                     continue;
                 }
@@ -349,7 +350,7 @@ public final class InputNumbersAnAnswerTurnsOn {
 
     private static ExactRatio coefficientOf(LinearForm<Quantity> form, NumericTerm term) {
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
-            if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm one)
+            if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm one, var _)
                     && one.equals(term)) {
                 return each.getValue();
             }

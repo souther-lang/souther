@@ -3,12 +3,14 @@ package souther.compiler.partition;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.ReadThroughNames;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
@@ -222,15 +224,15 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
      */
     private static boolean oneRelation(List<OnTheWay> stated) {
         return stated.size() == 1 && switch (stated.getFirst()) {
-            case OnTheWay.TakenIn(var _, RowDemand.Relational _),
-                 OnTheWay.TakenIn(var _, RowDemand.ATruth _) -> true;
-            case OnTheWay.TakenIn(var _, RowDemand.Exists _),
-                 OnTheWay.TakenIn(var _, RowDemand.ForAll _),
-                 OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth _),
-                 OnTheWay.TakenIn(var _, RowDemand.OnARemainder _),
-                 OnTheWay.TakenIn(var _, RowDemand.ForTheRun _) -> false;
+            case OnTheWay.TakenIn(var _, RowDemand.Relational _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.ATruth _, var _) -> true;
+            case OnTheWay.TakenIn(var _, RowDemand.Exists _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.ForAll _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.OnARemainder _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.ForTheRun _, var _) -> false;
             case OnTheWay.Narrowed _, OnTheWay.Declined _,
-                 OnTheWay.TakenIn(var _, RowDemand.SoMany _) -> true;
+                 OnTheWay.TakenIn(var _, RowDemand.SoMany _, var _) -> true;
             // One of several ways is no relation, and the column is what the condition states.
             case OnTheWay.OneOf _, OnTheWay.Counted _ -> false;
             // Taken off before a column is read ({@link #asked}): it asks nothing to read one off.
@@ -322,6 +324,16 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
      * compiler read nothing of, which the rule carries as that rather than leaving off.
      */
     private DecidedCondition answerOf(Condition condition, OnTheWay one, boolean held) {
+        // What was read through two names for one element, or a name whose element is not known,
+        // is of no one value at the position, so no column over the position is: the column is
+        // what the condition states, which tells the two apart, and where no condition stands one
+        // this reading has no column for.
+        if (ElementsOnTheWay.namedIn(one).readsNoOneValue()) {
+            return condition != null ? asOneColumn(condition, held)
+                    : new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
+                            ElementsOnTheWay.conditionOf(one), ElementsOnTheWay.ANOTHER_ELEMENT),
+                            held);
+        }
         return switch (one) {
             // That some element meets something is no column over the input's numbers: which
             // element did is nothing a value at one position says. So the condition is the column
@@ -331,34 +343,38 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
             // And two values being one, whose column is the comparison the condition states:
             // written either way round, it is read as one statement there. And a remainder of a
             // form, whose values are a class and no column over the input's numbers.
-            case OnTheWay.TakenIn(var _, RowDemand.Exists _),
-                 OnTheWay.TakenIn(var _, RowDemand.ForAll _),
-                 OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth _),
-                 OnTheWay.TakenIn(var _, RowDemand.OnARemainder _),
-                 OnTheWay.TakenIn(var _, RowDemand.ForTheRun _) ->
+            case OnTheWay.TakenIn(var _, RowDemand.Exists _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.ForAll _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.OnARemainder _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.ForTheRun _, var _) ->
                     asOneColumn(condition, held);
             // Which of two values stands at a position: the truth of that position, whichever
             // spelling asked it, read off the demand and not off the condition again. And what
             // came out is the position's value and not the condition's — `f == false` holding is
             // `f` not holding.
-            case OnTheWay.TakenIn(var _, RowDemand.ATruth truth) -> new DecidedCondition.Stood(
-                    new DecisionCondition.ATruth(new DecisionSubject.AnInput(truth.at())),
-                    truth.held());
-            case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken)) -> {
+            // The value at the position is the one the names the demand was read through stood
+            // for, as the condition's own statement of it is.
+            case OnTheWay.TakenIn(var _, RowDemand.ATruth truth, NamedElements named) ->
+                    new DecidedCondition.Stood(new DecisionCondition.ATruth(
+                            ReadThroughNames.theInputAt(truth.at(), named.elements())),
+                            truth.held());
+            case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken), NamedElements named) -> {
                 Rel proposition = taken.rel().orItsDenial();
+                ElementsNamed names = named.elements();
                 DecisionCondition.Comparison column = switch (taken) {
                     case TakenConstraint.Affine affine -> new DecisionCondition.AComparison(
-                            DecisionAtom.ofTheInput(affine.form()), proposition);
+                            ReadThroughNames.theNumbersOf(affine.form(), names), proposition);
                     case TakenConstraint.Ordered ordered ->
                             new DecisionCondition.AnOrderedComparison(
-                                    new DecisionAtom.OfTheInput(ordered.term()), ordered.at(),
-                                    proposition);
+                                    ReadThroughNames.theNumberAt(ordered.term(), names),
+                                    ordered.at(), proposition);
                     // A hole is the same column as the equality it denies, which is what makes the
                     // table exclusive: `voucher == "spring"` and `voucher /= "spring"` are one
                     // distinction a body draws, met the two ways a path can meet it.
                     case TakenConstraint.AwayFrom away ->
                             new DecisionCondition.AnOrderedComparison(
-                                    new DecisionAtom.OfTheInput(away.term()), away.at(),
+                                    ReadThroughNames.theNumberAt(away.term(), names), away.at(),
                                     proposition);
                 };
                 yield new DecidedCondition.Compared(column, taken.rel() == proposition);
@@ -386,10 +402,11 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
             // How many elements meet a statement, which a row is composed for and no column over
             // the input's numbers is: which elements meet it is nothing a value at one position
             // says, so the column is the statement.
-            case OnTheWay.TakenIn(var _, RowDemand.SoMany _) when condition != null ->
+            case OnTheWay.TakenIn(var _, RowDemand.SoMany _, var _) when condition != null ->
                     asOneColumn(condition, held);
             // A count is a comparison a condition states, and a fork states none.
-            case OnTheWay.TakenIn(var _, RowDemand.SoMany many) -> throw new IllegalArgumentException(
+            case OnTheWay.TakenIn(var _, RowDemand.SoMany many, var _) ->
+                    throw new IllegalArgumentException(
                     "a count is stated by a condition, and a fork brings none: " + many);
             // A condition the source settles is no distinction, and is taken off before a column
             // is asked for, the condition's ({@link #deciding}) and the arm's ({@link #entering})
@@ -432,12 +449,14 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
         // fork on a value the body computed is what the arm comes to for the input, which is no
         // answer to the question about the computed value.
         if (onTheWay.size() == 1 && onTheWay.getFirst() instanceof OnTheWay.Narrowed narrowed
+                && !narrowed.named().elements().readsNoOneValue()
                 && states.narrowsItsOwnPosition(match, part, reads)) {
             TermPath at = narrowed.position();
             // Where the value the fork is on stands: a name read on a value left several cases is
             // the name read at the sum, and not a name under the set of them.
             return new Read(new DecidedCondition.Narrowed(new DecisionCondition.ACase(
-                    new DecisionSubject.AnInput(at.narrowedFrom().position()),
+                    ReadThroughNames.theInputAt(at.narrowedFrom().position(),
+                            narrowed.named().elements()),
                     states.answersOf(match, reads)), at.narrowing()), entered);
         }
         // Where the arithmetic had no position to narrow, the fork may still be on something a row

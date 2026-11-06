@@ -25,7 +25,7 @@ record ConvertedText(NumericTerm.ValueOf place, CaseMapping through) {
      * conversions of one string — or null where it is made by anything else.
      */
     static ConvertedText of(Quantity quantity) {
-        if (quantity instanceof DecisionAtom.OfTheInput(NumericTerm.ValueOf place)) {
+        if (quantity instanceof DecisionAtom.OfTheInput(NumericTerm.ValueOf place, var _)) {
             return new ConvertedText(place, CaseMapping.NONE);
         }
         if (quantity instanceof Quantity.WhatAnOperationAnswers answers

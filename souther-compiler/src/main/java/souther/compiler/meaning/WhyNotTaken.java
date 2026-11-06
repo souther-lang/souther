@@ -162,6 +162,14 @@ public sealed interface WhyNotTaken {
         A_NODE_BELOW_WHAT_A_ROW_WRITES,
 
         /**
+         * A condition on an element of a container other than the one the rest of the way is about:
+         * what a way asks is placed at positions, and a position inside a container's elements is
+         * one element, so a condition read through another name for another element is a value the
+         * way has no place for beside the first.
+         */
+        ANOTHER_ELEMENT_THAN_THE_WAY_HOLDS,
+
+        /**
          * A place the tree a path is walked over does not read: a position, an answer or a value
          * the body bound that no expression of the condition stands for there, so there is no
          * subject for a fact about it to be about.
@@ -222,7 +230,7 @@ public sealed interface WhyNotTaken {
         public Domain domain() {
             return switch (this) {
                 case A_QUANTITY_ON_NO_ORDER, AN_ANSWER_A_ROW_STANDS_IN,
-                     A_NODE_BELOW_WHAT_A_ROW_WRITES ->
+                     A_NODE_BELOW_WHAT_A_ROW_WRITES, ANOTHER_ELEMENT_THAN_THE_WAY_HOLDS ->
                         Domain.WHAT_A_ROW_IS_WRITTEN_IN;
                 case A_PATH_KNOWS_NO_ALTERNATIVES, A_PLACE_THE_PATH_DOES_NOT_READ,
                      A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT, A_PATH_KNOWS_NO_SAMENESS_OF_VALUES,

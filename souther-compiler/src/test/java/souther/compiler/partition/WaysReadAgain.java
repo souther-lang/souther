@@ -243,7 +243,7 @@ final class WaysReadAgain {
             weights.put(new NumericTerm.ValueOf(Y), ExactRatio.of(onY));
         }
         return new OnTheWay.TakenIn(anchor(0), new RowDemand.Relational(new TakenConstraint.Affine(
-                new LinearForm<>(ExactRatio.of(-threshold), weights), rel)));
+                new LinearForm<>(ExactRatio.of(-threshold), weights), rel)), NamedElements.NONE);
     }
 
     /** {@code weight * z rel threshold}, asked of the number the relation does not read. */
@@ -259,7 +259,8 @@ final class WaysReadAgain {
     private static OnTheWay number(TermPath at, long weight, Rel rel, long threshold) {
         return new OnTheWay.TakenIn(anchor(0), new RowDemand.Relational(new TakenConstraint.Affine(
                 new LinearForm<>(ExactRatio.of(-threshold),
-                        Map.of(new NumericTerm.ValueOf(at), ExactRatio.of(weight))), rel)));
+                        Map.of(new NumericTerm.ValueOf(at), ExactRatio.of(weight))), rel)),
+                NamedElements.NONE);
     }
 
     /** The {@code Bool} at {@code at} asked to be {@code held}, apart from the relation. */
@@ -276,7 +277,8 @@ final class WaysReadAgain {
     }
 
     private static OnTheWay truth(ConditionReportAnchor anchor, String at, boolean held) {
-        return new OnTheWay.TakenIn(anchor, new RowDemand.ATruth(TermPath.of(at), held));
+        return new OnTheWay.TakenIn(anchor, new RowDemand.ATruth(TermPath.of(at), held),
+                NamedElements.NONE);
     }
 
     /** What the declarations leave the numbers the relation reads. */

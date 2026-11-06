@@ -153,7 +153,8 @@ class AStatementHoldingAnElementToOneClassSaysWhatRemaindersARunLeavesTest {
         Proposition stated = new Proposition.Compared(new Relation.Affine(
                 new LinearForm<>(ExactRatio.of(-2), coefs), Rel.EQ), true);
         OnTheWay weighed = new OnTheWay.TakenIn(WHERE, new RowDemand.ForTheRun(stated,
-                RowDemand.NoComposer.A_REMAINDER_OF_A_FORM, List.of(), Optional.empty()));
+                RowDemand.NoComposer.A_REMAINDER_OF_A_FORM, List.of(), Optional.empty()),
+                NamedElements.NONE);
         assertOpen(way(List.of(turn(N, 5), weighed), inputLeaves(7, 1)));
     }
 
@@ -217,7 +218,7 @@ class AStatementHoldingAnElementToOneClassSaysWhatRemaindersARunLeavesTest {
     }
 
     private static void statementsIn(OnTheWay entry, List<Proposition> into) {
-        if (entry instanceof OnTheWay.TakenIn(var _, RowDemand.ForTheRun run)) {
+        if (entry instanceof OnTheWay.TakenIn(var _, RowDemand.ForTheRun run, var _)) {
             into.add(run.statement());
         } else if (entry instanceof OnTheWay.OneOf several) {
             several.alternatives().forEach(way -> way.forEach(each -> statementsIn(each, into)));
@@ -278,7 +279,8 @@ class AStatementHoldingAnElementToOneClassSaysWhatRemaindersARunLeavesTest {
                 new LinearForm<>(ExactRatio.of(-against), Map.of(remainder, ExactRatio.ONE)), rel),
                 holds);
         return new OnTheWay.TakenIn(WHERE, new RowDemand.ForTheRun(stated,
-                RowDemand.NoComposer.A_REMAINDER_OF_A_FORM, List.of(), Optional.empty()));
+                RowDemand.NoComposer.A_REMAINDER_OF_A_FORM, List.of(), Optional.empty()),
+                NamedElements.NONE);
     }
 
     /** {@code floorMod(d - a, divisor) = remainder}, as the input is held at a line's point. */
@@ -287,7 +289,8 @@ class AStatementHoldingAnElementToOneClassSaysWhatRemaindersARunLeavesTest {
                 new LinearForm<>(ExactRatio.ZERO, Map.of(D, ExactRatio.ONE, A, ExactRatio.of(-1))),
                 BigInteger.valueOf(divisor));
         return new OnTheWay.TakenIn(WHERE, new RowDemand.OnARemainder(of,
-                WholeNumberRuns.one(BigInteger.valueOf(remainder), BigInteger.valueOf(remainder))));
+                WholeNumberRuns.one(BigInteger.valueOf(remainder), BigInteger.valueOf(remainder))),
+                NamedElements.NONE);
     }
 
     /** The element of {@code rangeInclusive(0, r.days)} in the body of {@code definition}. */

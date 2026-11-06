@@ -75,7 +75,7 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
                     LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("n"))), Rel.GE));
 
     private static ContentsAsked asked(RowDemand.OfACondition demand) {
-        return ContentsAsked.of(List.of(new OnTheWay.TakenIn(WHERE, demand)));
+        return ContentsAsked.of(List.of(new OnTheWay.TakenIn(WHERE, demand, NamedElements.NONE)));
     }
 
     private static RowDemand.WithinIt keyedInTheShelf(TermPath value) {

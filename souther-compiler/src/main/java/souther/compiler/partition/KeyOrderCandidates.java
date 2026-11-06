@@ -441,7 +441,8 @@ public final class KeyOrderCandidates {
     private static void collectNamed(Proposition stated, TermPath container,
                                      Map<List<String>, List<Place>> out) {
         if (stated instanceof Proposition.Compared(
-                Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm.ValueOf field), Place at, var _),
+                Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm.ValueOf field, var _),
+                        Place at, var _),
                 var _, var _)) {
             List<String> below = fieldsBelowAnElement(container, field.position());
             if (below != null) {

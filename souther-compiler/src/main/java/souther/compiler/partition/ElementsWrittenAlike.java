@@ -126,7 +126,7 @@ final class ElementsWrittenAlike {
                         out.add(List.of(new OnTheWay.TakenIn(entry.anchor(),
                                 new RowDemand.Exists(container,
                                         RowDemand.AnElementMeets.only(way), holdingOne,
-                                        Optional.empty()))));
+                                        Optional.empty()), entry.named())));
                     }
                 }
                 case RowDemand.ForAll(var container, var meets, var holdingNone, var _) -> {
@@ -134,7 +134,7 @@ final class ElementsWrittenAlike {
                         out.add(List.of(new OnTheWay.TakenIn(entry.anchor(),
                                 new RowDemand.ForAll(container,
                                         RowDemand.AnElementMeets.only(way), holdingNone,
-                                        Optional.empty()))));
+                                        Optional.empty()), entry.named())));
                     }
                 }
                 case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,

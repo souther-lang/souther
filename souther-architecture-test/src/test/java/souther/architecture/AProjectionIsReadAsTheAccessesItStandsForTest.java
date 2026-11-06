@@ -348,7 +348,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.STRUCTURE, "a chain read off one of the value's fields is one place, whose"
                         + " names Location.of reads; a projection read off anything else names"
                         + " no place, so its base is all there is to go down to");
-        row(out, c + "inputs/InputReads", "walkNames", "(" + core + "Ljava/util/Set;Ljava/util/Set;)V",
+        row(out, c + "inputs/InputReads", "walkNames", "(" + core + "Ljava/util/Set;Ljava/util/List;)V",
                 Reading.STRUCTURE, BINDINGS);
         row(out, c + "flow/ValueArrivals", "readCopies", "(" + core + "L" + c
                 + "types/OccurrenceLineage$Expansion;)V", Reading.STRUCTURE,
@@ -650,7 +650,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.STRUCTURE, BINDINGS);
         row(out, c + "partition/MeaningsOfABodyReading", "walk", "(" + core + reads + ")V",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
-        row(out, c + "partition/Pullback$1", "leafOf", "(" + core + reads + "L" + c
+        row(out, c + "partition/Pullback$1", "leafHeld", "(" + core + reads + "L" + c
                 + "check/AffineForms$Outcome$StoppedAt;)L" + c + "numeric/LinearForm;",
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/Pullback$1", "readsThrough",

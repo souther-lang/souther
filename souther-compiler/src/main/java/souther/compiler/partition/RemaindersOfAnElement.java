@@ -103,7 +103,7 @@ final class RemaindersOfAnElement {
         List<RowDemand.ForTheRun> held = new ArrayList<>(holding);
         Congruences in = members;
         for (OnTheWay entry : entries) {
-            if (entry instanceof OnTheWay.TakenIn(var _, RowDemand.ForTheRun run)
+            if (entry instanceof OnTheWay.TakenIn(var _, RowDemand.ForTheRun run, var _)
                     && classOf(run, element) instanceof Congruences one) {
                 Congruences both = in == null ? one : in.meet(one);
                 if (both == null) {
@@ -120,10 +120,10 @@ final class RemaindersOfAnElement {
         boolean changed = false;
         for (OnTheWay entry : entries) {
             out.add(entry);
-            if (entry instanceof OnTheWay.TakenIn(var anchor, RowDemand.ForTheRun run)
+            if (entry instanceof OnTheWay.TakenIn(var anchor, RowDemand.ForTheRun run, var named)
                     && putAt(run, element, in, held, kept)
                             instanceof RowDemand.OnARemainder follows) {
-                out.add(new OnTheWay.TakenIn(anchor, follows));
+                out.add(new OnTheWay.TakenIn(anchor, follows, named));
                 changed = true;
             } else if (entry instanceof OnTheWay.OneOf several) {
                 List<List<OnTheWay>> ways = new ArrayList<>();

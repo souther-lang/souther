@@ -153,7 +153,7 @@ final class ACaseAskedAtSomeElement {
             if (each.getKey().equals(element)) {
                 continue;
             }
-            if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))
+            if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _))
                     || whole(each.getValue()) == null) {
                 return null;
             }

@@ -143,7 +143,8 @@ class RemaindersOfOneFormMovedByNumbersAreHeldTogetherOnAWayTest {
                 FLOOR_MOD, new LinearForm<>(ExactRatio.of(moved), coefs),
                 BigInteger.valueOf(divisor));
         return new OnTheWay.TakenIn(WHERE, new RowDemand.OnARemainder(remainder,
-                WholeNumberRuns.one(BigInteger.valueOf(low), BigInteger.valueOf(high))));
+                WholeNumberRuns.one(BigInteger.valueOf(low), BigInteger.valueOf(high))),
+                NamedElements.NONE);
     }
 
     private static SearchRegion region() {

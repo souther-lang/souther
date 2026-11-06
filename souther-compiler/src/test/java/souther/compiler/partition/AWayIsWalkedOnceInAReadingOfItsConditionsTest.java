@@ -32,7 +32,8 @@ class AWayIsWalkedOnceInAReadingOfItsConditionsTest {
                     new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 0));
 
     private static OnTheWay truth(String name, boolean held) {
-        return new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(TermPath.of("r").then(name), held));
+        return new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(TermPath.of("r").then(name), held),
+                NamedElements.NONE);
     }
 
     /** {@code a || b} beside {@code c}, each entry made afresh. */

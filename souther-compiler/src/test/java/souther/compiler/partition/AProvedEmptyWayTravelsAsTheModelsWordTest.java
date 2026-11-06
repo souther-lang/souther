@@ -172,7 +172,8 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
 
     private static OnTheWay.TakenIn cutOver(NumericTerm over) {
         return new OnTheWay.TakenIn(WHERE,
-                new RowDemand.Relational(new TakenConstraint.Affine(LinearForm.atom(over), Rel.GE)));
+                new RowDemand.Relational(new TakenConstraint.Affine(LinearForm.atom(over), Rel.GE)),
+                NamedElements.NONE);
     }
 
     /** A row composed inside {@code within}, with {@code cut} on the way to it. */

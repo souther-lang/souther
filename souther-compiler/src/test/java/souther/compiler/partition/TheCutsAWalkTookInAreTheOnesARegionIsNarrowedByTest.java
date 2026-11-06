@@ -122,8 +122,10 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         Recording region = new Recording();
 
         SearchRegion narrowed = new WayToTheBorder(List.of(
-                new OnTheWay.TakenIn(somewhere(1), new RowDemand.Relational(first)),
-                new OnTheWay.TakenIn(somewhere(2), new RowDemand.Relational(second))))
+                new OnTheWay.TakenIn(somewhere(1), new RowDemand.Relational(first),
+                        NamedElements.NONE),
+                new OnTheWay.TakenIn(somewhere(2), new RowDemand.Relational(second),
+                        NamedElements.NONE)))
                 .narrowing(region);
 
         assertEquals(List.of(first, second), region.told,
@@ -146,7 +148,8 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         WayToTheBorder way = new WayToTheBorder(List.of(
                 new OnTheWay.Declined(met(1), somewhere(1),
                         new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER)),
-                new OnTheWay.TakenIn(somewhere(2), new RowDemand.Relational(only)),
+                new OnTheWay.TakenIn(somewhere(2), new RowDemand.Relational(only),
+                        NamedElements.NONE),
                 new OnTheWay.Declined(met(3), somewhere(3),
                         new WhyNotTaken.OutsideDomain(
                                 WhyNotTaken.DomainLimit.AN_ANSWER_A_ROW_STANDS_IN))));
@@ -172,8 +175,10 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         Recording region = new Recording();
 
         new WayToTheBorder(List.of(
-                new OnTheWay.TakenIn(somewhere(1), new RowDemand.Relational(arithmetic)),
-                new OnTheWay.TakenIn(somewhere(2), new RowDemand.Relational(ordered))))
+                new OnTheWay.TakenIn(somewhere(1), new RowDemand.Relational(arithmetic),
+                        NamedElements.NONE),
+                new OnTheWay.TakenIn(somewhere(2), new RowDemand.Relational(ordered),
+                        NamedElements.NONE)))
                 .narrowing(region);
 
         assertEquals(List.of(arithmetic, ordered), region.told,
@@ -202,7 +207,8 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         Recording region = new Recording();
 
         new WayToTheBorder(List.of(
-                new OnTheWay.TakenIn(somewhere(1), new RowDemand.Relational(shifted))))
+                new OnTheWay.TakenIn(somewhere(1), new RowDemand.Relational(shifted),
+                        NamedElements.NONE)))
                 .narrowing(region);
 
         assertEquals(List.of(shifted), region.told);

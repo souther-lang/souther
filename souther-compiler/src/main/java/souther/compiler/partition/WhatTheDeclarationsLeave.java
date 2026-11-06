@@ -151,12 +151,13 @@ public final class WhatTheDeclarationsLeave {
             case Proposition.Truth(DecisionSubject.AnAnswer _, boolean _, var _),
                  Proposition.InCases(DecisionSubject.AnAnswer _, var _, boolean _, var _),
                  Proposition.Present(DecisionSubject.AnAnswer _, boolean _, var _) -> LEFT;
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at, var _), boolean holds,
+                                   var _) ->
                     leaves(at, List.of(new Case.Truth(holds == want)), read);
-            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean holds,
+            case Proposition.Present(DecisionSubject.AnInput(TermPath at, var _), boolean holds,
                                      var _) ->
                     leaves(at, List.of(new Case.Presence(holds == want)), read);
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at, var _), CasesLeft cases,
                                      boolean holds, var _) ->
                     amongCases(at, cases, holds == want, read);
             // Whether two values are one is no rule of either position alone, so asked of each
@@ -341,7 +342,8 @@ public final class WhatTheDeclarationsLeave {
     private static AWayThrough leaves(Relation relation, boolean holds, Quantities declared) {
         Rel asked = holds ? relation.proposition() : relation.proposition().denied();
         return switch (relation) {
-            case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), var at, Rel _) ->
+            case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term, var _), var at,
+                                  Rel _) ->
                     ruledOutByBounds(declared.runsBetween(term), asked, at)
                             ? new AWayThrough.RuledOut(
                                     new WhyRuledOut.TheNumbersLeaveNone(relation, asked))
@@ -424,11 +426,14 @@ public final class WhatTheDeclarationsLeave {
     }
 
     /** {@code form} as one over numbers of the input, or null where a quantity is something else.
-     *  The one place a statement's form is put on the input space, for every reader that does. */
+     *  The one place a statement's form is put on the input space, for every reader that does.
+     *  Null too where two of its numbers are two values at one position: over positions they
+     *  would be one number, which is not what the form says. */
     static LinearForm<NumericTerm> ofTheInput(LinearForm<Quantity> form) {
         Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
-            if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))) {
+            if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _))
+                    || coefs.containsKey(term)) {
                 return null;
             }
             coefs.put(term, each.getValue());

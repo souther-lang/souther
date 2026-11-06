@@ -11,6 +11,9 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.meaning.CaseExpansion;
 import souther.compiler.meaning.NumericallyConsistentWays;
+import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.meaning.WhyUnread;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.RunSensitivity;
@@ -77,6 +80,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.InputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.RecordComponent;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -323,6 +328,72 @@ class EverySchemaWordIsAccountedForTest {
         return words;
     }
 
+    private static Set<String> meaningUnreadWords() {
+        Set<String> out = new LinkedHashSet<>();
+        for (Class<?> each : WhyUnread.class.getPermittedSubclasses()) {
+            for (Object reason : everyOf(each)) {
+                out.add(AdequacyReport.meaningUnreadWord((WhyUnread) reason));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * A value of the record {@code type} for each constant of each enum it carries, in every
+     * combination, and one value of whatever else it carries: the enums are where a reason's word
+     * may turn on what it carries.
+     */
+    private static List<Object> everyOf(Class<?> type) {
+        RecordComponent[] parts = type.getRecordComponents();
+        List<List<Object>> made = new ArrayList<>(List.of(List.of()));
+        for (RecordComponent part : parts) {
+            List<List<Object>> longer = new ArrayList<>();
+            for (List<Object> before : made) {
+                for (Object one : choicesFor(part.getType())) {
+                    List<Object> with = new ArrayList<>(before);
+                    with.add(one);
+                    longer.add(with);
+                }
+            }
+            made = longer;
+        }
+        List<Object> out = new ArrayList<>();
+        try {
+            Constructor<?> canonical = type.getDeclaredConstructor(Arrays.stream(parts)
+                    .map(RecordComponent::getType).toArray(Class<?>[]::new));
+            canonical.setAccessible(true);
+            for (List<Object> args : made) {
+                out.add(canonical.newInstance(args.toArray()));
+            }
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(type.getName() + " is not made of what it carries", e);
+        }
+        return out;
+    }
+
+    /** What a record component of {@code type} is given, refusing a type nothing here makes
+     *  rather than leaving the reason carrying it out of the words. */
+    private static List<Object> choicesFor(Class<?> type) {
+        if (type.isEnum()) {
+            return List.of(type.getEnumConstants());
+        }
+        if (type == ValueName.Stdlib.class) {
+            return List.of(ValueName.Stdlib.operation("Date", "addMonths"));
+        }
+        if (type == Clause.Ref.class) {
+            return List.of(new Clause.Ref(new Clause.Id(TypeSymbols.declared(
+                    new TypeKey("m", "T")), 0), Optional.empty()));
+        }
+        throw new IllegalStateException("nothing here makes a " + type.getName()
+                + ", so the word of a reason carrying one is held to nothing");
+    }
+
+    private static Set<String> outsideDomainWords() {
+        return Arrays.stream(WhyNotTaken.DomainLimit.values())
+                .map(AdequacyReport::outsideDomainWord)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
     private static Set<String> requirementBecauseWords() {
         Map<String, String> spelling = new LinkedHashMap<>();
         spelling.put("OnePositionCannotBeBoth", "the_way_needs_one_position_to_be_two");
@@ -492,6 +563,22 @@ class EverySchemaWordIsAccountedForTest {
             // inside the compiler is not a change to the contract, and would be one if this read
             // the constants.
             new Vocabulary("status", List.of("$defs", "status"), STATUS_WORDS),
+            // Why the meaning of a condition nothing read was not read, as the writer spells every
+            // reason there is, made of each case of what it carries.
+            new Vocabulary("notRead[].reason, meaning_unread",
+                    List.of("$defs", "conditionNotReadReason", "allOf", "0", "then",
+                            "properties", "reason"),
+                    List.of(WhyUnread.class), meaningUnreadWords(), Set.of()),
+            // Which domain a condition nothing read was outside of, as the writer spells each
+            // limit there is, so a limit added to the reading is one the schema is given a word
+            // for. Two words name limits nothing meets any more, and a third is the one a limit
+            // was written as in a released document before its word was changed.
+            new Vocabulary("notRead[].reason, outside_domain",
+                    List.of("$defs", "conditionNotReadReason", "allOf", "1", "then",
+                            "properties", "reason"),
+                    List.of(WhyNotTaken.DomainLimit.class), outsideDomainWords(),
+                    Set.of("size_nothing_measures", "position_the_reading_holds_no_place_for",
+                            "path_knows_no_cases")),
             // Which kind of decision a combination is of. Written as the words rather than as the
             // reading's arms, for the reason `status` is: the document promises what the writer
             // writes, and a reading renaming one of its own cases is not a change to the contract.

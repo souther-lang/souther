@@ -55,7 +55,8 @@ class ACountOfStatementsIsJudgedAsACountTest {
     private static OnTheWay positive(int field, boolean holds) {
         return new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(
                 new TakenConstraint.Affine(new LinearForm<>(ExactRatio.ZERO,
-                        Map.of(term(field), ExactRatio.ONE)), holds ? Rel.GT : Rel.LE)));
+                        Map.of(term(field), ExactRatio.ONE)), holds ? Rel.GT : Rel.LE)),
+                NamedElements.NONE);
     }
 
     /** The statement {@code x_field > 0}: what a row meets where it holds, and where it fails. */
@@ -144,11 +145,15 @@ class ACountOfStatementsIsJudgedAsACountTest {
     void exactlyOneOfATruthAndItsDenialIsOpenAndNoneOrBothIsNot() {
         TermPath at = TermPath.of("r").then("flag");
         OnTheWay.Counted.Statement truth = new OnTheWay.Counted.Statement(1,
-                List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, true))),
-                List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, false))));
+                List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, true),
+                        NamedElements.NONE)),
+                List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, false),
+                        NamedElements.NONE)));
         OnTheWay.Counted.Statement untrue = new OnTheWay.Counted.Statement(1,
-                List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, false))),
-                List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, true))));
+                List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, false),
+                        NamedElements.NONE)),
+                List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, true),
+                        NamedElements.NONE)));
 
         assertEquals(2, alongEach(of(counted(List.of(1), truth, untrue))).size());
         for (int count : new int[] {0, 2}) {

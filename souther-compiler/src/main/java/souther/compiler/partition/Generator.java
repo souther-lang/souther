@@ -849,7 +849,15 @@ public final class Generator {
                              // The counts a string is written for past this one, and the lengths
                              // past the ones looked at, were never asked for either.
                              CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
-                             CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR -> HowFar.CUT_SHORT;
+                             CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,
+                             // The values a position was tried at, the places looked at for it and
+                             // the assignments composed for them, past these, were never tried by
+                             // the search that places the numbers beside a count's elements, which
+                             // is the search that walks a position on the way to a border: what it
+                             // came to is about the values it tried.
+                             VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,
+                             PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT,
+                             ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR -> HowFar.CUT_SHORT;
                         // Reaching these stops no composing, so no search comes back from one of
                         // them and there is no word to give. Asked for one all the same, this says
                         // so rather than lending a word from a budget that does stop something.
@@ -857,12 +865,6 @@ public final class Generator {
                         // what it stopped is carried where that reading is
                         // ({@link DecisionReading.Enumeration}).
                         case TIMES_THE_RULES_ARE_ASKED_AGAIN,
-                             VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,
-                             // Beside it for the same reason: what either of them stopped is the
-                             // getting past a condition on the way, and the row is composed either
-                             // way.
-                             PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT,
-                             ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR,
                              VALUES_A_POINT_IS_TRIED_WITH,
                              DEPTH_A_CONSTRUCTION_PLAN_DESCENDS,
                              PATHS_OF_A_DECISION_READ,
@@ -8243,7 +8245,8 @@ public final class Generator {
         boolean some = cut.demand() instanceof RowDemand.Exists;
         return new OnTheWay.TakenIn(cut.anchor(), new RowDemand.SoMany(counted,
                 some ? Rel.GE : Rel.EQ, some ? ExactRatio.ONE : ExactRatio.ZERO,
-                new LinearForm<>(ExactRatio.ZERO, Map.of()), AnElementMeeting.UNREAD));
+                new LinearForm<>(ExactRatio.ZERO, Map.of()), AnElementMeeting.UNREAD),
+                cut.named());
     }
 
     /** Whether {@code demand} asks nothing a number stands for: an element to be, or not to be,

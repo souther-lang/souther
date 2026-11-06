@@ -15,6 +15,7 @@ import souther.compiler.partition.ConditionGap;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.partition.DemandGap;
+import souther.compiler.partition.NamedElements;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.ReachabilityGap;
 import souther.compiler.partition.RowDemand;
@@ -175,7 +176,8 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
     private static OnTheWay.TakenIn cut() {
         return new OnTheWay.TakenIn(where(), new RowDemand.Relational(
                 new TakenConstraint.Affine(
-                        LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("x"))), Rel.GE)));
+                        LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("x"))), Rel.GE)),
+                NamedElements.NONE);
     }
 
     /** Which question a report about the condition under test would put. */

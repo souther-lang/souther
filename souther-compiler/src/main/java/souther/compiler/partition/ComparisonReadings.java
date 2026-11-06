@@ -26,6 +26,7 @@ import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
@@ -337,14 +338,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    Optional<StopEvidence> stopsIn, List<StopEvidence.OnAnArm> onTheArms,
                    ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context,
                    SaidOnTheWay saidOnTheWay, CountWitnesses.Lookup witnesses,
-                   DemandReading.Answered getsPast, LinesReadOn readOn) {
+                   DemandReading.Answered getsPast, ElementsNamed readsTheElements,
+                   LinesReadOn readOn) {
 
         Reading {
             if (occurrence == null || statement == null || at == null
                     || statedAsACondition == null || stopsWhere == null || worksOutOnEach == null
                     || stopsIn == null || onTheArms == null || metOn == null || runsAs == null || context == null
                     || saidOnTheWay == null || witnesses == null || getsPast == null
-                    || readOn == null) {
+                    || readsTheElements == null || readOn == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
@@ -358,11 +360,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return wayToACase(put.entries());
         }
 
-        /** The way, and then {@code put}, entries some case puts on the way. */
+        /**
+         * The way, and then {@code put}, entries some case puts on the way: as statements of the
+         * elements the comparison reads, as the way is ({@link ElementsOnTheWay}).
+         */
         List<OnTheWay> wayToACase(List<OnTheWay> put) {
             List<OnTheWay> out = new ArrayList<>(assumed);
             out.addAll(put);
-            return List.copyOf(out);
+            return ElementsOnTheWay.keptToOneElementEach(List.copyOf(out), readsTheElements);
         }
 
         /**
@@ -921,12 +926,18 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     && stated.statement() instanceof Stated.AComparison(var comparison)
                     ? in.conditions().comparison(comparison, reads, in.read()).onTheArms().get()
                     : List.of();
-            out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing,
+            // What a line of it is looked for beside is the way as statements of the elements the
+            // comparison reads: a condition on the way read of another element of one of its
+            // containers is about a value the line is not.
+            ElementsNamed readsTheElements = reads.elementsNamedIn(e, in.newtypes());
+            List<OnTheWay> besideIt = ElementsOnTheWay.keptToOneElementEach(assumed,
+                    readsTheElements);
+            out.add(new Reading(stands, stated.statement(), where, reads, besideIt, standing,
                     statedAsACondition(e, standing, stopsWhere, worksOutOnEach, reads, in,
                             numbering), stopsWhere,
                     worksOutOnEach, stopsIn, onTheArms, applying.elementsMetOn(), stated.written(), in.context(),
-                    numbering.saidOnTheWay(List.of(assumed)), witnesses,
-                    pastOf(standing, e, in, reads), readOn));
+                    numbering.saidOnTheWay(List.of(besideIt)), witnesses,
+                    pastOf(standing, e, in, reads), readsTheElements, readOn));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.
@@ -1400,7 +1411,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                    WhatConditionsState conditions, CallContext context,
                                    ConditionNumbering numbering) {
         switch (condition) {
-            case Condition.OfOneConstruct one -> out.add(new OutcomeMet(one, assumed,
+            // Beside the way as statements of the elements the condition reads, as a line is.
+            case Condition.OfOneConstruct one -> out.add(new OutcomeMet(one,
+                    ElementsOnTheWay.keptToOneElementEach(assumed,
+                            one.elementsNamed(read.rules().newtypes())),
                     holding != null ? holding
                             : ReachingCuts.stating(condition, read, true, conditions).entries(),
                     failing != null ? failing
