@@ -2284,21 +2284,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The parameters this relation reads a place under: those of its places, and those of what a
-     * walk handing a side its value walks or starts from — or empty where some side is read off
-     * no place this names, as what an operation answered of something unnamed is, since that side
-     * may be read off any of them.
+     * The parameters this relation reads a place under: those of every place it is read off
+     * ({@link #positionsRead}) — or empty where some side is read off no place this names, as what
+     * an operation answered of something unnamed is, since that side may be read off any of them.
      */
-    private Optional<Set<String>> parametersRead() {
-        Set<String> out = new HashSet<>();
-        placesReadOff(amongThemselves).forEach(place -> out.add(place.head()));
-        for (Side each : sides) {
-            Optional<List<TermPath>> read = placesRead(each);
-            if (read.isEmpty()) {
-                return Optional.empty();
-            }
-            read.get().forEach(place -> out.add(place.head()));
+    Optional<Set<String>> parametersRead() {
+        Set<TermPath> read = positionsRead();
+        if (read == null) {
+            return Optional.empty();
         }
+        Set<String> out = new HashSet<>();
+        read.forEach(place -> out.add(place.head()));
         return Optional.of(out);
     }
 
@@ -2313,25 +2309,48 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The places of the input what {@code side} comes to is worked out from — its own, and those
-     * of what a walk handing it its value walks or starts from — or empty where some of them are no
-     * place this names: what an operation answered of something unnamed, or how many elements meet
-     * a statement that reads what was not read.
+     * Every place of the input what {@code side} comes to is read off: every place each of its
+     * numbers is read off ({@link FilingCoordinate#placesReadOff}), and those of what a walk
+     * handing it its value walks or starts from — or empty where some of them are no place this
+     * names: what an operation answered of something unnamed, or how many elements meet a
+     * statement that reads what was not read.
      *
-     * <p>Not where the relation is reported: a count of the elements meeting a statement is at no
-     * position, and is worked out from the container and from what the statement reads of each
-     * element.
-     *
-     * <p>Its own places are where each of its numbers stands in an element, and not every place a
-     * number is read off ({@link FilingCoordinate#placesReadOff}): a number read among the
-     * elements beside its own, the end of a key's values, is read off the container too, and a
-     * reader of these asks how a cut container keeps it of {@link #keptCutDown}, which says it is
-     * kept by copies of its element. Taken as a place read whole, the container would be read for
-     * every such side, and no cut would be shown to keep one.
+     * <p>What the side depends on, and the one answer to it: whether a place, a tie or a rule of
+     * the declarations can say something of the side is asked of these. Not where the relation is
+     * reported: a count of the elements meeting a statement is at no position, and is worked out
+     * from the container and from what the statement reads of each element.
      */
-    private static Optional<List<TermPath>> placesRead(Side side) {
+    private static Optional<List<TermPath>> placesItIsReadOff(Side side) {
+        return placesOf(side, FilingCoordinate::placesReadOff, true);
+    }
+
+    /**
+     * Where each number of {@code side} stands in an element, and the places of what a walk
+     * handing it its value walks or starts from — or empty as {@link #placesItIsReadOff} is.
+     *
+     * <p>For the one question that asks where a side stands rather than what it reads: whether
+     * a witness cutting a container down cuts a place the side reads whole ({@link Witness}). A
+     * number read among the elements beside its own, the end of a key's values, is read off the
+     * container too, and is kept by copies of its element where the container is cut
+     * ({@link #keptCutDown}); taken as a place read whole, the container would be read for every
+     * such side, and no cut would be shown to keep one.
+     */
+    private static Optional<List<TermPath>> whereItsNumbersStand(Side side) {
+        return placesOf(side, each -> List.of(each.path()), false);
+    }
+
+    /**
+     * The places of {@code side}: each of its numbers counted as {@code ofANumber} says, the
+     * number it is as well where {@code itsNumber}, and the places of what a walk handing it its
+     * value walks or starts from, which both questions count alike.
+     */
+    private static Optional<List<TermPath>> placesOf(
+            Side side, Function<FilingCoordinate, List<TermPath>> ofANumber, boolean itsNumber) {
         List<TermPath> out = new ArrayList<>();
-        side.madeOf().forEach(place -> out.add(place.path()));
+        side.madeOf().forEach(place -> out.addAll(ofANumber.apply(place)));
+        if (itsNumber && side.number() != null) {
+            out.addAll(ofANumber.apply(FilingCoordinate.of(side.number())));
+        }
         switch (side.along()) {
             case null -> {
                 if (side.madeOf().isEmpty() && side.number() == null) {
@@ -2342,7 +2361,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 out.add(kept.container());
                 out.addAll(kept.ofEach().placesReadOff());
                 if (kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)) {
-                    out.add(from.subjectPath());
+                    out.addAll(ofANumber.apply(FilingCoordinate.of(from)));
                 }
             }
             case Quantity.PositionInTheWalk position -> out.add(position.container());
@@ -2502,47 +2521,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The positions this relation reads: those of its places, and those a walk handing a side its
-     * value walks or starts from — or null where some side is read off places this cannot name,
-     * as what an operation answered of something unnamed is.
+     * Every place of the input this relation is read off: what the places it holds against each
+     * other are read off, and every place each side is ({@link #placesItIsReadOff}) — or null
+     * where some side is read off places this cannot name, as what an operation answered of
+     * something unnamed is.
      */
     private Set<TermPath> positionsRead() {
-        Set<TermPath> out = new LinkedHashSet<>(placesReadOff(places()));
+        Set<TermPath> out = new LinkedHashSet<>(placesReadOff(amongThemselves));
         for (Side each : sides) {
-            if (each.number() != null) {
-                out.addAll(each.number().placesReadOff());
+            Optional<List<TermPath>> read = placesItIsReadOff(each);
+            if (read.isEmpty()) {
+                return null;
             }
-            switch (each.along()) {
-                case null -> {
-                    if (each.madeOf().isEmpty() && each.number() == null) {
-                        return null;
-                    }
-                }
-                case Quantity.KeptSoFar kept -> {
-                    out.add(kept.container());
-                    out.addAll(kept.ofEach().placesReadOff());
-                    if (kept.seed() instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)) {
-                        out.addAll(from.placesReadOff());
-                    }
-                }
-                case Quantity.PositionInTheWalk position -> out.add(position.container());
-                case Quantity.PickedAtAnIndex picked -> {
-                    out.add(picked.container());
-                    out.add(picked.element());
-                }
-                case Quantity.AWholeNumberInTurn number -> out.addAll(placesOfItsEnds(number));
-                case Quantity.HowManyMeet counted -> {
-                    Optional<List<TermPath>> reads =
-                            PositionsAStatementReads.of(counted.ofTheElement());
-                    if (reads.isEmpty()
-                            || !(counted.container() instanceof DecisionSubject.AnInput(
-                                    TermPath container, var _))) {
-                        return null;
-                    }
-                    out.add(container);
-                    out.addAll(reads.get());
-                }
-            }
+            out.addAll(read.get());
         }
         return out;
     }
@@ -4172,21 +4163,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (past.tied().isEmpty() && past.owed().isEmpty() && past.before().isEmpty()) {
             return Optional.of(exact);
         }
-        // Where each number stands in an element, as placesRead has a side's, for the witness that
-        // cuts the containers these stand in.
-        List<TermPath> reads = new ArrayList<>();
-        amongThemselves.forEach(each -> reads.add(each.path()));
+        // What the relation is read off, which a tie or a stop is asked to touch; and where each of
+        // its numbers stands, which a witness cutting a container asks it does not read whole.
+        Set<TermPath> readOff = positionsRead();
+        if (readOff == null) {
+            return Optional.empty();
+        }
+        List<TermPath> reads = List.copyOf(readOff);
+        List<TermPath> standing = new ArrayList<>();
+        amongThemselves.forEach(each -> standing.add(each.path()));
         for (Side side : sides) {
-            Optional<List<TermPath>> placesOfTheSide = placesRead(side);
+            Optional<List<TermPath>> placesOfTheSide = whereItsNumbersStand(side);
             if (placesOfTheSide.isEmpty()) {
                 return Optional.empty();
             }
-            reads.addAll(placesOfTheSide.get());
+            standing.addAll(placesOfTheSide.get());
         }
-        Witness witness = new Witness(reads, read, region, conditions, declined, Set.of());
+        Witness witness = new Witness(reads, standing, read, region, conditions, declined,
+                Set.of());
         Optional<Set<TermPath>> walked = walkedByTheApplicationsBefore(past, read);
         if (walked.isPresent()) {
-            Witness ofOne = new Witness(reads, read, region, conditions, declined, walked.get());
+            Witness ofOne = new Witness(reads, standing, read, region, conditions, declined,
+                    walked.get());
             if (walked.get().stream()
                     .allMatch(each -> ofOne.holds(each).equals(Optional.of(BigInteger.ONE)))) {
                 return stopsOn(past, reads, ofOne, false, read, collecting, false, accountedFor)
@@ -4511,6 +4509,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         private final List<TermPath> reads;
         private final InputReading read;
+        private final List<TermPath> standing;
         private final SearchRegion region;
         private final List<OnAWay> conditions;
         private final Optional<Set<String>> declined;
@@ -4612,7 +4611,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             }
             for (Side side : sides) {
-                Optional<List<TermPath>> placesOfTheSide = placesRead(side);
+                Optional<List<TermPath>> placesOfTheSide = placesItIsReadOff(side);
                 if (placesOfTheSide.isEmpty()) {
                     return false;
                 }
@@ -4625,18 +4624,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /**
-         * @param reads     the places the relation reads
+         * @param reads     every place the relation is read off ({@link #positionsRead})
          * @param read      the reading of the input
          * @param region    the region the relation is read over
          * @param conditions what the way states
          * @param declined  the parameters what the way declined may name a position under, or
          *                  empty where it may name any
          * @param heldToOne the collections held to the one element the relation is read at
+         * @param standing  where each number the relation reads stands in an element
+         *                  ({@link #whereItsNumbersStand}), which a cut must not read whole
          */
-        Witness(List<TermPath> reads, InputReading read, SearchRegion region,
-                List<OnAWay> conditions, Optional<Set<String>> declined,
+        Witness(List<TermPath> reads, List<TermPath> standing, InputReading read,
+                SearchRegion region, List<OnAWay> conditions, Optional<Set<String>> declined,
                 Set<TermPath> heldToOne) {
             this.reads = reads;
+            this.standing = standing;
             this.read = read;
             this.region = region;
             this.conditions = conditions;
@@ -4710,7 +4712,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             boolean aTotal = false;
             for (Side side : sides) {
-                Optional<List<TermPath>> placesOfTheSide = placesRead(side);
+                Optional<List<TermPath>> placesOfTheSide = placesItIsReadOff(side);
                 boolean ofTheCollection = placesOfTheSide.isEmpty() || placesOfTheSide.get()
                         .stream().anyMatch(at -> at.bearsOn(collection));
                 switch (keptCutDown(side)) {
@@ -4724,7 +4726,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             }
             BigInteger inside = BigInteger.ZERO;
-            for (TermPath at : reads) {
+            for (TermPath at : standing) {
                 if (at.equals(collection) || collection.isAtOrUnder(at)) {
                     return Optional.empty();
                 }
@@ -5118,7 +5120,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * Whether {@code term} is a number nothing the way says of the input but {@code statement} may
-     * name — no side of the relation reads it ({@link #placesRead}), no other statement of
+     * name — no side of the relation reads it ({@link #placesItIsReadOff}), no other statement of
      * {@code conditions} does, nothing the way declined may ({@code declined}), no operator the
      * source works out on the way ties it to another place ({@code tied}), and no rule of a value
      * around it names it — and which is shown to take two values or more among those the
@@ -5136,7 +5138,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return false;
         }
         for (Side side : sides) {
-            Optional<List<TermPath>> reads = placesRead(side);
+            Optional<List<TermPath>> reads = placesItIsReadOff(side);
             if (reads.isEmpty() || reads.get().stream().anyMatch(place ->
                     number.placesReadOff().stream().anyMatch(place::bearsOn))) {
                 return false;
@@ -6475,7 +6477,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (other == side) {
                 continue;
             }
-            Optional<List<TermPath>> reads = placesRead(other);
+            Optional<List<TermPath>> reads = placesItIsReadOff(other);
             if (reads.isEmpty() || reads.get().stream().anyMatch(at -> ends.stream()
                     .anyMatch(at::bearsOn))) {
                 return null;
