@@ -569,6 +569,105 @@ final class Terms {
     private final FoldedValue.Kept affineFolds = new FoldedValue.Kept();
 
     /**
+     * What {@code stated}, read in {@code at}, states of the arguments of the operation one of its
+     * sides is the sign of ({@link TheSignOfAnOrder#read}), read in this check's environment
+     * ({@link #signSides}) — or null where it states nothing of them.
+     *
+     * <p>Held for as long as this is, for the reason {@link #affineAnswers} is. A clause is read
+     * again wherever the check reads it — on every path that owes it, at every leaf a reading of
+     * the clauses meets — and each time its comparison is the same nodes read in the same
+     * environment, so the sign is read once for all of them. Asked by those nodes and that
+     * environment as the objects they are, as a name's answer is ({@link BindingWalk}): the same
+     * question asked of equal ones is worked out again and answers alike.
+     */
+    TheSignOfAnOrder.Read<Denotations> signOf(StatedComparison stated, Denotations at) {
+        return signs.computeIfAbsent(new SignAsked(stated, at),
+                asked -> Optional.ofNullable(TheSignOfAnOrder.read(stated, at, signSides)))
+                .orElse(null);
+    }
+
+    private final Map<SignAsked, Optional<TheSignOfAnOrder.Read<Denotations>>> signs =
+            new HashMap<>();
+
+    /** A comparison and the environment it is read in, the nodes and the environment by what
+     *  object they are, and what it claims by what it claims. */
+    private static final class SignAsked {
+        private final StatedComparison stated;
+        private final Denotations at;
+
+        SignAsked(StatedComparison stated, Denotations at) {
+            this.stated = stated;
+            this.at = at;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof SignAsked asked && asked.stated.left() == stated.left()
+                    && asked.stated.right() == stated.right()
+                    && asked.stated.reading() == stated.reading()
+                    && asked.stated.claim().equals(stated.claim()) && asked.at == at;
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * (31 * (31 * System.identityHashCode(stated.left())
+                    + System.identityHashCode(stated.right())) + stated.claim().hashCode())
+                    + System.identityHashCode(at);
+        }
+    }
+
+    /**
+     * What this check answers about its environment for a comparison of a sign: a name is what it
+     * was given, as everywhere a value is read here ({@link #readThrough}), and the number against
+     * it is read and not matched, so {@code compare(a, b) > zero} under {@code let zero = 0} is the
+     * condition it looks like.
+     *
+     * <p>Where a name was given is where its value is read, which for this check is the environment
+     * at the comparison: a binding tells itself from every other, so nothing bound later answers
+     * for a name the arguments hold.
+     */
+    private final TheSignOfAnOrder.Sides<Denotations> signSides = new SignSides();
+
+    /** {@link #signSides}. */
+    private final class SignSides implements TheSignOfAnOrder.Sides<Denotations> {
+
+        @Override
+        public ValueStanding.ReadThrough<Denotations> standing(Core e, Denotations at) {
+            Core value = e;
+            Denotations in = at;
+            while (Core.withoutStanding(value) instanceof Core.Read name
+                    && readThrough(name, in)
+                            instanceof ValueStanding.ReadThrough<Denotations> through) {
+                value = through.value();
+                in = through.at();
+            }
+            return new ValueStanding.ReadThrough<>(value, in);
+        }
+
+        @Override
+        public ExactRatio constant(Core e, Denotations at) {
+            LinearForm<FactSubject> read = affineOf(e, at);
+            return read == null || !read.coefs().isEmpty() ? null : read.constant();
+        }
+
+        @Override
+        public LinearForm<AffineForms.ACall<Denotations>> overTheCalls(
+                Core e, Denotations at, Predicate<Core> taken) {
+            return Terms.this.overTheCalls(e, at, taken);
+        }
+
+        @Override
+        public DeclarationAccess declarations() {
+            return Terms.this.declarations();
+        }
+
+        @Override
+        public DeclarationNewtypes newtypes() {
+            return Terms.this.newtypes();
+        }
+    }
+
+    /**
      * The same, saying where the reading stopped where it did, and naming only the atoms
      * {@code names} accepts.
      *
