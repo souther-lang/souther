@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * What a question declares it answers with, walked as the declarations wrote it.
@@ -37,23 +39,29 @@ final class DeclaredAnswerWalk {
     /** One type in one place, and why the walk stopped there. */
     record Found(TypePath.Place place, Traversal.Why why) {}
 
-    /** What a walk of the declarations found, and how much of them it opened. */
-    record Walked(List<Found> found, int opened) {}
+    /**
+     * What a walk of the declarations found, and how much of them it opened.
+     *
+     * @param passedOver every field it met and did not go into, the rest deciding it
+     *                   ({@link AnswerShape#passedOver}), as {@code Declaring#field}
+     */
+    record Walked(List<Found> found, int opened, Set<String> passedOver) {}
 
     /** Everything the questions in {@code keys} declare that cannot be compared as a value. */
     static Walked of(List<Class<?>> keys) {
         List<Found> out = new ArrayList<>();
+        Set<String> passedOver = new TreeSet<>();
         int opened = 0;
         for (Class<?> key : keys) {
             Type answered = answeredBy(key);
-            Traversal<Node, TypePath> walk = new Traversal<>(new OfTheDeclarations());
+            Traversal<Node, TypePath> walk = new Traversal<>(new OfTheDeclarations(passedOver));
             walk.at(new Node(answered == null ? Key.class : answered, Map.of()), TypePath.ROOT);
             opened += walk.opened();
             for (Traversal.Stopped<TypePath> each : found(walk)) {
                 out.add(new Found(each.where().of(key.getName(), each.offender()), each.why()));
             }
         }
-        return new Walked(List.copyOf(out), opened);
+        return new Walked(List.copyOf(out), opened, passedOver);
     }
 
     /** What one walk of one declaration came to. A walk of types has nowhere to fall short: what it
@@ -134,6 +142,12 @@ final class DeclaredAnswerWalk {
      */
     private static final class OfTheDeclarations
             implements Traversal.Walking<Node, TypePath> {
+
+        private final Set<String> passedOver;
+
+        OfTheDeclarations(Set<String> passedOver) {
+            this.passedOver = passedOver;
+        }
 
         /** What is written here once every letter and every {@code ?} has been followed. */
         private static Type settled(Node node) {
@@ -309,6 +323,9 @@ final class DeclaredAnswerWalk {
             Class<?> raw = raw(node);
             Map<TypeVariable<?>, Type> under = boundUnder(node, raw);
             List<WhatStandsHere.Under<Node, TypePath>> out = new ArrayList<>();
+            for (Field field : AnswerShape.passedOver(raw)) {
+                passedOver.add(field.getDeclaringClass().getName() + "#" + field.getName());
+            }
             for (Field field : AnswerShape.fieldsOf(raw)) {
                 out.add(new WhatStandsHere.Under<>(
                         where.thenMember(field.getDeclaringClass(), field.getName()),

@@ -11,9 +11,13 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -151,23 +155,46 @@ class ADenialIsKeptForAsLongAsItsStatementIsHeldTest {
         }
     }
 
+    /**
+     * Readers on several threads that each made a denial before any of them kept one are all
+     * handed the one kept first.
+     *
+     * <p>Asked of the cell with a maker that makes a new object each time and waits until every
+     * reader has made one. Through a kind's own denial the question would not be asked: what a
+     * kind makes is kept as the equal one already held ({@link SharedPropositions#shared}), so
+     * readers handed what each made would still be handed one object.
+     */
     @Test
-    void askedOnSeveralThreadsAtOnceItIsOneDenial() throws Exception {
-        ExecutorService readers = Executors.newFixedThreadPool(8);
+    void readersThatEachMadeADenialAreHandedTheOneKeptFirst() throws Exception {
+        int readers = 8;
+        Proposition stated = CompoundSamples.truth("threads.a");
+        Proposition.Denial cell = new Proposition.Denial();
+        CyclicBarrier allMade = new CyclicBarrier(readers);
+        ExecutorService pool = Executors.newFixedThreadPool(readers);
         try {
-            for (Map.Entry<Class<?>, Function<String, Proposition>> each : kinds().entrySet()) {
-                Proposition stated = each.getValue().apply("threads " + each.getKey());
-                List<Future<Proposition>> asked = new ArrayList<>();
-                for (int reader = 0; reader < 64; reader++) {
-                    asked.add(readers.submit(stated::denied));
-                }
-                Proposition first = asked.getFirst().get();
-                for (Future<Proposition> one : asked) {
-                    assertSame(first, one.get(), each.getKey().getSimpleName());
-                }
+            List<Future<Proposition>> asked = new ArrayList<>();
+            for (int reader = 0; reader < readers; reader++) {
+                asked.add(pool.submit(() -> cell.of(stated, truth -> {
+                    Proposition made = new Proposition.All(List.of(truth.denied(),
+                            CompoundSamples.truth("threads.b")));
+                    await(allMade);
+                    return made;
+                })));
+            }
+            Proposition first = asked.getFirst().get(10, TimeUnit.SECONDS);
+            for (Future<Proposition> one : asked) {
+                assertSame(first, one.get(10, TimeUnit.SECONDS));
             }
         } finally {
-            readers.shutdownNow();
+            pool.shutdownNow();
+        }
+    }
+
+    private static void await(CyclicBarrier barrier) {
+        try {
+            barrier.await(10, TimeUnit.SECONDS);
+        } catch (InterruptedException | BrokenBarrierException | TimeoutException stopped) {
+            throw new IllegalStateException("the readers did not all make one", stopped);
         }
     }
 

@@ -175,9 +175,11 @@ class WhatTheRestDecidesIsNotWhatAThingIsMadeOfTest {
                 walked.passedOver().toString());
         assertEquals(Set.of(), found(Divergence.between(keeping, keepingNone)));
 
-        AnswerWalk.Walked denial = AnswerWalk.of("Q", keeping.denied());
-        assertEquals(found(control).isEmpty(), found(denial).isEmpty(),
-                "the denial walked on its own: " + found(denial));
+        Proposition.Any denied = (Proposition.Any) keeping.denied();
+        AnswerWalk.Walked denial = AnswerWalk.of("Q", denied);
+        AnswerWalk.Walked madeApart = AnswerWalk.of("Q", new Proposition.Any(denied.parts()));
+        assertEquals(found(madeApart), found(denial), "the denial walked on its own");
+        assertEquals(gaps(madeApart), gaps(denial));
         assertEquals(Set.of(), gaps(denial));
     }
 }

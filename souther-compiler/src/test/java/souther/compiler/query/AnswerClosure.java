@@ -1165,7 +1165,8 @@ final class AnswerClosure {
      * Every field an answer holds that a walk does not go into, the rest deciding it
      * ({@code DecidedByTheRest}), as {@code Declaring#field}.
      *
-     * <p>Held to exactly, like the places. What a walk leaves out is what it was not asked about,
+     * <p>Held to exactly by the walk of the declarations, and the walk of each store holds only
+     * fields from here. What a walk leaves out is what it was not asked about,
      * so a field marked that way is a claim that nothing under it is part of what the answer
      * means — made at the field by whoever wrote it, and read here by whoever reviews it. One
      * arriving that is not written down is a field the walks stopped asking about without anybody
@@ -1183,11 +1184,12 @@ final class AnswerClosure {
                 // How each entry a helper table emits is reached, read off the entries.
                 "souther.compiler.check.HelperTable#heldAs",
                 // The denial a proposition keeps, which is what denying its parts makes and is
-                // equal to what any other making makes ({@code Proposition.Denial}). The kinds
-                // the corpora deny; the others keep one the same way.
+                // equal to what any other making makes ({@code Proposition.Denial}).
                 "souther.compiler.meaning.Proposition$All#denial",
                 "souther.compiler.meaning.Proposition$Any#denial",
-                "souther.compiler.meaning.Proposition$Compared#denial");
+                "souther.compiler.meaning.Proposition$Compared#denial",
+                "souther.compiler.meaning.Proposition$OnAnApplication#denial",
+                "souther.compiler.meaning.Proposition$SoManyHold#denial");
     }
 
     /** Every place written down here, whichever detector or scenario meets it. */

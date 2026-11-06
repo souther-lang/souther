@@ -16,6 +16,7 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Everything a store holds means something by {@code equals}, and what does not is written down.
@@ -222,11 +223,14 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
     }
 
     /**
-     * And what the walk passed over is what is written down as passed over, and nothing else.
+     * And what the walk passed over is among what is written down as passed over.
      *
      * <p>A field the rest decides is not gone into, so whatever it holds is never asked whether it
-     * means something. That is a claim about the field, and the walk that honours it says here
-     * which fields it honoured it for, so that a field marked so is one somebody read.
+     * means something. That is a claim about the field, read where it is written down; the walk of
+     * the declarations holds the list to exactly what is declared
+     * ({@link EveryAnswerThisCompilerDeclaresIsSettledTest}), and a store holds no field nothing
+     * declares, so one passed over here and missing there is a walk of the declarations that did
+     * not reach what a store holds.
      */
     @Test
     void whatTheWalkPassesOverIsWrittenDown() {
@@ -236,7 +240,10 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
                 passedOver.addAll(walked.passedOver());
             }
         }
-        assertEquals(new TreeSet<>(AnswerClosure.passedOver()), passedOver);
+        Set<String> unwritten = new TreeSet<>(passedOver);
+        unwritten.removeAll(AnswerClosure.passedOver());
+        assertEquals(Set.of(), unwritten);
+        assertFalse(passedOver.isEmpty(), "the control: a store holds propositions keeping denials");
     }
 
     /**
