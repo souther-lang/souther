@@ -98,9 +98,11 @@ public record TheElementComesRound(Quantity.OfABinding element, Quantity.AWholeN
             }
             return switch (stated) {
                 case Proposition.Always _ -> true;
-                case Proposition.All(var parts, var _) -> parts.stream().allMatch(this::through);
-                case Proposition.Any(var parts, var _) -> parts.stream().allMatch(this::through);
-                case Proposition.Compared(Relation.Affine affine, boolean _, var _) ->
+                case Proposition.All(var parts, var _, var _) ->
+                        parts.stream().allMatch(this::through);
+                case Proposition.Any(var parts, var _, var _) ->
+                        parts.stream().allMatch(this::through);
+                case Proposition.Compared(Relation.Affine affine, boolean _, var _, var _) ->
                         affine.form().coefs().keySet().stream().allMatch(this::weighs);
                 case Proposition.Some(var _, var ofTheElement, var _, var _) when besideTheRest ->
                         through(ofTheElement);

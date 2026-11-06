@@ -491,7 +491,8 @@ public final class WhereEachLineDecides {
                     yield answers == where.answers() && states == where.states() ? stated
                             : Proposition.whereItAnswers(answers, states);
                 }
-                case Proposition.Compared(Relation.Affine affine, boolean holds, Spelling _) -> {
+                case Proposition.Compared(Relation.Affine affine, boolean holds, Spelling _,
+                                          var _) -> {
                     Relation.Affine first = firstWritten(affine);
                     yield first == affine ? stated : new Proposition.Compared(first, holds);
                 }

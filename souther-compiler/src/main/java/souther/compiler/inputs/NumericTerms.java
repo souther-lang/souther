@@ -50,6 +50,12 @@ public final class NumericTerms {
     }
 
     private static <T> List<T> walked(List<T> these, Function<T, Spelling> naming) {
+        // One term is in the one order however it is named, and two are not walked as one where
+        // there is no second, so a form of one term is walked without naming it: naming it would
+        // be all of what walking it costs.
+        if (these.size() < 2) {
+            return List.copyOf(these);
+        }
         // Each named once. A name is spelled out of the term's whole path, and the sort asks for
         // the names of two terms at every comparison; spelled there, one walk of a form of a few
         // terms spelled each of them several times over.

@@ -443,7 +443,7 @@ public final class KeyOrderCandidates {
         if (stated instanceof Proposition.Compared(
                 Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm.ValueOf field, var _),
                         Place at, var _),
-                var _, var _)) {
+                var _, var _, var _)) {
             List<String> below = fieldsBelowAnElement(container, field.position());
             if (below != null) {
                 List<Place> places = out.computeIfAbsent(below, _ -> new ArrayList<>());

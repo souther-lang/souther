@@ -948,13 +948,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static boolean saysNothingOfAnElement(Proposition stated) {
         return switch (stated) {
             case Proposition.Always _ -> true;
-            case Proposition.All(var parts, var _) ->
+            case Proposition.All(var parts, var _, var _) ->
                     parts.stream().allMatch(Cutting::saysNothingOfAnElement);
-            case Proposition.Any(var parts, var _) ->
+            case Proposition.Any(var parts, var _, var _) ->
                     parts.stream().allMatch(Cutting::saysNothingOfAnElement);
             case Proposition.Some(var _, var ofTheElement, var _, var _) ->
                     ofTheElement instanceof Proposition.Always(boolean holds) && holds;
-            case Proposition.Compared(Relation.Affine(var form, var _), var _, var _) ->
+            case Proposition.Compared(Relation.Affine(var form, var _), var _, var _, var _) ->
                     form.coefs().keySet().stream().allMatch(each ->
                             each instanceof DecisionAtom.OfTheInput(var term, var _)
                                     && !term.subjectPath().insideAContainer());
@@ -1451,7 +1451,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             onTheInput.arithmetic(), read, reads, answering);
         }
         Read line = stated.proposition() instanceof Proposition.Compared(
-                Relation.Affine affine, boolean holds, Spelling _)
+                Relation.Affine affine, boolean holds, Spelling _, var _)
                 ? lineOn(behavior, affine, holds, comparison.left(), read, reads) : null;
         List<FilingCoordinate> related = line == null
                 ? relatedToAnotherValue(stated.proposition()) : null;
@@ -1471,7 +1471,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     each -> each;
             case Proposition.Compared(Relation.Ordered(
                     DecisionAtom.OfTheInput(NumericTerm term, var _), Place at, Rel proposition),
-                    boolean holds, Spelling _) when term.atOnePosition() != null ->
+                    boolean holds, Spelling _, var _) when term.atOnePosition() != null ->
                     onAnOrder(behavior, term.atOnePosition(), at,
                             holds ? proposition : proposition.denied(), read.quantities());
             // A number the statement names has no representation, which is a line placed at a
@@ -1518,7 +1518,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     /** Whether some part of {@code stated} compares a remainder whose dividend is not a form of
      *  the input's numbers alone ({@link Quantity.RemainderOfADividend#overTheInput}). */
     private static boolean statesARemainderNoRowPuts(Proposition stated) {
-        if (stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, Spelling _)
+        if (stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, Spelling _,
+                var _)
                 && affine.form().coefs().keySet().stream().anyMatch(each ->
                         each instanceof Quantity.RemainderOfADividend remainder
                                 && remainder.overTheInput() == null)) {
@@ -1599,7 +1600,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                                         Arrivals answering,
                                                         Pullback.OnTheInput onTheInput) {
         if (one.stated() instanceof Proposition.Compared(Relation.Affine relation, boolean holds,
-                Spelling _)) {
+                Spelling _, var _)) {
             Read line = lineOn(behavior, relation, holds, comparison.left(), read, reads);
             return line == null || !Read.Several.Part.isALine(line) ? null
                     : List.of(new Read.Several.Part(new PlaceOfALine(THE_COMPARISON,
@@ -1731,7 +1732,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * and divides none of them.
      */
     private static List<FilingCoordinate> heldAgainstAnotherValue(Proposition stated) {
-        if (!(stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, Spelling _))
+        if (!(stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, Spelling _,
+                var _))
                 || Proposition.leavesSomethingUnread(stated)) {
             return null;
         }
@@ -1823,7 +1825,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static List<FilingCoordinate> heldOverValuesRelatedToOneAnother(Proposition stated) {
         if (!(stated instanceof Proposition.Compared(Relation.Affine affine, boolean _,
-                                                     Spelling _))) {
+                                                     Spelling _, var _))) {
             return null;
         }
         List<NumericTerm> input = new ArrayList<>();
@@ -2204,7 +2206,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                                     Proposition stated,
                                                     UndividedByARelation.Working working) {
         List<UndividedByARelation> relations = new ArrayList<>();
-        if (stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, Spelling _)) {
+        if (stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, Spelling _,
+                var _)) {
             relations.add(UndividedByARelation.ofAForm(affine.form(), affine.proposition())
                     .workingOut(working));
             for (Quantity each : affine.form().coefs().keySet()) {

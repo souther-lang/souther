@@ -571,10 +571,11 @@ public sealed interface Derivation {
                     && chosenHolds && of.equals(same) && cases.meet(chosen) == null;
         }
         return one instanceof Proposition.Compared(
-                Relation.Affine(LinearForm<Quantity> form, Rel rel), boolean holds, Spelling _)
+                Relation.Affine(LinearForm<Quantity> form, Rel rel), boolean holds, Spelling _,
+                var _)
                 && other instanceof Proposition.Compared(
                         Relation.Affine(LinearForm<Quantity> otherForm, Rel otherRel),
-                        boolean otherHolds, Spelling _)
+                        boolean otherHolds, Spelling _, var _)
                 && apart(form, holds ? rel : rel.denied(), otherForm,
                         otherHolds ? otherRel : otherRel.denied());
     }
@@ -1378,7 +1379,7 @@ public sealed interface Derivation {
                     case PRESENCE -> concluded.equals(
                             new PresentInASubject(subject).concludes(Optional.empty()));
                     case EMPTINESS -> concluded instanceof Proposition.Compared(
-                            Relation.Affine(var form, var rel), boolean holds, var _)
+                            Relation.Affine(var form, var rel), boolean holds, var _, var _)
                             && holds && rel == Rel.GT && howManyAt(soleAtom(form), at);
                 };
             }
@@ -2773,7 +2774,8 @@ public sealed interface Derivation {
          * the second's way again at the third only where it is the number being one or more.
          */
         private static CodePointClass pieceMustHoldOneOf(int within, Proposition read) {
-            if (!(read instanceof Proposition.Compared(Relation relation, boolean holds, var _))
+            if (!(read instanceof Proposition.Compared(Relation relation, boolean holds, var _,
+                    var _))
                     || !(relation instanceof Relation.Affine(LinearForm<Quantity> form, Rel rel))
                     || form.coefs().size() != 1) {
                 return null;
@@ -2841,7 +2843,7 @@ public sealed interface Derivation {
                         element.partsHeld().stream()
                                 .allMatch(part -> onlyOfACharacter(within, part, named));
                 case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, var _),
-                                          var _, var _) -> {
+                                          var _, var _, var _) -> {
                     for (Quantity each : form.coefs().keySet()) {
                         if (!(each instanceof Quantity.CodePointsOfAPiece(
                                 CodePointClass counted, int of)) || of != within) {
@@ -2866,12 +2868,12 @@ public sealed interface Derivation {
                                      ToIntFunction<CodePointClass> countOf) {
             return switch (element) {
                 case Proposition.Always(boolean holds) -> holds;
-                case Proposition.All(List<Proposition> parts, var _) ->
+                case Proposition.All(List<Proposition> parts, var _, var _) ->
                         parts.stream().allMatch(part -> holds(part, countOf));
-                case Proposition.Any(List<Proposition> parts, var _) ->
+                case Proposition.Any(List<Proposition> parts, var _, var _) ->
                         parts.stream().anyMatch(part -> holds(part, countOf));
                 case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel rel),
-                                          boolean holds, var _) -> {
+                                          boolean holds, var _, var _) -> {
                     ExactRatio value = form.constant();
                     for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
                         CodePointClass counted =

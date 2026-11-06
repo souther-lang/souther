@@ -131,7 +131,8 @@ class ARangeWrittenAsOnePartIsNotTakenApartIntoFewerWaysTest {
 
     /** One for a lower bound of its form, minus one for an upper, nought for neither. */
     private static int side(Proposition part) {
-        if (!(part instanceof Proposition.Compared(Relation.Affine affine, boolean holds, var _))) {
+        if (!(part instanceof Proposition.Compared(Relation.Affine affine, boolean holds, var _,
+                var _))) {
             return 0;
         }
         int side = switch (affine.proposition()) {
