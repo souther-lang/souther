@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.collect.InTheOrderGiven;
+import souther.compiler.identity.DecidedByTheRest;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -154,26 +155,63 @@ final class AnswerShape {
      * is what the walk is about — what is under a thing is what it holds, however the declaration
      * spelled the holding.
      *
-     * <p>Without what is static, which belongs to the class rather than to a thing of it, and
-     * without what is primitive, which the language already says the meaning of.
+     * <p>Of what a thing is made of ({@link #madeOf}), without what is primitive, which the
+     * language already says the meaning of.
      */
     static List<Field> fieldsOf(Class<?> type) {
         return FIELDS.get(type);
     }
 
-    /** What {@link #fieldsOf} says of each class, read once a class for the same reason. */
+    /**
+     * Every field a thing of this type is made of, primitive or not: what comparing two of them
+     * field by field compares.
+     *
+     * <p>Without what is static, which belongs to the class rather than to a thing of it, and
+     * without what says the rest decides it ({@link DecidedByTheRest}): what the identity around a
+     * field like that does not read, a walk asking what the identity means has nothing to ask of.
+     * Said at the field by whoever wrote it, and every such field an answer holds is written down
+     * where the walks are held to the store ({@code AnswerClosure#passedOver}).
+     */
+    static List<Field> madeOf(Class<?> type) {
+        return MADE_OF.get(type);
+    }
+
+    /** The fields of this type a walk passes over, being decided by the rest ({@link #madeOf}). */
+    static List<Field> passedOver(Class<?> type) {
+        return PASSED_OVER.get(type);
+    }
+
+    /** What {@link #fieldsOf}, {@link #madeOf} and {@link #passedOver} say of each class, read
+     *  once a class for the same reason. */
     private static final ClassValue<List<Field>> FIELDS = new ClassValue<>() {
         @Override
         protected List<Field> computeValue(Class<?> type) {
-            return fieldsDeclaredUnder(type);
+            return madeOf(type).stream().filter(field -> !field.getType().isPrimitive()).toList();
         }
     };
 
-    private static List<Field> fieldsDeclaredUnder(Class<?> type) {
+    private static final ClassValue<List<Field>> MADE_OF = new ClassValue<>() {
+        @Override
+        protected List<Field> computeValue(Class<?> type) {
+            return fieldsDeclaredUnder(type, false);
+        }
+    };
+
+    private static final ClassValue<List<Field>> PASSED_OVER = new ClassValue<>() {
+        @Override
+        protected List<Field> computeValue(Class<?> type) {
+            return fieldsDeclaredUnder(type, true);
+        }
+    };
+
+    /** The instance fields this type and what it extends declare, the ones the rest decides or
+     *  the others. */
+    private static List<Field> fieldsDeclaredUnder(Class<?> type, boolean decidedByTheRest) {
         List<Field> out = new ArrayList<>();
         for (Class<?> at = type; at != null && at != Object.class; at = at.getSuperclass()) {
             for (Field field : at.getDeclaredFields()) {
-                if (!Modifier.isStatic(field.getModifiers()) && !field.getType().isPrimitive()) {
+                if (!Modifier.isStatic(field.getModifiers())
+                        && field.isAnnotationPresent(DecidedByTheRest.class) == decidedByTheRest) {
                     out.add(field);
                 }
             }

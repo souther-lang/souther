@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -97,6 +98,19 @@ class EveryAnswerThisCompilerDeclaresIsSettledTest {
         assertTrue(walked.opened() > 500,
                 () -> "a walk that went into " + walked.opened() + " types is not reading what "
                         + questions.size() + " questions declare");
+    }
+
+    /**
+     * And the fields it passed over, the rest deciding them, are the ones written down, and no
+     * others.
+     *
+     * <p>Held here exactly, over every declaration, rather than over what a corpus happened to
+     * reach: a kind no corpus makes holds its fields all the same, and a field marked that way
+     * where no store has one yet is a claim nobody would otherwise read.
+     */
+    @Test
+    void theFieldsItPassesOverAreTheOnesWrittenDown() throws Exception {
+        assertEquals(new TreeSet<>(AnswerClosure.passedOver()), walked().passedOver());
     }
 
     /**

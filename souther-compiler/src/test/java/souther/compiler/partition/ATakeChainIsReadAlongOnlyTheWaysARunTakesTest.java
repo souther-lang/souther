@@ -272,7 +272,8 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
     private static boolean holds(Proposition stated, Map<String, Long> at) {
         return switch (stated) {
             case Proposition.Always always -> always.holds();
-            case Proposition.Compared(Relation.Affine(var form, var relation), var held, var _) ->
+            case Proposition.Compared(Relation.Affine(var form, var relation), var held, var _,
+                    var _) ->
                     relation.holds(signOf(form, at)) == held;
             case Proposition.All all -> all.parts().stream().allMatch(part -> holds(part, at));
             case Proposition.Any any -> any.parts().stream().anyMatch(part -> holds(part, at));
