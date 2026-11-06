@@ -692,6 +692,23 @@ final class Pullback {
         };
     }
 
+    /**
+     * {@code stated} of an occurrence, together with what it was kept by: an occurrence is one of
+     * the container's elements where each truth it was kept by came out as it did, and a
+     * statement about some element is about one that is there.
+     */
+    private Derivation whereItIsKept(Derivation stated,
+                                     List<ReadMeaning.Occurrence.Kept> keptWhere) {
+        if (keptWhere.isEmpty()) {
+            return stated;
+        }
+        List<Derivation> by = new ArrayList<>();
+        for (ReadMeaning.Occurrence.Kept kept : keptWhere) {
+            by.add(keeping(kept));
+        }
+        return new Derivation.OfWhatWasKept(stated, by);
+    }
+
     /** What {@code optional} holding a value states. */
     static Pulled ofAPresence(Core optional, InputReads reads, InputReading read,
                               Optional<ModelOccurrence> where) {
@@ -2446,6 +2463,8 @@ final class Pullback {
      * closure holds of ({@link BoundOperationFacts#answersAnElementWhereTheClosureHolds}), and
      * the operation applies the closure no further than the first that holds
      * ({@link HowAClosureIsApplied#UNTIL_ONE_HOLDS}): of any element after it, nothing was asked.
+     * Over what an operation kept, an element is one of them where it was kept, so the arm taken
+     * on it is where it was kept and the closure holds of it, and of none before it were both.
      */
     private Derivation onTheElementFound(Core.Match match, Core.Case arm, InputReads reads,
                                          InputReads inside,
@@ -2475,7 +2494,6 @@ final class Pullback {
                 || !(applicationsOf(block, closure.at(), read)
                         instanceof InputReads.Applications.Each(var each, var how))
                 || how != HowAClosureIsApplied.UNTIL_ONE_HOLDS || each.isEmpty()
-                || each.stream().anyMatch(made -> !made.keptWhere().isEmpty())
                 || splitInto(inside, each.size(), looked) != null) {
             return null;
         }
@@ -2485,7 +2503,8 @@ final class Pullback {
         List<Derivation.MatchArms.Arm> onEach = new ArrayList<>();
         for (InputReads.Applications.Made made : each) {
             onEach.add(new Derivation.MatchArms.Arm(
-                    observe(block.body(), AnswerAspect.TRUTH, made.reads()),
+                    whereItIsKept(observe(block.body(), AnswerAspect.TRUTH, made.reads()),
+                            made.keptWhere()),
                     states.apply(arm.body(), inside.holdingOneItMayHold(arm,
                             new Denotation(handed, made.reads()), read.rules().newtypes()))));
         }
@@ -5506,23 +5525,6 @@ final class Pullback {
          */
         private List<ReadMeaning.Occurrence> there(WrittenOutElements.Walked.Each each) {
             return each.occurrencesWhere(KeptTruths.readIn(read));
-        }
-
-        /**
-         * {@code stated} of an occurrence, together with what it was kept by: an occurrence is one
-         * of the container's elements where each truth it was kept by came out as it did, and a
-         * statement about some element is about one that is there.
-         */
-        private Derivation whereItIsKept(Derivation stated,
-                                         List<ReadMeaning.Occurrence.Kept> keptWhere) {
-            if (keptWhere.isEmpty()) {
-                return stated;
-            }
-            List<Derivation> by = new ArrayList<>();
-            for (ReadMeaning.Occurrence.Kept kept : keptWhere) {
-                by.add(keeping(kept));
-            }
-            return new Derivation.OfWhatWasKept(stated, by);
         }
 
         /**
