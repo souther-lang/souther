@@ -630,7 +630,7 @@ final class AStatementAtARow {
             case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
                  Proposition.OfTheWays _ -> stated.partsHeld().stream()
                     .allMatch(AStatementAtARow::madeOfFormsAndPositions);
-            case Proposition.Compared(Relation.Affine affine, boolean _, Spelling _) ->
+            case Proposition.Compared(Relation.Affine affine, boolean _, Spelling _, var _) ->
                     countIn(affine) == null && productIn(affine) == null
                             && remainderByAnInputIn(affine) == null
                             && remainderOfADividendIn(affine) == null

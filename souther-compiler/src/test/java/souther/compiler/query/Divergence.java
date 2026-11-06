@@ -1,7 +1,6 @@
 package souther.compiler.query;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -502,24 +501,20 @@ record Divergence(Locus at, String cause, Divergence.Kind kind) {
         }
 
         private void fieldsOf(Object a, Object b, Class<?> c, Locus path, Parts parts) {
-            for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass()) {
-                for (Field f : k.getDeclaredFields()) {
-                    if (Modifier.isStatic(f.getModifiers())) {
-                        continue;
-                    }
-                    Object mine;
-                    Object theirs;
-                    try {
-                        f.setAccessible(true);
-                        mine = f.get(a);
-                        theirs = f.get(b);
-                    } catch (ReflectiveOperationException | RuntimeException | Error _) {
-                        stopped(Gap.Why.A_FIELD_THAT_WOULD_NOT_OPEN, path.thenMember(k, f.getName()));
-                        parts.covered = false;
-                        continue;
-                    }
-                    parts.and(at(mine, theirs, path.thenMember(k, f.getName())));
+            for (Field f : AnswerShape.madeOf(c)) {
+                Class<?> k = f.getDeclaringClass();
+                Object mine;
+                Object theirs;
+                try {
+                    f.setAccessible(true);
+                    mine = f.get(a);
+                    theirs = f.get(b);
+                } catch (ReflectiveOperationException | RuntimeException | Error _) {
+                    stopped(Gap.Why.A_FIELD_THAT_WOULD_NOT_OPEN, path.thenMember(k, f.getName()));
+                    parts.covered = false;
+                    continue;
                 }
+                parts.and(at(mine, theirs, path.thenMember(k, f.getName())));
             }
         }
 

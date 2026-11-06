@@ -92,7 +92,7 @@ public final class WhatTheNumbersOfACaseLeave {
         Map<Map<Quantity, ExactRatio>, Integer> comparisons = new LinkedHashMap<>();
         for (Proposition part : parts) {
             if (!(part instanceof Proposition.Compared(Relation.Affine affine, boolean holds,
-                    Spelling _)) || affine.form().coefs().isEmpty()) {
+                    Spelling _, var _)) || affine.form().coefs().isEmpty()) {
                 continue;
             }
             Rel rel = holds ? affine.proposition() : affine.proposition().denied();
@@ -125,7 +125,7 @@ public final class WhatTheNumbersOfACaseLeave {
         Map<List<Object>, Quantity.RemainderOfADividend> of = new LinkedHashMap<>();
         for (Proposition part : parts) {
             if (!(part instanceof Proposition.Compared(Relation.Affine affine, boolean _,
-                    Spelling _)) || affine.form().coefs().size() != 1
+                    Spelling _, var _)) || affine.form().coefs().size() != 1
                     || !(affine.form().coefs().keySet().iterator().next()
                             instanceof Quantity.RemainderOfADividend remainder)) {
                 continue;

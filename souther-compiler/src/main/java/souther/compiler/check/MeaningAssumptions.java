@@ -330,7 +330,7 @@ final class MeaningAssumptions {
                 take(where.states());
             }
             case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel p),
-                                      boolean holds, var _) -> {
+                                      boolean holds, var _, var _) -> {
                 switch (formAt(form)) {
                     case FormAt.Named(LinearForm<FactSubject> over) -> {
                         known = known.taking(over, holds ? p : p.denied(),
@@ -394,7 +394,7 @@ final class MeaningAssumptions {
             case Proposition.Unread unread ->
                     notTaken(new WhyNotTaken.MeaningUnread(unread.why()));
             case Proposition.Carried carried -> throw carried.handedToAReader();
-            case Proposition.Compared(Relation.Ordered ordered, boolean holds, var _) ->
+            case Proposition.Compared(Relation.Ordered ordered, boolean holds, var _, var _) ->
                     onAnOrder(ordered, holds);
             case Proposition.Truth(DecisionSubject.AnAnswer answer, boolean holds, var _) -> {
                 Core standing = answering(answer);
@@ -848,7 +848,7 @@ final class MeaningAssumptions {
             case Proposition.Any any ->
                     any.parts().stream().allMatch(part -> comparesOnlyNumbers(part, numbers));
             case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel _),
-                                      boolean _, var _)
+                                      boolean _, var _, var _)
                     when form.coefs().size() == 1
                     && form.coefs().values().iterator().next().signum() != 0 -> {
                 numbers.add(form.coefs().keySet().iterator().next());
@@ -894,7 +894,8 @@ final class MeaningAssumptions {
                 yield out;
             }
             case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel p),
-                                      boolean holds, var _) -> leftBy(form, holds ? p : p.denied());
+                                      boolean holds, var _, var _) ->
+                    leftBy(form, holds ? p : p.denied());
             default -> throw new IllegalStateException(
                     "a part that compares no number was let through: " + stated);
         };

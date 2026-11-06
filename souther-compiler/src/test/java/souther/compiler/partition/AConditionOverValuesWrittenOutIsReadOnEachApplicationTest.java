@@ -15,9 +15,11 @@ import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.AnApplicationOfACall;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -234,6 +236,37 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
         assertEquals(Proposition.onAnApplication(List.of(one, other)),
                 Proposition.onAnApplication(List.of(other, one)),
                 "which application was read first says nothing");
+    }
+
+    /**
+     * The applications one call makes of a closure over every element of a list are each told
+     * apart, by the call and where the element it is handed is written. Over what a filter keeps,
+     * an element the filter drops on every row is handed to nothing and its place is no
+     * application's, and the ones after it keep theirs: {@code 0} is dropped, so the outer filter
+     * is applied to the elements written second and third. An element kept on some rows only is
+     * still where it is written.
+     */
+    @Test
+    void anApplicationIsToldApartByWhereTheElementItIsHandedIsWritten() {
+        assertEquals(Set.of(List.of(0, 1)), placesToldApart(
+                "List.length(List.filter(m -> m.days >= 17, [w.first, w.second])) >= 1"));
+        assertEquals(Set.of(List.of(0, 1, 2), List.of(1, 2)), placesToldApart(
+                "List.length(List.filter(x -> x >= 17,"
+                        + " List.filter(x -> x > 0, [0, 5, w.n]))) >= 1"));
+    }
+
+    /** Which applications the body's meanings tell apart: for each call telling some apart, where
+     *  the elements its applications are handed are written. */
+    private static Set<List<Integer>> placesToldApart(String condition) {
+        Model model = model(condition);
+        MeaningsOfABody meanings = MeaningsOfABodyReading.of(model.analysis,
+                () -> model.inputs.reading(model.rules), model.reads, model.rules.symbols(),
+                model.rules.newtypes());
+        return meanings.applications().keySet().stream()
+                .collect(Collectors.groupingBy(AnApplicationOfACall::call,
+                        Collectors.mapping(AnApplicationOfACall::written, Collectors.toList())))
+                .values().stream().map(each -> each.stream().sorted().toList())
+                .collect(Collectors.toSet());
     }
 
     /** What the condition of {@code f}'s one fork states, its fork written as {@code condition}. */

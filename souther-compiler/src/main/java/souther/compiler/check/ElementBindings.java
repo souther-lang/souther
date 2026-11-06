@@ -62,7 +62,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                               Map<BindingId, ElementAnswer> answers,
                               Map<BindingId, ClosureUses> uses,
                               OrderOfElements order,
-                              Map<BindingId, AssembledWalk> assembled) {
+                              Map<BindingId, AssembledWalk> assembled,
+                              Map<BindingId, BindingId> handing) {
 
     /** Nothing was read, which is what a body with no combinator in it comes to. */
     public static final ElementBindings NONE =
@@ -75,6 +76,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         answers = Map.copyOf(answers);
         uses = Map.copyOf(uses);
         assembled = Map.copyOf(assembled);
+        handing = Map.copyOf(handing);
         if (templates == null) {
             throw new IllegalArgumentException("a body builds values it holds the meaning of, or"
                     + " none");
@@ -93,7 +95,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                            Map<BindingId, ElementAnswer> answers,
                            Map<BindingId, ClosureUses> uses) {
         this(containers, held, provenance, projected, templates, answers, uses,
-                OrderOfElements.NOT_KNOWN, Map.of());
+                OrderOfElements.NOT_KNOWN, Map.of(), Map.of());
     }
 
     /** Of a body whose closures are asked for no more than what they answered. */
@@ -145,9 +147,30 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         joinedEntries.putAll(other.uses);
         Map<BindingId, AssembledWalk> joinedAssembled = new LinkedHashMap<>(assembled);
         joinedAssembled.putAll(other.assembled);
+        Map<BindingId, BindingId> joinedHanding = new LinkedHashMap<>(handing);
+        joinedHanding.putAll(other.handing);
         return new ElementBindings(joinedContainers, joinedHeld, provenance.and(other.provenance),
                 joinedProjected, new ValueTemplates(joinedTemplates), joinedAnswers,
-                joinedEntries, order.and(other.order), joinedAssembled);
+                joinedEntries, order.and(other.order), joinedAssembled, joinedHanding);
+    }
+
+    /**
+     * Whether the walk that hands {@code element} its elements is a walk an operation applies its
+     * closure by, over the container it was handed: so an application of the walk handed the
+     * element written at some place of that container is an application of the operation's
+     * closure handed that same element ({@link ElementProvenance#handedEachElementOf}).
+     *
+     * <p>That and no more. How many applications the operation makes, and in what order, is not
+     * said: an operation that applies its closure to every element may apply it twice to one, or
+     * by two walks, and each such application is handed the element it is handed. So a reader may
+     * take what an application handed an element states, and may not count applications off this.
+     *
+     * <p>Proved where the operation stood and held to the walk the copy left, as what a walk
+     * assembles is ({@link #assembledAt}). A walk over anything else — the container turned round,
+     * a part of it, another container the copy holds — is no walk this says anything of.
+     */
+    public boolean walksWhatItsOperationHandsEachElementOf(BindingId element) {
+        return element != null && handing.containsKey(element);
     }
 
     /**
@@ -358,7 +381,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         return found.isEmpty() && provenance.isEmpty() && values.templates().isEmpty() ? NONE
                 : new ElementBindings(found, held, provenance, projected, values, closures,
                         entered, OrderOfElements.of(roots, held),
-                        assembledWalks(provenance, held, answeredUnder, entered));
+                        assembledWalks(provenance, held, answeredUnder, entered),
+                        handingWalks(provenance, held, entered));
     }
 
     /**
@@ -384,23 +408,14 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Map<BindingId, AssembledWalk> out = new LinkedHashMap<>();
         Set<BindingId> twice = new HashSet<>();
         provenance.assembledFrom().forEach((parameter, from) -> {
-            if (!(Core.withoutStanding(held.get(parameter)) instanceof Core.Read read)
-                    || read.binding() == null) {
-                return;
-            }
-            BindingId element = read.binding();
-            ClosureUses of = uses.get(element);
-            if (of == null || of.usedElsewhere() || of.applications().size() != 1) {
-                return;
-            }
-            ClosureUses.Application applied = of.applications().getFirst();
+            ClosureUses.Application applied =
+                    theWalkHandingItsElementTo(parameter, from.source(), held, uses);
             Core answer = answeredUnder.get(from.source());
-            if (applied.applied() != HowAClosureIsApplied.TO_EVERY_ELEMENT
-                    || applied.position() != null || !applied.held().equals(Set.of(element))
-                    || answer == null || Core.withoutStanding(applied.call()) != answer
-                    || !readsWhatIsHeldBy(applied.container(), from.source(), held)) {
+            if (applied == null || answer == null
+                    || Core.withoutStanding(applied.call()) != answer) {
                 return;
             }
+            BindingId element = applied.held().iterator().next();
             if (out.putIfAbsent(element,
                     new AssembledWalk(parameter, applied.container(), from.piece())) != null) {
                 twice.add(element);
@@ -408,6 +423,64 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         });
         twice.forEach(out::remove);
         return out;
+    }
+
+    /**
+     * The walks an operation an expansion wrote applies its closure by over the container it was
+     * handed, against that container's binding, keyed by the element each walk hands its step
+     * ({@link #walksWhatItsOperationHandsEachElementOf}).
+     *
+     * <p>Asked as what a walk assembles is asked ({@link #theWalkHandingItsElementTo}), and of
+     * nothing more: what the walk answers is not the question. A step applying the closure twice
+     * to the element binds two parameters to it, each handed the elements of the one container,
+     * and that is still one walk; an element said of two containers is said of none.
+     */
+    private static Map<BindingId, BindingId> handingWalks(
+            ElementProvenance provenance, Map<BindingId, Core> held,
+            Map<BindingId, ClosureUses> uses) {
+        Map<BindingId, BindingId> out = new LinkedHashMap<>();
+        Set<BindingId> twice = new HashSet<>();
+        provenance.handedEachElementOf().forEach((parameter, container) -> {
+            ClosureUses.Application applied =
+                    theWalkHandingItsElementTo(parameter, container, held, uses);
+            if (applied == null) {
+                return;
+            }
+            BindingId element = applied.held().iterator().next();
+            BindingId before = out.putIfAbsent(element, container);
+            if (before != null && !before.equals(container)) {
+                twice.add(element);
+            }
+        });
+        twice.forEach(out::remove);
+        return out;
+    }
+
+    /**
+     * The walk a fact an expansion wrote of {@code parameter} and {@code source} is about, or null
+     * where the tree holds no such walk.
+     *
+     * <p>Each of the things asked is asked of whoever holds it. The parameter is bound to the
+     * element a walk hands, which is the one binding the walk and the fact have in common. That walk
+     * is the one application its step has, to every element of a container, handing the step the
+     * element and nothing else; and the container it is over reads what the operation's container
+     * binding holds, followed through the names the copy gave it and through nothing that turns it
+     * round or takes a part of it.
+     */
+    private static ClosureUses.Application theWalkHandingItsElementTo(
+            BindingId parameter, BindingId source, Map<BindingId, Core> held,
+            Map<BindingId, ClosureUses> uses) {
+        if (!(Core.withoutStanding(held.get(parameter)) instanceof Core.Read read)
+                || read.binding() == null) {
+            return null;
+        }
+        BindingId element = read.binding();
+        ClosureUses of = uses.get(element);
+        ClosureUses.Application applied =
+                of == null ? null : of.theOnlyApplication().orElse(null);
+        return applied == null || applied.applied() != HowAClosureIsApplied.TO_EVERY_ELEMENT
+                || applied.position() != null || !applied.held().equals(Set.of(element))
+                || !readsWhatIsHeldBy(applied.container(), source, held) ? null : applied;
     }
 
     /**

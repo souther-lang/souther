@@ -3391,7 +3391,8 @@ final class Pullback {
                                                                PieceWitness within,
                                                                Pieces pieces) {
         if (!(read instanceof Proposition.Compared(
-                Relation.Affine(LinearForm<Quantity> form, Rel rel), boolean holds, var _))
+                Relation.Affine(LinearForm<Quantity> form, Rel rel), boolean holds, var _,
+                var _))
                 || rel != Rel.EQ || !holds || form.constant().signum() != 0
                 || form.coefs().size() != 2 || !hasAPieceWhateverTheStringHolds(pieces)) {
             return null;
@@ -3441,7 +3442,7 @@ final class Pullback {
         if (alone != null) {
             return new AnElementAmongThePieces(alone, List.of());
         }
-        if (!(read instanceof Proposition.All(List<Proposition> parts, var _))) {
+        if (!(read instanceof Proposition.All(List<Proposition> parts, var _, var _))) {
             return null;
         }
         Quantity.IsAmongThePieces among = null;
@@ -3640,10 +3641,10 @@ final class Pullback {
      */
     private Optional<Quantity.ReadOffABinding> wholeNumberInTurn(Core.Read name, InputReads at) {
         ClosureUses uses = at.usesOfTheClosureTaking(name.binding());
-        if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1) {
+        if (uses == null || uses.theOnlyApplication().isEmpty()) {
             return Optional.empty();
         }
-        ClosureUses.Application applied = uses.applications().getFirst();
+        ClosureUses.Application applied = uses.theOnlyApplication().get();
         if (!applied.held().contains(name.binding())) {
             return Optional.empty();
         }
@@ -5329,7 +5330,7 @@ final class Pullback {
          */
         private Derivation.SomeElementEquallingSomePiece someElementBeingAPieceInALanguage(
                 Proposition element, PieceWitness within, Pieces pieces, Derivation answered) {
-            if (!(element instanceof Proposition.All(List<Proposition> parts, var _))
+            if (!(element instanceof Proposition.All(List<Proposition> parts, var _, var _))
                     || parts.size() != 2) {
                 return null;
             }
@@ -6066,7 +6067,8 @@ final class Pullback {
                 case InputReads.Applications.Each(var each, var _) -> applications = each;
                 case InputReads.Applications.Unsaid(var each) -> applications = each;
                 case InputReads.Applications.NoneHanded _ -> applications =
-                        List.of(new InputReads.Applications.Made(closure.at(), List.of()));
+                        List.of(new InputReads.Applications.Made(closure.at(), List.of(),
+                                Optional.empty()));
                 // Applied to nothing, so nothing it states is part of what is read.
                 case InputReads.Applications.NoneMade _ -> applications = List.of();
                 case InputReads.Applications.MoreThanAreRead _ -> {
@@ -10092,10 +10094,10 @@ final class Pullback {
     private Optional<Quantity.HandedToTheStep> positionInTheWalk(Core.Read name,
                                                                  InputReads at) {
         ClosureUses uses = at.usesOfTheClosureTaking(name.binding());
-        if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1) {
+        if (uses == null || uses.theOnlyApplication().isEmpty()) {
             return Optional.empty();
         }
-        ClosureUses.Application applied = uses.applications().getFirst();
+        ClosureUses.Application applied = uses.theOnlyApplication().get();
         if (!name.binding().equals(applied.position())
                 || applied.applied() != HowAClosureIsApplied.TO_EVERY_ELEMENT
                 || !Evaluated.runsWhenever(applied.step().body(), name)
@@ -10125,10 +10127,10 @@ final class Pullback {
      */
     private Optional<Quantity.KeptSoFar> keptSoFar(Core.Read name, InputReads at) {
         ClosureUses uses = at.usesOfTheClosureTaking(name.binding());
-        if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1) {
+        if (uses == null || uses.theOnlyApplication().isEmpty()) {
             return Optional.empty();
         }
-        Denotation call = new Denotation(uses.applications().getFirst().call(), at);
+        Denotation call = new Denotation(uses.theOnlyApplication().get().call(), at);
         SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
         if (walk == null || !name.binding().equals(walk.accumulator().binding())) {
             return Optional.empty();
@@ -10178,10 +10180,10 @@ final class Pullback {
             asked = opened.lookup();
         } else {
             ClosureUses uses = at.usesOfTheClosureTaking(name.binding());
-            if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1) {
+            if (uses == null || uses.theOnlyApplication().isEmpty()) {
                 return Optional.empty();
             }
-            asked = uses.applications().getFirst().call();
+            asked = uses.theOnlyApplication().get().call();
         }
         Core map = AnOperationApplied.of(asked) instanceof AnOperationApplied applied
                 ? KeyedAccumulation.mapOf(applied) : null;
@@ -10190,10 +10192,10 @@ final class Pullback {
             return Optional.empty();
         }
         ClosureUses folds = at.usesOfTheClosureTaking(answerSoFar.binding());
-        if (folds == null || folds.usedElsewhere() || folds.applications().size() != 1) {
+        if (folds == null || folds.theOnlyApplication().isEmpty()) {
             return Optional.empty();
         }
-        Denotation whole = at.standing(folds.applications().getFirst().call(), symbols, newtypes);
+        Denotation whole = at.standing(folds.theOnlyApplication().get().call(), symbols, newtypes);
         KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), whole.at(), sides(),
                 blocksAt(whole));
         if (filed == null || !(filed.filed() instanceof KeyedAccumulation.Filed.Kept kept)
@@ -11001,7 +11003,7 @@ final class Pullback {
         // Kept by the relation as the reading will state it, of the values it was read through:
         // two comparisons of two elements at one position work out two things.
         if (!(new Conclusion(where).of(Derivation.ReadThrough.of(cut, freeInTheRoot))
-                instanceof Proposition.Compared(Relation said, var _, var _))) {
+                instanceof Proposition.Compared(Relation said, var _, var _, var _))) {
             return;
         }
         UndividedByARelation.Working told = working.notOnEveryRun();
@@ -13643,7 +13645,8 @@ final class Pullback {
      */
     private ArmsLeft armsLeftBy(Derivation condition) {
         if (!(condition.concludes(Optional.empty()) instanceof Proposition.Compared(
-                Relation.Affine(LinearForm<Quantity> form, Rel relation), boolean holds, var _))) {
+                Relation.Affine(LinearForm<Quantity> form, Rel relation), boolean holds, var _,
+                var _))) {
             return ArmsLeft.BOTH;
         }
         LinearForm<NumericTerm> onTheInput = WhatTheDeclarationsLeave.ofTheInput(form);

@@ -277,7 +277,7 @@ final class WhatConditionsState {
         return switch (stated) {
             case Proposition.InCases(DecisionSubject.AnInput of, CasesLeft cases, boolean holds, _)
                     when holds -> new CaseOfAnInput(of, cases);
-            case Proposition.Any(List<Proposition> parts, _) -> {
+            case Proposition.Any(List<Proposition> parts, _, _) -> {
                 DecisionSubject.AnInput of = null;
                 Set<Refinement> atoms = new LinkedHashSet<>();
                 for (Proposition part : parts) {
@@ -290,7 +290,7 @@ final class WhatConditionsState {
                 }
                 yield casesOf(of, atoms);
             }
-            case Proposition.All(List<Proposition> parts, _) -> {
+            case Proposition.All(List<Proposition> parts, _, _) -> {
                 DecisionSubject.AnInput of = null;
                 Set<Refinement> atoms = null;
                 Set<Refinement> denied = new HashSet<>();

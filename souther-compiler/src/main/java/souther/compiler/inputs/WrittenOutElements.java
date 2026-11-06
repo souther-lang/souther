@@ -107,7 +107,7 @@ public final class WrittenOutElements {
             case ElementsWrittenOut.Walked.Each<InputReads>(var each) -> {
                 ReadMeaning.Occurrence[] made = new ReadMeaning.Occurrence[each.size()];
                 for (int at = 0; at < made.length; at++) {
-                    made[at] = occurrence(each.get(at));
+                    made[at] = occurrence(each.get(at), at);
                 }
                 yield new Walked.Each(List.of(made));
             }
@@ -133,10 +133,11 @@ public final class WrittenOutElements {
         return new Names(symbols, newtypes, Set.of());
     }
 
-    /** {@code one} as this reading's occurrence. Most are kept by nothing, and a walk writes out
-     *  every occurrence each time it is asked, so the truths are turned over by hand and none is
-     *  made where there is none. */
-    private static ReadMeaning.Occurrence occurrence(ElementsWrittenOut.Occurrence<InputReads> one) {
+    /** {@code one}, the {@code written}th the walk wrote out, as this reading's occurrence. Most
+     *  are kept by nothing, and a walk writes out every occurrence each time it is asked, so the
+     *  truths are turned over by hand and none is made where there is none. */
+    private static ReadMeaning.Occurrence occurrence(ElementsWrittenOut.Occurrence<InputReads> one,
+                                                     int written) {
         List<ElementsWrittenOut.Kept<InputReads>> keptWhere = one.keptWhere();
         List<ReadMeaning.Occurrence.Kept> kept;
         if (keptWhere.isEmpty()) {
@@ -149,7 +150,7 @@ public final class WrittenOutElements {
             kept = List.of(made);
         }
         return new ReadMeaning.Occurrence(denotation(one.value()), kept, one.answered(),
-                one.within());
+                one.within(), written);
     }
 
     private static ReadMeaning.Occurrence.Kept kept(ElementsWrittenOut.Kept<InputReads> kept) {

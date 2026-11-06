@@ -238,9 +238,11 @@ class AnElementComesRoundToTheClassItsCongruenceLeavesAtTheRowTest {
     private static void remaindersIn(Proposition stated,
                                      List<Quantity.RemainderOfADividend> into) {
         switch (stated) {
-            case Proposition.All(var parts, var _) -> parts.forEach(each -> remaindersIn(each, into));
-            case Proposition.Any(var parts, var _) -> parts.forEach(each -> remaindersIn(each, into));
-            case Proposition.Compared(Relation.Affine(var form, var _), var _, var _) ->
+            case Proposition.All(var parts, var _, var _) ->
+                    parts.forEach(each -> remaindersIn(each, into));
+            case Proposition.Any(var parts, var _, var _) ->
+                    parts.forEach(each -> remaindersIn(each, into));
+            case Proposition.Compared(Relation.Affine(var form, var _), var _, var _, var _) ->
                     form.coefs().keySet().forEach(each -> {
                         if (each instanceof Quantity.RemainderOfADividend remainder) {
                             into.add(remainder);

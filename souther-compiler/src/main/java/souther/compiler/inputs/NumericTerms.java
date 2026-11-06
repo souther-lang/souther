@@ -64,7 +64,9 @@ public final class NumericTerms {
     }
 
     private static <T> List<T> walked(List<T> these, Function<T, Spelling> naming) {
-        // One term has no other to come before or after, and no name to be mistaken for.
+        // One term is in the one order however it is named, and two are not walked as one where
+        // there is no second, so a form of one term is walked without naming it: naming it would
+        // be all of what walking it costs.
         if (these.size() < 2) {
             return List.copyOf(these);
         }

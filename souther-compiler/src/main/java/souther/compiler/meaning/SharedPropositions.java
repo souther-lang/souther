@@ -19,23 +19,16 @@ import java.util.function.Supplier;
  * <p>Compared as values when one is made. Its parts made the same way are the ones kept here
  * already, so the comparison stops at each of them.
  *
- * <p>And the denial of each, made once. A condition is stated where it holds and denied where it
- * does not, so a statement kept here is denied again wherever it is read, and a denial made afresh
- * writes out every part again before it comes to the one kept. So too the denial of a comparison,
- * whose spelling is written out from its form, atom by atom, each time one is made. A statement of
- * any other kind is spelled as one text, compared as a {@code String} is, or from the spellings
- * its parts already hold, which a comparison passes over whole.
+ * <p>And each comparison asked for its denial, and that denial, so that equal comparisons made
+ * by different readers share one denial ({@link Proposition.Compared#denied}).
  *
  * <p>Held weakly both ways. A key held weakly whose value is the key itself held strongly is never
  * let go, so what is kept is a reference to it, and one nobody else holds is let go with its
- * entry. A statement and its denial are each the other's, so a denial held strongly would hold its
- * statement, and neither would be let go.
+ * entry. The denial of each is the proposition's own to keep ({@link Proposition.Denial}).
  */
 final class SharedPropositions {
 
     private static final Map<Proposition, WeakReference<Proposition>> KEPT = new WeakHashMap<>();
-    private static final Map<Proposition, WeakReference<Proposition>> DENIED =
-            new WeakHashMap<>();
     /**
      * The choices each count is written out as, held as long as the count is. Held strongly: what
      * is written out names the count's statements and never the count, so it keeps nothing alive
@@ -108,30 +101,6 @@ final class SharedPropositions {
         WhichOfThemHold.Written made = writing.get();
         synchronized (CHOICES) {
             CHOICES.putIfAbsent(counted, made);
-        }
-        return made;
-    }
-    /**
-     * What holds exactly where {@code stated} does not: the one made the first time it was asked
-     * while both are held, or {@code denying}'s, kept from now on.
-     *
-     * <p>What is kept is equal to what {@code denying} would make: keeping it saves the making,
-     * and never says anything another making would not.
-     *
-     * <p>Made outside the lock, since making it asks for the denial of every part. Two readers
-     * asking at once make two equal denials and keep the one {@link #shared} hands both.
-     */
-    static Proposition denied(Proposition stated, Supplier<Proposition> denying) {
-        synchronized (DENIED) {
-            WeakReference<Proposition> held = DENIED.get(stated);
-            Proposition kept = held == null ? null : held.get();
-            if (kept != null) {
-                return kept;
-            }
-        }
-        Proposition made = denying.get();
-        synchronized (DENIED) {
-            DENIED.put(stated, new WeakReference<>(made));
         }
         return made;
     }
