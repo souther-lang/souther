@@ -3,6 +3,7 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.AnInputRead;
+import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.revision.RevisionKnowledge;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -22,6 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * ({@code WhoReadsAnInputIsWrittenDownTest}); a measure reading the input for itself passes this,
  * since nothing it did was the revision's work. What this catches is the work done once per asking
  * — a key that two askings do not agree on.
+ *
+ * <p>What each condition of the body states is the same kind of work: where a run of the body gets
+ * to and what the run meets each need it, and it is read for the first of them.
  */
 class OneMeasurementOfABehaviorReadsItsInputOnceTest {
 
@@ -48,6 +52,7 @@ class OneMeasurementOfABehaviorReadsItsInputOnceTest {
     @Test
     void theInputIsReadOnceForEveryMeasureOfTheBehavior() {
         long before = RevisionKnowledge.timesDone(AnInputRead.class);
+        long meaningsBefore = RevisionKnowledge.timesDone(MeaningsOfABodyReading.ForOneBody.class);
 
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -58,6 +63,8 @@ class OneMeasurementOfABehaviorReadsItsInputOnceTest {
         // failing on the measure rather than passing on fewer askings.
         assertNotNull(db.ask(new Adequacy.Divided(MODULE, "keep")).value(),
                 "the behavior is divided");
+        assertTrue(db.ask(new Adequacy.PathReached(MODULE)).value().containsKey("keep"),
+                "where a run of its body gets to is read");
         assertTrue(db.ask(new Adequacy.Meets(MODULE)).value().containsKey("keep"),
                 "its body's meetings are read");
         assertTrue(db.ask(new Adequacy.DecisionReadings(MODULE)).value().containsKey("keep"),
@@ -67,5 +74,8 @@ class OneMeasurementOfABehaviorReadsItsInputOnceTest {
 
         assertEquals(1, RevisionKnowledge.timesDone(AnInputRead.class) - before,
                 "one behavior, one reading of its input");
+        assertEquals(1, RevisionKnowledge.timesDone(MeaningsOfABodyReading.ForOneBody.class)
+                        - meaningsBefore,
+                "one body against one input, one reading of what its conditions state");
     }
 }
