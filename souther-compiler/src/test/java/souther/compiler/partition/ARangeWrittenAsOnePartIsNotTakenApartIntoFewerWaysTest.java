@@ -177,14 +177,17 @@ class ARangeWrittenAsOnePartIsNotTakenApartIntoFewerWaysTest {
         assertFalse(expansions.isEmpty(), "the search is past the figure");
         boolean bounded = false;
         for (JsonNode each : expansions) {
-            JsonNode said = each.path("caseExpansion");
-            Set<String> fields = new java.util.TreeSet<>();
-            said.propertyNames().forEach(fields::add);
-            assertEquals(Set.of("structuralWays", "numericallyConsistentWays", "partsSplitOn",
-                    "unattributed", "factors", "diagnosed"), fields,
-                    "the counts, what made the parts, and what the numbers leave: " + said);
-            for (JsonNode diagnosis : said.path("diagnosed")) {
-                bounded |= diagnosis.path("kind").asString().equals("orderedBoundaries");
+            assertFalse(each.path("readings").isEmpty(), "a case is read somewhere: " + each);
+            for (JsonNode reading : each.path("readings")) {
+                JsonNode said = reading.path("caseExpansion");
+                Set<String> fields = new java.util.TreeSet<>();
+                said.propertyNames().forEach(fields::add);
+                assertEquals(Set.of("structuralWays", "numericallyConsistentWays",
+                        "partsSplitOn", "unattributed", "factors", "diagnosed"), fields,
+                        "the counts, what made the parts, and what the numbers leave: " + said);
+                for (JsonNode diagnosis : said.path("diagnosed")) {
+                    bounded |= diagnosis.path("kind").asString().equals("orderedBoundaries");
+                }
             }
         }
         assertTrue(bounded, "the bounds of a candidate's number are diagnosed: " + expansions);
