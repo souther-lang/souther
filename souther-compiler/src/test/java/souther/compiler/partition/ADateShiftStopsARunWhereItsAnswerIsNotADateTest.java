@@ -310,6 +310,41 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
         assertTrue(aRunArrivesAbout(fromZeros, "b"), fromZeros);
     }
 
+    /**
+     * What a closure reads beside its element is read where the closure was written: a named one
+     * reading a binding before it, and one a helper writes reading the helper's parameter. Each
+     * beside the same with the value it reads one less, where the list holds only {@code 0}.
+     */
+    @Test
+    void whatAClosureReadsBesideItsElementIsReadWhereTheClosureWasWritten() {
+        String named = """
+                    guard n == %s else No
+                    let offset = %s
+                    let shift = (x) -> x + offset
+                    let xs = List.map(shift, [0, 0])
+                    let ys = List.map(k -> Date.addDays(k * n, d), xs)
+                    guard b > 3 else No""";
+        String shifted = report(named.formatted(GREATEST, "1"));
+        assertTrue(nothingArrivesAbout(shifted, "b"), shifted);
+        String unshifted = report(named.formatted(GREATEST, "0"));
+        assertTrue(aRunArrivesAbout(unshifted, "b"), unshifted);
+        String helper = """
+                module w1
+                let shifted (xs: List<Int>, by: Int): List<Int> = List.map(x -> x + by, xs)
+                behavior f : (n: Int, d: Date, b: Int, size: Int) -> Ok | No
+                let f (n, d, b, size) = {
+                    guard n == %s else No
+                    let ys = List.map(k -> Date.addDays(k * n, d), shifted([0, 0], %s))
+                    guard b > 3 else No
+                    Ok
+                }
+                """;
+        String byOne = reportOf(helper.formatted(GREATEST, "1"));
+        assertTrue(nothingArrivesAbout(byOne, "b"), byOne);
+        String byNone = reportOf(helper.formatted(GREATEST, "0"));
+        assertTrue(aRunArrivesAbout(byNone, "b"), byNone);
+    }
+
     /** A filter's list holds the elements its step held of, and none it did not. */
     @Test
     void aListAFilterMadeHoldsWhatItsStepHeldOf() {

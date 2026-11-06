@@ -48,6 +48,17 @@ class TheStepAfterABuildIsHandedWhatTheBuildMadeTest {
                 handedToTheLastStep("[0, 2, 4]"), "the same as the list written down");
     }
 
+    /** What a named closure reads beside its element is read where the closure was written. */
+    @Test
+    void whatANamedClosureReadsBesideItsElementIsReadWhereItWasWritten() {
+        assertEquals(List.of(Optional.of(1L), Optional.of(2L)),
+                handedToTheLastStep("{ let offset = 1\n let shift = (x) -> x + offset\n"
+                        + " List.map(shift, [0, 1]) }"));
+        assertEquals(List.of(Optional.of(0L), Optional.of(1L)),
+                handedToTheLastStep("{ let offset = 0\n let shift = (x) -> x + offset\n"
+                        + " List.map(shift, [0, 1]) }"));
+    }
+
     /**
      * An element of a filter's list is handed where the filter's step held of it: every element
      * is an application, each kept by that one truth, which a reader decides as it decides any.

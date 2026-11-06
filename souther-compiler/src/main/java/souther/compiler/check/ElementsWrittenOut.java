@@ -484,7 +484,8 @@ public final class ElementsWrittenOut {
      * element it hands ({@link GrowingFold#elementBindingOf}), and what the closure answers is what
      * the {@code let} binding its parameter answers, wherever in the walk's step that stands. The
      * walk is looked into for that binding and for nothing else: what its step does with the
-     * piece is what was proved and not read.
+     * piece is what was proved and not read. Once for each walk of the container, over the step
+     * the walk then reads on every element, so looking costs no more than one element does.
      */
     private static <E> Pieces<E> piecesOf(Core value, E at, Reading<E> reading) {
         // Each block the call's closures stand as, with where it was written: the step's body is
