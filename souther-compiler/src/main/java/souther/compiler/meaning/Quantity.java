@@ -1427,7 +1427,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                              NumericTerm.AmongTheElements.AllOfThem _ -> true;
                         case NumericTerm.AmongTheElements.ThoseUnderItsKey key ->
                                 key.selection() == null
-                                        && key.elements().equals(apart.element())
+                                        && NumericTerm.AmongTheElements.onePlace(key.elements(),
+                                                apart.element())
                                         && apart.filesUnderIt(key.key());
                         case NumericTerm.AmongTheElements.Otherwise _ -> false;
                     };

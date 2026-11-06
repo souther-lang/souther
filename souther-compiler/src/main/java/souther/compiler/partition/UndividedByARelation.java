@@ -3343,14 +3343,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         declined, read, piece);
     }
 
-    /** The places of the numbers {@code system} reads other than the counts of the strings at
-     *  {@code mine} and {@code theirs}. */
+    /** Every place the numbers {@code system} reads other than the counts of the strings at
+     *  {@code mine} and {@code theirs} are read off ({@link NumericTerm#placesReadOff}). */
     private static List<TermPath> placesBesideTheCount(List<TakenConstraint> system,
                                                        TermPath mine, TermPath theirs) {
         List<TermPath> beside = new ArrayList<>();
         system.forEach(constraint -> constraint.terms().forEach(term -> {
             if (!isACountOfAStringAt(term, mine) && !isACountOfAStringAt(term, theirs)) {
-                beside.add(term.subjectPath());
+                beside.addAll(term.placesReadOff());
             }
         }));
         return beside;

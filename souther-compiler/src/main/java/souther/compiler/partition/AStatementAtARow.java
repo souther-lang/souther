@@ -1420,7 +1420,19 @@ final class AStatementAtARow {
         if (!readsOf(stated, about, read)) {
             return null;
         }
-        numbersOf(stated).forEach(term -> read.add(term.subjectPath()));
+        // Every place a number is read off, which for a number read across a container's elements
+        // is the container as well, and for one of the elements a statement keeps is what the
+        // statement reads.
+        for (NumericTerm term : numbersOf(stated)) {
+            TermPath filed = term.subjectPath();
+            for (TermPath place : term.placesReadOff()) {
+                if (filed.insideAContainer() && place.equals(filed.outermostContainer())) {
+                    about.add(place);
+                } else {
+                    read.add(place);
+                }
+            }
+        }
         for (TermPath each : read) {
             if (!each.insideAContainer()) {
                 return null;

@@ -948,11 +948,10 @@ final class DemandReading {
             places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
         }
 
-        /** The tie a statement of numbers makes, between the places it names. */
+        /** The tie a statement of numbers makes, between every place its numbers are read off
+         *  ({@link RowDemand#placesReadOff}). */
         static Tie by(TakenConstraint constraint) {
-            Set<TermPath> places = new LinkedHashSet<>();
-            constraint.terms().forEach(term -> places.add(term.subjectPath()));
-            return new Tie(places, constraint);
+            return new Tie(RowDemand.placesReadOff(constraint.terms()), constraint);
         }
 
         /** The tie of places an operator not said of may stop the run on. */

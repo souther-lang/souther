@@ -136,9 +136,7 @@ public sealed interface RowDemand {
 
         @Override
         public Set<TermPath> positions() {
-            Set<TermPath> out = new LinkedHashSet<>();
-            constraint.terms().forEach(term -> out.add(term.subjectPath()));
-            return Collections.unmodifiableSet(out);
+            return placesReadOff(constraint.terms());
         }
 
         @Override
@@ -795,6 +793,18 @@ public sealed interface RowDemand {
     }
 
     /**
+     * Every place {@code terms} are read off ({@link NumericTerm#placesReadOff}), which is every
+     * position a statement of them turns on: how often a value occurs is read off the container
+     * as well as the value, and a total of the elements a statement keeps off what the statement
+     * reads; a step moving any of them moves the number.
+     */
+    static Set<TermPath> placesReadOff(Set<NumericTerm> terms) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        terms.forEach(term -> out.addAll(term.placesReadOff()));
+        return Collections.unmodifiableSet(out);
+    }
+
+    /**
      * Every position a demand on the elements of {@code container} turns on: the container itself,
      * and what each of {@code asked} turns on beside it.
      *
@@ -1074,7 +1084,7 @@ public sealed interface RowDemand {
             if (count instanceof Quantity.HowManyDifferentMeet different) {
                 out.addAll(different.ofTheElement().places());
             }
-            terms().forEach(term -> out.add(term.subjectPath()));
+            out.addAll(placesReadOff(terms()));
             return Collections.unmodifiableSet(out);
         }
 
@@ -1175,9 +1185,7 @@ public sealed interface RowDemand {
 
         @Override
         public Set<TermPath> positions() {
-            Set<TermPath> out = new LinkedHashSet<>();
-            terms().forEach(term -> out.add(term.subjectPath()));
-            return Collections.unmodifiableSet(out);
+            return placesReadOff(terms());
         }
 
         /** None: a row held to this writes every number of the form. */

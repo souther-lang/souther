@@ -1457,8 +1457,11 @@ public sealed interface AnotherLineTheRowsAllow {
                     // arrives where the place it moves to is none of those.
                     case OnTheWay.Narrowed(var _, var _, var _, var onItsOrder, var _) -> {
                         for (TakenConstraint.AwayFrom hole : onItsOrder) {
-                            if (Collections.disjoint(hole.terms(), moved)) {
+                            if (leaves(hole.terms())) {
                                 continue;
+                            }
+                            if (movesWithoutHolding(hole.terms())) {
+                                return false;
                             }
                             Boolean holds = holdsAt(hole, from, at);
                             if (holds == null || !holds) {
@@ -1467,8 +1470,11 @@ public sealed interface AnotherLineTheRowsAllow {
                         }
                     }
                     case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken), var _) -> {
-                        if (Collections.disjoint(taken.terms(), moved)) {
+                        if (leaves(taken.terms())) {
                             continue;   // the row's answer at it, unmoved
+                        }
+                        if (movesWithoutHolding(taken.terms())) {
+                            return false;
                         }
                         Boolean holds = holdsAt(taken, from, at);
                         if (holds == null || !holds) {
@@ -1500,7 +1506,7 @@ public sealed interface AnotherLineTheRowsAllow {
                     // What a division leaves of a form, worked out of the form where the input holds
                     // its numbers: still one of the remainders asked for, or the row turns away.
                     case OnTheWay.TakenIn(var _, RowDemand.OnARemainder remainder, var _) -> {
-                        if (Collections.disjoint(remainder.terms(), moved)) {
+                        if (leaves(remainder.terms())) {
                             continue;
                         }
                         if (!(OrderedAffineBoundary.at(remainder.dividend(), at)
@@ -1549,6 +1555,32 @@ public sealed interface AnotherLineTheRowsAllow {
             return moved.stream().anyMatch(term -> term.placesReadOff().stream()
                     .anyMatch(place -> positions.stream()
                             .anyMatch(place::standsAtUnderOrAround)));
+        }
+
+        /**
+         * Whether the step leaves every number of {@code terms} what it was: it moves no number
+         * read off a place one of them is read off, or one at, under or around it
+         * ({@link #movesAnyOf}). Asked of the places and not of which numbers the step names: a
+         * step moving the key an input holds moves what the elements of that key come to.
+         */
+        private boolean leaves(Set<NumericTerm> terms) {
+            return !movesAnyOf(RowDemand.placesReadOff(terms));
+        }
+
+        /**
+         * Whether the step moves a place a number of {@code terms} is read off and that number is
+         * none of the ones it moves: what the number comes to at the input is then nothing the
+         * step says, and read as the number the row had it would be the row's answer at a place
+         * the step left.
+         */
+        private boolean movesWithoutHolding(Set<NumericTerm> terms) {
+            for (NumericTerm term : terms) {
+                if (!moved.contains(term)
+                        && movesAnyOf(RowDemand.placesReadOff(Set.of(term)))) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 

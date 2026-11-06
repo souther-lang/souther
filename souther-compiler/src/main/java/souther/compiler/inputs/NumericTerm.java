@@ -2369,10 +2369,12 @@ public sealed interface NumericTerm
      * element holds under a key, or none of those.
      *
      * <p>Not where the number is filed ({@link #subjectPath}), nor every place it is read off
-     * ({@link #placesReadOff}). How often an element's value occurs is filed at a place inside the
-     * element and read off the elements beside it; a total over the container is read off places
-     * inside every element and is one number for all of them. Each kind says which it is, since
-     * only the kind knows whether it is read off one element or across them.
+     * ({@link #placesReadOff}) taken one by one. How often an element's value occurs is filed at a
+     * place inside the element and read off the elements beside it; a total over the container is
+     * read off places inside every element and is one number for all of them. Each kind says
+     * which containers it is read across, since only the kind knows whether it is read off one
+     * element or across them; every other place it is read off — what keeps the elements it is
+     * of, a key an input holds, a map it is joined to — is asked as the one value there.
      *
      * <p>Exhaustive over the terms there are, with no {@code default}, as {@link #atOnePosition}
      * is: a kind added is one this is answered for.
@@ -2380,47 +2382,44 @@ public sealed interface NumericTerm
     default AmongTheElements amongTheElementsOf(TermPath container) {
         return switch (this) {
             case FromOnePosition one -> AmongTheElements.ofOnePlace(one.position(), container);
-            case TakenOver over -> AmongTheElements.overTheRun(over.placesReadOff(), container);
-            case Multiplicity often -> AmongTheElements.readAcross(List.of(often.container()),
-                    List.of(often.place()), container,
+            // Across the containers its run stands in, and a tree, which stands in none, as the
+            // places it is read off.
+            case TakenOver over -> AmongTheElements.readAcross(this,
+                    over.source().subjectPath().containersHoldingIt(), container,
+                    new AmongTheElements.AllOfThem(
+                            over.source().subjectPath().containersHoldingIt()));
+            case Multiplicity often -> AmongTheElements.readAcross(this,
+                    List.of(often.container()), container,
                     new AmongTheElements.ThoseUnderItsKey(List.of(often.container()),
                             new ElementKey.At(often.placeField()), null));
-            case ExtremeOfItsKey end -> AmongTheElements.readAcross(List.of(end.container()),
-                    List.of(end.key(), end.value()), container,
+            case ExtremeOfItsKey end -> AmongTheElements.readAcross(this,
+                    List.of(end.container()), container,
                     new AmongTheElements.ThoseUnderItsKey(List.of(end.container()),
                             new ElementKey.At(end.keyField()), null));
             case OccurrencesOfItsValue often -> {
                 TermPath at = often.run().subjectPath();
                 List<TermPath> across = at.containersHoldingIt();
                 ElementProjection key = ElementProjection.below(across.getLast().element(), at);
-                yield AmongTheElements.readAcross(across, List.of(at), container,
+                yield AmongTheElements.readAcross(this, across, container,
                         key == null ? AmongTheElements.OTHERWISE
                                 : new AmongTheElements.ThoseUnderItsKey(across,
                                         new ElementKey.At(key), often.selection()));
             }
-            case OccurrencesOfAKey often ->
-                    AmongTheElements.overTheRun(often.placesReadOff(), container);
+            // One number for the key an input holds, whichever element is asked.
+            case OccurrencesOfAKey often -> AmongTheElements.readAcross(this,
+                    often.run().subjectPath().containersHoldingIt(), container,
+                    new AmongTheElements.AllOfThem(
+                            often.run().subjectPath().containersHoldingIt()));
             case GatheredUnderItsKey gathered -> {
                 List<TermPath> across = gathered.elements().containersHoldingIt();
-                List<TermPath> reads = new ArrayList<>();
-                for (ElementProjection read : gathered.fieldsRead()) {
-                    reads.add(read.from(gathered.elements()));
-                }
-                yield AmongTheElements.readAcross(across, reads, container,
+                yield AmongTheElements.readAcross(this, across, container,
                         new AmongTheElements.ThoseUnderItsKey(across, gathered.key(),
                                 gathered.selection()));
             }
-            // One number for the key an input holds, whichever element is asked, and read off
-            // that input as well.
             case GatheredUnderAKey gathered -> {
                 List<TermPath> across = gathered.gathered().elements().containersHoldingIt();
-                List<TermPath> reads = new ArrayList<>();
-                for (ElementProjection read : gathered.gathered().fieldsRead()) {
-                    reads.add(read.from(gathered.gathered().elements()));
-                }
-                yield AmongTheElements.readAcross(across, reads, container,
-                                new AmongTheElements.AllOfThem(across))
-                        .and(AmongTheElements.ofOnePlace(gathered.asked(), container));
+                yield AmongTheElements.readAcross(this, across, container,
+                        new AmongTheElements.AllOfThem(across));
             }
             // Read off what every number of its two forms is read off.
             case ProductOf product -> {
@@ -2513,10 +2512,25 @@ public sealed interface NumericTerm
         default boolean readsOnlyTheElementsOf(TermPath container) {
             return switch (this) {
                 case ItAlone _ -> true;
-                case ThoseUnderItsKey key -> key.across().equals(List.of(container));
-                case AllOfThem all -> all.across().equals(List.of(container));
+                case ThoseUnderItsKey key -> acrossItAlone(key.across(), container);
+                case AllOfThem all -> acrossItAlone(all.across(), container);
                 case NoneOfThem _, Otherwise _ -> false;
             };
+        }
+
+        /**
+         * Whether the paths {@code one} and {@code other} name one place on every row either
+         * stands on: each stands at or inside the other there ({@link
+         * TermPath#standsAtOrUnderOnEveryRow}). Two narrowings of a value to cases that are not
+         * the same cases are two places, though one holds what the other does on some rows.
+         */
+        static boolean onePlace(TermPath one, TermPath other) {
+            return one.standsAtOrUnderOnEveryRow(other) && other.standsAtOrUnderOnEveryRow(one);
+        }
+
+        /** Whether {@code across} is the one container {@code container}. */
+        private static boolean acrossItAlone(List<TermPath> across, TermPath container) {
+            return across.size() == 1 && onePlace(across.getFirst(), container);
         }
 
         /**
@@ -2529,53 +2543,67 @@ public sealed interface NumericTerm
             return this.equals(other) ? this : OTHERWISE;
         }
 
-        /** What a number read off the one value at {@code place} is read off: the element where
-         *  the place is in it, all of them where it holds the container. */
+        /**
+         * What a number read off the one value at {@code place} is read off, as the value is
+         * reached ({@link TermPath#standsAtOrUnderOnEveryRow}): the element where on every row the
+         * place stands inside it, all of them where on every row it holds the container, and none
+         * of them only where it is shown apart from the container
+         * ({@link TermPath#standsAtUnderOrAround}). A place shown neither is read off something
+         * of the elements no answer here names, and is none of the others: a number nothing shows
+         * apart from the elements is not one the elements leave alike.
+         */
         private static AmongTheElements ofOnePlace(TermPath place, TermPath container) {
-            if (place.isAtOrUnder(container.element())) {
+            if (place.standsAtOrUnderOnEveryRow(container.element())) {
                 return IT_ALONE;
             }
-            return container.isAtOrUnder(place) ? new AllOfThem(List.of()) : NONE_OF_THEM;
+            if (container.standsAtOrUnderOnEveryRow(place)) {
+                return new AllOfThem(List.of());
+            }
+            return place.standsAtUnderOrAround(container) ? OTHERWISE : NONE_OF_THEM;
         }
 
-        /**
-         * What a number read off each value of a run at {@code places}, and off the one value
-         * at each of them outside every container, is read off: all the elements of the container
-         * where the run is read across them.
-         */
-        private static AmongTheElements overTheRun(List<TermPath> places, TermPath container) {
+        /** What a number read off the one value at each of {@code places} is read off. */
+        private static AmongTheElements ofEachPlace(List<TermPath> places, TermPath container) {
             AmongTheElements read = null;
-            for (TermPath at : places) {
-                AmongTheElements that = at.insideAContainer()
-                        ? readAcross(at.containersHoldingIt(), List.of(at), container,
-                                new AllOfThem(at.containersHoldingIt()))
-                        : ofOnePlace(at, container);
+            for (TermPath place : places) {
+                AmongTheElements that = ofOnePlace(place, container);
                 read = read == null ? that : read.and(that);
             }
             return read;
         }
 
         /**
-         * What a number read across the elements of the containers {@code across}, outermost
-         * first, at the places {@code reads} inside them, is read off as an element of
-         * {@code container} sees it: the element alone where those containers are inside it,
-         * {@code acrossIt} where the container is one of them, and none of them where it is apart
-         * from them or inside their elements apart from every place read.
+         * What {@code term}, read across the elements of the containers {@code across}, outermost
+         * first, is read off as an element of {@code container} sees it: the element alone where
+         * those containers are inside it, {@code acrossIt} where the container is one of them,
+         * and what the one value at each place it is read off is where the container is neither.
+         *
+         * <p>Every place {@code term} is read off ({@link NumericTerm#placesReadOff}) is asked of,
+         * and not only the ones the kind is read across: one inside the elements read across is
+         * part of reading them, and any other — what keeps the elements, a key an input holds, a
+         * map the run is joined to — is the one value there, read beside them.
          */
-        private static AmongTheElements readAcross(List<TermPath> across, List<TermPath> reads,
-                                                   TermPath container, AmongTheElements acrossIt) {
-            if (across.getFirst().isAtOrUnder(container.element())) {
-                return IT_ALONE;
+        private static AmongTheElements readAcross(NumericTerm term, List<TermPath> across,
+                                                   TermPath container,
+                                                   AmongTheElements acrossIt) {
+            List<TermPath> places = term.placesReadOff();
+            AmongTheElements read;
+            if (across.isEmpty()) {
+                return ofEachPlace(places, container);
+            } else if (across.getFirst().standsAtOrUnderOnEveryRow(container.element())) {
+                read = IT_ALONE;
+            } else if (across.stream().anyMatch(each -> onePlace(each, container))) {
+                read = acrossIt;
+            } else {
+                return ofEachPlace(places, container);
             }
-            if (across.contains(container)) {
-                return acrossIt;
-            }
-            for (TermPath read : reads) {
-                if (container.isAtOrUnder(read)) {
-                    return OTHERWISE;
+            TermPath elements = across.getLast().element();
+            for (TermPath place : places) {
+                if (!across.contains(place) && !place.standsAtOrUnderOnEveryRow(elements)) {
+                    read = read.and(ofOnePlace(place, container));
                 }
             }
-            return NONE_OF_THEM;
+            return read;
         }
     }
 
