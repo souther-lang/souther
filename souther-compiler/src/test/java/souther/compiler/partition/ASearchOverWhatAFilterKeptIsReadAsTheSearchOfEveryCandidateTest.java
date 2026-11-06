@@ -76,7 +76,8 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
             List.find(d -> Bool.not(d == h), List.filter(d -> Int.floorMod(d, 7) >= 1
                     && Int.floorMod(d, 7) <= 5, List.map(k -> base + k, [0, 1])))""");
 
-    /** Over three, the third of which the search never reaches. */
+    /** Over three, the third of which the search reaches, but never near its upper bound
+     *  ({@link #overThreeTheFilterDrawsTheThirdCandidatesBoundTheSearchNeverReaches}). */
     private static final Written OF_THREE = new Written("""
             List.find(d -> Int.floorMod(d, 7) >= 1 && Int.floorMod(d, 7) <= 5
                     && Bool.not(d == h), List.map(k -> base + k, [0, 1, 2]))""", """
