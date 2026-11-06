@@ -89,33 +89,24 @@ public record ModelOccurrences(List<ModelOccurrence> inOrder)
         private ModelOccurrences only;
         private final Set<ModelOccurrence> held = new LinkedHashSet<>();
 
-        /** The values of copies added whole, each by itself: one added again adds nothing, and
-         *  is not put into {@link #held} copy by copy again. Many readers hand one value to every
-         *  place they gather into. Made once a second value is added. */
-        private Set<ModelOccurrences> addedWhole;
+        /** Every value of copies whose copies are all in {@link #held}, each by itself: one added
+         *  again adds nothing, and is not put into it copy by copy again. Many readers hand one
+         *  value to every place they gather into. Kept wherever a value goes into it whole,
+         *  which is {@link #intoHeld} and nowhere else, and made there: a gathering of one value
+         *  never needs it. */
+        private Set<ModelOccurrences> inHeld;
 
         public Gathering add(ModelOccurrences copies) {
-            if (copies.isEmpty()) {
+            if (copies.isEmpty() || copies == only
+                    || (inHeld != null && inHeld.contains(copies))) {
                 return this;
             }
             if (only == null && held.isEmpty()) {
                 only = copies;
                 return this;
             }
-            if (copies == only) {
-                return this;
-            }
-            if (addedWhole == null) {
-                addedWhole = Collections.newSetFromMap(new IdentityHashMap<>());
-                if (only != null) {
-                    addedWhole.add(only);
-                }
-            }
-            if (!addedWhole.add(copies)) {
-                return this;
-            }
             spill();
-            held.addAll(copies.inOrder);
+            intoHeld(copies);
             return this;
         }
 
@@ -127,9 +118,17 @@ public record ModelOccurrences(List<ModelOccurrence> inOrder)
 
         private void spill() {
             if (only != null) {
-                held.addAll(only.inOrder);
+                intoHeld(only);
                 only = null;
             }
+        }
+
+        private void intoHeld(ModelOccurrences copies) {
+            held.addAll(copies.inOrder);
+            if (inHeld == null) {
+                inHeld = Collections.newSetFromMap(new IdentityHashMap<>());
+            }
+            inHeld.add(copies);
         }
 
         public boolean isEmpty() {
