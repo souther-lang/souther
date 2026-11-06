@@ -349,8 +349,8 @@ public final class CoverageRead {
                         input.domain().parameterReads(), input.declared(),
                         analysed.orElseThrow(), input.domain().dependencies()));
         MeaningsOfABody meanings = run.analysis()
-                .map(analysis -> MeaningsOfABodyReading.of(analysis, () -> input,
-                        analysisReads.orElseThrow(), symbols, source.newtypes()))
+                .map(analysis -> MeaningsOfABodyReading.of(analysis, input.domain(), () -> input,
+                        analysisReads::orElseThrow, source, input.ruleReading().revision()))
                 .orElse(MeaningsOfABody.NONE);
         Meetings meetings = new Meetings(plan, new KeptElements(plan,
                 run.analysis().orElse(null), analysisReads.orElse(null), symbols,

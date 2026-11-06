@@ -3490,7 +3490,7 @@ public final class Bodies {
                             Adequacy.meaningsOf(
                                     analysed.get(spec.name()), read,
                                     () -> Adequacy.readingOf(db, read, reading.value()),
-                                    reading.value()),
+                                    reading.value(), ruleReading),
                             elements.getOrDefault(spec.name(), ElementBindings.NONE),
                             ValueDefinitions.of(analysed.get(spec.name()),
                                     Shapes.declarationNewtypes(db)))));

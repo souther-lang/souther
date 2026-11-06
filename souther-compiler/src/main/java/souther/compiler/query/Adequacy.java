@@ -1289,15 +1289,16 @@ public final class Adequacy {
      * off, which is a body whose conditions a path takes in as it reads them.
      */
     static MeaningsOfABody meaningsOf(AnalysisBody analysis, InputDomain read,
-                                      Supplier<InputReading> reading, RuleReadingSource source) {
+                                      Supplier<InputReading> reading, RuleReadingSource source,
+                                      RuleReadingContext ruleReading) {
         if (analysis == null) {
             return MeaningsOfABody.NONE;
         }
-        return MeaningsOfABodyReading.of(analysis, reading,
-                InputReads.ofParametersWhereCallsStand(read.parameterReads(),
+        return MeaningsOfABodyReading.of(analysis, read, reading,
+                () -> InputReads.ofParametersWhereCallsStand(read.parameterReads(),
                         read.declared(source), ElementBindings.of(analysis, source.newtypes()),
                         read.dependencies()),
-                source.symbols(), source.newtypes());
+                source, ruleReading.revision());
     }
 
     /**
@@ -1445,7 +1446,8 @@ public final class Adequacy {
                         both.emitted(), SpecImplementation.align(spec, fn), plan,
                         readingOf(db, read, reading.value()),
                         ruleReading, meaningsOf(both.analysis(), read,
-                                () -> readingOf(db, read, reading.value()), reading.value()),
+                                () -> readingOf(db, read, reading.value()), reading.value(),
+                                ruleReading),
                         checked.value().elementBindings()
                                 .getOrDefault(spec.name(), ElementBindings.NONE),
                         ValueDefinitions.of(both.analysis(), Shapes.declarationNewtypes(db))));
