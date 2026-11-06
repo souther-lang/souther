@@ -1,8 +1,6 @@
 package souther.compiler.types;
 
 import java.util.Collection;
-import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -89,24 +87,28 @@ public record ModelOccurrences(List<ModelOccurrence> inOrder)
         private ModelOccurrences only;
         private final Set<ModelOccurrence> held = new LinkedHashSet<>();
 
-        /** Every value of copies whose copies are all in {@link #held}, each by itself: one added
-         *  again adds nothing, and is not put into it copy by copy again. Many readers hand one
-         *  value to every place they gather into. Kept wherever a value goes into it whole,
-         *  which is {@link #intoHeld} and nowhere else, and made there: a gathering of one value
-         *  never needs it. */
-        private Set<ModelOccurrences> inHeld;
+        /**
+         * The value of copies last added, every copy of which is gathered: added again, it adds
+         * nothing, and its copies are not put into {@link #held} one by one again.
+         *
+         * <p>The last and not every one, so that what a gathering holds besides its copies does
+         * not grow with how many values it is handed. A reader handing one value to every place
+         * it gathers into hands it to one place over and over, so of the values added again,
+         * most are the one just added.
+         */
+        private ModelOccurrences last;
 
         public Gathering add(ModelOccurrences copies) {
-            if (copies.isEmpty() || copies == only
-                    || (inHeld != null && inHeld.contains(copies))) {
+            if (copies.isEmpty() || copies == last) {
                 return this;
             }
+            last = copies;
             if (only == null && held.isEmpty()) {
                 only = copies;
                 return this;
             }
             spill();
-            intoHeld(copies);
+            held.addAll(copies.inOrder);
             return this;
         }
 
@@ -118,17 +120,9 @@ public record ModelOccurrences(List<ModelOccurrence> inOrder)
 
         private void spill() {
             if (only != null) {
-                intoHeld(only);
+                held.addAll(only.inOrder);
                 only = null;
             }
-        }
-
-        private void intoHeld(ModelOccurrences copies) {
-            held.addAll(copies.inOrder);
-            if (inHeld == null) {
-                inHeld = Collections.newSetFromMap(new IdentityHashMap<>());
-            }
-            inHeld.add(copies);
         }
 
         public boolean isEmpty() {
