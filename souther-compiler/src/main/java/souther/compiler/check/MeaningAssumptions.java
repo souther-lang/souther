@@ -780,7 +780,8 @@ final class MeaningAssumptions {
         Set<Quantity> numbers = new LinkedHashSet<>();
         if (comparesOnlyNumbers(any, numbers) && numbers.size() == 1
                 && atomAt(numbers.iterator().next()) instanceof AtomAt.Named(FactSubject number)
-                && terms.carrierOf(number) instanceof Carrier.Whole) {
+                && terms.carrierOf(number) instanceof Carrier carrier
+                && carrier.countsInWholeNumbers()) {
             WholeNumberRuns values = leftOf(any);
             if (values != null) {
                 holdingTheValues(number, values);

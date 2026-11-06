@@ -6703,8 +6703,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         for (NumericTerm term : remainder.dividend().coefs().keySet()) {
-            TermOrders orders = read.quantities().ordersOf(term);
-            if (orders == null || !(orders.answered() instanceof Carrier.Whole)) {
+            if (!read.quantities().countsWhole(term)) {
                 return null;
             }
         }
@@ -7328,7 +7327,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return true;
         }
         Endpoint last = greatest ? seed.max() : seed.min();
-        if (!(carrier instanceof Carrier.Whole) || last == null || !last.inclusive()
+        if (carrier == null || !carrier.countsInWholeNumbers() || last == null || !last.inclusive()
                 || !(last.at() instanceof Count count)) {
             return false;
         }

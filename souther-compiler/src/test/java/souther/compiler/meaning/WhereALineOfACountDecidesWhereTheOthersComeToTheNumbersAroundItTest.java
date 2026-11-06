@@ -64,7 +64,7 @@ class WhereALineOfACountDecidesWhereTheOthersComeToTheNumbersAroundItTest {
             Proposition stated = count(values, k);
             assertTrue(stated instanceof Proposition.SoManyHold, () -> "held as a count: " + stated);
 
-            List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
+            List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated, term -> false);
 
             assertEquals(n, lines.size(), () -> n + "," + k + ": a line for each value");
             for (WhereEachLineDecides.Decides line : lines) {
@@ -89,7 +89,7 @@ class WhereALineOfACountDecidesWhereTheOthersComeToTheNumbersAroundItTest {
         List<Proposition> values = positives(12);
         Proposition stated = count(values, 7, 8, 9, 10, 11, 12);
 
-        for (WhereEachLineDecides.Decides line : WhereEachLineDecides.in(stated)) {
+        for (WhereEachLineDecides.Decides line : WhereEachLineDecides.in(stated, term -> false)) {
             List<Proposition> others = new ArrayList<>(values);
             others.removeIf(each -> each.spelledOut().equals(line.line().spelledOut()));
             assertEquals(List.of(count(others, 6)),
@@ -111,7 +111,7 @@ class WhereALineOfACountDecidesWhereTheOthersComeToTheNumbersAroundItTest {
         weights.add(2);
         Proposition stated = Proposition.SoManyHold.counting(all, weights, List.of(6));
 
-        WhereEachLineDecides.Decides doubled = WhereEachLineDecides.in(stated).stream()
+        WhereEachLineDecides.Decides doubled = WhereEachLineDecides.in(stated, term -> false).stream()
                 .filter(line -> line.line().spelledOut().equals(positive(0).spelledOut())).findFirst()
                 .orElseThrow();
 
@@ -132,7 +132,7 @@ class WhereALineOfACountDecidesWhereTheOthersComeToTheNumbersAroundItTest {
         Proposition z = positive(2);
         Proposition stated = count(List.of(above, notAbove, y, z), 2);
 
-        List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
+        List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated, term -> false);
 
         WhereEachLineDecides.Decides ofTheValue = lines.stream()
                 .filter(line -> line.line().spelledOut().equals(above.spelledOut())).findFirst().orElseThrow();

@@ -1,12 +1,17 @@
 package souther.compiler.meaning;
 
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.AdditiveImage;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.CompositionBudget;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
@@ -19,6 +24,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Predicate;
 
 /**
  * Where each relation a statement of several holds together decides what the statement comes to.
@@ -74,8 +80,9 @@ public final class WhereEachLineDecides {
      * @param cases where it decides, as cases any one of which is enough: each a part, a conjunction
      *              of parts, or nothing asked at all. Empty where it decides nowhere. None of them
      *              names {@code line}
-     * @param scales the line held at every scale the statement wrote it at, {@code line} first:
-     *               what made each of them made the line, which the statement holds at the first
+     * @param scales the line held at every way the statement wrote it, {@code line} first: every
+     *               scale, and over whole numbers every relation cutting where it does. What made
+     *               each of them made the line, which the statement holds as the first
      */
     public record Decides(Proposition.Compared line, List<DecidingCase> cases,
                           List<Proposition.Compared> scales) {
@@ -119,11 +126,17 @@ public final class WhereEachLineDecides {
      * ({@link Lifting}), so that each part is one part of what it stands in. Where that is more
      * than is read, nothing is taken apart, and every line is where its statement turns, said for
      * cases nobody took apart.
+     *
+     * <p>A line written several ways is one line ({@link OneSpellingPerLine}): at several scales,
+     * and over whole numbers as either side of one cut. Which numbers are whole is each number's to
+     * say ({@link Quantity#wholeOnEveryRow}), and of a number of the input, {@code measuredWhole}'s:
+     * whether the input measures it in whole numbers, which is the reading of the input's and no
+     * statement's.
      */
-    public static List<Decides> in(Proposition writtenAs) {
+    public static List<Decides> in(Proposition writtenAs, Predicate<NumericTerm> measuredWhole) {
         Map<Spelling, Proposition.Compared> lines = new TreeMap<>();
         Map<Spelling, List<List<List<DecidingCase>>>> standings = new TreeMap<>();
-        OneSpellingPerLine spellings = new OneSpellingPerLine();
+        OneSpellingPerLine spellings = new OneSpellingPerLine(measuredWhole);
         Proposition stated = spellings.of(writtenAs);
         Proposition lifted = new Lifting().of(stated);
         if (lifted != null) {
@@ -411,22 +424,41 @@ public final class WhereEachLineDecides {
     }
 
     /**
-     * A statement with every relation it holds at more than one scale written at the first: {@code
-     * 2c >= 0} and {@code c >= 0} are one line. Read as two, crossing nought turns both at once, and
-     * neither of them turns the statement alone.
+     * A statement with every relation it holds written more than one way written the first way:
+     * {@code 2c >= 0} and {@code c >= 0} are one line, and so, over whole numbers, are
+     * {@code c > 5} and {@code c >= 6}, which no whole number stands between. Read as two, crossing
+     * the line turns both at once, and neither of them turns the statement alone.
      *
-     * <p>Here and not in how a relation is written down, because which scale a relation was written
-     * at is what a reader of a document is shown and what a row is found against; only that two of
-     * them are one line is this reading's. A statement holding each line at one scale is itself.
+     * <p>Here and not in how a relation is written down, because which way a relation was written
+     * is what a reader of a document is shown and what a row is found against; only that two of
+     * them are one line is this reading's. A statement holding each line one way is itself.
      */
     private static final class OneSpellingPerLine {
 
         /** A relation and the atoms it is over, which every scale of one line shares. */
         private record Alike(Rel proposition, Set<Quantity> atoms) {}
 
+        /**
+         * Where a form of whole numbers is cut: the form divided by the largest its weights are
+         * all whole multiples of, at least {@code atLeast}. Every relation above or at a line of such a form
+         * says that of it, whatever scale and whichever of the two it was written as.
+         */
+        private record ACut(Map<Quantity, ExactRatio> weighing, BigInteger atLeast) {
+
+            ACut {
+                weighing = Map.copyOf(weighing);
+            }
+        }
+
+        private final Predicate<NumericTerm> measuredWhole;
         private final Map<Alike, List<Relation.Affine>> written = new HashMap<>();
-        /** Each relation written first, and every scale it was written at, itself first. */
+        private final Map<ACut, Relation.Affine> cuts = new HashMap<>();
+        /** Each relation written first, and every way it was written, itself first. */
         private final Map<Relation.Affine, List<Relation.Affine>> scales = new HashMap<>();
+
+        OneSpellingPerLine(Predicate<NumericTerm> measuredWhole) {
+            this.measuredWhole = measuredWhole;
+        }
 
         /** {@code line} held at every scale the statement wrote it at, itself first. */
         List<Proposition.Compared> scalesOf(Proposition.Compared line) {
@@ -483,9 +515,23 @@ public final class WhereEachLineDecides {
             return changed ? out : parts;
         }
 
-        /** The relation {@code affine} is at the scale it was first written, which is itself where
-         *  it is the first. Both face one way, so one is the other at a positive scale. */
+        /** The relation {@code affine} is as it was first written, which is itself where it is the
+         *  first. Both face one way, so one is the other at a positive scale, or over whole
+         *  numbers the same cut. */
         private Relation.Affine firstWritten(Relation.Affine affine) {
+            ACut cut = cutOf(affine);
+            if (cut != null) {
+                Relation.Affine first = cuts.putIfAbsent(cut, affine);
+                if (first == null) {
+                    scales.put(affine, new ArrayList<>(List.of(affine)));
+                    return affine;
+                }
+                List<Relation.Affine> atEach = scales.get(first);
+                if (!atEach.contains(affine)) {
+                    atEach.add(affine);
+                }
+                return first;
+            }
             List<Relation.Affine> alike = written.computeIfAbsent(
                     new Alike(affine.proposition(), affine.form().coefs().keySet()),
                     _ -> new ArrayList<>());
@@ -502,6 +548,40 @@ public final class WhereEachLineDecides {
             alike.add(affine);
             scales.put(affine, new ArrayList<>(List.of(affine)));
             return affine;
+        }
+
+        /**
+         * Where {@code affine} cuts its form, where every number the form weighs is whole — or
+         * null where one is not shown to be, or it is an equality, which is no cut. Weighed by
+         * whatever ratios: divided by the largest they are all whole multiples of, the weights are
+         * whole, so the form so divided is a whole number on every row. That at or above the
+         * constant taken off and so divided is the form at or above nought, and above it, the
+         * form above nought: each at least the least whole number it is.
+         */
+        private ACut cutOf(Relation.Affine affine) {
+            LinearForm<Quantity> form = affine.form();
+            if (affine.proposition() == Rel.EQ || form.coefs().isEmpty()
+                    || !form.coefs().keySet().stream()
+                            .allMatch(atom -> atom.wholeOnEveryRow(measuredWhole))) {
+                return null;
+            }
+            ExactRatio common = AdditiveImage.divisorOf(form.coefs().values());
+            Map<Quantity, ExactRatio> weighing = new HashMap<>();
+            for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+                if (!(each.getValue().dividedBy(common)
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio least))) {
+                    return null;
+                }
+                weighing.put(each.getKey(), least);
+            }
+            if (!(form.constant().negated().dividedBy(common)
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio threshold))) {
+                return null;
+            }
+            ExactAnswer<BigInteger> atLeast = affine.proposition() == Rel.GE
+                    ? threshold.ceiling() : threshold.floor().map(below -> below.add(BigInteger.ONE));
+            return atLeast instanceof ExactAnswer.Held<BigInteger>(BigInteger at)
+                    ? new ACut(weighing, at) : null;
         }
     }
 

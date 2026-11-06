@@ -1397,7 +1397,7 @@ public sealed interface BorderQuantity
                         + " itself: " + factors);
             }
             for (TermOrders each : factors.on().values()) {
-                if (!(each.answered() instanceof Carrier.Whole)) {
+                if (!each.countsWhole()) {
                     throw new IllegalArgumentException("a product read here is of whole numbers,"
                             + " and this order is not one of them: " + each.answered());
                 }
@@ -1593,7 +1593,7 @@ public sealed interface BorderQuantity
                         + " each read as itself: " + both + " with " + dividend + " by " + divisor);
             }
             for (TermOrders each : both.on().values()) {
-                if (!(each.answered() instanceof Carrier.Whole)) {
+                if (!each.countsWhole()) {
                     throw new IllegalArgumentException("a remainder read here is of whole numbers,"
                             + " and this order is not one of them: " + each.answered());
                 }

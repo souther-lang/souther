@@ -21,7 +21,10 @@ import java.util.function.Supplier;
  *
  * <p>And the denial of each, made once. A condition is stated where it holds and denied where it
  * does not, so a statement kept here is denied again wherever it is read, and a denial made afresh
- * writes out every part again before it comes to the one kept.
+ * writes out every part again before it comes to the one kept. So too the denial of a comparison,
+ * whose spelling is written out from its form, atom by atom, each time one is made. A statement of
+ * any other kind is spelled as one text, compared as a {@code String} is, or from the spellings
+ * its parts already hold, which a comparison passes over whole.
  *
  * <p>Held weakly both ways. A key held weakly whose value is the key itself held strongly is never
  * let go, so what is kept is a reference to it, and one nobody else holds is let go with its

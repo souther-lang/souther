@@ -1,5 +1,6 @@
 package souther.compiler.meaning;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Extreme;
 import souther.compiler.core.EnteredArm;
@@ -58,6 +59,17 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     }
 
     /**
+     * Whether this is a whole number on every row: by what it is, as a count or a remainder is,
+     * or, as a number of the input is, by whether the order the input measures it on is one of
+     * whole numbers, which {@code measuredWhole} says and nothing here does.
+     *
+     * <p>Asked of each kind, so a kind added says it, and a reader asking it of a form knows none
+     * of what the kinds are. Not where it is not shown: a number nothing says is whole may stand
+     * between two that are.
+     */
+    boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole);
+
+    /**
      * What a recursion carries, whatever that is: how many what a walk carried into the step
      * being read holds, the number a walk over the elements of an answer carried into its step, or
      * how many what a call of a search answers one node down holds.
@@ -68,6 +80,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * concludes has none of these in it, so no reader of what a condition states is handed one.
      */
     record HowManyCarried(ACarriedValue value) implements Quantity {
+
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
 
         public HowManyCarried {
             Objects.requireNonNull(value, "what is carried is some walk's");
@@ -164,6 +182,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     record WhatAnOperationAnswers(ValueName.Stdlib operation, List<Quantity> of)
             implements Quantity {
 
+        /** Not shown: what an operation answers is its own. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return false;
+        }
+
         public WhatAnOperationAnswers {
             if (operation == null || of == null || of.isEmpty()) {
                 throw new IllegalArgumentException("an answer is some operation's, of something");
@@ -245,6 +269,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     record APieceOf(ValueName.Stdlib operation, OptionalInt separator, Quantity string,
                     PieceWitness within, int from, int among) implements Quantity {
 
+        /** No number: a piece of a string. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return false;
+        }
+
         public APieceOf {
             Objects.requireNonNull(operation, "a piece is of what some operation parts");
             Objects.requireNonNull(separator, "parted at a code point, or into characters");
@@ -307,6 +337,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     record ThePieceAt(ValueName.Stdlib operation, int separator, Quantity string, int index)
             implements Quantity {
 
+        /** No number: a piece of a string. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return false;
+        }
+
         public ThePieceAt {
             Objects.requireNonNull(operation, "a piece is of what some operation parts");
             if (!(string instanceof DecisionAtom.OfTheInput)
@@ -368,6 +404,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      */
     record IsAmongThePieces(Quantity value, ValueName.Stdlib operation, OptionalInt separator,
                             Quantity string, int from, int among) implements Quantity {
+
+        /** No number: a value being a piece of a string. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return false;
+        }
 
         public IsAmongThePieces {
             Objects.requireNonNull(operation, "the pieces are what some operation parts");
@@ -446,6 +488,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      */
     record RemainderOfADividend(ValueName operation, LinearForm<Quantity> dividend,
                                 BigInteger divisor) implements Quantity {
+
+        /** A remainder of whole numbers by a whole number. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
 
         public RemainderOfADividend {
             if (operation == null || dividend == null || dividend.coefs().isEmpty()
@@ -595,6 +643,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                               ValueIdentity dividendIs, NumericTerm.FromOnePosition divisor,
                               ValueIdentity divisorIs) implements Quantity {
 
+        /** A remainder of a whole number by another, which is made only of whole numbers. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
+
         public RemainderByAnInput {
             if (operation == null || dividend == null || divisor == null || dividendIs == null
                     || divisorIs == null || dividend.position().equals(divisor.position())
@@ -654,6 +708,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     record ProductOfTwo(NumericTerm.FromOnePosition one, ValueIdentity oneIs,
                         NumericTerm.FromOnePosition other, ValueIdentity otherIs)
             implements Quantity {
+
+        /** A product of two whole numbers, which is made only of whole numbers. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
 
         public ProductOfTwo {
             if (one == null || other == null || oneIs == null || otherIs == null) {
@@ -718,6 +778,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      */
     record CodePointsOfAPiece(CodePointClass counted, int within) implements Quantity {
 
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
+
         public CodePointsOfAPiece {
             if (counted == null) {
                 throw new IllegalArgumentException("code points of a piece are counted by a class");
@@ -755,6 +821,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      */
     record HowManyDifferentAcross(DecisionSubject container, DecisionSubject ofTheOccurrence)
             implements Quantity {
+
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
 
         public HowManyDifferentAcross {
             if (container == null || ofTheOccurrence == null) {
@@ -805,6 +877,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      */
     record HowManyDifferentBelow(TermPath root, List<String> through, TermPath map,
                                  List<String> keyAt, List<String> valueAt) implements Quantity {
+
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
 
         public HowManyDifferentBelow {
             Objects.requireNonNull(root, "a search starts from some node");
@@ -998,6 +1076,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     record HowManyDifferent(DecisionSubject container, TheValue ofTheElement)
             implements Quantity {
 
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
+
         public HowManyDifferent {
             if (container == null || ofTheElement == null) {
                 throw new IllegalArgumentException("the values are of a container's elements");
@@ -1074,6 +1158,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      */
     record HowManyDifferentMeet(DecisionSubject container, TheValue ofTheElement,
                                 Selection meeting) implements Quantity {
+
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
 
         public HowManyDifferentMeet {
             if (container == null || ofTheElement == null || meeting == null) {
@@ -1367,6 +1457,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      */
     record SumOver(DecisionSubject container, Quantity ofTheElement) implements Quantity {
 
+        /** Whole where what it adds up of each element is. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return ofTheElement.wholeOnEveryRow(measuredWhole);
+        }
+
         public SumOver {
             if (container == null || ofTheElement == null) {
                 throw new IllegalArgumentException("a sum is of a number of each element");
@@ -1450,6 +1546,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      */
     record TheKeptTotal(int reading, boolean counted) implements Quantity {
 
+        /** Never asked: the stand-in reaches no reader. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            throw reachedAReader();
+        }
+
         /** What a reader that is handed the stand-in has been given wrongly. */
         public IllegalStateException reachedAReader() {
             return new IllegalStateException("a total of the elements a way keeps is given its"
@@ -1481,6 +1583,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * is counted.
      */
     record HowManyHold(List<Proposition> each) implements Quantity {
+
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
 
         public HowManyHold {
             each = List.copyOf(each);
@@ -1540,6 +1648,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      */
     record HowManyMeet(DecisionSubject container, Proposition ofTheElement)
             implements Quantity, ReadAlongAContainer {
+
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
 
         public HowManyMeet {
             if (container == null || ofTheElement == null) {
@@ -1871,6 +1985,14 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     record OfABinding(BindingId binding, List<TermPath.Step> steps, Type type,
                       Optional<WhyUnread> madeOf, Optional<ReadOffABinding> handed)
             implements Quantity {
+
+        /** Whole where what stands there is counted in whole numbers, which is how its numbers
+         *  are spaced. A name is the declarations' to open, and is not shown here. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return Carrier.ofPrimitive(type) instanceof Carrier carrier
+                    && carrier.countsInWholeNumbers();
+        }
 
         public OfABinding {
             if (binding == null || type == null || madeOf == null || handed == null) {
