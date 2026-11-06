@@ -53,7 +53,7 @@ final class WayThroughAClause {
      * what the declarations leave.
      */
     boolean mayReachTheNext() {
-        return Reachability.of(new WayToTheBorder(way), read.quantities().region()).leavesARow();
+        return Reachability.of(WayToTheBorder.forArrival(way), read.quantities().region()).leavesARow();
     }
 
     /** That the statement {@code said} has been evaluated, and held. */

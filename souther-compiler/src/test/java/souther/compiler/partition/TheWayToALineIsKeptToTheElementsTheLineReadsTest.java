@@ -88,13 +88,30 @@ class TheWayToALineIsKeptToTheElementsTheLineReadsTest {
      * reads {@code readsTheElements} and the case put {@code put} on the way.
      */
     private static List<OnTheWay> wayToTheLine(ElementsNamed readsTheElements, List<OnTheWay> put) {
-        ModelOccurrence states = copy(0);
+        return madeFor(readsTheElements, put).byLine().get(lineOfTheCase());
+    }
+
+    private static ReachingCuts.ALine lineOfTheCase() {
+        return new ReachingCuts.ALine(copy(0), Optional.of(aCase()));
+    }
+
+    private static ReachingCuts madeFor(ElementsNamed readsTheElements, List<OnTheWay> put) {
         Map<WhereAPartDecides, ReachingCuts.Stating> cases = new LinkedHashMap<>();
         cases.put(aCase(), ReachingCuts.Stating.of(put, ModelOccurrences.of(copy(1))));
         ReachingCuts.Collected collected = new ReachingCuts.Collected();
-        collected.reached(states, List.of(), readsTheElements, cases,
+        collected.reached(copy(0), List.of(), readsTheElements, cases,
                 ReachingCuts.Stating.of(List.of(), ModelOccurrences.of(copy(1))).by());
-        return collected.made().byLine().get(new ReachingCuts.ALine(states, Optional.of(aCase())));
+        return collected.made();
+    }
+
+    /** A condition declined for another name is told of the copy that put the condition it was
+     *  made of, so that a gap naming it says where it came from. */
+    @Test
+    void aDeclinedConditionIsToldWhatPutTheOneItWasMadeOf() {
+        ReachingCuts made = madeFor(reads(B), List.of(truth(0, A), truth(1, B)));
+        assertEquals(ModelOccurrences.of(copy(1)), made.saidByLine().get(lineOfTheCase())
+                .of(new ConditionGap.OfTheInput(new ReachabilityGap.Unstated(
+                        (OnTheWay.Declined) declined(0)))));
     }
 
     /** What the case read of another name for the element is declined, whichever name was met

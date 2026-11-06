@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ModelOccurrences;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -92,6 +93,40 @@ final class ElementsOnTheWay {
             out.add(declined(each));
         }
         return out == null ? way : List.copyOf(out);
+    }
+
+    /**
+     * A way kept to one element each, and who put each entry on it.
+     *
+     * @param way  the way, as {@link #keptToOneElementEach(List, ElementsNamed)} says it
+     * @param said what put each entry of {@code way} there: a condition declined for another
+     *             element is told of the copies that put the condition it was made of
+     */
+    record Kept(List<OnTheWay> way, SaidOnTheWay said) { }
+
+    /**
+     * {@link #keptToOneElementEach(List, ElementsNamed)} of {@code way}, with what put each entry
+     * of it there carried over to the entry that stands for it now.
+     *
+     * <p>A declined condition is a value of its own, and who put things on a way is filed by the
+     * value: told only of the condition it was made of, a gap that names the declined one is read
+     * off nothing and a report cannot say where it came from.
+     */
+    static Kept keptToOneElementEach(List<OnTheWay> way, ElementsNamed border, SaidOnTheWay said) {
+        List<OnTheWay> kept = keptToOneElementEach(way, border);
+        if (kept == way) {
+            return new Kept(way, said);
+        }
+        SaidOnTheWay.Filing filing = new SaidOnTheWay.Filing();
+        filing.all(said);
+        for (int at = 0; at < way.size(); at++) {
+            if (kept.get(at) != way.get(at)) {
+                filing.alone(kept.get(at),
+                        said.entries().getOrDefault(way.get(at), ModelOccurrences.NONE));
+            }
+        }
+        return new Kept(kept, new SaidOnTheWay(filing.said().entries(), said.stated(),
+                said.unstated()));
     }
 
     /** Whether every element {@code named} reads is read through the name kept for it: none

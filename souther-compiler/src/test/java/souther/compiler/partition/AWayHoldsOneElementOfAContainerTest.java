@@ -9,6 +9,12 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.List;
 import java.util.Optional;
@@ -16,6 +22,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Which conditions on a way are taken in as statements of one value ({@link ElementsOnTheWay}),
@@ -107,6 +114,35 @@ class AWayHoldsOneElementOfAContainerTest {
         assertEquals(List.of(declined(0), declined(1)),
                 ElementsOnTheWay.keptToOneElementEach(List.of(truth(0, PAID, A),
                         truth(1, PAID, B)), border));
+    }
+
+    /** A way is made of conditions that already hold one name for each element: the first name
+     *  met is chosen where only arrival is asked, and not where a way is made. */
+    @Test
+    void aWayIsNotMadeByChoosingAName() {
+        List<OnTheWay> two = List.of(truth(0, PAID, A), truth(1, PAID, B));
+        assertThrows(IllegalArgumentException.class, () -> new WayToTheBorder(two));
+        assertEquals(List.of(truth(0, PAID, A), declined(1)),
+                WayToTheBorder.forArrival(two).onTheWay());
+    }
+
+    /** What put a condition on the way is told of the condition declined in its place, where a
+     *  gap names it. */
+    @Test
+    void aDeclinedConditionIsToldWhatPutTheOneItWasMadeOf() {
+        OnTheWay put = truth(0, PAID, A);
+        ModelOccurrence copy = new ModelOccurrence(SourceConstructOrigin.written(
+                new WrittenOwner.Body("probe", "f"), 7, SourceConstruct.BINARY),
+                ExpansionLineage.ORIGINAL);
+        SaidOnTheWay.Filing filing = new SaidOnTheWay.Filing();
+        filing.alone(put, ModelOccurrences.of(copy));
+
+        ElementsOnTheWay.Kept kept = ElementsOnTheWay.keptToOneElementEach(List.of(put),
+                named(B), filing.said());
+
+        assertEquals(List.of(declined(0)), kept.way());
+        assertEquals(ModelOccurrences.of(copy), kept.said().of(new ConditionGap.OfTheInput(
+                new ReachabilityGap.Unstated((OnTheWay.Declined) kept.way().getFirst()))));
     }
 
     /** A condition of several ways is declined whole where one of its ways reads another

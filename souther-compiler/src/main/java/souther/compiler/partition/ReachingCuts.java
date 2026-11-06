@@ -265,9 +265,9 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         List<OnTheWay> asked = held ? met.holding() : met.failing();
         List<OnTheWay> onTheWay = new ArrayList<>(met.assumed());
         onTheWay.addAll(asked);
-        WayToTheBorder whole = new WayToTheBorder(onTheWay);
+        WayToTheBorder whole = WayToTheBorder.forArrival(onTheWay);
         List<HeldOutcome.Bringing> each = new ArrayList<>();
-        switch (new WayToTheBorder(asked).along()) {
+        switch (WayToTheBorder.forArrival(asked).along()) {
             case OneOfEach.Walked.Closed<OnTheWay, Reachability> _ -> {
                 return new HeldOutcome.Bringing.NoValueCanStandThere();
             }
@@ -433,7 +433,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         }
         List<OnTheWay> joined = new ArrayList<>(first.onTheWay());
         joined.addAll(second.onTheWay());
-        WayToTheBorder both = new WayToTheBorder(joined);
+        WayToTheBorder both = WayToTheBorder.forArrival(joined);
         TermPath twice = switch (both.requirements()) {
             case Requirements.Merge.Conflict conflict -> conflict.at();
             case Requirements.Merge.Merged _ ->
@@ -1193,10 +1193,11 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             whereEachDecides.forEach((part, decides) -> {
                 List<OnTheWay> way = new ArrayList<>(assumed);
                 way.addAll(decides.entries());
-                byLine.merge(new ALine(states, Optional.of(part)),
-                        ElementsOnTheWay.keptToOneElementEach(List.copyOf(way), readsTheElements),
+                ElementsOnTheWay.Kept kept = ElementsOnTheWay.keptToOneElementEach(
+                        List.copyOf(way), readsTheElements, said.and(decides.by()));
+                byLine.merge(new ALine(states, Optional.of(part)), kept.way(),
                         Collected::commonTo);
-                saidByLine.merge(new ALine(states, Optional.of(part)), said.and(decides.by()),
+                saidByLine.merge(new ALine(states, Optional.of(part)), kept.said(),
                         SaidOnTheWay::and);
             });
         }
