@@ -35,6 +35,7 @@ import java.util.TreeSet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -168,8 +169,31 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
         });
     }
 
-    private static String ruleOf(JsonNode rule) {
-        return rule.path("definition").asString() + "#" + rule.path("ordinal").asString();
+    /** Whether {@code rule} is written in the behavior's body, and not in the helper's. */
+    private static boolean ofTheBehavior(JsonNode rule) {
+        return rule.path("definition").asString().equals("g");
+    }
+
+    /** A rule of the behavior, by its place in the body, which both searches leave as it is. */
+    private static String placeOf(JsonNode rule) {
+        return "g#" + rule.path("ordinal").asString();
+    }
+
+    /**
+     * {@code id}, a line's or an obligation's, without the calls its line went through to get
+     * here, which pass through the helper the two searches write at different places: everything
+     * else that tells it apart is the behavior's.
+     */
+    private static JsonNode withoutTheCallsInTheHelper(JsonNode id) {
+        JsonNode copy = id.deepCopy();
+        for (JsonNode arm : copy.path("line").path("which").path("arms")) {
+            ((ObjectNode) arm).remove("through");
+        }
+        return copy;
+    }
+
+    private static JsonNode ruleDrawing(JsonNode boundary) {
+        return boundary.path("lineId").path("line").path("which").path("rule");
     }
 
     /**
@@ -179,29 +203,25 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
     private static Map<String, Map<String, Set<String>>> leftAtEachPosition(JsonNode partition) {
         Map<String, Map<String, Set<String>>> byRule = new TreeMap<>();
         for (JsonNode boundary : partition.path("boundaries")) {
-            JsonNode target = boundary.path("lineId").path("target");
-            for (JsonNode term : target.path("quantity").path("terms")) {
-                ofARuleOfG(byRule, boundary.path("lineId").path("line").path("which").path("rule"),
-                        term.path("term").path("position").asString())
-                        .add("draws " + target + " " + boundary.path("kind").asString());
+            if (!ofTheBehavior(ruleDrawing(boundary))) {
+                continue;
+            }
+            JsonNode line = withoutTheCallsInTheHelper(boundary.path("lineId"));
+            for (JsonNode term : line.path("target").path("quantity").path("terms")) {
+                byRule.computeIfAbsent(placeOf(ruleDrawing(boundary)), _ -> new TreeMap<>())
+                        .computeIfAbsent(term.path("term").path("position").asString(),
+                                _ -> new TreeSet<>())
+                        .add("draws " + line + " " + boundary.path("kind").asString());
             }
         }
         for (JsonNode each : partition.path("notRead")) {
-            ofARuleOfG(byRule, each.path("ruleId"), each.path("position").asString())
-                    .add(each.path("reason").asString());
+            if (ofTheBehavior(each.path("ruleId"))) {
+                byRule.computeIfAbsent(placeOf(each.path("ruleId")), _ -> new TreeMap<>())
+                        .computeIfAbsent(each.path("position").asString(), _ -> new TreeSet<>())
+                        .add(each.path("reason").asString());
+            }
         }
         return byRule;
-    }
-
-    /** Where what a rule leaves at {@code position} is gathered, or nowhere for a rule of the
-     *  helper. */
-    private static Set<String> ofARuleOfG(Map<String, Map<String, Set<String>>> byRule,
-                                          JsonNode rule, String position) {
-        String which = ruleOf(rule);
-        return which.startsWith("g#")
-                ? byRule.computeIfAbsent(which, _ -> new TreeMap<>())
-                        .computeIfAbsent(position, _ -> new TreeSet<>())
-                : new TreeSet<>();
     }
 
     /** Every line a rule of the helper draws, by its axis and the value it is at, whichever rule
@@ -209,8 +229,7 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
     private static Set<String> drawnByTheHelper(JsonNode partition) {
         Set<String> out = new TreeSet<>();
         for (JsonNode boundary : partition.path("boundaries")) {
-            if (!ruleOf(boundary.path("lineId").path("line").path("which").path("rule"))
-                    .startsWith("g#")) {
+            if (!ofTheBehavior(ruleDrawing(boundary))) {
                 out.add(boundary.path("axis").asString() + " at "
                         + boundary.path("lineId").path("target").path("level").path("at")
                         .asString() + " " + boundary.path("kind").asString());
@@ -221,27 +240,24 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
 
     /**
      * The readings of each obligation of a rule of {@code g}, each without the applications it was
-     * read on. An obligation is told by its rule's place in the body, its point and relation, and
-     * the line's facts: what the line went through to get there passes through the helper.
+     * read on, each obligation told apart as {@link #withoutTheCallsInTheHelper} says.
      */
     private static Map<String, List<String>> readingsOfEachObligation(JsonNode partition) {
         Map<String, List<String>> out = new TreeMap<>();
         for (JsonNode obligation : partition.path("obligations")) {
-            String rule = ruleOf(obligation.path("ruleId"));
-            if (!rule.startsWith("g#")) {
+            if (!ofTheBehavior(obligation.path("ruleId"))) {
                 continue;
             }
-            JsonNode line = obligation.path("obligationId").path("line");
-            String key = rule + " " + obligation.path("point") + " "
-                    + obligation.path("relation") + " " + line.path("facts") + " "
-                    + obligation.path("obligationId").path("location");
-            List<String> readings = out.computeIfAbsent(key, _ -> new ArrayList<>());
+            JsonNode told = withoutTheCallsInTheHelper(obligation.path("obligationId"));
+            List<String> readings = new ArrayList<>();
             for (JsonNode reading : obligation.path("readings")) {
                 ObjectNode alone = (ObjectNode) reading.deepCopy();
                 alone.remove("applications");
                 readings.add(alone.toString());
             }
             readings.sort(null);
+            assertNull(out.put(told.toString(), readings),
+                    "an obligation is told apart without the calls it went through: " + told);
         }
         return out;
     }
