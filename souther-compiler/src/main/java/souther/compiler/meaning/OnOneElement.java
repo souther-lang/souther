@@ -51,9 +51,9 @@ public final class OnOneElement {
             return;
         }
         switch (stated) {
-            case Proposition.All(var parts, var _) ->
+            case Proposition.All(var parts, var _, var _) ->
                     parts.forEach(each -> elementsIn(each, into, walked));
-            case Proposition.Any(var parts, var _) ->
+            case Proposition.Any(var parts, var _, var _) ->
                     parts.forEach(each -> elementsIn(each, into, walked));
             case Proposition.WhereItAnswers(var answers, var states, var _) -> {
                 elementsIn(answers, into, walked);
@@ -61,7 +61,7 @@ public final class OnOneElement {
             }
             case Proposition.Some(var _, var ofTheElement, var _, var _) ->
                     elementsIn(ofTheElement, into, walked);
-            case Proposition.Compared(Relation.Affine affine, var _, var _) ->
+            case Proposition.Compared(Relation.Affine affine, var _, var _, var _) ->
                     elementsIn(affine.form(), into);
             default -> { }
         }
@@ -123,11 +123,11 @@ public final class OnOneElement {
         private Proposition atOnce(Proposition stated) {
             return switch (stated) {
                 case Proposition.Always _ -> stated;
-                case Proposition.All(var parts, var _) -> {
+                case Proposition.All(var parts, var _, var _) -> {
                     List<Proposition> each = at(parts);
                     yield each == null ? null : each == parts ? stated : Proposition.all(each);
                 }
-                case Proposition.Any(var parts, var _) -> {
+                case Proposition.Any(var parts, var _, var _) -> {
                     List<Proposition> each = at(parts);
                     yield each == null ? null : each == parts ? stated : Proposition.any(each);
                 }
@@ -143,7 +143,7 @@ public final class OnOneElement {
                     yield met == null ? null : met == ofTheElement ? stated
                             : new Proposition.Some(container, met, holds);
                 }
-                case Proposition.Compared(Relation.Affine affine, boolean holds, var _) -> {
+                case Proposition.Compared(Relation.Affine affine, boolean holds, var _, var _) -> {
                     LinearForm<Quantity> on = formAt(affine.form(), element, there, itself);
                     if (on == null) {
                         yield null;

@@ -275,11 +275,11 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
             case Proposition.Truth(DecisionSubject of, boolean holds, var _) ->
                     new DecidedCondition.Stood(new DecisionCondition.ATruth(of), holds == held);
             case Proposition.Compared(Relation.Ordered(DecisionAtom term, var at, Rel proposition),
-                                      boolean holds, var _) -> new DecidedCondition.Compared(
+                                      boolean holds, var _, var _) -> new DecidedCondition.Compared(
                     new DecisionCondition.AnOrderedComparison(term, at, proposition),
                     holds == held);
             case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel proposition),
-                                      boolean holds, var _) when overDecisionAtoms(form) ->
+                                      boolean holds, var _, var _) when overDecisionAtoms(form) ->
                     new DecidedCondition.Compared(new DecisionCondition.AComparison(
                             decisionForm(form), proposition), holds == held);
             case Proposition.Compared _, Proposition.Always _, Proposition.InCases _,

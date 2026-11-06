@@ -335,7 +335,7 @@ public final class NumericallyConsistentWays {
          *  every state as it was. */
         static Optional<Narrowing> of(Proposition part) {
             if (!(part instanceof Proposition.Compared(Relation.Affine affine, boolean holds,
-                    Spelling _)) || affine.form().coefs().isEmpty()) {
+                    Spelling _, var _)) || affine.form().coefs().isEmpty()) {
                 return Optional.empty();
             }
             Map<Quantity, ExactRatio> form = affine.form().coefs();

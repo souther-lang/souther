@@ -294,7 +294,7 @@ class WhatACaseChosenPartByPartPutsOnTheWayIsWhatItPutsWholeTest {
                 .stated().proposition();
         Quantity.OfABinding element = OnOneElement.theElementOf(stated).orElseThrow();
         if (!(stated instanceof Proposition.Compared(Relation.Affine(var form, var _), var _,
-                var _)) || !(form.coefs().keySet().iterator().next()
+                var _, var _)) || !(form.coefs().keySet().iterator().next()
                 instanceof Quantity.RemainderOfADividend remainder)) {
             throw new AssertionError("the comparison weighs a remainder: " + stated);
         }

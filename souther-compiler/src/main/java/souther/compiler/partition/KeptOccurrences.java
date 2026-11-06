@@ -87,7 +87,7 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
     private static boolean heldTo(Proposition stated, List<TakenConstraint> out) {
         return switch (stated) {
             case Proposition.All all -> all.parts().stream().allMatch(part -> heldTo(part, out));
-            case Proposition.Compared(Relation.Affine affine, boolean holds, Spelling _) -> {
+            case Proposition.Compared(Relation.Affine affine, boolean holds, Spelling _, var _) -> {
                 LinearForm<NumericTerm> form = WhatTheDeclarationsLeave.ofTheInput(affine.form());
                 Rel rel = holds ? affine.proposition() : affine.proposition().denied();
                 if (form == null) {
@@ -114,7 +114,7 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
             }
             case Proposition.Compared(Relation.Ordered(
                     DecisionAtom.OfTheInput(NumericTerm term, var _), Place at, Rel rel),
-                    boolean holds, Spelling _)
+                    boolean holds, Spelling _, var _)
                     when term.atOnePosition() != null -> {
                 Rel held = holds ? rel : rel.denied();
                 out.add(TakenConstraint.Ordered.isABound(held)

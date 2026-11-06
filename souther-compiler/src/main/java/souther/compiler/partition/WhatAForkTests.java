@@ -105,7 +105,8 @@ final class WhatAForkTests {
         if (part instanceof Proposition.Some(var _, var ofTheElement, var _, var _)) {
             return isAmongThePieces(ofTheElement);
         }
-        return part instanceof Proposition.Compared(Relation.Affine(var form, var _), var _, var _)
+        return part instanceof Proposition.Compared(Relation.Affine(var form, var _), var _, var _,
+                var _)
                 && form.coefs().keySet().stream().anyMatch(Quantity.IsAmongThePieces.class::isInstance);
     }
 }

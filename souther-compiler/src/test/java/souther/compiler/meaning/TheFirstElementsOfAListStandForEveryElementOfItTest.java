@@ -178,11 +178,11 @@ class TheFirstElementsOfAListStandForEveryElementOfItTest {
     private static boolean holds(Proposition stated, long n, long x, long y) {
         return switch (stated) {
             case Proposition.Always(boolean holds) -> holds;
-            case Proposition.All(var parts, var _) ->
+            case Proposition.All(var parts, var _, var _) ->
                     parts.stream().allMatch(each -> holds(each, n, x, y));
-            case Proposition.Any(var parts, var _) ->
+            case Proposition.Any(var parts, var _, var _) ->
                     parts.stream().anyMatch(each -> holds(each, n, x, y));
-            case Proposition.Compared(Relation.Affine affine, boolean holds, var _) ->
+            case Proposition.Compared(Relation.Affine affine, boolean holds, var _, var _) ->
                     affine.proposition().holds(Long.signum(sum(affine.form(), n, x, y))) == holds;
             default -> throw new AssertionError("no such statement is drawn: " + stated);
         };

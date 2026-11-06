@@ -214,11 +214,11 @@ class AStatementComesRoundOnlyWhereEveryElementThatFarApartComesOutAlikeTest {
     private static boolean holds(Proposition stated, Values at) {
         return switch (stated) {
             case Proposition.Always(boolean holds) -> holds;
-            case Proposition.All(var parts, var _) ->
+            case Proposition.All(var parts, var _, var _) ->
                     parts.stream().allMatch(each -> holds(each, at));
-            case Proposition.Any(var parts, var _) ->
+            case Proposition.Any(var parts, var _, var _) ->
                     parts.stream().anyMatch(each -> holds(each, at));
-            case Proposition.Compared(Relation.Affine affine, boolean holds, var _) ->
+            case Proposition.Compared(Relation.Affine affine, boolean holds, var _, var _) ->
                     affine.proposition().holds(sum(affine.form(), at).signum()) == holds;
             default -> throw new AssertionError("no such statement is drawn: " + stated);
         };
@@ -304,11 +304,11 @@ class AStatementComesRoundOnlyWhereEveryElementThatFarApartComesOutAlikeTest {
 
     private static List<LinearForm<Quantity>> comparedIn(Proposition stated) {
         return switch (stated) {
-            case Proposition.All(var parts, var _) -> parts.stream()
+            case Proposition.All(var parts, var _, var _) -> parts.stream()
                     .flatMap(each -> comparedIn(each).stream()).toList();
-            case Proposition.Any(var parts, var _) -> parts.stream()
+            case Proposition.Any(var parts, var _, var _) -> parts.stream()
                     .flatMap(each -> comparedIn(each).stream()).toList();
-            case Proposition.Compared(Relation.Affine(var form, var _), var _, var _) ->
+            case Proposition.Compared(Relation.Affine(var form, var _), var _, var _, var _) ->
                     List.of(form);
             default -> List.of();
         };
@@ -317,9 +317,11 @@ class AStatementComesRoundOnlyWhereEveryElementThatFarApartComesOutAlikeTest {
     private static void remaindersIn(Proposition stated,
                                      List<Quantity.RemainderOfADividend> into) {
         switch (stated) {
-            case Proposition.All(var parts, var _) -> parts.forEach(each -> remaindersIn(each, into));
-            case Proposition.Any(var parts, var _) -> parts.forEach(each -> remaindersIn(each, into));
-            case Proposition.Compared(Relation.Affine(var form, var _), var _, var _) ->
+            case Proposition.All(var parts, var _, var _) ->
+                    parts.forEach(each -> remaindersIn(each, into));
+            case Proposition.Any(var parts, var _, var _) ->
+                    parts.forEach(each -> remaindersIn(each, into));
+            case Proposition.Compared(Relation.Affine(var form, var _), var _, var _, var _) ->
                     form.coefs().keySet().forEach(each -> {
                         if (each instanceof Quantity.RemainderOfADividend remainder) {
                             into.add(remainder);

@@ -333,7 +333,7 @@ public final class AnswerAsAnInput {
         return switch (stated) {
             case Proposition.Always always -> always;
             case Proposition.Unread unread -> unread;
-            case Proposition.Compared(Relation relation, boolean holds, var _) -> {
+            case Proposition.Compared(Relation relation, boolean holds, var _, var _) -> {
                 if (!(relation instanceof Relation.Affine(LinearForm<Quantity> form,
                         var rel))) {
                     yield null;

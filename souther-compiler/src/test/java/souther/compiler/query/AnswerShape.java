@@ -154,15 +154,38 @@ final class AnswerShape {
      * is what the walk is about — what is under a thing is what it holds, however the declaration
      * spelled the holding.
      *
-     * <p>Without what is static, which belongs to the class rather than to a thing of it, and
-     * without what is primitive, which the language already says the meaning of.
+     * <p>Of what a thing is made of ({@link #madeOf}), without what is primitive, which the
+     * language already says the meaning of.
      */
     static List<Field> fieldsOf(Class<?> type) {
         return FIELDS.get(type);
     }
 
-    /** What {@link #fieldsOf} says of each class, read once a class for the same reason. */
+    /**
+     * Every field a thing of this type is made of, primitive or not: what comparing two of them
+     * field by field compares.
+     *
+     * <p>Without what is static, which belongs to the class rather than to a thing of it, and
+     * without what is {@code volatile}, which is an answer worked out later from the rest and
+     * kept beside it: writing one changes nothing anybody can observe, so two things equal in the
+     * rest are equal whichever of them has worked it out, and a walk into it would be a walk into
+     * what the rest already holds. That is what a store's identity says of the same fields
+     * ({@code AnAnswersIdentityCoversEverythingItAnswersWithTest}).
+     */
+    static List<Field> madeOf(Class<?> type) {
+        return MADE_OF.get(type);
+    }
+
+    /** What {@link #fieldsOf} and {@link #madeOf} say of each class, read once a class for the
+     *  same reason. */
     private static final ClassValue<List<Field>> FIELDS = new ClassValue<>() {
+        @Override
+        protected List<Field> computeValue(Class<?> type) {
+            return madeOf(type).stream().filter(field -> !field.getType().isPrimitive()).toList();
+        }
+    };
+
+    private static final ClassValue<List<Field>> MADE_OF = new ClassValue<>() {
         @Override
         protected List<Field> computeValue(Class<?> type) {
             return fieldsDeclaredUnder(type);
@@ -173,7 +196,8 @@ final class AnswerShape {
         List<Field> out = new ArrayList<>();
         for (Class<?> at = type; at != null && at != Object.class; at = at.getSuperclass()) {
             for (Field field : at.getDeclaredFields()) {
-                if (!Modifier.isStatic(field.getModifiers()) && !field.getType().isPrimitive()) {
+                if (!Modifier.isStatic(field.getModifiers())
+                        && !Modifier.isVolatile(field.getModifiers())) {
                     out.add(field);
                 }
             }

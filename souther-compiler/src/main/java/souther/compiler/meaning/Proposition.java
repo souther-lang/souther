@@ -29,6 +29,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
@@ -98,6 +99,66 @@ public sealed interface Proposition {
      */
     default Spelling deniedSpelling() {
         return denied().spelling();
+    }
+
+    /**
+     * The denial of the proposition holding this, once a reader has made it, kept for as long as
+     * that proposition is held.
+     *
+     * <p>A condition is stated where it holds and denied where it does not, so one statement is
+     * denied again wherever it is read, and a denial made afresh writes out every part again — the
+     * parts of a conjunction joined and ordered by their spellings, a comparison spelled from its
+     * form atom by atom. Kept here it is made once. A map from each statement to its denial would
+     * either let the denial go while the statement is still held or hold the two of them for ever,
+     * since each is the other's denial; held by the statement, the two are let go together once
+     * nothing else holds either.
+     *
+     * <p>Nothing a proposition is. What is kept is equal to what any other making would make, so
+     * every cell is equal to every other and hashes alike: a proposition compares and hashes as it
+     * would without one, whether its {@code equals} is written out or the record's own. The
+     * denial is the one {@code volatile} field, which is what a field worked out later from the
+     * rest says of itself to a reader of what a value is made of.
+     *
+     * <p>Made outside the lock, since making it asks for the denial of every part. Two readers
+     * asking at once may both make one, and both are handed the one kept first.
+     */
+    final class Denial {
+
+        private volatile Proposition kept;
+
+        Denial() {
+        }
+
+        /** The denial kept, or {@code denying}'s, kept from now on. */
+        Proposition of(Supplier<Proposition> denying) {
+            Proposition held = kept;
+            if (held != null) {
+                return held;
+            }
+            Proposition made = denying.get();
+            synchronized (this) {
+                if (kept == null) {
+                    kept = made;
+                }
+                return kept;
+            }
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Denial;
+        }
+
+        @Override
+        public int hashCode() {
+            return 0;
+        }
+
+        /** Not the denial: its own cell may hold the proposition this is the cell of. */
+        @Override
+        public String toString() {
+            return "Denial";
+        }
     }
 
     /**
@@ -259,8 +320,10 @@ public sealed interface Proposition {
      * A relation over quantities, held or failing.
      *
      * @param spelling spelled from the rest when it is made, whatever is handed in
+     * @param denial   a new one when it is made, whatever is handed in
      */
-    record Compared(Relation relation, boolean holds, Spelling spelling) implements Proposition {
+    record Compared(Relation relation, boolean holds, Spelling spelling, Denial denial)
+            implements Proposition {
 
         @Override
         public int hashCode() {
@@ -268,7 +331,7 @@ public sealed interface Proposition {
         }
 
         public Compared(Relation relation, boolean holds) {
-            this(relation, holds, null);
+            this(relation, holds, null, null);
         }
 
         public Compared {
@@ -280,6 +343,7 @@ public sealed interface Proposition {
                         + " element meets what is counted, and are written as that: " + relation);
             }
             spelling = Spelling.denying(holds, relation.spelling());
+            denial = new Denial();
         }
 
         /** The spelling of the relation held, whichever way round this is: one for one relation. */
@@ -288,13 +352,23 @@ public sealed interface Proposition {
         }
 
         /**
-         * The comparison failing, made once while this is held ({@link SharedPropositions#denied}).
-         * Its spelling is put together from the form's, atom by atom, so made again for each
-         * reader it is spelled again and compared with the one kept a character at a time.
+         * The comparison failing, made once while this is held ({@link Denial}). Its spelling is
+         * put together from the form's, atom by atom, so made again for each reader it is spelled
+         * again and compared with the one kept a character at a time.
+         *
+         * <p>A comparison is made afresh by every reader that reads one, so many equal ones are held
+         * at once, each with a cell of its own. Asked for the first time, this is the denial of
+         * the equal one kept ({@link SharedPropositions#shared}), and the denial made is kept the
+         * same way, so equal comparisons share one denial. The denial's own denial is then the
+         * comparison kept, and a reader denying back and forth makes nothing more.
          */
         @Override
         public Proposition denied() {
-            return SharedPropositions.denied(this, () -> new Compared(relation, !holds));
+            return denial.of(() -> {
+                Proposition kept = SharedPropositions.shared(this);
+                return kept != this ? kept.denied()
+                        : SharedPropositions.shared(new Compared(relation, !holds));
+            });
         }
 
         @Override
@@ -819,8 +893,9 @@ public sealed interface Proposition {
      * again gives it back, so a reader that changes none of them may hand it back as it is.
      *
      * @param spelling spelled from the parts' own when it is made, whatever is handed in
+     * @param denial   a new one when it is made, whatever is handed in
      */
-    record All(List<Proposition> parts, Spelling spelling) implements Proposition {
+    record All(List<Proposition> parts, Spelling spelling, Denial denial) implements Proposition {
 
         @Override
         public int hashCode() {
@@ -842,7 +917,7 @@ public sealed interface Proposition {
         private static final Spelling OPENING = Spelling.of("all[");
 
         public All(List<Proposition> parts) {
-            this(parts, null);
+            this(parts, null, null);
         }
 
         public All {
@@ -851,12 +926,12 @@ public sealed interface Proposition {
                 throw new IllegalArgumentException("a conjunction is of two or more parts");
             }
             spelling = spellingOf(OPENING, parts);
+            denial = new Denial();
         }
 
         @Override
         public Proposition denied() {
-            return SharedPropositions.denied(this,
-                    () -> any(parts.stream().map(Proposition::denied).toList()));
+            return denial.of(() -> any(parts.stream().map(Proposition::denied).toList()));
         }
     }
 
@@ -864,8 +939,9 @@ public sealed interface Proposition {
      * Some part holding. Made through {@link #any}, and nowhere else, as {@link All} is.
      *
      * @param spelling spelled from the parts' own when it is made, whatever is handed in
+     * @param denial   a new one when it is made, whatever is handed in
      */
-    record Any(List<Proposition> parts, Spelling spelling) implements Proposition {
+    record Any(List<Proposition> parts, Spelling spelling, Denial denial) implements Proposition {
 
         @Override
         public int hashCode() {
@@ -883,7 +959,7 @@ public sealed interface Proposition {
         private static final Spelling OPENING = Spelling.of("any[");
 
         public Any(List<Proposition> parts) {
-            this(parts, null);
+            this(parts, null, null);
         }
 
         public Any {
@@ -892,14 +968,14 @@ public sealed interface Proposition {
                 throw new IllegalArgumentException("a disjunction is of two or more parts");
             }
             spelling = spellingOf(OPENING, parts);
+            denial = new Denial();
         }
 
         /** Every part failing — which {@link #all} keeps as the cases of a condition where the
          *  parts are cases of one ({@link #byTheCases}). */
         @Override
         public Proposition denied() {
-            return SharedPropositions.denied(this,
-                    () -> all(parts.stream().map(Proposition::denied).toList()));
+            return denial.of(() -> all(parts.stream().map(Proposition::denied).toList()));
         }
     }
 
@@ -1281,7 +1357,8 @@ public sealed interface Proposition {
          */
         public Optional<NodeBelowMeeting> someNodeBelowMeetingIt(int levels) {
             if (levels < 1 || through.size() != 1
-                    || !(atANode instanceof Compared(Relation.Affine affine, boolean asked, var _))) {
+                    || !(atANode instanceof Compared(Relation.Affine affine, boolean asked, var _,
+                            var _))) {
                 return Optional.empty();
             }
             List<TermPath> containers = new ArrayList<>();
@@ -1406,8 +1483,10 @@ public sealed interface Proposition {
      * asked for — declines it.
      *
      * @param spelling spelled from the statements' own when it is made, whatever is handed in
+     * @param denial   a new one when it is made, whatever is handed in
      */
-    record OnAnApplication(List<Proposition> each, Spelling spelling) implements Proposition {
+    record OnAnApplication(List<Proposition> each, Spelling spelling, Denial denial)
+            implements Proposition {
 
         @Override
         public int hashCode() {
@@ -1425,7 +1504,7 @@ public sealed interface Proposition {
         private static final Spelling OPENING = Spelling.of("on an application[");
 
         public OnAnApplication(List<Proposition> each) {
-            this(each, null);
+            this(each, null, null);
         }
 
         public OnAnApplication {
@@ -1435,11 +1514,12 @@ public sealed interface Proposition {
                         "a condition read on its applications states two or more things");
             }
             spelling = spellingOf(OPENING, each);
+            denial = new Denial();
         }
 
         @Override
         public Proposition denied() {
-            return SharedPropositions.denied(this,
+            return denial.of(
                     () -> onAnApplication(each.stream().map(Proposition::denied).toList()));
         }
     }
@@ -1469,9 +1549,10 @@ public sealed interface Proposition {
      * @param admitted   the counts this holds at, rising — none of them every count there is, and
      *                   not none
      * @param spelling       spelled from the rest when it is made, whatever is handed in
+     * @param denial         a new one when it is made, whatever is handed in
      */
     record SoManyHold(List<Proposition> statements, List<Integer> weights, List<Integer> admitted,
-                      Spelling spelling) implements Proposition {
+                      Spelling spelling, Denial denial) implements Proposition {
 
         @Override
         public int hashCode() {
@@ -1490,7 +1571,7 @@ public sealed interface Proposition {
 
         public SoManyHold(List<Proposition> statements, List<Integer> weights,
                           List<Integer> admitted) {
-            this(statements, weights, admitted, null);
+            this(statements, weights, admitted, null, null);
         }
 
         public SoManyHold {
@@ -1535,6 +1616,7 @@ public sealed interface Proposition {
             }
             spelled.add(Spelling.CLOSE);
             spelling = Spelling.joined(spelled);
+            denial = new Denial();
         }
 
         /** How many the statements come to where every one of them holds. */
@@ -1645,14 +1727,15 @@ public sealed interface Proposition {
 
         @Override
         public Proposition denied() {
-            List<Integer> others = new ArrayList<>();
-            for (int count = 0; count <= weight(); count++) {
-                if (Collections.binarySearch(admitted, count) < 0) {
-                    others.add(count);
+            return denial.of(() -> {
+                List<Integer> others = new ArrayList<>();
+                for (int count = 0; count <= weight(); count++) {
+                    if (Collections.binarySearch(admitted, count) < 0) {
+                        others.add(count);
+                    }
                 }
-            }
-            return SharedPropositions.denied(this,
-                    () -> SharedPropositions.shared(new SoManyHold(statements, weights, others)));
+                return SharedPropositions.shared(new SoManyHold(statements, weights, others));
+            });
         }
 
         /** Which way a count comes out, as far as what each statement can come out as says. */
@@ -1922,7 +2005,7 @@ public sealed interface Proposition {
         return switch (stated) {
             case Always _, Unread _, Carried _ -> false;
             case LastToHold last -> last.container() instanceof DecisionSubject.AnAnswer;
-            case Compared(Relation relation, boolean _, Spelling _) -> switch (relation) {
+            case Compared(Relation relation, boolean _, Spelling _, var _) -> switch (relation) {
                 case Relation.Affine affine -> affine.form().coefs().keySet().stream()
                         .anyMatch(Proposition::anAnswerIn);
                 case Relation.Ordered ordered -> anAnswerIn(ordered.term());
@@ -2147,7 +2230,7 @@ public sealed interface Proposition {
                     && other instanceof DecisionSubject.AnInput(TermPath alsoAt, var _)
                     ? List.of(at, alsoAt) : null;
         }
-        if (!(stated instanceof Compared(Relation relation, boolean holds, var _))
+        if (!(stated instanceof Compared(Relation relation, boolean holds, var _, var _))
                 || !holds
                 || !(relation instanceof Relation.Affine(LinearForm<Quantity> form, Rel rel))
                 || rel != Rel.EQ || form.constant().signum() != 0 || form.coefs().size() != 2) {
@@ -2313,7 +2396,7 @@ public sealed interface Proposition {
      *  stands, above nought. */
     private static boolean holdsSomething(Proposition stated, DecisionSubject container) {
         if (!(stated instanceof Compared(Relation.Affine(LinearForm<Quantity> form, Rel rel),
-                        boolean holds, Spelling _))
+                        boolean holds, Spelling _, var _))
                 || !holds || rel != Rel.GT || form.constant().signum() != 0
                 || form.coefs().size() != 1
                 || form.coefs().values().iterator().next().signum() <= 0) {

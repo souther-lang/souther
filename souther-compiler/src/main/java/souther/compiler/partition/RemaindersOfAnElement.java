@@ -150,7 +150,7 @@ final class RemaindersOfAnElement {
      */
     private static Congruences classOf(RowDemand.ForTheRun run, Quantity.OfABinding element) {
         if (!(run.statement() instanceof Proposition.Compared(Relation.Affine affine,
-                boolean holds, var _))
+                boolean holds, var _, var _))
                 || affine.form().coefs().size() != 1
                 || !(affine.form().coefs().keySet().iterator().next()
                         instanceof Quantity.RemainderOfADividend remainder)
@@ -209,7 +209,8 @@ final class RemaindersOfAnElement {
         }
         if (!(OnOneElement.inItsRemainders(stated, element,
                 LinearForm.constant(ExactRatio.of(members.residue())))
-                instanceof Proposition.Compared(Relation.Affine affine, boolean holds, var _))
+                instanceof Proposition.Compared(Relation.Affine affine, boolean holds, var _,
+                        var _))
                 || affine.form().coefs().size() != 1
                 || !(affine.form().coefs().keySet().iterator().next()
                         instanceof Quantity.RemainderOfADividend remainder)

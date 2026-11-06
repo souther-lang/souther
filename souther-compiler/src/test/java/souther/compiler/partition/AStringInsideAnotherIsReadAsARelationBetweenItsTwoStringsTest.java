@@ -152,7 +152,7 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
     /** The value being one of the pieces of the window, wherever in the statement it stands. */
     private static Quantity.IsAmongThePieces among(Proposition stated) {
         if (stated instanceof Proposition.Compared(
-                souther.compiler.meaning.Relation.Affine affine, boolean _, Spelling _)) {
+                souther.compiler.meaning.Relation.Affine affine, boolean _, Spelling _, var _)) {
             for (Quantity each : affine.form().coefs().keySet()) {
                 if (each instanceof Quantity.IsAmongThePieces among) {
                     return among;

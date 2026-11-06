@@ -108,14 +108,14 @@ final class ResiduesAStatementLeaves {
             return switch (stated) {
                 case Proposition.Always(boolean holds) ->
                         holds ? WholeNumberRuns.EVERY : WholeNumberRuns.NONE;
-                case Proposition.All(var parts, var _) -> {
+                case Proposition.All(var parts, var _, var _) -> {
                     WholeNumberRuns at = WholeNumberRuns.EVERY;
                     for (Proposition part : parts) {
                         at = at.and(held(part));
                     }
                     yield at;
                 }
-                case Proposition.Any(var parts, var _) -> {
+                case Proposition.Any(var parts, var _, var _) -> {
                     WholeNumberRuns at = WholeNumberRuns.NONE;
                     for (Proposition part : parts) {
                         at = at.or(held(part));

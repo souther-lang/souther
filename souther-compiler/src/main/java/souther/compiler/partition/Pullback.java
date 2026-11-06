@@ -3391,7 +3391,8 @@ final class Pullback {
                                                                PieceWitness within,
                                                                Pieces pieces) {
         if (!(read instanceof Proposition.Compared(
-                Relation.Affine(LinearForm<Quantity> form, Rel rel), boolean holds, var _))
+                Relation.Affine(LinearForm<Quantity> form, Rel rel), boolean holds, var _,
+                var _))
                 || rel != Rel.EQ || !holds || form.constant().signum() != 0
                 || form.coefs().size() != 2 || !hasAPieceWhateverTheStringHolds(pieces)) {
             return null;
@@ -3441,7 +3442,7 @@ final class Pullback {
         if (alone != null) {
             return new AnElementAmongThePieces(alone, List.of());
         }
-        if (!(read instanceof Proposition.All(List<Proposition> parts, var _))) {
+        if (!(read instanceof Proposition.All(List<Proposition> parts, var _, var _))) {
             return null;
         }
         Quantity.IsAmongThePieces among = null;
@@ -5329,7 +5330,7 @@ final class Pullback {
          */
         private Derivation.SomeElementEquallingSomePiece someElementBeingAPieceInALanguage(
                 Proposition element, PieceWitness within, Pieces pieces, Derivation answered) {
-            if (!(element instanceof Proposition.All(List<Proposition> parts, var _))
+            if (!(element instanceof Proposition.All(List<Proposition> parts, var _, var _))
                     || parts.size() != 2) {
                 return null;
             }
@@ -11001,7 +11002,7 @@ final class Pullback {
         // Kept by the relation as the reading will state it, of the values it was read through:
         // two comparisons of two elements at one position work out two things.
         if (!(new Conclusion(where).of(Derivation.ReadThrough.of(cut, freeInTheRoot))
-                instanceof Proposition.Compared(Relation said, var _, var _))) {
+                instanceof Proposition.Compared(Relation said, var _, var _, var _))) {
             return;
         }
         UndividedByARelation.Working told = working.notOnEveryRun();
@@ -13643,7 +13644,8 @@ final class Pullback {
      */
     private ArmsLeft armsLeftBy(Derivation condition) {
         if (!(condition.concludes(Optional.empty()) instanceof Proposition.Compared(
-                Relation.Affine(LinearForm<Quantity> form, Rel relation), boolean holds, var _))) {
+                Relation.Affine(LinearForm<Quantity> form, Rel relation), boolean holds, var _,
+                var _))) {
             return ArmsLeft.BOTH;
         }
         LinearForm<NumericTerm> onTheInput = WhatTheDeclarationsLeave.ofTheInput(form);

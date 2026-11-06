@@ -152,7 +152,7 @@ class WhatARowAtARemainderMakesOfAStatementHoldsOfEveryRowThereTest {
                     flag == holds;
             case Proposition.WhereItAnswers(var answers, var states, var _) ->
                     holds(answers, d, s, flag) && holds(states, d, s, flag);
-            case Proposition.Compared(Relation.Affine affine, boolean holds, var _) -> {
+            case Proposition.Compared(Relation.Affine affine, boolean holds, var _, var _) -> {
                 long sum = whole(affine.form().constant());
                 for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
                     Quantity.RemainderOfADividend remainder =
