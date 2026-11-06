@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedSet;
 import java.util.Set;
 
 /**
@@ -44,8 +45,11 @@ public sealed interface TakenConstraint {
      * composer does with a condition on the way is place a value for every position it names, and
      * that act is the same act in both vocabularies — read off the shapes, it would be written once
      * per shape and a vocabulary added later would be one the composer walks past.
+     *
+     * <p>In one order whatever order the constraint's form held its terms in, which the type says:
+     * a search places them one after another, and where it comes to a valid row first turns on it.
      */
-    java.util.Set<NumericTerm> terms();
+    SequencedSet<NumericTerm> terms();
 
     /**
      * {@code region} with this taken in.
@@ -189,14 +193,14 @@ public sealed interface TakenConstraint {
          * coefficient names it.
          */
         @Override
-        public java.util.Set<NumericTerm> terms() {
+        public SequencedSet<NumericTerm> terms() {
             if (form.coefs().keySet().stream().noneMatch(term ->
                     term instanceof NumericTerm.OccurrencesOfAKey
                             || term instanceof NumericTerm.GatheredUnderAKey
                             || term instanceof NumericTerm.ProductOf)) {
                 return NumericTerms.setInOrder(form.coefs().keySet());
             }
-            Set<NumericTerm> out = new LinkedHashSet<>();
+            SequencedSet<NumericTerm> out = new LinkedHashSet<>();
             for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
                 switch (term) {
                     case NumericTerm.OccurrencesOfAKey asked ->
@@ -259,8 +263,8 @@ public sealed interface TakenConstraint {
         }
 
         @Override
-        public java.util.Set<NumericTerm> terms() {
-            return java.util.Set.of(term);
+        public SequencedSet<NumericTerm> terms() {
+            return NumericTerms.setInOrder(List.of(term));
         }
     }
 
@@ -294,8 +298,8 @@ public sealed interface TakenConstraint {
         }
 
         @Override
-        public java.util.Set<NumericTerm> terms() {
-            return java.util.Set.of(term);
+        public SequencedSet<NumericTerm> terms() {
+            return NumericTerms.setInOrder(List.of(term));
         }
     }
 }

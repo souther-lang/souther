@@ -45,6 +45,7 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -525,7 +526,7 @@ final class AStatementAtARow {
      * Every number of the input {@code stated} reads, the numbers of the elements it reads among
      * them; for a statement {@link #askable} says a row can be asked.
      */
-    static Set<NumericTerm> numbersOf(Proposition stated) {
+    static SequencedSet<NumericTerm> numbersOf(Proposition stated) {
         Set<NumericTerm> out = new LinkedHashSet<>();
         gatherNumbers(stated, out);
         return NumericTerms.setInOrder(out);

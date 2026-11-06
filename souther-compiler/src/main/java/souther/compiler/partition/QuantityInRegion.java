@@ -3,7 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 
-import java.util.Set;
+import java.util.SequencedSet;
 
 /**
  * A border's quantity standing somewhere, which is what a row at one of its items has to do.
@@ -32,7 +32,7 @@ public record QuantityInRegion(BorderQuantity quantity, LevelRegion values)
     }
 
     @Override
-    public Set<NumericTerm> terms() {
+    public SequencedSet<NumericTerm> terms() {
         return NumericTerms.setInOrder(quantity.numbers());
     }
 }
