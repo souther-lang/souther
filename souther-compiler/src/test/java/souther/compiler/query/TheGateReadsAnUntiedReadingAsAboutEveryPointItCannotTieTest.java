@@ -30,6 +30,7 @@ import souther.compiler.partition.LineFacts;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.OwedPoint;
 import souther.compiler.partition.ReadingSeat;
+import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstruct;
@@ -115,7 +116,8 @@ class TheGateReadsAnUntiedReadingAsAboutEveryPointItCannotTieTest {
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(Numberings.comparison(1, 0)), ElementsMetOn.EVERY,
-                        LineOrigin.NOTHING_ON_THE_WAY, Optional.empty(), Optional.empty()),
+                        LineOrigin.NOTHING_ON_THE_WAY, Optional.empty(), Optional.empty(),
+                        ApplicationsReadOn.NONE),
                 Optional.empty(),
                 new LineFacts(new ComparisonClaim.Cut(Towards.ABOVE, true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,

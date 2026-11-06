@@ -25,6 +25,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Text;
 import souther.compiler.numeric.Towards;
 import souther.compiler.semantics.TakenAs;
+import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstruct;
@@ -220,7 +221,8 @@ class WhatTheDeclarationsHoldAValueToIsOneAnswerTest {
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(Numberings.comparison(1, 0)), ElementsMetOn.EVERY,
-                        LineOrigin.NOTHING_ON_THE_WAY, Optional.empty(), Optional.empty()),
+                        LineOrigin.NOTHING_ON_THE_WAY, Optional.empty(), Optional.empty(),
+                        ApplicationsReadOn.NONE),
                 Optional.empty(),
                 new LineFacts(new ComparisonClaim.Singled(true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,

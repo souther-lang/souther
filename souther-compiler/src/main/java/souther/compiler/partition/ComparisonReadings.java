@@ -19,6 +19,7 @@ import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.coverage.Arrivals;
+import souther.compiler.types.AnApplicationOfAClosure;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
@@ -1269,7 +1270,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 new ClosureApplications.Each(List.of(new ClosureApplications.Application(step,
                         WhereAnApplicationIsMade.nothingAsked(), Map.of(),
                         metOn.madeWhere(made.stated()).stoppingIn(list, onward.denied()),
-                        List.of()))));
+                        AnApplicationOfAClosure.OF_NO_CALL_WRITTEN))));
     }
 
     /**

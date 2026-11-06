@@ -19,6 +19,9 @@ import souther.compiler.check.Extreme;
 import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.PartId;
 import souther.compiler.publish.InputUseWord;
+import souther.compiler.types.ACallOfAnOperation;
+import souther.compiler.types.AnApplicationOfAClosure;
+import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.CanonicalNameOrder;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ExpansionSite;
@@ -1144,7 +1147,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     conditionPlaces(compilation, name, linesOf(read), requirements, reported,
                             partition == null ? List.of() : partition.caseExpansions()),
                     rulePlaces(compilation, citedBy(evidence, reported)),
-                    partPlaces(compilation, partition, reported),
+                    partPlaces(compilation, partition, reported,
+                            evidence.account() == null ? List.of()
+                                    : evidence.account().made().orElseGet(List::of)),
                     ruleReadings(compilation, name, behavior.name(),
                             decisions == null ? null : decisions.get(behavior.name()),
                             reported, requirements),
@@ -2129,7 +2134,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * the part, and two readers naming one part name one place.
      */
     private static Map<RuleSite, Citation> partPlaces(
-            Compilation compilation, PartitionEvidence partition, List<ReportedFinding> found) {
+            Compilation compilation, PartitionEvidence partition, List<ReportedFinding> found,
+            List<BorderObligationPointAssessment> account) {
         Map<RuleSite, Citation> places = new LinkedHashMap<>();
         Consumer<RuleSite> take = sentTo -> {
             switch (sentTo) {
@@ -2162,6 +2168,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             construct -> whereItIsWritten(construct).ifPresent(take)));
                 }
             }));
+        }
+        // And each call whose applications an obligation's readings were read on.
+        for (BorderObligationPointAssessment point : account) {
+            for (BorderAssessment reading : point.met().values()) {
+                for (AnApplicationOfAClosure application : reading.readOn().each()) {
+                    for (AnApplicationOfAClosure.Made made : application.by()) {
+                        callWritten(made.call()).flatMap(AdequacyReport::whereItIsWritten)
+                                .ifPresent(take);
+                    }
+                }
+            }
         }
         if (found != null) {
             found.stream().map(ReportedFinding::finding).map(Adequacy.Finding::about)
@@ -8835,7 +8852,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // here, on the point, where on the line and the rule; and every reading is published, so
         // nothing a text report left out for room is missing from the document.
         obligations(DocumentPart.OBLIGATIONS.putArray(out), account, null, sources, places,
-                rowsAt);
+                rowsAt, Optional.of(parts));
         // Written where the pair space is what this behavior is held to, and left out where its
         // decisions meet: the criterion is one or the other, and a document carrying both would
         // hand a consumer a second universe of combinations nobody is owed a row in.
@@ -9889,11 +9906,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * @param axes what each point's line is on in the words a declaration wrote, for the account
      *             that has such words. Null for a body's own lines, which have none: a reading
      *             names the position it met the line at and no reading can stand for the rest
+     * @param parts where this document shows the calls whose applications a reading was read on,
+     *             for the account that was assembled with them: a behavior's. Nothing for the
+     *             declarations', whose calls are named without a place
      */
     private void obligations(DocumentArray out, List<BorderObligationPointAssessment> account,
                              Map<BorderObligationPoint, String> axes,
                              DocumentSources sources,
-                             PublishedRuleHandle.WhereARuleIs places, WhereARowIs rowsAt) {
+                             PublishedRuleHandle.WhereARuleIs places, WhereARowIs rowsAt,
+                             Optional<WhereAPartIs> parts) {
         for (BorderObligationPointAssessment point : account) {
             DocumentItem owed = out.addObject();
             ObjectNode o = owed.node();
@@ -9924,8 +9945,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // the order is not a contract, and a consumer reads these as a bag: two entries that
             // print alike are two readings, so they may be counted and may not be merged.
             ArrayNode readings = o.putArray("readings");
+            List<ApplicationsReadOn> readOn = new ArrayList<>();
             for (BorderObligationPointAssessment.Reading read : point.readingsInSteadyOrder()) {
                 BorderAssessment at = point.met().get(read);
+                readOn.add(at.readOn());
                 ObjectNode r = readings.addObject();
                 r.put("behavior", read.behavior());
                 r.put("axis", at.axis());
@@ -9939,8 +9962,55 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
                 measured(r, point.owedAt(at).coverage(), (node, coverage) ->
                         node.put("hit", ItemAssessment.Coverage.hit(coverage)));
+                // And the applications of closures it was read on, where some call a source wrote
+                // made them. Left out where none did: a reading read once was read on nothing an
+                // author is named.
+                if (!at.readOn().isEmpty()) {
+                    ArrayNode applications = r.putArray("applications");
+                    for (AnApplicationOfAClosure one : at.readOn().each()) {
+                        ArrayNode by = applications.addObject().putArray("madeBy");
+                        for (AnApplicationOfAClosure.Made made : one.by()) {
+                            ObjectNode step = by.addObject();
+                            calledAt(step, made.call(), parts, sources);
+                            step.put("application", made.ordinal());
+                        }
+                    }
+                }
+            }
+            // And, of each call whose applications made some of the readings, how many of its
+            // applications did and how many readings they made: two counts, and neither a bound
+            // on the other.
+            List<ApplicationsReadOn.OfACall> byCall = ApplicationsReadOn.byCall(readOn);
+            if (!byCall.isEmpty()) {
+                ArrayNode calls = o.putArray("readingsByCall");
+                for (ApplicationsReadOn.OfACall each : byCall) {
+                    ObjectNode one = calls.addObject();
+                    calledAt(one, each.call(), parts, sources);
+                    one.put("applications", each.applications());
+                    one.put("readings", each.readings());
+                }
             }
         }
+    }
+
+    /**
+     * A call of one of the language's operations, as the construct of the model it is and where
+     * its author wrote it, where this document can say: the operation by the name the library
+     * publishes it under.
+     */
+    private static void calledAt(ObjectNode into, ACallOfAnOperation call,
+                                 Optional<WhereAPartIs> parts, DocumentSources sources) {
+        into.put("operation", operationNamed(call.operation()));
+        callWritten(call).ifPresent(construct -> {
+            copyId(into.putObject("call"), construct);
+            parts.ifPresent(where -> writtenAt(into, construct, where, sources));
+        });
+    }
+
+    /** The construct of the model {@code call} is, where the model states one there: a call made
+     *  inside one of the language's own operations is none. */
+    private static Optional<ModelOccurrence> callWritten(ACallOfAnOperation call) {
+        return ModelOccurrence.statedAt(call.at());
     }
 
     /**
@@ -10001,7 +10071,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     entry.owed.stream().map(Adequacy.DeclaredDebt::debt).toList(),
                     entry.owed.stream().collect(Collectors.toMap(
                             each -> each.debt().point(), Adequacy.DeclaredDebt::axis, (a, _) -> a)),
-                    sources, places, rowsAt);
+                    sources, places, rowsAt, Optional.empty());
             findings(DocumentPart.FINDINGS.putArray(one), entry.found, sources, places);
             lines(one.putArray("lines"), entry.lines);
             excluded(one.putArray("excluded"), entry.excluded);

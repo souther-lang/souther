@@ -2464,6 +2464,28 @@
                 "hit": {
                   "type": "boolean",
                   "description": "Whether some row stands at the point as read here."
+                },
+                "applications": {
+                  "type": "array",
+                  "minItems": 1,
+                  "description": "The applications of closures this reading was read on, where some call a source wrote made them; absent where none did. Two applications reading the line at one place are one reading of both, so how many there are bounds nothing about how many readings there are.",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "madeBy"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "madeBy": {
+                        "type": "array",
+                        "minItems": 1,
+                        "description": "For each closure the application stands inside whose call a source wrote, that call and which of its applications it is, the outermost first.",
+                        "items": {
+                          "$ref": "#/$defs/anApplicationsCall"
+                        }
+                      }
+                    }
+                  }
                 }
               },
               "allOf": [
@@ -2533,6 +2555,42 @@
               "description": "One position that read the line, and what a row there has to do in that position's terms. A bag and not a set: two readings that print alike are two readings — what tells them apart is where the line was met, which this document does not carry — so a consumer may count these but may not deduplicate them. The order is not a contract."
             },
             "minItems": 1
+          },
+          "readingsByCall": {
+            "type": "array",
+            "minItems": 1,
+            "description": "For each call whose applications some of `readings` were read on, or inside: how many of its applications made some of them and how many of them those made. Two counts with no relation between them. An application inside two applications of the call around it is two applications. Absent where no reading was read on an application some call a source wrote made.",
+            "items": {
+              "type": "object",
+              "required": [
+                "operation",
+                "applications",
+                "readings"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "operation": {
+                  "type": "string",
+                  "description": "The operation called, as the library publishes it."
+                },
+                "call": {
+                  "$ref": "#/$defs/constructOccurrence",
+                  "description": "The call, in the copy of the body it stands in: a helper called twice is two calls. Absent where the call stands inside one of the language's own operations, which no model states."
+                },
+                "at": {
+                  "$ref": "#/$defs/at",
+                  "description": "Where the author wrote the call. Absent in a module's declarations' account."
+                },
+                "applications": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "readings": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
           },
           "axis": {
             "type": "string",
@@ -6071,6 +6129,33 @@
         "required": [
           "level"
         ]
+      }
+    },
+    "anApplicationsCall": {
+      "type": "object",
+      "description": "One call of an operation of the language that applied a closure, and which of its applications it is, counted from nought in the order a run makes them.",
+      "required": [
+        "operation",
+        "application"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "type": "string",
+          "description": "The operation called, as the library publishes it."
+        },
+        "call": {
+          "$ref": "#/$defs/constructOccurrence",
+          "description": "The call, in the copy of the body it stands in. Absent where the call stands inside one of the language's own operations, which no model states."
+        },
+        "at": {
+          "$ref": "#/$defs/at",
+          "description": "Where the author wrote the call. Absent in a module's declarations' account."
+        },
+        "application": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "constructOccurrence": {

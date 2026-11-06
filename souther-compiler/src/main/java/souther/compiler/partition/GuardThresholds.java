@@ -1259,7 +1259,7 @@ public final class GuardThresholds {
                         new RuleRef.Comparison(behavior, wrote), stated, anchor,
                         at.observations().stream().map(EmittedComparisonState.Observation::site)
                                 .toList(), metOn, stopsBefore(at.observations()),
-                        cutting.written(), cutting.heldIn()),
+                        cutting.written(), cutting.heldIn(), cutting.readOn()),
                 part, new LineFacts(cutting.claim()), authored);
     }
 

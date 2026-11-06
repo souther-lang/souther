@@ -18,11 +18,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Who reads what a value carries only to tell an author what multiplied the cases of a line.
+ * Who reads what a value carries only to tell an author what multiplied the cases of a line, or
+ * which applications of a closure a reading of a line was read on.
  *
  * <p>Which call handed a closure its parameter, which application of it a statement was read on,
- * how the statement was derived on each, and how many ways each case asked stood for: none of these
- * decides what a body states or which rows a line asks for. Which call handed what is read off the
+ * how the statement was derived on each, how many ways each case asked stood for, and which
+ * applications drew a line: none of these decides what a body states or which rows a line asks
+ * for. Which call handed what is read off the
  * applications a body's bindings already hold, and is no part of them. The rest are carried inside
  * the values a reading is made of — an application, a derivation, an assessment — and so are part
  * of what makes two of those values equal. That is on purpose. A value left equal to one carrying
@@ -66,6 +68,16 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                     "expanded");
     private static final Account COUNTED_OF_A_LINE =
             new Account("souther/compiler/meaning/CasesOfALineAsked$NotWorkedOut", "counted");
+    private static final Account READ_ON_BY_A_LINE =
+            new Account("souther/compiler/partition/Cutting", "readOn");
+    private static final Account READ_ON_BY_A_RELATION =
+            new Account("souther/compiler/partition/Cutting$Read$AgainstAnotherValue", "readOn");
+    private static final Account READ_ON_BESIDE_A_RELATION =
+            new Account("souther/compiler/partition/ComparisonAssessment$DrawnBeside", "readOn");
+    private static final Account READ_ON_BY_AN_ORIGIN =
+            new Account("souther/compiler/partition/LineOrigin$ComparisonOrigin$Read", "readOn");
+    private static final Account READ_ON_BY_A_READING =
+            new Account("souther/compiler/query/BorderAssessment", "readOn");
 
     /**
      * Every method outside its carrier that reads each account.
@@ -79,6 +91,12 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
      * its parts are narrowed, and told where the assessment says what each line was told. The
      * application a reading is inside, and the derivations an assessment holds, are read by their
      * carrier alone, which is where they are handed on.
+     *
+     * <p>The applications a line was drawn on are handed from the line to the lines parting the
+     * values that settle it and to the line's origin; from a relation to what those lines are drawn
+     * beside, and from there to each of them; from the origin to its reading, which puts them
+     * together where the readings of one line are put together and is told where an obligation's
+     * readings are written, and where the calls they name are placed.
      */
     private static final Map<Account, Set<String>> READ_BY = expected();
 
@@ -115,6 +133,62 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                         + "Lsouther/compiler/partition/WaysToACase;Ljava/util/List;Z"
                         + "Lsouther/compiler/inputs/InputReading;"
                         + "Lsouther/compiler/partition/CountWitnesses$Lookup;)Ljava/util/List;")));
+        String settling = AMethod.of("souther/compiler/partition/ComparisonAssessment",
+                "settlingLines", "(Lsouther/compiler/partition/ComparisonAssessment$DrawnBeside;"
+                        + "Ljava/util/Map;Lsouther/compiler/inputs/InputReading;"
+                        + "Lsouther/compiler/partition/CountWitnesses$Lookup;)Ljava/util/List;");
+        by.put(READ_ON_BY_A_LINE, Set.of(
+                AMethod.of("souther/compiler/partition/ComparisonAssessment$AcrossPositions",
+                        "leaving", "(Lsouther/compiler/partition/Cutting;"
+                                + "Lsouther/compiler/diag/Citation;"
+                                + "Lsouther/compiler/partition/ComparisonAssessment$Places;"
+                                + "Lsouther/compiler/partition/UndividedByARelation;"
+                                + "Lsouther/compiler/partition/UndividedByARelation$WhatItLeaves;"
+                                + "Lsouther/compiler/meaning/AuthoredPointMapping;"
+                                + "Lsouther/compiler/inputs/InputReading;"
+                                + "Lsouther/compiler/partition/CountWitnesses$Lookup;)"
+                                + "Lsouther/compiler/partition/ComparisonAssessment$AcrossPositions;"),
+                AMethod.of("souther/compiler/partition/GuardThresholds", "originOf",
+                        "(Ljava/lang/String;Lsouther/compiler/types/ModelOccurrence;"
+                                + "Lsouther/compiler/coverage/EmittedComparisonState$Instrumented;"
+                                + "Lsouther/compiler/types/SourceConstructOrigin;"
+                                + "Lsouther/compiler/check/RuleReportAnchor;"
+                                + "Lsouther/compiler/partition/ElementsMetOn;Ljava/util/Optional;"
+                                + "Lsouther/compiler/partition/Cutting;"
+                                + "Lsouther/compiler/meaning/AuthoredPointMapping;)"
+                                + "Lsouther/compiler/partition/LineOrigin$ComparisonOrigin;")));
+        by.put(READ_ON_BY_A_RELATION, Set.of(AMethod.of(
+                "souther/compiler/partition/ComparisonAssessment$AgainstAnotherValue", "of",
+                "(Lsouther/compiler/partition/Cutting$Read$AgainstAnotherValue;"
+                        + "Lsouther/compiler/inputs/InputReading;Ljava/util/Optional;"
+                        + "Lsouther/compiler/partition/CountWitnesses$Lookup;)"
+                        + "Lsouther/compiler/partition/ComparisonAssessment$AgainstAnotherValue;")));
+        by.put(READ_ON_BESIDE_A_RELATION, Set.of(settling));
+        by.put(READ_ON_BY_AN_ORIGIN, Set.of(AMethod.of("souther/compiler/partition/LineOrigin",
+                "readOn", "()Lsouther/compiler/types/ApplicationsReadOn;")));
+        by.put(READ_ON_BY_A_READING, Set.of(
+                AMethod.of("souther/compiler/query/Coverages", "asOneLine",
+                        "(Ljava/util/List;)Lsouther/compiler/query/BorderAssessment;"),
+                AMethod.of("souther/compiler/query/Coverages", "asOneLine",
+                        "(Lsouther/compiler/query/BorderAssessment;"
+                                + "Lsouther/compiler/query/BorderAssessment;)"
+                                + "Lsouther/compiler/query/BorderAssessment;"),
+                AMethod.of("souther/compiler/query/Coverages", "searched",
+                        "(Lsouther/compiler/query/LineReadings;"
+                                + "Lsouther/compiler/partition/MeasuredInput;"
+                                + "Lsouther/compiler/query/Coverages$Probe;"
+                                + "Lsouther/compiler/partition/ReachingCuts;Ljava/util/Set;)"
+                                + "Lsouther/compiler/query/LineReadings;"),
+                AMethod.of("souther/compiler/report/AdequacyReport", "obligations",
+                        "(Lsouther/compiler/publish/DocumentArray;Ljava/util/List;Ljava/util/Map;"
+                                + "Lsouther/compiler/report/DocumentSources;"
+                                + "Lsouther/compiler/publish/PublishedRuleHandle$WhereARuleIs;"
+                                + "Lsouther/compiler/report/AdequacyReport$WhereARowIs;"
+                                + "Ljava/util/Optional;)V"),
+                AMethod.of("souther/compiler/report/AdequacyReport", "partPlaces",
+                        "(Lsouther/compiler/query/Compilation;"
+                                + "Lsouther/compiler/query/PartitionEvidence;Ljava/util/List;"
+                                + "Ljava/util/List;)Ljava/util/Map;")));
         return by;
     }
 

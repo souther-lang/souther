@@ -50,6 +50,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
 import souther.compiler.reach.ComparisonArrival;
+import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
@@ -199,7 +200,8 @@ sealed interface ComparisonAssessment {
                                        CountWitnesses.Lookup witnesses) {
             return new AcrossPositions(cutting, at, places, relation, left,
                     settlingLines(new DrawnBeside(cutting.of().behavior(), at, authored.line(),
-                            Optional.of(authored.claims())), left.settled(), reading, witnesses),
+                            Optional.of(authored.claims()), cutting.readOn()), left.settled(),
+                            reading, witnesses),
                     authored);
         }
 
@@ -251,16 +253,29 @@ sealed interface ComparisonAssessment {
 
     /**
      * What a line parting the values that settle a relation is drawn beside: the behavior it is a
-     * line of, where the comparison stands, and the author's line it is no place of.
+     * line of, where the comparison stands, the author's line it is no place of, and the
+     * applications of closures the relation was read on, which the line is read on too.
      */
     record DrawnBeside(String behavior, Citation at, WrittenLine line,
-                       Optional<ComparisonClaim> claim) {
+                       Optional<ComparisonClaim> claim, ApplicationsReadOn readOn) {
 
         public DrawnBeside {
             Objects.requireNonNull(behavior, "a line is some behavior's");
             Objects.requireNonNull(at, "drawn beside a comparison standing somewhere");
             Objects.requireNonNull(line, "and no place of some line of the author's");
             Objects.requireNonNull(claim, "the comparison's claim, or the line's own");
+            Objects.requireNonNull(readOn, "read on the applications what it is beside is");
+        }
+
+        /** Beside a comparison read on no application a source's call made. */
+        DrawnBeside(String behavior, Citation at, WrittenLine line,
+                    Optional<ComparisonClaim> claim) {
+            this(behavior, at, line, claim, ApplicationsReadOn.NONE);
+        }
+
+        /** The same, beside a relation read on {@code applications}. */
+        DrawnBeside drawnOn(ApplicationsReadOn applications) {
+            return new DrawnBeside(behavior, at, line, claim, applications);
         }
 
         /** The line {@code drawn} said to be no place of the author's line: it claims what the
@@ -300,6 +315,9 @@ sealed interface ComparisonAssessment {
             for (WhatARelationLeavesUndivided.Line each : lines) {
                 Cutting drawn = Cutting.onOneTerm(beside.behavior(), term,
                         each.at(), each.relation(), reading.quantities());
+                if (drawn != null) {
+                    drawn = drawn.drawnOn(beside.readOn());
+                }
                 if (drawn == null || !(onTheQuantity(beside.at(), drawn, beside.noPlaceOfIt(drawn),
                         reading, false, witnesses) instanceof AtAPosition line)) {
                     here = null;
@@ -380,12 +398,13 @@ sealed interface ComparisonAssessment {
         }
 
         /** {@code read}, with what it leaves undivided over what the declarations leave, and the
-         *  lines parting what settles it drawn {@code beside}. */
+         *  lines parting what settles it drawn {@code beside}, read on the applications it was. */
         static AgainstAnotherValue of(Cutting.Read.AgainstAnotherValue read,
                                       InputReading reading, Optional<DrawnBeside> beside,
                                       CountWitnesses.Lookup witnesses) {
+            ApplicationsReadOn on = read.readOn();
             return new AgainstAnotherValue(read.over(), read.relations(), Set.of(), List.of(),
-                    beside, Map.of(), Set.of(), Map.of(), Map.of())
+                    beside.map(drawn -> drawn.drawnOn(on)), Map.of(), Set.of(), Map.of(), Map.of())
                     .whereRowsArrive(reading, List.of(), witnesses);
         }
 

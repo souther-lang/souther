@@ -1331,7 +1331,8 @@ final class Coverages {
                     settled(border.border(), tellingApart(border, search), read);
             out.add(new BorderAssessment(border.border(), items,
                     shownArriving(border.beside(), toldApart), toldApart,
-                    border.readAt(), reaching.saidOnTheWayTo(border.border().origin())));
+                    border.readAt(), reaching.saidOnTheWayTo(border.border().origin()),
+                    border.readOn()));
         }
         return new LineReadings(out, measured.tilts());
     }
@@ -2229,7 +2230,8 @@ final class Coverages {
         }
         return new BorderAssessment(kept.border(), kept.items(), kept.beside(), kept.toldApart(),
                 kept.readAt(), SaidOnTheWay.allOf(
-                        ofOneLine.stream().map(BorderAssessment::saidOnTheWay).toList()));
+                        ofOneLine.stream().map(BorderAssessment::saidOnTheWay).toList()),
+                kept.readOn());
     }
 
     /**
@@ -2976,7 +2978,9 @@ final class Coverages {
                 // And both readings' copies, which is what tells the calls of a helper that read
                 // one line apart. What put things on each one's way is put together once for every
                 // reading of the line, by whoever holds them all.
-                readAt, a.saidOnTheWay());
+                readAt, a.saidOnTheWay(),
+                // And both readings' applications, every one kept.
+                a.readOn().and(b.readOn()));
     }
 
     /**

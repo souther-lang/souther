@@ -8,6 +8,7 @@ import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.WrittenLine;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.numeric.Towards;
+import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ExpansionSite;
 import souther.compiler.types.ModelOccurrence;
@@ -588,7 +589,8 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                                         occurrence, SourceConstruct.CALL)))),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(WHERE.outcome(occurrence)), ElementsMetOn.EVERY,
-                        LineOrigin.NOTHING_ON_THE_WAY, Optional.empty(), Optional.empty()),
+                        LineOrigin.NOTHING_ON_THE_WAY, Optional.empty(), Optional.empty(),
+                        ApplicationsReadOn.NONE),
                 Optional.empty(),
                 new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,

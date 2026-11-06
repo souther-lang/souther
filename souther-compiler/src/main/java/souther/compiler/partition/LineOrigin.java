@@ -18,6 +18,7 @@ import souther.compiler.publish.PublicationOrders;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
 import souther.compiler.reach.WhatMayStopARun;
+import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.TypeSymbol;
@@ -249,16 +250,21 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
          * @param heldIn the data that number is read out of, where it is read out of data: two
          *              calls of one helper given two tables read two lines, however alike the
          *              bounds
+         * @param readOn the applications of closures this reading's comparison drew the line on,
+         *              where it stands inside closures whose applications some source's calls
+         *              made: what the line is read on, and none of what tells it apart
          */
         public record Read(RuleRef.Comparison rule, ModelOccurrence states,
                            RuleReportAnchor anchor,
                            List<ConditionOutcomeSite> recordedAt, ElementsMetOn metOn,
                            CanonicalSelection<WhatMayStopARun> stopsBefore,
-                           Optional<ExactRatio> writtenAgainst, Optional<BoundHeldIn> heldIn) {
+                           Optional<ExactRatio> writtenAgainst, Optional<BoundHeldIn> heldIn,
+                           ApplicationsReadOn readOn) {
 
             public Read {
                 if (rule == null || states == null || anchor == null || metOn == null
-                        || stopsBefore == null || writtenAgainst == null || heldIn == null) {
+                        || stopsBefore == null || writtenAgainst == null || heldIn == null
+                        || readOn == null) {
                     throw new IllegalArgumentException(
                             "a rule read off a comparison names one, states it somewhere and cites"
                                     + " it");
@@ -651,6 +657,16 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
     @Override
     default ModelOccurrences readAt() {
         return comparisonAt().map(ModelOccurrences::of).orElse(ModelOccurrences.NONE);
+    }
+
+    /** The applications of closures the comparison drew this line on, where it was drawn on
+     *  some a source's calls made. */
+    default ApplicationsReadOn readOn() {
+        return switch (this) {
+            case ComparisonOrigin g -> g.read().readOn();
+            case NarrowedOrigin n -> n.bound().readOn();
+            case InvariantOrigin _, EnsuresOrigin _ -> ApplicationsReadOn.NONE;
+        };
     }
 
     /**

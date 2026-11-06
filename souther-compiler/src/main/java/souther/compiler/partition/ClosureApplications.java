@@ -15,8 +15,10 @@ import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.semantics.HowAClosureIsApplied;
-import souther.compiler.types.BindingId;
 import souther.compiler.types.ACallOfAnOperation;
+import souther.compiler.types.AnApplicationOfAClosure;
+import souther.compiler.types.ApplicationsReadOn;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -124,15 +126,15 @@ sealed interface ClosureApplications {
      */
     record Application(InputReads reads, Proposition reached,
                        Map<BindingId, Denotation> carriedIntoTheFirst, ElementsMetOn metOn,
-                       List<MadeBy> madeBy) {
+                       AnApplicationOfAClosure madeBy) {
 
         public Application {
             Objects.requireNonNull(reads, "an application is read in some names");
             Objects.requireNonNull(reached, "and is made under something");
             Objects.requireNonNull(metOn, "and on some elements");
+            Objects.requireNonNull(madeBy, "and by some calls, or by none a source wrote");
             carriedIntoTheFirst = Collections.unmodifiableMap(
                     new LinkedHashMap<>(carriedIntoTheFirst));
-            madeBy = List.copyOf(madeBy);
         }
 
         /** The same application, read in {@code names}. */
@@ -159,36 +161,26 @@ sealed interface ClosureApplications {
          * nothing a reading reads it in passing ({@code WhatExplainsACountIsReadOnlyWhereItIsTold}).
          */
         Application inside(InputReads names, Proposition where, ElementsMetOn on,
-                           Optional<MadeBy> by) {
-            List<MadeBy> deeper = new ArrayList<>(madeBy);
-            by.ifPresent(deeper::add);
-            return new Application(names, where, carriedIntoTheFirst, on, deeper);
+                           Optional<AnApplicationOfAClosure.Made> by) {
+            return new Application(names, where, carriedIntoTheFirst, on,
+                    by.map(madeBy::inside).orElse(madeBy));
         }
 
         /** {@code stated}, said to be the statement of this application of each call it is
          *  made by ({@link Derivation.AnApplication}), the innermost nearest. */
         Derivation statedOn(Derivation stated) {
             Derivation out = stated;
-            for (int at = madeBy.size() - 1; at >= 0; at--) {
-                out = new Derivation.AnApplication(madeBy.get(at).call(),
-                        madeBy.get(at).ordinal(), out);
+            List<AnApplicationOfAClosure.Made> by = madeBy.by();
+            for (int at = by.size() - 1; at >= 0; at--) {
+                out = new Derivation.AnApplication(by.get(at).call(), by.get(at).ordinal(), out);
             }
             return out;
         }
-    }
 
-    /**
-     * One application a call makes of a closure: the call, and which of its applications it is,
-     * counting from nought in the order a run makes them.
-     */
-    record MadeBy(ACallOfAnOperation call, int ordinal) {
-
-        public MadeBy {
-            Objects.requireNonNull(call, "an application is made by some call");
-            if (ordinal < 0) {
-                throw new IllegalArgumentException("applications are counted from nought: "
-                        + ordinal);
-            }
+        /** This application, as what a line drawn on it is read on: nothing where no call some
+         *  source wrote made it. */
+        ApplicationsReadOn readOn() {
+            return ApplicationsReadOn.of(List.of(madeBy));
         }
     }
 
@@ -237,7 +229,7 @@ sealed interface ClosureApplications {
         return switch (this) {
             case Outside(var metOn) -> applied(block, step,
                     List.of(new Application(reads, WhereAnApplicationIsMade.nothingAsked(),
-                            Map.of(), metOn, List.of())),
+                            Map.of(), metOn, AnApplicationOfAClosure.OF_NO_CALL_WRITTEN)),
                     read, true);
             case Each(var outer) -> applied(block, step, outer, read, false);
             case NotSaid _, None _ -> this;
@@ -294,7 +286,8 @@ sealed interface ClosureApplications {
                         int ordinal = at;
                         out.add(around.inside(each.get(at).reads(), reached.get(at),
                                 around.metOn(), madeBy.map(call ->
-                                        new MadeBy(asWritten(call, symbols), ordinal))));
+                                        new AnApplicationOfAClosure.Made(
+                                                asWritten(call, symbols), ordinal))));
                     }
                 }
                 case InputReads.Applications.NoneHanded _ -> {
