@@ -82,8 +82,8 @@ public final class ElementProvenance {
         /** The first binding is the closure parameter of an operation whose answer is a piece of
          *  each element of the second, put end to end. */
         ASSEMBLES_THE_PIECES_OF,
-        /** The first binding is the parameter an operation hands each element of the second, once
-         *  and in the order they are written out. */
+        /** The first binding is the parameter an operation hands the elements of the second on,
+         *  each application the one element it is handed. */
         HANDED_EACH_ELEMENT_OF
     }
 
@@ -95,16 +95,22 @@ public final class ElementProvenance {
     private final Map<BindingId, BindingId> projections;
 
     /**
-     * The parameter each operation an expansion wrote hands the elements of a container to, against
-     * that container: the operation applies its closure to every element, from the first, once
-     * each and in the order they are written out ({@link Combinators}), and the element arrives on
-     * this parameter.
+     * The parameter each operation an expansion wrote hands the elements of a container on, against
+     * that container: on each application the operation makes of its closure, this parameter is
+     * the one element of the container that application is handed. Written of an operation that
+     * applies its closure to every element ({@link Combinators}) and to nothing else.
+     *
+     * <p>Not that each element is handed once, nor in which order. Applying a closure to every
+     * element says that each is handed and not how often: an operation may hand one element twice,
+     * or walk its container twice. What this licenses is that an application handed an element
+     * is handed that element, so what the closure states there is what it states on the element —
+     * and nothing read off this counts applications.
      *
      * <p>Beside the projections and not among them. A projection says the walk answers one value
      * per element, which a filter or an {@code all} does not; this says which element the closure
-     * is handed on each of its applications, which a projection does not. It is what lets a reader
-     * standing on one application of the walk the copy left say which application of the
-     * operation that is.
+     * is handed on an application, which a projection does not. It is what lets a reader standing
+     * on one application of the walk the copy left say which element of the operation's container
+     * that application is of.
      */
     private final Map<BindingId, BindingId> handed;
 
@@ -388,8 +394,8 @@ public final class ElementProvenance {
         }
 
         /**
-         * {@code parameter} is the parameter an operation hands each element of {@code container}
-         * to, once and in the order they are written out.
+         * {@code parameter} is the parameter an operation hands the elements of {@code container}
+         * on, each application the one element it is handed.
          *
          * <p>Written once, as an edge is: a parameter said to be handed the elements of two
          * containers is one whose application nothing can say is of which.

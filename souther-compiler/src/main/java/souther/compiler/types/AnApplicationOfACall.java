@@ -19,6 +19,11 @@ import java.util.Objects;
  * apart would count one application two ways; where an element is written is the walk of the
  * container's to say, and is the same for both. Two elements written alike are two places.
  *
+ * <p>An application by the element it is handed, and not a count of them. An operation that applies
+ * its closure to every element may hand one element over twice, and both are named by this; what
+ * the closure states on the element is what it states on either, so a reader may take that and
+ * may not read off this how many applications a run makes.
+ *
  * <p>An application of the call, and not of one closure: a call handed two closures it applies to
  * each element makes an application of both on each, and this names the two. What is read on
  * one is read at the sites of its own body, so what is filed under this is the sites of both, each

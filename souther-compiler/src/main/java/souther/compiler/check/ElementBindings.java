@@ -155,10 +155,15 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     }
 
     /**
-     * Whether the walk that hands {@code element} its elements is the walk an operation applies its
-     * closure by to every element of the container it was handed, from the first and once each:
-     * so the walk's applications are the operation's, one for one and in the order the container
-     * is written out ({@link ElementProvenance#handedEachElementOf}).
+     * Whether the walk that hands {@code element} its elements is a walk an operation applies its
+     * closure by, over the container it was handed: so an application of the walk handed the
+     * element written at some place of that container is an application of the operation's
+     * closure handed that same element ({@link ElementProvenance#handedEachElementOf}).
+     *
+     * <p>That and no more. How many applications the operation makes, and in what order, is not
+     * said: an operation that applies its closure to every element may apply it twice to one, or
+     * by two walks, and each such application is handed the element it is handed. So a reader may
+     * take what an application handed an element states, and may not count applications off this.
      *
      * <p>Proved where the operation stood and held to the walk the copy left, as what a walk
      * assembles is ({@link #assembledAt}). A walk over anything else — the container turned round,
@@ -421,9 +426,9 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     }
 
     /**
-     * The walks an operation an expansion wrote applies its closure by to every element of the
-     * container it was handed, from the first and once each, against that container's binding,
-     * keyed by the element each walk hands its step ({@link #walksWhatItsOperationHandsEachElementOf}).
+     * The walks an operation an expansion wrote applies its closure by over the container it was
+     * handed, against that container's binding, keyed by the element each walk hands its step
+     * ({@link #walksWhatItsOperationHandsEachElementOf}).
      *
      * <p>Asked as what a walk assembles is asked ({@link #theWalkHandingItsElementTo}), and of
      * nothing more: what the walk answers is not the question. A step applying the closure twice

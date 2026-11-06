@@ -2127,9 +2127,9 @@ public final class HelperInliner {
                              Map<BindingId, HandingEach> handing) {}
 
     /**
-     * What an operation applying the lambda it was handed to every element of a container, from
-     * the first and once each, proved of it: the binding of that container in the operation's copy,
-     * and which of the lambda's parameters the element arrives on ({@link Combinators}).
+     * What an operation applying the lambda it was handed to every element of a container proved
+     * of it: the binding of that container in the operation's copy, and which of the lambda's
+     * parameters the element arrives on ({@link Combinators}). Nothing about how many times.
      */
     private record HandingEach(BindingId container, int elementParam) {}
 
@@ -2361,8 +2361,10 @@ public final class HelperInliner {
 
     /**
      * How {@code callee} hands its closure the elements of a container, where it applies it to every
-     * one of them from the first, once each and in the order they are written out, and hands it no
-     * key — or null where it applies it any other way or to nothing a container holds.
+     * one of them, from the first, and hands it no key — or null where it applies it any other way
+     * or to nothing a container holds. Applying it to every one says each is handed and not how
+     * often ({@link HowAClosureIsApplied#TO_EVERY_ELEMENT}), and what is written of the closure
+     * from this says no more than which element an application is handed.
      */
     private static Combinator handingEveryElement(ValueName callee) {
         Combinator rule = Combinators.of(callee);

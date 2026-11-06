@@ -1196,13 +1196,14 @@ public final class PathReachability {
      * the application by the call of the model that makes it and the place of the element it is
      * handed among what the call's container is written out as ({@link AnApplicationOfACall}),
      * since the call, the closure and its parameters are other nodes and other bindings here
-     * ({@link ClosureUses.Application#callOfTheModel}). The walk's applications are the call's only
-     * where this walk is the one the operation applies its closure by to every element it was
-     * handed, which the expansion proved where the operation stood
-     * ({@link Terms#walksWhatItsOperationHandsEachElementOf}); then the element written in a place
-     * here is the element written in that place there. Where it is not, or the body was not read on
-     * that application alone, a condition states what it states on some application, which a path
-     * declines.
+     * ({@link ClosureUses.Application#callOfTheModel}). An application of this walk is handed the
+     * element an application of the call is handed only where this walk is one the operation
+     * applies its closure by, over the container it was handed, which the expansion proved where
+     * the operation stood ({@link Terms#walksWhatItsOperationHandsEachElementOf}); then the element
+     * written in a place here is the element written in that place there, and what the closure
+     * states on it is what it states on that element however often the operation hands it over.
+     * Where it is not, or the body was not read on that application alone, a condition states
+     * what it states on some application, which a path declines.
      *
      * <p>Only what arrives is read off these walks. Where a comparison in the body arrives is the
      * one walk of the body's to say, made under no element in particular, so what one application

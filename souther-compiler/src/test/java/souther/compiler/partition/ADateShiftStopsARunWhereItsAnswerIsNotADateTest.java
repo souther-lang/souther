@@ -598,6 +598,25 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
     }
 
     /**
+     * An operation that applies its closure twice to each element hands each application the
+     * element it hands it: on the element {@code 1} both take the arm that shifts by {@code n}, and
+     * a run stops there; where no element takes it, none does.
+     */
+    @Test
+    void aClosureAppliedTwiceToAnElementStatesOnBothWhatItStatesOnTheElement() {
+        String report = report("""
+                    guard n == %s else No
+                    let ys = List.distinctBy(k -> if k > 0 then Date.addDays(n, d) else d, [0, 1])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(nothingArrivesAbout(report, "b"), report);
+        String control = report("""
+                    guard n == %s else No
+                    let ys = List.distinctBy(k -> if k > 0 then Date.addDays(n, d) else d, [0, -1])
+                    guard b > 3 else No""".formatted(GREATEST));
+        assertTrue(aRunArrivesAbout(control, "b"), control);
+    }
+
+    /**
      * A right fold hands its step the elements last first: the step handed {@code 1} shifts by
      * none and the one handed {@code 0} shifts nothing. Each element's statement taken on the
      * other would shift by {@code -n}.

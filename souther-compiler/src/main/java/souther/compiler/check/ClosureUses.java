@@ -119,9 +119,9 @@ public record ClosureUses(List<Application> applications, boolean usedElsewhere)
          * is handed ({@link AnApplicationOfACall}): the call itself where the model wrote it, and
          * otherwise the call of one of the language's operations that made the one copy of the
          * operation's body it stands in. Empty where the call stands in an operation another
-         * operation called. Whether this call's applications are that operation's, one for one, is
-         * not said here: the expansion proves it of a walk where it does
-         * ({@link ElementBindings#walksWhatItsOperationHandsEachElementOf}).
+         * operation called. Whether an application of this call is handed the element an
+         * application of that operation is handed is not said here: the expansion proves it of a
+         * walk where it does ({@link ElementBindings#walksWhatItsOperationHandsEachElementOf}).
          *
          * <p>Told by the call and not by the closure or its parameters. A reading where the
          * language's operations stand and one where they are expanded hold the call, the closure
