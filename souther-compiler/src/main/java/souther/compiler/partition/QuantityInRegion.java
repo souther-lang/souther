@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 
 import java.util.Set;
 
@@ -32,6 +33,6 @@ public record QuantityInRegion(BorderQuantity quantity, LevelRegion values)
 
     @Override
     public Set<NumericTerm> terms() {
-        return Set.copyOf(quantity.numbers());
+        return NumericTerms.setInOrder(quantity.numbers());
     }
 }

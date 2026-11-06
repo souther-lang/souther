@@ -4,9 +4,12 @@ import souther.compiler.meaning.Spelling;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -42,6 +45,12 @@ public final class NumericTerms {
     /** These terms, in the one order. */
     public static List<NumericTerm> inOrder(Collection<NumericTerm> terms) {
         return walked(new ArrayList<>(terms), NumericTerms::nameOf);
+    }
+
+    /** These terms as a set that is walked in the one order, for a reader whose answer holds the
+     *  order it was handed them in. */
+    public static Set<NumericTerm> setInOrder(Collection<NumericTerm> terms) {
+        return Collections.unmodifiableSequencedSet(new LinkedHashSet<>(inOrder(terms)));
     }
 
     /** What a form holds, walked by its terms. */

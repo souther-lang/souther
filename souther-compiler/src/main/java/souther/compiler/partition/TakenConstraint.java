@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
@@ -193,10 +194,10 @@ public sealed interface TakenConstraint {
                     term instanceof NumericTerm.OccurrencesOfAKey
                             || term instanceof NumericTerm.GatheredUnderAKey
                             || term instanceof NumericTerm.ProductOf)) {
-                return form.coefs().keySet();
+                return NumericTerms.setInOrder(form.coefs().keySet());
             }
             Set<NumericTerm> out = new LinkedHashSet<>();
-            for (NumericTerm term : form.coefs().keySet()) {
+            for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
                 switch (term) {
                     case NumericTerm.OccurrencesOfAKey asked ->
                             out.add(new NumericTerm.ValueOf(asked.key()));
@@ -204,7 +205,7 @@ public sealed interface TakenConstraint {
                             out.add(new NumericTerm.ValueOf(asked.asked()));
                     // The numbers either form is of are composed for the product to stand.
                     case NumericTerm.ProductOf product -> product.factors().forEach(
-                            form -> out.addAll(form.coefs().keySet()));
+                            form -> out.addAll(NumericTerms.inOrder(form.coefs().keySet())));
                     case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _,
                          NumericTerm.OfAnElementsNeighbours _, NumericTerm.OccurrencesOfItsValue _,
                          NumericTerm.GatheredUnderItsKey _ -> { }

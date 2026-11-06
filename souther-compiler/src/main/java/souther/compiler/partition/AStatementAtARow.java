@@ -528,7 +528,7 @@ final class AStatementAtARow {
     static Set<NumericTerm> numbersOf(Proposition stated) {
         Set<NumericTerm> out = new LinkedHashSet<>();
         gatherNumbers(stated, out);
-        return Collections.unmodifiableSet(out);
+        return NumericTerms.setInOrder(out);
     }
 
     private static void gatherNumbers(Proposition stated, Set<NumericTerm> into) {

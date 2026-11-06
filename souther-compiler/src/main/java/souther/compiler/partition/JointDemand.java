@@ -25,6 +25,9 @@ public interface JointDemand {
      * Every number of the row this is about.
      *
      * <p>Which is how a reader finds the ones it bears on, and the whole of what a reader asks it.
+     * Walked in {@link souther.compiler.inputs.NumericTerms#inOrder}'s order, and not in the order
+     * a form held its terms: a search that takes a cut's numbers as this hands them over would
+     * otherwise place two equal cuts at two places.
      */
     Set<NumericTerm> terms();
 }

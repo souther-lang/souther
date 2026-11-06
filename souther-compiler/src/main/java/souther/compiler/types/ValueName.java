@@ -2,6 +2,9 @@ package souther.compiler.types;
 
 import souther.compiler.Reserved;
 import souther.compiler.SettledAnswer;
+import souther.compiler.crossing.ObjectEqualityIsRepresentedByWhatItStandsFor;
+import souther.compiler.hash.KeepsTheNumberItIsAskedFor;
+import souther.compiler.hash.ValueHash;
 
 /**
  * What a name written in the value namespace denotes — the answer {@link TypeSymbol} gives for the
@@ -112,7 +115,7 @@ public sealed interface ValueName extends SettledAnswer {
          * The namespace itself, applied: {@code Date("2026-09-30")} constructs from the module the
          * alias names, and there is no operation for it to name.
          *
-         * <p>The second shape a library name has, and the reason it is two records rather than one
+         * <p>The second shape a library name has, and the reason it is two types rather than one
          * with an absence in it. Which of the two a name is, the type says — not the spelling: an
          * operation a library gave its own module's name would render the same either way, and
          * telling them apart by comparing renderings is the reading-a-name-back-out this type
@@ -137,13 +140,62 @@ public sealed interface ValueName extends SettledAnswer {
          *  reaches. Both parts are held so that a reader wanting one of them takes it rather than
          *  splitting {@link #qualified()} back apart — a name written by joining two values is a
          *  name somebody downstream will try to read them back out of. */
-        record Operation(String alias, String name) implements Stdlib {
+        final class Operation
+                implements Stdlib, KeepsTheNumberItIsAskedFor, ObjectEqualityIsRepresentedByWhatItStandsFor {
 
-            public Operation {
+            /** The whole of what an operation is, in one value: the equality and the number are
+             *  both over this, so neither can hold a part the other does not. */
+            public record Parts(String alias, String name) implements SettledAnswer {
+            }
+
+            private final Parts parts;
+
+            private final int hash;
+
+            public Operation(String alias, String name) {
                 if (alias == null || name == null) {
                     throw new IllegalArgumentException(
                             "an operation is a name under an alias: " + alias + "." + name);
                 }
+                this.parts = new Parts(alias, name);
+                this.hash = ValueHash.ofOnePart(Operation.class, parts.hashCode());
+            }
+
+            /** What an operation is, handed over so that two builds are compared part by part. */
+            public Parts parts() {
+                return parts;
+            }
+
+            /** The number kept, handed over for the same reason. */
+            public int hash() {
+                return hash;
+            }
+
+            @Override
+            public String alias() {
+                return parts.alias();
+            }
+
+            @Override
+            public String name() {
+                return parts.name();
+            }
+
+            @Override
+            public Parts standsFor() {
+                return parts;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Operation that && hash == that.hash
+                        && parts.alias().equals(that.parts.alias())
+                        && parts.name().equals(that.parts.name());
+            }
+
+            @Override
+            public int hashCode() {
+                return hash;
             }
 
             @Override
@@ -153,7 +205,7 @@ public sealed interface ValueName extends SettledAnswer {
 
             @Override
             public String qualified() {
-                return alias + "." + name;
+                return parts.alias() + "." + parts.name();
             }
 
             @Override

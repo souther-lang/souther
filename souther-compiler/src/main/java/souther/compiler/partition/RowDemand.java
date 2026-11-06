@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
@@ -1061,7 +1062,7 @@ public sealed interface RowDemand {
         public Set<NumericTerm> terms() {
             Set<NumericTerm> out = new LinkedHashSet<>(AStatementAtARow.numbersOf(
                     AStatementAtARow.meetingOf(count)));
-            out.addAll(against.coefs().keySet());
+            out.addAll(NumericTerms.inOrder(against.coefs().keySet()));
             return Collections.unmodifiableSet(out);
         }
 
@@ -1170,7 +1171,7 @@ public sealed interface RowDemand {
         /** The numbers of the form. */
         @Override
         public Set<NumericTerm> terms() {
-            return dividend().coefs().keySet();
+            return NumericTerms.setInOrder(dividend().coefs().keySet());
         }
 
         @Override

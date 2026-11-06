@@ -117,12 +117,14 @@ class HowManyAListMadeFromOthersHoldsIsWrittenByThoseListsTest {
         }
     }
 
-    /** How many strings each row writes, over both lists. */
+    /** How many strings each row writes, over both lists. A row standing at a line it was not
+     *  composed for is shown behind that line's name, which is text and no string of the row. */
     private static List<Integer> heldByEachRow(String rows) {
         List<Integer> held = new ArrayList<>();
         for (String line : rows.split("\n")) {
-            if (line.trim().startsWith("| (")) {
-                held.add(count(line.substring(0, line.indexOf("->")), "\"[^\"]*\""));
+            String row = line.trim().replaceFirst("^\\|\\s*\"[^\"]*\"\\s*:\\s*", "| ");
+            if (row.startsWith("| (")) {
+                held.add(count(row.substring(0, row.indexOf("->")), "\"[^\"]*\""));
             }
         }
         return held;
