@@ -2291,7 +2291,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private Optional<Set<String>> parametersRead() {
         Set<String> out = new HashSet<>();
-        amongThemselves.forEach(place -> out.add(place.path().head()));
+        placesReadOff(amongThemselves).forEach(place -> out.add(place.head()));
         for (Side each : sides) {
             Optional<List<TermPath>> read = placesRead(each);
             if (read.isEmpty()) {
@@ -2321,6 +2321,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * <p>Not where the relation is reported: a count of the elements meeting a statement is at no
      * position, and is worked out from the container and from what the statement reads of each
      * element.
+     *
+     * <p>Its own places are where each of its numbers stands in an element, and not every place a
+     * number is read off ({@link FilingCoordinate#placesReadOff}): a number read among the
+     * elements beside its own, the end of a key's values, is read off the container too, and a
+     * reader of these asks how a cut container keeps it of {@link #keptCutDown}, which says it is
+     * kept by copies of its element. Taken as a place read whole, the container would be read for
+     * every such side, and no cut would be shown to keep one.
      */
     private static Optional<List<TermPath>> placesRead(Side side) {
         List<TermPath> out = new ArrayList<>();
@@ -2500,8 +2507,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * as what an operation answered of something unnamed is.
      */
     private Set<TermPath> positionsRead() {
-        Set<TermPath> out = new LinkedHashSet<>();
-        places().forEach(place -> out.add(place.path()));
+        Set<TermPath> out = new LinkedHashSet<>(placesReadOff(places()));
         for (Side each : sides) {
             if (each.number() != null) {
                 out.addAll(each.number().placesReadOff());
@@ -4166,6 +4172,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (past.tied().isEmpty() && past.owed().isEmpty() && past.before().isEmpty()) {
             return Optional.of(exact);
         }
+        // Where each number stands in an element, as placesRead has a side's, for the witness that
+        // cuts the containers these stand in.
         List<TermPath> reads = new ArrayList<>();
         amongThemselves.forEach(each -> reads.add(each.path()));
         for (Side side : sides) {
@@ -5674,8 +5682,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Map<String, Set<RuleRef>> refs = new LinkedHashMap<>();
         Map<String, Set<PartId<RuleRef.Invariant>>> parts = new LinkedHashMap<>();
         for (Side side : sides) {
-            for (FilingCoordinate place : placesAsked(side)) {
-                for (Object node : reachedByTheDeclarations(place.path(), read).nodes().ties()) {
+            for (TermPath place : placesReadOff(placesAsked(side))) {
+                for (Object node : reachedByTheDeclarations(place, read).nodes().ties()) {
                     if (node instanceof TiedOnTheWay.Rule rule && rule.clause() >= 0
                             && asked(tried, rule)) {
                         ClauseMeaning.Stated stated = leavingRoomAroundTheLine(rule, asked, read,
@@ -7357,8 +7365,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         for (FilingCoordinate each : first) {
             for (FilingCoordinate that : second) {
-                if (each.sharesAPlaceWith(that)
-                        || tiedByARule(each.path(), that.path(), read, ignoring)) {
+                if (each.sharesAPlaceWith(that) || tiedByARule(each, that, read, ignoring)) {
                     return false;
                 }
             }
@@ -7866,8 +7873,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         if (mayBeNamed(at, sources)) {
-            for (FilingCoordinate place : placesAsked(side)) {
-                for (Object node : tiedByTheDeclarations(place.path(), read, ignoring)) {
+            for (TermPath place : placesReadOff(placesAsked(side))) {
+                for (Object node : tiedByTheDeclarations(place, read, ignoring)) {
                     out.add(tied.classOf(node));
                 }
             }
@@ -8195,7 +8202,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (way == null) {
             return null;
         }
-        if (tiedByARule(way.carrier().subjectPath(), way.fixed().subjectPath(), read)) {
+        if (tiedByARule(FilingCoordinate.of(way.carrier()), FilingCoordinate.of(way.fixed()), read,
+                Set.of())) {
             return null;
         }
         // What the way states of the product is a relation of the product and other numbers, which
@@ -9468,6 +9476,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static boolean tiedByARule(TermPath one, TermPath other, InputReading read) {
         return tiedByARule(one, other, read, Set.of());
+    }
+
+    /** Every place the numbers at {@code coordinates} are read off, each once
+     *  ({@link FilingCoordinate#placesReadOff}). */
+    private static Set<TermPath> placesReadOff(Collection<FilingCoordinate> coordinates) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        for (FilingCoordinate each : coordinates) {
+            out.addAll(each.placesReadOff());
+        }
+        return out;
+    }
+
+    /**
+     * Whether a rule of the declarations relates the numbers at {@code one} and {@code other}:
+     * some place one is read off to some place the other is ({@link FilingCoordinate#placesReadOff}),
+     * without the rules in {@code ignoring}. Asked of what each number reads and not of where it is
+     * filed: a count of a value's occurrences is filed under the run and reads the value as well,
+     * and a rule relating the value to another place relates the count to it.
+     */
+    private static boolean tiedByARule(FilingCoordinate one, FilingCoordinate other,
+                                       InputReading read, Set<Object> ignoring) {
+        for (TermPath here : one.placesReadOff()) {
+            for (TermPath there : other.placesReadOff()) {
+                if (tiedByARule(here, there, read, ignoring)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** The same, without the rules in {@code ignoring} ({@link #rulesLeavingRoomAroundTheLine}). */

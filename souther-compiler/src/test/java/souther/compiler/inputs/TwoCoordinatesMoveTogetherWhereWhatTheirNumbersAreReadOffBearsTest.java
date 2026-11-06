@@ -2,6 +2,9 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -28,6 +31,16 @@ class TwoCoordinatesMoveTogetherWhereWhatTheirNumbersAreReadOffBearsTest {
         assertFalse(count.path().bearsOn(value.path()));
         assertTrue(count.sharesAPlaceWith(value));
         assertTrue(value.sharesAPlaceWith(count));
+    }
+
+    /** What a number depends on is asked of every place it is read off, which a rule of the
+     *  declarations may tie by any of them. */
+    @Test
+    void aCountIsReadOffTheValueItCountsAsWellAsTheRunItIsFiledUnder() {
+        FilingCoordinate count = occurrencesOf(KEY);
+        assertTrue(count.placesReadOff().contains(KEY));
+        assertFalse(count.path().equals(KEY));
+        assertEquals(List.of(OTHER), FilingCoordinate.at(OTHER).placesReadOff());
     }
 
     /** A position the reading got no further than is the value there. */

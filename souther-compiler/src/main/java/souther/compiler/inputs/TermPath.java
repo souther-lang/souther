@@ -779,9 +779,12 @@ public record TermPath(String head, List<Step> steps) {
      * answer to whether two things asked of the input are apart; a reader that sets them apart, to
      * ask one without the other, asks it here. Whether one value moves with another, or is read by
      * what reads it, is {@link #standsAtUnderOrAround}.
+     *
+     * <p>False only where the two are shown apart. Cases that may leave a value none in common
+     * through a name the cases of a sum share, which a path cannot tell ({@link Cases}), bear.
      */
     public boolean bearsOn(TermPath other) {
-        return reached(other) != Reached.APART;
+        return casesBeside(other) != Cases.HOLD_TOGETHER || placed(other) != Placed.APART;
     }
 
     /**
@@ -796,10 +799,13 @@ public record TermPath(String head, List<Step> steps) {
      * statements under two cases cannot both hold; but the value under one case neither moves with
      * nor reads the value under another, and a place read under a case, as a rule of a sum reads
      * each case, says nothing of which case the value is.
+     *
+     * <p>False only where the two are shown apart: their steps apart, or their cases shown to
+     * leave some value none in common. Cases that may do so through a name the cases of a sum
+     * share, which a path cannot tell ({@link Cases}), are taken to stand together.
      */
     public boolean standsAtUnderOrAround(TermPath other) {
-        Reached reached = reached(other);
-        return reached != Reached.APART && reached != Reached.ANOTHER_CASE;
+        return casesBeside(other) != Cases.EXCLUDE && placed(other) != Placed.APART;
     }
 
     /**
@@ -810,11 +816,13 @@ public record TermPath(String head, List<Step> steps) {
      * stands around whatever is asked under the other.
      *
      * <p>The one-way half of {@link #bearsOn}, for a reader that tells what is asked of a value
-     * itself from what is asked of a value it sits in.
+     * itself from what is asked of a value it sits in. False only where it is shown not to be, as
+     * {@link #standsAtUnderOrAround} is.
      */
     public boolean standsAtOrUnder(TermPath other) {
-        Reached reached = reached(other);
-        return reached == Reached.AT || reached == Reached.UNDER;
+        Placed placed = placed(other);
+        return casesBeside(other) != Cases.EXCLUDE
+                && (placed == Placed.AT || placed == Placed.UNDER);
     }
 
     /**
@@ -828,9 +836,12 @@ public record TermPath(String head, List<Step> steps) {
      * {@code x@{Hospital|Station}.code} and within {@code x.code}; {@code x.code} is within neither
      * of the narrowed ones, since on a row where {@code x} is a {@code Hospital} it stands at no
      * {@code x@Station}.
+     *
+     * <p>True only where it is shown: cases that may leave a value none in common through a name
+     * the cases of a sum share ({@link Cases}) are not.
      */
     public boolean standsAtOrUnderOnEveryRow(TermPath other) {
-        if (!standsAtOrUnder(other)) {
+        if (casesBeside(other) != Cases.HOLD_TOGETHER || !standsAtOrUnder(other)) {
             return false;
         }
         if (!other.narrowsAnywhere()) {
@@ -841,43 +852,120 @@ public record TermPath(String head, List<Step> steps) {
                 Requirements both) && both.equals(mine);
     }
 
-    /** Where this path stands to another as the value is reached. */
-    private enum Reached {
+    /**
+     * How the cases two paths require of the values they pass through stand to each other.
+     *
+     * <p>Each refinement is read as what it requires of the position it is taken at
+     * ({@link #requirements}), and the two are put together by {@link Requirements#compatibleWith},
+     * the one rule of which cases hold together: two narrowings of one position hold together where
+     * they leave it some case in common, so {@code x@{Hospital|Station}} and {@code x@Station} do
+     * and {@code x@Hospital} and {@code x@Station} do not; and narrowings at two positions, as
+     * {@code x@Some} and {@code x@Some@Some} are, ask nothing of each other.
+     *
+     * <p>A path carries no account of where a name the cases of a sum share stands under each case
+     * ({@link NameReach}), so a narrowing at such a name, {@code r.q.flag@Some}, and one under a case,
+     * {@code r.q@A.flag@None}, are of two positions here and of one value on a row where {@code r.q}
+     * is an {@code A}. Two such narrowings that leave the value no case in common are neither shown
+     * to hold together nor shown apart, and each question about two places answers them on its own
+     * side: what bears says they bear, what stands says they stand, and what is shown of every row
+     * says nothing is.
+     */
+    private enum Cases {
+        /** Every value both pass through can be what both require. */
+        HOLD_TOGETHER,
+        /** Some value is required cases by one that the other leaves it none of. */
+        EXCLUDE,
+        /** They may exclude each other through a name the cases of a sum share, which a path
+         *  cannot tell. */
+        MAY_EXCLUDE
+    }
+
+    /** How the cases this path and {@code other} require stand to each other ({@link Cases}). */
+    private Cases casesBeside(TermPath other) {
+        if (!head.equals(other.head) || !narrowsAnywhere() || !other.narrowsAnywhere()) {
+            return Cases.HOLD_TOGETHER;
+        }
+        Requirements mine = requirements();
+        Requirements theirs = other.requirements();
+        if (!mine.compatibleWith(theirs)) {
+            return Cases.EXCLUDE;
+        }
+        for (Map.Entry<TermPath, CasesLeft> here : mine.refinements().entrySet()) {
+            for (Map.Entry<TermPath, CasesLeft> there : theirs.refinements().entrySet()) {
+                if (here.getValue().meet(there.getValue()) == null
+                        && mayBeOneValueThroughASharedName(here.getKey(), there.getKey())) {
+                    return Cases.MAY_EXCLUDE;
+                }
+            }
+        }
+        return Cases.HOLD_TOGETHER;
+    }
+
+    /**
+     * Whether {@code one} and {@code other} are two positions that may be one value: written alike
+     * but that one of them, somewhere on the way, narrows a value to cases of a sum where the other
+     * does not, and goes on by a name — which, read without the narrowing, may be a name the cases
+     * share. A narrowing of an optional, or narrowings both sides take that differ, make two
+     * positions of what a path says, and so do the steps that go somewhere differing.
+     */
+    private static boolean mayBeOneValueThroughASharedName(TermPath one, TermPath other) {
+        if (one.equals(other) || !one.head.equals(other.head)) {
+            return false;
+        }
+        int here = 0;
+        int there = 0;
+        while (true) {
+            int hereNarrowed = pastNarrowings(one.steps, here);
+            int thereNarrowed = pastNarrowings(other.steps, there);
+            List<Step> mine = one.steps.subList(here, hereNarrowed);
+            List<Step> theirs = other.steps.subList(there, thereNarrowed);
+            boolean hereEnds = hereNarrowed == one.steps.size();
+            boolean thereEnds = thereNarrowed == other.steps.size();
+            if (!mine.equals(theirs) && !(!hereEnds && !thereEnds
+                    && one.steps.get(hereNarrowed) instanceof Step.Field
+                    && ((mine.isEmpty() && toCasesOfASum(theirs))
+                            || (theirs.isEmpty() && toCasesOfASum(mine))))) {
+                return false;
+            }
+            if (hereEnds || thereEnds) {
+                return hereEnds && thereEnds;
+            }
+            if (!one.steps.get(hereNarrowed).equals(other.steps.get(thereNarrowed))) {
+                return false;
+            }
+            here = hereNarrowed + 1;
+            there = thereNarrowed + 1;
+        }
+    }
+
+    /** Whether {@code narrowings} narrow a value to cases of a sum, and to nothing else. */
+    private static boolean toCasesOfASum(List<Step> narrowings) {
+        for (Step step : narrowings) {
+            if (!(step instanceof Step.Refine(CasesLeft cases)) || cases.atoms().stream()
+                    .anyMatch(atom -> !(atom instanceof Refinement.SumCase))) {
+                return false;
+            }
+        }
+        return !narrowings.isEmpty();
+    }
+
+    /** Where this path's steps that go somewhere stand to {@code other}'s, narrowings set aside. */
+    private enum Placed {
         /** Each runs out where the other does. */
         AT,
         /** The other runs out within this. */
         UNDER,
         /** This runs out within the other. */
         AROUND,
-        /** The cases the two require leave some value none in common. */
-        ANOTHER_CASE,
         /** Neither reaches the other. */
         APART
     }
 
-    /**
-     * Where this path stands to {@code other}, on two counts.
-     *
-     * <p>The cases first, each refinement read as what it requires of the position it is taken at
-     * ({@link #requirements}) and the two put together by {@link Requirements#compatibleWith}, the
-     * one rule of which cases hold together: two narrowings of one position hold together where
-     * they leave it some case in common, so {@code x@{Hospital|Station}} and {@code x@Station} do
-     * and {@code x@Hospital} and {@code x@Station} do not; and narrowings at two positions, as
-     * {@code x@Some} and {@code x@Some@Some} are, ask nothing of each other. A path carries no
-     * account of where a name the cases share stands under each case, so a requirement at such a
-     * name is met against none stated under a case; two that this leaves holding together are
-     * matched as places, which says more of them bear on each other and never fewer.
-     *
-     * <p>Then the steps that go somewhere, narrowings set aside, matched step for step until one
-     * path runs out.
-     */
-    private Reached reached(TermPath other) {
+    /** Where this path's steps that go somewhere stand to {@code other}'s, matched step for step
+     *  until one path runs out, narrowings set aside. */
+    private Placed placed(TermPath other) {
         if (!head.equals(other.head)) {
-            return Reached.APART;
-        }
-        if (narrowsAnywhere() && other.narrowsAnywhere()
-                && !requirements().compatibleWith(other.requirements())) {
-            return Reached.ANOTHER_CASE;
+            return Placed.APART;
         }
         int here = 0;
         int there = 0;
@@ -887,11 +975,11 @@ public record TermPath(String head, List<Step> steps) {
             boolean hereEnds = here == steps.size();
             boolean thereEnds = there == other.steps.size();
             if (hereEnds || thereEnds) {
-                return hereEnds && thereEnds ? Reached.AT
-                        : thereEnds ? Reached.UNDER : Reached.AROUND;
+                return hereEnds && thereEnds ? Placed.AT
+                        : thereEnds ? Placed.UNDER : Placed.AROUND;
             }
             if (!steps.get(here).equals(other.steps.get(there))) {
-                return Reached.APART;
+                return Placed.APART;
             }
             here++;
             there++;

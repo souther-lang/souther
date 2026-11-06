@@ -131,6 +131,42 @@ class AValueStandsAtOrUnderAnotherAsTheValueIsReachedTest {
     }
 
     /**
+     * A narrowing at a name the cases of a sum may share and one under a case of the sum may be of
+     * one value, which a path cannot tell. Where they share no case, each question answers on its
+     * own side: they bear on each other, they stand together, and neither is within the other on
+     * every row.
+     */
+    @Test
+    void narrowingsThatMayExcludeEachOtherThroughASharedNameAreAnsweredOnEachQuestionsOwnSide() {
+        TermPath q = TermPath.of("r").then("q");
+        TermPath atTheName = q.then("flag").refine(Refinement.of(new Case.Presence(true)));
+        TermPath underACase = q.refine(casesOf(STATION)).then("flag")
+                .refine(Refinement.of(new Case.Presence(false)));
+        assertTrue(atTheName.then("x").bearsOn(underACase.then("y")));
+        assertTrue(underACase.then("y").bearsOn(atTheName.then("x")));
+        assertTrue(atTheName.standsAtUnderOrAround(underACase));
+        assertTrue(atTheName.standsAtOrUnder(underACase));
+        assertFalse(atTheName.standsAtOrUnderOnEveryRow(underACase));
+        assertFalse(underACase.standsAtOrUnderOnEveryRow(atTheName));
+        TermPath presentUnderACase = q.refine(casesOf(STATION)).then("flag")
+                .refine(Refinement.of(new Case.Presence(true)));
+        assertFalse(atTheName.then("x").bearsOn(presentUnderACase.then("y")),
+                "where they share a case the two are apart as their steps are");
+        assertFalse(presentUnderACase.standsAtOrUnderOnEveryRow(atTheName),
+                "within on every row only where shown, and where the name stands under the case is"
+                        + " what a path does not say");
+    }
+
+    /** A narrowing of what an optional holds is of another position than the optional, and leaves
+     *  nothing of the two in doubt. */
+    @Test
+    void aNarrowingOfWhatAnOptionalHoldsLeavesNothingInDoubt() {
+        TermPath innerAbsent = PRESENT.refine(Refinement.of(new Case.Presence(false)));
+        assertTrue(innerAbsent.standsAtOrUnderOnEveryRow(PRESENT));
+        assertFalse(innerAbsent.then("x").bearsOn(PRESENT.then("y")));
+    }
+
+    /**
      * A place is within another on every row ({@link TermPath#standsAtOrUnderOnEveryRow}) where
      * it is narrowed as far as the other is or further: on a row where {@code x} is a
      * {@code Hospital}, {@code x.code} stands at no {@code x@Station.code}.
