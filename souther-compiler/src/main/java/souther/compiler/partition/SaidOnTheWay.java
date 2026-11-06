@@ -3,9 +3,11 @@ package souther.compiler.partition;
 import souther.compiler.collect.InTheOrderGiven;
 import souther.compiler.types.ModelOccurrences;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Which copies of the model's code put each thing on one way to a line or a rule.
@@ -174,16 +176,25 @@ public record SaidOnTheWay(Map<OnTheWay, ModelOccurrences> entries,
      * copies — a truth every alternative of a long disjunction asks is one entry, made once for
      * each — and putting each copy together with all those before it files them all again, so
      * that an entry made by many copies costs as many times all of them.
+     *
+     * <p>And filed only when it is asked ({@link #said}), in the order it was told. An entry is
+     * filed under its value, which is a tree hashed whole, and the entries of a way are told far
+     * more often than who put them is read: the cases of a line are asked of their entries as they
+     * are chosen, and who put them is read only of the cases the line is read in. What is told is
+     * what each entry was put there by, already worked out, so filing it later files the same.
      */
     static final class Filing {
 
-        private final Map<OnTheWay, ModelOccurrences.Gathering> entries = new LinkedHashMap<>();
+        /** What was told, in its order, each a step of filing it. */
+        private final List<Consumer<Map<OnTheWay, ModelOccurrences.Gathering>>> told =
+                new ArrayList<>();
 
         /** What {@code entry} itself was put on the way by, leaving what its alternatives were
          *  put there by to whoever made them. */
         void alone(OnTheWay entry, ModelOccurrences by) {
             if (!by.isEmpty()) {
-                entries.computeIfAbsent(entry, _ -> new ModelOccurrences.Gathering()).add(by);
+                told.add(entries -> entries
+                        .computeIfAbsent(entry, _ -> new ModelOccurrences.Gathering()).add(by));
             }
         }
 
@@ -206,12 +217,14 @@ public record SaidOnTheWay(Map<OnTheWay, ModelOccurrences> entries,
 
         /** What {@code said} told of each entry, in its order, every entry it names kept. */
         void all(SaidOnTheWay said) {
-            said.entries.forEach((entry, by) -> entries
-                    .computeIfAbsent(entry, _ -> new ModelOccurrences.Gathering()).add(by));
+            told.add(entries -> said.entries.forEach((entry, by) -> entries
+                    .computeIfAbsent(entry, _ -> new ModelOccurrences.Gathering()).add(by)));
         }
 
         /** What put each entry on the way, the entries in the order they were first told of. */
         SaidOnTheWay said() {
+            Map<OnTheWay, ModelOccurrences.Gathering> entries = new LinkedHashMap<>();
+            told.forEach(step -> step.accept(entries));
             return new SaidOnTheWay(gathered(entries), Map.of(), Map.of());
         }
     }
