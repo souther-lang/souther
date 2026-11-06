@@ -14,6 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 
 /**
@@ -118,7 +119,7 @@ public final class TheChoicesACaseIsMadeOf {
     /** Inside the condition of the choice the construct at {@code at} makes. */
     private record Choosing(ConstructOccurrence at, ModelOccurrence construct,
                             CaseExpansion.ChoiceKind kind, int alternatives,
-                            Optional<ValueName> operation) implements Frame {}
+                            Optional<ValueName.Stdlib> operation) implements Frame {}
 
     /**
      * Where a walk down the derivation stands: the frames around it, outermost first; the choice
@@ -336,7 +337,7 @@ public final class TheChoicesACaseIsMadeOf {
         CaseExpansion.Attributed attributed(Set<Spelling> ofTheCase) {
             int unattributed = 0;
             // What each occurrence of each thing made, by where it stood.
-            Map<Object, Map<Object, Set<Spelling>>> occurrences = new LinkedHashMap<>();
+            Map<Object, Map<Standing, Set<Spelling>>> occurrences = new LinkedHashMap<>();
             Map<Object, Frame> named = new LinkedHashMap<>();
             for (Spelling part : ofTheCase) {
                 Set<Origin> from = made.get(part);
@@ -347,28 +348,31 @@ public final class TheChoicesACaseIsMadeOf {
                 for (Origin origin : from) {
                     List<Frame> frames = origin.frames();
                     for (int at = 0; at < frames.size(); at++) {
-                        Object key = keyOf(frames.get(at));
-                        named.putIfAbsent(key, frames.get(at));
+                        Frame frame = frames.get(at);
+                        Object key = keyOf(frame);
+                        named.putIfAbsent(key, frame);
                         occurrences.computeIfAbsent(key, _ -> new LinkedHashMap<>())
-                                .computeIfAbsent(List.copyOf(frames.subList(0, at + 1)),
-                                        _ -> new HashSet<>())
+                                .computeIfAbsent(new Standing(List.copyOf(frames.subList(0, at + 1)),
+                                        Optional.empty(), frame instanceof Applied applied
+                                                ? OptionalInt.of(applied.ordinal())
+                                                : OptionalInt.empty()), _ -> new HashSet<>())
                                 .add(part);
                     }
                     origin.ways().ifPresent(ways -> occurrences
                             .computeIfAbsent(keptBy(ways), _ -> new LinkedHashMap<>())
-                            .computeIfAbsent(List.of(new Identity(ways), frames),
-                                    _ -> new HashSet<>())
+                            .computeIfAbsent(new Standing(frames, Optional.of(new Identity(ways)),
+                                    OptionalInt.empty()), _ -> new HashSet<>())
                             .add(part));
                 }
             }
             List<CaseExpansion.Factor> factors = new ArrayList<>();
             for (Object key : order) {
-                Map<Object, Set<Spelling>> met = occurrences.get(key);
+                Map<Standing, Set<Spelling>> met = occurrences.get(key);
                 if (met == null) {
                     continue;
                 }
-                Set<Object> distinct = new HashSet<>();
-                met.forEach((where, parts) -> distinct.add(List.of(which(where), parts)));
+                Set<List<Object>> distinct = new HashSet<>();
+                met.forEach((where, parts) -> distinct.add(List.of(where.application(), parts)));
                 factors.add(switch (key) {
                     case KeptBy by -> new CaseExpansion.KeptWays(by.constructs(),
                             met.values().stream().mapToInt(Set::size).max().orElse(0),
@@ -385,21 +389,21 @@ public final class TheChoicesACaseIsMadeOf {
             }
             return new CaseExpansion.Attributed(factors, ofTheCase.size(), unattributed);
         }
-
-        /** Which application an occurrence standing at {@code where} is, where it is one: the
-         *  ordinal of the innermost frame, or nothing that tells it apart. */
-        private static Object which(Object where) {
-            return where instanceof List<?> frames && !frames.isEmpty()
-                    && frames.getLast() instanceof Applied applied ? applied.ordinal() : "";
-        }
     }
 
+    /**
+     * Where one occurrence of a thing stood: the frames down to it, the writing out of kept ways
+     * it is where it is one, and which application of its call it is where it is an application.
+     */
+    private record Standing(List<Frame> frames, Optional<Identity> writing,
+                            OptionalInt application) {}
+
     /** Applications of closures by calls of {@code operation} at {@code construct}. */
-    private record AppliedBy(ModelOccurrence construct, ValueName operation) {}
+    private record AppliedBy(ModelOccurrence construct, ValueName.Stdlib operation) {}
 
     /** Choosings at {@code construct}. */
     private record ChosenAt(ModelOccurrence construct, CaseExpansion.ChoiceKind kind,
-                            int alternatives, Optional<ValueName> operation) {}
+                            int alternatives, Optional<ValueName.Stdlib> operation) {}
 
     /** Writings out of the ways elements are kept by the truths at {@code constructs}. */
     private record KeptBy(List<ModelOccurrence> constructs) {}

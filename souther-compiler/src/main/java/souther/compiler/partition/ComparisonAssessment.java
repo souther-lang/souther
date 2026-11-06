@@ -1099,7 +1099,10 @@ sealed interface ComparisonAssessment {
                 } else {
                     places = places.and(stopped.places());
                     where = where.and(stopped.where());
-                    each.add(new Part(part.id(), stopped, List.of()));
+                    // Not drawn in any case, and still the line it was: one not worked out for
+                    // the number of its cases is so still, and what was counted of them is kept.
+                    each.add(new Part(part.id(), stopped, List.of(), Map.of(),
+                            CasesWorkedOut.SHOWN, part.expanded()));
                 }
             }
             return allStopped ? new Unread(places, where) : new Several(each, derivedBy);
@@ -1553,10 +1556,13 @@ sealed interface ComparisonAssessment {
         return switch (read) {
             case Unread unread -> new NothingArrivesAtItsStop(
                     List.copyOf(unread.why().keySet()));
+            // A line nothing arrives at the stop of is no line not worked out any more, so what
+            // was counted of its cases goes with the reason it was counted beside.
             case Several several -> new Several(several.parts().stream()
                     .map(part -> part.line() instanceof Unread unread
                             ? new Several.Part(part.id(), new NothingArrivesAtItsStop(
-                                    List.copyOf(unread.why().keySet())), List.of())
+                                    List.copyOf(unread.why().keySet())), List.of(), Map.of(),
+                                    CasesWorkedOut.SHOWN, List.of())
                             : part)
                     .toList(), several.derivedBy());
             default -> read;
@@ -1725,7 +1731,8 @@ sealed interface ComparisonAssessment {
             List<CaseExpansion.Counted> expanded = new ArrayList<>();
             for (CasesOfALineAsked.NotWorkedOut each : found.notWorkedOut()) {
                 each.counted().ifPresent(counted -> expanded.add(new CaseExpansion.Counted(
-                        cutting.of().named(), part.id().relation(), each.in(), counted)));
+                        cutting.of().named(), cutting.at().toString(), part.id().relation(),
+                        each.in(), counted)));
             }
             out.add(new Several.Part(part.id(), new Unread(atEachOf(cutting.over(),
                     new BlockReason.WhereALineDecidesNotWorkedOut(stoppedAt.stream()

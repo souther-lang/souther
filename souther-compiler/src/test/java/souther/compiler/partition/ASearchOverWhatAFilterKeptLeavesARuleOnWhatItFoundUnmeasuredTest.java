@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
@@ -8,10 +10,12 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Searching what a filter kept, rather than every candidate, for the first whose number is not a
@@ -25,6 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the record: the record billing's rule reads is no part of why.
  */
 class ASearchOverWhatAFilterKeptLeavesARuleOnWhatItFoundUnmeasuredTest {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static final String EVERY_CANDIDATE = """
             List.find(d -> Int.floorMod(d, 7) >= 1 && Int.floorMod(d, 7) <= 5
@@ -49,8 +55,17 @@ class ASearchOverWhatAFilterKeptLeavesARuleOnWhatItFoundUnmeasuredTest {
     /** What was found, against a constant. */
     private static final String WHAT_WAS_FOUND = "first(base, h) > 2";
 
-    /** How many times a report gives a rule about a derived value as why it was not drawn. */
-    private static int aboutADerivedValue(String search, String rule) {
+    /**
+     * Where a report says a rule about a derived value was not read: the positions, and how many
+     * rules of {@code g}.
+     */
+    private record Unmeasured(Set<String> at, int rules) {
+
+        static final Unmeasured NOTHING = new Unmeasured(Set.of(), 0);
+    }
+
+    /** What the report gives a rule about a derived value as why it was not drawn at. */
+    private static Unmeasured aboutADerivedValue(String search, String rule) {
         String source = """
                 module demo exposing (g, V)
 
@@ -66,25 +81,38 @@ class ASearchOverWhatAFilterKeptLeavesARuleOnWhatItFoundUnmeasuredTest {
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors(), source);
-        String json = AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
-        return json.split("\"rule_about_a_derived_value\"", -1).length - 1;
+        JsonNode notRead = JSON.readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)))
+                .path("modules").get(0).path("behaviors").get(0).path("partition")
+                .path("notRead");
+        Set<String> at = new TreeSet<>();
+        Set<JsonNode> rules = new HashSet<>();
+        for (JsonNode each : notRead) {
+            if (each.path("reason").asString().equals("rule_about_a_derived_value")) {
+                assertEquals("g", each.path("ruleId").path("definition").asString(),
+                        "a rule of the behavior: " + each);
+                at.add(each.path("position").asString());
+                rules.add(each.path("ruleId"));
+            }
+        }
+        return new Unmeasured(at, rules.size());
     }
 
     @Test
     void aRuleReadingAValueOfWhatWasFoundIsLeftUnmeasuredRecordOrNot() {
-        int inARecord = aboutADerivedValue(WHAT_A_FILTER_KEPT, ITS_WEEKDAY_IN_A_RECORD);
-        assertTrue(inARecord > 0, "the staged search costs the rule on the weekday found");
+        Unmeasured inARecord = aboutADerivedValue(WHAT_A_FILTER_KEPT, ITS_WEEKDAY_IN_A_RECORD);
+        assertEquals(new Unmeasured(Set.of("base", "h"), 2), inARecord,
+                "both comparisons of the weekday found, at every position what was found reads");
         assertEquals(inARecord, aboutADerivedValue(WHAT_A_FILTER_KEPT, ITS_WEEKDAY),
-                "and as much where the value is read of what was found itself");
+                "and the same where the value is read of what was found itself");
     }
 
     @Test
     void neitherARuleOnWhatWasFoundNorASearchOfEveryCandidateCostsIt() {
-        assertEquals(0, aboutADerivedValue(WHAT_A_FILTER_KEPT, WHAT_WAS_FOUND),
+        assertEquals(Unmeasured.NOTHING, aboutADerivedValue(WHAT_A_FILTER_KEPT, WHAT_WAS_FOUND),
                 "what was found against a constant is no derived value");
         for (String rule : List.of(ITS_WEEKDAY_IN_A_RECORD, ITS_WEEKDAY, WHAT_WAS_FOUND)) {
-            assertEquals(0, aboutADerivedValue(EVERY_CANDIDATE, rule),
+            assertEquals(Unmeasured.NOTHING, aboutADerivedValue(EVERY_CANDIDATE, rule),
                     "a search of every candidate leaves the rule its measure: " + rule);
         }
     }

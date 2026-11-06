@@ -8602,6 +8602,7 @@
               "rule",
               "ruleId",
               "line",
+              "cutAt",
               "case",
               "casesOfTheLine",
               "caseExpansion"
@@ -8620,15 +8621,19 @@
                 "type": "string",
                 "description": "The quantity the line is on, named the way a boundary on it is named."
               },
+              "cutAt": {
+                "type": "string",
+                "description": "Where on the quantity the line is, written as a boundary's level is written. Two lines of a rule on one quantity are at different places, and this is what tells them apart to a reader."
+              },
               "case": {
                 "type": "integer",
                 "minimum": 1,
-                "description": "Which of the cases of this rule's line the entry is, counted from one in the order the entries stand. Two entries of one rule and line are two cases, whatever they came to; the condition a case was said as is what tells them apart, and it is not written."
+                "description": "Which of the cases of this rule's line the entry is, counted from one in the order the entries stand. Two entries of one rule and line are two cases, whatever they came to; the condition a case was said as is what tells them apart, and it is not written. A line is told apart by its relation, not by `line`, which two lines of a rule may share; `cutAt` is where it is."
               },
               "casesOfTheLine": {
                 "type": "integer",
                 "minimum": 1,
-                "description": "How many entries there are for this rule and line."
+                "description": "How many entries there are for this rule and line, the line told apart as `case` says."
               },
               "caseExpansion": {
                 "$ref": "#/$defs/caseExpansion"

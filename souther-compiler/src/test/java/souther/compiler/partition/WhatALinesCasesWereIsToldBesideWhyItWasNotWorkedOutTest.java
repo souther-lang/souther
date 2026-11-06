@@ -131,25 +131,26 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
 
     /**
      * Two lines of one rule are one finding about why, at a place, and an entry for each case of
-     * each: a count is the cases of one case of one line, which is put together with no other —
-     * not even with another case of the same line that came to the same counts and the same
-     * makers. Here the line on the sum is asked in two cases that come to the same.
+     * each: a count is the cases of one case of one line, which is put together with no other.
+     * Here two lines on the sum, at two of the thresholds, come to the same counts and the same
+     * makers, and are two entries told apart by where they cut the sum.
      */
     @Test
-    void theCountsOfTwoCasesAreNeverPutTogetherAsTheirReasonIs() {
+    void theCountsOfTwoLinesAreNeverPutTogetherAsTheirReasonIs() {
         JsonNode partition = partition(compiled(FIND));
         List<String> told = new ArrayList<>();
         List<String> came = new ArrayList<>();
         for (JsonNode each : partition.path("caseExpansions")) {
             String line = each.path("line").asString();
-            told.add(line + " case " + each.path("case").asInt() + " of "
-                    + each.path("casesOfTheLine").asInt());
+            told.add(line + " at " + each.path("cutAt").asString() + " case "
+                    + each.path("case").asInt() + " of " + each.path("casesOfTheLine").asInt());
             came.add(line + " " + each.path("caseExpansion"));
         }
         assertEquals(told.size(), new TreeSet<>(told).size(), "each case of each line once: "
                 + told);
         assertTrue(came.size() > new TreeSet<>(came).size(),
-                "two cases of one line that came to the same are two entries still: " + came);
+                "two lines on one quantity that came to the same are two entries still: "
+                        + came);
         for (String section : List.of("notRead", "unanswered")) {
             for (JsonNode each : partition.path(section)) {
                 assertFalse(each.has("caseExpansion"), "why is said with no count in it: " + each);
@@ -174,8 +175,8 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
         }
     }
 
-    /** The fewest grades a table may have for the line on what it is looked up as to be past the
-     *  figure. */
+    /** Enough grades for the line on what the table is looked up as to be past the figure, which
+     *  twenty are not. */
     private static final int GRADES = 25;
 
     /**
@@ -276,9 +277,10 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
                     .filter(one -> one.path("operation").asString().equals("List.filter"))
                     .findFirst().orElseThrow(() -> new AssertionError("the filter: " + factors));
             assertEquals("payableMonths", filter.path("call").path("definition").asString());
-            assertTrue(filter.path("applications").asInt() <= 3,
-                    "of the three months it is handed, read again on every application of the"
-                            + " fold and still the same applications: " + filter);
+            assertEquals(2, filter.path("applications").asInt(),
+                    "the two months besides the one the line is on, whose truths the case is"
+                            + " taken apart on — read again on every application of the fold and"
+                            + " still the same two applications: " + filter);
             List<JsonNode> kept = ofKind(factors, "keptWays");
             assertEquals(1, kept.size(), "the ways the months are kept: " + factors);
             assertEquals(7, kept.getFirst().path("ways").asInt(),

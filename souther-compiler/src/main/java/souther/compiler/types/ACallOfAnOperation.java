@@ -10,10 +10,10 @@ import java.util.Objects;
  * however many times it is applied, so a reader naming the construct of the model that applied it
  * names this call, and the operation is what that reader calls it by.
  *
- * @param operation the operation called
+ * @param operation the operation of the language called
  * @param at        where the call stands, in the copy of the body it stands in
  */
-public record ACallOfAnOperation(ValueName operation, ConstructOccurrence at) {
+public record ACallOfAnOperation(ValueName.Stdlib operation, ConstructOccurrence at) {
 
     public ACallOfAnOperation {
         Objects.requireNonNull(operation, "a call is of some operation");

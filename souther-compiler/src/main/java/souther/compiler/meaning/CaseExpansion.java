@@ -20,6 +20,8 @@ import java.util.Optional;
  * condition the case was said as ({@link DecidingCase#eachByItsOwnCondition}).
  *
  * @param line       the quantity the line is on, named the way a report names a border on it
+ * @param cutAt      where on the quantity the line is, written as a border's level is: what tells
+ *                   a reader two lines on one quantity apart
  * @param relation   the relation the line came to, as the reading spelled it
  * @param ofTheCase  the condition the case was said as
  * @param counted    how many ways there were of choosing one of what the case stands for
@@ -28,12 +30,13 @@ import java.util.Optional;
  *                   one number ({@link WhatTheNumbersOfACaseLeave}): what the numbers leave, and
  *                   no count of cases nor of what a rewrite would leave
  */
-public record CaseExpansion(String line, Spelling relation, Proposition ofTheCase,
+public record CaseExpansion(String line, String cutAt, Spelling relation, Proposition ofTheCase,
                             CaseCount counted, Attribution attributed,
                             List<Diagnosis> diagnosed) {
 
     public CaseExpansion {
         Objects.requireNonNull(line, "cases are a line's");
+        Objects.requireNonNull(cutAt, "a line is somewhere on its quantity");
         Objects.requireNonNull(relation, "of some relation");
         Objects.requireNonNull(ofTheCase, "a case is said as some condition");
         Objects.requireNonNull(counted, "cases are some number of ways");
@@ -46,14 +49,17 @@ public record CaseExpansion(String line, Spelling relation, Proposition ofTheCas
      * was derived, which the reading that counted it does not hold.
      *
      * @param line     the quantity the line is on
+     * @param cutAt    where on it the line is
      * @param relation the relation the line came to
      * @param asked    the case
      * @param counted  how many ways there were of choosing one of what it stands for
      */
-    public record Counted(String line, Spelling relation, DecidingCase asked, CaseCount counted) {
+    public record Counted(String line, String cutAt, Spelling relation, DecidingCase asked,
+                          CaseCount counted) {
 
         public Counted {
             Objects.requireNonNull(line, "cases are a line's");
+            Objects.requireNonNull(cutAt, "a line is somewhere on its quantity");
             Objects.requireNonNull(relation, "of some relation");
             Objects.requireNonNull(asked, "a case asked");
             Objects.requireNonNull(counted, "cases are some number of ways");
@@ -61,8 +67,8 @@ public record CaseExpansion(String line, Spelling relation, Proposition ofTheCas
 
         /** This case, with what made its parts and what the numbers they compare leave. */
         CaseExpansion attributed(Attribution attributed) {
-            return new CaseExpansion(line, relation, asked.condition(), counted, attributed,
-                    WhatTheNumbersOfACaseLeave.of(asked.standsFor()));
+            return new CaseExpansion(line, cutAt, relation, asked.condition(), counted,
+                    attributed, WhatTheNumbersOfACaseLeave.of(asked.standsFor()));
         }
 
         /**
@@ -197,7 +203,7 @@ public record CaseExpansion(String line, Spelling relation, Proposition ofTheCas
      * @param operation    the operation, for the cases of one
      */
     public record Choice(ModelOccurrence construct, ChoiceKind kind, int alternatives, int times,
-                         Optional<ValueName> operation) implements Factor {
+                         Optional<ValueName.Stdlib> operation) implements Factor {
 
         public Choice {
             Objects.requireNonNull(construct, "a choice is made at some construct");
@@ -232,7 +238,8 @@ public record CaseExpansion(String line, Spelling relation, Proposition ofTheCas
      * @param applications on how many of its applications some part the case is taken apart on
      *                     was read
      */
-    public record Applications(ModelOccurrence call, ValueName operation, int applications)
+    public record Applications(ModelOccurrence call, ValueName.Stdlib operation,
+                               int applications)
             implements Factor {
 
         public Applications {

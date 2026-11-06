@@ -37,7 +37,7 @@ class TwoCasesOfOneLineAreTwoEntriesWhateverTheyCameToTest {
             new NumericallyConsistentWays.Counted.AtMost(BigInteger.valueOf(20)));
 
     private static CaseExpansion ofTheCase(Proposition condition) {
-        return new CaseExpansion("g/x", Spelling.of("x"), condition, COUNTED,
+        return new CaseExpansion("g/x", "3", Spelling.of("x"), condition, COUNTED,
                 new CaseExpansion.Attributed(List.of(), 4, 4), List.of());
     }
 

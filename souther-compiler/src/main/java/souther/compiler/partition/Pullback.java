@@ -13623,7 +13623,8 @@ final class Pullback {
                     reached.denotes();
             default -> null;
         };
-        return at == null || operation == null ? null : new ACallOfAnOperation(operation, at);
+        return at == null || !(operation instanceof ValueName.Stdlib library) ? null
+                : new ACallOfAnOperation(library, at);
     }
 
     /** The construct some source wrote that {@code node} is, or null where it is none. */

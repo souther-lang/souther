@@ -4082,9 +4082,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             List<CaseOfALine> numbered = casesNumbered(expanded);
             for (int at = 0; at < expanded.size(); at++) {
                 CasesExpandedAtARule each = expanded.get(at);
-                out.append(String.format("      case expansion: %s, on `%s`, case %d of %d — %s%n",
+                out.append(String.format(
+                        "      case expansion: %s, on `%s` at %s, case %d of %d — %s%n",
                         cited(each.cited(), rendering, declaredIn, places),
-                        each.expansion().line(), numbered.get(at).ordinal(),
+                        each.expansion().line(), each.expansion().cutAt(),
+                        numbered.get(at).ordinal(),
                         numbered.get(at).of(), caseExpansionSaid(each.expansion())));
             }
         }
@@ -8964,6 +8966,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 sources.rendering(), null);
         ruleId(said.putObject("ruleId"), each.rule());
         said.put("line", each.expansion().line());
+        said.put("cutAt", each.expansion().cutAt());
         said.put("case", which.ordinal());
         said.put("casesOfTheLine", which.of());
         caseExpansion(said.putObject("caseExpansion"), each.expansion());
@@ -8975,17 +8978,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /**
      * Each entry numbered among those about the same rule and line, in the order they stand. Two
      * entries are two cases ({@link CasesExpandedAtARule#key}), which is all the number says: the
-     * condition a case was said as is what tells it apart, and it is too long to be read.
+     * condition a case was said as is what tells it apart, and it is too long to be read. A line
+     * is told apart as the reading tells it apart, by its relation, and not by the name a report
+     * gives the quantity it is on, which two lines may share.
      */
     private static List<CaseOfALine> casesNumbered(List<CasesExpandedAtARule> expanded) {
         Map<List<Object>, Integer> of = new HashMap<>();
         for (CasesExpandedAtARule each : expanded) {
-            of.merge(List.of(each.rule(), each.expansion().line()), 1, Integer::sum);
+            of.merge(List.of(each.rule(), each.expansion().relation()), 1, Integer::sum);
         }
         Map<List<Object>, Integer> sofar = new HashMap<>();
         List<CaseOfALine> out = new ArrayList<>();
         for (CasesExpandedAtARule each : expanded) {
-            List<Object> line = List.of(each.rule(), each.expansion().line());
+            List<Object> line = List.of(each.rule(), each.expansion().relation());
             out.add(new CaseOfALine(sofar.merge(line, 1, Integer::sum), of.get(line)));
         }
         return out;
@@ -9070,10 +9075,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
     }
 
-    /** An operation of the language as the library publishes it, or as it is named otherwise. */
-    private static String operationNamed(ValueName operation) {
-        return operation instanceof ValueName.Stdlib stdlib ? stdlib.qualified()
-                : operation.toString();
+    /** An operation of the language as the library publishes it. */
+    private static String operationNamed(ValueName.Stdlib operation) {
+        return operation.qualified();
     }
 
     /**

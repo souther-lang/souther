@@ -469,11 +469,13 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         }
     }
 
-    /** The call of {@code operation} at {@code occurrence}, where some source wrote it. */
+    /** The call of {@code operation} at {@code occurrence}, where it is one of the language's
+     *  operations and some source wrote the call. */
     private static Optional<ACallOfAnOperation> written(ValueName operation,
                                                         ConstructOccurrence occurrence) {
-        return occurrence == null || !occurrence.isWritten() ? Optional.empty()
-                : Optional.of(new ACallOfAnOperation(operation, occurrence));
+        return occurrence == null || !occurrence.isWritten()
+                || !(operation instanceof ValueName.Stdlib library) ? Optional.empty()
+                : Optional.of(new ACallOfAnOperation(library, occurrence));
     }
 
     /**
