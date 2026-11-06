@@ -228,7 +228,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         boolean mayEvaluate(Core part, InputReading read) {
             List<List<OnTheWay>> reached = ways.to(part);
             for (List<OnTheWay> way : reached.isEmpty() ? List.of(assumed) : reached) {
-                if (Reachability.of(new WayToTheBorder(way), read.quantities().region())
+                if (Reachability.of(WayToTheBorder.forArrival(way), read.quantities().region())
                         .leavesARow()) {
                     return true;
                 }
@@ -930,13 +930,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // comparison reads: a condition on the way read of another element of one of its
             // containers is about a value the line is not.
             ElementsNamed readsTheElements = reads.elementsNamedIn(e, in.newtypes());
-            List<OnTheWay> besideIt = ElementsOnTheWay.keptToOneElementEach(assumed,
-                    readsTheElements);
-            out.add(new Reading(stands, stated.statement(), where, reads, besideIt, standing,
+            ElementsOnTheWay.Kept besideIt = ElementsOnTheWay.keptToOneElementEach(assumed,
+                    readsTheElements, numbering.saidOnTheWay(List.of(assumed)));
+            out.add(new Reading(stands, stated.statement(), where, reads, besideIt.way(), standing,
                     statedAsACondition(e, standing, stopsWhere, worksOutOnEach, reads, in,
                             numbering), stopsWhere,
                     worksOutOnEach, stopsIn, onTheArms, applying.elementsMetOn(), stated.written(), in.context(),
-                    numbering.saidOnTheWay(List.of(besideIt)), witnesses,
+                    besideIt.said(), witnesses,
                     pastOf(standing, e, in, reads), readsTheElements, readOn));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A

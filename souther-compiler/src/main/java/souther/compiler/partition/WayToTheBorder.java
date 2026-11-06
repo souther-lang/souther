@@ -64,13 +64,36 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     public static final WayToTheBorder UNTOUCHED = new WayToTheBorder(List.of());
 
     /**
-     * Every condition on it, with the ones read of an element through another name than the one
-     * the way holds that element by declined ({@link ElementsOnTheWay}): what a way states is
-     * composed as statements of the values it names, whoever reads it.
+     * Every condition on it, as statements of one value each: a way holds an element of a container
+     * by one name ({@link ElementsOnTheWay}), because what it states is composed as statements of
+     * the values it names, whoever reads it.
+     *
+     * <p>Which name that is, is the border's to say, and a way is not made here by choosing one.
+     * Whoever has the border keeps the way to it ({@link ElementsOnTheWay#keptToOneElementEach})
+     * before making it; a way that is only asked whether a row arrives may keep any one name
+     * ({@link #forArrival}).
+     *
+     * @throws IllegalArgumentException where an element is held by more than one name
      */
     public WayToTheBorder {
-        onTheWay = ElementsOnTheWay.keptToOneElementEach(List.copyOf(onTheWay),
-                ElementsNamed.NONE);
+        onTheWay = List.copyOf(onTheWay);
+        if (ElementsOnTheWay.keptToOneElementEach(onTheWay, ElementsNamed.NONE) != onTheWay) {
+            throw new IllegalArgumentException("a way holds one name for each element, and the"
+                    + " border it is kept to is the one to choose it: " + onTheWay);
+        }
+    }
+
+    /**
+     * {@code onTheWay} as a way that is only asked whether a row arrives, with the first name met
+     * for each element kept and what is read through another declined.
+     *
+     * <p>What it leaves out only widens the region the way states, so every row that arrives is
+     * still in it. It is no way to look for a value of an element in: a point at one element
+     * composed with a region kept to another element's name is a point refuted for no reason.
+     */
+    public static WayToTheBorder forArrival(List<OnTheWay> onTheWay) {
+        return new WayToTheBorder(ElementsOnTheWay.keptToOneElementEach(List.copyOf(onTheWay),
+                ElementsNamed.NONE));
     }
 
     /**

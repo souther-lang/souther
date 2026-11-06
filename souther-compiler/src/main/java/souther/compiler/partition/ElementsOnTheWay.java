@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ModelOccurrences;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -24,7 +25,8 @@ import java.util.Set;
  *
  * <p>The name kept is the one the border is read through, where the border reads that element:
  * what is looked for there is a value of that element. Elsewhere it is the first name the way met
- * it by. Where the border reads one element through two names, nothing on the way is kept for it.
+ * it by. Where the border reads one element through two names, or through one and through a name
+ * whose element is not known, nothing on the way is kept for it.
  *
  * <p>Only what the names say. A condition whose names stood for no element is the row's, and one
  * whose names were not worked out names nothing here; both are taken as they stand. A condition of
@@ -50,6 +52,9 @@ final class ElementsOnTheWay {
      *               them; {@link ElementsNamed#NONE} where the way is asked of no border
      */
     static List<OnTheWay> keptToOneElementEach(List<OnTheWay> way, ElementsNamed border) {
+        if (border.isEmpty() && way.stream().allMatch(each -> namedIn(each).isEmpty())) {
+            return way;
+        }
         Map<ElementsNamed.Slot, BindingId> kept = new LinkedHashMap<>();
         Set<ElementsNamed.Slot> keptNone = new HashSet<>();
         border.named().forEach((slot, names) -> {
@@ -60,6 +65,7 @@ final class ElementsOnTheWay {
             }
         });
         keptNone.addAll(border.unnamed());
+        kept.keySet().removeAll(keptNone);
         boolean anyNamed = !border.isEmpty();
         List<ElementsNamed> namedInEach = new ArrayList<>(way.size());
         for (OnTheWay each : way) {
@@ -90,6 +96,65 @@ final class ElementsOnTheWay {
             out.add(declined(each));
         }
         return out == null ? way : List.copyOf(out);
+    }
+
+    /**
+     * A way kept to one element each, and who put each entry on it.
+     *
+     * @param way  the way, as {@link #keptToOneElementEach(List, ElementsNamed)} says it
+     * @param said what put each entry of {@code way} there: a condition declined for another
+     *             element is told of the copies that put the condition it was made of
+     */
+    record Kept(List<OnTheWay> way, SaidOnTheWay said) { }
+
+    /**
+     * {@link #keptToOneElementEach(List, ElementsNamed)} of {@code way}, with what put each entry
+     * of it there carried over to the entry that stands for it now.
+     *
+     * <p>A declined condition is a value of its own, and who put things on a way is filed by the
+     * value: told only of the condition it was made of, a gap that names the declined one is read
+     * off nothing and a report cannot say where it came from.
+     */
+    static Kept keptToOneElementEach(List<OnTheWay> way, ElementsNamed border, SaidOnTheWay said) {
+        List<OnTheWay> kept = keptToOneElementEach(way, border);
+        if (kept == way) {
+            return new Kept(way, said);
+        }
+        SaidOnTheWay.Filing filing = new SaidOnTheWay.Filing();
+        for (int at = 0; at < way.size(); at++) {
+            carried(kept.get(at), way.get(at), said, filing);
+        }
+        return new Kept(kept, new SaidOnTheWay(filing.said().entries(), said.stated(),
+                said.unstated()));
+    }
+
+    /**
+     * What put {@code was} on the way, told of {@code now}, the entry that stands for it, and of
+     * what is inside {@code now} where it is {@code was} as it stood.
+     *
+     * <p>Filed as the way is told, which is in its order, and together where several entries have
+     * become one: two conditions of one place declined for one reason are one declined condition,
+     * put there by whatever put either. What was inside a condition that is declined whole is not
+     * on the way, so it is not told of.
+     */
+    private static void carried(OnTheWay now, OnTheWay was, SaidOnTheWay said,
+                                SaidOnTheWay.Filing into) {
+        ModelOccurrences by = said.entries().get(was);
+        if (by != null) {
+            into.alone(now, by);
+        }
+        if (now != was) {
+            return;
+        }
+        switch (now) {
+            case OnTheWay.OneOf several -> several.alternatives().forEach(
+                    one -> one.forEach(each -> carried(each, each, said, into)));
+            case OnTheWay.Counted counted -> counted.statements().forEach(one -> {
+                one.holding().forEach(each -> carried(each, each, said, into));
+                one.failing().forEach(each -> carried(each, each, said, into));
+            });
+            default -> { }
+        }
     }
 
     /** Whether every element {@code named} reads is read through the name kept for it: none
