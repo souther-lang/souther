@@ -102,6 +102,15 @@ class AComparisonSomeRunReachesIsNeverSaidToHaveNoLineTest {
                             }
                             List.sum(List.map(f, ITEMS)) + List.sum(List.map(f, List.reverse(ITEMS)))
                         }""".replace("GATE", GATE)),
+            // And their numbers in one difference.
+            new Shape("sharedDifference", """
+                    {
+                            let f = (a) -> {
+                                let g = (b) -> if %3$s.n - %4$s.n /= 0 then GATE else 0
+                                List.sum(List.map(g, ITEMS)) + List.sum(List.map(g, List.reverse(ITEMS)))
+                            }
+                            List.sum(List.map(f, ITEMS)) + List.sum(List.map(f, List.reverse(ITEMS)))
+                        }""".replace("GATE", GATE), true),
             // Two entries of the input's map, each taken apart into its key and value: an entry is
             // a pair and no position, and its value stands at the map's values.
             new Shape("entries", """
@@ -115,7 +124,7 @@ class AComparisonSomeRunReachesIsNeverSaidToHaveNoLineTest {
             // Two numbers of two elements in one difference, which is no number where they are
             // taken for one, over the list and what an operation made of it.
             new Shape("difference", "List.sum(List.map(a -> List.sum(List.map(b -> if %3$s.n -"
-                    + " %4$s.n > 0 then " + GATE + " else 0, ITEMS)), List.reverse(ITEMS)))",
+                    + " %4$s.n /= 0 then " + GATE + " else 0, ITEMS)), List.reverse(ITEMS)))",
                     true));
 
     /** Where the list is: written as {@code ITEMS} is replaced, and whether a dependency answers

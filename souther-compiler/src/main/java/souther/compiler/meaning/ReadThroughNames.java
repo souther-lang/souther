@@ -224,7 +224,10 @@ public final class ReadThroughNames {
      * come at another turn. A pairing that does not make {@code other} shows nothing.
      *
      * <p>Where that cannot be shown they are said to differ, which is never the wrong way round:
-     * two statements of different values taken for one would be one value's two names.
+     * two statements of different values taken for one would be one value's two names. So this is
+     * sound and not complete: two statements the same but for their names, whose parts their names
+     * put in another order, can be said to differ, and the copies of a site that state them are
+     * then said to state different things rather than one.
      */
     public static boolean sameUpToTheNames(Proposition one, Proposition other) {
         if (one.equals(other)) {

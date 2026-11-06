@@ -2279,7 +2279,7 @@ public final class InputReads {
      *                  what the walk was given
      * @param part      whether the name is the element or the key of its entry
      */
-    record ElementStood(BindingId name, ContainerOf container, HeldIn.Part part) {
+    private record ElementStood(BindingId name, ContainerOf container, HeldIn.Part part) {
 
         ElementStood {
             Objects.requireNonNull(name, "an element is stood for by some name");
@@ -2326,8 +2326,8 @@ public final class InputReads {
     }
 
     /**
-     * Each element of a container that {@code e} reads a name for: the elements, and not the
-     * names for a position that is no container's element or for a value an operation made.
+     * Which element of each container {@code e} reads, by the names that stand for it, and which
+     * elements it reads through a name whose element is not known.
      *
      * <p>What tells two names for two elements of one container from one name met twice, and a
      * name for an entry's key from one for its value. A position inside a container says an element
@@ -2336,18 +2336,9 @@ public final class InputReads {
      * <p>Through what each name was given as well: {@code let v = a.n + 1} reads the element
      * {@code a} stands for wherever {@code v} is read, and a name read for its value is that value
      * read. Each name is followed once, which is what stops it.
-     */
-    List<ElementStood> elementsStoodForIn(Core e, DeclarationNewtypes newtypes) {
-        List<ElementStood> out = new ArrayList<>();
-        elementsNamedIn(e, newtypes).named().forEach((slot, names) -> names.forEach(name ->
-                out.add(new ElementStood(name, slot.container(), slot.part()))));
-        return out;
-    }
-
-    /**
-     * Which element of each container {@code e} reads, by the names that stand for it
-     * ({@link #elementsStoodForIn}): for a reader that holds what {@code e} states and no longer
-     * the names it was written with.
+     *
+     * <p>Handed out whole and in no other shape, so that no reader sees the names without the
+     * elements no name is known for.
      */
     public ElementsNamed elementsNamedIn(Core e, DeclarationNewtypes newtypes) {
         // Answered once for each node asked here, as where a node stands is ({@link #pathOf}):
