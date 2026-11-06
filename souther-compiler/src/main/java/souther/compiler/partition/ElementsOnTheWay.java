@@ -52,6 +52,9 @@ final class ElementsOnTheWay {
      *               them; {@link ElementsNamed#NONE} where the way is asked of no border
      */
     static List<OnTheWay> keptToOneElementEach(List<OnTheWay> way, ElementsNamed border) {
+        if (border.isEmpty() && way.stream().allMatch(each -> namedIn(each).isEmpty())) {
+            return way;
+        }
         Map<ElementsNamed.Slot, BindingId> kept = new LinkedHashMap<>();
         Set<ElementsNamed.Slot> keptNone = new HashSet<>();
         border.named().forEach((slot, names) -> {
