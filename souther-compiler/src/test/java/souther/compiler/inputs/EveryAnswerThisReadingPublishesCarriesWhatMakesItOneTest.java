@@ -20,6 +20,7 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -172,6 +173,9 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         }
         if (type == Set.class) {
             return Set.of();
+        }
+        if (type == Optional.class) {
+            return Optional.empty();
         }
         if (type == TermPath.class) {
             return TermPath.of("x");

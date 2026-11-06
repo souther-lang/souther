@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.meaning.CaseExpansion;
 import souther.compiler.meaning.Spelling;
 
 import java.util.Objects;
@@ -24,5 +25,10 @@ public record PlaceOfALine(PartOfAComparison line, Spelling relation) {
     public PlaceOfALine {
         Objects.requireNonNull(line, "a place is of some line");
         Objects.requireNonNull(relation, "and is some relation");
+    }
+
+    /** This place as a count of a line's cases names it, which is every half of it. */
+    public CaseExpansion.Line ofItsCases() {
+        return new CaseExpansion.Line(line.line(), relation);
     }
 }

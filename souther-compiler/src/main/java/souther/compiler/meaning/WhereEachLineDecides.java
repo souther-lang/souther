@@ -1360,6 +1360,21 @@ public final class WhereEachLineDecides {
      */
     private record Literal(Spelling part, boolean held) {}
 
+    /**
+     * Every part {@code stated} joins, each by the spelling of it held: what the cases where a
+     * line decides are taken apart on, told apart as they are told apart here.
+     */
+    static Set<Spelling> partsJoinedBy(Proposition stated) {
+        return partsHeldBy(stated).keySet();
+    }
+
+    /** The same parts, each as it stands held, by the spelling of it held. */
+    static Map<Spelling, Proposition> partsHeldBy(Proposition stated) {
+        Map<Spelling, Proposition> parts = new HashMap<>();
+        gather(stated, parts, new HashMap<>());
+        return parts;
+    }
+
     /** Every part {@code stated} joins, held, and each place one stands, by its own spelling. */
     private static void gather(Proposition stated, Map<Spelling, Proposition> parts,
                                Map<Spelling, Literal> leaves) {

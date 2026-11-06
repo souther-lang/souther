@@ -27,6 +27,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.AuthorsLines;
+import souther.compiler.meaning.CaseExpansion;
 import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.DecisionAtom;
@@ -325,14 +326,48 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
          * that is is carried with the line ({@link Part#cases}) rather than worked out by whoever
          * meets it: it is read off what the statement states, and what meets a line afterwards
          * holds the line and not the statement.
+         *
+         * <p>And how the statement was derived, where some line's cases are more ways of choosing
+         * one than are taken apart: what a reader telling an author why that line was not worked
+         * out reads what made the parts of its cases off ({@link CaseExpansion.Counted}), and
+         * which nothing past the drawing holds.
+         *
+         * @param derivedBy the statement's derivation on each application it was read on, each
+         *                  said to be that application ({@link Derivation.AnApplication}); none
+         *                  where no line's cases are past the figure they are taken apart to
          */
-        record Several(List<Part> parts) implements Read {
+        record Several(List<Part> parts, List<Derivation> derivedBy) implements Read {
 
             public Several {
                 parts = List.copyOf(parts);
+                derivedBy = List.copyOf(derivedBy);
                 if (parts.isEmpty()) {
                     throw new IllegalArgumentException("several lines are some lines");
                 }
+            }
+
+            /** Lines whose statement's derivation is not held. */
+            Several(List<Part> parts) {
+                this(parts, List.of());
+            }
+
+            /** The same lines, of a statement derived as {@code derived}. */
+            Several derivedAs(List<Derivation> derived) {
+                return new Several(parts, derived);
+            }
+
+            /** Each line made into what {@code each} makes of it, of the statement derived as
+             *  these lines' statement was. */
+            Several eachPart(UnaryOperator<Part> each) {
+                return new Several(parts.stream().map(each).toList(), derivedBy);
+            }
+
+            /** Whether some line's cases are more ways of choosing one than are taken apart,
+             *  which is where what made their parts is told. */
+            boolean pastTheCasesTakenApart() {
+                long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
+                return parts.stream().anyMatch(part -> part.cases().stream()
+                        .anyMatch(one -> one.standsFor().waysOfChoosing(most) > most));
             }
 
             /**
@@ -722,11 +757,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> relating = new LinkedHashMap<>();
         boolean relatedOnlySomewhere = false;
         InputReads statingNoRelation = null;
+        // How each application's statement was derived, said to be that application's, for where
+        // the lines its applications draw are past the cases taken apart.
+        List<Derivation> derived = new ArrayList<>();
         for (ClosureApplications.Application one : each) {
             if (one.reached() instanceof Proposition.Always(boolean made) && !made) {
                 continue;
             }
             Pullback.OnTheInput onTheInput = conditions.comparison(comparison, one.reads(), read);
+            derived.add(one.statedOn(onTheInput.stated().meaning().how()));
             switch (readOnce(behavior, comparison, read, one.reads(), answering, onTheInput,
                     one.metOn().levels().isEmpty(), writtenIn)) {
                 case Read.Stopped alone -> {
@@ -811,7 +850,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return relatedOnlySomewhere && lines.isEmpty() && parts.stream().allMatch(part ->
                     part.cases().stream().allMatch(one -> AStatementAtARow.askable(
                             one.condition()) && saysNothingOfAnElement(one.condition())))
-                    ? new Read.Several(parts) : new Read.AgainstAnotherValue(against, relations);
+                    ? derivedOnEach(new Read.Several(parts), derived)
+                    : new Read.AgainstAnotherValue(against, relations);
         }
         // A statement of no relation on some application is no line there, and the lines the
         // others draw would be drawn as though the comparison were only them.
@@ -844,7 +884,17 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         workingOf(conditions.comparison(comparison, reads, read)))) {
             return parts.getFirst().line();
         }
-        return new Read.Several(parts);
+        return derivedOnEach(new Read.Several(parts), derived);
+    }
+
+    /**
+     * {@code lines}, drawn of the applications {@code derived} are each application's statement
+     * of, held with those derivations where the lines are past the cases taken apart: cases where
+     * a line read on several applications decides are the cases of each, any one of them, and
+     * what made their parts is read off the application each was read on.
+     */
+    private static Read.Several derivedOnEach(Read.Several lines, List<Derivation> derived) {
+        return lines.pastTheCasesTakenApart() ? lines.derivedAs(derived) : lines;
     }
 
     /**
@@ -1236,10 +1286,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Read.Cuts cuts -> cuts.cutting().of().derivedFromSeveralPositions().isPresent()
                     ? new Read.Cuts(cuts.cutting().writtenAgainst(level), cuts.authored())
                     : cuts;
-            case Read.Several several -> new Read.Several(several.parts().stream()
-                    .map(part -> new Read.Several.Part(part.id(),
-                            writtenAgainst(part.line(), level), part.cases(), part.working()))
-                    .toList());
+            case Read.Several several -> several.eachPart(part -> new Read.Several.Part(
+                    part.id(), writtenAgainst(part.line(), level), part.cases(), part.working()));
             default -> drawn;
         };
     }
@@ -1253,10 +1301,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static Read heldIn(Read drawn, Optional<BoundHeldIn> data) {
         return switch (drawn) {
             case Read.Cuts cuts -> new Read.Cuts(cuts.cutting().heldIn(data), cuts.authored());
-            case Read.Several several -> new Read.Several(several.parts().stream()
-                    .map(part -> new Read.Several.Part(part.id(), heldIn(part.line(), data),
-                            part.cases(), part.working()))
-                    .toList());
+            case Read.Several several -> several.eachPart(part -> new Read.Several.Part(
+                    part.id(), heldIn(part.line(), data), part.cases(), part.working()));
             default -> drawn;
         };
     }
@@ -1272,6 +1318,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         Optional.of(comparison.claim()))));
         Read drawn = readAsAWhole(behavior, comparison, read, reads, answering, onTheInput,
                 onEveryElement, lines);
+        // How the statement was derived is held only where some line's cases are too many to be
+        // taken apart, which is the one place a reader reads what made their parts off it.
+        if (drawn instanceof Read.Several several && several.pastTheCasesTakenApart()) {
+            return several.derivedAs(List.of(stated.meaning().how()));
+        }
         if (writtenIn.isEmpty() || !(stated.proposition() instanceof Proposition.Compared compared)
                 || !(drawn instanceof Read.Cuts || drawn instanceof Read.NoOrderToCountOn
                         || drawn instanceof Read.NumberNoRatioHolds)) {

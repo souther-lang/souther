@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
+import souther.compiler.meaning.CaseExpansion;
+import souther.compiler.meaning.NumericallyConsistentWays;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.RunSensitivity;
@@ -429,6 +431,19 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "constructOccurrence", "properties", "through", "items",
                             "properties", "kind"),
                     ThroughStepWord.class),
+            // Which kind of choice made parts a line's case was taken apart on, why what made them
+            // was not read, and why a count of the ways no number refutes was given up.
+            new Vocabulary("caseExpansion.factors[].choice",
+                    List.of("$defs", "caseExpansion", "properties", "factors", "items", "oneOf",
+                            "0", "properties", "choice"),
+                    CaseExpansion.ChoiceKind.class),
+            new Vocabulary("caseExpansion.notAttributed",
+                    List.of("$defs", "caseExpansion", "properties", "notAttributed"),
+                    CaseExpansion.WhyNotAttributed.class),
+            new Vocabulary("caseExpansion.numericallyConsistentWays.notCounted",
+                    List.of("$defs", "caseExpansion", "properties", "numericallyConsistentWays",
+                            "properties", "notCounted"),
+                    NumericallyConsistentWays.WhyNotCounted.class),
             // Which kind of place a proof that nothing arrives was about, where a row went there.
             new Vocabulary("reachProof.kind",
                     List.of("$defs", "reachProof", "properties", "kind"),

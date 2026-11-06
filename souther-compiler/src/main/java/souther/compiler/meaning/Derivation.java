@@ -29,6 +29,7 @@ import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenAs;
+import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
@@ -2013,6 +2014,44 @@ public sealed interface Derivation {
         @Override
         public List<Derivation> oneOf() {
             return each;
+        }
+    }
+
+    /**
+     * What one application of a closure states, said to be that application: the one the call at
+     * {@code madeBy} makes {@code ordinal}th, counting from nought in the order a run makes them.
+     *
+     * <p>Concludes what {@code derived} concludes and nothing more, so whatever reads what is
+     * stated reads through it. What it adds is which application a step was read on, which the
+     * step cannot say: the body of a closure is one construct whichever application reads it, and
+     * its applications differ only in what each was handed. A reader explaining what the ways of
+     * choosing a case came from names the applications, and two of them stating alike are still
+     * two applications.
+     *
+     * @param madeBy  the call that applies the closure
+     * @param ordinal which of the call's applications this is
+     * @param derived what the application states
+     */
+    record AnApplication(ACallOfAnOperation madeBy, int ordinal, Derivation derived)
+            implements Derivation {
+
+        public AnApplication {
+            Objects.requireNonNull(madeBy, "an application is made by some call");
+            Objects.requireNonNull(derived, "and states something");
+            if (ordinal < 0) {
+                throw new IllegalArgumentException("applications are counted from nought: "
+                        + ordinal);
+            }
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(derived);
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(derived);
         }
     }
 

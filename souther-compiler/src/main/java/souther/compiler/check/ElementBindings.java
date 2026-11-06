@@ -6,6 +6,7 @@ import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.HeldIn;
+import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
@@ -13,6 +14,7 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -209,6 +211,29 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
      *  applies it ({@link ClosureEntries}). */
     public ClosureUses usesOf(BindingId binding) {
         return binding == null ? null : uses.get(binding);
+    }
+
+    /**
+     * Which calls of the language's operations handed {@code binding} what it holds, every one of
+     * them: none where none did, or where no source wrote the call.
+     *
+     * <p>Read off the applications of the closure it is a parameter of ({@link #usesOf}), each of
+     * which is a call, and not kept apart from them: which call handed what is a fact of the
+     * applications, and kept beside them it would be a second account of one fact that two bodies'
+     * bindings could be told apart by when nothing else tells them apart.
+     */
+    public Set<ACallOfAnOperation> handedBy(BindingId binding) {
+        ClosureUses of = usesOf(binding);
+        if (of == null) {
+            return Set.of();
+        }
+        Set<ACallOfAnOperation> by = new LinkedHashSet<>();
+        for (ClosureUses.Application each : of.applications()) {
+            if (each.held().contains(binding)) {
+                each.written().ifPresent(by::add);
+            }
+        }
+        return by;
     }
 
     public boolean isEmpty() {

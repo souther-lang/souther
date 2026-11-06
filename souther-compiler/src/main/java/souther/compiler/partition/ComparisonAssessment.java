@@ -30,8 +30,10 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.CaseExpansion;
 import souther.compiler.meaning.CasesOfALineAsked;
 import souther.compiler.meaning.DecidingCase;
+import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WrittenChoice;
 import souther.compiler.meaning.WrittenLine;
@@ -702,14 +704,47 @@ sealed interface ComparisonAssessment {
      * nobody worked out ({@link BlockReason.WhereALineDecidesNotWorkedOut}). The first is what a
      * row is asked to be at; the second is said at the line's places and asks no row of any case,
      * so neither speaks for the other.
+     *
+     * @param derivedBy how the statement was derived on each application it was read on, as the
+     *                  reading of it held them ({@link Cutting.Read.Several#derivedBy}); none
+     *                  where no line's cases were too many to be taken apart
      */
-    record Several(List<Part> parts) implements ComparisonAssessment {
+    record Several(List<Part> parts, List<Derivation> derivedBy)
+            implements ComparisonAssessment {
 
         public Several {
             parts = List.copyOf(parts);
+            derivedBy = List.copyOf(derivedBy);
             if (parts.isEmpty()) {
                 throw new IllegalArgumentException("several lines are some lines");
             }
+        }
+
+        /** Lines whose statement's derivation is not held. */
+        Several(List<Part> parts) {
+            this(parts, List.of());
+        }
+
+        /** Each line made into the parts {@code each} makes of it, of the statement derived as
+         *  these lines' statement was. */
+        Several eachPart(Function<Part, List<Part>> each) {
+            return new Several(parts.stream().flatMap(part -> each.apply(part).stream())
+                    .toList(), derivedBy);
+        }
+
+        /**
+         * What each line not worked out because its cases were too many was told of them: each
+         * case asked counted on its own, with what made the parts it is taken apart on read off
+         * the statement's derivations.
+         */
+        @Override
+        public List<CaseExpansion> caseExpansions() {
+            List<CaseExpansion.Counted> counted = new ArrayList<>();
+            for (Part part : parts) {
+                counted.addAll(part.expanded());
+            }
+            return counted.isEmpty() ? List.of()
+                    : CaseExpansion.Counted.attributedTo(counted, derivedBy);
         }
 
         /**
@@ -936,10 +971,23 @@ sealed interface ComparisonAssessment {
          *              None where it was not read along them
          * @param workedOut how far {@code cases} were shown to be ones the line decides in, which
          *              every reading of it is made with ({@link #readings})
+         * @param expanded for the line not worked out because its cases were more ways of choosing
+         *              one than are taken apart, how many ways each case asked stood for, each on
+         *              its own ({@link CaseExpansion.Counted}), and nothing yet of what made its
+         *              parts, which is read off the statement's derivations
+         *              ({@link Several#derivedBy}); empty for every other part. Beside what the
+         *              line comes to and no part of it
          */
         public record Part(PlaceOfALine id, ComparisonAssessment line, List<DecidingCase> cases,
                            Map<NumericTerm, EachWayItComesOut> comesOut,
-                           CasesWorkedOut workedOut) {
+                           CasesWorkedOut workedOut, List<CaseExpansion.Counted> expanded) {
+
+            /** A line whose cases nobody counted. */
+            public Part(PlaceOfALine id, ComparisonAssessment line, List<DecidingCase> cases,
+                        Map<NumericTerm, EachWayItComesOut> comesOut,
+                        CasesWorkedOut workedOut) {
+                this(id, line, cases, comesOut, workedOut, List.of());
+            }
 
             /** A line not read along the ways to its cases. */
             public Part(PlaceOfALine id, ComparisonAssessment line, List<DecidingCase> cases) {
@@ -967,6 +1015,7 @@ sealed interface ComparisonAssessment {
                 comesOut = Collections.unmodifiableMap(new LinkedHashMap<>(comesOut));
                 Objects.requireNonNull(id, "a line of a statement is one of its lines");
                 Objects.requireNonNull(workedOut, "cases are worked out or not");
+                expanded = List.copyOf(expanded);
                 cases = DecidingCase.eachByItsOwnCondition(cases);
                 if (line == null || line instanceof Several) {
                     throw new IllegalArgumentException(
@@ -976,6 +1025,15 @@ sealed interface ComparisonAssessment {
                     throw new IllegalArgumentException("what is no line is read in no case: "
                             + line);
                 }
+            }
+
+            /**
+             * This line not drawn in any case, as {@code stopped} says, and still the line it was:
+             * one not worked out for the number of its cases is so still, and what was counted of
+             * them is kept.
+             */
+            Part drawnInNoCase(Unread stopped) {
+                return new Part(id, stopped, List.of(), Map.of(), CasesWorkedOut.SHOWN, expanded);
             }
 
             /**
@@ -1059,10 +1117,10 @@ sealed interface ComparisonAssessment {
                 } else {
                     places = places.and(stopped.places());
                     where = where.and(stopped.where());
-                    each.add(new Part(part.id(), stopped, List.of()));
+                    each.add(part.drawnInNoCase(stopped));
                 }
             }
-            return allStopped ? new Unread(places, where) : new Several(each);
+            return allStopped ? new Unread(places, where) : new Several(each, derivedBy);
         }
 
         /**
@@ -1304,7 +1362,7 @@ sealed interface ComparisonAssessment {
                             aLine(part.line(), at, read, drawnByAnInvariant, aboutNoPosition,
                                     witnesses, part::working);
                 }, part.cases()))
-                .toList());
+                .toList(), lines.derivedBy());
     }
 
     /**
@@ -1394,10 +1452,8 @@ sealed interface ComparisonAssessment {
             InputReading reading,
             CountWitnesses.Lookup witnesses) {
         if (read instanceof Several several) {
-            return new Several(several.parts().stream()
-                    .flatMap(part -> aPartNarrowed(part, way, wayToACase, arrivals,
-                            drawnByAnInvariant, reading, witnesses).stream())
-                    .toList());
+            return several.eachPart(part -> aPartNarrowed(part, way, wayToACase, arrivals,
+                    drawnByAnInvariant, reading, witnesses));
         }
         return arrivedAt(read, way, arrivals, drawnByAnInvariant, reading, witnesses, true);
     }
@@ -1513,12 +1569,14 @@ sealed interface ComparisonAssessment {
         return switch (read) {
             case Unread unread -> new NothingArrivesAtItsStop(
                     List.copyOf(unread.why().keySet()));
-            case Several several -> new Several(several.parts().stream()
-                    .map(part -> part.line() instanceof Unread unread
+            // A line nothing arrives at the stop of is no line not worked out any more, so what
+            // was counted of its cases goes with the reason it was counted beside.
+            case Several several -> several.eachPart(part -> List.of(
+                    part.line() instanceof Unread unread
                             ? new Several.Part(part.id(), new NothingArrivesAtItsStop(
-                                    List.copyOf(unread.why().keySet())), List.of())
-                            : part)
-                    .toList());
+                                    List.copyOf(unread.why().keySet())), List.of(), Map.of(),
+                                    CasesWorkedOut.SHOWN, List.of())
+                            : part));
             default -> read;
         };
     }
@@ -1680,10 +1738,19 @@ sealed interface ComparisonAssessment {
                             : comingOutAlong(read, deciding, reading)));
         }
         if (!stoppedAt.isEmpty()) {
+            // And beside it, how many ways each case asked stood for, where their number is what
+            // stopped it: each case on its own, since one case's ways are none of another's.
+            List<CaseExpansion.Counted> expanded = new ArrayList<>();
+            for (CasesOfALineAsked.NotWorkedOut each : found.notWorkedOut()) {
+                each.counted().ifPresent(counted -> expanded.add(new CaseExpansion.Counted(
+                        part.id().ofItsCases(), cutting.of().named(), cutting.at().toString(),
+                        each.in(), counted)));
+            }
             out.add(new Several.Part(part.id(), new Unread(atEachOf(cutting.over(),
                     new BlockReason.WhereALineDecidesNotWorkedOut(stoppedAt.stream()
                             .map(CompositionBudget::figure).toList())),
-                    WhereAReadingStopped.ELSEWHERE), List.of()));
+                    WhereAReadingStopped.ELSEWHERE), List.of(), Map.of(), CasesWorkedOut.SHOWN,
+                    expanded));
         }
         if (out.isEmpty()) {
             out.add(new Several.Part(part.id(), new TurnsNothing(cutting), List.of()));
@@ -2302,6 +2369,16 @@ sealed interface ComparisonAssessment {
                  NothingArrivesAtItsStop _, RelationTurnsNothing _, NoFeasibleInput _,
                  Unread _ -> List.of();
         };
+    }
+
+    /**
+     * What a reader telling an author why a line was not worked out is told of its cases, where
+     * they were more ways of choosing one than are taken apart ({@link CaseExpansion}): beside
+     * what each place is left with, and never in it. None for a comparison of one line, whose
+     * cases are never taken apart.
+     */
+    default List<CaseExpansion> caseExpansions() {
+        return List.of();
     }
 
     /**

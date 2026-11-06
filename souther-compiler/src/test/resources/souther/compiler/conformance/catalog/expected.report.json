@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 27,
+  "schemaVersion" : 28,
   "compilerVersion" : "<version>",
   "status" : "partial",
   "weakening" : [ "rule_unread", "reachable_node_cases_unmeasured", "rewrite_undecided" ],
@@ -2272,7 +2272,8 @@
             "ordinal" : 3,
             "lowered" : 0
           }
-        } ]
+        } ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "complete",
@@ -2613,7 +2614,8 @@
           "unknown" : 0
         },
         "notDerivable" : [ "品目" ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -3553,7 +3555,8 @@
           "unknown" : 0
         },
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "complete",
@@ -4347,7 +4350,8 @@
             "ordinal" : 4,
             "lowered" : 0
           }
-        } ]
+        } ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "complete",
@@ -5539,7 +5543,8 @@
           "unknown" : 0
         },
         "notDerivable" : [ "指示.品目", "指示.受付日", "指示.締切", "指示.集荷時刻", "指示.記録時刻" ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -7253,7 +7258,8 @@
             "ordinal" : 3,
             "lowered" : 0
           }
-        } ]
+        } ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "complete",
@@ -8645,7 +8651,8 @@
           } ]
         } ],
         "notDerivable" : [ "指示.品目", "指示.受付日", "指示.締切", "指示.記録時刻" ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "complete",
@@ -9853,7 +9860,8 @@
           "unknown" : 0
         },
         "notDerivable" : [ "shelf.counts" ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "complete",
@@ -10460,7 +10468,8 @@
           "unknown" : 0
         },
         "notDerivable" : [ "shelf.counts" ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "complete",
@@ -10882,7 +10891,8 @@
           "unknown" : 0
         },
         "notDerivable" : [ "zone.count", "zone.zones" ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "complete",
@@ -11112,7 +11122,8 @@
           "unknown" : 0
         },
         "notDerivable" : [ "zone.count", "zone.zones" ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "complete",
@@ -11328,7 +11339,8 @@
           "unknown" : 0
         },
         "notDerivable" : [ "zone.count", "zone.zones" ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "complete",
@@ -12325,7 +12337,8 @@
             "declaredOn" : "CurrencyCode",
             "clause" : 0
           }
-        } ]
+        } ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "complete",

@@ -123,6 +123,9 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
             // is. The same rule reaches a consumer under the position as well, and the two are one
             // piece of news only while both are handles.
             REPORT + "#causes",
+            // The rule a line of which was not worked out for its many cases, beside what those
+            // cases were: the same rule the partition's own entries name for why.
+            REPORT + "#caseExpansionRow",
             REPORT + "#finding",
             REPORT + "#obligations",
             INSIDE_THE_PARTITION_IN_THE_DOCUMENT.spelt(),

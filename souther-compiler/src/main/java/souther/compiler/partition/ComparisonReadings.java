@@ -1279,7 +1279,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         return new Recursion(recursion.body().body(), walk.some().body(), called, step,
                 new ClosureApplications.Each(List.of(new ClosureApplications.Application(step,
                         WhereAnApplicationIsMade.nothingAsked(), Map.of(),
-                        metOn.madeWhere(made.stated()).stoppingIn(list, onward.denied())))));
+                        metOn.madeWhere(made.stated()).stoppingIn(list, onward.denied()),
+                        List.of()))));
     }
 
     /**

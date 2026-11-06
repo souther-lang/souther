@@ -31,6 +31,7 @@ import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.TypeSymbol;
@@ -746,6 +747,25 @@ public final class InputReads {
         public AppliedOver {
             Objects.requireNonNull(container, "a closure is applied over some container");
         }
+    }
+
+    /**
+     * The call of one of the language's operations whose applications of {@code block} these are,
+     * where one call some source wrote handed its parameters what they hold
+     * ({@link ElementBindings#handedBy}): of two, which made an application is not one.
+     *
+     * <p>For a reader telling which construct of the model made the applications, and for nothing
+     * that reads them: what an application states is the same whichever call made it, so no
+     * reading of one asks this.
+     */
+    public Optional<ACallOfAnOperation> handingCall(Core.Block block) {
+        Set<ACallOfAnOperation> by = new LinkedHashSet<>();
+        for (Core.Binder param : block.params()) {
+            if (param != null && param.binding() != null) {
+                by.addAll(names.handedBy(param.binding()));
+            }
+        }
+        return by.size() == 1 ? Optional.of(by.iterator().next()) : Optional.empty();
     }
 
     /**
