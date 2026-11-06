@@ -3488,9 +3488,8 @@ public final class Bodies {
                             fn == null ? null : SpecImplementation.align(spec, fn),
                             plan, Adequacy.readingOf(db, read, reading.value()), ruleReading,
                             Adequacy.meaningsOf(
-                                    analysed.get(spec.name()), read,
-                                    () -> Adequacy.readingOf(db, read, reading.value()),
-                                    reading.value()),
+                                    analysed.get(spec.name()), read, reading.value(),
+                                    ruleReading),
                             elements.getOrDefault(spec.name(), ElementBindings.NONE),
                             ValueDefinitions.of(analysed.get(spec.name()),
                                     Shapes.declarationNewtypes(db)))));
