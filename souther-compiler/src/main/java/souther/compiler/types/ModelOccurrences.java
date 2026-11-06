@@ -1,6 +1,8 @@
 package souther.compiler.types;
 
 import java.util.Collection;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -87,12 +89,29 @@ public record ModelOccurrences(List<ModelOccurrence> inOrder)
         private ModelOccurrences only;
         private final Set<ModelOccurrence> held = new LinkedHashSet<>();
 
+        /** The values of copies added whole, each by itself: one added again adds nothing, and
+         *  is not put into {@link #held} copy by copy again. Many readers hand one value to every
+         *  place they gather into. Made once a second value is added. */
+        private Set<ModelOccurrences> addedWhole;
+
         public Gathering add(ModelOccurrences copies) {
             if (copies.isEmpty()) {
                 return this;
             }
             if (only == null && held.isEmpty()) {
                 only = copies;
+                return this;
+            }
+            if (copies == only) {
+                return this;
+            }
+            if (addedWhole == null) {
+                addedWhole = Collections.newSetFromMap(new IdentityHashMap<>());
+                if (only != null) {
+                    addedWhole.add(only);
+                }
+            }
+            if (!addedWhole.add(copies)) {
                 return this;
             }
             spill();
