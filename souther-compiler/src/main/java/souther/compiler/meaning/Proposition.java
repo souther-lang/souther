@@ -147,8 +147,9 @@ public sealed interface Proposition {
             case Truth truth -> mayBeAnElementOf(truth.of(), container);
             case InCases cases -> mayBeAnElementOf(cases.of(), container);
             case Present present -> mayBeAnElementOf(present.of(), container);
-            case InTheStrings(InTheStrings.Strings.AtAPosition(var at), var _, var _, var _) ->
-                    isAnElementOf(new DecisionSubject.AnInput(at), container);
+            case InTheStrings(InTheStrings.Strings.AtAPosition(var at, var identity), var _,
+                    var _, var _) -> isAnElementOf(new DecisionSubject.AnInput(at, identity),
+                    container);
             // A piece is whatever the statement it is read inside says it is, which is about the
             // string and no container's element.
             case InTheStrings _ -> false;
@@ -413,17 +414,22 @@ public sealed interface Proposition {
              * string are is read off the string, and a string that no row writes is no string a
              * statement about its pieces divides.
              */
-            record AtAPosition(TermPath at) implements Strings {
+            record AtAPosition(TermPath at, ValueIdentity identity) implements Strings {
 
                 public AtAPosition {
-                    if (at == null) {
+                    if (at == null || identity == null) {
                         throw new IllegalArgumentException("a string stands at some position");
                     }
                 }
 
+                /** The string at {@code at}, read through no name for an element. */
+                public AtAPosition(TermPath at) {
+                    this(at, ValueIdentity.AT_THE_POSITION);
+                }
+
                 @Override
                 public String spelled() {
-                    return at.toString();
+                    return at + identity.spelled();
                 }
             }
 

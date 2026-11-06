@@ -83,26 +83,17 @@ public final class Conclusion {
         private final Map<Spelling, Long> reserved = new HashMap<>();
         /** The figure parts are counted up to, and held at one past. */
         private final long mostParts;
-        /** Which elements the names each step was read off stood for, by the step; a step not
-         *  here was read off no name for an element. */
-        private final Map<Derivation, ElementsNamed> named;
         private int unread;
 
         private Shared(Optional<ModelOccurrence> where, boolean reusing) {
-            this(where, reusing, PARTS, Map.of());
+            this(where, reusing, PARTS);
         }
 
         private Shared(Optional<ModelOccurrence> where, boolean reusing,
                        CompositionBudget countedTo) {
-            this(where, reusing, countedTo, Map.of());
-        }
-
-        private Shared(Optional<ModelOccurrence> where, boolean reusing,
-                       CompositionBudget countedTo, Map<Derivation, ElementsNamed> named) {
             this.where = where;
             this.reusing = reusing;
             this.mostParts = countedTo.maximum();
-            this.named = named;
         }
     }
 
@@ -116,18 +107,6 @@ public final class Conclusion {
     /** A concluding of a condition at {@code where}, where the reader knows it. */
     public Conclusion(Optional<ModelOccurrence> where) {
         this(new Shared(where, false), Map.of());
-    }
-
-    /**
-     * A concluding of a condition at {@code where}, each step of {@code named} told which value
-     * at each element's position it is about: the one the names it was read off stood for
-     * ({@link ReadThroughNames}).
-     *
-     * @param named by the step, by identity: a step and its conclusion are what is kept by identity
-     *              here
-     */
-    public Conclusion(Optional<ModelOccurrence> where, Map<Derivation, ElementsNamed> named) {
-        this(new Shared(where, false, PARTS, named), Map.of());
     }
 
     private Conclusion(Shared shared, Map<ACarriedValue, Boolean> supposed) {
@@ -147,6 +126,31 @@ public final class Conclusion {
      */
     public static Conclusion reusing() {
         return new Conclusion(new Shared(Optional.empty(), true), Map.of());
+    }
+
+    /**
+     * {@code element}, what a quantifier over {@code container} says of its element, where no call
+     * said which names it was handed: every part at that element told a name a part nothing read
+     * ({@link ReadThroughNames#ownedBy}).
+     */
+    Proposition ownedBy(DecisionSubject container, Proposition element) {
+        return ReadThroughNames.ownedBy(container, _ -> true, element, this::twoElementsAsOne);
+    }
+
+    /** What {@code step} concludes of the element of {@code container}, held to being the
+     *  element of a call handed {@code given} ({@link Derivation.OfItsOwnElement}). */
+    Proposition ofItsOwnElement(DecisionSubject container, ElementsNamed given, Derivation step) {
+        return ReadThroughNames.ownedBy(container, given::stoodFor, of(step),
+                this::twoElementsAsOne);
+    }
+
+    /**
+     * What {@code step} concludes, read through {@code names} ({@link Derivation.ReadThrough}):
+     * each number and subject at an element of a container they hold told the name that stood
+     * for it, and a part at one more than one name stood for a part nothing read.
+     */
+    Proposition readThrough(Derivation step, ElementsNamed names) {
+        return ReadThroughNames.readThrough(of(step), names, this::twoElementsAsOne);
     }
 
     /** This concluding, with what {@code carried} stands for supposed to have come out as
@@ -176,10 +180,6 @@ public final class Conclusion {
             read = shared.reading.pop();
         }
         out = withinTheParts(out);
-        ElementsNamed named = shared.named.get(step);
-        if (named != null) {
-            out = ReadThroughNames.readThrough(out, named, this::twoElementsAsOne);
-        }
         if (shared.reusing) {
             Map<ACarriedValue, Optional<Boolean>> how = new HashMap<>();
             read.forEach(each -> how.put(each, Optional.ofNullable(supposed.get(each))));
@@ -448,9 +448,7 @@ public final class Conclusion {
      * derivation concludes is made here, so no reading of two elements reaches a reader as one.
      */
     Proposition someElement(DecisionSubject container, Proposition element) {
-        // What stands at the container's element is the quantifier's element, whichever name
-        // the closure it was written with gave it.
-        Proposition owned = ReadThroughNames.ownedBy(container, element);
+        Proposition owned = ownedBy(container, element);
         return Proposition.Some.quantifiesOver(container, owned)
                 ? twoElementsAsOne()
                 : new Proposition.Some(container, owned, true);

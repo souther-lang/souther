@@ -9,6 +9,7 @@ import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.RunSource;
@@ -297,11 +298,12 @@ public sealed interface Derivation {
             Objects.requireNonNull(read, "a comparison is read as another");
         }
 
-        /** What {@code how} was read by, past every comparison it was read as. */
+        /** What {@code how} was read by, past every comparison it was read as and the names it
+         *  was read through ({@link ReadThrough}). */
         public static Derivation through(Derivation how) {
-            Derivation out = how;
+            Derivation out = readOff(how);
             while (out instanceof Restated(var inner)) {
-                out = inner;
+                out = readOff(inner);
             }
             return out;
         }
@@ -1111,7 +1113,9 @@ public sealed interface Derivation {
                 };
             }
 
-            boolean reads(LawProposition<DeclaredArgument> law, Derivation read) {
+            // Each of these asks which rule made the step, past the names it was read through.
+            boolean reads(LawProposition<DeclaredArgument> law, Derivation step) {
+                Derivation read = readOff(step);
                 if (read instanceof Stopped) {
                     return true;
                 }
@@ -1193,7 +1197,8 @@ public sealed interface Derivation {
              * is some element meeting it in its turn.
              */
             private boolean meets(LawProposition.SomeElement<DeclaredArgument> some,
-                                  Derivation read) {
+                                  Derivation step) {
+                Derivation read = readOff(step);
                 return switch (read) {
                     case Stopped _ -> true;
                     // What the container holding something was read as is a reading of what made
@@ -1260,7 +1265,9 @@ public sealed interface Derivation {
              * the two numbers, it is of the positions the call has them at — or on each of the
              * cases a value it is of is chosen by, as a comparison is.
              */
-            private boolean isTheSame(LawProposition.Same<DeclaredArgument> law, Derivation read) {
+            private boolean isTheSame(LawProposition.Same<DeclaredArgument> law,
+                                      Derivation step) {
+                Derivation read = readOff(step);
                 return switch (read) {
                     case Stopped _ -> true;
                     case TheSameValue(var part, var one, var other) -> part.equals(law)
@@ -1284,7 +1291,8 @@ public sealed interface Derivation {
              * comparison in its turn.
              */
             private boolean compares(LawProposition.Compared<DeclaredArgument> law,
-                                     Derivation read) {
+                                     Derivation step) {
+                Derivation read = readOff(step);
                 if (read instanceof Stopped) {
                     return true;
                 }
@@ -3606,10 +3614,7 @@ public sealed interface Derivation {
              *  answers on is how many meet it ({@link Derivation.WhereItIsAnswered}), or of their
              *  different values. */
             public Quantity counted(Conclusion numbering) {
-                // What stands at the container's element is the element counted, as a
-                // quantifier's is ({@link ReadThroughNames#ownedBy}).
-                Proposition meeting = Proposition.whereItHolds(
-                        ReadThroughNames.ownedBy(container, numbering.of(ofTheElement)));
+                Proposition meeting = Proposition.whereItHolds(numbering.of(ofTheElement));
                 return different.<Quantity>map(values -> new Quantity.HowManyDifferentMeet(
                         container, values.at(), values.ofEachValue()
                                 ? new Quantity.HowManyDifferentMeet.Selection.OfEachValue(meeting)
@@ -3665,6 +3670,92 @@ public sealed interface Derivation {
         @Override
         public Proposition conclusion(Conclusion numbering) {
             return new Proposition.Always(holds);
+        }
+    }
+
+    /**
+     * {@code step}, read off an expression through names that stood for elements of containers
+     * ({@code names}): what it states of a value at an element's position is about the element its
+     * name stood for ({@link ReadThroughNames}).
+     *
+     * <p>A step and not a note beside one, so that whoever concludes the derivation — the reading
+     * that tries candidates, the one that files what a body states, the one that asks again on each
+     * application — concludes the same values. Told nowhere, a part at an element's position would
+     * be the one value at the position, and two names for two elements of one container one value.
+     */
+    record ReadThrough(Derivation step, ElementsNamed names) implements Derivation {
+
+        public ReadThrough {
+            Objects.requireNonNull(step, "a step is read through names");
+            if (names == null || names.isEmpty()) {
+                throw new IllegalArgumentException("a step read through no name is that step");
+            }
+        }
+
+        /** {@code step}, read through {@code names} — {@code step} itself where they are none. */
+        public static Derivation of(Derivation step, ElementsNamed names) {
+            return names.isEmpty() ? step : new ReadThrough(step, names);
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.readThrough(step, names);
+        }
+
+        /** It states what its step states, of the values the names stood for. */
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(step);
+        }
+    }
+
+    /**
+     * {@code step}, what a quantifier or a count over {@code container} states of the element it
+     * goes over, held to that element being its own: {@code given} are the elements the names
+     * free in the call that goes over it stood for, the names it was handed from outside.
+     *
+     * <p>At the element's position a name it was not given is one its own closures bound, read
+     * through a call inside it, and is its element whatever it was called; a name it was given is
+     * another element of the container, which a statement of its element has no place for, and
+     * that part is a part nothing read ({@link ReadThroughNames#ownedBy}). Held by the call that
+     * knows which names it was handed, and not guessed from where a name stands.
+     */
+    record OfItsOwnElement(DecisionSubject container, ElementsNamed given, Derivation step)
+            implements Derivation {
+
+        public OfItsOwnElement {
+            Objects.requireNonNull(container, "an element is of a container");
+            Objects.requireNonNull(given, "a call was handed some names or none");
+            Objects.requireNonNull(step, "what is stated of the element");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.ofItsOwnElement(container, given, step);
+        }
+
+        /** It states what its step states, of the element it goes over. */
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(step);
+        }
+    }
+
+    /**
+     * {@code step}, past the names it was read through ({@link ReadThrough}) and the element it is
+     * held to ({@link OfItsOwnElement}): the rule that made it, for a reader that asks which rule
+     * that was.
+     */
+    static Derivation readOff(Derivation step) {
+        Derivation out = step;
+        while (true) {
+            if (out instanceof ReadThrough(Derivation read, var _)) {
+                out = read;
+            } else if (out instanceof OfItsOwnElement(var _, var _, Derivation read)) {
+                out = read;
+            } else {
+                return out;
+            }
         }
     }
 

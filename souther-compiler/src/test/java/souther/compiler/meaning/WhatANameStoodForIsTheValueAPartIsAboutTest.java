@@ -1,5 +1,6 @@
 package souther.compiler.meaning;
 
+import net.unit8.notation199x.pattern.PatternMeaning;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.ElementsNamed;
@@ -32,6 +33,7 @@ class WhatANameStoodForIsTheValueAPartIsAboutTest {
     private static final TermPath ITEMS = TermPath.of("x").then("items");
     private static final TermPath N = ITEMS.element().then("n");
     private static final TermPath PAID = ITEMS.element().then("paid");
+    private static final TermPath TEXT = ITEMS.element().then("text");
     private static final TermPath GATE = TermPath.of("x").then("gate");
 
     private static final BindingOwner OWNER = new BindingOwner.OfValue("probe", "f");
@@ -120,16 +122,21 @@ class WhatANameStoodForIsTheValueAPartIsAboutTest {
     }
 
     /**
-     * Inside a quantifier over the items, what stands at the item is the quantifier's element,
-     * whatever name it was told; what stands at an element of another container keeps its name.
+     * Inside a quantifier over the items handed {@code a} from outside, what stands at the item
+     * untold, or told {@code b}, a name it was not handed and so its own closure's, is the
+     * quantifier's element; a part there told {@code a} is another element, which is a part
+     * nothing read; what stands at an element of another container keeps its name.
      */
     @Test
-    void whatStandsAtAQuantifiersElementIsTheQuantifiers() {
+    void aQuantifiersElementIsItsOwnAndANameItWasHandedIsAnotherElement() {
         TermPath other = TermPath.of("x").then("groups").element().then("m");
-        Proposition element = Proposition.all(List.of(below(N, of(A)), below(other, of(B))));
+        Proposition element = Proposition.all(List.of(below(N, ValueIdentity.AT_THE_POSITION),
+                truth(PAID, of(B)), below(N.then("m"), of(A)), below(other, of(B))));
         assertEquals(Proposition.all(List.of(below(N, ValueIdentity.AT_THE_POSITION),
+                        truth(PAID, ValueIdentity.AT_THE_POSITION), TWO_AS_ONE,
                         below(other, of(B)))),
-                ReadThroughNames.ownedBy(new DecisionSubject.AnInput(ITEMS), element));
+                ReadThroughNames.ownedBy(new DecisionSubject.AnInput(ITEMS), A::equals, element,
+                        () -> TWO_AS_ONE));
     }
 
     /**
@@ -155,6 +162,59 @@ class WhatANameStoodForIsTheValueAPartIsAboutTest {
         assertEquals(Proposition.all(List.of(below(N, ValueIdentity.AT_THE_POSITION),
                         truth(PAID, ValueIdentity.AT_THE_POSITION))),
                 ReadThroughNames.atThePositions(told));
+    }
+
+    /**
+     * A value inside an element of a container another element holds is told the name of the
+     * inner element and no other: where none stood for it, it is the element of whatever goes over
+     * it, and the outer element's name, which says only which outer element it is in, is not told.
+     */
+    @Test
+    void aValueIsToldTheNameOfItsInnermostElementOnly() {
+        TermPath inner = ITEMS.element().then("subs").element().then("m");
+        Proposition stated = below(inner, ValueIdentity.AT_THE_POSITION);
+        assertSame(stated, readThrough(stated, named(A)));
+    }
+
+    /** A string at an element's position is a subject as any other: told the name, and a part
+     *  nothing read where two names stood for the element. */
+    @Test
+    void aStringAtAnElementIsToldItsName() {
+        StringsLanguage starts = new StringsLanguage(PatternMeaning.text("X"));
+        Proposition stated = new Proposition.InTheStrings(
+                new Proposition.InTheStrings.Strings.AtAPosition(TEXT), starts, true);
+        assertEquals(new Proposition.InTheStrings(
+                        new Proposition.InTheStrings.Strings.AtAPosition(TEXT, of(A)), starts, true),
+                readThrough(stated, named(A)));
+        assertSame(TWO_AS_ONE, readThrough(stated, named(A, B)));
+    }
+
+    /** How many of some statements hold is told what each statement is told. */
+    @Test
+    void aCountOfStatementsIsToldWhatItsStatementsAre() {
+        Proposition stated = Proposition.SoManyHold.counting(List.of(
+                below(N, ValueIdentity.AT_THE_POSITION), below(GATE, ValueIdentity.AT_THE_POSITION)),
+                List.of(1, 1), List.of(1));
+        assertEquals(Proposition.SoManyHold.counting(List.of(below(N, of(A)),
+                        below(GATE, ValueIdentity.AT_THE_POSITION)), List.of(1, 1), List.of(1)),
+                readThrough(stated, named(A)));
+    }
+
+    /**
+     * A count of the elements of a container inside an element is told which element's container
+     * it counts, and what it asks of each element it counts is of its own element.
+     */
+    @Test
+    void aCountIsToldWhoseContainerItCounts() {
+        TermPath subs = ITEMS.element().then("subs");
+        DecisionSubject.AnInput counted = new DecisionSubject.AnInput(subs);
+        Proposition each = below(subs.element().then("m"), ValueIdentity.AT_THE_POSITION);
+        Proposition stated = Proposition.compared(new Relation.Affine(LinearForm.atomMinusConstant(
+                new Quantity.HowManyMeet(counted, each), ExactRatio.ONE), Rel.GE), true);
+        assertEquals(Proposition.compared(new Relation.Affine(LinearForm.atomMinusConstant(
+                        new Quantity.HowManyMeet(new DecisionSubject.AnInput(subs, of(A)), each),
+                        ExactRatio.ONE), Rel.GE), true),
+                readThrough(stated, named(A)));
     }
 
     /** Which value at a position: the row's where no name stood for its element, the one name's

@@ -251,9 +251,15 @@ public enum CompositionBudget {
      */
     TIMES_THE_RULES_ARE_ASKED_AGAIN(2_000),
 
-    /** How many values of one position on the way to a border are tried. Its outcome is not a
-     *  composing that stopped: the row is composed, and what was not composed against is one
-     *  condition on the way ({@link ReachabilityGap}). */
+    /**
+     * How many values of one position on the way to a border are tried. On the way its outcome is
+     * not a composing that stopped: the row is composed, and what was not composed against is one
+     * condition on the way ({@link ReachabilityGap}).
+     *
+     * <p>The same search places the numbers read beside the elements of a count, and there it is
+     * a search for the count's level that came back short of the values it did not try, said as
+     * any search cut short is ({@link Generator}).
+     */
     VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT(8),
 
     /**

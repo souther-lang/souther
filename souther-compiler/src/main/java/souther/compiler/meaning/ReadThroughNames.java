@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -64,24 +65,31 @@ public final class ReadThroughNames {
     }
 
     /**
-     * {@code element}, what a quantifier over {@code container} says of its element, with what
-     * stands at that element told it is the quantifier's: no name the closure gave it.
+     * {@code element}, what a shape over {@code container} — a quantifier, a count — says of the
+     * element it goes over, held to that element being the shape's own: at it, a part told a name
+     * the shape was {@code given} from outside is {@code twoAsOne}, and one told another name is
+     * the shape's element.
      *
-     * <p>The body may have been concluded as a part read through the closure's own parameter, and
-     * then the element is told that name; inside the quantifier it is the quantifier's element,
-     * whatever it was called. A name for another element of the container than the quantifier's
-     * is no name this meets: the reading refuses a body that reads one, where it knows which name
-     * the closure binds and which it was given from outside.
+     * <p>What the shape's closure binds is read inside the shape's own scope and told no name, or,
+     * read through a call inside the shape, the name the closure gave it — a name the shape was
+     * not handed. A name it was handed is another element of the container, which a statement of
+     * the shape's element has no place for. A shape that does not say what it was handed is
+     * handed every name.
      */
-    static Proposition ownedBy(DecisionSubject container, Proposition element) {
+    static Proposition ownedBy(DecisionSubject container, Predicate<BindingId> given,
+                               Proposition element, Supplier<Proposition> twoAsOne) {
         if (!(container instanceof DecisionSubject.AnInput(TermPath at, var _))) {
             return element;
         }
         TermPath own = at.element();
         TermPath key = at.key();
-        return told(element, (position, had) -> position.isAtOrUnder(own)
-                        || position.isAtOrUnder(key) ? ValueIdentity.AT_THE_POSITION : had,
-                () -> element);
+        return told(element, (position, had) -> {
+            if (!(had instanceof ValueIdentity.OfAnElement(BindingId name))
+                    || !(position.isAtOrUnder(own) || position.isAtOrUnder(key))) {
+                return had;
+            }
+            return given.test(name) ? null : ValueIdentity.AT_THE_POSITION;
+        }, twoAsOne);
     }
 
     /**
@@ -205,22 +213,18 @@ public final class ReadThroughNames {
         };
     }
 
-    /** The names that stood for the innermost element of a container {@code position} is in
-     *  that {@code names} holds, or null where it is in none of them. */
+    /**
+     * The names {@code names} holds for the innermost element of a container {@code position} is
+     * in, or null where it holds none for that one or the position is in no element.
+     *
+     * <p>That element and no outer one: a value inside an element of a container held by another
+     * element is a value of the inner element, and the outer element's name says which outer
+     * element it is in and not which inner one. Where no name stood for the inner element it is the
+     * element of whatever goes over it, and is told nothing.
+     */
     private static Set<BindingId> innermost(TermPath position, ElementsNamed names) {
-        List<TermPath.Step> steps = position.steps();
-        for (int at = steps.size() - 1; at >= 0; at--) {
-            HeldIn.Part part = partAt(steps.get(at));
-            if (part == null) {
-                continue;
-            }
-            Set<BindingId> stood = names.named().get(new ElementsNamed.Slot(
-                    new InputReads.ContainerOf.AtAPosition(position.prefix(at)), part));
-            if (stood != null) {
-                return stood;
-            }
-        }
-        return null;
+        ElementsNamed.Slot slot = innermostSlot(position);
+        return slot == null ? null : names.named().get(slot);
     }
 
     private static Proposition told(Proposition stated, Telling telling,
@@ -289,12 +293,38 @@ public final class ReadThroughNames {
                 yield container == some.container() && element == some.ofTheElement() ? stated
                         : new Proposition.Some(container, element, some.holds());
             }
-            // Shapes that hold their positions as what they are over: the elements a count or a
-            // search walks, the strings a relation reads, the ways a statement is written. Those
-            // are the shape's own, as a quantifier's element is, and are left as they stand.
-            case Proposition.InTheStrings _, Proposition.StringInside _,
-                 Proposition.LastToHold _, Proposition.OfTheWays _, Proposition.Carried _,
-                 Proposition.SomeReachable _, Proposition.SoManyHold _ -> stated;
+            // A string at a position is a subject as any other is.
+            case Proposition.InTheStrings strings -> {
+                if (!(strings.of() instanceof Proposition.InTheStrings.Strings.AtAPosition(
+                        TermPath at, ValueIdentity had))) {
+                    yield stated;
+                }
+                ValueIdentity identity = telling.of(at, had);
+                yield identity == null ? twoAsOne.get() : identity.equals(had) ? stated
+                        : new Proposition.InTheStrings(
+                                new Proposition.InTheStrings.Strings.AtAPosition(at, identity),
+                                strings.accepts(), strings.holds());
+            }
+            // A string inside another is a relation of the two strings' values.
+            case Proposition.StringInside inside -> {
+                Quantity inner = told(inside.inner(), telling);
+                Quantity outer = told(inside.outer(), telling);
+                yield inner == null || outer == null ? twoAsOne.get()
+                        : inner == inside.inner() && outer == inside.outer() ? stated
+                        : new Proposition.StringInside(inner, outer, inside.where(),
+                                inside.holds());
+            }
+            // How many of some statements hold is of whatever those statements are of.
+            case Proposition.SoManyHold many -> {
+                List<Proposition> statements = eachTold(many.statements(), telling, twoAsOne);
+                yield statements == null ? stated : Proposition.SoManyHold.counting(statements,
+                        many.weights(), many.admitted());
+            }
+            // Shapes over elements of their own: the end a walk keeps, the nodes a search
+            // reaches, the ways a statement is written. What they go over is theirs, as a
+            // quantifier's element is, and they are left as they stand.
+            case Proposition.LastToHold _, Proposition.OfTheWays _, Proposition.Carried _,
+                 Proposition.SomeReachable _ -> stated;
         };
     }
 
@@ -337,19 +367,9 @@ public final class ReadThroughNames {
     private static Relation told(Relation relation, Telling telling) {
         return switch (relation) {
             case Relation.Affine(LinearForm<Quantity> form, Rel rel) -> {
-                Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
-                boolean changed = false;
-                for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
-                    Quantity term = told(each.getKey(), telling);
-                    // Two numbers told to be one are no form this says.
-                    if (term == null || coefs.containsKey(term)) {
-                        yield null;
-                    }
-                    changed |= term != each.getKey();
-                    coefs.put(term, each.getValue());
-                }
-                yield changed ? new Relation.Affine(new LinearForm<>(form.constant(), coefs), rel)
-                        : relation;
+                LinearForm<Quantity> told = told(form, telling);
+                yield told == null ? null : told == form ? relation
+                        : new Relation.Affine(told, rel);
             }
             case Relation.Ordered(DecisionAtom term, var at, Rel rel) -> {
                 Quantity told = told(term, telling);
@@ -359,14 +379,54 @@ public final class ReadThroughNames {
         };
     }
 
-    /** {@code quantity} told which value it is, or null where it is no one: a number of the input.
-     *  A number of another kind — a count, an end a walk keeps — is over elements of its own. */
-    private static Quantity told(Quantity quantity, Telling telling) {
-        if (quantity instanceof DecisionAtom.OfTheInput(NumericTerm term, ValueIdentity had)) {
-            ValueIdentity told = telling.of(term.subjectPath(), had);
-            return told == null ? null : told.equals(had) ? quantity
-                    : new DecisionAtom.OfTheInput(term, told);
+    /** {@code form} with each of its numbers told which value it is, itself where none is told
+     *  anything, or null where one is no one or two are told to be one number. */
+    private static LinearForm<Quantity> told(LinearForm<Quantity> form, Telling telling) {
+        Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+        boolean changed = false;
+        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+            Quantity term = told(each.getKey(), telling);
+            // Two numbers told to be one are no form this says.
+            if (term == null || coefs.containsKey(term)) {
+                return null;
+            }
+            changed |= term != each.getKey();
+            coefs.put(term, each.getValue());
         }
-        return quantity;
+        return changed ? new LinearForm<>(form.constant(), coefs) : form;
+    }
+
+    /**
+     * {@code quantity} told which value it is, or null where it is no one: a number of the input,
+     * the numbers a remainder is of, the container a count counts the elements of. What a count
+     * asks of each element is about its own element, as a quantifier's is; a number of another
+     * kind — an end a walk keeps, the values a count takes apart — is over elements of its own.
+     */
+    private static Quantity told(Quantity quantity, Telling telling) {
+        return switch (quantity) {
+            case DecisionAtom.OfTheInput(NumericTerm term, ValueIdentity had) -> {
+                ValueIdentity told = telling.of(term.subjectPath(), had);
+                yield told == null ? null : told.equals(had) ? quantity
+                        : new DecisionAtom.OfTheInput(term, told);
+            }
+            case Quantity.RemainderOfADividend(var operation, LinearForm<Quantity> dividend,
+                                               var divisor) -> {
+                LinearForm<Quantity> told = told(dividend, telling);
+                yield told == null ? null : told == dividend ? quantity
+                        : new Quantity.RemainderOfADividend(operation, told, divisor);
+            }
+            case Quantity.HowManyMeet(DecisionSubject container, Proposition ofTheElement) -> {
+                DecisionSubject told = told(container, telling);
+                if (told == null) {
+                    yield null;
+                }
+                Proposition element = told(ofTheElement, ownElementLeftAlone(container, telling),
+                        () -> null);
+                yield element == null ? null
+                        : told == container && element == ofTheElement ? quantity
+                        : new Quantity.HowManyMeet(told, element);
+            }
+            default -> quantity;
+        };
     }
 }

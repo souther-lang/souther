@@ -446,7 +446,7 @@ final class AStatementAtARow {
             case Proposition.InCases(DecisionSubject.AnInput(TermPath at, var _), CasesLeft _,
                                      boolean _, Spelling _) -> List.of(at);
             case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtAPosition(
-                    TermPath at), StringsLanguage _, boolean _, Spelling _) -> List.of(at);
+                    TermPath at, var _), StringsLanguage _, boolean _, Spelling _) -> List.of(at);
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
                                        DecisionSubject.AnInput(TermPath other, var _), boolean _,
                                        Spelling _) -> List.of(one, other);
@@ -1329,7 +1329,7 @@ final class AStatementAtARow {
                                        boolean holds, Spelling _) ->
                     heldAs(holds, theSame(one, other, row));
             case Proposition.InTheStrings(
-                    Proposition.InTheStrings.Strings.AtAPosition(TermPath at),
+                    Proposition.InTheStrings.Strings.AtAPosition(TermPath at, var _),
                     StringsLanguage language, boolean holds, Spelling _) ->
                     switch (textAt(at, row)) {
                         case TextAtARow.Written(String text) -> heldAs(holds, Recognizer

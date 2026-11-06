@@ -576,7 +576,8 @@ final class DemandReading {
             List<Derivation.APieceInALanguage> held = new ArrayList<>();
             if (pulled != null) {
                 for (Pullback.Leaf leaf : pulled.leaves()) {
-                    if (leaf.step() instanceof Derivation.APieceInALanguage piece) {
+                    if (Derivation.readOff(leaf.step())
+                            instanceof Derivation.APieceInALanguage piece) {
                         held.add(piece);
                     }
                 }

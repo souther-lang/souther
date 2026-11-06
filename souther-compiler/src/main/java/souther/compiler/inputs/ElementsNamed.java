@@ -1,8 +1,8 @@
 package souther.compiler.inputs;
 
+import souther.compiler.collect.InTheOrderGiven;
 import souther.compiler.types.BindingId;
 
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -58,9 +58,9 @@ public record ElementsNamed(Map<Slot, Set<BindingId>> named) {
                 throw new IllegalArgumentException("a slot read is read through some name: "
                         + slot);
             }
-            copy.put(slot, Collections.unmodifiableSet(new LinkedHashSet<>(names)));
+            copy.put(slot, InTheOrderGiven.set(names));
         });
-        named = Collections.unmodifiableMap(copy);
+        named = InTheOrderGiven.map(copy);
     }
 
     /** What {@code names}, in the order met, say. */
@@ -111,5 +111,15 @@ public record ElementsNamed(Map<Slot, Set<BindingId>> named) {
     /** Whether nothing was read through a name for an element. */
     public boolean isEmpty() {
         return named.isEmpty();
+    }
+
+    /** Whether {@code name} stood for an element of some container here. */
+    public boolean stoodFor(BindingId name) {
+        for (Set<BindingId> each : named.values()) {
+            if (each.contains(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -780,7 +780,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " computed. The figure it was is the answer, and the stop of the"
                             + " call names it"),
             Map.entry("souther.compiler.partition.Pullback#<init>("
-                            + "Lsouther/compiler/inputs/InputReading;Ljava/util/Optional;)V",
+                            + "Lsouther/compiler/inputs/InputReading;Ljava/util/Optional;"
+                            + "Lsouther/compiler/inputs/ElementsNamed;)V",
                     "how many readings one reading of a condition makes in all, which every split"
                             + " takes its readings from and past which it says which figure"),
             // What a step of a reading concludes, written out. Past the figure the step is
@@ -892,8 +893,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "omits no work a reader is owed: past either figure the count is held whole,"
                             + " every choice still what it states"),
             Map.entry("souther.compiler.meaning.Conclusion$Shared#<init>("
-                            + "Ljava/util/Optional;ZLsouther/compiler/partition/CompositionBudget;"
-                            + "Ljava/util/Map;)V",
+                            + "Ljava/util/Optional;ZLsouther/compiler/partition/CompositionBudget;)V",
                     "how many parts a concluding counts a statement to and no further than one"
                             + " past, handed in by whoever asks"),
             Map.entry("souther.compiler.meaning.Proposition$SoManyHold#writtenOutForAReader()"

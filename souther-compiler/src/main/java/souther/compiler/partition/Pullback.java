@@ -100,6 +100,7 @@ import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.meaning.TruthTable;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhichCase;
+import souther.compiler.meaning.ValueIdentity;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.meaning.WrittenOfANode;
 import souther.compiler.meaning.ACarriedValue;
@@ -331,6 +332,16 @@ final class Pullback {
     private final InputReading read;
     private final Optional<ModelOccurrence> where;
     /**
+     * Which elements the names free in the innermost call being read about its own elements stood
+     * for — the expression read, outside every such call. A part is told only these: a name the
+     * call's closures bind is the element the call goes over, its own, and stands at the element's
+     * position untold, so that a name told there is always one given from outside
+     * ({@link #inTheScopeOf}).
+     */
+    private ElementsNamed freeInTheScope;
+    /** Which elements the names free in the expression read stood for ({@link #pulled}). */
+    private final ElementsNamed freeInTheRoot;
+    /**
      * What a value a row stands a dependency in for is, read as the decision table reads it: one
      * account of which answer a call is, so a column of the table and a part of what a condition
      * states are one subject.
@@ -554,8 +565,20 @@ final class Pullback {
                             Derivation atANode, ConditionJoin how) implements Supposed {}
 
     private Pullback(InputReading read, Optional<ModelOccurrence> where) {
+        this(read, where, ElementsNamed.NONE);
+    }
+
+    /**
+     * A reading of an expression in whose names {@code freeInTheRoot} are the elements the names
+     * free in it — bound outside it — stood for: what each part read through one of those is
+     * about ({@link #leaf}).
+     */
+    private Pullback(InputReading read, Optional<ModelOccurrence> where,
+                     ElementsNamed freeInTheRoot) {
         this.read = read;
         this.where = where;
+        this.freeInTheRoot = freeInTheRoot;
+        this.freeInTheScope = freeInTheRoot;
         this.subjects = new DecisionSubjects(read.domain(), read.rules().symbols(),
                 read.rules().declarations(), read.rules().newtypes(), KeptTruths.readIn(read));
     }
@@ -617,19 +640,20 @@ final class Pullback {
      */
     static Pulled ofATruth(Core truth, InputReads reads, InputReading read,
                            Optional<ModelOccurrence> where) {
-        Pullback reading = new Pullback(read, where);
-        return reading.pulled(reading.observe(truth, AnswerAspect.TRUTH, reads),
-                reading.namesIn(truth, reads));
+        Pullback reading = new Pullback(read, where, namesIn(truth, reads, read));
+        return reading.pulled(reading.observe(truth, AnswerAspect.TRUTH, reads));
     }
 
     /** Which elements the names in {@code e} stand for, read where {@code reads} reads it. */
-    private ElementsNamed namesIn(Core e, InputReads reads) {
+    private static ElementsNamed namesIn(Core e, InputReads reads, InputReading read) {
         return reads.elementsNamedIn(e, read.rules().newtypes());
     }
 
     /** Which elements the names on either side of {@code comparison} stand for. */
-    private ElementsNamed namesIn(StatedComparison comparison, InputReads reads) {
-        return namesIn(comparison.left(), reads).and(namesIn(comparison.right(), reads));
+    private static ElementsNamed namesIn(StatedComparison comparison, InputReads reads,
+                                         InputReading read) {
+        return namesIn(comparison.left(), reads, read)
+                .and(namesIn(comparison.right(), reads, read));
     }
 
     /**
@@ -664,17 +688,15 @@ final class Pullback {
     /** What {@code optional} holding a value states. */
     static Pulled ofAPresence(Core optional, InputReads reads, InputReading read,
                               Optional<ModelOccurrence> where) {
-        Pullback reading = new Pullback(read, where);
-        return reading.pulled(reading.observe(optional, AnswerAspect.PRESENCE, reads),
-                reading.namesIn(optional, reads));
+        Pullback reading = new Pullback(read, where, namesIn(optional, reads, read));
+        return reading.pulled(reading.observe(optional, AnswerAspect.PRESENCE, reads));
     }
 
     /** What {@code container} holding something states. */
     static Pulled ofHoldingSomething(Core container, InputReads reads, InputReading read,
                                      Optional<ModelOccurrence> where) {
-        Pullback reading = new Pullback(read, where);
-        return reading.pulled(reading.observe(container, AnswerAspect.EMPTINESS, reads),
-                reading.namesIn(container, reads));
+        Pullback reading = new Pullback(read, where, namesIn(container, reads, read));
+        return reading.pulled(reading.observe(container, AnswerAspect.EMPTINESS, reads));
     }
 
     /**
@@ -683,10 +705,9 @@ final class Pullback {
      */
     static Pulled ofAComparison(StatedComparison comparison, InputReads reads, InputReading read,
                                 Optional<ModelOccurrence> where) {
-        Pullback reading = new Pullback(read, where);
+        Pullback reading = new Pullback(read, where, namesIn(comparison, reads, read));
         return reading.pulled(reading.underTheEntriesLookedUp(
-                reading.comparison(comparison, null, false, reads), comparison, reads),
-                reading.namesIn(comparison, reads));
+                reading.comparison(comparison, null, false, reads), comparison, reads));
     }
 
     /**
@@ -756,12 +777,11 @@ final class Pullback {
     /** The same, with the arithmetic it was read through. */
     static OnTheInput ofAComparisonOnTheInput(StatedComparison comparison, InputReads reads,
                                               InputReading read) {
-        Pullback reading = new Pullback(read, Optional.empty());
+        Pullback reading = new Pullback(read, Optional.empty(), namesIn(comparison, reads, read));
         Once<AffineReading.OfAComparison> arithmetic = reading.arithmeticOf(comparison, reads);
         Derivation chosen = reading.firstThatReadsIt(
                 reading.rulesFor(comparison, null, false, reads, arithmetic));
-        Pulled stated = reading.pulled(reading.underTheEntriesLookedUp(chosen, comparison, reads),
-                reading.namesIn(comparison, reads));
+        Pulled stated = reading.pulled(reading.underTheEntriesLookedUp(chosen, comparison, reads));
         Trial theRule = reading.triedAndConcluded.get(chosen);
         Once<AffineReading.WorkedOut> worksOut =
                 new Once<>(() -> reading.worksOut(theRule, arithmetic));
@@ -891,26 +911,13 @@ final class Pullback {
      * was not kept is in no derivation concluded here, so whatever was met on the way, the parts
      * are the derivation's own. A part met twice is one part.
      */
-    private Pulled pulled(Derivation stated, ElementsNamed readThrough) {
-        // Each part told which value at an element's position it is about, by the names it was
-        // read through where it was read: past here what it states is said at positions, and two
-        // names for two elements of one container are one position. What no part was read off is
-        // read off the whole, through the names it holds. Only the names free in the whole: one a
-        // closure inside it binds is the element of what that closure is handed — a quantifier's
-        // or a count's own — and that is said where the quantifier or the count is.
-        Map<Derivation, ElementsNamed> named = new IdentityHashMap<>();
-        if (!readThrough.isEmpty()) {
-            named.put(stated, readThrough);
-        }
-        for (Met each : met) {
-            ElementsNamed through = each.from().at().elementsNamedIn(each.from().value(),
-                    read.rules().newtypes()).keepingTheNamesOf(readThrough);
-            if (!through.isEmpty()) {
-                named.merge(each.step(), through, ElementsNamed::and);
-            }
-        }
-        Conclusion conclusion = new Conclusion(where, named);
-        Meaning meaning = conclusion.meaningOf(stated);
+    private Pulled pulled(Derivation stated) {
+        // Each part was told the names it was read through where it was read ({@link #leaf});
+        // what no part was read off is read off the whole, through the names free in it. By
+        // here what a call binds stands inside the quantifier or the count it made, which is
+        // told nothing of names from outside it, so only what the whole was read off is told.
+        Conclusion conclusion = new Conclusion(where);
+        Meaning meaning = conclusion.meaningOf(Derivation.ReadThrough.of(stated, freeInTheRoot));
         List<Leaf> leaves = new ArrayList<>();
         Set<Met> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Met each : met) {
@@ -1274,7 +1281,7 @@ final class Pullback {
         }
         return new OperatorsAnswer(
                 answered == null ? Optional.empty()
-                        : Optional.of(pulled(answered, ElementsNamed.NONE).proposition()),
+                        : Optional.of(pulled(answered).proposition()),
                 told[0].unsaidGroups, told[0].unsaidElsewhere, told[0].obligations);
     }
 
@@ -2157,10 +2164,11 @@ final class Pullback {
                 .rulesFor(comparison, null, false, reads).size();
         List<Proposition> out = new ArrayList<>();
         for (int i = 0; i < rules; i++) {
-            Pullback alone = new Pullback(read, Optional.empty());
+            Pullback alone = new Pullback(read, Optional.empty(),
+                    namesIn(comparison, reads, read));
             Derivation taken = alone.rulesFor(comparison, null, false, reads).get(i).get();
             if (taken != null) {
-                out.add(alone.pulled(taken, alone.namesIn(comparison, reads)).proposition());
+                out.add(alone.pulled(taken).proposition());
             }
         }
         return out;
@@ -2649,13 +2657,12 @@ final class Pullback {
      */
     static List<Pulled> ofTheArms(Core fork, InputReads reads, InputReading read,
                                   Optional<ModelOccurrence> where) {
-        Pullback reading = new Pullback(read, where);
         // An arm is entered on what the fork tests: a match's scrutinee, or the construction an
         // attempt is of.
-        ElementsNamed tested = reading.namesIn(Core.withoutStanding(fork) instanceof Core.Match
-                match ? match.scrutinee() : fork, reads);
-        return reading.entering(fork, reads).stream()
-                .map(arm -> reading.pulled(arm, tested)).toList();
+        Pullback reading = new Pullback(read, where, namesIn(
+                Core.withoutStanding(fork) instanceof Core.Match match ? match.scrutinee() : fork,
+                reads, read));
+        return reading.entering(fork, reads).stream().map(reading::pulled).toList();
     }
 
     /**
@@ -2700,12 +2707,12 @@ final class Pullback {
         Proposition stated = reading.observe(call, AnswerAspect.TRUTH, reads)
                 .concludes(Optional.empty());
         if (!(stated instanceof Proposition.InTheStrings(
-                Proposition.InTheStrings.Strings.AtAPosition(TermPath at),
+                Proposition.InTheStrings.Strings.AtAPosition(TermPath at, var _),
                 StringsLanguage accepts, boolean holds, var _))) {
             return null;
         }
         for (Met each : reading.met) {
-            if (each.step() instanceof Derivation.SomePieceInALanguage found
+            if (Derivation.readOff(each.step()) instanceof Derivation.SomePieceInALanguage found
                     && found.accepts().equals(accepts)) {
                 return new StringByItsPieces(at, accepts, holds, found.holds() != holds,
                         found.says());
@@ -3881,7 +3888,7 @@ final class Pullback {
             if (form.constant().signum() == 0) {
                 continue;
             }
-            Proposition stated = trying.of(taken.get(i));
+            Proposition stated = tried(taken.get(i));
             WhyUnread stopped = Proposition.firstStopIn(stated);
             if (stopped != null) {
                 return new Sized.NotSized(stopped);
@@ -3905,7 +3912,7 @@ final class Pullback {
                             .map(arm -> new Derivation.MatchArms.Arm(arm,
                                     new Derivation.WrittenOut(true), false))
                             .toList());
-            Proposition stated = trying.of(oneOf);
+            Proposition stated = tried(oneOf);
             WhyUnread stopped = Proposition.firstStopIn(stated);
             if (stopped != null) {
                 return new Sized.NotSized(stopped);
@@ -4729,7 +4736,7 @@ final class Pullback {
             }
             ofTheElement = alsoWhatWasKept(ofTheElement, located);
             Derivation.EveryElementMeetsIt.Alike alike =
-                    trying.of(ofTheElement) instanceof Proposition.Always
+                    tried(ofTheElement) instanceof Proposition.Always
                             ? new Derivation.EveryElementMeetsIt.Alike.Settled()
                             : writtenWithout != null && Derivation.EveryElementMeetsIt
                                     .keptOnlyByWhatSettlesTrue(ofTheElement)
@@ -5007,8 +5014,9 @@ final class Pullback {
                 answered = leaf(new Derivation.OfTheLastToHoldItsValue(answered, list, filedUnder),
                         e, reads);
             }
-            answered = alsoWhatWasKept(answered, located.kept());
-            Proposition element = trying.of(answered);
+            answered = ofItsOwnElement(heldAt, e, reads,
+                    alsoWhatWasKept(answered, located.kept()));
+            Proposition element = tried(answered);
             Optional<Derivation> holdsSomething = holdsSomething(heldAt, located, element, over, in);
             HowTheElementsAreAsked asked = !Proposition.mayAnswerNothing(element)
                     ? HowTheElementsAreAsked.NOT_SAID
@@ -5226,7 +5234,7 @@ final class Pullback {
             } finally {
                 parting.remove(pieces);
             }
-            Proposition element = trying.of(answered);
+            Proposition element = tried(answered);
             Derivation inALanguage = somePieceInALanguage(pieces, within, element, answered);
             if (inALanguage != null) {
                 return inALanguage;
@@ -5356,7 +5364,7 @@ final class Pullback {
             // steps this reading met.
             Derivation.APieceInALanguage held = null;
             for (Met each : met) {
-                if (each.step() instanceof Derivation.APieceInALanguage read
+                if (Derivation.readOff(each.step()) instanceof Derivation.APieceInALanguage read
                         && read.within().equals(within) && read.accepts().equals(piece)) {
                     held = read;
                     break;
@@ -5395,9 +5403,11 @@ final class Pullback {
             if (!quantifying.add(held)) {
                 return null;
             }
+            ElementsNamed outer = inTheScopeOf(e, reads);
             try {
                 return ofAnElement(container, element, ofTheElement);
             } finally {
+                freeInTheScope = outer;
                 quantifying.remove(held);
             }
         }
@@ -5435,9 +5445,11 @@ final class Pullback {
             if (!quantifying.add(held)) {
                 return null;
             }
+            ElementsNamed outer = inTheScopeOf(e, reads);
             try {
                 return ofTheValue(container, ofTheElement, value);
             } finally {
+                freeInTheScope = outer;
                 quantifying.remove(held);
             }
         }
@@ -6887,7 +6899,7 @@ final class Pullback {
                     fromEachBefore = fromEachBefore == null ? pair
                             : new Derivation.Joined(ConditionJoin.BOTH, fromEachBefore, pair);
                 }
-                Proposition stated = trying.of(fromEachBefore);
+                Proposition stated = tried(fromEachBefore);
                 if (stated instanceof Proposition.Always(boolean holds)) {
                     settled += holds ? 1 : 0;
                 } else {
@@ -6996,10 +7008,12 @@ final class Pullback {
                 return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
             }
             elements.put(at, located.each());
+            ElementsNamed outer = inTheScopeOf(e, reads);
             Sized each;
             try {
                 each = number(LinearForm.atom(ofTheElement));
             } finally {
+                freeInTheScope = outer;
                 elements.remove(at);
                 quantifying.remove(held);
             }
@@ -7110,7 +7124,7 @@ final class Pullback {
                         List<Proposition> unsettled = new ArrayList<>();
                         List<Derivation> answers = new ArrayList<>();
                         for (Derivation one : each) {
-                            Proposition stated = trying.of(one);
+                            Proposition stated = tried(one);
                             WhyUnread stopped = Proposition.firstStopIn(stated);
                             if (stopped != null) {
                                 yield new Sized.NotSized(stopped);
@@ -7162,8 +7176,9 @@ final class Pullback {
             if (answered == null) {
                 return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
             }
-            answered = alsoWhatWasKept(answered, located.kept());
-            Proposition element = trying.of(answered);
+            answered = ofItsOwnElement(heldAt, e, reads,
+                    alsoWhatWasKept(answered, located.kept()));
+            Proposition element = tried(answered);
             WhyUnread stopped = Proposition.firstStopIn(element);
             if (stopped != null) {
                 return new Sized.NotSized(stopped);
@@ -7313,9 +7328,9 @@ final class Pullback {
          * or of none.
          */
         private Sized differentMeeting(DecisionSubject.AnInput held, Quantity.TheValue at,
-                                       Derivation meeting, boolean ofEachValue) {
-            Proposition stated = trying.of(meeting);
-            WhyUnread stopped = Proposition.firstStopIn(stated);
+                                       Derivation read, boolean ofEachValue) {
+            Derivation meeting = ofItsOwnElement(held, e, reads, read);
+            Proposition stated = tried(meeting);            WhyUnread stopped = Proposition.firstStopIn(stated);
             if (stopped != null) {
                 return new Sized.NotSized(stopped);
             }
@@ -7940,7 +7955,8 @@ final class Pullback {
      * past that, a statement counted something that answered nothing, and comes out no way.
      */
     private Derivation whereItsCountsAnswer(Derivation stated) {
-        if (stated == null || stated instanceof Derivation.Stopped || answering.isEmpty()) {
+        if (stated == null || Derivation.readOff(stated) instanceof Derivation.Stopped
+                || answering.isEmpty()) {
             return stated;
         }
         Derivation answered = null;
@@ -8763,7 +8779,7 @@ final class Pullback {
             return null;
         }
         Derivation ofTheElement = asAComparisonOfTwoOrderedValues(meeting.ofTheElement());
-        Proposition element = trying.of(ofTheElement);
+        Proposition element = tried(ofTheElement);
         if (Proposition.firstStopIn(element) != null
                 || !element.mayTurnOnAnElementOf(meeting.container())
                 || Proposition.mayAnswerNothing(element)) {
@@ -8786,6 +8802,16 @@ final class Pullback {
      * {@code read} itself where it says anything else, which a position on no order does.
      */
     private Derivation asAComparisonOfTwoOrderedValues(Derivation read) {
+        if (read instanceof Derivation.ReadThrough(Derivation step, ElementsNamed names)) {
+            Derivation stated = asAComparisonOfTwoOrderedValues(step);
+            return stated == step ? read : Derivation.ReadThrough.of(stated, names);
+        }
+        if (read instanceof Derivation.OfItsOwnElement(DecisionSubject container,
+                                                       ElementsNamed given, Derivation step)) {
+            Derivation stated = asAComparisonOfTwoOrderedValues(step);
+            return stated == step ? read
+                    : new Derivation.OfItsOwnElement(container, given, stated);
+        }
         if (read instanceof Derivation.OfWhatWasKept(Derivation ofTheElement,
                                                      List<Derivation> kept)) {
             Derivation stated = asAComparisonOfTwoOrderedValues(ofTheElement);
@@ -8797,9 +8823,10 @@ final class Pullback {
             return one == left && other == right ? read
                     : new Derivation.Joined(how, one, other);
         }
-        if (!(trying.of(read) instanceof Proposition.SameValue(
-                DecisionSubject.AnInput(TermPath one, var _),
-                DecisionSubject.AnInput(TermPath other, var _), boolean holds, var _))) {
+        if (!(tried(read) instanceof Proposition.SameValue(
+                DecisionSubject.AnInput(TermPath one, ValueIdentity oneIs),
+                DecisionSubject.AnInput(TermPath other, ValueIdentity otherIs), boolean holds,
+                var _))) {
             return read;
         }
         NumericTerm left = new NumericTerm.ValueOf(one);
@@ -8807,9 +8834,10 @@ final class Pullback {
         if (!readOnAnOrder(left) || !readOnAnOrder(right)) {
             return read;
         }
+        // Each the value its subject was about: two elements of one container are two numbers.
         return aRelation(Derivation.ComparisonReading.AS_A_CUT,
-                LinearForm.difference(new DecisionAtom.OfTheInput(left),
-                        new DecisionAtom.OfTheInput(right)),
+                LinearForm.difference(new DecisionAtom.OfTheInput(left, oneIs),
+                        new DecisionAtom.OfTheInput(right, otherIs)),
                 holds ? Rel.EQ : Rel.NE, Derivation.AComparisonRead.Facing.NOTHING_WRITTEN);
     }
 
@@ -8826,6 +8854,7 @@ final class Pullback {
         return switch (read) {
             case Derivation.AChoiceAt(var _, Derivation choice) -> someElementMeetingIn(choice);
             case Derivation.ThroughABinding(Derivation value) -> someElementMeetingIn(value);
+            case Derivation.ReadThrough(Derivation step, var _) -> someElementMeetingIn(step);
             case Derivation.ByALaw(var _, var _, Derivation of) -> someElementMeetingIn(of);
             case Derivation.ALawQuantifies(var _, Derivation meeting) ->
                     someElementMeetingIn(meeting);
@@ -9075,7 +9104,7 @@ final class Pullback {
         DecisionSubject.AnInput counted = new DecisionSubject.AnInput(container);
         Quantity.HowManyDifferentMeet different = Quantity.HowManyDifferentMeet.of(counted, at,
                 new Quantity.HowManyDifferentMeet.Selection.OfEachElement(
-                        Proposition.whereItHolds(trying.of(keeping))));
+                        Proposition.whereItHolds(tried(keeping))));
         if (different == null || !heldAt.equals(different.occurrences())) {
             return null;
         }
@@ -9705,7 +9734,7 @@ final class Pullback {
 
     /** Whether {@code derivation} was read to the end, with no part of it that stopped. */
     private boolean readToTheEnd(Derivation derivation) {
-        return !Proposition.leavesSomethingUnread(trying.of(derivation));
+        return !Proposition.leavesSomethingUnread(tried(derivation));
     }
 
     /** What a law says on {@code applications}, and what else the reading of it turns on. */
@@ -10840,12 +10869,14 @@ final class Pullback {
                 return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
             }
             carriedSoFar.put(accumulator, LinearForm.atom(soFar));
+            ElementsNamed outer = inTheScopeOf(walk.step(), at);
             try {
                 Sized each = byTheArmsOfAnElement(step, at,
                         (arm, inside) -> addedBesideWhatItCarried(arm, inside, soFar));
                 return each instanceof Sized.AsAForm(LinearForm<Quantity> form)
                         ? addedUpOver(held, form) : each;
             } finally {
+                freeInTheScope = outer;
                 carriedSoFar.remove(accumulator);
                 quantifying.remove(held);
             }
@@ -10927,7 +10958,7 @@ final class Pullback {
      */
     private void tellWhatItWorksOut(Derivation cut, UndividedByARelation.Working working) {
         if (beforeTheFork.isEmpty() || restatingAQuotient
-                || !(cut instanceof Derivation.AComparisonRead made)) {
+                || !(Derivation.readOff(cut) instanceof Derivation.AComparisonRead made)) {
             return;
         }
         UndividedByARelation.Working told = working.notOnEveryRun();
@@ -11761,9 +11792,11 @@ final class Pullback {
         }
         ACarriedValue value = ACarriedValue.made();
         Derivation step;
+        ElementsNamed outer = inTheScopeOf(e, reads);
         try {
             step = stepCarrying(walk, aspect, value, reads);
         } finally {
+            freeInTheScope = outer;
             quantifying.remove(container);
         }
         return closed(observe(walk.seed(), aspect, reads), container, walk.container(), step,
@@ -11822,14 +11855,16 @@ final class Pullback {
         ACarriedValue rest = ACarriedValue.made();
         Derivation end;
         Derivation stepped;
+        ElementsNamed outer = inTheScopeOf(e, reads);
         try {
             end = observe(walk.none().body(), aspect, step);
-            if (!(trying.of(end) instanceof Proposition.Always)) {
+            if (!(tried(end) instanceof Proposition.Always)) {
                 return null;
             }
             stepped = supposing(walk.again(), new Carried(aspect, rest),
                     () -> observe(walk.some().body(), aspect, step));
         } finally {
+            freeInTheScope = outer;
             quantifying.remove(container);
         }
         Derivation closed = closed(end, container, args.get(walk.walked()), stepped, rest, e,
@@ -11960,7 +11995,7 @@ final class Pullback {
                                 List<TermPath> staying, List<String> through, Derivation atANode,
                                 ConditionJoin how, AnswerAspect aspect, Core e, InputReads reads,
                                 InputReads inside) {
-        Proposition stated = trying.of(atANode);
+        Proposition stated = tried(atANode);
         if (Proposition.leavesSomethingUnread(stated)
                 || !WrittenOfANode.movesWithIt(stated, node, staying)) {
             return null;
@@ -11968,7 +12003,7 @@ final class Pullback {
         Derivation unfolded = supposing(search.again(),
                 new Reaching(aspect, search.node(), node, through, atANode, how),
                 () -> observe(body.body(), aspect, inside));
-        Proposition oneStepDown = trying.of(unfolded);
+        Proposition oneStepDown = tried(unfolded);
         if (Proposition.leavesSomethingUnread(oneStepDown) || !Derivation.ATreeSearched
                 .unfoldsOnce(oneStepDown, stated, node, through, how)) {
             return null;
@@ -12278,8 +12313,8 @@ final class Pullback {
                               Derivation step, ACarriedValue value, Core e, InputReads reads) {
         Derivation carriedNothing = new Derivation.Supposing(step, value, false);
         Derivation carriedSomething = new Derivation.Supposing(step, value, true);
-        Proposition whereNothing = trying.of(carriedNothing);
-        Proposition whereSomething = trying.of(carriedSomething);
+        Proposition whereNothing = tried(carriedNothing);
+        Proposition whereSomething = tried(carriedSomething);
         if (Proposition.leavesSomethingUnread(whereNothing)
                 || Proposition.leavesSomethingUnread(whereSomething)) {
             return null;
@@ -12320,7 +12355,8 @@ final class Pullback {
                                          Derivation meets, Derivation keeps, ConditionJoin how,
                                          HowTheElementsAreAsked asked, Core e, InputReads reads) {
         boolean holds = how == ConditionJoin.EITHER;
-        Proposition element = holds ? trying.of(meets) : trying.of(meets).denied();
+        Derivation meeting = ofItsOwnElement(container, e, reads, meets);
+        Proposition element = holds ? tried(meeting) : tried(meeting).denied();
         Optional<Derivation> holdsSomething = Optional.empty();
         if (Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(container, element)) {
             DecisionAtom size = sizeOfSubject(container, Core.withoutStanding(walked).type());
@@ -12330,7 +12366,7 @@ final class Pullback {
                     : unread(walked, reads, new WhyUnread.NoMeasureOfItsSize()));
         }
         return new Derivation.AcrossAWalk(start,
-                new Derivation.SomeElementMeeting(container, meets, holds, holdsSomething,
+                new Derivation.SomeElementMeeting(container, meeting, holds, holdsSomething,
                         Proposition.mayAnswerNothing(element) ? asked
                                 : HowTheElementsAreAsked.NOT_SAID),
                 keeps, how);
@@ -13808,9 +13844,44 @@ final class Pullback {
         return leaf(step, new Denotation(from, reads));
     }
 
+    /** What {@code step} states, as this reading tries its candidates. */
+    private Proposition tried(Derivation step) {
+        return trying.of(step);
+    }
+
+    /**
+     * {@code step}, read through the names {@code from} holds for elements of containers
+     * ({@link Derivation.ReadThrough}), kept as a part met there. Told here, where the names are
+     * read, the part states its values whoever concludes it; told only the names given from
+     * outside the call it is read in ({@link #freeInTheScope}).
+     */
     private Derivation leaf(Derivation step, Denotation from) {
-        met.add(new Met(step, from));
-        return step;
+        Derivation part = Derivation.ReadThrough.of(step, from.at().elementsNamedIn(from.value(),
+                read.rules().newtypes()).keepingTheNamesOf(freeInTheScope));
+        met.add(new Met(part, from));
+        return part;
+    }
+
+    /**
+     * {@code step}, what {@code owner}, a call going over the elements of {@code container}, states
+     * of its element, held to that element being the call's own: the names the call was handed
+     * from outside are the ones free in it ({@link Derivation.OfItsOwnElement}).
+     */
+    private Derivation ofItsOwnElement(DecisionSubject container, Core owner, InputReads reads,
+                                       Derivation step) {
+        return new Derivation.OfItsOwnElement(container,
+                reads.elementsNamedIn(owner, read.rules().newtypes()), step);
+    }
+
+    /**
+     * Enters {@code owner}, a call read about its own elements, for the parts read inside it: they
+     * are told only the names free in it. Answers the scope it was entered from, which the caller
+     * puts back ({@link #freeInTheScope}) once the part is read.
+     */
+    private ElementsNamed inTheScopeOf(Core owner, InputReads reads) {
+        ElementsNamed outer = freeInTheScope;
+        freeInTheScope = reads.elementsNamedIn(owner, read.rules().newtypes());
+        return outer;
     }
 
     /** {@code reading}, with whether a container holds anything asked at {@code where}. */
