@@ -24,7 +24,8 @@ import java.util.Set;
  *
  * <p>The name kept is the one the border is read through, where the border reads that element:
  * what is looked for there is a value of that element. Elsewhere it is the first name the way met
- * it by. Where the border reads one element through two names, nothing on the way is kept for it.
+ * it by. Where the border reads one element through two names, or through one and through a name
+ * whose element is not known, nothing on the way is kept for it.
  *
  * <p>Only what the names say. A condition whose names stood for no element is the row's, and one
  * whose names were not worked out names nothing here; both are taken as they stand. A condition of
@@ -60,6 +61,7 @@ final class ElementsOnTheWay {
             }
         });
         keptNone.addAll(border.unnamed());
+        kept.keySet().removeAll(keptNone);
         boolean anyNamed = !border.isEmpty();
         List<ElementsNamed> namedInEach = new ArrayList<>(way.size());
         for (OnTheWay each : way) {

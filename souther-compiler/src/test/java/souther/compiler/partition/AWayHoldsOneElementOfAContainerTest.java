@@ -12,6 +12,7 @@ import souther.compiler.types.BindingOwner;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -95,6 +96,17 @@ class AWayHoldsOneElementOfAContainerTest {
         assertEquals(List.of(truth(0, PAID, A), declined(1)),
                 ElementsOnTheWay.keptToOneElementEach(List.of(truth(0, PAID, A),
                         truth(1, PAID, A, B)), ElementsNamed.NONE));
+    }
+
+    /** Where the border reads the element through a name and through one not known, no name is
+     *  the one it reads it through: nothing on the way is kept for the element. */
+    @Test
+    void anElementAlsoReadThroughAnUnknownNameIsKeptForNoName() {
+        ElementsNamed border = ElementsNamed.of(
+                List.of(new ElementsNamed.Named(AN_ITEM, B)), Set.of(AN_ITEM));
+        assertEquals(List.of(declined(0), declined(1)),
+                ElementsOnTheWay.keptToOneElementEach(List.of(truth(0, PAID, A),
+                        truth(1, PAID, B)), border));
     }
 
     /** A condition of several ways is declined whole where one of its ways reads another

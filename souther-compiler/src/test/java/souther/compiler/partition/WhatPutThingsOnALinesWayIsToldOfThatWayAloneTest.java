@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
@@ -72,7 +73,7 @@ class WhatPutThingsOnALinesWayIsToldOfThatWayAloneTest {
         cases.put(aCase("other"), put(List.of(inBoth), copy(13)));
 
         ReachingCuts.Collected collected = new ReachingCuts.Collected();
-        collected.reached(states, List.of(toTheComparison), cases,
+        collected.reached(states, List.of(toTheComparison), ElementsNamed.NONE, cases,
                 put(List.of(toTheComparison), copy(11)).by());
         ReachingCuts made = collected.made();
 
