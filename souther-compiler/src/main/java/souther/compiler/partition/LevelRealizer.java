@@ -995,10 +995,20 @@ public final class LevelRealizer {
         if (named != null) {
             return named;
         }
-        Realization congruent = asACongruence(over, within, looking, tried);
-        if (congruent != null) {
-            return congruent;
+        NumericWitness.Standing congruent = asACongruence(over, within, looking, tried);
+        if (congruent instanceof NumericWitness.Standing.Found standing) {
+            Map<NumericTerm, Place> placed = new LinkedHashMap<>();
+            for (NumericWitness.Standing.Found.Placed each : standing.inFixingOrder()) {
+                placed.put(each.term(), each.place());
+            }
+            return found(fixingOf(placed), within, tried);
         }
+        // What the walk of the numbers fell short of is said beside what the class walk meets
+        // where that comes back with nothing too: raising either may find the row. A proof the
+        // class walk makes is of every value of the form, and settles both.
+        CompositionShortfall numbersShortOf =
+                congruent instanceof NumericWitness.Standing.NotFound(CompositionShortfall met)
+                        ? met : CompositionShortfall.NONE;
         LinearForm<NumericTerm> form = new LinearForm<>(ExactRatio.ZERO, over.dividend().coefs());
         BigInteger moved = ((ExactAnswer.Held<BigInteger>) over.dividend().constant().floor())
                 .value();
@@ -1065,24 +1075,28 @@ public final class LevelRealizer {
         if (bounded && over.where() instanceof Criterion.AtTheLevel) {
             return new Realization.Impossible();
         }
+        stoppedBy.addAll(numbersShortOf.figures());
+        unheld.addAll(numbersShortOf.unheld());
         return Realization.Unknown.leftOpen(
                 Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
-                stoppedBy, Set.of(), unheld);
+                stoppedBy, numbersShortOf.populations(), unheld);
     }
 
     /**
-     * A row at a remainder the criterion offers, its numbers walked as the region leaves them and
-     * the last held to the class the others leave it ({@link NumericWitness.Congruent}) — or null
-     * where no remainder offered found one, which the class walk of the form's values is asked
-     * after.
+     * Where the numbers stand at a remainder the criterion offers, walked as the region leaves
+     * them with the last held to the class the others leave it ({@link NumericWitness.Congruent}),
+     * a row composed with them — or null where the form is not of whole numbers. Where none was
+     * found, the class walk of the form's values is asked after, and what this walk fell short of
+     * is said beside what that one meets.
      *
      * <p>Asked first because it puts no value of the form ahead of its numbers. A value chosen
      * from the run the region leaves the form is one its numbers may come to only at places no
      * row is written at — a string's length beside what its code points come to — while each
      * number walked from where it usually is reaches one they come to together.
      */
-    private Realization asACongruence(Standing.OfARemainder over, SearchRegion within,
-                                      WitnessSearch looking, ValuesTried tried) {
+    private NumericWitness.Standing asACongruence(Standing.OfARemainder over,
+                                                  SearchRegion within, WitnessSearch looking,
+                                                  ValuesTried tried) {
         if (!over.dividend().constant().isWhole()
                 || !over.dividend().coefs().values().stream().allMatch(ExactRatio::isWhole)) {
             return null;
@@ -1106,15 +1120,7 @@ public final class LevelRealizer {
         NumericWitness.Composing notTried = standing -> found(fixingOf(standing), within, tried)
                 instanceof Realization.Found ? new NumericWitness.Composed.Built()
                 : new NumericWitness.Composed.NotBuilt(CompositionShortfall.NONE);
-        if (NumericWitness.of(within, terms, over.on()::get, looking, notTried, congruents)
-                instanceof NumericWitness.Standing.Found standing) {
-            Map<NumericTerm, Place> placed = new LinkedHashMap<>();
-            for (NumericWitness.Standing.Found.Placed each : standing.inFixingOrder()) {
-                placed.put(each.term(), each.place());
-            }
-            return found(fixingOf(placed), within, tried);
-        }
-        return null;
+        return NumericWitness.of(within, terms, over.on()::get, looking, notTried, congruents);
     }
 
     /** Each number standing at its place, as the target a row is composed for. */

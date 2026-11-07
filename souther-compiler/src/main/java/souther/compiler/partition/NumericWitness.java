@@ -27,6 +27,7 @@ import java.util.Objects;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * One assignment of some numbers that a region admits, or nothing.
@@ -166,6 +167,15 @@ final class NumericWitness {
         CompositionShortfall met = CompositionShortfall.NONE;
         Tries tries = new Tries();
         for (Congruent congruent : congruents) {
+            // Every value the question may be tried at has been tried, so the congruences after
+            // this one are left at the figure and not walked: a walk now would work out what the
+            // region leaves each position only to be refused its first value.
+            if (tries.spent()) {
+                proved = false;
+                met = met.and(CompositionShortfall.of(
+                        Set.of(CompositionBudget.VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT)));
+                break;
+            }
             switch (walked(within, nearFirst, on, looking, composing, congruent, tries)) {
                 case Standing.Found found -> {
                     return found;
@@ -369,6 +379,11 @@ final class NumericWitness {
             left--;
             return true;
         }
+
+        /** Whether no more values may be tried. */
+        boolean spent() {
+            return left == 0;
+        }
     }
 
     /**
@@ -412,6 +427,28 @@ final class NumericWitness {
      * to know not to trust.
      */
     sealed interface Standing {
+
+        /**
+         * What a question comes to that was asked first of a narrower region, as a way to try it,
+         * and, where that found nothing, of the whole region it is about.
+         *
+         * <p>A proof is the whole region's alone. That the narrower one leaves nothing is no answer
+         * about the rest of the question, and what the whole proves holds of the narrower part
+         * too. Where neither found an assignment, each walk fell short in its own way and both are
+         * said: raising what stopped the first may find one where the second stopped short.
+         */
+        default Standing orAskedOfTheWhole(Supplier<Standing> theWhole) {
+            if (this instanceof Found) {
+                return this;
+            }
+            Standing whole = theWhole.get();
+            return switch (whole) {
+                case Found _, ProvedImpossible _ -> whole;
+                case NotFound(CompositionShortfall met) -> new NotFound(
+                        (this instanceof NotFound(CompositionShortfall first)
+                                ? first : CompositionShortfall.NONE).and(met));
+            };
+        }
 
         /**
          * Where each position stands, which is an assignment the region admits.

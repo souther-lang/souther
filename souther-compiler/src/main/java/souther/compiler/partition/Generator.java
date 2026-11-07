@@ -7193,10 +7193,11 @@ public final class Generator {
                     apart = apart.apartFrom(key, earlier.getValue());
                 }
             }
-            NumericWitness.Standing placing = NumericWitness.of(apart, List.of(key), on, looking);
-            if (apart != here && !(placing instanceof NumericWitness.Standing.Found)) {
-                placing = NumericWitness.of(here, List.of(key), on, looking);
-            }
+            SearchRegion whole = here;
+            NumericWitness.Standing placing = apart == whole
+                    ? NumericWitness.of(whole, List.of(key), on, looking)
+                    : NumericWitness.of(apart, List.of(key), on, looking).orAskedOfTheWhole(
+                            () -> NumericWitness.of(whole, List.of(key), on, looking));
             switch (placing) {
                 case NumericWitness.Standing.Found beside -> {
                     for (NumericWitness.Standing.Found.Placed placed : beside.inFixingOrder()) {
@@ -8528,24 +8529,18 @@ public final class Generator {
             List<ComposedAt> composedWith = new ArrayList<>();
             SearchRegion within = here.given(remaindersStanding(alreadyStanding));
             SearchRegion apart = keysApart(within, owing.keySet());
-            NumericWitness.Standing found = NumericWitness.of(apart, numbers,
-                    term -> carrierOf(term, subject.quantities()), looking,
-                    assignment -> {
-                        composedWith.clear();
-                        return composer.composes(alreadyStanding, some, asked, owing,
-                                assignment, composedWith);
-                    });
+            Function<NumericTerm, Carrier> on = term -> carrierOf(term, subject.quantities());
+            NumericWitness.Composing composing = assignment -> {
+                composedWith.clear();
+                return composer.composes(alreadyStanding, some, asked, owing, assignment,
+                        composedWith);
+            };
             // The keys held apart are a way to try: where nothing stands that way, they are tried
             // as the rules leave them.
-            if (apart != within && !(found instanceof NumericWitness.Standing.Found)) {
-                found = NumericWitness.of(within, numbers,
-                        term -> carrierOf(term, subject.quantities()), looking,
-                        assignment -> {
-                            composedWith.clear();
-                            return composer.composes(alreadyStanding, some, asked, owing,
-                                    assignment, composedWith);
-                        });
-            }
+            NumericWitness.Standing found = apart == within
+                    ? NumericWitness.of(within, numbers, on, looking, composing)
+                    : NumericWitness.of(apart, numbers, on, looking, composing).orAskedOfTheWhole(
+                            () -> NumericWitness.of(within, numbers, on, looking, composing));
             // What the rules settle before what this compiler managed, because a reader may act on
             // the first and on none of the rest. A proof is the region's alone: an assignment no
             // row composed with is what this compiler built, and says nothing of the rules.

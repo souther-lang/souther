@@ -101,6 +101,23 @@ class AWalkOverManyPositionsOnTheWayStopsAtWhatTheyAreTriedAtTogetherTest {
                 () -> "offered under one figure for all seven: " + seven.offered());
     }
 
+    /**
+     * And the congruences left once the figure is spent are not walked, and are said as left at
+     * it. Over one position each congruence is tried at the values a position is tried at and no
+     * more, so the figure is spent at the end of a walk that was refused nothing, and what says
+     * it is the congruences left after it.
+     */
+    @Test
+    void theCongruencesLeftOnceTheFigureIsSpentAreSaidAsLeftAtIt() {
+        assertEquals(0, TOGETHER.maximum() % EACH, "the figure is spent at the end of a walk");
+        Walked one = walked(1, BigInteger.valueOf(100));
+
+        NumericWitness.Standing.NotFound notFound =
+                assertInstanceOf(NumericWitness.Standing.NotFound.class, one.standing());
+        assertTrue(notFound.met().figures().contains(TOGETHER), () -> notFound.met().toString());
+        assertEquals(TOGETHER.maximum(), one.offered(), "every value the figure lets, and no more");
+    }
+
     @Test
     void aWalkOverMorePositionsThanTheFigureLetsStopsAtItAndSaysSo() {
         assertTrue(Math.pow(EACH, 5) > TOGETHER.maximum(), "five positions are past the figure");

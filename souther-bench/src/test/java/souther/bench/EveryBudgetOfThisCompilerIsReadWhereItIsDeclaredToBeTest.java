@@ -664,6 +664,15 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/NumericWitness$Met;)Z",
                     "stops trying values of the positions on the way once they come to the"
                             + " figure together, and says so"),
+            Map.entry("souther.compiler.partition.NumericWitness#of("
+                            + "Lsouther/compiler/inputs/SearchRegion;Ljava/util/List;"
+                            + "Ljava/util/function/Function;"
+                            + "Lsouther/compiler/partition/WitnessSearch;"
+                            + "Lsouther/compiler/partition/NumericWitness$Composing;"
+                            + "Ljava/util/List;)"
+                            + "Lsouther/compiler/partition/NumericWitness$Standing;",
+                    "leaves the congruences after the figure unwalked once the positions have"
+                            + " come to it together, and says so"),
             Map.entry("souther.compiler.partition.Generator$WayComposer#composes("
                             + "Ljava/util/Map;Ljava/util/Set;Ljava/util/Map;"
                             + "Ljava/util/SequencedMap;Ljava/util/SequencedMap;Ljava/util/List;)"
