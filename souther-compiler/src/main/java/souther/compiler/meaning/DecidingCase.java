@@ -169,7 +169,7 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
         }
         Proposition met = Proposition.all(List.of(condition, also));
         return saidAlone() ? alone(met)
-                : new DecidingCase(met, new Cases.Together(List.of(standsFor, new Cases.One(also))));
+                : new DecidingCase(met, Cases.together(List.of(standsFor, new Cases.One(also))));
     }
 
     /** Whether this is said for no case but its own, so that asking its cases asks it again. */
@@ -185,8 +185,30 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
      * way of choosing one of each, which grows as their product; held as the choices, a reader
      * asking each case can stop choosing as soon as what it has chosen so far leaves no row on one
      * side of the line, since a case chosen further holds fewer rows than that.
+     *
+     * <p><b>No case is said once, as {@link #NONE}, and held nowhere.</b> Any one of several is as
+     * many ways as each has together, so an alternative that is no case adds none and is left out;
+     * one of each of several is as many ways as theirs multiplied, so cases held together with no
+     * case are none ({@link #together}). Kept where the cases are made, so that every reader of
+     * them — counting them, naming their parts, walking them to ask each, saying what stopped
+     * them — reads only cases some way of choosing goes through, and none has to remember to leave
+     * the others out.
      */
     public sealed interface Cases {
+
+        /** No case at all: any one of none. */
+        Cases NONE = new EachOf(List.of());
+
+        /** One case of each of {@code factors} held together, or {@link #NONE} where one of them
+         *  is no case. */
+        static Cases together(List<Cases> factors) {
+            return factors.stream().anyMatch(Cases::isNone) ? NONE : new Together(factors);
+        }
+
+        /** Whether these are no case at all. */
+        static boolean isNone(Cases cases) {
+            return cases instanceof EachOf(var alternatives) && alternatives.isEmpty();
+        }
 
         /** One case. */
         record One(Proposition condition) implements Cases {
@@ -196,11 +218,13 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
             }
         }
 
-        /** Any one of these. None is no case at all. */
+        /** Any one of these, less those that are no case. None is no case at all. */
         record EachOf(List<Cases> alternatives) implements Cases {
 
             public EachOf {
-                alternatives = List.copyOf(alternatives);
+                alternatives = alternatives.stream().noneMatch(Cases::isNone)
+                        ? List.copyOf(alternatives)
+                        : alternatives.stream().filter(each -> !isNone(each)).toList();
             }
 
             /** Cases share what follows from a choice, so a hash walking them is as long as they
@@ -221,11 +245,19 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
             }
         }
 
-        /** One case of each of these, holding together. None is the case where nothing is asked. */
+        /**
+         * One case of each of these, holding together. None is the case where nothing is asked.
+         * Never held together with no case, which is no case itself and is made by
+         * {@link Cases#together}.
+         */
         record Together(List<Cases> factors) implements Cases {
 
             public Together {
                 factors = List.copyOf(factors);
+                if (factors.stream().anyMatch(Cases::isNone)) {
+                    throw new IllegalArgumentException("cases held together with no case are no"
+                            + " case, which is NONE: " + factors);
+                }
             }
 
             /** As {@link EachOf#hashCode}: what is shared here is the number of factors. */
@@ -520,7 +552,7 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
 
                 @Override
                 public Cases together(Together node, List<Cases> factors) {
-                    return new Together(factors);
+                    return Cases.together(factors);
                 }
 
                 @Override

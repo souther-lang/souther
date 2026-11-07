@@ -1,5 +1,6 @@
 package souther.compiler.meaning;
 
+import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
 
@@ -150,16 +151,79 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
      * @param unattributed how many of them nothing here was found to have made: a part a step
      *                     made out of others, where no step said which of the model's constructs
      *                     it is of
+     * @param multiplied   the helpers whose copies made parts the case's choices held together
+     *                     multiply, in the order the cases meet them
      */
-    public record Attributed(List<Factor> factors, int partsSplitOn, int unattributed)
+    public record Attributed(List<Factor> factors, int partsSplitOn, int unattributed,
+                             List<MultipliedHelper> multiplied)
             implements Attribution {
 
         public Attributed {
             factors = List.copyOf(factors);
+            multiplied = List.copyOf(multiplied);
             if (partsSplitOn < 0 || unattributed < 0 || unattributed > partsSplitOn) {
                 throw new IllegalArgumentException("parts are some of those split on: "
                         + unattributed + " of " + partsSplitOn);
             }
+        }
+
+        /** Every construct of the model this names: what each factor is, and where each helper
+         *  multiplied made its parts. */
+        public List<ModelOccurrence> constructsNamed() {
+            List<ModelOccurrence> out = new ArrayList<>();
+            factors.forEach(factor -> out.addAll(factor.constructs()));
+            multiplied.forEach(helper -> out.addAll(helper.madeAt()));
+            return out;
+        }
+    }
+
+    /**
+     * A helper read more than once — at more than one copy of its body, or on more than one
+     * application of a closure its call stands in — whose readings the case chooses among one
+     * beside another: two choices made together, each among more than one way, one among parts
+     * one reading's comparisons made and the other among parts another reading made
+     * ({@code ReadingsChosenOneBesideAnother}). Made together as two choices held together, or as
+     * a choice made again past more than one alternative of the other, which is how a walk that
+     * reaches a candidate only past every way the one before it fails is taken apart. Declared as
+     * a behavior, the helper is not expanded, and each reading is its answer.
+     *
+     * <p>Not every helper whose comparisons made parts. Readings chosen among as alternatives to
+     * each other add to the ways and multiply nothing, and so does a choice inside one alternative
+     * alone; one reading whose choices multiply others' is the same reading however it is
+     * declared. Neither is told here, and nothing here says what the case would come to: that is
+     * another compilation.
+     *
+     * @param helper the helper
+     * @param madeAt the constructs it wrote those parts were read at — comparisons, and choices of
+     *               every kind, an operation's law among them —
+     *               each in the copy of the body it was read in, in the order the cases meet them
+     */
+    public record MultipliedHelper(ValueName.Helper helper, List<ModelOccurrence> madeAt) {
+
+        public MultipliedHelper {
+            Objects.requireNonNull(helper, "a helper multiplied");
+            madeAt = List.copyOf(madeAt);
+            if (madeAt.isEmpty()) {
+                throw new IllegalArgumentException("a helper multiplies parts it made somewhere");
+            }
+        }
+
+        /**
+         * The helpers whose copies the copy {@code at} stands in, the one calling this helper
+         * first: what its call is written inside on the way out to the behavior's own body. A
+         * helper cannot call a behavior, so a call declared as one has to move out past them all.
+         */
+        public static List<ValueName.Helper> calledInside(ModelOccurrence at) {
+            List<ValueName.Helper> out = new ArrayList<>();
+            if (at.lineage() instanceof ExpansionLineage.Expansion copy) {
+                for (ExpansionLineage each = copy.within();
+                        each instanceof ExpansionLineage.Expansion step; each = step.within()) {
+                    if (step.expanded() instanceof ValueName.Helper helper) {
+                        out.add(helper);
+                    }
+                }
+            }
+            return List.copyOf(out);
         }
     }
 

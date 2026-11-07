@@ -1646,7 +1646,7 @@ public sealed interface AnotherLineTheRowsAllow {
                 // A model's own decimals can put this row's sum out of the exact arithmetic's reach,
                 // which this method already has a word for: null, the same as any other condition
                 // nothing here can say.
-                case TakenConstraint.Affine(var form, var rel) -> {
+                case TakenConstraint.Affine(var form, var rel, var _) -> {
                     ExactRatio total = OrderedAffineBoundary.at(form, at).orNull();
                     yield total == null ? null : rel.holds(total.signum());
                 }
@@ -1660,7 +1660,7 @@ public sealed interface AnotherLineTheRowsAllow {
         // that moves it has that position's number in hand — so the only condition that reaches
         // here is a form over positions this input says nothing about.
         if (!(taken instanceof TakenConstraint.Affine(
-                var form, var rel))) {
+                var form, var rel, var _))) {
             return null;
         }
         return whatAStepDoesTo(rel, moves(form.coefs(), from, at));

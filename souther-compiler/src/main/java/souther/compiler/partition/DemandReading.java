@@ -926,7 +926,8 @@ final class DemandReading {
      */
     private static boolean heldByTheRunsOfTheDeclarations(TakenConstraint constraint,
                                                           InputReading read) {
-        return constraint instanceof TakenConstraint.Affine(LinearForm<NumericTerm> form, Rel rel)
+        return constraint instanceof TakenConstraint.Affine(
+                        LinearForm<NumericTerm> form, Rel rel, var _)
                 && TakenConstraint.holdsOverTheRunsOf(form, rel, read.quantities().region());
     }
 
@@ -1111,7 +1112,7 @@ final class DemandReading {
          */
         private static boolean bindsInsideTheDeclaredRuns(TakenConstraint each,
                                                           SearchRegion declarations) {
-            if (!(each instanceof TakenConstraint.Affine(var form, var rel))) {
+            if (!(each instanceof TakenConstraint.Affine(var form, var rel, var _))) {
                 return false;
             }
             boolean everyNumberIsHeld = form.coefs().keySet().stream().allMatch(term ->
@@ -1200,7 +1201,8 @@ final class DemandReading {
      *  the side of the number it is on, whether it is strict and the sign of its weight are not
      *  told apart by hand. */
     static boolean endsOfTheInts(TakenConstraint constraint) {
-        if (!(constraint instanceof TakenConstraint.Affine(LinearForm<NumericTerm> form, Rel rel))
+        if (!(constraint instanceof TakenConstraint.Affine(
+                        LinearForm<NumericTerm> form, Rel rel, var _))
                 || form.coefs().size() != 1
                 || !(rel == Rel.LE || rel == Rel.LT || rel == Rel.GE || rel == Rel.GT)) {
             return false;
