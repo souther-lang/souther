@@ -4260,32 +4260,16 @@ final class Pullback {
      * none of these.
      */
     private Sized accumulated(SeededWalk walk, InputReads at, Accumulating how) {
-        Core step = Core.withoutStanding(walk.step().body());
         BindingId accumulator = walk.accumulator().binding();
-        boolean chosen = step instanceof Core.If || step instanceof Core.Match;
-        if ((chosen && decidedByWhatItCarried(step, accumulator))
-                || !(walkedContainer(walk.container(), at)
-                        instanceof DecisionSubject.AnInput held)
-                || !(readAs(how, walk.seed(), at) instanceof Sized.AsAForm(
-                        LinearForm<Quantity> seed))) {
+        if (!(readAs(how, walk.seed(), at) instanceof Sized.AsAForm(LinearForm<Quantity> seed))) {
             return null;
         }
         Quantity.HowManyCarried soFar = new Quantity.HowManyCarried(ACarriedValue.made());
         return tentatively(soFar, () -> {
-            if (!quantifying.add(held)) {
-                return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
-            }
             carriedUnder(how).put(accumulator, LinearForm.atom(soFar));
-            ElementsNamed outer = inTheScopeOf(walk.step(), at);
             try {
-                Sized each = chosen
-                        ? byTheArmsOfAnElement(step, at,
-                                (arm, inside) -> addedBeside(how, arm, inside, soFar))
-                        : addedBeside(how, step, at, soFar);
-                if (!(each instanceof Sized.AsAForm(LinearForm<Quantity> added))) {
-                    return null;
-                }
-                Sized total = addedUpOver(held, added);
+                Sized total = eachAddedUpOver(walk.container(), walk.step(), at, accumulator,
+                        (arm, inside) -> addedBeside(how, arm, inside, soFar));
                 if (!(total instanceof Sized.AsAForm(LinearForm<Quantity> over))) {
                     return total;
                 }
@@ -4293,11 +4277,62 @@ final class Pullback {
                 return all == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
                         : new Sized.AsAForm(all);
             } finally {
-                freeInTheScope = outer;
                 carriedUnder(how).remove(accumulator);
-                quantifying.remove(held);
             }
         });
+    }
+
+    /**
+     * What {@code step} answers of each element of {@code container}, a container of the input,
+     * as {@code each} reads it, added up over the elements ({@link #addedUpOver}) — or null where
+     * the container is no container of the input or the answer is not read.
+     *
+     * <p>A step that is a {@code match} or an {@code if} on the element is read arm by arm
+     * ({@link #byTheArmsOfAnElement}), and what decides the arm may not read {@code carried}, so
+     * which arm an element takes is a statement about the element alone.
+     *
+     * @param carried what a walk carried from one element to the next, or null where it carries
+     *                nothing
+     */
+    private Sized eachAddedUpOver(Core container, Core.Block step, InputReads at,
+                                  BindingId carried, BiFunction<Core, InputReads, Sized> each) {
+        Core answer = Core.withoutStanding(step.body());
+        boolean chosen = answer instanceof Core.If || answer instanceof Core.Match;
+        if ((chosen && decidedByWhatItCarried(answer, carried))
+                || !(walkedContainer(container, at) instanceof DecisionSubject.AnInput held)) {
+            return null;
+        }
+        if (!quantifying.add(held)) {
+            return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
+        }
+        ElementsNamed outer = inTheScopeOf(step, at);
+        try {
+            Sized one = chosen ? byTheArmsOfAnElement(answer, at, each) : each.apply(answer, at);
+            return one instanceof Sized.AsAForm(LinearForm<Quantity> added)
+                    ? addedUpOver(held, added) : null;
+        } finally {
+            freeInTheScope = outer;
+            quantifying.remove(held);
+        }
+    }
+
+    /**
+     * The total {@code node} takes of what a walk answers on each element of a container of the
+     * input, read as a walk from nought adding each answer is ({@link #accumulated}) — or null
+     * where {@code node} is no such total.
+     */
+    private LinearForm<Quantity> totalOfWhatAWalkAnswers(Core node, InputReads at) {
+        AnOperationApplied total = sumCall(node);
+        if (total == null) {
+            return null;
+        }
+        Denotation walk = at.standing(total.args().getFirst(), read.rules().symbols(),
+                read.rules().newtypes());
+        ElementBindings.StepOnEachElement step =
+                ElementBindings.stepAnsweredOnEachElement(walk.value(), blocksAt(walk));
+        return step != null && eachAddedUpOver(step.walked(), step.step(), walk.at(), null,
+                (arm, inside) -> readAs(Accumulating.NUMBER, arm, inside))
+                instanceof Sized.AsAForm(LinearForm<Quantity> form) ? form : null;
     }
 
     /** What {@code e}, read as {@code how} says at {@code at}, adds beside {@code carried}:
@@ -10633,6 +10668,10 @@ final class Pullback {
                 if (numbers != null) {
                     return numbers.over(term ->
                             LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(term)));
+                }
+                LinearForm<Quantity> totalOfAWalk = totalOfWhatAWalkAnswers(node, at);
+                if (totalOfAWalk != null) {
+                    return totalOfAWalk;
                 }
                 // A name for another element of a container the comparison is already read of is
                 // no number of the input, and what it is made of is not followed further.

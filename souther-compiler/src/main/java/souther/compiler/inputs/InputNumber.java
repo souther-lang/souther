@@ -723,9 +723,12 @@ public final class InputNumber {
      *
      * <p>Three numbers are not runs of their own. A total of what is the same number for every
      * element is that number times how many there are — nought where it is nought — as a fold
-     * adding it at every step is. What is the element's own place, at the place's own type, is
-     * the number taken over that place ({@link #overThePlace}). And what is left is a run over what
-     * was computed, in the order the elements were handed where the computation reads it.
+     * adding it at every step is. A total of numbers written out, chosen by what the element holds
+     * ({@link ElementValue#weighsOnlyWhatTheElementMeets}), counts the elements meeting each
+     * choice, which is the count's to say and no run here, so it is null. What is the element's own
+     * place, at the place's own type, is the number taken over that place ({@link #overThePlace}).
+     * And what is left is a run over what was computed, in the order the elements were handed where
+     * the computation reads it.
      *
      * @param each  what one computed value stands as, with which a place is the place
      * @param order the direction the elements were handed in, where {@code computed} reads where
@@ -749,6 +752,10 @@ public final class InputNumber {
             NumericTerm howMany = howManyStandAt(elements, inputs, source);
             return howMany == null ? null
                     : new LinearForm<>(ExactRatio.ZERO, Map.of(howMany, alike.constant()));
+        }
+        if (takenAs instanceof TakenAs.TheSumOfWhatItHolds
+                && computed.weighsOnlyWhatTheElementMeets()) {
+            return null;
         }
         ElementProjection place = placeStanding(computed, each, elements, inputs, source);
         if (place != null) {

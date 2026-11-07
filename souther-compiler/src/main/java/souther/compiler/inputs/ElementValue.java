@@ -19,6 +19,7 @@ import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -26,6 +27,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
@@ -97,6 +99,29 @@ public sealed interface ElementValue {
                     || choice.arms().stream().anyMatch(arm -> arm.value().readsThePosition());
             case SumOfChoices sum -> sum.besides().readsThePosition()
                     || sum.chosen().keySet().stream().anyMatch(ElementValue::readsThePosition);
+        };
+    }
+
+    /**
+     * Whether this comes to a number written out for every element, chosen only by flags the
+     * element holds and cases of values of it, and reads no number of the element.
+     *
+     * <p>A total of such numbers counts the elements meeting each choice, weighed by the number
+     * chosen, so it is a count of what meets a condition and no run of values.
+     */
+    default boolean weighsOnlyWhatTheElementMeets() {
+        return switch (this) {
+            case Affine form -> form.form().coefs().isEmpty();
+            case Choose choice -> choice.whenSet().weighsOnlyWhatTheElementMeets()
+                    && choice.otherwise().weighsOnlyWhatTheElementMeets();
+            case OfItsCase choice -> (choice.rest() == null
+                    || choice.rest().weighsOnlyWhatTheElementMeets())
+                    && choice.arms().stream()
+                            .allMatch(arm -> arm.value().weighsOnlyWhatTheElementMeets());
+            case SumOfChoices sum -> sum.besides().weighsOnlyWhatTheElementMeets()
+                    && sum.chosen().keySet().stream()
+                            .allMatch(ElementValue::weighsOnlyWhatTheElementMeets);
+            case ByPosition _, Indexed _, Multilinear _ -> false;
         };
     }
 
@@ -2246,10 +2271,12 @@ public sealed interface ElementValue {
          * constant, and a step adding nothing else of the element adds that many for each of them.
          *
          * <p>A choice of the element the step adds is read as it is in a closure's answer
-         * ({@link #value}): {@code acc + (if a.debit then a.q else 0)} adds the choice. A choice
-         * holding the answer so far is no choice of the element, and is not read.
+         * ({@link #value}): {@code acc + (if a.debit then a.q else 0)} adds the choice, and so
+         * does {@code if a.debit then acc + a.q else acc} ({@link #addedByEachArm}). A choice
+         * decided by the answer so far is no choice of the element, and is not read.
          */
         private Added addedTo(Core answer, BindingId accumulator) {
+            Set<BindingId> carried = WhatABodyReads.namesMadeOf(answer, Set.of(accumulator));
             LinearForm<TheStep> form = AffineForms.of(answer, held, new Names<TheStep>() {
 
                 @Override
@@ -2261,6 +2288,14 @@ public sealed interface ElementValue {
                     ElementProjection counted = countedAt(e, element, at, source);
                     if (counted != null) {
                         return LinearForm.atom(new TheStep.HowManyAt(counted));
+                    }
+                    LinearForm<Atom> eachArmAdds = addedByEachArm(e, accumulator, carried);
+                    if (eachArmAdds != null) {
+                        Map<TheStep, ExactRatio> terms = new LinkedHashMap<>();
+                        terms.put(new TheStep.TheAnswerSoFar(), ExactRatio.ONE);
+                        eachArmAdds.coefs().forEach((atom, weight) ->
+                                terms.put(new TheStep.OfTheElement(atom), weight));
+                        return new LinearForm<>(eachArmAdds.constant(), terms);
                     }
                     LinearForm<Atom> ofTheElement = atoms().leafOf(e, at);
                     if (ofTheElement == null) {
@@ -2320,6 +2355,72 @@ public sealed interface ElementValue {
             ElementValue adds = ofAtoms(form.constant(), ofTheElement, chosen);
             return adds == null ? null : new Added(adds, counted);
         }
+
+        /**
+         * What a choice adds to the answer so far, where every arm of it answers that answer once
+         * and something more, and nothing the answer so far is made of decides which arm is
+         * taken: the choice of what each arm adds, which is the choice read with the answer so
+         * far as nought. {@code if a.debit then acc + a.q else acc} adds
+         * {@code if a.debit then a.q else 0}, the number
+         * {@code acc + (if a.debit then a.q else 0)} adds. Null where {@code e} is no such choice.
+         *
+         * @param carried the answer so far and every name the step binds to a value made of it
+         */
+        private LinearForm<Atom> addedByEachArm(Core e, BindingId accumulator,
+                                                Set<BindingId> carried) {
+            Core fork = Core.withoutStanding(e);
+            Core decides = switch (fork) {
+                case Core.If iff -> iff.cond();
+                case Core.Match match -> match.scrutinee();
+                case null, default -> null;
+            };
+            if (decides == null || WhatABodyReads.anyOf(decides, carried)) {
+                return null;
+            }
+            for (Choice.Arm arm : Choice.of(fork).arms()) {
+                if (!addsToTheAnswerSoFar(arm.answers(), accumulator, carried)) {
+                    return null;
+                }
+            }
+            Map<BindingId, Core> nought = new LinkedHashMap<>(held);
+            nought.put(accumulator, new Core.Int(0, Type.INT, fork.pos()));
+            ElementValue chosen = new Reader(element, position, standing, Map.copyOf(nought),
+                    source, elements, invariantAt).value(fork);
+            return chosen == null ? null : termsOf(chosen);
+        }
+
+        /** Whether {@code arm} answers the answer so far, at a weight of one, and beside it
+         *  nothing made of it — an arm that is itself such a choice included. */
+        private boolean addsToTheAnswerSoFar(Core arm, BindingId accumulator,
+                                             Set<BindingId> carried) {
+            LinearForm<SoFar> form = AffineForms.of(arm, held, new Names<SoFar>() {
+
+                @Override
+                public LinearForm<SoFar> leafOf(Core e, Map<BindingId, Core> at) {
+                    if (Core.withoutStanding(e) instanceof Core.Read read
+                            && read.binding().equals(accumulator)) {
+                        return LinearForm.atom(SoFar.THE_ANSWER);
+                    }
+                    if (addedByEachArm(e, accumulator, carried) != null) {
+                        return LinearForm.atom(SoFar.THE_ANSWER).plus(LinearForm.atom(SoFar.MORE))
+                                .orNull();
+                    }
+                    return WhatABodyReads.anyOf(e, carried) ? null : LinearForm.atom(SoFar.MORE);
+                }
+
+                @Override
+                public LinearForm<SoFar> productOf(LinearForm<SoFar> left,
+                                                   LinearForm<SoFar> right) {
+                    return left.coefs().containsKey(SoFar.THE_ANSWER)
+                            || right.coefs().containsKey(SoFar.THE_ANSWER) ? null
+                            : LinearForm.atom(SoFar.MORE);
+                }
+            });
+            return form != null && ExactRatio.ONE.equals(form.coefs().get(SoFar.THE_ANSWER));
+        }
+
+        /** What an arm of a step is made of, as far as whether it adds to the answer so far. */
+        private enum SoFar { THE_ANSWER, MORE }
 
         /** What an atom of a step is: the answer so far, an atom of the element, or how many the
          *  container at a place of the element holds. */
