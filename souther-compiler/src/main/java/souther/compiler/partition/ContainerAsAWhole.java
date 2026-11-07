@@ -36,7 +36,7 @@ import java.util.function.Function;
  * elements of a group alone comes to what they come to, which is not the number fixed. So the group
  * is read with its own places answered by the row holding it and the container's whole numbers
  * answered by a row of as many elements coming to what is fixed: the group, one element holding
- * what is left of each total, and elements holding nought ({@link #readingOf}). What is read of the
+ * what is left of each total, and elements holding nought ({@link Fixed#readingOf}). What is read of the
  * container through that row is what the container chosen will come to, which is what the reading
  * of the group is for.
  *

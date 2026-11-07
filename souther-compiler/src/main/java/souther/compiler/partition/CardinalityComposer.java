@@ -601,7 +601,7 @@ final class CardinalityComposer {
                     values -> standing.read(withNumbersBeside(
                             ofTheElement.holding(sourceType, values), written));
             // What a group of elements answers is read inside a container coming to the numbers
-            // of the whole fixed, where any are ({@link ContainerAsAWhole#readingOf}).
+            // of the whole fixed, where any are ({@link ContainerAsAWhole.Fixed#readingOf}).
             Function<List<ObservedValue>, BorderQuantity.Observation> readingOf = fixed == null
                     ? holdingThem
                     : group -> fixed.readingOf(group, holdingThem)
