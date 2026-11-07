@@ -1,7 +1,13 @@
 package souther.compiler.abort;
 
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.semantics.LawNumber;
+import souther.compiler.semantics.LawSubject;
+
 import java.math.BigInteger;
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -28,9 +34,14 @@ public sealed interface GetsPast {
      * by putting elements in, so every collection it holds on the way holds no more than the
      * answer.
      *
-     * @param answer how many elements the answer holds at most, of what the site is handed
+     * <p>How many is a number of what the site is handed, in the words the library's laws count
+     * with: how many an operand holds, and over the elements of an operand what each holds, or
+     * what a closure among the operands answers on each.
+     *
+     * @param answer how many elements the answer holds at most, over the site's operands counted
+     *               from nought
      */
-    record WhereTheAnswerFits(AnswerSize answer) implements GetsPast {
+    record WhereTheAnswerFits(LinearForm<LawNumber<Integer>> answer) implements GetsPast {
 
         public WhereTheAnswerFits {
             Objects.requireNonNull(answer, "an answer fits by some count");
@@ -68,30 +79,17 @@ public sealed interface GetsPast {
      */
     BigInteger MOST_ELEMENTS = BigInteger.valueOf(2_147_483_647L);
 
-    /** How many elements an answer holds at most, in terms of what the site is handed. */
-    sealed interface AnswerSize {
-
-        /**
-         * At most as many as the collections at {@code operands} hold together, and
-         * {@code more} beside them.
-         *
-         * @param operands which of the site's operands, counted from nought
-         * @param more     how many beside them
-         */
-        record SumOf(List<Integer> operands, int more) implements AnswerSize {
-
-            public SumOf {
-                operands = List.copyOf(operands);
-                if (operands.isEmpty() && more == 0) {
-                    throw new IllegalArgumentException("a sum of something");
-                }
+    /** How many the collections at {@code operands}, each a different one, hold together, and
+     *  {@code more} beside them: what an answer put together of them and of {@code more}
+     *  elements holds. */
+    static LinearForm<LawNumber<Integer>> together(int more, Integer... operands) {
+        Map<LawNumber<Integer>, ExactRatio> each = new LinkedHashMap<>();
+        for (int at : operands) {
+            if (each.put(new LawNumber.SizeOf<>(new LawSubject.Argument<>(at)), ExactRatio.ONE)
+                    != null) {
+                throw new IllegalArgumentException("operand " + at + " is counted once");
             }
         }
-
-        /**
-         * A piece for each element of the collection at {@code source}, each what the function
-         * at {@code function} answers on that element, put end to end.
-         */
-        record PiecesOf(int source, int function) implements AnswerSize {}
+        return new LinearForm<>(ExactRatio.of(more), each);
     }
 }

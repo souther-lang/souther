@@ -4700,12 +4700,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** Whether a run gets past {@code owed} on this witness. */
         boolean answers(Pullback.StopObligation owed) {
             return ContainerSizesUnderAWitness.answersOn(owed.within(), owed.operation(),
-                    owed.completion(), node -> {
-                        InputReads at = owed.readsAt(node);
-                        return at != null && at.pathOf(node, read.rules().newtypes())
-                                instanceof PathResolution.At(TermPath path)
-                                ? holds(path) : Optional.empty();
-                    });
+                    owed.completion(), node -> heldAt(owed, node, false),
+                    node -> heldAt(owed, node, true));
+        }
+
+        /** How many elements the collection of the input {@code node} reads holds here, or each
+         *  element of it where {@code ofEachElement}, or nothing where no such run is shown. */
+        private Optional<BigInteger> heldAt(Pullback.StopObligation owed, Core node,
+                                            boolean ofEachElement) {
+            InputReads at = owed.readsAt(node);
+            if (at == null || !(at.pathOf(node, read.rules().newtypes())
+                    instanceof PathResolution.At(TermPath path))) {
+                return Optional.empty();
+            }
+            return holds(ofEachElement ? path.element() : path);
         }
 
         /**

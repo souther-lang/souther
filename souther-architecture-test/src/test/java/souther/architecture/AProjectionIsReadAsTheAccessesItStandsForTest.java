@@ -295,6 +295,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks of one access the type of its target, which says whether the field is the"
                         + " value a newtype wraps; a projection reaches it as its last access, whose"
                         + " target is the projection one name shorter and has a type of its own");
+        row(out, c + "check/PathCompletion", "workedOut", "(" + core + "L" + c + "check/Known;"
+                + at + "Ljava/util/List;[Z)L" + c + "check/Known;", Reading.STRUCTURE,
+                EVALUATION);
         row(out, c + "check/ValueStanding", "eliminated", "(" + core + "Ljava/lang/Object;L" + c
                 + "check/ValueStanding$Names;L" + c + "check/BindingWalk;)Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
@@ -610,12 +613,18 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/GuardThresholds", "readsAnAnswer", "(" + core
                 + reads + "L" + c + "inputs/InputReading;Ljava/util/Set;)Z", Reading.STRUCTURE,
                 CHOICES_AND_CALLS);
-        row(out, c + "check/SeededWalk", "theFieldAsCarried", "(" + core + "L" + c
-                + "types/BindingId;Ljava/lang/String;L" + CORE + "$Read;)" + core,
-                Reading.NAMES, "reads the field of what a walk carried a step names, a projection"
-                        + " as the accesses it stands for, the last of them holding the rest");
-        row(out, c + "partition/Pullback", "aFieldOfAWalk", "(" + core + reads + ")L" + c
-                + "numeric/LinearForm;", Reading.ONE_ACCESS, ONE);
+        row(out, c + "check/SeededWalk", "thePartAsCarried", "(" + core
+                + "L" + c + "types/BindingId;L" + c + "check/SeededWalk$Part;L" + CORE
+                + "$Read;)" + core,
+                Reading.STRUCTURE, "asks which part each node takes of what a walk carried"
+                        + " through Part.taken, which reads a projection as its last access; one"
+                        + " of more names off what was carried reads it whole below that, which"
+                        + " no walk of the part reads");
+        row(out, c + "check/SeededWalk$Part", "taken", "(" + core + ")L" + c
+                + "check/SeededWalk$Taken;", Reading.NAMES, "which part an access or a"
+                + " component taken reads, a projection as its last access off the rest");
+        row(out, c + "check/SeededWalk", "inlined", "(" + core + "L" + c + "types/BindingId;"
+                + core + ")" + core, Reading.STRUCTURE, REWRITES_THE_BASE);
         row(out, c + "partition/ComparisonAssessment", "written",
                 "(" + core + ")Ljava/lang/String;", Reading.NAMES,
                 "spells a side of a comparison for a report, a projection as the accesses it"

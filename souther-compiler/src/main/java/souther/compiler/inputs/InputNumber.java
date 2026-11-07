@@ -1055,8 +1055,8 @@ public final class InputNumber {
         return walk == null ? null : ofAWalkAdding(walk, inputs, reads, source);
     }
 
-    /** The same, of {@code walk} as it is handed: a walk read for one field of what it carries
-     *  ({@link SeededWalk#ofTheField}) is no call standing anywhere. */
+    /** The same, of {@code walk} as it is handed: a walk read for one part of what it carries
+     *  ({@link SeededWalk#ofThePart}) is no call standing anywhere. */
     public static SeedAndAdded ofAWalkAdding(SeededWalk walk, InputDomain inputs, InputReads reads,
                                              RuleReadingSource source) {
         Denotation container =

@@ -293,6 +293,27 @@ public final class AbortSites {
     private static final List<Type> NUMBERS = List.of(Type.INT, Type.DECIMAL, Type.RATIONAL);
 
     /**
+     * What {@code op}, answering a value of {@code answer}, may end a run for: for a reader that
+     * knows what an operator answers and not what each operand is. {@code + - *} answering a
+     * plain number build nothing; one answering anything else, and {@code /}, whose sites turn on
+     * its operands, are read over every typing ({@link #ofAnOperatorOfAnyType}).
+     */
+    public static AbortSet ofAnOperatorAnswering(BinOp op, Type answer) {
+        return switch (op) {
+            case BinOp.ADD, BinOp.SUB, BinOp.MUL -> NUMBERS.contains(answer)
+                    ? arithmeticType(op, answer) : ofAnOperatorOfAnyType(op);
+            case BinOp.DIV -> ofAnOperatorOfAnyType(op);
+            case BinOp.CONCAT, BinOp.EQ, BinOp.NE, BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE,
+                 BinOp.AND, BinOp.OR -> whateverItsTypes(op);
+        };
+    }
+
+    /** The same, of a unary minus answering a value of {@code answer}. */
+    public static AbortSet ofANegationAnswering(Type answer) {
+        return NUMBERS.contains(answer) ? negation(answer) : ofANegationOfAnyType();
+    }
+
+    /**
      * What the sites {@code op} is written as may end a run for, over every typing the checker
      * admits it at: for a reader of a tree whose operands carry no type. Each typing is written as
      * one or more sites — an operator, and a construction where the typing builds a value — and
@@ -397,8 +418,7 @@ public final class AbortSites {
     public static GetsPast completionOfAnOperator(BinOp op, Type answer) {
         return switch (op) {
             case BinOp.CONCAT -> answer instanceof Type.ListOf
-                    ? new GetsPast.WhereTheAnswerFits(
-                            new GetsPast.AnswerSize.SumOf(List.of(0, 1), 0))
+                    ? new GetsPast.WhereTheAnswerFits(GetsPast.together(0, 0, 1))
                     : new GetsPast.NotKnown();
             case BinOp.EQ, BinOp.NE, BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE, BinOp.AND,
                  BinOp.OR -> new GetsPast.Always();

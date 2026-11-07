@@ -99,6 +99,9 @@ public final class BoundOperationFacts {
     private final Map<ValueName, List<LawProposition<Slot>>> relations;
     private final Stdlib stdlib;
     private final Map<ValueName, Map<OperationLaw.Observed, Settled>> settled;
+    /** What proved the operations the library writes, which is asked what else is proved of
+     *  their bodies once everything is settled. */
+    private final LibraryProofs proved;
     private final List<BoundOperationFact> notProvedOfTheirBodies;
 
     /** Made by the binder and by nothing else: what these are is what a binding came to, and a
@@ -126,6 +129,7 @@ public final class BoundOperationFacts {
                 BoundOperationFact.HasALaw::beside));
         Settling settling = settle(awaiting, proofs);
         settled = settling.settled();
+        proved = settling.proving();
         // One the body does not prove is an obligation, held apart, and no reader takes it. The
         // cases a definition is written in stand or fall together: a reader takes them as every
         // way the operation answers, so they are filed where every one of them is proved and some
@@ -639,6 +643,12 @@ public final class BoundOperationFacts {
     public Settled settled(ValueName operation, OperationLaw.Observed observed) {
         Map<OperationLaw.Observed, Settled> of = operation == null ? null : settled.get(operation);
         return of == null ? null : of.get(observed);
+    }
+
+    /** What proved the operations the library writes, for what is asked of their bodies once
+     *  every law of the library is settled ({@link LibraryEndings}). */
+    LibraryProofs proofs() {
+        return proved;
     }
 
     /** What is stated of operations the library writes that their bodies do not prove, and that
