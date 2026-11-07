@@ -56,10 +56,21 @@ final class DecisionPath {
      */
     private final DecisionRule rule;
 
+    /**
+     * A path that consulted each of {@code consulted}'s conditions once: a condition met again on
+     * the way is the one column met again ({@link Consulted#again}), so a list naming one twice is
+     * refused. What a path's rule holds is then exactly the conditions it lists, which is what
+     * {@link #and} asks of the rule in place of looking through the list.
+     */
     DecisionPath(List<Consulted> consulted) {
         this.consulted = List.copyOf(consulted);
         Map<DecisionCondition, DecidedCondition> vector = new LinkedHashMap<>();
-        this.consulted.forEach(each -> vector.put(each.answer().condition(), each.answer()));
+        for (Consulted each : this.consulted) {
+            if (vector.put(each.answer().condition(), each.answer()) != null) {
+                throw new IllegalArgumentException("a path consults " + each.answer().condition()
+                        + " once, however often it is met");
+            }
+        }
         this.rule = new DecisionRule(vector);
     }
 
@@ -413,22 +424,26 @@ final class DecisionPath {
         // disagree exactly where a column of one came out otherwise in the other. Most ways a
         // reading pairs are ways no run takes, and each of those is answered by a look per column
         // rather than by finding every condition of one among the conditions of the other.
-        for (Map.Entry<DecisionCondition, DecidedCondition> each
-                : more.rule.consulted().entrySet()) {
-            DecidedCondition had = rule.at(each.getKey());
-            if (had != null && !had.equals(each.getValue())) {
+        boolean[] metAgain = new boolean[more.consulted.size()];
+        for (int each = 0; each < metAgain.length; each++) {
+            DecidedCondition answer = more.consulted.get(each).answer();
+            DecidedCondition had = rule.at(answer.condition());
+            if (had != null && !had.equals(answer)) {
                 return null;
             }
+            metAgain[each] = had != null;
         }
+        // A condition this path never consulted is a column added, and one it did is a column met
+        // again, which is found among this path's own: what the rule held is what the path lists,
+        // and the conditions the other path adds are each its own once.
         List<Consulted> out = new ArrayList<>(consulted);
-        for (Consulted each : more.consulted) {
-            int already = at(out, each.answer().condition());
-            if (already < 0) {
-                out.add(each);
-            } else if (!out.get(already).answer().equals(each.answer())) {
-                return null;
+        for (int each = 0; each < metAgain.length; each++) {
+            Consulted added = more.consulted.get(each);
+            if (!metAgain[each]) {
+                out.add(added);
             } else {
-                out.set(already, out.get(already).again(each));
+                int already = at(consulted, added.answer().condition());
+                out.set(already, out.get(already).again(added));
             }
         }
         return new DecisionPath(out);
