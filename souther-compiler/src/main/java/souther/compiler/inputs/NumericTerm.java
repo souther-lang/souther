@@ -1920,11 +1920,28 @@ public sealed interface NumericTerm
          *  value, or null where it stands where that factor is one. */
         private final ExactRatio fixedAt;
 
+        /**
+         * Each factor holds its numbers in the order {@link NumericTerms} walks a form in, whatever
+         * order the form it was made from held them. Two products that are equal are then the same
+         * to everyone who reads one: the text it is written as, the place a reader is sent to, the
+         * order its numbers are placed in.
+         */
         private ProductOf(LinearForm<NumericTerm> one, LinearForm<NumericTerm> other,
                           ExactRatio fixedAt) {
-            this.one = one;
-            this.other = other;
+            this.one = inTheOneOrder(one);
+            this.other = inTheOneOrder(other);
             this.fixedAt = fixedAt;
+        }
+
+        private static LinearForm<NumericTerm> inTheOneOrder(LinearForm<NumericTerm> form) {
+            if (form.coefs().size() < 2) {
+                return form;
+            }
+            Map<NumericTerm, ExactRatio> ordered = new LinkedHashMap<>();
+            for (Map.Entry<NumericTerm, ExactRatio> each : NumericTerms.entriesInOrder(form.coefs())) {
+                ordered.put(each.getKey(), each.getValue());
+            }
+            return new LinearForm<>(form.constant(), ordered);
         }
 
         /**

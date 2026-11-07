@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
@@ -26,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.SequencedSet;
 import java.util.Set;
 
 /**
@@ -57,8 +59,10 @@ public sealed interface RowDemand {
          * <p>Asked of the demand, for the reason {@link TakenConstraint#terms} is: what a composer
          * does first with a demand is find where each of its numbers is written, and read off the
          * shapes that act would be written once per shape.
+         *
+         * <p>In one order, as {@link TakenConstraint#terms} hands them over.
          */
-        Set<NumericTerm> terms();
+        SequencedSet<NumericTerm> terms();
 
         /**
          * Every position whose value this turns on.
@@ -130,7 +134,7 @@ public sealed interface RowDemand {
     record Relational(TakenConstraint constraint) implements OfACondition, OfAnElement {
 
         @Override
-        public Set<NumericTerm> terms() {
+        public SequencedSet<NumericTerm> terms() {
             return constraint.terms();
         }
 
@@ -180,8 +184,8 @@ public sealed interface RowDemand {
 
         /** None: a {@code Bool} is no number. */
         @Override
-        public Set<NumericTerm> terms() {
-            return Set.of();
+        public SequencedSet<NumericTerm> terms() {
+            return NumericTerms.none();
         }
 
         @Override
@@ -270,8 +274,8 @@ public sealed interface RowDemand {
 
         /** None: two values on no order are no number. */
         @Override
-        public Set<NumericTerm> terms() {
-            return Set.of();
+        public SequencedSet<NumericTerm> terms() {
+            return NumericTerms.none();
         }
 
         @Override
@@ -786,8 +790,8 @@ public sealed interface RowDemand {
     }
 
     /** The numbers {@code asked} is written with, along every way. */
-    private static Set<NumericTerm> termsOf(AnElementMeets asked) {
-        Set<NumericTerm> out = new LinkedHashSet<>();
+    private static SequencedSet<NumericTerm> termsOf(AnElementMeets asked) {
+        SequencedSet<NumericTerm> out = new LinkedHashSet<>();
         asked.ways().forEach(way -> relationsAmong(way).forEach(each -> out.addAll(each.terms())));
         return out;
     }
@@ -894,8 +898,8 @@ public sealed interface RowDemand {
         /** The numbers the element is written with, which are what a row composed for this
          *  places. */
         @Override
-        public Set<NumericTerm> terms() {
-            return Collections.unmodifiableSet(termsOf(ofAnElement));
+        public SequencedSet<NumericTerm> terms() {
+            return Collections.unmodifiableSequencedSet(termsOf(ofAnElement));
         }
 
         @Override
@@ -960,10 +964,10 @@ public sealed interface RowDemand {
          *  row composed for this places — the first where it writes an element, the second where
          *  it writes none. */
         @Override
-        public Set<NumericTerm> terms() {
-            Set<NumericTerm> out = termsOf(ofEachElement);
+        public SequencedSet<NumericTerm> terms() {
+            SequencedSet<NumericTerm> out = termsOf(ofEachElement);
             out.addAll(holdingNone.terms());
-            return Collections.unmodifiableSet(out);
+            return Collections.unmodifiableSequencedSet(out);
         }
 
         @Override
@@ -1068,11 +1072,11 @@ public sealed interface RowDemand {
         /** The numbers the statement reads, of the elements and beside them, and the numbers added
          *  to the count. */
         @Override
-        public Set<NumericTerm> terms() {
-            Set<NumericTerm> out = new LinkedHashSet<>(AStatementAtARow.numbersOf(
+        public SequencedSet<NumericTerm> terms() {
+            SequencedSet<NumericTerm> out = new LinkedHashSet<>(AStatementAtARow.numbersOf(
                     AStatementAtARow.meetingOf(count)));
-            out.addAll(against.coefs().keySet());
-            return Collections.unmodifiableSet(out);
+            out.addAll(NumericTerms.inOrder(against.coefs().keySet()));
+            return Collections.unmodifiableSequencedSet(out);
         }
 
         /** The container, the place whose values are counted where values are what is counted,
@@ -1179,8 +1183,8 @@ public sealed interface RowDemand {
 
         /** The numbers of the form. */
         @Override
-        public Set<NumericTerm> terms() {
-            return dividend().coefs().keySet();
+        public SequencedSet<NumericTerm> terms() {
+            return NumericTerms.setInOrder(dividend().coefs().keySet());
         }
 
         @Override
@@ -1238,8 +1242,8 @@ public sealed interface RowDemand {
 
         /** None: a composer places nothing for this, and the run says whether it held. */
         @Override
-        public Set<NumericTerm> terms() {
-            return Set.of();
+        public SequencedSet<NumericTerm> terms() {
+            return NumericTerms.none();
         }
 
         @Override
