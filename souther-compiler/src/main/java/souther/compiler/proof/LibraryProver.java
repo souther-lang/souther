@@ -731,7 +731,7 @@ public final class LibraryProver {
         // For each part, what it may be proved to carry, each with how much it then holds.
         List<List<Carrying>> ways = new ArrayList<>();
         for (List<Integer> path : paths) {
-            ways.add(carrying(operation, reading, params, walk, path));
+            ways.add(carrying(reading, walk, path));
         }
         for (List<Carrying> chosen : everyChoice(ways)) {
             List<LawProposition<Slot>> carries = new ArrayList<>();
@@ -782,8 +782,7 @@ public final class LibraryProver {
      * the arguments, holding no more than that and one for each element walked, or than that and
      * what each element walked holds. Nothing (a choice of no statement) where it is neither.
      */
-    private List<Carrying> carrying(ValueName.Stdlib.Operation operation, Reading reading,
-                                    List<Value> params, Value.Made walk, List<Integer> path) {
+    private List<Carrying> carrying(Reading reading, Value.Made walk, List<Integer> path) {
         TheWalk shape = library.stdlib().walk();
         Value started = Induction.at(walk.args().get(shape.seed()), path);
         LawNumber<Slot> part = started instanceof Value.Whole
