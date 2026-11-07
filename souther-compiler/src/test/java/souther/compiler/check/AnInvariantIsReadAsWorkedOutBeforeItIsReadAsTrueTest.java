@@ -9,6 +9,10 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
+import java.util.HashSet;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -83,6 +87,34 @@ class AnInvariantIsReadAsWorkedOutBeforeItIsReadAsTrueTest {
         FieldDomains read = domainsOf("value >= 0 && value <= 100 && value + 1 > 0");
         assertTrue(read.holdsNothing().isEmpty());
         assertInstanceOf(ProjectionEvidence.CertifiedExact.class, read.projection());
+    }
+
+    /**
+     * What a choice is worked out on before it chooses is read as worked out, whichever way the
+     * choice is written: the condition of an {@code if} and what a {@code match} matches on alike.
+     * A sum there that stops no value asks nothing of the bounds, and one that may stop one asks
+     * a relation they do not hold.
+     */
+    @Test
+    void whatAChoiceIsWorkedOutOnIsReadAsWorkedOutWhicheverWayItIsWritten() {
+        String fork = "if value + %s > 0 then value >= 0 else value >= 0";
+        String match = "match List.get(value + %s, [1, 2]) with | Some x -> x > 0"
+                + " | None -> value >= 0";
+        for (String added : new String[] {"1", MAX}) {
+            Set<Class<?>> ofTheFork = causes(fork.formatted(added));
+            assertEquals(ofTheFork, causes(match.formatted(added)), added);
+            assertEquals(added.equals(MAX), ofTheFork.contains(ProjectionEvidence.Cause.Lossy.class),
+                    added);
+        }
+    }
+
+    /** The kinds of cause the bounds of {@code chosen}, over a value from nought to a hundred,
+     *  are short of the rule for. */
+    private static Set<Class<?>> causes(String chosen) {
+        Set<Class<?>> out = new HashSet<>();
+        domainsOf("value >= 0 && value <= 100 && (" + chosen + ")").projection().causes()
+                .forEach(cause -> out.add(cause.getClass()));
+        return out;
     }
 
     /** The left of a choice is worked out first, so the right is reached where it fails. */

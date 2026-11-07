@@ -258,6 +258,67 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
         }
     }
 
+    /**
+     * A collection a body builds holds no more than what it is shown to under the way the body
+     * went to reach it, and a body answers where what it builds there fits: an insert reached
+     * only where the key is there holds no more than the map; one reached either way, one more; a
+     * walk starting from a map holds it and one for each entry walked; and a walk joining whole
+     * lists holds what they hold together.
+     */
+    @Test
+    void whatABodyBuildsIsHeldToWhatItIsShownToHoldWhereItIsReached() {
+        LibraryEndings endings = LibraryEndings.shipped();
+        assertEquals(new GetsPast.Always(), endings.completionApartFromWhatItIsHanded(
+                ValueName.Stdlib.operation("Map", "updateIfPresent")));
+        assertEquals(new GetsPast.WhereTheAnswerFits(GetsPast.together(1, 3)),
+                endings.completionApartFromWhatItIsHanded(
+                        ValueName.Stdlib.operation("Map", "updateOrInsert")));
+        assertEquals(new GetsPast.WhereTheAnswerFits(GetsPast.together(0, 0, 1)),
+                endings.completionApartFromWhatItIsHanded(
+                        ValueName.Stdlib.operation("Map", "union")));
+        assertEquals(new GetsPast.WhereTheAnswerFits(LinearForm.atom(new LawNumber.SumOver<>(0,
+                        new LawNumber.SizeOf<>(new LawSubject.ElementOf<>(0))))),
+                endings.completionApartFromWhatItIsHanded(
+                        ValueName.Stdlib.operation("List", "concat")));
+    }
+
+    /** An operation handed no function is read whole as it is read apart from what it is handed,
+     *  and an arithmetic over whole numbers it is handed ends a run where it passes an Int. */
+    @Test
+    void anOperationHandedNoFunctionIsReadWholeAsItIsReadApart() {
+        LibraryEndings endings = LibraryEndings.shipped();
+        for (String each : new String[] {"take", "drop", "distinct", "zipShortest", "contains"}) {
+            assertEquals(NONE, endings.of(ValueName.Stdlib.operation("List", each)), each);
+        }
+        assertEquals(new Endings.Known(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE)),
+                endings.of(ValueName.Stdlib.operation("Int", "abs")));
+    }
+
+    /** A value a step works out and then does not answer is worked out all the same, and what it
+     *  holds is asked of as well. */
+    @Test
+    void aValueAStepWorksOutAndDropsIsAskedOfAsWell() {
+        LibraryEndings endings = LibraryEndings.of(rewritten(
+                "(acc, x) -> if keep(x) then acc ++ [x] else acc",
+                "(acc, x) -> {\n        let twice = acc ++ acc\n"
+                        + "        if keep(x) then acc ++ [x] else acc\n    }"));
+        ValueName.Stdlib.Operation filter = ValueName.Stdlib.operation("List", "filter");
+
+        assertTrue(!endings.apartFromWhatItIsHanded(filter).endsNone());
+        assertEquals(new GetsPast.NotKnown(), endings.completionApartFromWhatItIsHanded(filter));
+    }
+
+    /** A site in a closure the body hands to a kernel is met by no reading of the body, so
+     *  nothing is shown of what it holds, and it ends a run where it holds too much. */
+    @Test
+    void aSiteNoReadingMeetsIsNotShownToHoldLittle() {
+        Stdlib rewritten = rewritten(IS_EMPTY_BODY,
+                "List.length(List.sortBy(y -> List.length(List.append(xs, xs)), [1])) >= 0");
+
+        assertEquals(new Endings.Known(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE)),
+                LibraryEndings.of(rewritten).of(IS_EMPTY));
+    }
+
     /** What a walk is proved to end of its own is what an operation calling it reads, as it reads
      *  any operation it calls. */
     @Test

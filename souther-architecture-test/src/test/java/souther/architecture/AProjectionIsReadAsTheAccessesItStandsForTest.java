@@ -295,6 +295,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks of one access the type of its target, which says whether the field is the"
                         + " value a newtype wraps; a projection reaches it as its last access, whose"
                         + " target is the projection one name shorter and has a type of its own");
+        row(out, c + "check/PathCompletion", "workedOut", "(" + core + "L" + c + "check/Known;"
+                + at + "Ljava/util/List;[Z)L" + c + "check/Known;", Reading.STRUCTURE,
+                EVALUATION);
         row(out, c + "check/ValueStanding", "eliminated", "(" + core + "Ljava/lang/Object;L" + c
                 + "check/ValueStanding$Names;L" + c + "check/BindingWalk;)Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
