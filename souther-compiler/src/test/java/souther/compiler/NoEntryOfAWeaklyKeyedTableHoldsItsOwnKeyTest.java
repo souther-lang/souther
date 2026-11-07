@@ -30,6 +30,8 @@ import souther.compiler.meaning.CompoundSamples;
 import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WaysSamples;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
 import souther.compiler.regex.Language;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -58,6 +60,17 @@ class NoEntryOfAWeaklyKeyedTableHoldsItsOwnKeyTest {
 
     /** Each table, by the class and the field holding it, and how the compiler fills it. */
     private static final Map<String, Runnable> FILLED_BY = Map.of(
+            "souther.compiler.coverage.DecisionSources$LibraryPart#KEPT", () -> {
+                Compilation compilation = Compilation.ofSource("""
+                        module example.weak
+
+                        behavior pick : (n: Int) -> Int
+                        let pick (n) = if Int.abs(n) > 3 then 1 else 0
+                        """, "Main");
+                compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
+                compilation.answerEverything();
+                KEPT.add(compilation);
+            },
             "souther.compiler.regex.EndsOfAMachine#HELD", () -> {
                 Language words = Language.ofWords(List.of("ab", "cde"), ROOMY);
                 words.lengths();
