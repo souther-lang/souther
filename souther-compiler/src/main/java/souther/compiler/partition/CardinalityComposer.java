@@ -196,15 +196,11 @@ final class CardinalityComposer {
             }
             return handingOn(asked, handed, meeting, size, view, keptApart, reading);
         }
-        Element element = Element.of(counts, container);
-        boolean inside = standingAt.stream()
-                .anyMatch(each -> !each.term().subjectPath().equals(container.element()));
         // Counts whose statements read the total of the element's number are composed with the
         // total chosen first ({@link CoupledCardinalityComposer}): what a row holding an element
         // alone answers is not what the element answers in the container it is in. Counts it does
         // not take are chosen as below.
-        if (element == null && standingAt.isEmpty()
-                && ElementsKeptApart.at(view, keptApart, reading).isEmpty()) {
+        if (standingAt.isEmpty() && ElementsKeptApart.at(view, keptApart, reading).isEmpty()) {
             CoupledCardinalityComposer.Coupled coupled =
                     CoupledCardinalityComposer.Coupled.of(asked, container, measuring);
             TermRealizations.Realization composed = coupled == null ? null
@@ -214,131 +210,11 @@ final class CardinalityComposer {
                 return composed;
             }
         }
-        // An element that is more than one number is chosen among the values it is read at
-        // whole; and so is every element whose different values are counted, since what is
-        // shared out then is the elements holding one value together, however many there are of
-        // each.
-        if (element == null || inside || apartAt != null) {
-            return amongItsValues(asked, List.of(), standingAt, demands, container, size,
-                    sourceType, view, holding, keptApart, apartAt, measuring, within, reading,
-                    new Standing.WhereItIsWritten(sourceType, reading));
-        }
-        for (RealizationTarget.OfANumber each : standingAt) {
-            AskedAt at = demands.get(each);
-            if (at == null || at.walking() == null) {
-                return none("nothing says where an element of `" + container + "` is to stand");
-            }
-            asked.add(new Asked.SomeElementIn(at.walking(), element.carrier()));
-        }
-        // The numbers beside an element, each at the one value the row was fixed at.
-        Map<NumericTerm, Place> beside = new LinkedHashMap<>();
-        Map<TermPath, ObservedValue> written = new LinkedHashMap<>();
-        for (NumericTerm term : element.beside()) {
-            Carrier on = element.on().get(term);
-            Place at = settled(within, term);
-            if (on == null || at == null) {
-                return none("`" + term + "` stands at no one value beside the elements of `"
-                        + container + "`");
-            }
-            beside.put(term, at);
-            writtenAt(term, at, measuring, written);
-        }
-        NumericDomain.Bounds run = switch (within.projectionOf(element.term())) {
-            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
-                    held == null ? NumericDomain.Bounds.OPEN : held;
-            case NumericDomain.FormProjection.NothingIsLeft _ -> null;
-            case null -> NumericDomain.Bounds.OPEN;
-        };
-        // The element is the one number chosen, so elements kept apart at any run of it — a set's,
-        // or a list's its rules keep apart — are elements holding no number twice.
-        boolean distinct = !ElementsKeptApart.at(view, keptApart, reading).isEmpty();
-        int perPart = distinct ? MOST_ELEMENTS : 1;
-        Set<CompositionCapacity> unheld = new LinkedHashSet<>();
-        Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
-        TypeView ofTheElement = TypeView.of(holding.element(), ruleSource.inners(),
-                ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
-        List<Place> candidates = List.of();
-        if (element.carrier().counts()) {
-            List<ExactRatio> turns = new ArrayList<>();
-            for (Asked one : asked) {
-                List<ExactRatio> where = one.turnsAt(element.term(), beside);
-                if (where == null) {
-                    return notChosen("where `" + one + "` turns over an element of `" + container
-                            + "` could not be worked out");
-                }
-                turns.addAll(where);
-            }
-            if (run != null) {
-                candidates = valuesAlong(element.carrier(), run, turns, perPart,
-                        UsualPlaces.of(element.term(), element.carrier(), reading.today()),
-                        unheld, unnamed);
-            }
-        } else {
-            List<Place> turns = new ArrayList<>();
-            for (Asked one : asked) {
-                List<Place> where = one.placesTurnedAt(element.term(), beside);
-                if (where == null) {
-                    return notChosen("where `" + one + "` turns over an element of `" + container
-                            + "` could not be worked out");
-                }
-                turns.addAll(where);
-            }
-            if (run != null) {
-                candidates = valuesAlongAnOrder(element.carrier(), run, turns, perPart,
-                        OfTheType.of(ofTheElement, reading), unnamed);
-            }
-        }
-        Groups<Place> groups =
-                Groups.of(asked, container, element, written, candidates).keptBy(asked);
-        List<FixtureTemplate> built = new ArrayList<>();
-        Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
-        Sharing sharing = new Sharing(groups, asked, List.of(), size,
-                g -> distinct ? groups.values().get(g).size() : Integer.MAX_VALUE, MOST_SHARES);
-        for (int elements = 0; ; elements++) {
-            if (elements > MOST_ELEMENTS) {
-                refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
-                break;
-            }
-            // Each sharing is built as it is found, so what stops the walk is a container offered
-            // or a sharing looked at, and never a list of them made first.
-            boolean walkedThem = sharing.each(elements, share -> {
-                if (built.size() == MOST_OFFERED) {
-                    return false;
-                }
-                List<Place> values = groups.drawn(share, distinct);
-                if (readsAsAsked(asked, container, element, written, values)) {
-                    FixtureTemplate one = holdingThese(values, element.carrier(), view,
-                            ofTheElement, ruleSource);
-                    if (one != null) {
-                        built.add(one);
-                    }
-                }
-                return true;
-            });
-            // Stopped with a sharing in front of it: for the sharings this looks at, or else for the
-            // containers it offers, which is the one other thing that turns a sharing away.
-            if (!walkedThem) {
-                refused.add(sharing.spent() ? CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT
-                        : CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED);
-                break;
-            }
-        }
-        if (!groups.unread().isEmpty()) {
-            unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
-        }
-        CompositionShortfall rest = CompositionShortfall.of(refused, unnamed, unheld);
-        if (!built.isEmpty()) {
-            return new TermRealizations.Realization.Built(built, rest);
-        }
-        if (!rest.figures().isEmpty()) {
-            return new TermRealizations.Realization.Stopped(rest);
-        }
-        if (!rest.nothing()) {
-            return new TermRealizations.Realization.Unexhausted(rest, groups.unreadSaid());
-        }
-        String alone = chosenAlone(asked, container, null);
-        return alone != null ? notChosen(alone)
-                : none("no container of `" + container + "` this composed meets every count asked");
+        // Every element is chosen among the values it is read at whole, whether it is one number
+        // or several, and whether or not the different values of a place are counted.
+        return amongItsValues(asked, List.of(), standingAt, demands, container, size, sourceType,
+                view, holding, keptApart, apartAt, measuring, within, reading,
+                new Standing.WhereItIsWritten(sourceType, reading));
     }
 
     /**
@@ -423,12 +299,22 @@ final class CardinalityComposer {
                 return holding;
             }
 
+            /**
+             * Written under the type's names, the container itself under none: what is chosen is
+             * the elements, and the names go on as every value a row writes wears them.
+             */
             @Override
             public TermRealizations.Realization written(List<ObservedValue> values, int room) {
-                return ObservedFixtures.of(new ObservedValue.Sequence(values), type, reading)
+                RuleReadingSource source = reading.source();
+                TypeView view = TypeView.of(type, source.inners(), source.symbols(),
+                        source.kinds(), source.sums());
+                return ObservedFixtures.of(new ObservedValue.Sequence(values),
+                        source.inners().terminal(type), reading)
                         instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
                                 FixtureTemplate one)
-                        ? new TermRealizations.Realization.Built(List.of(one),
+                        && WornNames.under(view.wrappers(), one, source)
+                                instanceof FixtureTemplate named
+                        ? new TermRealizations.Realization.Built(List.of(named),
                                 CompositionShortfall.NONE)
                         : null;
             }
@@ -650,8 +536,6 @@ final class CardinalityComposer {
             ofAnElement.add(switch (each) {
                 case Asked.SoManyMeeting many -> many.perElement()::at;
                 case Asked.SomeElementAt some -> some::ofAnElement;
-                case Asked.SomeElementIn _ -> throw new IllegalStateException(
-                        "an element standing in a set is one number, and is chosen as one");
             });
         }
         // Elements its rules keep apart are chosen among more than one value of each part.
@@ -2005,120 +1889,6 @@ final class CardinalityComposer {
                 return element.subjectPath().equals(at) ? set.turnsAt() : List.of();
             }
         }
-
-        /** Some element standing in {@code set}, on the order the element is written on. */
-        record SomeElementIn(NumericSet set, Carrier on) implements Asked {
-
-            @Override
-            public AStatementAtARow.Answer at(Place value, BorderQuantity.Observation row) {
-                return set.holds(value, on) ? AStatementAtARow.Answer.HOLDS
-                        : AStatementAtARow.Answer.FAILS;
-            }
-
-            @Override
-            public boolean asMany(int meeting) {
-                return meeting >= 1;
-            }
-
-            @Override
-            public AStatementAtARow.Answer over(TermPath container, List<Place> values,
-                                                BorderQuantity.Observation row) {
-                return values.stream().anyMatch(value -> set.holds(value, on))
-                        ? AStatementAtARow.Answer.HOLDS : AStatementAtARow.Answer.FAILS;
-            }
-
-            /** Asked of the values chosen and not of a row: an element that is one number is
-             *  chosen as one, and never among the values it is read at whole. */
-            @Override
-            public AStatementAtARow.HowManyAtARow among(TermPath container,
-                                                        BorderQuantity.Observation row) {
-                throw new IllegalStateException(
-                        "an element standing in a set is one number, and is chosen as one");
-            }
-
-            /** The element is the number this asks of, whatever place is asked about. */
-            @Override
-            public boolean readsTheValueAt(TermPath container, Quantity.TheValue at) {
-                return true;
-            }
-            /** The element itself. */
-            @Override
-            public AStatementAtARow.TurnsOn turnsOnAmong(TermPath container,
-                                                         Quantity.TheValue under) {
-                return AStatementAtARow.TurnsOn.THE_ELEMENT;
-            }
-
-            /** Where standing in the set turns over, which the set says ({@link NumericSet#turnsAt}). */
-            @Override
-            public List<ExactRatio> turnsAt(NumericTerm element, Map<NumericTerm, Place> beside) {
-                return set.turnsAt().stream().map(at -> Count.number(at).exactly()).toList();
-            }
-
-            /** The same on an order with no numbers, where the places are the answer. */
-            @Override
-            public List<Place> placesTurnedAt(NumericTerm element, Map<NumericTerm, Place> beside) {
-                return set.turnsAt();
-            }
-        }
-    }
-
-    /**
-     * The number the statements read at each element, and the numbers they read beside it.
-     *
-     * @param term    the element's own number, which is the element itself
-     * @param carrier the order the element is written on
-     * @param beside  every number the statements read that stands at one place of the row, in the
-     *                order they were met
-     * @param on      the order each number the statements read is written on
-     */
-    private record Element(NumericTerm term, Carrier carrier, List<NumericTerm> beside,
-                           Map<NumericTerm, Carrier> on) {
-
-        /**
-         * The element of {@code container} as every count reads it, or null where one of them
-         * reads it as something other than one number standing at the element itself.
-         *
-         * <p>A number of another container's elements is not beside the element: it is read
-         * element by element where the statement is asked, which is where it is left. A number
-         * read off the elements beside the element, or off all of them, is neither: it moves
-         * with what the container holds, and nothing here composes it.
-         */
-        static Element of(List<RealizationTarget.ACount> counts, TermPath container) {
-            NumericTerm own = null;
-            Set<NumericTerm> beside = new LinkedHashSet<>();
-            Map<NumericTerm, Carrier> on = new LinkedHashMap<>();
-            for (RealizationTarget.ACount each : counts) {
-                on.putAll(each.count().on());
-                for (NumericTerm term : each.count().numbers()) {
-                    switch (term.amongTheElementsOf(container)) {
-                        case NumericTerm.AmongTheElements.ItAlone _ -> {
-                            if (!(term instanceof NumericTerm.ValueOf(TermPath at))
-                                    || !at.equals(container.element())
-                                    || (own != null && !own.equals(term))) {
-                                return null;
-                            }
-                            own = term;
-                        }
-                        case NumericTerm.AmongTheElements.NoneOfThem _ -> {
-                            if (term.placesReadOff().stream()
-                                    .noneMatch(TermPath::insideAContainer)) {
-                                beside.add(term);
-                            }
-                        }
-                        case NumericTerm.AmongTheElements.AllOfThem _,
-                             NumericTerm.AmongTheElements.ThoseUnderItsKey _,
-                             NumericTerm.AmongTheElements.Otherwise _ -> {
-                            return null;
-                        }
-                    }
-                }
-            }
-            Carrier carrier = own == null ? null : on.get(own);
-            if (carrier == null) {
-                return null;
-            }
-            return new Element(own, carrier, List.copyOf(beside), on);
-        }
     }
 
     /**
@@ -3009,19 +2779,6 @@ final class CardinalityComposer {
                     new LinkedHashSet<>());
         }
 
-        static Groups<Place> of(List<Asked> asked, TermPath container,
-                                Element element, Map<TermPath, ObservedValue> written,
-                                List<Place> values) {
-            Groups<Place> out = none();
-            for (Place value : values) {
-                AnElementRead read = new AnElementRead(container, element.term().subjectPath(),
-                        written, List.of(element.carrier().valueOf(value)));
-                BorderQuantity.Observation one = read.elements().getFirst();
-                out.add(value, i -> asked.get(i).at(value, one), asked.size());
-            }
-            return out;
-        }
-
         /**
          * {@code value}, one element, put in the group of values answering every statement the
          * way it does — the {@code i}-th as {@code answering} says — or in none where some
@@ -3294,28 +3051,6 @@ final class CardinalityComposer {
             }
             return true;
         }
-    }
-
-    /**
-     * Whether a container of {@code values}, read as a row's container is, has as many elements
-     * meeting each statement as its count asks — every count the reading leaves it, where an
-     * element could not be read.
-     */
-    private static boolean readsAsAsked(List<Asked> asked, TermPath container,
-                                        Element element, Map<TermPath, ObservedValue> written,
-                                        List<Place> values) {
-        List<ObservedValue> observed = new ArrayList<>();
-        for (Place each : values) {
-            observed.add(element.carrier().valueOf(each));
-        }
-        AnElementRead whole = new AnElementRead(container, element.term().subjectPath(), written,
-                observed);
-        for (Asked each : asked) {
-            if (!(each.over(container, values, whole) instanceof AStatementAtARow.Answer.Holds)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /** The container holding an element for each value, under the names both wear. */
