@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperEntry;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ReachName;
@@ -9,11 +10,13 @@ import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 
 /**
  * Who owns the rule a fork decides by, read off the declaration that wrote the fork.
@@ -97,6 +100,7 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
      * that carry a rule.
      */
     public static DecisionSources of(
+            Stdlib library,
             Map<ReachName.Declaration,
                     HelperEntry> reachable,
             Map<ReachName.Declaration, Hir.FnDef> own) {
@@ -104,15 +108,76 @@ public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork,
         // up by and what a call carries. Rendered into a string here, this would be a summary
         // joined to a call by a spelling, which is the join the reference exists to make
         // unnecessary.
-        Map<ReachName.Declaration, Hir.FnDef> declarations =
-                new LinkedHashMap<>();
+        Map<ReachName.Declaration, Hir.FnDef> ofTheLibrary = new LinkedHashMap<>();
+        Map<ReachName.Declaration, Hir.FnDef> declarations = new LinkedHashMap<>();
         reachable.forEach((reference, entry) ->
-                declarations.put(reference, entry.definition()));
+                (reference instanceof ReachName.OfLibrary ? ofTheLibrary : declarations)
+                        .put(reference, entry.definition()));
         declarations.putAll(own);
-        AnswerDependencies answersOn = AnswerDependencies.of(declarations);
-        Map<SourceConstructOrigin, DecisionSource> byFork = new LinkedHashMap<>();
+        // The library first, as one part of the reading: it calls nothing a module writes, so what
+        // its forks rest on is the same whatever reaches it.
+        LibraryPart lower = LibraryPart.of(library, ofTheLibrary);
+        AnswerDependencies answersOn = AnswerDependencies.of(declarations, lower.answersOn());
+        Map<SourceConstructOrigin, DecisionSource> byFork = new LinkedHashMap<>(lower.byFork());
         declarations.forEach((declaration, fn) -> forks(declaration, fn, answersOn, byFork));
         return new DecisionSources(byFork);
+    }
+
+    /**
+     * What the library's own declarations answer out of and say about the forks they write.
+     *
+     * <p>A function of the library and of nothing a module writes, since the library calls nothing
+     * a module declares — and every module's table reaches every operation it writes, so every
+     * reading of every module was reading the whole of it again. Kept once for a library that
+     * every one of them reaches whole: the declarations handed over are the library's own
+     * definitions and no others. A table reaching some of them, or other definitions under the
+     * library's names, is read as it is.
+     */
+    private record LibraryPart(AnswerDependencies answersOn,
+                               Map<SourceConstructOrigin, DecisionSource> byFork) {
+
+        private static final Map<Stdlib, LibraryPart> KEPT =
+                Collections.synchronizedMap(new WeakHashMap<>());
+
+        LibraryPart {
+            byFork = Collections.unmodifiableMap(new LinkedHashMap<>(byFork));
+        }
+
+        static LibraryPart of(Stdlib library, Map<ReachName.Declaration, Hir.FnDef> handed) {
+            if (library == null || !isTheWhole(library, handed)) {
+                return read(handed);
+            }
+            LibraryPart kept = KEPT.get(library);
+            if (kept == null) {
+                kept = read(handed);
+                KEPT.put(library, kept);
+            }
+            return kept;
+        }
+
+        /** Whether {@code handed} is every definition {@code library} writes, each the very one
+         *  it holds. */
+        private static boolean isTheWhole(Stdlib library,
+                                          Map<ReachName.Declaration, Hir.FnDef> handed) {
+            Map<ValueName.Stdlib.Operation, Hir.FnDef> written = library.helpers();
+            if (written.size() != handed.size()) {
+                return false;
+            }
+            for (Map.Entry<ReachName.Declaration, Hir.FnDef> each : handed.entrySet()) {
+                if (!(each.getKey() instanceof ReachName.OfLibrary(var operation))
+                        || written.get(operation) != each.getValue()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static LibraryPart read(Map<ReachName.Declaration, Hir.FnDef> handed) {
+            AnswerDependencies answersOn = AnswerDependencies.of(handed);
+            Map<SourceConstructOrigin, DecisionSource> byFork = new LinkedHashMap<>();
+            handed.forEach((declaration, fn) -> forks(declaration, fn, answersOn, byFork));
+            return new LibraryPart(answersOn, byFork);
+        }
     }
 
     private static void forks(ReachName.Declaration declaration,

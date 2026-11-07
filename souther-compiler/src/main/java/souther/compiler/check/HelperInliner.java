@@ -675,7 +675,7 @@ public final class HelperInliner {
     }
 
     /** The library this expansion's table was built over. */
-    Stdlib library() {
+    public Stdlib library() {
         return table.library();
     }
 

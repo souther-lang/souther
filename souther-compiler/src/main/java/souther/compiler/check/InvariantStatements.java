@@ -44,10 +44,10 @@ public final class InvariantStatements {
     }
 
     /**
-     * The calls a conjunct states, for a consumer that reads nothing else of it. A comparison is
-     * {@link InvariantStatement.Unread} here: what a comparison states takes a reading of the
-     * declarations ({@link #of(RuleReadingContext)}), and a consumer of calls has no budget to
-     * read under.
+     * What a conjunct states, for a consumer with no budget to read the declarations under. A
+     * comparison is the one written, with its denials spent: reading a comparison of the sign of an
+     * order as that order takes a reading of the declarations ({@link #of(RuleReadingContext)}), and
+     * the comparison written is true of the values all the same.
      */
     public static InvariantStatements ofTheCalls(RuleReadingSource source) {
         return new InvariantStatements(null, new Clauses(source));
@@ -126,8 +126,10 @@ public final class InvariantStatements {
         // make, as every other reader of a clause reads a name: a value named twice is then read
         // once per name and not once per path through the tree its names spell. What comes back is
         // spent afterwards, since it is handed on to readers with no environment of their own.
-        if (terms != null
-                && Core.withoutStanding(reached.said().of()) instanceof Core.Binary written) {
+        // An emptiness check states its size held against nought, and is read as that comparison
+        // by every reader of what a part states.
+        Core comparedAs = Conditions.asSizeComparison(reached.said().of());
+        if (terms != null && Core.withoutStanding(comparedAs) instanceof Core.Binary written) {
             StatedComparison compares =
                     Conditions.statedBy(terms, written, reached.said().positive(), inside);
             if (compares != null) {
@@ -141,13 +143,14 @@ public final class InvariantStatements {
         // where one was kept standing. Stated only: what holds where an operation does not is not
         // that operation, and there is nothing here to name it by.
         if (reached.said().positive()
-                && Core.withoutStanding(Clauses.substituted(reached.said().of(), given))
+                && Core.withoutStanding(Clauses.substituted(comparedAs, given))
                         instanceof Core.PreservedCall call) {
             return new InvariantStatement.Applies(reached.statement(), call);
         }
-        // Two totals of one list at two cases of a field of its elements, compared for equality.
-        SidesBalanced.Stated balanced = reached.said().positive()
-                ? SidesBalanced.read(Clauses.substituted(reached.said().of(), given)) : null;
+        // Two totals of one list at two cases of a field of its elements, held equal under
+        // whichever denials the clause holds the comparison under.
+        SidesBalanced.Stated balanced = SidesBalanced.read(
+                Clauses.substituted(comparedAs, given), reached.said().positive());
         if (balanced != null) {
             return new InvariantStatement.BalancesSides(reached.statement(), balanced);
         }
@@ -158,6 +161,15 @@ public final class InvariantStatements {
                 : null;
         if (entry != null) {
             return new InvariantStatement.HoldsAnEntry(reached.statement(), entry);
+        }
+        // With no reading of the declarations, a comparison is the one its author wrote with the
+        // denials above it spent: true of the values all the same, and all a reader of calls asks.
+        StatedComparison written = terms == null
+                && Core.withoutStanding(Clauses.substituted(comparedAs, given))
+                        instanceof Core.Binary bin
+                ? StatedComparison.of(bin, reached.said().positive()) : null;
+        if (written != null) {
+            return new InvariantStatement.Compares(reached.statement(), written);
         }
         return new InvariantStatement.Unread(reached.statement(),
                 Clauses.substituted(reached.said().of(), given), reached.said().positive());

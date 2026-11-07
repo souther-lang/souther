@@ -132,18 +132,7 @@ record RecordRules(Map<BindingId, String> fields, List<InvariantStatement> state
             Set<String> reads = new HashSet<>();
             Set<String> counted = new HashSet<>();
             switch (one) {
-                case InvariantStatement.Unread it -> {
-                    // A comparison the calls-only reading made nothing of is still a comparison,
-                    // asked under the polarity it stood at.
-                    StatedComparison compares =
-                            Core.withoutStanding(it.said()) instanceof Core.Binary bin
-                                    ? StatedComparison.of(bin, it.positive()) : null;
-                    if (compares != null) {
-                        readFromComparison(compares, fields, reads, counted);
-                    } else {
-                        readFrom(it.said(), fields, reads);
-                    }
-                }
+                case InvariantStatement.Unread it -> readFrom(it.said(), fields, reads);
                 case InvariantStatement.Compares it ->
                         readFromComparison(it.states(), fields, reads, counted);
                 case InvariantStatement.Applies it -> readFrom(it.call(), fields, reads);

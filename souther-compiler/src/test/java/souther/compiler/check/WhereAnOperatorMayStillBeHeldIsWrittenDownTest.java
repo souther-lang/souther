@@ -247,11 +247,15 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.EntryHeld.valueIs",
                     "asks whether a statement about the value a lookup found is an equality with"
                             + " a written number"),
-            new Held("souther.compiler.check.SidesBalanced.read",
-                    "asks whether two totals are compared for equality"),
+            new Held("souther.compiler.check.SidesBalanced.caseOf",
+                    "asks whether a condition on an element compares a field of it for equality"
+                            + " with a case"),
             new Held("souther.compiler.check.SidesBalanced.side",
-                    "asks whether the step of a walk adding a number compares a field of the"
-                            + " element for equality with a case"),
+                    "asks the operations that add, by the operator the library says each"
+                            + " computes, for the number a walk adds to its total"),
+            new Held("souther.compiler.check.ContainerCounts.number",
+                    "keeps the three operators that are exact arithmetic over counts, and leaves"
+                            + " a number written with any other unread"),
             new Held("souther.compiler.check.ComputedNumber.operated",
                     "keeps the three operators that are exact arithmetic over places, and leaves"
                             + " a number written with any other unread"),

@@ -521,8 +521,12 @@ final class Clauses {
                 return;
             }
             Core.PreservedCall call = e instanceof Core.PreservedCall preserved ? preserved : null;
-            ElementsApart.Stated apart = call == null ? null : ElementsApart.stated(call, newtypes);
-            Location container = apart == null ? null : locationOf(apart.container());
+            // As written: whether the clause wants it or its denial is the need's to say. And only
+            // where it answers for every value: one that may stop works out more of each element
+            // than the run, and whether it stops turns on that.
+            ElementsApart.Stated apart = ElementsApart.stated(e, true, newtypes);
+            Location container = apart == null || !apart.answersEverywhere() ? null
+                    : locationOf(apart.container());
             if (container != null) {
                 aparts.add(new Apart(e, container, apart.run()));
                 return;

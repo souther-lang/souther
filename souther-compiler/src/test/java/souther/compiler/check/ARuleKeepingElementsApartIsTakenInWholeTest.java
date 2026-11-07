@@ -12,7 +12,9 @@ import souther.compiler.types.TypeSymbols;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.UnreadReason;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -168,6 +170,141 @@ class ARuleKeepingElementsApartIsTakenInWholeTest {
                 """).heldAt(RuleKey.of("items"));
         assertEquals(List.of(List.of("id")), control.keptApart(),
                 "the conjunction tells the builders, so the pairing above is not two absences");
+    }
+
+    /**
+     * A count of the different values held against the count of the elements is the call's law
+     * written out, and tells the builders what the call does: the same runs, whichever side it is
+     * written on, under a denial of its opposite, through a binding, and whichever operation
+     * answers one of each different value. The forms that say something weaker or about two
+     * containers tell nothing.
+     *
+     * <p>Taken in where it is also shown to answer for every container, as the call is: every step
+     * of its arithmetic held on what an {@code Int} holds where the counts lie as the library bounds
+     * them, and nothing else it works out ending a run. A count multiplied past the {@code Int}s, a
+     * key filed beside a number added past them, and a count through {@code List.distinct}, whose
+     * answer the library does not show always has a place, keep the elements apart where they answer
+     * and are not shown to answer everywhere: told, and not taken in.
+     *
+     * <p>The call is the oracle for what is told, and its accounting for what is taken in.
+     */
+    @Test
+    void aCountOfDifferentValuesTellsTheBuildersWhatTheCallTells() {
+        List<String> identity = List.of(
+                "List.length(List.distinct(items)) == List.length(items)",
+                "List.length(items) == List.length(List.distinct(items))",
+                "Bool.not(List.length(List.distinct(items)) /= List.length(items))",
+                "List.length(List.distinct(items)) >= List.length(items)",
+                "Bool.not(List.length(items) > List.length(List.distinct(items)))",
+                "List.length(List.distinctBy(x -> x, items)) == List.length(items)",
+                "Set.size(Set.fromList(items)) == List.length(items)",
+                "{\n        let xs = items\n        List.length(List.distinct(xs)) == List.length(xs)"
+                        + "\n    }",
+                "List.length(List.distinct(items)) - List.length(items) == 0",
+                "List.length(List.distinct(items)) + 0 == List.length(items)",
+                "2 * List.length(List.distinct(items)) == 2 * List.length(items)",
+                "Set.size(Set.fromList(items)) - List.length(items) == 0",
+                "2 * Set.size(Set.fromList(items)) == 2 * List.length(items)",
+                "9223372036854775807 * Set.size(Set.fromList(items))"
+                        + " == 9223372036854775807 * List.length(items)");
+        List<String> byId = List.of(
+                "List.length(List.distinctBy(.id, items)) == List.length(items)",
+                "List.length(List.distinctBy(x -> x.id, items)) == List.length(items)",
+                "List.length(List.distinct(List.map(.id, items))) == List.length(items)",
+                "List.length(List.distinct(List.map(.id, items)))"
+                        + " == List.length(List.map(.id, items))",
+                "Set.size(Set.fromList(List.map(.id, items))) == List.length(items)",
+                "List.allDistinctBy(x -> x, List.map(.id, items))",
+                "Map.size(Map.fromList(List.map(x -> (x.id, x), items))) == List.length(items)",
+                "Map.size(Map.fromList(List.map(x -> (x.id, 9223372036854775807 + x.id), items)))"
+                        + " == List.length(items)");
+        Set<String> answeringEverywhere = Set.of(
+                "Set.size(Set.fromList(items)) == List.length(items)",
+                "Set.size(Set.fromList(items)) - List.length(items) == 0",
+                "2 * Set.size(Set.fromList(items)) == 2 * List.length(items)",
+                "Set.size(Set.fromList(List.map(.id, items))) == List.length(items)",
+                "List.allDistinctBy(x -> x, List.map(.id, items))",
+                "Map.size(Map.fromList(List.map(x -> (x.id, x), items))) == List.length(items)");
+        List<String> none = List.of(
+                "List.length(List.distinct(items)) <= List.length(items)",
+                "List.length(List.distinct(items)) /= List.length(items)",
+                "List.length(List.distinct(items)) < List.length(items)",
+                "List.length(List.distinct(items)) == List.length(others)",
+                "List.length(List.distinct(items)) == List.length(List.distinct(items))",
+                "List.length(items) == List.length(items)",
+                "List.length(List.distinctBy(x -> x.id + 1, items)) == List.length(items)",
+                "List.length(List.distinct(items)) == List.length(items) || n < 0",
+                "List.length(List.distinct(List.filter(x -> x.id > 0, items)))"
+                        + " == List.length(items)",
+                "List.length(List.distinct(List.map(.id, items))) >= 1",
+                "List.length(List.distinct(items)) + 1 == List.length(items)",
+                "Map.size(Map.fromList(List.map(x -> (x.id + 1, x), items)))"
+                        + " == List.length(items)");
+        // Each oracle read once: what it tells is one answer, whichever spelling it is held to.
+        List<List<String>> asWholes = toldBy("List.allDistinctBy(x -> x, items)");
+        List<List<String>> atTheId = toldBy("List.allDistinctBy(.id, items)");
+        assertEquals(List.of(List.of()), asWholes, "the oracle tells");
+        assertEquals(List.of(List.of("id")), atTheId, "the oracle tells");
+        Map<String, List<List<String>>> expected = new LinkedHashMap<>();
+        identity.forEach(rule -> expected.put(rule, asWholes));
+        byId.forEach(rule -> expected.put(rule, atTheId));
+        none.forEach(rule -> expected.put(rule, List.of()));
+
+        expected.forEach((rule, runs) -> {
+            FieldDomains read = read(withCounts(rule));
+            FieldDomains.Held held = read.heldAt(RuleKey.of("items"));
+            List<List<String>> told = held == null ? List.of() : held.keptApart();
+
+            assertEquals(runs, told, rule);
+            if (!runs.isEmpty()) {
+                assertEquals(answeringEverywhere.contains(rule), !anyUnaccounted(read), rule);
+            }
+        });
+    }
+
+    /**
+     * A newtype's own {@code value} is the value itself and no step of it, so a closure reading it
+     * keeps the elements apart where the closure reading the element does: apart as wholes for a
+     * list of names, apart at the field for a field wearing one. The closure without the
+     * {@code value} is the oracle.
+     */
+    @Test
+    void aClosureReadingANewtypesValueKeepsApartWhatTheClosureWithoutItKeeps() {
+        Map<String, String> without = Map.of(
+                "List.allDistinctBy(x -> x.value, ids)", "List.allDistinctBy(x -> x, ids)",
+                "List.allDistinctBy(x -> x.key.value, keyed)", "List.allDistinctBy(.key, keyed)");
+        without.forEach((rule, oracle) -> {
+            String field = rule.contains("keyed") ? "keyed" : "ids";
+            FieldDomains.Held expected = read(withNames(oracle)).heldAt(RuleKey.of(field));
+            FieldDomains read = read(withNames(rule));
+            FieldDomains.Held held = read.heldAt(RuleKey.of(field));
+            assertFalse(expected.keptApart().isEmpty(), oracle);
+            assertEquals(expected.keptApart(), held.keptApart(), rule);
+            // And the reading of what may stand there names the run as the builders do.
+            assertFalse(anyUnaccounted(read), rule);
+        });
+    }
+
+    private static String withNames(String rule) {
+        return """
+                data Id = Int
+                data Keyed = { key: Id }
+                data N = { ids: List<Id>, keyed: List<Keyed> }
+                    invariant %s
+                """.formatted(rule);
+    }
+
+    /** What a record holding two lists of items is told of {@code items} under {@code rule}. */
+    private static List<List<String>> toldBy(String rule) {
+        FieldDomains.Held held = read(withCounts(rule)).heldAt(RuleKey.of("items"));
+        return held == null ? List.of() : held.keptApart();
+    }
+
+    private static String withCounts(String rule) {
+        return """
+                data N = { n: Int, items: List<Item>, others: List<Item> }
+                    invariant %s
+                """.formatted(rule);
     }
 
     @Test
