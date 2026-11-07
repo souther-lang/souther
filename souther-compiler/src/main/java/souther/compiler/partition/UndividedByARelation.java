@@ -4657,6 +4657,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     });
         }
 
+        /**
+         * Whether {@code statement} states nothing but what a count a side is made of comes to,
+         * the count being of {@code collection} or of a container {@code collection} is inside
+         * ({@link #containerItCounts}): a relation over that count alone. The rows a count is
+         * asked on are one for each value it takes, each holding as many as it counts, so such a
+         * statement says which of those values the way leaves, which the region holds, and
+         * nothing more of how many {@code collection} holds.
+         */
+        private boolean statesACountAlone(OnAWay statement, TermPath collection) {
+            return statement.elementsOf() == null && !statement.whatStands()
+                    && statement.relation() instanceof TakenConstraint.Affine(var form, var _, var _)
+                    && !form.coefs().isEmpty()
+                    && form.coefs().keySet().stream().allMatch(term -> sides.stream()
+                            .anyMatch(side -> term.equals(side.number())
+                                    && containerItCounts(side.number()) instanceof TermPath counted
+                                    && collection.isAtOrUnder(counted)));
+        }
+
         /** How many elements {@code collection} holds here, or nothing where no such run is
          *  shown. */
         Optional<BigInteger> holds(TermPath collection) {
@@ -4698,6 +4716,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 if (ofOne && ofTheElementAtHand(each, collection)) {
                     continue;
                 }
+                if (statesACountAlone(each, collection)) {
+                    continue;
+                }
                 // Which case an element is, said of the element and nothing else, asks the
                 // collection for the element it is said of.
                 if (saysOnlyWhatStandsInside(each, collection)) {
@@ -4712,6 +4733,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             boolean aTotal = false;
             boolean asManyAsItCounts = false;
+            Set<TermPath> countedHere = new HashSet<>();
             for (Side side : sides) {
                 Optional<List<TermPath>> placesOfTheSide = placesItIsReadOff(side);
                 boolean ofTheCollection = placesOfTheSide.isEmpty() || placesOfTheSide.get()
@@ -4720,13 +4742,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     case AT_ANY_SIZE -> { }
                     case AT_ONE -> aTotal |= ofTheCollection;
                     case BY_ITS_COUNT -> {
+                        TermPath counted = containerItCounts(side.number());
+                        countedHere.add(counted);
                         if (ofTheCollection) {
-                            List<TermPath> holding =
-                                    side.number().subjectPath().containersHoldingIt();
-                            if (!holding.contains(collection)) {
+                            if (collection.equals(counted)) {
+                                asManyAsItCounts = true;
+                            } else if (!collection.isAtOrUnder(counted)
+                                    && !side.number().subjectPath().containersHoldingIt()
+                                            .contains(collection)) {
                                 return Optional.empty();
                             }
-                            asManyAsItCounts |= holding.getFirst().equals(collection);
                         }
                     }
                     case NOT -> {
@@ -4738,7 +4763,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             BigInteger inside = BigInteger.ZERO;
             for (TermPath at : standing) {
-                if (at.equals(collection) || collection.isAtOrUnder(at)) {
+                // A count stands at the container it counts, which is held at as many as it holds
+                // above, and what is inside that container is no part of how many it holds.
+                if ((at.equals(collection) || collection.isAtOrUnder(at))
+                        && !countedHere.contains(at)) {
                     return Optional.empty();
                 }
                 if (at.isAtOrUnder(collection)) {
@@ -4813,11 +4841,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** Only at one element: a total, which the relation reads on one element's run. */
         AT_ONE,
         /**
-         * By how many it counts: how often the value at a place occurs among the values of a run,
-         * which takes each value it does on a row whose outermost container holds that many
-         * elements, each holding the value once and otherwise as few as it may. So a container
-         * inside is cut as one the side does not read is, and the outermost is held at as many as
-         * it holds at most.
+         * By how many it counts: a count of the elements of one container
+         * ({@link #containerItCounts}), which takes each value it does on a row where that
+         * container holds that many elements, each holding what is counted once and otherwise as
+         * few as it may. So every other container is cut as one the side does not read is, and
+         * the one counted is held at as many as it holds at most.
          */
         BY_ITS_COUNT,
         /** Not shown to keep it. */
@@ -4846,17 +4874,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (side.along() != null) {
             return CutDown.NOT;
         }
+        if (containerItCounts(side.number()) != null) {
+            return CutDown.BY_ITS_COUNT;
+        }
         return switch (side.number()) {
             case NumericTerm.ValueOf _, NumericTerm.ExtremeOfItsKey _ -> CutDown.AT_ANY_SIZE;
-            // Among every occurrence: one a selection keeps may need others beside it.
-            case NumericTerm.OccurrencesOfItsValue occurrences ->
-                    occurrences.selection() == null ? CutDown.BY_ITS_COUNT : CutDown.NOT;
             case NumericTerm.TakenOver over ->
                     over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds ? CutDown.AT_ONE
                             : CutDown.NOT;
             case NumericTerm.TakenOf of ->
                     of.takenAs() instanceof TakenAs.TheSumOfWhatItHolds ? CutDown.AT_ONE
                             : CutDown.NOT;
+            case NumericTerm.OccurrencesOfItsValue _ -> CutDown.NOT;
             case NumericTerm.GatheredUnderItsKey filed -> switch (filed.gathering()) {
                 case NumericTerm.GatheredUnderItsKey.Gathering.End _ -> CutDown.AT_ANY_SIZE;
                 case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> CutDown.AT_ONE;
@@ -4868,6 +4897,37 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                  NumericTerm.OccurrencesOfAKey _,
                  NumericTerm.GatheredUnderAKey _, NumericTerm.ProductOf _ -> CutDown.NOT;
         };
+    }
+
+    /**
+     * The container {@code number} counts the elements of, where it is a count that takes each
+     * value it does on a row of that many elements each holding what is counted once — or null
+     * where it is no such count.
+     *
+     * <p>How many a position holds counts that position. How many values a run has, and how often
+     * one value occurs among them, whether the value at a place of the run or one a key names,
+     * count the outermost container of the run: a row of as many copies of one element, each
+     * holding the value once, takes the count. A count of occurrences a selection keeps is not
+     * one: which occurrences are kept may turn on others beside them.
+     */
+    private static TermPath containerItCounts(NumericTerm number) {
+        return switch (number) {
+            case NumericTerm.TakenOf of when of.takenAs() instanceof TakenAs.HowManyItHolds ->
+                    of.position();
+            case NumericTerm.TakenOver over
+                    when over.takenAs() instanceof TakenAs.HowManyItHolds ->
+                    outermostHolding(over.subjectPath());
+            case NumericTerm.OccurrencesOfItsValue counted when counted.selection() == null ->
+                    outermostHolding(counted.subjectPath());
+            case NumericTerm.OccurrencesOfAKey counted -> outermostHolding(counted.subjectPath());
+            case null, default -> null;
+        };
+    }
+
+    /** The outermost container {@code at} stands inside, or null where it stands in none. */
+    private static TermPath outermostHolding(TermPath at) {
+        List<TermPath> containers = at.containersHoldingIt();
+        return containers.isEmpty() ? null : containers.getFirst();
     }
 
     /**

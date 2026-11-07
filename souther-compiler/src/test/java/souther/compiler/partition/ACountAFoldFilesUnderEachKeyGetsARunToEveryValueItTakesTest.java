@@ -22,7 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * is what the law makes of the elements before that have it — fewer than a collection holds. So
  * neither the filing nor the move of the count stops it. And where the list it walks is built of a
  * piece of each element, a count taking a value is reached on a row whose elements each hold the
- * key once, which holds no more pieces than a list does.
+ * key once, which holds no more pieces than a list does. That is so of every count of the elements
+ * of one container: how often a key the caller names occurs, read through a lookup the way only
+ * passes where it occurs, and how many issues there are beside a list built of their labels.
  *
  * <p>Each holds only of the walk the step is applied by: a move written as a closure handed by
  * name may be applied to other values too, and is left as any operator is.
@@ -38,6 +40,7 @@ class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
             data Board = { issues: List<Issue> }
             data Usage = { counts: Map<String, Int> }
             data Item = { code: Label }
+            data Seen = { keys: List<String>, busy: Bool }
 
             let keysOf (issues: List<Issue>): List<String> =
                 List.flatMap(i -> List.map(l -> l.value, Set.toList(i.labels)), issues)
@@ -93,6 +96,19 @@ class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
                 Usage { counts = Map.filterEntries((_, c) -> c >= atLeast,
                         moveNamed(board.issues)) }
 
+            behavior countedOfAKey : (board: Board, key: String, atLeast: Int) -> Bool
+            let countedOfAKey (board, key, atLeast) =
+                match Map.get(key, byOne(board.issues)) with
+                    | Some c -> c >= atLeast
+                    | None -> false
+
+            behavior issuesBesideTheirKeys : (board: Board, atLeast: Int) -> Seen
+                constructs Seen
+            let issuesBesideTheirKeys (board, atLeast) = {
+                let ks = keysOf(board.issues)
+                Seen { keys = ks, busy = List.length(board.issues) >= atLeast }
+            }
+
             behavior countedFlat : (items: List<Item>, atLeast: Int) -> Usage
                 constructs Usage
             let countedFlat (items, atLeast) =
@@ -109,6 +125,8 @@ class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
                 "countedLooked", List.of(),
                 "countedStepNamed", List.of(),
                 "countedFlat", List.of(),
+                "countedOfAKey", List.of(),
+                "issuesBesideTheirKeys", List.of(),
                 "countedMoveNamed", THE_COUNT);
         assertEquals(expected, notReachedAtEveryValue(expected.keySet().stream().toList()));
     }
