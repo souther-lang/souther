@@ -755,9 +755,10 @@ public final class ReadThroughNames {
             case Quantity.PickedAtAnIndex picked -> out.add(picked.container());
             case Quantity.PositionInTheWalk walk -> out.add(walk.container());
             case Quantity.KeptSoFar kept -> out.add(kept.container());
+            // Every place each number is read off, any of which a name may be told at.
             case Quantity.AWholeNumberInTurn turn -> {
-                turn.from().coefs().keySet().forEach(term -> out.add(term.subjectPath()));
-                turn.to().coefs().keySet().forEach(term -> out.add(term.subjectPath()));
+                turn.from().coefs().keySet().forEach(term -> out.addAll(term.placesReadOff()));
+                turn.to().coefs().keySet().forEach(term -> out.addAll(term.placesReadOff()));
             }
         }
         return out;

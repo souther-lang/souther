@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.crossing.ObjectEqualityIsRepresentedByWhatItStandsFor;
 import souther.compiler.frontend.CstFrontend;
 
 import org.junit.jupiter.api.Test;
@@ -121,9 +122,14 @@ class TheTableAReaderHoldsReachesNothingTest {
      * record, and holding one reaches no more than holding an arm of it does. Read as "a record",
      * dividing a value into its cases would read as a way of asking, and what the reader would be
      * told to do about it is put it back.
+     *
+     * <p>A class that says what stands for it is one too, where it is equal by that alone
+     * ({@link ObjectEqualityIsRepresentedByWhatItStandsFor}): it holds a value and answers nothing
+     * else, which a record would have written for itself.
      */
     private static boolean isValue(Class<?> named) {
-        if (named.isRecord() || named.isEnum()) {
+        if (named.isRecord() || named.isEnum()
+                || ObjectEqualityIsRepresentedByWhatItStandsFor.class.isAssignableFrom(named)) {
             return true;
         }
         if (!named.isSealed()) {

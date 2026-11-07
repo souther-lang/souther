@@ -897,7 +897,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 throw new IllegalArgumentException(
                         "a search goes down each field once: " + through);
             }
-            if (map.isAtOrUnder(root) || root.isAtOrUnder(map)) {
+            if (map.standsAtUnderOrAround(root)) {
                 throw new IllegalArgumentException(
                         "the map is apart from the tree it is looked up for: " + map + ", " + root);
             }
@@ -1312,11 +1312,11 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 /**
                  * Whether {@code stated} reads nothing of an element of the container at
                  * {@code container} but its value at {@code ofTheElement} and what the elements
-                 * holding that value come to: every number it reads inside an element is the value
-                 * itself, how often it occurs ({@link NumericTerm.Multiplicity}) or one gathered
-                 * under it, of every element ({@link NumericTerm.GatheredUnderItsKey}), and every
-                 * place inside an element it reads is the value's or one such a number is read
-                 * from.
+                 * holding that value come to: every number it reads is the value itself, read off
+                 * none of the elements or all of them as one, or read off the elements holding the
+                 * value under its key ({@link NumericTerm#amongTheElementsOf}) — how often it
+                 * occurs, the end of what they hold, what they are gathered into — and every place
+                 * inside an element it reads is the value's or one such a number is read from.
                  *
                  * <p>Where the value is of the elements of a container inside each element of
                  * {@code container}, a number gathered under it is of every element of all of those
@@ -1336,15 +1336,15 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                                 .element();
                         case TheValue.ChosenByCase chosen -> chosen.element();
                     };
-                    return alike(stated, new Apart(element, held.element(), ofTheElement));
+                    return alike(stated, new Apart(element, held, ofTheElement));
                 }
 
                 /**
-                 * The element a value is of, the element of the container counted over that holds
-                 * it — the same element where the value is of the container's own — and the
-                 * value.
+                 * The element a value is of, the container counted over whose element holds it —
+                 * the container of that element where the value is of the container's own — and
+                 * the value.
                  */
-                private record Apart(TermPath element, TermPath outermost, TheValue value) {
+                private record Apart(TermPath element, TermPath counted, TheValue value) {
 
                     /** Whether {@code at} is the value itself, which one place is only where the
                      *  value stands at one place of every element. */
@@ -1400,29 +1400,49 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                  *  the elements. */
                 private static boolean alike(DecisionSubject subject, Apart apart) {
                     return subject instanceof DecisionSubject.AnInput(TermPath at, var _)
-                            && (apart.isTheValue(at) || !at.isAtOrUnder(apart.outermost()));
+                            && (apart.isTheValue(at) || outsideTheElements(at, apart));
                 }
 
-                /** Whether {@code number} is the value itself, how often it occurs among the
-                 *  elements of one container, one gathered under it of every element, or a number
-                 *  of the input outside the elements. */
+                /**
+                 * Whether the value at {@code at} is shown to be no value of one element of the
+                 * container counted over: read off none of them, or off what holds them all
+                 * ({@link NumericTerm.AmongTheElements#ofOnePlace}). A place nothing shows apart
+                 * from the elements is not.
+                 */
+                private static boolean outsideTheElements(TermPath at, Apart apart) {
+                    return switch (NumericTerm.AmongTheElements.ofOnePlace(at, apart.counted())) {
+                        case NumericTerm.AmongTheElements.NoneOfThem _,
+                             NumericTerm.AmongTheElements.AllOfThem _ -> true;
+                        case NumericTerm.AmongTheElements.ItAlone _,
+                             NumericTerm.AmongTheElements.ThoseUnderItsKey _,
+                             NumericTerm.AmongTheElements.Otherwise _ -> false;
+                    };
+                }
+
+                /**
+                 * Whether {@code number}, read as an element of the container counted over sees
+                 * it ({@link NumericTerm#amongTheElementsOf}), is the value itself, a number none
+                 * of the elements or all of them as one are read for, or one read off every
+                 * element holding the value at the place its key is read, across every occurrence
+                 * of the containers those stand in.
+                 */
                 private static boolean alike(Quantity number, Apart apart) {
                     if (!(number instanceof DecisionAtom.OfTheInput(NumericTerm term, var _))) {
                         return false;
                     }
-                    if (term instanceof NumericTerm.Multiplicity often) {
-                        return apart.element().equals(apart.outermost())
-                                && often.container().element().equals(apart.element())
-                                && apart.isTheValue(often.place());
-                    }
-                    if (term instanceof NumericTerm.GatheredUnderItsKey gathered) {
-                        return gathered.elements().equals(apart.element())
-                                && gathered.selection() == null
-                                && apart.filesUnderIt(gathered.key());
-                    }
-                    return (term instanceof NumericTerm.ValueOf(TermPath at)
-                            && apart.isTheValue(at))
-                            || !term.subjectPath().isAtOrUnder(apart.outermost());
+                    return switch (term.amongTheElementsOf(apart.counted())) {
+                        case NumericTerm.AmongTheElements.ItAlone _ ->
+                                term instanceof NumericTerm.ValueOf(TermPath at)
+                                        && apart.isTheValue(at);
+                        case NumericTerm.AmongTheElements.NoneOfThem _,
+                             NumericTerm.AmongTheElements.AllOfThem _ -> true;
+                        case NumericTerm.AmongTheElements.ThoseUnderItsKey key ->
+                                key.selection() == null
+                                        && key.elements().standsAtTheSamePlaceOnEveryRow(
+                                                apart.element())
+                                        && apart.filesUnderIt(key.key());
+                        case NumericTerm.AmongTheElements.Otherwise _ -> false;
+                    };
                 }
             }
         }

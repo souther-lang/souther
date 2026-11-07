@@ -432,9 +432,12 @@ public final class CountWitnesses {
                                        boolean holds, var _) when holds -> {
                 List<String> inOne = fieldsBelow(element, one);
                 List<String> inOther = fieldsBelow(element, other);
-                if (inOne != null && inOther == null && !other.isAtOrUnder(element)) {
+                // Outside only where shown apart from the element as the value is reached: a
+                // place narrowed to another reach of the element may be inside it on some row.
+                if (inOne != null && inOther == null && !other.standsAtUnderOrAround(element)) {
                     into.putIfAbsent(inOne, other);
-                } else if (inOther != null && inOne == null && !one.isAtOrUnder(element)) {
+                } else if (inOther != null && inOne == null
+                        && !one.standsAtUnderOrAround(element)) {
                     into.putIfAbsent(inOther, one);
                 }
             }

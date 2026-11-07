@@ -99,11 +99,13 @@ public record ForkDependencies(Map<ModelOccurrence, Dependency> byFork,
     /** What a construct that decides a fork may turn on. */
     public sealed interface Dependency {
 
-        /** These positions and no other: none where it turns on nothing of the input. */
+        /** These positions and no other: none where it turns on nothing of the input. They are
+         *  held in {@link TermPath#structuralOrder}, and not in the order a form happened to hold
+         *  the numbers they were read from, so that one input compiled twice answers alike. */
         record Known(List<TermPath> positions) implements Dependency {
 
             public Known {
-                positions = List.copyOf(positions);
+                positions = positions.stream().sorted(TermPath.structuralOrder()).toList();
             }
         }
 
