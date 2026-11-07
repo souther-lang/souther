@@ -135,39 +135,36 @@ public final class ContainerCounts {
     /** {@code e} as a form over counts, or null where it is no number this names. */
     private LinearForm<Count> number(Core e) {
         Core bare = Core.withoutStanding(e);
-        switch (bare) {
-            case Core.Int literal -> {
-                return LinearForm.constant(ExactRatio.of(literal.value()));
-            }
+        return switch (bare) {
+            case Core.Int literal -> LinearForm.constant(ExactRatio.of(literal.value()));
             case Core.Neg negated -> {
                 LinearForm<Count> of = number(negated.operand());
-                return of == null ? null : of.negate();
+                yield of == null ? null : of.negate();
             }
             case Core.Binary bin when bin.op() == BinOp.ADD || bin.op() == BinOp.SUB -> {
                 LinearForm<Count> left = number(bin.left());
                 LinearForm<Count> right = left == null ? null : number(bin.right());
-                if (right == null) {
-                    return null;
-                }
-                return (bin.op() == BinOp.ADD ? left.plus(right) : left.minus(right)).orNull();
+                yield right == null ? null
+                        : (bin.op() == BinOp.ADD ? left.plus(right) : left.minus(right)).orNull();
             }
             case Core.Binary bin when bin.op() == BinOp.MUL -> {
                 LinearForm<Count> left = number(bin.left());
                 LinearForm<Count> right = left == null ? null : number(bin.right());
-                if (right == null) {
-                    return null;
-                }
-                // A product is a form only where one side is a constant.
-                if (left.coefs().isEmpty()) {
-                    return right.times(left.constant()).orNull();
-                }
-                return right.coefs().isEmpty() ? left.times(right.constant()).orNull() : null;
+                yield right == null ? null : product(left, right);
             }
             default -> {
                 Core counted = countedBy(bare);
-                return counted == null ? null : count(counted);
+                yield counted == null ? null : count(counted);
             }
+        };
+    }
+
+    /** {@code left} times {@code right}, which is a form only where one of them is a constant. */
+    private static LinearForm<Count> product(LinearForm<Count> left, LinearForm<Count> right) {
+        if (left.coefs().isEmpty()) {
+            return right.times(left.constant()).orNull();
         }
+        return right.coefs().isEmpty() ? left.times(right.constant()).orNull() : null;
     }
 
     /** What {@code e} counts the elements of, or null where it is no such count. */

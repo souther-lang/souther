@@ -221,12 +221,15 @@ class ARuleKeepingElementsApartIsTakenInWholeTest {
                 "List.length(List.distinct(items)) + 1 == List.length(items)",
                 "Map.size(Map.fromList(List.map(x -> (x.id + 1, x), items)))"
                         + " == List.length(items)");
+        // Each oracle read once: what it tells is one answer, whichever spelling it is held to.
+        List<List<String>> asWholes = toldBy("List.allDistinctBy(x -> x, items)");
+        List<List<String>> atTheId = toldBy("List.allDistinctBy(.id, items)");
+        assertEquals(List.of(List.of()), asWholes, "the oracle tells");
+        assertEquals(List.of(List.of("id")), atTheId, "the oracle tells");
         Map<String, List<List<String>>> expected = new LinkedHashMap<>();
-        identity.forEach(rule -> expected.put(rule, toldBy("List.allDistinctBy(x -> x, items)")));
-        byId.forEach(rule -> expected.put(rule, toldBy("List.allDistinctBy(.id, items)")));
+        identity.forEach(rule -> expected.put(rule, asWholes));
+        byId.forEach(rule -> expected.put(rule, atTheId));
         none.forEach(rule -> expected.put(rule, List.of()));
-        assertEquals(List.of(List.of()), expected.get(identity.getFirst()), "the oracle tells");
-        assertEquals(List.of(List.of("id")), expected.get(byId.getFirst()), "the oracle tells");
 
         expected.forEach((rule, runs) -> {
             FieldDomains read = read(withCounts(rule));
