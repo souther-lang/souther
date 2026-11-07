@@ -26,6 +26,11 @@ public enum WorkFigure {
     /** How many fields down the rules about a value are followed. */
     FIELDS_A_RULE_IS_FOLLOWED_DOWN("how many fields down the rules about a value are followed"),
 
+    /** How many parts of the choices a path leaves undecided are taken alone along the path, to
+     *  settle them over what it comes to know. */
+    PARTS_A_PATH_SETTLES("how many parts of the choices a path leaves undecided are taken alone"
+            + " along the path to settle them"),
+
     /** How many combinations of two positions' classes are counted. */
     PAIRS_OF_CLASSES_COUNTED("how many combinations of two positions' classes are counted"),
 
