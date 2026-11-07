@@ -10,6 +10,7 @@ import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -60,16 +61,163 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
 
     /**
      * How many {@code applied}'s answer holds, read in {@code at}, where its law says it in one
-     * case met whatever the arguments are — or null where no law says, it says it case by case
-     * ({@link #sizeInCases}), or names a number this cannot.
+     * case met whatever the arguments are, or in two told apart by whether a container holding
+     * each value once holds one ({@link #byAValueHeldOnce}) — or null where no law says, it says
+     * it in other cases ({@link #sizeInCases}), or names a number this cannot.
      */
-    static LinearForm<FactSubject> sizeOf(AnOperationApplied applied, Denotations at,
-                                          Terms terms) {
+    static Sized sizeOf(AnOperationApplied applied, Denotations at, Terms terms) {
         OperationLaw.Size<DeclaredArgument> law = sizeLawOf(applied);
-        LinearForm<LawNumber<DeclaredArgument>> unconditional =
-                law == null ? null : law.unconditional();
-        return unconditional == null ? null
-                : new LawOverAtoms(applied, at, terms).form(unconditional);
+        if (law == null) {
+            return null;
+        }
+        LawOverAtoms reading = new LawOverAtoms(applied, at, terms);
+        LinearForm<LawNumber<DeclaredArgument>> unconditional = law.unconditional();
+        if (unconditional == null) {
+            return reading.byAValueHeldOnce(law.cases());
+        }
+        LinearForm<FactSubject> form = reading.form(unconditional);
+        return form == null ? null : new Sized(form, null);
+    }
+
+    /**
+     * How many an answer holds: the law's one form, or its two cases of a value held once
+     * ({@code byTheValue}) — one of the two, and the other null.
+     */
+    record Sized(LinearForm<FactSubject> form, ByAValueHeldOnce byTheValue) {
+
+        Sized {
+            if ((form == null) == (byTheValue == null)) {
+                throw new IllegalArgumentException("a size is said by one form or by two cases");
+            }
+        }
+
+        /**
+         * What {@code answer}, the atom of how many the answer holds, is held to whatever the
+         * path: the form, or where the law was in cases, the answer between what the two cases
+         * come to.
+         *
+         * <p>The span and not one form of the count. The span relates two atoms each way, which
+         * is what a reading closes over, and says what the cases say read forward; which case it
+         * is, is what the count settles where a reading settles it ({@link #guaranteedOf}).
+         */
+        List<NumericConstraint> carriedBy(FactSubject answer) {
+            List<NumericConstraint> out = new ArrayList<>();
+            if (byTheValue == null) {
+                stating(LinearForm.atom(answer).minus(form).orNull(), Rel.EQ, out);
+            } else {
+                boolean fewerWhereHeld = byTheValue.fewerWhereHeld();
+                stating(LinearForm.atom(answer).minus(fewerWhereHeld ? byTheValue.held()
+                        : byTheValue.notHeld()).orNull(), Rel.GE, out);
+                stating(LinearForm.atom(answer).minus(fewerWhereHeld ? byTheValue.notHeld()
+                        : byTheValue.held()).orNull(), Rel.LE, out);
+            }
+            return out;
+        }
+
+        /**
+         * What {@code answer} comes to where a reading settles the count: the one case's answer
+         * where the value is held, and the other's where it is not. Asked of the reading's bounds
+         * on the count and opening no case, so a chain of such operations is read once.
+         */
+        List<ConditionalConstraint> guaranteedOf(FactSubject answer) {
+            if (byTheValue == null) {
+                return List.of();
+            }
+            LinearForm<FactSubject> atLeastOne = byTheValue.count()
+                    .minus(LinearForm.constant(ExactRatio.ONE)).orNull();
+            LinearForm<FactSubject> asHeld = LinearForm.atom(answer).minus(byTheValue.held())
+                    .orNull();
+            LinearForm<FactSubject> asNotHeld = LinearForm.atom(answer)
+                    .minus(byTheValue.notHeld()).orNull();
+            if (atLeastOne == null || asHeld == null || asNotHeld == null) {
+                return List.of();
+            }
+            return List.of(
+                    new ConditionalConstraint(new NumericConstraint(atLeastOne, Rel.GE),
+                            new NumericConstraint(asHeld, Rel.EQ)),
+                    new ConditionalConstraint(new NumericConstraint(byTheValue.count(), Rel.LE),
+                            new NumericConstraint(asNotHeld, Rel.EQ)));
+        }
+
+        private static void stating(LinearForm<FactSubject> form, Rel rel,
+                                    List<NumericConstraint> out) {
+            if (form != null) {
+                out.add(new NumericConstraint(form, rel));
+            }
+        }
+    }
+
+    /**
+     * Two cases of how many an answer holds, told apart by how many of a container that holds
+     * each value once are one value: {@code held} where it is one, {@code notHeld} where none is.
+     */
+    record ByAValueHeldOnce(LinearForm<FactSubject> count, LinearForm<FactSubject> held,
+                            LinearForm<FactSubject> notHeld) {
+
+        /** Whether the answer is the smaller where the value is held, as an insert's is. */
+        boolean fewerWhereHeld() {
+            LinearForm<FactSubject> step = held.minus(notHeld).orNull();
+            return step != null && step.constant().signum() < 0;
+        }
+    }
+
+    /**
+     * Two cases that are a container holding one value, or not, where the container holds each
+     * value once — a set its elements, a map its keys — and the two answers differ by a number.
+     *
+     * <p>Not cases to open. The answer lies between the two whichever holds, and is the one the
+     * count picks where a reading settles the count; read as cases, every value built by a chain
+     * of such operations is a split in each reading that bounds it, for a count no reading may
+     * say anything of.
+     */
+    private Sized byAValueHeldOnce(List<OperationLaw.Size.Case<DeclaredArgument>> cases) {
+        if (cases.size() != 2) {
+            return null;
+        }
+        LinearForm<FactSubject> count = null;
+        LinearForm<FactSubject> held = null;
+        LinearForm<FactSubject> notHeld = null;
+        for (OperationLaw.Size.Case<DeclaredArgument> each : cases) {
+            if (!(each.where() instanceof LawProposition.SomeElement<DeclaredArgument> some)
+                    || !heldOnce(some)) {
+                return null;
+            }
+            LinearForm<FactSubject> answer = form(each.equalTo());
+            LinearForm<FactSubject> counted = switch (LawAtACall.of(each.where(), this)) {
+                case Holding.Something(LinearForm<FactSubject> c) -> c;
+                case Holding.Not(Holding.Something(LinearForm<FactSubject> c)) -> c;
+                case null, default -> null;
+            };
+            if (answer == null || counted == null || (count != null && !count.equals(counted))) {
+                return null;
+            }
+            count = counted;
+            if (some.holds()) {
+                held = answer;
+            } else {
+                notHeld = answer;
+            }
+        }
+        LinearForm<FactSubject> step = held == null || notHeld == null ? null
+                : held.minus(notHeld).orNull();
+        return step == null || !step.coefs().isEmpty() ? null
+                : new Sized(null, new ByAValueHeldOnce(count, held, notHeld));
+    }
+
+    /** Whether {@code some} asks of a container that holds each value once: some element of a
+     *  set being a value, or some key of a map. */
+    private boolean heldOnce(LawProposition.SomeElement<DeclaredArgument> some) {
+        Core container = applied.argument(some.container());
+        if (container == null || !(some.ofTheElement() instanceof LawProposition.Same<
+                DeclaredArgument>(var one, var other, boolean same)) || !same) {
+            return false;
+        }
+        Type held = TypeOps.base(Core.withoutStanding(container).type(), terms.newtypeInners());
+        LawSubject<DeclaredArgument> asked = held instanceof Type.SetOf
+                ? heldAs(some.container(), AddsWhatItDoesNotHold.Of.ELEMENTS)
+                : held instanceof Type.MapOf
+                        ? heldAs(some.container(), AddsWhatItDoesNotHold.Of.KEYS) : null;
+        return asked != null && (asked.equals(one) || asked.equals(other));
     }
 
     /**
@@ -92,6 +240,9 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
             return null;
         }
         LawOverAtoms reading = new LawOverAtoms(applied, at, terms);
+        if (reading.byAValueHeldOnce(law.cases()) != null) {
+            return null;
+        }
         List<Derivation.Chosen.Arm> arms = new ArrayList<>();
         for (OperationLaw.Size.Case<DeclaredArgument> each : law.cases()) {
             LinearForm<FactSubject> answer = reading.form(each.equalTo());

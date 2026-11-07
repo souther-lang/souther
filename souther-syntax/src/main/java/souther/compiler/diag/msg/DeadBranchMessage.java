@@ -93,6 +93,15 @@ public sealed interface DeadBranchMessage extends Message {
     /** What to do about it. */
     record TakeItOutOrLetSomethingReachIt() implements DeadBranchMessage, Supporting {}
 
-    /** What to do about a departure of an attempted construction: build the value outright. */
+    /** What to do about the departures of an attempted construction, none of which is taken:
+     *  build the value outright. */
     record BuildTheValueRatherThanAttemptIt() implements DeadBranchMessage, Supporting {}
+
+    /** What to do about one departure of an attempted construction where another is taken: it is
+     *  written for its clause and stays, so it answers with {@code unreachable}. */
+    record AnswerTheDepartureWithUnreachable() implements DeadBranchMessage, Supporting {}
+
+    /** What to do about the success branch of an attempted construction that is never built:
+     *  answer what it departs with rather than attempting it. */
+    record AnswerTheDepartureRatherThanAttemptIt() implements DeadBranchMessage, Supporting {}
 }

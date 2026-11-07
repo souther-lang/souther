@@ -30,7 +30,6 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -171,14 +170,18 @@ final class Terms {
     private final ElementsReading elements = new ElementsReading();
 
     /**
-     * The expressions each size atom has had what it carries filed from, and the environments each
-     * was read in, both told apart by identity ({@link #sizeAtomFor}). A size is named wherever a
-     * clause reads it, and what it carries walks the elements written out and the laws of what
-     * built it; read from one expression in one environment it is the same answer every time.
-     * Read in another, it is read again and held to be the answer the first gave
-     * ({@link #carrying}), which is what says one atom is one value however it was reached.
+     * The values each atom read off how a container was built has had what it carries filed from,
+     * each with the environment it was read in, told apart by identity ({@link #sizeAtomFor},
+     * {@link #howManyAreInAtomFor}). Such an atom is named wherever a clause reads it, and what it
+     * carries walks how the containers were built, naming the atoms of what they were built from
+     * and filing theirs in turn; read off the same values it is the same answer every time, so it
+     * is worked out once. A walk that worked it out again at every naming would walk each atom
+     * below once for every way down to it, and two containers each built by adding are as many
+     * ways as there are orders to take the two sides' additions in. Read off other values, it is
+     * read again and held to be the answer the first gave ({@link #carrying}), which is what says
+     * one atom is one value however it was reached.
      */
-    private final Map<FactSubject, Map<Core, Set<Denotations>>> sizesFiledFrom = new HashMap<>();
+    private final Map<FactSubject, Set<ReadOff>> filedFrom = new HashMap<>();
 
     /**
      * What this reading knows about each atom it has named by knowing which value it is: how the
@@ -2324,15 +2327,12 @@ final class Terms {
             // that built it — and in the environment that expression's own names mean something in,
             // which is not the one the name was read in where a binding stands between them.
             Given built = sizedBy(container, at);
-            if (!sizesFiledFrom.computeIfAbsent(atom, _ -> new IdentityHashMap<>())
-                    .computeIfAbsent(built.value(),
-                            _ -> Collections.newSetFromMap(new IdentityHashMap<>()))
-                    .add(built.at())) {
+            if (!firstFiledFrom(atom, new ReadOff(built, null))) {
                 return atom;
             }
             carrying(atom, IntrinsicNumericFacts.ofSize(size, built.value(), atom, built.at(),
                     this));
-            Derivation held = IntrinsicNumericFacts.heldWhereItsLawsSay(built.value(),
+            Derivation held = IntrinsicNumericFacts.heldWhereItsLawsSay(built.value(), atom,
                     built.at(), this);
             if (held != null) {
                 computedBy(atom, new AtomKnowledge.Computation.Derived(held));
@@ -2389,16 +2389,33 @@ final class Terms {
         if (atom == null) {
             return null;
         }
+        Given holderBuilt = given(holder.value(), holder.at());
+        Given countedBuilt = given(counted.value(), counted.at());
+        if (!firstFiledFrom(atom, new ReadOff(countedBuilt, holderBuilt))) {
+            return atom;
+        }
         List<NumericConstraint> carried = new ArrayList<>();
         // A count, and so never below nought.
         carried.add(new NumericConstraint(LinearForm.atom(atom), Rel.GE));
-        AddedTo added = addedTo(given(holder.value(), holder.at()), of);
+        // One side at a time, and a side that took in another container's elements before a side
+        // that took in one value. Taking both sides at every step names a count for every pair of
+        // the values the two sides added, and what bounds a step that added one value is how many
+        // of the other side are that value: read only where a condition says it of the other side
+        // as it stands, so it says nothing while the other side is still built. A step that took
+        // in a container's elements is bounded by counts of two containers, each of which is
+        // read on in turn, so it is taken first and the values added are left until the other
+        // side is down to what a condition can speak of.
+        AddedTo onTheHolder = addedTo(holderBuilt, of);
+        AddedTo onTheCounted = addedTo(countedBuilt, of);
+        boolean holderFirst = onTheHolder != null
+                && (!onTheHolder.oneValue() || onTheCounted == null || onTheCounted.oneValue());
+        AddedTo added = holderFirst ? onTheHolder : null;
+        AddedTo grown = holderFirst ? null : onTheCounted;
         if (added != null) {
             between(atom, howManyAreIn(counted, added.before(), of), added.oneValue()
                     ? howManyAre(countedKey, bodyKey(added.what().value(), added.what().at()), of)
                     : howManyAreIn(counted, added.what(), of), carried);
         }
-        AddedTo grown = addedTo(given(counted.value(), counted.at()), of);
         if (grown != null) {
             between(atom, howManyAreIn(grown.before(), holder, of), grown.oneValue()
                     ? howManyAre(holderKey, bodyKey(grown.what().value(), grown.what().at()), of)
@@ -2406,6 +2423,48 @@ final class Terms {
         }
         carrying(atom, carried);
         return atom;
+    }
+
+    /** Whether {@code atom} has had nothing filed from {@code from} yet, which it has from now
+     *  on ({@link #filedFrom}). */
+    private boolean firstFiledFrom(FactSubject atom, ReadOff from) {
+        return filedFrom.computeIfAbsent(atom, _ -> new HashSet<>()).add(from);
+    }
+
+    /**
+     * The values what an atom carries is read off, each where it was read: one container, or the
+     * one counted from and the one holding them. By identity, values and environments alike,
+     * which is what an answer read off them is the same answer for.
+     */
+    private static final class ReadOff {
+
+        private final Given one;
+        private final Given other;
+
+        ReadOff(Given one, Given other) {
+            this.one = one;
+            this.other = other;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof ReadOff that && same(one, that.one) && same(other, that.other);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * identity(one) + identity(other);
+        }
+
+        private static boolean same(Given a, Given b) {
+            return a == null ? b == null
+                    : b != null && a.value() == b.value() && a.at() == b.at();
+        }
+
+        private static int identity(Given g) {
+            return g == null ? 0
+                    : 31 * System.identityHashCode(g.value()) + System.identityHashCode(g.at());
+        }
     }
 
     /**

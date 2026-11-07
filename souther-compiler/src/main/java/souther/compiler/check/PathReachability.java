@@ -957,8 +957,8 @@ public final class PathReachability {
                 Choice.Decides.ItWasBuilt held = Choice.Decides.ofBuilt(ic);
                 PathEngine.Entered built = engine.enteringBuilt(held, given.known(), at);
                 List<Walked> ways = new ArrayList<>();
-                ways.add(walk(ic.then(), given.enteringAWay(built.known(), given.decided()),
-                        built.at(), reads.choosing(held, symbols, newtypes)));
+                ways.add(building(arms, ic, given, built, reads.choosing(held, symbols,
+                        newtypes)));
                 for (int i = 0; i < ic.els().size(); i++) {
                     Core.ElseArm arm = ic.els().get(i);
                     boolean shut = notTaken.get(i)
@@ -1612,12 +1612,17 @@ public final class PathReachability {
     /** Every arm of a fork in {@code arms} the walk has not proven otherwise, as one nothing enters
      *  for {@code why}. */
     private void noneEnters(ControlPlace.Arm[] arms, Proof why) {
+        noneEnters(arms, why, Reachability.Said.HERE);
+    }
+
+    /** The same, said where {@code said} says. */
+    private void noneEnters(ControlPlace.Arm[] arms, Proof why, Reachability.Said said) {
         if (arms == null) {
             return;
         }
         for (ControlPlace.Arm arm : arms) {
             if (!(out.get(arm) instanceof Reachability.Unreachable)) {
-                out.put(arm, new Reachability.Unreachable(why));
+                out.put(arm, new Reachability.Unreachable(why, said));
             }
         }
     }
@@ -1636,9 +1641,10 @@ public final class PathReachability {
     /**
      * Every comparison below a place nothing arrives at, answered as one nothing arrives at.
      *
-     * <p>A separate descent because what it does is not what the walk does: no arm is filed, and
-     * nothing here narrows anything — the state was already empty when this began, and it stays
-     * that way for every node under it. Whether one operand of a short circuit was reached is a
+     * <p>A separate descent because what it does is not what the walk does: every arm below is
+     * filed as one nothing enters — said at the first fork, and with that fork for the forks
+     * inside it — and nothing here narrows anything — the state was already empty when this
+     * began, and it stays that way for every node under it. Whether one operand of a short circuit was reached is a
      * question about a run, and there are none.
      *
      * <p>Written out rather than folded into the walk, because the walk stops here and stopping is
@@ -1654,9 +1660,15 @@ public final class PathReachability {
         Walked below = here;
         ControlPlace.Arm[] arms = plan.armsOf(e);
         Optional<Proof> why = here.whyNothingArrives();
-        if (arms != null && !here.filedAbove() && why.isPresent()) {
-            noneEnters(arms, why.get());
-            below = here.filed();
+        if (arms != null && why.isPresent()) {
+            // The first fork below where nothing arrives is where it is said; a fork inside an
+            // arm already said to be one nothing enters is owed no row either, and is said there.
+            if (here.filedAbove()) {
+                noneEnters(arms, why.get(), Reachability.Said.ABOVE);
+            } else {
+                noneEnters(arms, why.get(), Reachability.Said.HERE);
+                below = here.filed();
+            }
         }
         Walked under = below;
         Core.forEachChild(e, child -> unreached(child, under, at, reads));
@@ -1937,6 +1949,32 @@ public final class PathReachability {
         return walk(arm, fork.enteringAWay(
                         noRunPast.isPresent() ? inside.reachingNothing() : inside, under), at,
                 reads.choosing(Choice.Decides.ofCondition(iff, holds), symbols, newtypes));
+    }
+
+    /**
+     * The success branch of an attempt, entered with what the construction's clauses guarantee.
+     *
+     * <p>Where the clauses cannot all hold beside what holds on the way here, no run builds the
+     * value — each clause may hold and they cannot hold together — and the branch is filed as one
+     * nothing enters: the conditions on the way here and building it cannot all hold. What is
+     * under it is walked as a place nothing arrives at. Where nothing gets to the attempt at all,
+     * why is the attempt's, and nothing is filed here.
+     *
+     * @return what a run leaving the branch holds
+     */
+    private Walked building(ControlPlace.Arm[] arms, Core.IfConstructed attempt, Walked fork,
+                            PathEngine.Entered built, InputReads reads) {
+        if (nothingReaches(fork.known()) || !nothingReaches(built.known())) {
+            return walk(attempt.then(), fork.enteringAWay(built.known(), fork.decided()),
+                    built.at(), reads);
+        }
+        List<PathDecision> under = new ArrayList<>(fork.decided());
+        under.add(PathDecision.ofAnArm(attempt.then().pos(), attempt.lineage()));
+        if (arms != null && arms.length > 0) {
+            out.put(arms[0], new Reachability.Unreachable(
+                    Proof.conditionsThatCannotAllHold(under)));
+        }
+        return walk(attempt.then(), fork.enteringAWay(built.known(), under), built.at(), reads);
     }
 
     /**

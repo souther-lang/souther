@@ -166,6 +166,170 @@ class ADepartureNoRunTakesIsOwedNoRowTest {
         assertFalse(report.contains("no row goes through `else ordered`"), report);
     }
 
+    private static final String WINDOW = """
+            module seats
+
+            data TooWide
+            data Unordered
+            data Window = { lo: Int, hi: Int }
+                invariant ordered = lo <= hi
+                invariant small = hi - lo <= 10
+
+            behavior w : (a: Int, b: Int) -> Window | Unordered | TooWide
+                constructs Window
+            let w (a, b) = {
+                guard a <= b else Unordered
+                guard Window { lo = a, hi = b } as win else
+                    | ordered -> %s
+                    | small -> TooWide
+                win
+            }
+
+            example w
+                | (1, 2) -> Window { lo = 1, hi = 2 }
+                | (1, 20) -> TooWide
+                | (2, 1) -> Unordered
+            """;
+
+    /** A departure no run takes beside one a run takes stays, since its clause is answered by a
+     *  departure, and says so with `unreachable`; building the value outright would take the
+     *  other away. Written so, it is no arm and nothing is said of it. */
+    @Test
+    void aDepartureShutBesideOneTakenIsAnsweredWithUnreachable() {
+        Compilation shut = measured(WINDOW.formatted("Unordered"));
+        assertEquals(List.of("E1327"), codes(shut));
+        assertEquals(List.of(DeadBranchMessage.AnswerTheDepartureWithUnreachable.class),
+                hints(shut));
+        Compilation answered = measured(WINDOW.formatted("unreachable \"a <= b is guarded\""));
+        assertEquals(List.of(), codes(answered));
+        assertFalse(report(answered).contains("no row goes through"), () -> report(answered));
+    }
+
+    /** Clauses each of which may hold, and which cannot hold together where the attempt stands:
+     *  no run builds the value, so its success branch is owed no row, and the attempt is
+     *  answered by what it departs with. */
+    @Test
+    void anAttemptWhoseClausesCannotHoldTogetherOwesNoRowThroughItsSuccess() {
+        Compilation compilation = measured("""
+                module pairs
+
+                data Bad
+                data Pair = { n: Int, m: Int }
+                    invariant left = n > 0
+                    invariant right = m > 0
+
+                behavior f : (n: Int) -> Pair | Bad
+                    constructs Pair
+                let f (n) = {
+                    guard Pair { n = n, m = 0 - n } as p else
+                        | left -> Bad
+                        | right -> Bad
+                    p
+                }
+
+                example f
+                    | (1) -> Bad
+                    | (0 - 1) -> Bad
+                """);
+        assertFalse(owes(compilation, "pairs", "f", SourceOutcome.Held.class),
+                () -> report(compilation));
+        assertEquals(List.of("E1327"), codes(compilation));
+        assertEquals(List.of(DeadBranchMessage.AnswerTheDepartureRatherThanAttemptIt.class),
+                hints(compilation));
+    }
+
+    /** The control: clauses that hold together somewhere leave the success branch owed. */
+    @Test
+    void anAttemptWhoseClausesMayHoldTogetherOwesItsSuccess() {
+        Compilation compilation = measured("""
+                module pairs
+
+                data Bad
+                data Pair = { n: Int, m: Int }
+                    invariant left = n > 0
+                    invariant right = m > 0
+
+                behavior f : (n: Int) -> Pair | Bad
+                    constructs Pair
+                let f (n) = {
+                    guard Pair { n = n, m = n } as p else
+                        | left -> Bad
+                        | right -> Bad
+                    p
+                }
+
+                example f
+                    | (0) -> Bad
+                """);
+        assertTrue(owes(compilation, "pairs", "f", SourceOutcome.Held.class),
+                () -> report(compilation));
+    }
+
+    /** A fork inside a branch nothing enters is reached by nothing either: owed no row, and said
+     *  with the branch it is inside, which is what an author takes out. Plain forks and attempts
+     *  alike. */
+    @Test
+    void theForksInsideADeadBranchAreOwedNothingAndSaidWithIt() {
+        String model = """
+                module counts
+
+                data Count = { n: Int }
+                    invariant n >= 0
+
+                data Bad
+
+                behavior f : (n: Int) -> Count | Bad
+                    constructs Count
+                let f (n) = {
+                    guard n > 0 else Bad
+                    if n < 0 then {
+                        %s
+                    } else Count { n = n }
+                }
+
+                example f
+                    | (1) -> Count { n = 1 }
+                    | (0) -> Bad
+                """;
+        for (String inside : List.of("if n < 0 - 5 then Bad else Count { n = 0 }",
+                "guard Count { n = n } as c else Bad\n        c")) {
+            Compilation compilation = measured(model.formatted(inside));
+            assertFalse(report(compilation).contains("no row goes through"),
+                    () -> report(compilation));
+            assertEquals(List.of("E1327"), codes(compilation));
+            assertEquals(List.of(DeadBranchMessage.TakeItOutOrLetSomethingReachIt.class),
+                    hints(compilation));
+        }
+    }
+
+    /** A branch of a helper said with the branch it is inside at one call, and dead where it is
+     *  written at another, is said where it is written: the branch it is inside at the first is
+     *  not dead at the second, so nothing else says it. */
+    @Test
+    void aBranchDeadOnItsOwnAtOneCallIsSaidThoughItIsInsideADeadBranchAtAnother() {
+        Compilation compilation = measured("""
+                module seats
+
+                data Full
+
+                let lower (f: Int) : Int | Full = {
+                    guard f - 1 >= 0 else Full
+                    f - 1
+                }
+
+                behavior take : (a: Int) -> Int | Full
+                let take (a) = {
+                    guard a > 0 else Full
+                    if a < 0 then lower(a) else lower(a)
+                }
+
+                example take
+                    | (1) -> 0
+                    | (0) -> Full
+                """);
+        assertEquals(List.of("E1327", "E1327"), codes(compilation));
+    }
+
     /** A clause read on a value the check names nothing of is left to the run-time check, which is
      *  no clause holding. */
     @Test
@@ -272,14 +436,37 @@ class ADepartureNoRunTakesIsOwedNoRowTest {
     /** Whether {@code behavior} owes a row through a departure of an attempted construction. */
     private static boolean owesADeparture(Compilation compilation, String module,
                                           String behavior) {
+        return owes(compilation, module, behavior, SourceOutcome.Failed.class);
+    }
+
+    /** Whether {@code behavior} owes a row through an arm of an attempted construction whose
+     *  outcome is {@code outcome}. */
+    private static boolean owes(Compilation compilation, String module, String behavior,
+                                Class<? extends SourceOutcome.Arm> outcome) {
         return compilation.db().ask(new Adequacy.BranchCoverage(module)).value().get(behavior)
                 .measured() instanceof Measurement.Complete<ArmSummary>(ArmSummary summary)
                 && summary.all().stream()
                         .filter(ArmObligation.Counted.class::isInstance)
                         .map(ArmObligation.Counted.class::cast)
                         .flatMap(arm -> arm.occurrences().stream())
-                        .anyMatch(site -> site.outcome() instanceof SourceOutcome.Failed(
-                                SourceOutcome.FailedBy.Construction _));
+                        .anyMatch(site -> outcome.isInstance(site.outcome())
+                                && (site.outcome() instanceof SourceOutcome.Failed(
+                                        SourceOutcome.FailedBy.Construction _)
+                                        || site.outcome() instanceof SourceOutcome.Held(
+                                                SourceOutcome.HeldBy.Construction _)));
+    }
+
+    /** What each warning says to do about it. */
+    private static List<Class<?>> hints(Compilation compilation) {
+        return compilation.warnings().stream()
+                .flatMap(each -> each.diagnostic().notes().stream())
+                .map(note -> (Object) note.said())
+                .filter(said -> said instanceof DeadBranchMessage.TakeItOutOrLetSomethingReachIt
+                        || said instanceof DeadBranchMessage.BuildTheValueRatherThanAttemptIt
+                        || said instanceof DeadBranchMessage.AnswerTheDepartureWithUnreachable
+                        || said instanceof DeadBranchMessage.AnswerTheDepartureRatherThanAttemptIt)
+                .<Class<?>>map(Object::getClass)
+                .toList();
     }
 
     /** One departure written once and copied at two calls: shut at one call and not at the other

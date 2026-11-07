@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
@@ -210,6 +211,98 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
                     Outcomes { ...o, refused = Set.union(o.refused, ns) }
                 }
                 """));
+    }
+
+    /** Both sides built: the union is taken apart first, so the value inserted on the other side is
+     *  asked of each half as a condition says it. */
+    @Test
+    void aUnionOnOneSideAndAnInsertOnTheOtherAreTakenApartTogether() {
+        assertEquals(List.of(), warnings(OUTCOMES + """
+                behavior move : (o: Outcomes, ns: Set<Int>, n: Int) -> Outcomes | Already
+                    constructs Outcomes
+                let move (o, ns, n) = {
+                    guard Set.isEmpty(Set.intersection(ns, o.refused)) else Already
+                    guard Bool.not(Set.contains(n, o.seated)) else Already
+                    guard Bool.not(Set.contains(n, ns)) else Already
+                    Outcomes { seated = Set.union(o.seated, ns), refused = Set.insert(n, o.refused) }
+                }
+                """));
+    }
+
+    /** Values added on both sides are read one side at a time, so the counts named grow with how
+     *  many were added and not with how many pairs of them there are. */
+    @Test
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void manyInsertsOnBothSidesAreReadOneSideAtATime() {
+        int depth = 24;
+        StringBuilder parameters = new StringBuilder();
+        StringBuilder names = new StringBuilder();
+        String seated = "o.seated";
+        String refused = "o.refused";
+        for (int i = 0; i < depth; i++) {
+            parameters.append(", a").append(i).append(": Int, b").append(i).append(": Int");
+            names.append(", a").append(i).append(", b").append(i);
+            seated = "Set.insert(a" + i + ", " + seated + ")";
+            refused = "Set.insert(b" + i + ", " + refused + ")";
+        }
+        assertEquals(List.of("E2011"), warnings(OUTCOMES + """
+                behavior both : (o: Outcomes%s) -> Outcomes
+                    constructs Outcomes
+                let both (o%s) = Outcomes { seated = %s, refused = %s }
+                """.formatted(parameters, names, seated, refused)));
+    }
+
+    /** How many a set holds once a value is put in is one form of the count of that value, and
+     *  no case of it: inserts written one into another are each read once, and together are as
+     *  many more as there were inserts at most. */
+    @Test
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void aChainOfInsertsHoldsAtMostOneMoreForEach() {
+        int depth = 16;
+        StringBuilder parameters = new StringBuilder();
+        StringBuilder names = new StringBuilder();
+        String taken = "s.taken";
+        for (int i = 0; i < depth; i++) {
+            parameters.append(", a").append(i).append(": Int");
+            names.append(", a").append(i);
+            taken = "Set.insert(a" + i + ", " + taken + ")";
+        }
+        assertEquals(List.of(), warnings("""
+                module seats
+
+                data Capped = { taken: Set<Int>, cap: Int }
+                    invariant Set.size(taken) <= cap
+
+                behavior grow : (s: Capped%s) -> Capped
+                    constructs Capped
+                let grow (s%s) = Capped { taken = %s, cap = s.cap + %d }
+                """.formatted(parameters, names, taken, depth)));
+    }
+
+    /** What a count of two containers carries is filed once for the values it is read off, so a
+     *  set united with itself again and again is read once for each union and not once for each
+     *  way down to it. */
+    @Test
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void aSetUnitedWithItselfIsReadOnceForEachUnion() {
+        for (int depth : new int[] {8, 24}) {
+            StringBuilder lets = new StringBuilder();
+            for (int i = 1; i <= depth; i++) {
+                lets.append("    let s").append(i).append(" = Set.union(s").append(i - 1)
+                        .append(", s").append(i - 1).append(")\n");
+            }
+            List<String> said = warnings(OUTCOMES + """
+                    behavior refuseAll : (o: Outcomes) -> Outcomes
+                        constructs Outcomes
+                    let refuseAll (o) = {
+                        let s0 = o.refused
+                    %s    Outcomes { ...o, refused = s%d }
+                    }
+                    """.formatted(lets, depth));
+            if (depth == 8) {
+                assertEquals(List.of(), said);
+            }
+        }
     }
 
     @Test
