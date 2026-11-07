@@ -1692,6 +1692,13 @@ final class Pullback {
      * in the step of another walk is not shown by this one: entering another walk shows what that
      * walk shows, and nothing of this one's.
      *
+     * <p>Within the step, the same operation that files met at another place is shown there too,
+     * and is what it is shown to be: what it answers turns on the names it reads, each bound by
+     * one binder ({@code BindingId}), and in one application of the step the answer so far and
+     * the element are each bound once. The move is not so: the closure it is written in is
+     * applied to whatever value the operation handed it finds, so it is shown only under the
+     * argument of the operation shown, and the same closure handed to anything else is not.
+     *
      * <p>In the step, each operation that files is shown to stop no run where it ends one only on
      * an answer that holds more than a collection does ({@link GetsPast.WhereTheAnswerFits}),
      * which what it files into never comes to ({@link KeyedAccumulation.Filing}). Under the

@@ -69,6 +69,20 @@ class WhatAWalkShowsIsShownWhereItStandsTest {
                 "the same move met under another node is not shown");
     }
 
+    /**
+     * The same nodes met again at another place of the step: the operation that files is the same
+     * operation over the same names and is shown there too; the closure it moves by, met under
+     * anything but that operation, is handed whatever that thing hands it, and its move is not.
+     */
+    @Test
+    void aNodeMetAgainInTheStepIsShownOnlyWhereWhatItReadsIsTheSame() {
+        Pullback.ShownByAWalk elsewhereInTheStep = ofTheStep.under(key, seed);
+        assertTrue(elsewhereInTheStep.stopsNoRunAt(operation));
+        assertFalse(ofTheStep.under(key, movedBy).stopsNoRunAt(move),
+                "the closure met under another node moves another value");
+        assertFalse(ofTheStep.under(key, movedBy).under(movedBy, move).stopsNoRunAt(move));
+    }
+
     @Test
     void whatIsShownGoesDownThroughWhatIsNoFilingAndNothingIsShownOfNothing() {
         assertEquals(ofTheStep, ofTheStep.under(key, seed));

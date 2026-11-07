@@ -4701,21 +4701,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /**
-         * Whether {@code statement} states nothing but what a count a side is made of comes to,
+         * Whether {@code statement} states nothing but what one count a side is made of comes to,
          * the count being of {@code collection} or of a container {@code collection} is inside
-         * ({@link #containerItCounts}): a relation over that count alone. The rows a count is
-         * asked on are one for each value it takes, each holding as many as it counts, so such a
-         * statement says which of those values the way leaves, which the region holds, and
-         * nothing more of how many {@code collection} holds.
+         * ({@link #containerItCounts}): a relation over that one count and a constant. The rows
+         * a count is asked on are one for each value it takes, each holding as many as it counts
+         * and what is inside as few as it may, so such a statement says which of those values the
+         * way leaves, which the region holds, and nothing more of how many {@code collection}
+         * holds.
+         *
+         * <p>One count, and not several: a statement relating two counts — more labels than
+         * twice the issues — asks the containers inside for more than the fewest, which the rows
+         * of each value do not hold.
          */
         private boolean statesACountAlone(OnAWay statement, TermPath collection) {
             return statement.elementsOf() == null && !statement.whatStands()
                     && statement.relation() instanceof TakenConstraint.Affine(var form, var _, var _)
-                    && !form.coefs().isEmpty()
-                    && form.coefs().keySet().stream().allMatch(term -> sides.stream()
-                            .anyMatch(side -> term.equals(side.number())
+                    && form.coefs().size() == 1
+                    && sides.stream().anyMatch(side ->
+                            form.coefs().containsKey(side.number())
                                     && containerItCounts(side.number()) instanceof TermPath counted
-                                    && collection.isAtOrUnder(counted)));
+                                    && collection.isAtOrUnder(counted));
         }
 
         /** How many elements {@code collection} holds here, or nothing where no such run is
