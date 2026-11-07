@@ -1,11 +1,11 @@
 package souther.compiler.meaning;
 
+import souther.compiler.observe.Figure;
 import souther.compiler.partition.CompositionBudget;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -117,8 +117,8 @@ public final class CasesOfALineAsked {
 
         /** Every figure some case was stopped at: which way those cases go was not worked out.
          *  Empty where every case was. */
-        public Set<CompositionBudget> notWorkedOut() {
-            Set<CompositionBudget> out = EnumSet.noneOf(CompositionBudget.class);
+        public Set<Figure.Budget> notWorkedOut() {
+            Set<Figure.Budget> out = new LinkedHashSet<>();
             notWorkedOutIn.forEach(each -> out.addAll(each.stoppedAt()));
             return out.isEmpty() ? Set.of() : Collections.unmodifiableSet(out);
         }
@@ -145,7 +145,7 @@ public final class CasesOfALineAsked {
      * @param counted   how many ways of choosing its cases there were, where their number is what
      *                  stopped them; empty where none was taken apart for another reason
      */
-    public record NotWorkedOut(DecidingCase in, Set<CompositionBudget> stoppedAt,
+    public record NotWorkedOut(DecidingCase in, Set<Figure.Budget> stoppedAt,
                                Optional<CaseCount> counted) {
 
         public NotWorkedOut {
@@ -155,11 +155,11 @@ public final class CasesOfALineAsked {
                 throw new IllegalArgumentException(
                         "cases nobody worked out were stopped at some figure");
             }
-            stoppedAt = Collections.unmodifiableSet(EnumSet.copyOf(stoppedAt));
+            stoppedAt = Set.copyOf(stoppedAt);
         }
 
         /** The same, with the ways not counted. */
-        public NotWorkedOut(DecidingCase in, Set<CompositionBudget> stoppedAt) {
+        public NotWorkedOut(DecidingCase in, Set<Figure.Budget> stoppedAt) {
             this(in, stoppedAt, Optional.empty());
         }
     }
@@ -202,13 +202,14 @@ public final class CasesOfALineAsked {
      *  case asked is then not what the line decides in, as it was said. */
     private boolean droppedNonDividing;
 
-    private final Set<CompositionBudget> stopped = EnumSet.noneOf(CompositionBudget.class);
+    /** The figures the asking stopped at, each made where it stopped. */
+    private final Set<Figure.Budget> stopped = new LinkedHashSet<>();
 
     /** How many ways of choosing the cases asked there were, where their number stopped them. */
     private Optional<CaseCount> counted = Optional.empty();
 
     /** The figures each case was never taken apart at, for the cases already asked of. */
-    private final Map<DecidingCase.Cases, Set<CompositionBudget>> figuresOf =
+    private final Map<DecidingCase.Cases, Set<Figure.Budget>> figuresOf =
             new IdentityHashMap<>();
 
     /** Whether a part chosen that the numbers chosen so far refute ends the way there, asked of
@@ -257,12 +258,11 @@ public final class CasesOfALineAsked {
      * @param notWorkedOut every figure some case was stopped at, where some was: those cases are
      *                     in none of {@code each}, and empty where every case was walked to
      */
-    public record Atoms<T>(List<Atom<T>> each, Set<CompositionBudget> notWorkedOut) {
+    public record Atoms<T>(List<Atom<T>> each, Set<Figure.Budget> notWorkedOut) {
 
         public Atoms {
             each = List.copyOf(each);
-            notWorkedOut = notWorkedOut.isEmpty() ? Set.of()
-                    : Collections.unmodifiableSet(EnumSet.copyOf(notWorkedOut));
+            notWorkedOut = Set.copyOf(notWorkedOut);
         }
     }
 
@@ -391,7 +391,7 @@ public final class CasesOfALineAsked {
     /** The cases of {@code said} were more ways of choosing one than are taken apart: none is
      *  chosen, at that figure and at every figure they were never taken apart at. */
     private void moreWaysThanAreTakenApart(DecidingCase said) {
-        stopped.add(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
+        stopped.add(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached());
         stopped.addAll(said.standsFor().notTakenApartAt(figuresOf));
     }
 
@@ -617,7 +617,7 @@ public final class CasesOfALineAsked {
      * them as they stand — once over each, and not by choosing among them.
      */
     private void pastTheSteps(List<DecidingCase.Cases> notWalked) {
-        stopped.add(CompositionBudget.CASES_A_LINE_IS_ASKED_IN);
+        stopped.add(CompositionBudget.CASES_A_LINE_IS_ASKED_IN.reached());
         notWalked.forEach(each -> stopped.addAll(each.notTakenApartAt(figuresOf)));
     }
 

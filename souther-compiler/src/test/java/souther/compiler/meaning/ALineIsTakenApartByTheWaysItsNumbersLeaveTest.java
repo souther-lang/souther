@@ -171,7 +171,7 @@ class ALineIsTakenApartByTheWaysItsNumbersLeaveTest {
         BigInteger ways = BigInteger.TWO.pow(numbers);
         assertTrue(ways.compareTo(BigInteger.valueOf(TAKEN_APART)) > 0);
         assertEquals(List.of(new CasesOfALineAsked.NotWorkedOut(new DecidingCase(SAID, cases),
-                        Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO),
+                        Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached()),
                         Optional.of(new CaseCount(new CaseCount.Ways.Exactly(ways),
                                 new NumericallyConsistentWays.Counted.AtMost(ways))))),
                 asking.found(cases).notWorkedOutIn(), "every way consistent, and none chosen");
@@ -210,7 +210,7 @@ class ALineIsTakenApartByTheWaysItsNumbersLeaveTest {
         Asking asking = new Asking(_ -> CasesOfALineAsked.Crossing.MAY_CROSS);
 
         assertEquals(List.of(new CasesOfALineAsked.NotWorkedOut(new DecidingCase(SAID, cases),
-                        Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO),
+                        Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached()),
                         Optional.of(new CaseCount(new CaseCount.Ways.Exactly(ways),
                                 counted.ofTheNumbers())))),
                 asking.found(cases).notWorkedOutIn(), "cut off, told the numbers' count");

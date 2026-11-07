@@ -75,7 +75,7 @@ class HoldingWhatEveryCaseHoldsFirstKeepsTheOrderTheCasesWereWrittenInTest {
             case 0 -> new DecidingCase.Cases.One(truth(dice.nextInt(6)));
             case 1 -> nobodyTookApart && dice.nextInt(8) == 0
                     ? new DecidingCase.Cases.NotTakenApart(
-                            CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN)
+                            CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached())
                     : new DecidingCase.Cases.One(truth(dice.nextInt(6)));
             case 2, 3 -> new DecidingCase.Cases.EachOf(
                     group(dice, depth, before, dice.nextInt(3), sharing, nobodyTookApart));

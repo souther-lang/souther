@@ -141,7 +141,7 @@ class WhereALineDecidesDoesNotDependOnHowManyPartsTheStatementHasTest {
 
         assertEquals(1, cases.size(), cases::toString);
         assertEquals(List.of(new DecidingCase.Cases.NotTakenApart(
-                        CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN)),
+                        CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached())),
                 notTakenApart(cases.getFirst().standsFor()), cases::toString);
     }
 

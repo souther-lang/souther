@@ -3,6 +3,7 @@ package souther.compiler.meaning;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.Figure;
 import souther.compiler.partition.CompositionBudget;
 
 import java.lang.reflect.Method;
@@ -107,7 +108,8 @@ class ASharedSetOfCasesIsWalkedOncePerCaseTest {
     }
 
     private static final DecidingCase.Cases.NotTakenApart NOT_TAKEN_APART =
-            new DecidingCase.Cases.NotTakenApart(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN);
+            new DecidingCase.Cases.NotTakenApart(
+                    CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached());
 
     /** Each question the cases are asked, so that a new one is put to this test with it. */
     private static Map<String, Callable<?>> askedOf(DecidingCase.Cases cases) {
@@ -217,10 +219,10 @@ class ASharedSetOfCasesIsWalkedOncePerCaseTest {
 
     @Test
     void theFiguresCasesWereNeverTakenApartAtAreFoundBeneathTheSharedRest() {
-        Set<CompositionBudget> figures = assertTimeoutPreemptively(
+        Set<Figure.Budget> figures = assertTimeoutPreemptively(
                 LONG_ENOUGH_FOR_A_VISIT_TO_EACH_CASE,
                 () -> sharingTheRest(NOT_TAKEN_APART).notTakenApartAt());
-        assertEquals(Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN), figures);
+        assertEquals(Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached()), figures);
         assertEquals(Set.of(), sharingTheRest(one(truth("end"))).notTakenApartAt());
     }
 
@@ -275,7 +277,8 @@ class ASharedSetOfCasesIsWalkedOncePerCaseTest {
                     LONG_ENOUGH_FOR_A_VISIT_TO_EACH_CASE,
                     () -> CasesOfALineAsked.casesOf(said,
                             _ -> CasesOfALineAsked.Crossing.MAY_CROSS));
-            assertTrue(found.notWorkedOut().contains(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN),
+            assertTrue(found.notWorkedOut()
+                            .contains(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached()),
                     found.notWorkedOut().toString());
         }
     }
@@ -290,9 +293,9 @@ class ASharedSetOfCasesIsWalkedOncePerCaseTest {
                     () -> CasesOfALineAsked.atomsOf(said, _ -> true));
             assertTrue(found.each().isEmpty());
             assertTrue(found.notWorkedOut()
-                    .contains(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO));
+                    .contains(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached()));
             assertTrue(found.notWorkedOut()
-                    .contains(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN));
+                    .contains(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached()));
         }
     }
 }

@@ -46,7 +46,7 @@ class AFigureIsHeldToWhatItsCompilationSaysTest {
 
         @Override
         public Answer<Figure> compute(Db db) {
-            return Answer.of(SETTABLE.figure());
+            return Answer.of(SETTABLE.reached());
         }
     }
 
@@ -65,20 +65,14 @@ class AFigureIsHeldToWhatItsCompilationSaysTest {
     }
 
     /**
-     * A budget a compilation may set is made a figure only while one answers: made after, it
-     * would say the figure declared whatever the compilation that reached it was held to. A store
-     * holding every figure to the one declared puts them in force as well.
+     * A figure a compilation may set is not made again where it is told, where the one in force
+     * is no longer the one it stopped at; one no compilation sets is the same wherever it is made.
      */
     @Test
-    void aFigureACompilationMaySetIsMadeOnlyWhileOneAnswers() {
-        assertThrows(IllegalStateException.class, SETTABLE::figure,
-                "no compilation answering, so no figure it stood at");
-        assertEquals(new Figure.Budget(SETTABLE, SETTABLE.declared()),
-                new Db().ask(new TheFigureReached()).value(),
-                "a store holding the figures declared answers under them");
+    void aFigureACompilationMaySetIsMadeOnlyWhereItIsReached() {
+        assertThrows(IllegalStateException.class, SETTABLE::figure);
         CompositionBudget fixed = CompositionBudget.PAIRINGS_BUILT_AT_ONCE;
-        assertEquals(new Figure.Budget(fixed, fixed.declared()), fixed.figure(),
-                "a budget no compilation may set stands at the one declared anywhere");
+        assertEquals(fixed.reached(), fixed.figure());
     }
 
     @Test

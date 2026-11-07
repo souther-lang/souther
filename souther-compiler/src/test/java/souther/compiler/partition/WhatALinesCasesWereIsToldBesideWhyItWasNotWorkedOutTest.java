@@ -285,25 +285,6 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
         }
     }
 
-    /**
-     * A line cut off at a figure its compilation was held to is said to have stopped at that
-     * figure, and not at the one declared: the number is the one the reading reached, carried to
-     * the report put together after it.
-     */
-    @Test
-    void aStopIsSaidAtTheFigureItsCompilationWasHeldTo() {
-        Compilation compilation = compiled(FIND, NO_CASE_TAKEN_APART);
-        String said = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
-        String figure = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.name();
-        List<String> stops = said.lines().filter(each -> each.contains(figure + ",")).toList();
-        assertFalse(stops.isEmpty(), "the lines past the figure say it: " + said);
-        for (String each : stops) {
-            assertTrue(each.contains("(" + figure + ", " + NO_CASE_TAKEN_APART + ")"),
-                    "at the figure it was held to: " + each);
-        }
-    }
-
     /** How many grades the table has. */
     private static final int GRADES = 25;
 

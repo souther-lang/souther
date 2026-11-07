@@ -766,19 +766,27 @@ public enum CompositionBudget {
     }
 
     /**
-     * This budget as a figure something stopped at, at the figure it is held to where this is
-     * asked: made where it is reached, it carries the figure the compilation reaching it used.
+     * This budget as the figure something stopped at, made where it stopped: the figure the
+     * compilation stopping there held it to. What carries the stop carries this.
+     */
+    public Figure.Budget reached() {
+        return new Figure.Budget(this, maximum());
+    }
+
+    /**
+     * This budget as a figure, made wherever it is asked: the one declared, which is the figure
+     * every compilation holds a budget to that none may hold to another.
      *
-     * @throws IllegalStateException where this is a budget a compilation may set and no
-     *                               compilation is answering, which leaves no figure it stood at
-     *                               ({@link Allowances})
+     * @throws IllegalStateException for a budget a compilation may hold to another figure
+     *         ({@link Allowances#SETTABLE}): which figure it stopped at is known only where it
+     *         stopped, and what stopped there carries it ({@link #reached})
      */
     public Figure figure() {
-        if (Allowances.SETTABLE.contains(this) && !Allowances.someInForce()) {
-            throw new IllegalStateException(name() + " is held to the figure of the compilation"
-                    + " reaching it, and none is answering here");
+        if (Allowances.SETTABLE.contains(this)) {
+            throw new IllegalStateException(this + " may be held to another figure than the one"
+                    + " declared, and what stopped at it carries the figure it stopped at");
         }
-        return new Figure.Budget(this, maximum());
+        return reached();
     }
 
     /**

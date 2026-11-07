@@ -54,7 +54,9 @@ final class CountedWays {
 
         private int left;
         private int walksLeft = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum();
-        private boolean past;
+
+        /** The figure that ran out first, of the steps and the walks; null while neither has. */
+        private CompositionBudget past;
 
         Steps(int most) {
             this.left = most;
@@ -72,9 +74,9 @@ final class CountedWays {
                     / CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum());
         }
 
-        private boolean take() {
+        boolean take() {
             if (left <= 0) {
-                past = true;
+                ranOutAt(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT);
                 return false;
             }
             left--;
@@ -88,15 +90,30 @@ final class CountedWays {
          */
         boolean takeAWalk() {
             if (walksLeft <= 0) {
-                past = true;
+                ranOutAt(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
                 return false;
             }
             walksLeft--;
             return true;
         }
 
-        /** Whether something asked for a step there was none of. */
+        private void ranOutAt(CompositionBudget figure) {
+            if (past == null) {
+                past = figure;
+            }
+        }
+
+        /** Whether something asked for a step or a walk there was none of. */
         boolean ranOut() {
+            return past != null;
+        }
+
+        /** The figure that ran out first: the steps' or the walks'. Asked only where something
+         *  ran out. */
+        CompositionBudget ranOutAt() {
+            if (past == null) {
+                throw new IllegalStateException("neither the steps nor the walks ran out");
+            }
             return past;
         }
     }
@@ -254,13 +271,12 @@ final class CountedWays {
             walk(0, 0, start, new ArrayList<>());
             if (!found.isEmpty()) {
                 boolean more = found.size() > most;
-                CompositionBudget stoppedBy = steps.ranOut()
-                        ? CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT
+                CompositionBudget stoppedBy = steps.ranOut() ? steps.ranOutAt()
                         : more ? CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG : null;
                 return new Found.Some<>(more ? found.subList(0, most) : found, stoppedBy);
             }
             if (steps.ranOut()) {
-                return new Found.Unknown<>(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT);
+                return new Found.Unknown<>(steps.ranOutAt());
             }
             R because = why != null ? why : settledWhy(start);
             // Every assignment was looked at, and there is none. What closed them is the reason;
@@ -373,7 +389,7 @@ final class CountedWays {
         Walked<OnTheWay, R> first = walk.apply(entries, new Metered<>(asked, steps));
         if (steps.ranOut() && first instanceof Walked.Open<OnTheWay, R>(var ways, var by)
                 && by == null) {
-            first = new Walked.Open<>(ways, CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT);
+            first = new Walked.Open<>(ways, steps.ranOutAt());
         }
         if (!(first instanceof Walked.Open<OnTheWay, R>(var ways, var stoppedBy))
                 || ways.stream().noneMatch(CountedWays::holdsACount)) {
@@ -433,7 +449,7 @@ final class CountedWays {
                 // A way that left choices unchosen is not walked again, and nor is one reached
                 // with no step left: the figure is said, and the count stays on it for a composer
                 // holding the statement whole.
-                stoppedAt(steps.ranOut() ? CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT
+                stoppedAt(steps.ranOut() ? steps.ranOutAt()
                         : CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
                 keep(way);
             }
@@ -497,7 +513,7 @@ final class CountedWays {
         /** The assignment {@code replaced}, walked for the choices inside its statements. */
         private void walkInto(List<OnTheWay> replaced, List<OneOfEach.Choice<OnTheWay>> choices) {
             if (!steps.takeAWalk()) {
-                stoppedAt(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT);
+                stoppedAt(steps.ranOutAt());
                 return;
             }
             switch (again.apply(replaced, metered)) {
@@ -513,7 +529,7 @@ final class CountedWays {
                 }
             }
             if (steps.ranOut()) {
-                stoppedAt(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT);
+                stoppedAt(steps.ranOutAt());
             }
         }
 
@@ -529,7 +545,7 @@ final class CountedWays {
                         expand(made, entries, both);
                     } else {
                         if (holdsACount(made)) {
-                            stoppedAt(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT);
+                            stoppedAt(steps.ranOutAt());
                         }
                         keep(made);
                     }

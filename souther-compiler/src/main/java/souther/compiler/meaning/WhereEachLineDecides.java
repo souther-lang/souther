@@ -1093,8 +1093,9 @@ public final class WhereEachLineDecides {
             return List.of(new DecidingCase(said, new DecidingCase.Cases.NotTakenApart(
                     switch (taken) {
                         case TakenApart.MoreThan _ ->
-                                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO;
-                        case TakenApart.RanOut _ -> CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN;
+                                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached();
+                        case TakenApart.RanOut _ ->
+                                CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached();
                         // No one part tells the cases apart only where some ways are left out of
                         // what is possible, and only a value in twice leaves them out so: the
                         // statement is read under each case of the first of those. What else

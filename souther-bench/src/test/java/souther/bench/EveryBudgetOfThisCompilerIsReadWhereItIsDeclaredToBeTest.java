@@ -858,15 +858,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/DecidingCase;)V",
                     "more ways of choosing than are taken apart, naming the figure and the ones"
                             + " the cases were never taken apart at"),
-            Map.entry("souther.compiler.partition.ComparisonAssessment#aPartNarrowed("
-                            + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
-                            + "Lsouther/compiler/partition/Reachability;"
-                            + "Lsouther/compiler/partition/WaysToACase;"
-                            + "Ljava/util/List;ZLsouther/compiler/inputs/InputReading;"
-                            + "Lsouther/compiler/partition/CountWitnesses$Lookup;)"
-                            + "Ljava/util/List;",
-                    "hands the figure the asking stopped at to the line, as one where it decides"
-                            + " in those cases was not worked out"),
             // The search for a row showing how many elements meet a statement takes every value
             // from none to all of a container, and what it stopped at, one consumer each.
             Map.entry("souther.compiler.partition.CountWitnesses#<clinit>()V",
@@ -880,13 +871,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;Ljava/util/Set;)Ljava/util/List;",
                     "stops at the rows a witness is sought among, and adds the figure to what the"
                             + " search came to"),
-            Map.entry("souther.compiler.partition.ComparisonAssessment#partsOfARelation("
-                            + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
-                            + "Lsouther/compiler/partition/ComparisonAssessment$AgainstAnotherValue;"
-                            + "Ljava/util/function/Function;Ljava/util/function/Predicate;)"
-                            + "Ljava/util/List;",
-                    "hands the figure the asking stopped at to the relation, as one where it"
-                            + " decides in those cases was not worked out"),
             // What a path takes in of a condition: the parts of a disjunction taken alone, across
             // every disjunction inside another. Past the figure the disjunction is declined,
             // naming it.
@@ -941,12 +925,12 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.CountedWays$Steps#<init>(I)V",
                     "starts the walks an assignment may be walked again in at as many as ways are"
                             + " looked along, and says when there are none left"),
-            Map.entry("souther.compiler.partition.CountedWays#walkedWithCounts("
-                            + "Ljava/util/List;Lsouther/compiler/partition/OneOfEach$Vocabulary;"
-                            + "Ljava/util/function/BiFunction;)"
-                            + "Lsouther/compiler/partition/OneOfEach$Walked;",
-                    "says the figure the steps ran out at on the ways the first walk handed on,"
-                            + " so that they are not said to be every way"),
+            Map.entry("souther.compiler.partition.CountedWays$Steps#take()Z",
+                    "keeps the steps as the figure that ran out, where they run out before the"
+                            + " walks, which every reader of a search stopped says"),
+            Map.entry("souther.compiler.partition.CountedWays$Steps#takeAWalk()Z",
+                    "keeps the walks as the figure that ran out, where they run out before the"
+                            + " steps, which every reader of a search stopped says"),
             Map.entry("souther.compiler.partition.CountedWays$Steps#ofAWay()"
                             + "Lsouther/compiler/partition/CountedWays$Steps;",
                     "the steps a whole way's counts take together, which the searches and the walks"
@@ -958,12 +942,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.CountedWays$Expansion#add("
                             + "Lsouther/compiler/partition/OneOfEach$Way;)V",
                     "says the figure a way left as it stands was left at, and keeps its count"),
-            Map.entry("souther.compiler.partition.CountedWays$Expansion#walkInto("
-                            + "Ljava/util/List;Ljava/util/List;)V",
-                    "says that the steps ran out where an assignment was walked past them"),
-            Map.entry("souther.compiler.partition.CountedWays$Expansion#addUnder("
-                            + "Lsouther/compiler/partition/OneOfEach$Way;Ljava/util/List;)V",
-                    "says the figure a count was left at where no step was left to expand it"),
             Map.entry("souther.compiler.partition.CountedWays$Expansion#result("
                             + "Ljava/util/List;)Lsouther/compiler/partition/OneOfEach$Walked;",
                     "hands on the figure the ways were stopped at, and proves no way closed"
@@ -1180,11 +1158,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.query.Weakening#figures()Ljava/util/List;",
                     "names the budget a decision's reading stopped at, for a reader told a wider"
                             + " run may read past it"),
-            Map.entry("souther.compiler.partition.CasesWorkedOut$Stopped#at("
-                            + "Ljava/util/Collection;)"
-                            + "Lsouther/compiler/partition/CasesWorkedOut$Stopped;",
-                    "names the budgets the cases a line is read in were not worked out past, which"
-                            + " a row there is told as what it was not told"),
             // Which figure each reason a part was not read or a condition not taken in stopped at,
             // said once for every reader that names the figure: a gap on the way, a rule that
             // drew no line, a composer of an answer.
