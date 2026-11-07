@@ -2,11 +2,14 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DecisionEvidence;
+import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -761,7 +764,7 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
      */
     @Test
     void aFieldKeptApartIsNotGivenAValueTheRowDoesNotOffer() {
-        Map<CaseOfAStatement, RowToRun> found = search(HEAD + """
+        String model = HEAD + """
                 data Row = { code: String, sku: String, qty: Int }
                 data Snap = { rows: List<Row> }
                     invariant List.allDistinctBy(.code, rows)
@@ -775,9 +778,24 @@ class ARowIsComposedForTheOrderOfARepeatedKeyNoRowWasSeenInTest {
                     | "short" : ([LI { sku = "A", q = 5 }],
                         Snap { rows = [Row { code = "c", sku = "A", qty = 1 }] })
                         -> Empty { n = 0 }
-                """);
-
-        assertTrue(found.isEmpty(), () -> "a code the row does not offer was made up: " + found);
+                """;
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+        Map<CaseOfAStatement, RowToRun> found =
+                compilation.db().ask(new Adequacy.CaseSearch(module, "f")).value();
+        // The codes the rows the search starts from hold: the examples', and the rows composed.
+        Set<String> offered = new HashSet<>(keysIn(model, "code"));
+        offered.addAll(keysIn(GeneratedRows.of(compilation, module, null,
+                SourceRendering.namedByIdentity(compilation.texts())).text(), "code"));
+        for (RowToRun row : found.values()) {
+            List<String> codes = keysIn(row.inputs().get(1).text(), "code");
+            assertEquals(codes.size(), Set.copyOf(codes).size(),
+                    () -> "the codes are kept apart: " + row.inputs().get(1).text());
+            assertTrue(offered.containsAll(codes), () -> "a code no row offers was made up: "
+                    + row.inputs().get(1).text() + " beside " + offered);
+        }
     }
 
     /** The two copies of the element hold what a field the statement does not read held. */

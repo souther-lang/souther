@@ -269,7 +269,7 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
                     total(row.get(0), "q") < 10 ? 0
                             : meeting(row.get(0), "q", 5) < 3 ? 1
                             : number(row.get(1)) > 3 ? 2 : 3,
-                    Set.of(0, 2, 3))),
+                    Set.of(0, 1, 2, 3))),
             Map.entry(EVERY_ELEMENT_THEN_HOW_MANY_MEET, new Answered(row ->
                     !every(row.get(0), "q", 5) ? 0
                             : meeting(row.get(0), "q", 5) < 1 ? 1
@@ -335,29 +335,6 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
             assertEquals(answered.composedFor(), answers,
                     () -> "a row for the rules this model has one for: " + examples + "\n" + model);
         });
-    }
-
-    /**
-     * The rule nothing is composed for is said as the pair of numbers no one list is composed for,
-     * and as nothing about the model.
-     */
-    @Test
-    void aTotalAndACountNothingComposesOneListForAreSaidAsThat() {
-        String report = report(measured(A_TOTAL_AND_HOW_MANY_MEET));
-        List<String> lines = report.lines().toList();
-        List<Integer> opened = new ArrayList<>();
-        for (int i = 0; i < lines.size(); i++) {
-            if (lines.get(i).contains("nothing could show a row can be written at")
-                    && lines.get(i).contains("decision rule")) {
-                opened.add(i);
-            }
-        }
-
-        assertEquals(1, opened.size(), () -> report);
-        List<String> under = lines.subList(opened.getFirst() + 1, lines.size()).stream()
-                .takeWhile(line -> line.startsWith("          · ")).toList();
-        assertTrue(under.stream().anyMatch(line -> line.contains("a condition on another number"
-                + " taken where this row is already being written for one")), () -> report);
     }
 
     /**

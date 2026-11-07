@@ -267,6 +267,32 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     }
 
     /**
+     * What the rules reaching this value leave each total of the elements of the container at
+     * {@code path} ({@link FieldDomains#totalsLeftAt}): this value's own, and what the value this
+     * was narrowed out of leaves, both of which a value of the position has to clear.
+     */
+    List<TotalLeft> totalsLeftAt(TermPath path) {
+        List<TotalLeft> out = new ArrayList<>();
+        for (FieldDomains.TotalLeft each : rulesOfTheTotalsAt(path)) {
+            out.add(new TotalLeft(each.operation(), path.element().then(each.inside()),
+                    each.left()));
+        }
+        return List.copyOf(out);
+    }
+
+    /** {@link #totalsLeftAt}, as the rules wrote each: the fields read off an element. */
+    private List<FieldDomains.TotalLeft> rulesOfTheTotalsAt(TermPath path) {
+        RuleKey where = keyOf(path);
+        List<FieldDomains.TotalLeft> out = new ArrayList<>(
+                where == null ? List.of() : bounds().totalsLeftAt(where));
+        TermPath above = alsoAt(path);
+        if (above != null) {
+            out.addAll(alsoReaching.outer().rulesOfTheTotalsAt(above));
+        }
+        return out;
+    }
+
+    /**
      * What the order leaves the position at {@code path}, or null where no rule of it stops the
      * position: this value's own, met with what it leaves the value this was narrowed out of, as
      * {@link #admits} meets what each admits. Whatever shape the meet comes to — one run, runs

@@ -698,6 +698,26 @@ final class Term {
         return shape == Shape.CALLED ? (ValueName) of : null;
     }
 
+    /**
+     * The fields a closure of one parameter reads off what it is handed, none where it answers that
+     * value itself — or null where this is no such closure, or it answers anything else.
+     *
+     * <p>Read off how the closure was built: its parameter is the one bound nearest it, and the
+     * fields read off a bound value are one chain ({@link Interner#on}), so {@code .a.b} and
+     * {@code x -> x.a.b} come back as the same two fields.
+     */
+    List<String> fieldsAClosureOfOneReads() {
+        if (shape != Shape.CLOSURE || !Integer.valueOf(1).equals(of)) {
+            return null;
+        }
+        Term body = parts.getFirst();
+        Term handed = body.shape == Shape.ON ? body.parts.getFirst() : body;
+        if (handed.shape != Shape.BOUND || !new At(0, 0).equals(handed.of)) {
+            return null;
+        }
+        return body.shape == Shape.ON ? body.fields().names() : List.of();
+    }
+
     /** The text this term is written as, or null where it is no written text. */
     String writtenText() {
         return shape == Shape.STRING ? (String) of : null;

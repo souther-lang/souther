@@ -378,6 +378,12 @@ sealed interface WhatATermRead {
      * where it is taken over a run of them.
      */
     static WhatATermRead ofTerm(TermOrders orders, BorderQuantity.Observation observation) {
+        // A number the reading holds fixed beside what the row wrote is that number, wherever the
+        // row would have had it read from.
+        Place fixed = observation.fixedAt(orders.term());
+        if (fixed != null) {
+            return new Number(fixed);
+        }
         return switch (orders.term()) {
             case NumericTerm.OfAnElementsNeighbours _ ->
                     inItsOccurrence(orders, observation);

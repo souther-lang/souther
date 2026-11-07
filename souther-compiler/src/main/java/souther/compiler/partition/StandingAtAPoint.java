@@ -4,9 +4,11 @@ import souther.compiler.check.TypeView;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.SeenComparison;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Place;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.observe.ElementsTaken;
@@ -1137,6 +1139,12 @@ public final class StandingAtAPoint {
         @Override
         public final <T> T keptOf(BorderQuantity.ReadAlike<T> asked) {
             return walk.kept(asked, this, () -> asked.readAt(this));
+        }
+
+        /** Nothing is fixed beside a row: every number of it is read off what it wrote. */
+        @Override
+        public final Place fixedAt(NumericTerm term) {
+            return null;
         }
 
         /**

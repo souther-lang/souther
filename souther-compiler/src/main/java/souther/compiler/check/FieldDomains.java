@@ -342,6 +342,10 @@ public final class FieldDomains {
      */
     private volatile Map<Term, List<FactSubject>> takenOfEachPlace;
 
+    /** The totals the rules speak of, under the container each is of ({@link #totalsLeftAt}),
+     *  worked out the first time it is asked. */
+    private volatile Map<RuleKey, List<TotalLeft>> totalsAtEachContainer;
+
     /**
      * What the rules keep the elements of each place apart at ({@link #keptApartAt}), and what the
      * rules written on each declaration on the way keep apart, kept for the same reason
@@ -2726,6 +2730,81 @@ public final class FieldDomains {
             java.util.Objects.requireNonNull(by, "a count is of some operation");
         }
     }
+
+    /**
+     * What the rules leave each number an operation accumulates over the elements of the container
+     * at {@code container}, or nothing where they say nothing of one.
+     *
+     * <p>The totals a clause of this value writes, such as {@code List.sum(List.map(.amount, fs))}:
+     * a number of the container as a whole, which no field of an element and no count of it says.
+     * Answered from the numbers the clauses were read into and from nowhere else, so a total is
+     * where the same reading that answers a count leaves it.
+     */
+    public List<TotalLeft> totalsLeftAt(RuleKey container) {
+        Map<RuleKey, List<TotalLeft>> index = totalsAtEachContainer;
+        if (index == null) {
+            index = new HashMap<>();
+            for (FactSubject atom : constraints.numbers().atomsSpokenOf()) {
+                TotalRead read = totalOf(atom.identity());
+                if (read == null) {
+                    continue;
+                }
+                NumericDomain.Bounds left = constraints.numbers().boundsOf(atom);
+                if (!left.saysNothing()) {
+                    index.computeIfAbsent(read.container(), _ -> new ArrayList<>())
+                            .add(new TotalLeft(read.operation(), read.inside(), left));
+                }
+            }
+            totalsAtEachContainer = index;
+        }
+        return index.getOrDefault(container, List.of());
+    }
+
+    /**
+     * A number an operation accumulates over the elements of a container, each element read at
+     * {@code inside} of it, and where the rules leave it.
+     *
+     * @param inside the fields read off each element, none where the elements are what is added
+     *               up. Fields of the element and not a name of this value: what an element holds is
+     *               a value with a declaration of its own, and none of this value's rules is
+     *               written at a name inside it
+     */
+    public record TotalLeft(ValueName operation, List<String> inside, NumericDomain.Bounds left) {
+
+        public TotalLeft {
+            java.util.Objects.requireNonNull(operation, "a total is taken by some operation");
+            inside = List.copyOf(inside);
+            java.util.Objects.requireNonNull(left, "and the rules leave it somewhere");
+        }
+    }
+
+    /** Which container a total is of, by what this value calls it. */
+    private record TotalRead(RuleKey container, ValueName operation, List<String> inside) {}
+
+    /**
+     * The total {@code call} is, or null where it is none: an operation that accumulates what a
+     * container holds, called on a place of this value or on what a closure of one parameter reads
+     * off each element of one ({@code List.map}).
+     */
+    private TotalRead totalOf(Term call) {
+        ValueName operation = call.calledOperation();
+        if (operation == null || call.parts().size() != 1
+                || DefaultBoundOperationFacts.get().accumulates(operation) == null) {
+            return null;
+        }
+        Term walked = call.parts().getFirst();
+        List<String> inside = List.of();
+        if (EACH_ELEMENT_MAPPED.equals(walked.calledOperation()) && walked.parts().size() == 2) {
+            inside = walked.parts().getFirst().fieldsAClosureOfOneReads();
+            walked = walked.parts().getLast();
+        }
+        RuleKey container = inside == null ? null : namedBy.get(FactSubject.of(walked));
+        return container == null ? null
+                : new TotalRead(container, operation, inside);
+    }
+
+    /** The operation that hands on what a closure answers of each element of a list. */
+    private static final ValueName EACH_ELEMENT_MAPPED = ValueName.Stdlib.operation("List", "map");
 
     /** The atom of a count this reading may not have, which is what every lookup of one wants. */
     private static FactSubject atomOf(Counted counted) {

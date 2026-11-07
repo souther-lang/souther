@@ -168,10 +168,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "BehaviorInputs", "view", "(" + TYPE + ")L" + TYPE_VIEW + ";",
                     THE_POSITION),
             row(PARTITION + "CardinalityComposer", "compose",
-                    "(" + TYPE + "Ljava/util/List;Ljava/util/List;Ljava/util/List;"
-                            + "Ljava/util/SequencedMap;L" + PARTITION
-                            + "RealizationTarget$OfANumber;Ljava/util/List;L" + INPUTS
-                            + "Quantities;L" + INPUTS + "SearchRegion;" + CONTEXT + ")"
+                    "(" + TYPE + "Ljava/util/List;L" + INPUTS + "TermPath;Ljava/util/List;"
+                            + "Ljava/util/List;Ljava/util/SequencedMap;L" + PARTITION
+                            + "RealizationTarget$OfANumber;Ljava/util/List;Ljava/util/List;L"
+                            + INPUTS + "Quantities;L" + INPUTS + "SearchRegion;" + CONTEXT + ")"
                             + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "CardinalityComposer", "composeAcross",
@@ -192,6 +192,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "CardinalityComposer$OfTheType", "of",
                     "(" + TYPE + CONTEXT + ")L" + PARTITION + "CardinalityComposer$OfTheType;",
                     THE_POSITION),
+            row(PARTITION + "CardinalityComposer$Standing$WhereItIsWritten", "written",
+                    "(Ljava/util/List;I)" + REALIZATION, THE_POSITION),
             row(PARTITION + "ComparisonAssessment", "sideRuns",
                     "(Lsouther/compiler/core/Core;L" + INPUTS + "InputReading;)" + BOUNDS,
                     THE_POSITION),

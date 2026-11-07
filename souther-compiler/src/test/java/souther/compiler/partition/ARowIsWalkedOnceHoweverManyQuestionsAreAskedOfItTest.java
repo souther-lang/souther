@@ -8,6 +8,7 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.ArrayList;
@@ -99,6 +100,11 @@ class ARowIsWalkedOnceHoweverManyQuestionsAreAskedOfItTest {
      *  for. */
     private static BorderQuantity.Observation row(List<TermPath> walked) {
         return new AnObservationOfAForm() {
+
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

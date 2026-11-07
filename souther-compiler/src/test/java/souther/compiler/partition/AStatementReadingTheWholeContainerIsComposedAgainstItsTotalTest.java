@@ -369,22 +369,6 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
     }
 
     /**
-     * A statement that asks of its own value the place whose different values are counted is
-     * left to the composition that does not read the total, and said to be: the values that place
-     * is offered are chosen apart from what the statement reads, which here it reads.
-     */
-    @Test
-    void aStatementThatReadsThePlaceCountedIsLeftToTheCompositionThatDoesNotReadTheTotal() {
-        String source = source("data Forecast = { currency: String, amount: Int, active: Bool }\n",
-                FS, "if Set.size(Set.fromList(List.map(.active, "
-                        + "List.filter(f -> f.active && " + HALF + ", fs)))) == 1 then 1 else 0");
-        Compilation compilation = measured(source);
-        String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
-        assertLeftToTheCompositionThatDoesNotReadTheTotal(report);
-    }
-
-    /**
      * What the elements may be is the type's, and the type may tie the number to a position the
      * statement does not read: here an amount above a hundred is only active. The rows composed
      * keep to the type, and one above half of the total, which is above a hundred, is composed.
@@ -425,30 +409,6 @@ class AStatementReadingTheWholeContainerIsComposedAgainstItsTotalTest {
         }
         measured(source + examples);
         assertTrue(counts.contains(2L), () -> counts + " in " + rows);
-    }
-
-    /**
-     * A statement that asks of its own value a position outside the container is left to the
-     * composition that does not read the total, and said to be: the observation the elements are
-     * read in holds the container and the numbers beside it, and there is nothing in it to read
-     * that position from.
-     */
-    @Test
-    void aStatementThatReadsAPositionOutsideTheContainerIsLeftToTheCompositionThatDoesNotReadTheTotal() {
-        String source = source(PLAIN, new Parameters("enabled: Bool, fs: List<Forecast>",
-                "enabled, fs"), "if " + listCount("enabled && " + HALF) + " == 1 then 1 else 0");
-        Compilation compilation = measured(source);
-        String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
-        assertLeftToTheCompositionThatDoesNotReadTheTotal(report);
-    }
-
-    /** What the other composition says of an element it cannot choose the values of, and what this
-     *  one says where it stops: the first is the one a statement it does not take is left to. */
-    private static void assertLeftToTheCompositionThatDoesNotReadTheTotal(String report) {
-        assertTrue(report.contains("has a part whose values are neither one of so many nor"
-                + " numbers the statements part"), report);
-        assertFalse(report.contains("answers turns on the total of"), report);
     }
 
     /**

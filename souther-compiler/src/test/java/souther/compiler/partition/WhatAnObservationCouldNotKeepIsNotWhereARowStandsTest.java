@@ -9,6 +9,7 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
@@ -132,6 +133,11 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
                 new AnObservationOfAForm() {
 
                     @Override
+                    public Place fixedAt(NumericTerm term) {
+                        return null;
+                    }
+
+                    @Override
                     public WalkResult<ObservationAtPoint> at(TermPath path) {
                         throw new AssertionError("a number over a run is not read from one value");
                     }
@@ -168,6 +174,11 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
                 new AnObservationOfAForm() {
 
                     @Override
+                    public Place fixedAt(NumericTerm term) {
+                        return null;
+                    }
+
+                    @Override
                     public WalkResult<ObservationAtPoint> at(TermPath path) {
                         return WalkResult.reached(ObservationAtPoint.ANOTHER_READING);
                     }
@@ -195,6 +206,11 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
     void aRunTheWalkNeverReachedIsNotARunThatMissedTheLine() {
         BorderQuantity.Stands met = stands(form(), AT_A_HUNDRED,
                 new AnObservationOfAForm() {
+
+                    @Override
+                    public Place fixedAt(NumericTerm term) {
+                        return null;
+                    }
 
                     @Override
                     public WalkResult<ObservationAtPoint> at(TermPath path) {
@@ -226,6 +242,11 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
     /** A row whose only readable place is the run, holding these values. */
     private static BorderQuantity.Observation run(ObservedValue... values) {
         return new AnObservationOfAForm() {
+
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

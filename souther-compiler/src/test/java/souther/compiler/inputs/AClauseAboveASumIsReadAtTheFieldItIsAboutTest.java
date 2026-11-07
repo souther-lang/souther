@@ -10,11 +10,13 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.TypeCardinality;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.List;
 import java.util.Map;
@@ -72,6 +74,47 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
             assertEquals(underTheRecord.replace("h.q.limit", "h.q@" + each + ".limit"),
                     String.valueOf(valuesAt(at).ownEnds()),
                     "the clause draws the end it draws, wherever the reading came through");
+        }
+    }
+
+    /**
+     * What a clause above holds a total of a shared container to stands at that container under
+     * each case, as it does where no sum is in the way.
+     */
+    @Test
+    void aTotalAboveStandsAtTheSharedContainerUnderEachCase() {
+        String model = """
+                module g
+
+                data Line = { amount: Int }
+                data Paging = { lines: List<Line> }
+                data A = { ...Paging, x: Int }
+                data B = { ...Paging, y: Int }
+                data Q = A | B
+
+                data Holder = { q: HELD }
+                    invariant big = List.sum(List.map(.amount, q.lines)) >= 100
+
+                data Ok
+
+                behavior read : (h: Holder) -> Ok
+                """;
+        ValueName sum = ValueName.Stdlib.operation("List", "sum");
+        Endpoint aHundred = Endpoint.inclusive(Count.of(100));
+
+        TermPath underTheRecord = TermPath.of("h").then("q").then("lines");
+        assertEquals(aHundred, reading(model.replace("HELD", "A")).at(underTheRecord)
+                        .totalLeft(sum, underTheRecord.element().then("amount")).min(),
+                "the clause holds the total with no sum in the way");
+
+        InputDomain held = reading(model.replace("HELD", "Q"));
+        for (String each : List.of("A", "B")) {
+            TermPath lines = TermPath.of("h").then("q").refine(caseNamed(held, each))
+                    .then("lines");
+            NumericDomain.Bounds left =
+                    held.at(lines).totalLeft(sum, lines.element().then("amount"));
+            assertNotNull(left, () -> "the total is held under case " + each);
+            assertEquals(aHundred, left.min(), () -> "where the clause holds it, under " + each);
         }
     }
 

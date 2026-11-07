@@ -10,6 +10,7 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -80,6 +81,11 @@ class ANumberOfAnElementIsReadAmongItsOwnOccurrenceTest {
 
         private static final List<List<ObservedValue>> LINES_OF = List.of(
                 List.of(line("x", 9)), List.of(line("x", 2)));
+
+        @Override
+        public Place fixedAt(NumericTerm term) {
+            return null;
+        }
 
         @Override
         public WalkResult<ObservationAtPoint> at(TermPath path) {

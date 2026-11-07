@@ -288,7 +288,7 @@ public final class LevelRealizer {
                     case NumericWitness.Standing.Found beside -> {
                         fixing.put(counted, Count.of(many));
                         for (NumericWitness.Standing.Found.Placed each : beside.inFixingOrder()) {
-                            if (!each.term().subjectPath().insideAContainer()) {
+                            if (over.count().standsBeside(each.term())) {
                                 fixing.putIfAbsent(RealizationTarget.of(each.term()),
                                         each.place());
                             }
@@ -370,7 +370,7 @@ public final class LevelRealizer {
                     Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
                     fixing.put(counted, asked);
                     for (NumericWitness.Standing.Found.Placed each : beside.inFixingOrder()) {
-                        if (!each.term().subjectPath().insideAContainer()) {
+                        if (count.count().standsBeside(each.term())) {
                             fixing.put(RealizationTarget.of(each.term()), each.place());
                         }
                     }
@@ -416,13 +416,12 @@ public final class LevelRealizer {
             case Standing.OfAProduct over -> List.of(over.one(), over.other());
             case Standing.OfARemainderByAnInput over -> List.of(over.dividend(), over.divisor());
             case Standing.OfACount count -> count.numbers().stream()
-                    .filter(term -> !term.subjectPath().insideAContainer()).toList();
+                    .filter(count.count()::standsBeside).toList();
             case Standing.OfACountAndAForm both -> {
                 List<NumericTerm> out = new ArrayList<>(NumericTerms.inOrder(
                         both.form().coefs().keySet()));
-                both.count().numbers().stream()
-                        .filter(term -> !term.subjectPath().insideAContainer()
-                                && !out.contains(term))
+                both.count().numbersBeside().stream()
+                        .filter(term -> !out.contains(term))
                         .forEach(out::add);
                 yield List.copyOf(out);
             }

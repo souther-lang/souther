@@ -126,6 +126,11 @@ class WhatTwoNumbersOfARowComeToMultipliedIsReadOffWhatItPutThereTest {
         return new AnObservationOfAForm() {
 
             @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
+
+            @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {
                 ObservedValue value = wrote.get(path);
                 return value == null ? WalkResult.couldNotWalk()

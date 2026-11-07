@@ -6,6 +6,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.List;
@@ -93,6 +94,11 @@ class AReadingAnswersOnlyForTheOrdersItWasReadOnTest {
 
     private static BorderQuantity.Observation row(long value) {
         return new AnObservationOfAForm() {
+
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

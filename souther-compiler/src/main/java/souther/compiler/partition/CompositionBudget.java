@@ -80,17 +80,15 @@ public enum CompositionBudget {
     /** How many ways of sharing a size out among the values a count's elements are drawn from
      *  are looked at, over every size tried. The ways grow with the size and with how many ways
      *  an element answers the statements, and each is checked against every count before any is
-     *  built. Where the elements are shared out kind by kind ({@link SharingsAmongKinds}), a
-     *  way is counted whole or part, once it is not dropped for giving no count asked for. */
+     *  built. */
     SHARES_A_COUNT_IS_TRIED_AT(4096),
 
-    /** How many whole numbers a total is tried at, where what an element answers turns on the total
-     *  of the container it is in: for a way the statements can stand to be shown to be met by an
-     *  element, and for one sharing of a container's elements. The totals either can come to are
-     *  an interval over the rationals, which is exact; the whole numbers in it are walked from the
-     *  one nearest nought and from either end, and one that no whole number tried meets is not
-     *  shown to have none. */
-    TOTALS_A_COUNT_IS_TRIED_AT(8),
+    /** How many values of each run a total is tried at, where what an element answers turns on
+     *  the total of the container it is in and nothing asks the total to be any one number: the
+     *  runs are those between where the statements turn over on the total, inside what the region
+     *  leaves it, and the elements are moved to come to whichever is tried
+     *  ({@link ContainerAsAWhole}). A count no total tried meets is not shown to have none. */
+    TOTALS_A_COUNT_IS_TRIED_AT(2),
 
     /** How many combinations of how often each of several keys occurs are tried for the lists of
      *  an outer list. They multiply with the keys, and each is a container composed whole, so a
@@ -846,8 +844,8 @@ public enum CompositionBudget {
             case SHARES_A_COUNT_IS_TRIED_AT ->
                     "how many ways of sharing out a container's elements are tried for a count";
             case TOTALS_A_COUNT_IS_TRIED_AT ->
-                    "how many whole numbers a total is tried at for a count of the elements that"
-                            + " turns on it";
+                    "how many values of each run a total is tried at for a count of the elements"
+                            + " that turns on it";
             case COUNTS_OF_KEYS_TRIED ->
                     "how many combinations of how often each key occurs are tried";
             case VALUES_AN_ELEMENT_IS_CHOSEN_AMONG ->
