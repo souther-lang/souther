@@ -98,7 +98,7 @@ class ASharedSetOfCasesIsWalkedOncePerCaseTest {
                 held.add(before.get(back));
             }
             before.add(dice.nextBoolean() ? new DecidingCase.Cases.EachOf(held)
-                    : new DecidingCase.Cases.Together(held));
+                    : DecidingCase.Cases.together(held));
             if (withCasesNobodyTookApart && dice.nextInt(15) == 0) {
                 before.add(NOT_TAKEN_APART);
             }

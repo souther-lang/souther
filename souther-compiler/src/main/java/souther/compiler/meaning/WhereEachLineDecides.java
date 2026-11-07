@@ -192,9 +192,9 @@ public final class WhereEachLineDecides {
             }
             Proposition said = Proposition.all(List.of(there, standsThere));
             out.add(each.saidAlone() ? DecidingCase.alone(said) : new DecidingCase(said,
-                    new DecidingCase.Cases.Together(List.of(each.standsFor().eachSaid(one -> {
+                    DecidingCase.Cases.together(List.of(each.standsFor().eachSaid(one -> {
                         Proposition itsOwn = there(one, at);
-                        return itsOwn == null ? new DecidingCase.Cases.EachOf(List.of())
+                        return itsOwn == null ? DecidingCase.Cases.NONE
                                 : new DecidingCase.Cases.One(itsOwn);
                     }), new DecidingCase.Cases.One(standsThere)))));
         }
@@ -1311,7 +1311,7 @@ public final class WhereEachLineDecides {
             }
             DecidingCase.Cases choices = null;
             if (some == WhatAStatementComesTo.NEVER) {
-                choices = new DecidingCase.Cases.EachOf(List.of());
+                choices = DecidingCase.Cases.NONE;
             } else if (notEvery == WhatAStatementComesTo.NEVER) {
                 choices = new DecidingCase.Cases.Together(List.of());
             } else {
@@ -1334,9 +1334,9 @@ public final class WhereEachLineDecides {
                         return null;
                     }
                     choices = new DecidingCase.Cases.EachOf(List.of(
-                            new DecidingCase.Cases.Together(List.of(
+                            DecidingCase.Cases.together(List.of(
                                     new DecidingCase.Cases.One(named.get(part)), holding)),
-                            new DecidingCase.Cases.Together(List.of(
+                            DecidingCase.Cases.together(List.of(
                                     new DecidingCase.Cases.One(named.get(part).denied()),
                                     failing))));
                     break;
@@ -1390,7 +1390,7 @@ public final class WhereEachLineDecides {
                                 .toList()))
                         .toList()),
                 new DecidingCase.Cases.EachOf(standings.stream()
-                        .<DecidingCase.Cases>map(factors -> new DecidingCase.Cases.Together(
+                        .<DecidingCase.Cases>map(factors -> DecidingCase.Cases.together(
                                 factors.stream()
                                         .<DecidingCase.Cases>map(factor ->
                                                 new DecidingCase.Cases.EachOf(factor.stream()
@@ -1425,7 +1425,7 @@ public final class WhereEachLineDecides {
     private static DecidingCase together(List<DecidingCase> chosen) {
         Proposition said = Proposition.all(chosen.stream().map(DecidingCase::condition).toList());
         return chosen.stream().allMatch(DecidingCase::saidAlone) ? DecidingCase.alone(said)
-                : new DecidingCase(said, new DecidingCase.Cases.Together(
+                : new DecidingCase(said, DecidingCase.Cases.together(
                         chosen.stream().map(DecidingCase::standsFor).toList()));
     }
 
@@ -1849,7 +1849,7 @@ public final class WhereEachLineDecides {
         private DecidingCase.Cases anyOfTheJoined(Proposition one) {
             Proposition left = leftOfEachValue(one);
             if (left instanceof Proposition.Always(boolean holds) && !holds) {
-                return new DecidingCase.Cases.EachOf(List.of());
+                return DecidingCase.Cases.NONE;
             }
             List<Proposition> parts = new ArrayList<>();
             for (Proposition part : left instanceof Proposition.All all ? all.parts()

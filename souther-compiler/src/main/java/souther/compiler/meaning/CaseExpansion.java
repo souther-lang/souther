@@ -179,12 +179,13 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
 
     /**
      * A helper read more than once — at more than one copy of its body, or on more than one
-     * application of a closure its call stands in — whose readings the case chooses among one past
-     * another: a choice among alternatives one reading's comparisons made, more than one of which
-     * chooses again among parts another reading made, so the inner choice is made whichever outer
-     * alternative was taken. A walk that reaches a candidate only past every way the one before
-     * it fails is taken apart so. Declared as a behavior, the helper is not expanded, and each
-     * reading is its answer.
+     * application of a closure its call stands in — whose readings the case chooses among one
+     * beside another: two choices made together, each among more than one way, one among parts
+     * one reading's comparisons made and the other among parts another reading made
+     * ({@code ReadingsChosenOneBesideAnother}). Made together as two choices held together, or as
+     * a choice made again past more than one alternative of the other, which is how a walk that
+     * reaches a candidate only past every way the one before it fails is taken apart. Declared as
+     * a behavior, the helper is not expanded, and each reading is its answer.
      *
      * <p>Not every helper whose comparisons made parts. Readings chosen among as alternatives to
      * each other add to the ways and multiply nothing, and so does a choice inside one alternative

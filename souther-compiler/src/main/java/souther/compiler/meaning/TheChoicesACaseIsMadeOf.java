@@ -43,7 +43,7 @@ import java.util.Set;
  * multiplied the parts, and a helper holding a {@code find} is named by them; the helper whose
  * comparisons a {@code find} applies on each candidate is not. So the walk also keeps the
  * comparison, or the condition of a choice, each part was made inside, and a helper is named
- * where the cases choose among its readings one past another
+ * where the cases choose among its readings one beside another
  * ({@link CaseExpansion.MultipliedHelper}).
  *
  * <p><b>For a reader explaining a line, and nothing that reads the line.</b> Nothing here is a
@@ -426,89 +426,12 @@ public final class TheChoicesACaseIsMadeOf {
         }
 
         /**
-         * The helpers whose readings {@code cases} choose among one past another
-         * ({@link CaseExpansion.MultipliedHelper}): a choice among alternatives made by one
-         * reading, more than one of which chooses among another reading again.
-         *
-         * <p>Asked of the cases as they were taken apart and not of how often a reading recurs:
-         * readings chosen among as alternatives to each other are as many ways as theirs added up,
-         * and so is a choice inside one alternative alone. Chosen again whichever of several
-         * alternatives was taken, the inner choice is made beside the outer one, which is how a
-         * walk that reaches its next candidate only past every way the one before it fails is
-         * taken apart: each candidate's ways shared by every way of failing the one before.
+         * The helpers whose readings {@code cases} choose among one beside another
+         * ({@link CaseExpansion.MultipliedHelper}, {@link ReadingsChosenOneBesideAnother}).
          */
         private List<CaseExpansion.MultipliedHelper> multiplied(DecidingCase.Cases cases) {
-            Map<ValueName.Helper, BitSet> found = new LinkedHashMap<>();
-            cases.fold(new DecidingCase.Cases.Fold<Chosen>() {
-
-                @Override
-                public Chosen one(DecidingCase.Cases.One one) {
-                    BitSet direct = new BitSet();
-                    for (Spelling part : WhereEachLineDecides.partsJoinedBy(one.condition())) {
-                        direct.or(readingsMaking(part));
-                    }
-                    return new Chosen(1, direct, new BitSet());
-                }
-
-                @Override
-                public Chosen eachOf(DecidingCase.Cases.EachOf node, List<Chosen> alternatives) {
-                    long ways = 0;
-                    BitSet own = new BitSet();
-                    BitSet chosen = new BitSet();
-                    // Each reading chosen among again inside an alternative, how many alternatives
-                    // choose among it again, and what those alternatives were chosen by.
-                    Map<Integer, Integer> past = new HashMap<>();
-                    Map<Integer, BitSet> besideIt = new LinkedHashMap<>();
-                    for (Chosen each : alternatives) {
-                        ways = Math.min(2, ways + each.ways());
-                        own.or(each.direct());
-                        chosen.or(each.chosen());
-                        each.chosen().stream().forEach(again -> {
-                            past.merge(again, 1, Integer::sum);
-                            besideIt.computeIfAbsent(again, _ -> new BitSet()).or(each.direct());
-                        });
-                    }
-                    // Chosen among again past more than one of the alternatives, a reading is
-                    // chosen beside the choice among them, whichever was taken; past one alone,
-                    // its ways are only added to the others'. Another reading of the same helper
-                    // on each side: one reading on both is one answer however it is declared.
-                    besideIt.forEach((again, by) -> {
-                        if (past.get(again) > 1) {
-                            ValueName.Helper helper = readings.get(again).helper();
-                            by.stream().filter(outer -> outer != again
-                                            && readings.get(outer).helper().equals(helper))
-                                    .forEach(outer -> {
-                                        BitSet of = found.computeIfAbsent(helper,
-                                                _ -> new BitSet());
-                                        of.set(outer);
-                                        of.set(again);
-                                    });
-                        }
-                    });
-                    if (ways > 1) {
-                        chosen.or(own);
-                    }
-                    return new Chosen(ways, new BitSet(), chosen);
-                }
-
-                @Override
-                public Chosen together(DecidingCase.Cases.Together node, List<Chosen> factors) {
-                    long ways = 1;
-                    BitSet direct = new BitSet();
-                    BitSet chosen = new BitSet();
-                    for (Chosen each : factors) {
-                        ways = Math.min(2, ways * each.ways());
-                        direct.or(each.direct());
-                        chosen.or(each.chosen());
-                    }
-                    return new Chosen(ways, direct, chosen);
-                }
-
-                @Override
-                public Chosen notTakenApart(DecidingCase.Cases.NotTakenApart notTakenApart) {
-                    return new Chosen(1, new BitSet(), new BitSet());
-                }
-            });
+            Map<ValueName.Helper, BitSet> found = ReadingsChosenOneBesideAnother.of(cases,
+                    this::readingsMaking, number -> readings.get(number).helper());
             List<CaseExpansion.MultipliedHelper> out = new ArrayList<>();
             found.forEach((helper, these) -> {
                 Set<ModelOccurrence> at = new LinkedHashSet<>();
@@ -581,15 +504,6 @@ public final class TheChoicesACaseIsMadeOf {
      */
     private record ReadingOfAHelper(ValueName.Helper helper, ExpansionLineage.Expansion copy,
                                     List<Applied> on) {}
-
-    /**
-     * What {@link Reading#multiplied} makes of some cases: how many ways they are, counted as far
-     * as two; the readings of helpers whose parts they hold outside any choice, which a choice
-     * they are an alternative of chooses among; and the readings whose parts a choice among more
-     * than one way inside them chooses among. Each reading by its number, so no more than the
-     * readings the case's parts were made by, however many ways lead here.
-     */
-    private record Chosen(long ways, BitSet direct, BitSet chosen) {}
 
     /**
      * Where one occurrence of a thing stood: the frames down to it, the writing out of kept ways
