@@ -55,6 +55,10 @@ import java.util.function.Function;
  */
 final class ContainerAsAWhole {
 
+    /** How many values of each run between the turns a total nothing asks is tried at. */
+    private static final int VALUES_OF_EACH_RUN =
+            CompositionBudget.TOTALS_A_COUNT_IS_TRIED_AT.maximum();
+
     private static final int MOST_ELEMENTS =
             CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH.maximum();
 
@@ -217,16 +221,13 @@ final class ContainerAsAWhole {
             }
         }
         List<Place> places = CardinalityComposer.valuesAlong(carrier, run, turns,
-                PLACES_IN_EACH_RUN, UsualPlaces.of(term, carrier, reading.today()),
+                VALUES_OF_EACH_RUN, UsualPlaces.of(term, carrier, reading.today()),
                 new LinkedHashSet<>(), unnamed);
-        unnamed.add(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
-        return new TermRealizations.Tried(places, new TermRealizations.Remainder.SomeOf(unnamed));
+        return new TermRealizations.Tried(places, unnamed.isEmpty()
+                ? new TermRealizations.Remainder.StoppedAt(
+                        CompositionBudget.TOTALS_A_COUNT_IS_TRIED_AT)
+                : new TermRealizations.Remainder.SomeOf(unnamed));
     }
-
-    /** How many values of each run between where the statements turn over a total is tried at:
-     *  more than one, so that a run holding a total the elements cannot be moved to come to holds
-     *  another. */
-    private static final int PLACES_IN_EACH_RUN = 2;
 
     /** The order the numbers at the place a total adds up are written on, where it counts in
      *  whole numbers — the elements are moved by whole steps to come to the total. */

@@ -186,7 +186,16 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // handed over as the remainder of the numbers it is tried at, which the composing
             // says in what it comes back with.
             Map.entry("souther.compiler.partition.ContainerAsAWhole#<clinit>()V",
-                    "how many elements a container is composed with"),
+                    "how many values of each run a total is tried at, and how many elements a"
+                            + " container is composed with"),
+            Map.entry("souther.compiler.partition.ContainerAsAWhole#turningOn("
+                            + "Lsouther/compiler/inputs/NumericTerm;Ljava/util/List;"
+                            + "Ljava/util/Map;Lsouther/compiler/inputs/Quantities;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Tried;",
+                    "stops at the values of each run tried and hands the figure over as what is"
+                            + " left of them"),
             Map.entry("souther.compiler.partition.ContainerAsAWhole#sizes("
                             + "Lsouther/compiler/check/DeclaredBounds$CountRange;"
                             + "Lsouther/compiler/partition/NumericSet;)"

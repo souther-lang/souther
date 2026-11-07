@@ -83,6 +83,13 @@ public enum CompositionBudget {
      *  built. */
     SHARES_A_COUNT_IS_TRIED_AT(4096),
 
+    /** How many values of each run a total is tried at, where what an element answers turns on
+     *  the total of the container it is in and nothing asks the total to be any one number: the
+     *  runs are those between where the statements turn over on the total, inside what the region
+     *  leaves it, and the elements are moved to come to whichever is tried
+     *  ({@link ContainerAsAWhole}). A count no total tried meets is not shown to have none. */
+    TOTALS_A_COUNT_IS_TRIED_AT(2),
+
     /** How many combinations of how often each of several keys occurs are tried for the lists of
      *  an outer list. They multiply with the keys, and each is a container composed whole, so a
      *  walk over them is held to this and not to the containers it offers, which count only the
@@ -836,6 +843,9 @@ public enum CompositionBudget {
             case CONTAINERS_A_COUNT_IS_OFFERED -> "how many containers are offered for one count";
             case SHARES_A_COUNT_IS_TRIED_AT ->
                     "how many ways of sharing out a container's elements are tried for a count";
+            case TOTALS_A_COUNT_IS_TRIED_AT ->
+                    "how many values of each run a total is tried at for a count of the elements"
+                            + " that turns on it";
             case COUNTS_OF_KEYS_TRIED ->
                     "how many combinations of how often each key occurs are tried";
             case VALUES_AN_ELEMENT_IS_CHOSEN_AMONG ->
@@ -981,7 +991,7 @@ public enum CompositionBudget {
             case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
                  ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,
                  ELEMENTS_A_COUNT_IS_COMPOSED_WITH, CONTAINERS_A_COUNT_IS_OFFERED,
-                 SHARES_A_COUNT_IS_TRIED_AT, COUNTS_OF_KEYS_TRIED,
+                 SHARES_A_COUNT_IS_TRIED_AT, TOTALS_A_COUNT_IS_TRIED_AT, COUNTS_OF_KEYS_TRIED,
                  VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                  WAYS_DOWN_TO_A_TOTAL_TRIED, WAYS_UNDER_THE_CASES_TRIED,
                  CASES_A_RULE_ABOVE_IS_PLANNED_UNDER,
