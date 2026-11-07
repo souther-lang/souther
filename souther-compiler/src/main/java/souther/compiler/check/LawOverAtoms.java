@@ -10,7 +10,6 @@ import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -212,11 +211,9 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
                 DeclaredArgument>(var one, var other, boolean same)) || !same) {
             return false;
         }
-        Type held = TypeOps.base(Core.withoutStanding(container).type(), terms.newtypeInners());
-        LawSubject<DeclaredArgument> asked = held instanceof Type.SetOf
-                ? heldAs(some.container(), AddsWhatItDoesNotHold.Of.ELEMENTS)
-                : held instanceof Type.MapOf
-                        ? heldAs(some.container(), AddsWhatItDoesNotHold.Of.KEYS) : null;
+        AddsWhatItDoesNotHold.Of once = AddsWhatItDoesNotHold.Of.heldOnceIn(
+                TypeOps.base(Core.withoutStanding(container).type(), terms.newtypeInners()));
+        LawSubject<DeclaredArgument> asked = once == null ? null : heldAs(some.container(), once);
         return asked != null && (asked.equals(one) || asked.equals(other));
     }
 

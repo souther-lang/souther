@@ -266,7 +266,7 @@ final class DerivedNumericFacts {
         }
         derived.watched();
         ReadingDomain out = reading;
-        for (Says said : derived.answered.values()) {
+        for (Says said : derived.everyAnswer()) {
             out = out.taking(said.facts(), terms);
         }
         return out.domain();
@@ -462,8 +462,26 @@ final class DerivedNumericFacts {
 
         private final Map<FactSubject, Says> answered = new LinkedHashMap<>();
 
+        /** What was answered of values read in place, a relation having dragged them in
+         *  ({@link ContextMultiplicity#inPlace}). Apart from {@link #answered}, since the two are
+         *  two readings of one value and a value read both ways would otherwise come back as
+         *  whichever was asked first. */
+        private final Map<FactSubject, Says> answeredInPlace = new LinkedHashMap<>();
+
         Memo(Question asked) {
             this.asked = asked;
+        }
+
+        /** What was answered of a value read with {@code copies}. */
+        Map<FactSubject, Says> answeredWith(ContextMultiplicity copies) {
+            return copies.opensSplits() ? answered : answeredInPlace;
+        }
+
+        /** Everything answered, both ways. */
+        List<Says> everyAnswer() {
+            List<Says> out = new ArrayList<>(answered.values());
+            out.addAll(answeredInPlace.values());
+            return out;
         }
 
         /** Null wherever no test is reading, which is every compilation but a test's. Kept as
@@ -562,7 +580,8 @@ final class DerivedNumericFacts {
      */
     private static Says derive(FactSubject atom, ReadingDomain base, Terms terms,
                                Memo done, Deriving deriving, ContextMultiplicity copies) {
-        Says had = done.answered.get(atom);
+        Map<FactSubject, Says> answered = done.answeredWith(copies);
+        Says had = answered.get(atom);
         if (had != null) {
             return had;
         }
@@ -576,7 +595,7 @@ final class DerivedNumericFacts {
         done.evaluating(atom);
         Says said = factsFor(atom, base, terms, done, deriving, copies);
         deriving.left(atom);
-        done.answered.put(atom, said);
+        answered.put(atom, said);
         return said;
     }
 
@@ -1295,9 +1314,13 @@ final class DerivedNumericFacts {
             // Which of the two edges this atom was reached by is the whole of what the refusal below
             // turns on, and it is known here and nowhere else: an atom the form names is what this
             // recipe was computed from, and every other one is a value some relation dragged in.
-            Deriving how = form.coefs().containsKey(atom)
-                    ? deriving : deriving.throughWhatAValueCarries();
-            with = with.taking(derive(atom, base, terms, done, how, copies).facts(), terms);
+            // And read in place where only a relation dragged it in: its own splits refine a value
+            // the question never asked about, and opened at every split above they read the chain
+            // of values it is related to again for each one (ContextMultiplicity.inPlace).
+            boolean named = form.coefs().containsKey(atom);
+            Deriving how = named ? deriving : deriving.throughWhatAValueCarries();
+            with = with.taking(derive(atom, base, terms, done, how,
+                    named ? copies : copies.inPlace()).facts(), terms);
         }
         return with.boundsOf(form);
     }
