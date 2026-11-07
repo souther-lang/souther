@@ -1,6 +1,7 @@
 package souther.compiler.meaning;
 
 import souther.compiler.observe.Figure;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.LinkedHashSet;
@@ -39,8 +40,7 @@ public sealed interface WhyNotTaken {
             case MeaningUnread(WhyUnread why) -> why.figure();
             case MoreWaysThanAreRead _ ->
                     Optional.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure());
-            case MoreAlternativesThanAreTried _ ->
-                    Optional.of(CompositionBudget.ALTERNATIVES_A_PATH_TRIES.figure());
+            case MoreAlternativesThanAreTried(Figure stoppedAt) -> Optional.of(stoppedAt);
             case MoreChoicesThanAreWrittenOut(CompositionBudget figure) ->
                     Optional.of(figure.figure());
             case OutsideDomain _ -> Optional.empty();
@@ -101,8 +101,20 @@ public sealed interface WhyNotTaken {
      * A part not taken may be the one that leaves nothing, so what the others came to is not
      * taken either. Raising the figure lifts it; the domain of what a path knows has the words,
      * so its limit is not said of it.
+     *
+     * @param stoppedAt the figure the parts were counted against, made where the count ran out:
+     *                  the parts one reading takes alone
+     *                  ({@link CompositionBudget#ALTERNATIVES_A_PATH_TRIES}), or the parts a path
+     *                  takes alone settling the choices it left undecided
+     *                  ({@link WorkFigure#PARTS_A_PATH_SETTLES}). Two counts of one walk, so the
+     *                  reason carries which one it was and nothing works it out of the kind.
      */
-    record MoreAlternativesThanAreTried() implements WhyNotTaken {}
+    record MoreAlternativesThanAreTried(Figure stoppedAt) implements WhyNotTaken {
+
+        public MoreAlternativesThanAreTried {
+            Objects.requireNonNull(stoppedAt, "parts not tried were past some figure");
+        }
+    }
 
     /**
      * What the condition means was read, and it holds a count of statements a reader takes by the

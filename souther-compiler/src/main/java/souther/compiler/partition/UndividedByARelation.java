@@ -6965,7 +6965,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * amount, so where the rest leaves every remainder, so does each of them.
      *
      * <p>Where the walks would move more remainders than {@code work}, it is not shown, and the
-     * figure the work is allowed under goes into {@code stopped}.
+     * share of the figure the walk that ran out was held to goes into {@code stopped}: {@code work}
+     * where the sets are more than it, and the part of it each set is walked under where a walk
+     * runs past that.
      */
     private boolean leavesEveryRemainder(CodePointsOfTheForm form, Integer held, int work,
                                          Set<Figure> stopped) {
@@ -6994,7 +6996,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             alike.add(shown.alikeAt(strings.length(), index, taken));
             sets *= alike.getLast().size();
             if (sets > work) {
-                stopped.add(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.figure());
+                stopped.add(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.reachedAShareOf(work));
                 return false;
             }
         }
@@ -7009,7 +7011,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     remainder.shift().mod(remainder.divisor()).longValueExact(), divisor, at,
                     each);
             if (left == null) {
-                stopped.add(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.figure());
+                stopped.add(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.reachedAShareOf(each));
                 return false;
             }
             if (left.cardinality() < divisor) {
@@ -7033,7 +7035,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * form or it does not leave every remainder.
      *
      * <p>One budget for every question asked of the strings, shared out among them; a question
-     * the share runs out on is not shown, and the figure goes into {@code stopped}.
+     * the share runs out on is not shown, and the share goes into {@code stopped}. A divisor past
+     * the whole figure is past every share, and the whole figure goes in.
      */
     private Set<FilingCoordinate> leftByTheFormat(InputReading read, List<OnAWay> conditions,
                                                   Set<Figure> stopped) {

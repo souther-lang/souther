@@ -6154,9 +6154,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + " comes to more ways an element may meet it than this compiler takes one by"
                     + " one";
             // The same kind: read, in a path's words, and stopped at a figure.
-            case WhyNotTaken.MoreAlternativesThanAreTried _ -> "a condition that is one of"
-                    + " several things, inside one another past "
-                    + CompositionBudget.ALTERNATIVES_A_PATH_TRIES.counts();
+            case WhyNotTaken.MoreAlternativesThanAreTried(Figure stoppedAt) -> "a condition that"
+                    + " is one of several things, inside one another past " + stoppedAt.counts();
             // The same kind: read, and taken apart into choices past a figure.
             case WhyNotTaken.MoreChoicesThanAreWrittenOut(CompositionBudget figure) ->
                     "a condition counting how many of some statements hold, taken apart into the"

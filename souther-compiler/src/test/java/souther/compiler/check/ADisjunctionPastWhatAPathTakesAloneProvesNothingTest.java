@@ -3,14 +3,26 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.query.ReadAs;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -31,7 +43,8 @@ class ADisjunctionPastWhatAPathTakesAloneProvesNothingTest {
     private static final int MOST = CompositionBudget.ALTERNATIVES_A_PATH_TRIES.maximum();
 
     private static final WhyNotTaken PAST_THE_FIGURE =
-            new WhyNotTaken.MoreAlternativesThanAreTried();
+            new WhyNotTaken.MoreAlternativesThanAreTried(
+                    CompositionBudget.ALTERNATIVES_A_PATH_TRIES.reached());
 
     /** A reading of terms that states no rules, which is all a proposition written out here asks. */
     private static final Terms TERMS = RuleReadings.termsOfNoClauseFiled(
@@ -130,5 +143,54 @@ class ADisjunctionPastWhatAPathTakesAloneProvesNothingTest {
 
         assertEquals(List.of(new WhyNotTaken.OutsideDomain(
                 WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES)), asked.notTaken());
+    }
+
+    /** Three whole numbers a behavior is handed, named as the parameters they are. */
+    private static final MeaningAssumptions.InputPlaces NUMBERS = new MeaningAssumptions.InputPlaces(
+            Map.of("n", parameter(0), "m", parameter(1), "k", parameter(2)), path -> Type.INT,
+            Map.of(), Map.of());
+
+    private static BindingId parameter(int at) {
+        return new BindingId(new BindingOwner.OfValue("p", "f"), at);
+    }
+
+    /** That the number {@code input} is above nought. */
+    private static Proposition aboveNought(String input) {
+        return new Proposition.Compared(new Relation.Affine(LinearForm.<Quantity>atom(
+                new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of(input)))),
+                Rel.GT), true);
+    }
+
+    /**
+     * A choice kept on the path is settled by a later condition against the parts the path
+     * settles, which is another count than the one a reading takes alone. Where it runs out inside
+     * the one part the choice comes to, the reading names the path's figure, at the figure and not
+     * at what was left of it; with one part more left, the same choice comes to the choice its
+     * second part is, which the path keeps and says it keeps.
+     */
+    @Test
+    void aPartSettledPastWhatThePathSettlesNamesThePathsFigure() {
+        Proposition first = aboveNought("n");
+        Predicates.Assumed kept = MeaningAssumptions.assumed(new Proposition.Any(List.of(first,
+                        new Proposition.Any(List.of(aboveNought("m"), aboveNought("k"))))),
+                true, Known.top(), TERMS, NUMBERS, null);
+        assertEquals(1, kept.known().declinedChoices().size(), "the choice is kept on the path");
+
+        // The first part settling takes leaves nothing, and the second is a choice of its own, whose
+        // two parts are taken alone after it: three parts left take the second in without its
+        // last part, and four take it in whole.
+        Predicates.Assumed past = MeaningAssumptions.assumed(first, false,
+                kept.known().settledOverWhatIsKnown(3), TERMS, NUMBERS, null);
+        Predicates.Assumed within = MeaningAssumptions.assumed(first, false,
+                kept.known().settledOverWhatIsKnown(4), TERMS, NUMBERS, null);
+
+        assertFalse(past.known().reachesNothing());
+        assertFalse(past.shapeRead(), "a part was taken in without all of it");
+        assertEquals(List.of(new WhyNotTaken.MoreAlternativesThanAreTried(
+                        WorkFigure.PARTS_A_PATH_SETTLES.at(Known.Choices.PARTS_A_PATH_SETTLES))),
+                past.notTaken());
+        assertEquals(List.of(new WhyNotTaken.OutsideDomain(
+                WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES)), within.notTaken(),
+                "taken in whole, the second part is the choice of its own the path keeps");
     }
 }
