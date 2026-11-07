@@ -256,6 +256,11 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
         record NotWorkedOut(UnheldNumber why) implements Least {}
     }
 
+    /** Whether {@code term} is a number of the counted container as a whole. */
+    private boolean ofTheWholeContainer(NumericTerm term) {
+        return container.equals(NumbersOfTheWhole.containerOf(term));
+    }
+
     /**
      * Places for every number the statement reads beside an element, chosen together, and where
      * {@code oneMeets}, together with an element that meets the statement.
@@ -274,9 +279,13 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
      */
     NumericWitness.Standing placesBeside(SearchRegion within, boolean oneMeets,
                                          WitnessSearch looking) {
+        // A number of the counted container as a whole — how many it holds, what its elements come
+        // to — is no number beside an element: it is what the elements chosen make it, and the
+        // composing fixes it before it chooses them ({@link ContainerAsAWhole}).
         Set<NumericTerm> beside = new LinkedHashSet<>();
         for (NumericTerm term : numbers()) {
-            if (!term.subjectPath().insideAContainer() && term.atOnePosition() != null) {
+            if (!term.subjectPath().insideAContainer() && term.atOnePosition() != null
+                    && !ofTheWholeContainer(term)) {
                 beside.add(term);
             }
         }
@@ -285,7 +294,7 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
             for (TakenConstraint each : anElementMeeting.get()) {
                 region = each.narrowing(region);
                 for (NumericTerm term : each.terms()) {
-                    if (term.atOnePosition() != null) {
+                    if (term.atOnePosition() != null && !ofTheWholeContainer(term)) {
                         beside.add(term);
                     }
                 }

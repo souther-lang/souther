@@ -6317,6 +6317,16 @@ public final class Generator {
     }
 
     /**
+     * Whether {@code target} is a value placed inside an element of some container: the element
+     * itself or a number of it.
+     */
+    private static boolean insideAnElement(RealizationTarget target) {
+        return target instanceof RealizationTarget.AtOnePosition(NumericTerm.FromOnePosition term)
+                && term instanceof NumericTerm.ValueOf value
+                && value.position().insideAContainer();
+    }
+
+    /**
      * {@link #probeFixing}, along a way whose demands of several ways are written as they stand.
      *
      * @param byCounts whether every container a quantifier that is the whole of a statement is
@@ -7467,20 +7477,13 @@ public final class Generator {
             cuts.add(countedOf(cut.demand()).isPresent()
                     && byCounts.contains(containerOf(cut.demand())) ? asACount(cut) : cut);
         }
-        // And a number of the item inside an element of such a container is where some element
-        // stands, which the container is composed holding — its elements are not written alike,
-        // so there is no every element for it to be the value of. So is one inside an element of
-        // a container the item's own total adds up: the item is read at one element against what
-        // the container comes to, and the element is one of the numbers that total is made of.
-        Set<TermPath> composedWhole = new HashSet<>(byCounts);
+        // And a number of the item inside an element of a container is where some element stands:
+        // the item is read at one element, and the others are what the container holds beside
+        // it. Where the container is composed element by element — for its counts, or for a
+        // number of it as a whole — the value goes in with it ({@link #writtenAmong}); elsewhere
+        // it is written where it stands, which every element holding it answers.
         for (RealizationTarget each : fixing.keySet()) {
-            if (each instanceof RealizationTarget.OfANumber number
-                    && ContainersAddingUp.containerAddedUp(number.term()) instanceof TermPath added) {
-                composedWhole.add(added);
-            }
-        }
-        for (RealizationTarget each : fixing.keySet()) {
-            if (insideAnElementOf(each, composedWhole)) {
+            if (insideAnElement(each)) {
                 someElement.add(each);
             }
         }
@@ -9917,11 +9920,10 @@ public final class Generator {
      * they were: nothing composes those together, and {@link LocationWrites} is what says so.
      *
      * <p>But for a container composed element by element. One composed for how many of its elements
-     * meet something chooses its elements, so a value some element of it is to stand at goes in
-     * with the counts ({@link CardinalityComposer}); one composed for what its elements come to
-     * holds a value some element stands at as one of the numbers the total is made of, so the value
-     * goes in with the total ({@link ContainersAddingUp.SomeElementHolding}). Whether one value
-     * answers the group gathered so is the realizer's ({@link TermRealizations#jointRealizationOf}).
+     * meet something, or with a number of it as a whole asked beside — how many it holds, what its
+     * elements come to — chooses its elements, so a value some element of it is to stand at goes
+     * in with them ({@link CardinalityComposer}). Whether one value answers the group gathered so
+     * is the realizer's ({@link TermRealizations#jointRealizationOf}).
      *
      * <p>The numbers as the sets they are asked for out of, which a point of a border and a class
      * both are: the arrangement is the same either way, and reading it twice would be two answers
@@ -9955,7 +9957,7 @@ public final class Generator {
                 case RealizationTarget.ACount count -> count.count().container();
                 case RealizationTarget.ElementsMeetingTogether together -> together.container();
                 case RealizationTarget.OfANumber number ->
-                        ContainersAddingUp.containerAddedUp(number.term());
+                        NumbersOfTheWhole.containerOf(number.term());
             };
             if (container != null) {
                 if (out.isEmpty()) {

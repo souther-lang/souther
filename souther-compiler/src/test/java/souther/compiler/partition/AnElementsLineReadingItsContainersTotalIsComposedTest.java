@@ -284,16 +284,45 @@ class AnElementsLineReadingItsContainersTotalIsComposedTest {
     }
 
     /**
-     * A point nothing composes for writing a place inside another is said to be that, naming both:
-     * how many the container holds is no number of the element, and nothing here writes the two
-     * as one container.
+     * Every number of a container as a whole an element is read against is fixed before the
+     * element is chosen, whatever number it is: how many it holds, what a form of its elements'
+     * numbers comes to, what another of their fields comes to, two totals at once, what a list of
+     * numbers comes to — and a total a condition on the way asks rather than the point. Every
+     * point of every line of each has a row or is owed none.
      */
     @Test
-    void aPointRefusedForWritingOnePlaceInsideAnotherNamesBoth() {
-        Compilation compilation = measured(ofFs(counted("f.amount > List.length(fs)")));
-        String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
-        assertTrue(report.contains("`fs[*].amount` is inside `fs`, and each is asked for a value"
-                + " of its own"), report);
+    void everyNumberOfTheWholeAnElementIsReadAgainstIsFixedBeforeTheElementIsChosen() {
+        String qty = "data Forecast = { amount: Int, qty: Int }\n";
+        Map<String, String> models = new LinkedHashMap<>();
+        models.put("how many it holds", ofFs(counted("f.amount > List.length(fs)")));
+        models.put("a form of the numbers",
+                ofFs(counted("f.amount * 2 > List.sum(List.map(g -> g.amount + 1, fs))")));
+        models.put("a total on the way", ofFs("if List.sum(List.map(.amount, fs)) > 10 then ("
+                + counted("f.amount > 3") + ") else 0"));
+        models.put("another field", "module probe\n\n" + qty + "\nbehavior f : (fs: List<Forecast>)"
+                + " -> Int\nlet f (fs) = " + counted("f.amount > List.sum(List.map(.qty, fs))")
+                + "\n");
+        models.put("two totals", "module probe\n\n" + qty + "\nbehavior f : (fs: List<Forecast>)"
+                + " -> Int\nlet f (fs) = " + counted("f.amount * 2 > List.sum(List.map(.amount,"
+                + " fs)) + List.sum(List.map(.qty, fs))") + "\n");
+        models.put("a list of numbers", "module probe\n\nbehavior f : (xs: List<Int>) -> Int\n"
+                + "let f (xs) = if List.length(List.filter(x -> x * 2 > List.sum(xs), xs)) == 1"
+                + " then 1 else 0\n");
+        models.forEach((name, source) -> {
+            Compilation compilation = measured(source);
+            JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
+                    .json(SourceRendering.namedByIdentity(compilation.texts())));
+            int items = 0;
+            for (JsonNode behavior : report.at("/modules/0/behaviors")) {
+                for (JsonNode line : behavior.at("/partition/boundaries")) {
+                    for (JsonNode item : line.path("items")) {
+                        items++;
+                        assertTrue(item.has("notOwed") || item.path("knownWritable").asBoolean(),
+                                () -> name + ": " + line.path("axis").asString() + " " + item);
+                    }
+                }
+            }
+            assertTrue(items > 0, name);
+        });
     }
 }

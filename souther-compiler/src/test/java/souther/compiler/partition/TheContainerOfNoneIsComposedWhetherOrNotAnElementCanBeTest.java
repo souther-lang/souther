@@ -8,9 +8,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
-import souther.compiler.check.Shape;
 import souther.compiler.check.TypeCardinality;
-import souther.compiler.check.TypeView;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
@@ -19,7 +17,9 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.numeric.Count;
@@ -33,9 +33,10 @@ import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.SequencedMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -44,7 +45,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The container of none is a container whether or not an element can be: where the region leaves
  * a number to no element, a count of none is still met by it, and a count of one is met by no
- * container at all.
+ * container at all — which is said as that, and not as a search stopped at the totals it tried,
+ * since no total turns on an element there is none of.
  *
  * <p>The smallest case that asks it: a list of whole numbers, and how many of them are above half
  * of what they come to.
@@ -61,8 +63,8 @@ class TheContainerOfNoneIsComposedWhetherOrNotAnElementCanBeTest {
 
     /** The input of {@link #SOURCE}, read, and the count of its numbers above half of their sum. */
     private record Case(Quantities measuring, RuleReadingContext reading, TermPath xs,
-                        NumericTerm.ValueOf number, CoupledCardinalityComposer.Coupled coupled,
-                        Shape.Sequence holding) {}
+                        NumericTerm.ValueOf number, RealizationTarget.ACount count,
+                        SequencedMap<RealizationTarget, AskedAt> demands) {}
 
     private static Case theCase(long asked) {
         Compilation compilation = Compilation.ofSources(List.of(SOURCE), ModulePath.EMPTY);
@@ -86,16 +88,13 @@ class TheContainerOfNoneIsComposedWhetherOrNotAnElementCanBeTest {
         Proposition above = new Proposition.Compared(new Relation.Affine(new LinearForm<>(
                 ExactRatio.ZERO, Map.of(new DecisionAtom.OfTheInput(total), ExactRatio.ONE,
                         new DecisionAtom.OfTheInput(number), ExactRatio.of(-2))), Rel.GE), false);
-        CardinalityComposer.Asked.SoManyMeeting many = new CardinalityComposer.Asked.SoManyMeeting(
-                AStatementAtARow.of(above, "counted", measuring),
-                LevelRegion.point(new Level.OfTheQuantity(ExactRatio.of(asked))),
-                Optional.empty(), Optional.empty());
-        CoupledCardinalityComposer.Coupled coupled =
-                CoupledCardinalityComposer.Coupled.of(List.of(many), xs, measuring);
-        TypeView view = TypeView.of(new Type.ListOf(Type.INT), rules.inners(), rules.symbols(),
-                rules.kinds(), rules.sums());
-        return new Case(measuring, reading, xs, number, coupled,
-                (Shape.Sequence) view.shape());
+        RealizationTarget.ACount count = new RealizationTarget.ACount(CountedElements.of(
+                "counted", new Quantity.HowManyMeet(new DecisionSubject.AnInput(xs), above),
+                measuring, AnElementMeeting.UNREAD));
+        SequencedMap<RealizationTarget, AskedAt> demands = new LinkedHashMap<>();
+        demands.put(count, AskedAt.oneNumberOf(NumbersAskedFor.of(LevelRegion.point(
+                new Level.OfTheQuantity(ExactRatio.of(asked)))), Count.of(asked)));
+        return new Case(measuring, reading, xs, number, count, demands);
     }
 
     /** The region with the number above ten and below nought, which no element is. */
@@ -106,11 +105,10 @@ class TheContainerOfNoneIsComposedWhetherOrNotAnElementCanBeTest {
                 .assuming(LinearForm.atom(made.number()), Rel.LT).taken();
     }
 
-    private static TermRealizations.Realization composed(Case made, SearchRegion region,
-                                                         NumericSet size) {
-        return CoupledCardinalityComposer.compose(made.coupled(), made.xs(), size,
-                new Type.ListOf(Type.INT), made.holding(), made.measuring(), region,
-                made.reading());
+    private static TermRealizations.Realization composed(Case made, SearchRegion region) {
+        return CardinalityComposer.compose(new Type.ListOf(Type.INT), List.of(), made.xs(),
+                List.of(made.count()), List.of(), made.demands(), null, List.of(), List.of(),
+                made.measuring(), region, made.reading());
     }
 
     @Test
@@ -119,8 +117,7 @@ class TheContainerOfNoneIsComposedWhetherOrNotAnElementCanBeTest {
         assertInstanceOf(NumericDomain.FormProjection.NothingIsLeft.class,
                 leavingNoNumber(made).projectionOf(made.number()));
         TermRealizations.Realization.Built built = assertInstanceOf(
-                TermRealizations.Realization.Built.class,
-                composed(made, leavingNoNumber(made), null));
+                TermRealizations.Realization.Built.class, composed(made, leavingNoNumber(made)));
         assertEquals(1, built.values().size(), "the container of none, and no other");
     }
 
@@ -128,15 +125,7 @@ class TheContainerOfNoneIsComposedWhetherOrNotAnElementCanBeTest {
     void whereNoNumberIsLeftNoContainerMeetsACountOfOne() {
         Case made = theCase(1);
         assertInstanceOf(TermRealizations.Realization.None.class,
-                composed(made, leavingNoNumber(made), null));
-    }
-
-    @Test
-    void whereNoNumberIsLeftAContainerOfOneIsAskedForAndNoneIsComposed() {
-        Case made = theCase(0);
-        assertInstanceOf(TermRealizations.Realization.None.class,
-                composed(made, leavingNoNumber(made),
-                        new NumericSet.At(Count.of(1))));
+                composed(made, leavingNoNumber(made)));
     }
 
     @Test
@@ -144,7 +133,7 @@ class TheContainerOfNoneIsComposedWhetherOrNotAnElementCanBeTest {
         Case made = theCase(0);
         TermRealizations.Realization.Built built = assertInstanceOf(
                 TermRealizations.Realization.Built.class,
-                composed(made, made.measuring().region(), null));
+                composed(made, made.measuring().region()));
         assertTrue(built.values().size() >= 1, "the container of none is among them");
     }
 }

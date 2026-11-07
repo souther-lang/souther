@@ -144,17 +144,6 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                     "how many rewrites of one row are run for the order of a repeated key; a case"
                             + " with no row is not found, which claims nothing of the model"),
 
-            // What counts are composed against the total of their container, and past which they
-            // are composed as any are. No search runs to them and stops there: they say which
-            // statements this takes, and a statement past them is not stopped but left to the
-            // composing that does not read the total.
-            Map.entry("souther.compiler.partition.CoupledCardinalityComposer.MOST_STATEMENTS",
-                    "how many counts are composed together against a total; past it the counts"
-                            + " are composed one at a time as they are elsewhere"),
-            Map.entry("souther.compiler.partition.CoupledCardinalityComposer.MOST_RELATIONS",
-                    "how many relations of those counts have their ways of standing taken"
-                            + " together; past it the counts are composed as elsewhere"),
-
             // How many ways a statement of cases is met in before it is not read as one. No search
             // runs to it: a statement past it is read as anything else is that this takes no
             // statement of, so nothing is claimed of the elements it keeps and no row is written
