@@ -364,17 +364,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
 
             /**
-             * Whether some line's cases are more ways of choosing one than are taken apart as the
-             * choices stand, which every line whose cases are not taken apart is
-             * ({@link CasesOfALineAsked}), and the only lines what made their parts is told of.
+             * Whether some line's cases are past the figure as the choices stand
+             * ({@link CasesOfALineAsked#pastTheFigureAsTheChoicesStand}), which every line whose
+             * cases are not taken apart is, and the only lines what made their parts is told of.
              * Some are taken apart still, where the ways their numbers leave are few; telling
              * them apart here would count the ways a second time, for a reading that is only
              * kept.
              */
             boolean mayBePastTheCasesTakenApart() {
-                long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
-                return parts.stream().anyMatch(part -> part.cases().stream()
-                        .anyMatch(one -> one.standsFor().waysOfChoosing(most) > most));
+                return parts.stream().anyMatch(part -> part.cases().stream().anyMatch(
+                        one -> CasesOfALineAsked.pastTheFigureAsTheChoicesStand(one.standsFor())));
             }
 
             /**

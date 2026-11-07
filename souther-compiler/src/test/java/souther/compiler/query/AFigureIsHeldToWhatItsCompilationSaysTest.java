@@ -64,6 +64,23 @@ class AFigureIsHeldToWhatItsCompilationSaysTest {
         assertNotEquals(declared, reached, "a budget reached at two numbers is two figures");
     }
 
+    /**
+     * A budget a compilation may set is made a figure only while one answers: made after, it
+     * would say the figure declared whatever the compilation that reached it was held to. A store
+     * holding every figure to the one declared puts them in force as well.
+     */
+    @Test
+    void aFigureACompilationMaySetIsMadeOnlyWhileOneAnswers() {
+        assertThrows(IllegalStateException.class, SETTABLE::figure,
+                "no compilation answering, so no figure it stood at");
+        assertEquals(new Figure.Budget(SETTABLE, SETTABLE.declared()),
+                new Db().ask(new TheFigureReached()).value(),
+                "a store holding the figures declared answers under them");
+        CompositionBudget fixed = CompositionBudget.PAIRINGS_BUILT_AT_ONCE;
+        assertEquals(new Figure.Budget(fixed, fixed.declared()), fixed.figure(),
+                "a budget no compilation may set stands at the one declared anywhere");
+    }
+
     @Test
     void theFiguresAreSaidBeforeAnythingIsAsked() {
         Db db = new Db();

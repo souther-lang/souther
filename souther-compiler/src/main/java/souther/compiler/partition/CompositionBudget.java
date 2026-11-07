@@ -765,9 +765,19 @@ public enum CompositionBudget {
         return maximum;
     }
 
-    /** This budget as a figure something stopped at, at the figure it is held to where this is
-     *  asked: made where it is reached, it carries the figure the compilation reaching it used. */
+    /**
+     * This budget as a figure something stopped at, at the figure it is held to where this is
+     * asked: made where it is reached, it carries the figure the compilation reaching it used.
+     *
+     * @throws IllegalStateException where this is a budget a compilation may set and no
+     *                               compilation is answering, which leaves no figure it stood at
+     *                               ({@link Allowances})
+     */
     public Figure figure() {
+        if (Allowances.SETTABLE.contains(this) && !Allowances.someInForce()) {
+            throw new IllegalStateException(name() + " is held to the figure of the compilation"
+                    + " reaching it, and none is answering here");
+        }
         return new Figure.Budget(this, maximum());
     }
 

@@ -844,12 +844,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/CasesOfALineAsked$Found;",
                     "how many ways of choosing a case are asked, counted before any is: past the"
                             + " figure, more cases than are taken apart, and none is asked"),
-            Map.entry("souther.compiler.meaning.CasesOfALineAsked#allAsked("
-                            + "Lsouther/compiler/meaning/DecidingCase;"
-                            + "Ljava/util/function/Function;Z)"
-                            + "Lsouther/compiler/meaning/CasesOfALineAsked$Atoms;",
-                    "how many ways of choosing a case are asked, counted before any is: past the"
-                            + " figure, more cases than are taken apart, and none is asked"),
+            // Whether the cases are past the figure as the choices stand, said once for the askings
+            // that stop there and for the reader that holds a statement's derivations only where
+            // a line's cases may be cut off, which omits no work.
+            Map.entry("souther.compiler.meaning.CasesOfALineAsked#pastTheFigureAsTheChoicesStand("
+                            + "Lsouther/compiler/meaning/DecidingCase$Cases;)Z",
+                    "whether the ways of choosing a case are past the figure as the choices stand,"
+                            + " which each asking hands over as the figure it stopped at"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#pastTheSteps("
                             + "Ljava/util/List;)V",
                     "out of steps, naming them and the cases left nobody took apart"),
@@ -857,15 +858,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/DecidingCase;)V",
                     "more ways of choosing than are taken apart, naming the figure and the ones"
                             + " the cases were never taken apart at"),
-            // Asked only to say whether how the statement was derived is worth holding for a reader
-            // told why a line was not worked out. Nothing is stopped or left: the cases are asked
-            // as they would be either way, and where this says no what made their parts is simply
-            // not named.
-            Map.entry("souther.compiler.partition.Cutting$Read$Several"
-                            + "#mayBePastTheCasesTakenApart()Z",
-                    "whether some line's cases are past the figure, which decides only whether the"
-                            + " statement's derivations are held for a reader of what made their"
-                            + " parts; no work is omitted"),
             Map.entry("souther.compiler.partition.ComparisonAssessment#aPartNarrowed("
                             + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
                             + "Lsouther/compiler/partition/Reachability;"

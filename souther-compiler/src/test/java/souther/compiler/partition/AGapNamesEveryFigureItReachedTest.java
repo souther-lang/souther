@@ -63,12 +63,15 @@ class AGapNamesEveryFigureItReachedTest {
                         ElementsWrittenOut.MOST_WALKED)),
                 new ReadingGap.ReachNotRead(
                         ReadingGap.ReachNotRead.Why.MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT).figures());
+        // Stopped where a compilation holding every figure to the one declared answers, which is
+        // the only place a figure a compilation may set is made.
         assertEquals(Figure.inOrder(List.of(
-                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure(),
+                        new Figure.Budget(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
+                                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.declared()),
                         CompositionBudget.CASES_A_LINE_IS_ASKED_IN.figure())),
-                CasesWorkedOut.Stopped.at(EnumSet.of(
+                Allowances.DECLARED.over(() -> CasesWorkedOut.Stopped.at(EnumSet.of(
                         CompositionBudget.CASES_A_LINE_IS_ASKED_IN,
-                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)).gap().figures(),
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)).gap().figures()),
                 "a row in cases nobody worked out says every figure they were stopped at");
         assertEquals(List.of(DEPTH), ReadingGap.ofAComparisonOf(new ObservedValue.Sequence(
                         List.of(new ObservedValue.Truncated(DEPTH)))).figures(),

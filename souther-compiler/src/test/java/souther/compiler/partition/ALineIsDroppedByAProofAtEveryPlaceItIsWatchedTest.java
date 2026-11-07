@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
@@ -83,6 +84,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * each rule in one place, and there the two quantifiers answer alike — so the rule is held here,
  * over the arrivals themselves, rather than waiting for a corpus that happens to write one twice.
  */
+@ExtendWith(AsACompilationHoldingTheDeclaredFiguresAnswers.class)
 class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
 
     private static final Carrier WHOLE = new Carrier.Whole();

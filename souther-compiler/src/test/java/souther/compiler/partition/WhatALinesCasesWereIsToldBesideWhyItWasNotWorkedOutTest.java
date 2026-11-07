@@ -61,11 +61,11 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
     }
 
     /**
-     * How many cases a line of {@link #FIND} is taken apart into here: none. Its lines' numbers
-     * leave few ways each, the fewest one, and a line taken apart says nothing beside why it was
-     * not, so every one of them is cut off at the figure, as each is past it as the choices stand.
+     * How many cases a line is taken apart into here: none. The lines of these models leave few
+     * ways each once their numbers are read, the fewest one, and a line taken apart says nothing
+     * beside why it was not; so every line past the figure as the choices stand is cut off.
      */
-    private static final int FIND_TAKEN_APART_INTO = 0;
+    private static final int NO_CASE_TAKEN_APART = 0;
 
     private static Compilation compiled(String model) {
         return compiled(model, CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.declared());
@@ -121,7 +121,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
 
     @Test
     void eachLineNotWorkedOutForItsManyCasesSaysHowManyWaysTheyWereAndWhatMadeThem() {
-        JsonNode partition = partition(compiled(FIND, FIND_TAKEN_APART_INTO));
+        JsonNode partition = partition(compiled(FIND, NO_CASE_TAKEN_APART));
         JsonNode expansions = partition.path("caseExpansions");
         assertFalse(expansions.isEmpty(), "the lines past the cases taken apart are told of: "
                 + partition);
@@ -184,7 +184,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
      */
     @Test
     void theCountsOfTwoPlacesOfALineAreNeverPutTogetherAsTheirReasonIs() {
-        JsonNode partition = partition(compiled(FIND, FIND_TAKEN_APART_INTO));
+        JsonNode partition = partition(compiled(FIND, NO_CASE_TAKEN_APART));
         List<String> told = new ArrayList<>();
         List<String> came = new ArrayList<>();
         Set<String> levels = new TreeSet<>();
@@ -243,7 +243,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
     @Test
     void aCaseReadAtEachCallOfAHelperIsOneCaseWithAReadingAtEach() {
         JsonNode expansions = partition(compiled(FIND_IN_A_HELPER_CALLED_TWICE,
-                FIND_TAKEN_APART_INTO))
+                NO_CASE_TAKEN_APART))
                 .path("caseExpansions");
         assertFalse(expansions.isEmpty(), "the helper's lines past the figure");
         for (JsonNode each : expansions) {
@@ -269,7 +269,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
 
     @Test
     void aPersonIsToldTheCountsAndWhatMadeThePartsAsAListAndNeverAsAProduct() {
-        Compilation compilation = compiled(FIND, FIND_TAKEN_APART_INTO);
+        Compilation compilation = compiled(FIND, NO_CASE_TAKEN_APART);
         String said = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
         List<String> lines = said.lines().filter(each -> each.contains("case expansion:"))
@@ -292,14 +292,14 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
      */
     @Test
     void aStopIsSaidAtTheFigureItsCompilationWasHeldTo() {
-        Compilation compilation = compiled(FIND, FIND_TAKEN_APART_INTO);
+        Compilation compilation = compiled(FIND, NO_CASE_TAKEN_APART);
         String said = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
         String figure = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.name();
         List<String> stops = said.lines().filter(each -> each.contains(figure + ",")).toList();
         assertFalse(stops.isEmpty(), "the lines past the figure say it: " + said);
         for (String each : stops) {
-            assertTrue(each.contains("(" + figure + ", " + FIND_TAKEN_APART_INTO + ")"),
+            assertTrue(each.contains("(" + figure + ", " + NO_CASE_TAKEN_APART + ")"),
                     "at the figure it was held to: " + each);
         }
     }
@@ -308,19 +308,13 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
     private static final int GRADES = 25;
 
     /**
-     * How many cases a line of the grade table's model is taken apart into here. The lines on the
-     * monthly amount leave a way for each grade they are on the far side of, and twice that for the
-     * cases of the absolute value, so every one past the first two grades is cut off; the lines on
-     * the grade asked for leave two ways at most, and are taken apart.
-     */
-    private static final int GRADES_TAKEN_APART_INTO = 2;
-
-    /**
      * A fold over a table of grades whose step is an {@code if}, read through by a comparison of
-     * the grade it ends with: the cases are taken apart on the bound of each row, one on each
-     * application of the step. The fold is named as the call whose applications those are, with as
-     * many applications as the table has rows, and the {@code if} as a choice between two made once
-     * on each application — two ways chosen many times, never many ways chosen once.
+     * the grade it ends with: the cases of a line on the amount the grade is looked up by are
+     * taken apart on the bound of each row, one on each application of the step. The fold is named
+     * as the call whose applications those are, with as many applications as the table has rows,
+     * and the {@code if} as a choice between two made once on each application — two ways chosen
+     * many times, never many ways chosen once. The lines on the grade asked for are cut off as
+     * well, and are not what this is about.
      */
     @Test
     void aFoldIsNamedByItsApplicationsAndTheChoiceInItsStepByHowOftenItIsMade() {
@@ -338,10 +332,14 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
                 behavior g : (a: Int, h: Int) -> Bool
                 let g (a, h) = Int.abs(gradeFor(a) - h) < 2
                 """.replace("ROWS", gradeTable(GRADES));
-        JsonNode expansions = partition(compiled(model, GRADES_TAKEN_APART_INTO))
-                .path("caseExpansions");
-        assertFalse(expansions.isEmpty(), "the line on the grade is past the figure");
-        for (JsonNode each : expansions) {
+        List<JsonNode> onTheAmount = new ArrayList<>();
+        partition(compiled(model, NO_CASE_TAKEN_APART)).path("caseExpansions").forEach(each -> {
+            if (each.path("line").asString().equals("g/a")) {
+                onTheAmount.add(each);
+            }
+        });
+        assertFalse(onTheAmount.isEmpty(), "the lines on the amount are past the figure");
+        for (JsonNode each : onTheAmount) {
             JsonNode factors = onlyReading(each).path("factors");
             List<JsonNode> applied = ofKind(factors, "applications");
             assertEquals(1, applied.size(), "the fold, once: " + factors);

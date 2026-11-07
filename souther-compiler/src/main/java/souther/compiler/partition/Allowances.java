@@ -28,9 +28,11 @@ import java.util.function.Supplier;
  *
  * <p><b>And carried, where a figure is reached.</b> What stopped at a figure says the number it
  * stood at ({@link CompositionBudget#figure}), made where the figure was reached and so under the
- * compilation reaching it, and a reader is told that number however long after. A reader putting
- * figures together out of the budgets an answer names does so under the compilation's figures as
- * well ({@code AdequacyReport#of}).
+ * compilation reaching it, and a reader is told that number however long after. A budget that may
+ * be set is made a figure only while some compilation answers: made after, out of a budget an
+ * answer names, it would say the figure declared whatever the compilation was held to, so it is
+ * refused there rather than said. Every store puts its figures in force while it answers, the
+ * ones declared as well, so that outside is outside every compilation.
  */
 public final class Allowances {
 
@@ -89,12 +91,17 @@ public final class Allowances {
     }
 
     /**
-     * Whether these are the figures read where this is asked: these themselves in force, or
-     * nothing in force and these the ones declared. A store asks it before every question, so it
-     * asks the one in force by identity, which a store's own figures are wherever it answers.
+     * Whether these themselves are in force where this is asked. A store asks it before every
+     * question, so it asks by identity, which a store's own figures are wherever it answers.
      */
     public boolean inForce() {
-        return IN_FORCE.isBound() ? IN_FORCE.get() == this : figures.isEmpty();
+        return IN_FORCE.isBound() && IN_FORCE.get() == this;
+    }
+
+    /** Whether some compilation's figures are in force where this is asked: whether this is
+     *  asked while a compilation answers. */
+    static boolean someInForce() {
+        return IN_FORCE.isBound();
     }
 
     /** What {@code work} comes to with these in force. */

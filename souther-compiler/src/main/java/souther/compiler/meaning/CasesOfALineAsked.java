@@ -314,8 +314,7 @@ public final class CasesOfALineAsked {
                     : List.of(new Atom<>(said.condition(), answer.apply(said.condition()))),
                     Set.of());
         }
-        long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
-        if (waysCounted && said.standsFor().waysOfChoosing(most) > most) {
+        if (waysCounted && pastTheFigureAsTheChoicesStand(said.standsFor())) {
             moreWaysThanAreTakenApart(said);
             return new Atoms<>(List.of(), stopped);
         }
@@ -324,6 +323,18 @@ public final class CasesOfALineAsked {
                 List.of(heldFirst(said.standsFor())), crossedIn,
                 chosen -> out.add(new Atom<>(chosen, answer.apply(chosen))));
         return new Atoms<>(out, stopped);
+    }
+
+    /**
+     * Whether {@code cases} are more ways of choosing one than
+     * {@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO} as the choices stand: where they
+     * are not, every case is asked; where they are, each case is answered for none, and a line is
+     * asked in them only where the ways the intervals leave are no more than that. So every line
+     * whose cases are not taken apart is one of these, and not every one of these is such a line.
+     */
+    public static boolean pastTheFigureAsTheChoicesStand(DecidingCase.Cases cases) {
+        long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
+        return cases.waysOfChoosing(most) > most;
     }
 
     private Found asked(DecidingCase said) {
@@ -345,7 +356,7 @@ public final class CasesOfALineAsked {
         if (said.saidAlone()) {
             return new Found(List.of(said), List.of());
         }
-        if (said.standsFor().waysOfChoosing(most) > most) {
+        if (pastTheFigureAsTheChoicesStand(said.standsFor())) {
             NumericallyConsistentWays.Counts counts =
                     NumericallyConsistentWays.counted(said.standsFor());
             if (!(counts.ofTheIntervals()
