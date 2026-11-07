@@ -2079,7 +2079,9 @@ final class CardinalityComposer {
          * reads it as something other than one number standing at the element itself.
          *
          * <p>A number of another container's elements is not beside the element: it is read
-         * element by element where the statement is asked, which is where it is left.
+         * element by element where the statement is asked, which is where it is left. A number
+         * read off the elements beside the element, or off all of them, is neither: it moves
+         * with what the container holds, and nothing here composes it.
          */
         static Element of(List<RealizationTarget.ACount> counts, TermPath container) {
             NumericTerm own = null;
@@ -2088,15 +2090,26 @@ final class CardinalityComposer {
             for (RealizationTarget.ACount each : counts) {
                 on.putAll(each.count().on());
                 for (NumericTerm term : each.count().numbers()) {
-                    if (term.subjectPath().isAtOrUnder(container.element())) {
-                        if (!(term instanceof NumericTerm.ValueOf)
-                                || !term.subjectPath().equals(container.element())
-                                || (own != null && !own.equals(term))) {
+                    switch (term.amongTheElementsOf(container)) {
+                        case NumericTerm.AmongTheElements.ItAlone _ -> {
+                            if (!(term instanceof NumericTerm.ValueOf(TermPath at))
+                                    || !at.equals(container.element())
+                                    || (own != null && !own.equals(term))) {
+                                return null;
+                            }
+                            own = term;
+                        }
+                        case NumericTerm.AmongTheElements.NoneOfThem _ -> {
+                            if (term.placesReadOff().stream()
+                                    .noneMatch(TermPath::insideAContainer)) {
+                                beside.add(term);
+                            }
+                        }
+                        case NumericTerm.AmongTheElements.AllOfThem _,
+                             NumericTerm.AmongTheElements.ThoseUnderItsKey _,
+                             NumericTerm.AmongTheElements.Otherwise _ -> {
                             return null;
                         }
-                        own = term;
-                    } else if (!term.subjectPath().insideAContainer()) {
-                        beside.add(term);
                     }
                 }
             }

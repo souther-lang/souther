@@ -141,6 +141,9 @@ public final class InputReads {
      *  what this reading is. */
     private Map<Core, ElementsNamed> named;
     private DeclarationNewtypes namedUnder;
+    /** Which elements each name read in those nodes stood for, under the same declarations: one
+     *  answer for every read of the name. No part of what this reading is. */
+    private Map<BindingId, ElementsNamed> namedThrough;
 
     /**
      * The applications of closures, the arms of choices and the calls of behaviors a reading here is
@@ -2388,6 +2391,7 @@ public final class InputReads {
         // on nothing but the node and this reading.
         if (named == null) {
             named = new IdentityHashMap<>();
+            namedThrough = new HashMap<>();
             namedUnder = newtypes;
         } else if (namedUnder != newtypes) {
             return namesIn(e, newtypes);
@@ -2436,10 +2440,28 @@ public final class InputReads {
         return ElementsNamed.of(out, unnamed);
     }
 
-    /** What the one read {@code read} names, through the names it was only given. */
+    /**
+     * What the one read {@code read} names, through the names it was only given.
+     *
+     * <p>Followed from the name alone, so every read of one name names the same elements: asked
+     * under the declarations the nodes are answered under, it is answered once for the name.
+     */
     private ElementsNamed namesOfTheRead(Core.Read read, DeclarationNewtypes newtypes) {
+        if (namedUnder != newtypes) {
+            return followedFrom(read.binding(), newtypes);
+        }
+        ElementsNamed held = namedThrough.get(read.binding());
+        if (held == null) {
+            held = followedFrom(read.binding(), newtypes);
+            namedThrough.put(read.binding(), held);
+        }
+        return held;
+    }
+
+    /** What {@code name} names, followed from it with no name followed yet. */
+    private ElementsNamed followedFrom(BindingId name, DeclarationNewtypes newtypes) {
         Set<ElementStood> stood = new LinkedHashSet<>();
-        stoodBy(read.binding(), newtypes, new HashSet<>(), stood);
+        stoodBy(name, newtypes, new HashSet<>(), stood);
         return ElementsNamed.of(stood.stream()
                 .map(each -> new ElementsNamed.Named(
                         new ElementsNamed.Slot(each.container(), each.part()), each.name()))

@@ -853,6 +853,53 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
+     * How the value at this path stands to the elements of the container at {@code container}, as
+     * the value is reached.
+     *
+     * <p>The one answer to it. Three of the answers are claims, each true on every row: inside the
+     * element ({@link #standsAtOrUnderOnEveryRow} of the element), holding them all (the container
+     * stands at or under this on every row), or apart from them ({@link #standsAtUnderOrAround}
+     * false). The fourth is that none of those is shown, and it is no claim: a reader that needs
+     * one of the others does not have it.
+     */
+    public ToTheElements toTheElementsOf(TermPath container) {
+        if (standsAtOrUnderOnEveryRow(container.element())) {
+            return ToTheElements.INSIDE_ONE;
+        }
+        if (container.standsAtOrUnderOnEveryRow(this)) {
+            return ToTheElements.HOLDING_THEM;
+        }
+        return standsAtUnderOrAround(container) ? ToTheElements.NOT_SHOWN
+                : ToTheElements.APART;
+    }
+
+    /**
+     * Whether this path and {@code other} name one place on every row either stands on: each
+     * stands at or inside the other there ({@link #standsAtOrUnderOnEveryRow}). Two narrowings of
+     * a value to cases that are not the same cases are two places, though one holds what the
+     * other does on some rows.
+     */
+    public boolean standsAtTheSamePlaceOnEveryRow(TermPath other) {
+        return standsAtOrUnderOnEveryRow(other) && other.standsAtOrUnderOnEveryRow(this);
+    }
+
+    /** How a value stands to the elements of a container ({@link #toTheElementsOf}). */
+    public enum ToTheElements {
+
+        /** Inside the element on every row it stands on: a value of each element alone. */
+        INSIDE_ONE,
+
+        /** Holding the container on every row the container stands on: a value of all of them. */
+        HOLDING_THEM,
+
+        /** Shown apart from the container and everything in it. */
+        APART,
+
+        /** None of the others shown. */
+        NOT_SHOWN
+    }
+
+    /**
      * How the cases two paths require of the values they pass through stand to each other.
      *
      * <p>Each refinement is read as what it requires of the position it is taken at

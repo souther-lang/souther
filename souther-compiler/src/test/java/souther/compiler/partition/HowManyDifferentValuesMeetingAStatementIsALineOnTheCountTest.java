@@ -265,6 +265,23 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
     }
 
     /**
+     * How often a value occurs among the forecasts of every desk put end to end is one number for
+     * every forecast holding it, whichever desk it stands in, so a statement of it is asked of
+     * each value; a row stands on each point of how many values occur at least twice.
+     */
+    @Test
+    void howOftenAValueOccursAcrossTheListsIsAskedOfEachValue() {
+        everyRowComposedAnswersAsItsPointSays(DECLARED + """
+                data Desk = { forecasts: List<Forecast> }
+                behavior f : (ds: List<Desk>) -> Int
+                let f (ds) = if Map.size(Map.filterEntries((_, n) -> n >= 2,
+                    filed(List.flatMap(d -> List.map(.currency, d.forecasts), ds)))) >= 1
+                    then 1 else 0
+                """, "f/#different ds [ds[*].forecasts[*].currency] where"
+                + " [occurrences(ds[*].forecasts[*].currency) >= 2]");
+    }
+
+    /**
      * Where the way to a line on how often a value occurs leaves the container one size, its rows
      * hold that many: a value twice in three elements, and three values once each, though the
      * smallest container a value occurs twice in is two.

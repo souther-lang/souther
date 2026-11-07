@@ -1457,22 +1457,30 @@ public sealed interface AnotherLineTheRowsAllow {
                     // arrives where the place it moves to is none of those.
                     case OnTheWay.Narrowed(var _, var _, var _, var onItsOrder, var _) -> {
                         for (TakenConstraint.AwayFrom hole : onItsOrder) {
-                            if (Collections.disjoint(hole.terms(), moved)) {
-                                continue;
-                            }
-                            Boolean holds = holdsAt(hole, from, at);
-                            if (holds == null || !holds) {
-                                return false;
+                            switch (onto(hole.terms(), from, at)) {
+                                case Stepped.Left _ -> { }
+                                case Stepped.Unsaid _ -> {
+                                    return false;
+                                }
+                                case Stepped.Held held -> {
+                                    if (!held.stillMeets(hole)) {
+                                        return false;
+                                    }
+                                }
                             }
                         }
                     }
                     case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken), var _) -> {
-                        if (Collections.disjoint(taken.terms(), moved)) {
-                            continue;   // the row's answer at it, unmoved
-                        }
-                        Boolean holds = holdsAt(taken, from, at);
-                        if (holds == null || !holds) {
-                            return false;
+                        switch (onto(taken.terms(), from, at)) {
+                            case Stepped.Left _ -> { }   // the row's answer at it, unmoved
+                            case Stepped.Unsaid _ -> {
+                                return false;
+                            }
+                            case Stepped.Held held -> {
+                                if (!held.stillMeets(taken)) {
+                                    return false;
+                                }
+                            }
                         }
                     }
                     // That some element meets these, or every element does, which a step leaves as
@@ -1500,17 +1508,16 @@ public sealed interface AnotherLineTheRowsAllow {
                     // What a division leaves of a form, worked out of the form where the input holds
                     // its numbers: still one of the remainders asked for, or the row turns away.
                     case OnTheWay.TakenIn(var _, RowDemand.OnARemainder remainder, var _) -> {
-                        if (Collections.disjoint(remainder.terms(), moved)) {
-                            continue;
-                        }
-                        if (!(OrderedAffineBoundary.at(remainder.dividend(), at)
-                                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio comes))
-                                || !comes.isWhole()
-                                || !(comes.floor() instanceof ExactAnswer.Held<BigInteger>(
-                                        BigInteger whole))
-                                || !remainder.leaves().holds(
-                                        whole.mod(remainder.remainder().divisor()))) {
-                            return false;
+                        switch (onto(remainder.terms(), from, at)) {
+                            case Stepped.Left _ -> { }
+                            case Stepped.Unsaid _ -> {
+                                return false;
+                            }
+                            case Stepped.Held held -> {
+                                if (!held.stillMeets(remainder)) {
+                                    return false;
+                                }
+                            }
                         }
                     }
                     // Which of two values stands at a position, and a step moves numbers: what
@@ -1539,10 +1546,81 @@ public sealed interface AnotherLineTheRowsAllow {
             return true;
         }
 
-        /** Whether the step moves a number at or under one of {@code positions}. */
+        /**
+         * Whether the step moves a number read off a place at, under or around one of
+         * {@code positions} ({@link TermPath#standsAtUnderOrAround}): every place it is read off
+         * and not the one it is filed under, since how often a value occurs among a container's
+         * elements moves with which elements the container holds.
+         */
         private boolean movesAnyOf(Set<TermPath> positions) {
-            return moved.stream().anyMatch(term -> positions.stream()
-                    .anyMatch(position -> term.subjectPath().isAtOrUnder(position)));
+            return moved.stream().anyMatch(term -> term.placesReadOff().stream()
+                    .anyMatch(place -> positions.stream()
+                            .anyMatch(place::standsAtUnderOrAround)));
+        }
+
+        /**
+         * What a step does to the numbers a condition is worked out of. Only {@link Held} holds
+         * the numbers at the two ends, so a condition is worked out at the input only where the
+         * step was shown to hold every number of it that it moves.
+         */
+        private sealed interface Stepped {
+
+            /** Moves no place any of them is read off: the condition answers what it did. */
+            record Left() implements Stepped {}
+
+            /** Moves a place one of them is read off without holding that number: what the
+             *  number comes to at the input is nothing the step says, and read as the number the
+             *  row had it would be the row's answer at a place the step left. */
+            record Unsaid() implements Stepped {}
+
+            /**
+             * Moves some, and every one whose places it moves is a number it holds at both ends.
+             *
+             * @param from the numbers at the row stepped from
+             * @param at   the numbers at the input the step reached
+             */
+            record Held(Map<NumericTerm, Place> from, Map<NumericTerm, Place> at)
+                    implements Stepped {
+
+                /** Whether {@code taken}, which the row passed, still holds at the input. */
+                boolean stillMeets(TakenConstraint taken) {
+                    return Boolean.TRUE.equals(holdsAt(taken, from, at));
+                }
+
+                /** Whether what a division of the form leaves at the input is still one of the
+                 *  remainders {@code remainder} asks for. */
+                boolean stillMeets(RowDemand.OnARemainder remainder) {
+                    return OrderedAffineBoundary.at(remainder.dividend(), at)
+                            instanceof ExactAnswer.Held<ExactRatio>(ExactRatio comes)
+                            && comes.isWhole()
+                            && comes.floor() instanceof ExactAnswer.Held<BigInteger>(
+                                    BigInteger whole)
+                            && remainder.leaves().holds(
+                                    whole.mod(remainder.remainder().divisor()));
+                }
+            }
+        }
+
+        /**
+         * What the step does to {@code terms}, asked of every place each is read off
+         * ({@link RowDemand#placesReadOff}) and not of which numbers the step names: a step moving
+         * the currency an element holds moves how often that currency occurs.
+         *
+         * <p>The one answer every condition worked out of numbers is read by, and the only way to
+         * the numbers it is worked out of.
+         */
+        private Stepped onto(Set<NumericTerm> terms, Map<NumericTerm, Place> from,
+                             Map<NumericTerm, Place> at) {
+            if (!movesAnyOf(RowDemand.placesReadOff(terms))) {
+                return new Stepped.Left();
+            }
+            for (NumericTerm term : terms) {
+                if (!moved.contains(term)
+                        && movesAnyOf(RowDemand.placesReadOff(Set.of(term)))) {
+                    return new Stepped.Unsaid();
+                }
+            }
+            return new Stepped.Held(from, at);
         }
     }
 
