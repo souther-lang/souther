@@ -4062,7 +4062,7 @@ final class Pullback {
      * number every element settles alike: that number times whether the arm is taken — or null
      * where {@code e} is no such choice, or no element is being added up over. What a number is
      * here is {@code ofAnArm}'s: how many an arm holds ({@link #sizedByTheArmsOfAnElement}), or
-     * what a step adds to what it carried ({@link #countedByTheArmsOfTheStep}).
+     * what a step adds to what it carried ({@link #accumulated}).
      */
     private Sized byTheArmsOfAnElement(Core e, InputReads at,
                                        BiFunction<Core, InputReads, Sized> ofAnArm) {
@@ -4217,35 +4217,97 @@ final class Pullback {
                     : differentAmongTheKept(chosen.container(), chosen.value(), chosen.keptBy());
             return different == null ? null : new Sized.AsAForm(LinearForm.atom(different));
         }
-        if (!(walkedContainer(walk.container(), reads) instanceof DecisionSubject.AnInput held)) {
+        return accumulated(walk, reads, Accumulating.SIZE);
+    }
+
+    /** What a walk's reading of what it carries reads it as: how many it holds, or the number
+     *  it is. */
+    private enum Accumulating { SIZE, NUMBER }
+
+    /** {@code e} read as {@code how} says, at {@code at}. */
+    private Sized readAs(Accumulating how, Core e, InputReads at) {
+        return switch (how) {
+            case SIZE -> sizeOf(e, at);
+            case NUMBER -> AffineForms.outcome(e, at, quantities())
+                    instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)
+                    ? new Sized.AsAForm(form) : new Sized.NotSized(new WhyUnread.NotArithmetic());
+        };
+    }
+
+    /** Where what a walk carried so far is told to the reading {@code how} names. */
+    private Map<BindingId, LinearForm<Quantity>> carriedUnder(Accumulating how) {
+        return switch (how) {
+            case SIZE -> sizedSoFar;
+            case NUMBER -> carriedSoFar;
+        };
+    }
+
+    /**
+     * What a walk from a seed over a container of the input ends with, read as {@code how} says,
+     * where its step adds to what it carried, read the same way, what the element alone decides:
+     * the seed, and what each element adds added up over them ({@link #addedUpOver}) — or null
+     * where it is no such walk.
+     *
+     * <p>By induction over the walk, which hands every element to the step once. The step is read
+     * once with what it carried standing for any number ({@link Quantity.HowManyCarried}), and has
+     * to come to that number once and a number beside it that does not read it. A step that is a
+     * {@code match} or an {@code if} on the element is read arm by arm
+     * ({@link #byTheArmsOfAnElement}): what decides the arm may not read what it carried, so which
+     * arm an element takes is a statement about the element alone, and an arm adding the same to
+     * every element adds it as many times as elements take it. {@code if x == 0 then n + 1 else n}
+     * is how many elements are nought, and {@code if x == 0 then acc ++ [x] else acc} holds as
+     * many. An arm that starts over, {@code else 0}, keeps nothing it carried, and the walk is
+     * none of these.
+     */
+    private Sized accumulated(SeededWalk walk, InputReads at, Accumulating how) {
+        Core step = Core.withoutStanding(walk.step().body());
+        BindingId accumulator = walk.accumulator().binding();
+        boolean chosen = step instanceof Core.If || step instanceof Core.Match;
+        if ((chosen && decidedByWhatItCarried(step, accumulator))
+                || !(walkedContainer(walk.container(), at)
+                        instanceof DecisionSubject.AnInput held)
+                || !(readAs(how, walk.seed(), at) instanceof Sized.AsAForm(
+                        LinearForm<Quantity> seed))) {
             return null;
         }
         Quantity.HowManyCarried soFar = new Quantity.HowManyCarried(ACarriedValue.made());
         return tentatively(soFar, () -> {
-            if (!(stepSized(walk.accumulator().binding(), soFar, walk, reads)
-                    instanceof Sized.AsAForm(LinearForm<Quantity> stepped))) {
-                return null;
-            }
-            LinearForm<Quantity> adds = addedBesideOnce(stepped, soFar);
-            if (adds == null) {
-                return null;
-            }
             if (!quantifying.add(held)) {
                 return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
             }
-            Sized total;
+            carriedUnder(how).put(accumulator, LinearForm.atom(soFar));
+            ElementsNamed outer = inTheScopeOf(walk.step(), at);
             try {
-                total = addedUpOver(held, adds);
+                Sized each = chosen
+                        ? byTheArmsOfAnElement(step, at,
+                                (arm, inside) -> addedBeside(how, arm, inside, soFar))
+                        : addedBeside(how, step, at, soFar);
+                if (!(each instanceof Sized.AsAForm(LinearForm<Quantity> added))) {
+                    return null;
+                }
+                Sized total = addedUpOver(held, added);
+                if (!(total instanceof Sized.AsAForm(LinearForm<Quantity> over))) {
+                    return total;
+                }
+                LinearForm<Quantity> all = seed.plus(over).orNull();
+                return all == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
+                        : new Sized.AsAForm(all);
             } finally {
+                freeInTheScope = outer;
+                carriedUnder(how).remove(accumulator);
                 quantifying.remove(held);
             }
-            if (!(total instanceof Sized.AsAForm(LinearForm<Quantity> over))) {
-                return total;
-            }
-            LinearForm<Quantity> all = seed.plus(over).orNull();
-            return all == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
-                    : new Sized.AsAForm(all);
         });
+    }
+
+    /** What {@code e}, read as {@code how} says at {@code at}, adds beside {@code carried}:
+     *  {@code carried} once and a form beside it that does not read it. */
+    private Sized addedBeside(Accumulating how, Core e, InputReads at,
+                              Quantity.HowManyCarried carried) {
+        LinearForm<Quantity> added = readAs(how, e, at) instanceof Sized.AsAForm(var form)
+                ? addedBesideOnce(form, carried) : null;
+        return added == null ? new Sized.NotSized(new WhyUnread.NotArithmetic())
+                : new Sized.AsAForm(added);
     }
 
     /**
@@ -4390,17 +4452,6 @@ final class Pullback {
         rest.remove(carried);
         LinearForm<Quantity> beside = new LinearForm<>(form.constant(), rest);
         return carried.isIn(beside) ? null : beside;
-    }
-
-    /** How many {@code walk}'s step holds, with what it carried holding {@code soFar}. */
-    private Sized stepSized(BindingId accumulator, Quantity soFar, SeededWalk walk,
-                            InputReads reads) {
-        sizedSoFar.put(accumulator, LinearForm.atom(soFar));
-        try {
-            return sizeOf(walk.step().body(), reads);
-        } finally {
-            sizedSoFar.remove(accumulator);
-        }
     }
 
     /**
@@ -10196,7 +10247,7 @@ final class Pullback {
             if (ofAnAnswer != null) {
                 return ofAnAnswer;
             }
-            LinearForm<Quantity> counted = unlessUnread(() -> countedByTheArmsOfTheStep(walk));
+            LinearForm<Quantity> counted = unlessUnread(() -> addedUpByTheStep(walk));
             return counted != null ? counted : unlessUnread(() -> foldOfWrittenOut(walk));
         }
         return ofTheInput(added);
@@ -10227,7 +10278,7 @@ final class Pullback {
         InputNumber.SeedAndAdded added = InputNumber.ofAWalkAdding(part.walk(), read.domain(),
                 part.at(), read.rules());
         return added != null ? ofTheInput(added)
-                : countedByTheArmsOfTheStep(part.walk(), part.at());
+                : addedUpByTheStep(part.walk(), part.at());
     }
 
     /**
@@ -11098,55 +11149,19 @@ final class Pullback {
     }
 
     /**
-     * What a walk from a seed over a container of the input ends with, where its step is a
-     * {@code match} or an {@code if} on the element each arm of which adds to what it carried a
-     * number every element settles alike, or keeps it: the seed, and each of those numbers times
-     * how many elements take its arm — or null where it is anything else.
-     *
-     * <p>By induction over the walk, which hands every element to the step once. Each arm is read
-     * once with what it carried standing for any number, and has to come to that number once and a
-     * number beside it; what decides the arm may not read what it carried, so which arm an element
-     * takes is a statement about the element alone. {@code if x == 0 then n + 1 else n} is then
-     * how many elements are nought. An arm that starts over, {@code else 0}, keeps nothing it
-     * carried, and the walk counts nothing.
+     * The number a walk from a seed over a container of the input ends with, where its step adds
+     * to what it carried what the element alone decides ({@link #accumulated}) — or null where it
+     * is anything else.
      */
-    private LinearForm<Quantity> countedByTheArmsOfTheStep(Denotation call) {
+    private LinearForm<Quantity> addedUpByTheStep(Denotation call) {
         SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
-        return walk == null ? null : countedByTheArmsOfTheStep(walk, call.at());
+        return walk == null ? null : addedUpByTheStep(walk, call.at());
     }
 
     /** The same, of {@code walk} as it is handed, read where it stands at {@code at}. */
-    private LinearForm<Quantity> countedByTheArmsOfTheStep(SeededWalk walk, InputReads at) {
-        Core step = Core.withoutStanding(walk.step().body());
-        BindingId accumulator = walk.accumulator().binding();
-        if (decidedByWhatItCarried(step, accumulator)
-                || !(walkedContainer(walk.container(), at)
-                        instanceof DecisionSubject.AnInput held)
-                || !(AffineForms.outcome(walk.seed(), at, quantities())
-                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
-                                LinearForm<Quantity> seed))) {
-            return null;
-        }
-        Quantity.HowManyCarried soFar = new Quantity.HowManyCarried(ACarriedValue.made());
-        Sized counted = tentatively(soFar, () -> {
-            if (!quantifying.add(held)) {
-                return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
-            }
-            carriedSoFar.put(accumulator, LinearForm.atom(soFar));
-            ElementsNamed outer = inTheScopeOf(walk.step(), at);
-            try {
-                Sized each = byTheArmsOfAnElement(step, at,
-                        (arm, inside) -> addedBesideWhatItCarried(arm, inside, soFar));
-                return each instanceof Sized.AsAForm(LinearForm<Quantity> form)
-                        ? addedUpOver(held, form) : each;
-            } finally {
-                freeInTheScope = outer;
-                carriedSoFar.remove(accumulator);
-                quantifying.remove(held);
-            }
-        });
-        return counted instanceof Sized.AsAForm(LinearForm<Quantity> over)
-                ? seed.plus(over).orNull() : null;
+    private LinearForm<Quantity> addedUpByTheStep(SeededWalk walk, InputReads at) {
+        return accumulated(walk, at, Accumulating.NUMBER)
+                instanceof Sized.AsAForm(LinearForm<Quantity> all) ? all : null;
     }
 
     /** Whether what decides which arm of {@code fork} is taken reads {@code carried}, or
@@ -11159,16 +11174,6 @@ final class Pullback {
         };
     }
 
-    /** What {@code arm} adds to {@code carried}, read as a number of what stands at {@code at}:
-     *  {@code carried} once and a form beside it that does not read it. */
-    private Sized addedBesideWhatItCarried(Core arm, InputReads at,
-                                           Quantity.HowManyCarried carried) {
-        LinearForm<Quantity> added = AffineForms.outcome(arm, at, quantities())
-                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)
-                ? addedBesideOnce(form, carried) : null;
-        return added == null ? new Sized.NotSized(new WhyUnread.NotArithmetic())
-                : new Sized.AsAForm(added);
-    }
 
     /**
      * A comparison as the cut the arithmetic of the input reads it to, or as one that cuts nothing —
