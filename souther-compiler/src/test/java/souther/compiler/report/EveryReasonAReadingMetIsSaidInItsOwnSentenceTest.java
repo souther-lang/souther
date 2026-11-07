@@ -3,6 +3,7 @@ package souther.compiler.report;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
@@ -136,7 +137,8 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                     }
                 }
                 case "CasesNotWorkedOut" -> out.add(new ReadingGap.CasesNotWorkedOut(List.of(
-                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure())));
+                        new Figure.Budget(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
+                                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.declared()))));
                 // A reason added to the type and not to this list. Written as a failure rather than
                 // skipped: a reason nothing here can build is one nothing here is checking.
                 default -> throw new IllegalStateException(

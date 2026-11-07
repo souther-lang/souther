@@ -2,6 +2,7 @@ package souther.compiler.meaning;
 
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
+import souther.compiler.partition.CompositionBudget;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -25,9 +26,19 @@ import java.util.function.Function;
  * a whole number meets a form is not asked, so the count is at least as many as the ways some row
  * can take: what it says is that no more than these can.
  *
- * <p><b>For a reader explaining a line, and nothing that reads the line.</b> Asking the cases is
- * {@link CasesOfALineAsked}'s; this counts beside it where a reader is told why it stopped, and no
- * figure it meets is one the line stopped at.
+ * <p><b>Counted twice in one walk.</b> The ways no comparison leaves a form no value of, and of
+ * those, the ways no comparison of a remainder leaves its dividend none ({@link Counts}). Each
+ * count is worked out by states of its own, and given up for its own: the first keeps a way a
+ * remainder refutes, and the second does not pay for it.
+ *
+ * <p><b>What a line is taken apart by.</b> Where the ways as the choices stand are more than
+ * {@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO}, {@link CasesOfALineAsked} takes the
+ * line apart where the intervals' count is no more than that ({@link CasesOfALineAsked} says why
+ * the intervals' and not the numbers'), and the walk it takes ends every way at the part a
+ * {@link State} leaves nothing of, so it walks no way either count leaves out. Where the count is
+ * given up the line is cut off by the ways as the choices stand. The numbers' count is what a
+ * reader is told beside a line that stopped there; neither figure it meets is one the line stopped
+ * at.
  *
  * <p><b>Counted by what is left, and not way by way.</b> What a way has chosen so far leaves each
  * form an interval and each dividend some of its remainders, and the ways past a case depend on
@@ -41,8 +52,8 @@ public final class NumericallyConsistentWays {
      * How many states the cases may be reached in, counted over every case, before the count is
      * given up.
      *
-     * <p>Not a figure a reading stops at: past it the line is what it was, and only the count is
-     * not said.
+     * <p>Not a figure a reading stops at: past it the line is cut off by the ways as the choices
+     * stand, as it would be with no count, and only the count is not said.
      */
     public static final int STATES_A_COUNT_IS_TAKEN_IN = 1 << 16;
 
@@ -85,33 +96,122 @@ public final class NumericallyConsistentWays {
         WAYS_A_COUNT_IS_HELD_TO
     }
 
+    /**
+     * The two counts one walk of the cases comes to.
+     *
+     * @param ofTheIntervals the ways no comparison chosen leaves a form no value of; no fewer than
+     *                       {@code ofTheNumbers}
+     * @param ofTheNumbers   the ways no comparison chosen refutes, its form's interval or its
+     *                       dividend's remainders
+     */
+    public record Counts(Counted ofTheIntervals, Counted ofTheNumbers) {
+
+        public Counts {
+            Objects.requireNonNull(ofTheIntervals, "the ways of the intervals were counted or not");
+            Objects.requireNonNull(ofTheNumbers, "the consistent ways were counted or not");
+        }
+    }
+
     /** How many ways of choosing a case of {@code cases} no comparison chosen refutes. */
     public static Counted of(DecidingCase.Cases cases) {
-        return of(cases, State.NOTHING_CHOSEN);
+        return counted(cases).ofTheNumbers();
+    }
+
+    /** How many ways of choosing a case of {@code cases} the intervals leave, and how many the
+     *  numbers do. */
+    public static Counts counted(DecidingCase.Cases cases) {
+        return counted(cases, State.NOTHING_CHOSEN);
     }
 
     /** The same, of the ways that start where {@code start} leaves the numbers. */
     static Counted of(DecidingCase.Cases cases, State start) {
-        Counting counting = new Counting();
-        Map<State, BigInteger> out = cases.fold(counting).apply(start);
-        if (counting.reached > STATES_A_COUNT_IS_TAKEN_IN) {
-            return new Counted.NotCounted(WhyNotCounted.STATES_A_COUNT_IS_TAKEN_IN);
-        }
-        BigInteger ways = out.values().stream().reduce(BigInteger.ZERO, Counting::sum);
-        return ways.compareTo(CaseCount.WAYS_A_COUNT_IS_HELD_TO) > 0
-                ? new Counted.NotCounted(WhyNotCounted.WAYS_A_COUNT_IS_HELD_TO)
-                : new Counted.AtMost(ways);
+        return counted(cases, start).ofTheNumbers();
+    }
+
+    private static Counts counted(DecidingCase.Cases cases, State start) {
+        Counting ofTheIntervals = new Counting(false);
+        Counting ofTheNumbers = new Counting(true);
+        EachCase both = cases.fold(new BothCounts(ofTheIntervals, ofTheNumbers));
+        return new Counts(ofTheIntervals.counted(both.ofTheIntervals(), start.ofItsForms()),
+                ofTheNumbers.counted(both.ofTheNumbers(), start));
+    }
+
+    /** What one case comes to from each state it is reached in, for each count. */
+    private record EachCase(Function<State, Map<State, BigInteger>> ofTheIntervals,
+                            Function<State, Map<State, BigInteger>> ofTheNumbers) {
     }
 
     /**
-     * What each case comes to from each state it is reached in: the states it leaves, each with
-     * how many of its ways leave it. Each answer is kept, so a case reached again in one state is
-     * not worked out again.
+     * The one walk of the cases, each case given what it comes to for both counts: each count
+     * worked out by its own states, kept and bounded by its own.
+     *
+     * <p>Two states and not one holding both. A way a remainder refutes is a way of the intervals
+     * still, and a state of the intervals' count from there on; held in one state with the
+     * numbers', every such way would be one more state of the numbers' count as well, and a
+     * count the remainders keep small would be given up for the states the intervals' needs.
+     */
+    private record BothCounts(Counting ofTheIntervals, Counting ofTheNumbers)
+            implements DecidingCase.Cases.Fold<EachCase> {
+
+        @Override
+        public EachCase one(DecidingCase.Cases.One one) {
+            return new EachCase(ofTheIntervals.one(one), ofTheNumbers.one(one));
+        }
+
+        @Override
+        public EachCase eachOf(DecidingCase.Cases.EachOf node, List<EachCase> alternatives) {
+            return new EachCase(
+                    ofTheIntervals.eachOf(node, alternatives.stream()
+                            .map(EachCase::ofTheIntervals).toList()),
+                    ofTheNumbers.eachOf(node, alternatives.stream()
+                            .map(EachCase::ofTheNumbers).toList()));
+        }
+
+        @Override
+        public EachCase together(DecidingCase.Cases.Together node, List<EachCase> factors) {
+            return new EachCase(
+                    ofTheIntervals.together(node, factors.stream()
+                            .map(EachCase::ofTheIntervals).toList()),
+                    ofTheNumbers.together(node, factors.stream()
+                            .map(EachCase::ofTheNumbers).toList()));
+        }
+
+        @Override
+        public EachCase notTakenApart(DecidingCase.Cases.NotTakenApart notTakenApart) {
+            return new EachCase(ofTheIntervals.notTakenApart(notTakenApart),
+                    ofTheNumbers.notTakenApart(notTakenApart));
+        }
+    }
+
+    /**
+     * What each case comes to from each state it is reached in, for one count: the states it
+     * leaves, each with how many of its ways leave it. Each answer is kept, so a case reached
+     * again in one state is not worked out again.
      */
     private static final class Counting
             implements DecidingCase.Cases.Fold<Function<State, Map<State, BigInteger>>> {
 
+        /** Whether a comparison of a remainder narrows the states, or only an interval does. */
+        private final boolean readsTheRemainders;
+
         private int reached;
+
+        Counting(boolean readsTheRemainders) {
+            this.readsTheRemainders = readsTheRemainders;
+        }
+
+        /** What {@code cases}, starting from {@code start}, came to: the ways counted, or why
+         *  they were not. */
+        Counted counted(Function<State, Map<State, BigInteger>> cases, State start) {
+            Map<State, BigInteger> out = cases.apply(start);
+            if (reached > STATES_A_COUNT_IS_TAKEN_IN) {
+                return new Counted.NotCounted(WhyNotCounted.STATES_A_COUNT_IS_TAKEN_IN);
+            }
+            BigInteger ways = out.values().stream().reduce(BigInteger.ZERO, Counting::sum);
+            return ways.compareTo(CaseCount.WAYS_A_COUNT_IS_HELD_TO) > 0
+                    ? new Counted.NotCounted(WhyNotCounted.WAYS_A_COUNT_IS_HELD_TO)
+                    : new Counted.AtMost(ways);
+        }
 
         /** Past {@link CaseCount#WAYS_A_COUNT_IS_HELD_TO} a count is one past it, which says only
          *  that it is more; so no number worked out here is longer than that. */
@@ -151,7 +251,7 @@ public final class NumericallyConsistentWays {
             return remembered(state -> {
                 State left = state;
                 for (Narrowing part : parts) {
-                    left = left.taking(part);
+                    left = left.taking(part, readsTheRemainders);
                     if (left == null) {
                         return Map.of();
                     }
@@ -390,6 +490,8 @@ public final class NumericallyConsistentWays {
      * What the comparisons chosen so far leave: each affine form's interval, and each dividend's
      * remainders as the bits of a number.
      *
+     * <p>Or each form's interval alone, for the intervals' count, which keeps no remainder.
+     *
      * <p>Hashed once when made, since every case a state reaches looks it up and every case
      * leaving it merges it, and each such hash would otherwise walk every form it holds.
      */
@@ -427,14 +529,37 @@ public final class NumericallyConsistentWays {
             return out ^ (out >>> 13);
         }
 
-        /** This with {@code part} chosen; null where it leaves a form or a dividend nothing. */
-        State taking(Proposition part) {
-            Optional<Narrowing> narrowing = Narrowing.of(part);
-            return narrowing.isEmpty() ? this : taking(narrowing.get());
+        /** This with every part {@code condition} states together chosen; null where they leave a
+         *  form or a dividend nothing. */
+        State takingAll(Proposition condition) {
+            State left = this;
+            for (Proposition part : conjunctsOf(condition)) {
+                left = left.taking(part);
+                if (left == null) {
+                    return null;
+                }
+            }
+            return left;
         }
 
         /** This with {@code part} chosen; null where it leaves a form or a dividend nothing. */
-        private State taking(Narrowing part) {
+        State taking(Proposition part) {
+            Optional<Narrowing> narrowing = Narrowing.of(part);
+            return narrowing.isEmpty() ? this : taking(narrowing.get(), true);
+        }
+
+        /** The intervals this leaves its forms, and no remainder of any dividend: the state the
+         *  intervals' count reads. */
+        State ofItsForms() {
+            return remainders.isEmpty() ? this : new State(forms, Map.of());
+        }
+
+        /**
+         * This with {@code part} chosen; null where it leaves a form nothing, or where
+         * {@code readsTheRemainders} and it leaves a dividend nothing. Not reading the remainders,
+         * the state keeps none, and a comparison of one narrows only its form's interval.
+         */
+        private State taking(Narrowing part, boolean readsTheRemainders) {
             Interval left = forms.getOrDefault(part.form(), Interval.EVERY)
                     .with(part.rel(), part.at());
             if (left == null) {
@@ -443,7 +568,7 @@ public final class NumericallyConsistentWays {
             Map<Form, Interval> nextForms = new HashMap<>(forms);
             nextForms.put(part.form(), left);
             Map<Dividend, Long> nextRemainders = remainders;
-            if (part.remainders().isPresent()) {
+            if (readsTheRemainders && part.remainders().isPresent()) {
                 Remainders meeting = part.remainders().get();
                 long kept = remainders.getOrDefault(meeting.of(),
                         (1L << meeting.of().divisor()) - 1) & meeting.allowed();

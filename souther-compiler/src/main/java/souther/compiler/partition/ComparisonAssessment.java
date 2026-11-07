@@ -62,7 +62,6 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -1007,8 +1006,9 @@ sealed interface ComparisonAssessment {
              */
             static Part inCasesNotWorkedOut(PlaceOfALine id, ComparisonAssessment line,
                                             List<DecidingCase> cases,
-                                            Set<CompositionBudget> stoppedAt) {
-                return new Part(id, line, cases, Map.of(), CasesWorkedOut.Stopped.at(stoppedAt));
+                                            Set<Figure.Budget> stoppedAt) {
+                return new Part(id, line, cases, Map.of(),
+                        new CasesWorkedOut.Stopped(List.copyOf(stoppedAt)));
             }
 
             public Part {
@@ -1741,7 +1741,7 @@ sealed interface ComparisonAssessment {
         CasesReached found = casesTurnedOn(cutting, part.cases(), wayToACase, arrivals, reading);
         List<DecidingCase> reached = found.reached();
         List<Reachability.Reaching> deciding = found.deciding();
-        Set<CompositionBudget> stoppedAt = found.stoppedAt();
+        Set<Figure.Budget> stoppedAt = found.stoppedAt();
         // The cases nobody worked out are neither ones the line turns in, owed rows a row in them
         // would be taken to meet, nor ones dropped for a proof nobody finished. The line is still a
         // line there, and its points are still owed: it is read in each case asked some of whose
@@ -1754,7 +1754,7 @@ sealed interface ComparisonAssessment {
         // to divide none is in neither. Cases stopped at the same figures are read together, each
         // still a case of its own.
         List<Several.Part> out = new ArrayList<>();
-        Map<Set<CompositionBudget>, List<DecidingCase>> notWorkedOut = new LinkedHashMap<>();
+        Map<Set<Figure.Budget>, List<DecidingCase>> notWorkedOut = new LinkedHashMap<>();
         for (CasesOfALineAsked.NotWorkedOut each : found.notWorkedOut()) {
             notWorkedOut.computeIfAbsent(each.stoppedAt(), _ -> new ArrayList<>()).add(each.in());
         }
@@ -1782,8 +1782,7 @@ sealed interface ComparisonAssessment {
                         each.in(), counted)));
             }
             out.add(new Several.Part(part.id(), new Unread(atEachOf(cutting.over(),
-                    new BlockReason.WhereALineDecidesNotWorkedOut(stoppedAt.stream()
-                            .map(CompositionBudget::figure).toList())),
+                    new BlockReason.WhereALineDecidesNotWorkedOut(List.copyOf(stoppedAt))),
                     WhereAReadingStopped.ELSEWHERE), List.of(), Map.of(), CasesWorkedOut.SHOWN,
                     expanded));
         }
@@ -1839,8 +1838,8 @@ sealed interface ComparisonAssessment {
                         List<CasesOfALineAsked.NotWorkedOut> notWorkedOut) {
 
         /** Every figure a case nobody worked out was stopped at. */
-        Set<CompositionBudget> stoppedAt() {
-            Set<CompositionBudget> out = EnumSet.noneOf(CompositionBudget.class);
+        Set<Figure.Budget> stoppedAt() {
+            Set<Figure.Budget> out = new LinkedHashSet<>();
             notWorkedOut.forEach(each -> out.addAll(each.stoppedAt()));
             return out;
         }
@@ -1950,7 +1949,7 @@ sealed interface ComparisonAssessment {
         // its own lines are known. Cases are said for several only past that, where they part the
         // values by the same lines.
         Map<List<AtAPosition>, List<DecidingCase>> casesByLines = new LinkedHashMap<>();
-        Set<CompositionBudget> stoppedAt = EnumSet.noneOf(CompositionBudget.class);
+        Set<Figure.Budget> stoppedAt = new LinkedHashSet<>();
         boolean someCaseLeftUndrawn = part.cases().isEmpty();
         for (DecidingCase each : part.cases()) {
             CasesOfALineAsked.Atoms<InACase> atoms =
@@ -1985,8 +1984,7 @@ sealed interface ComparisonAssessment {
         }
         if (!stoppedAt.isEmpty()) {
             out.add(new Several.Part(part.id(), new Unread(atEachOf(against.filedAt(),
-                    new BlockReason.WhereALineDecidesNotWorkedOut(stoppedAt.stream()
-                            .map(CompositionBudget::figure).toList())),
+                    new BlockReason.WhereALineDecidesNotWorkedOut(List.copyOf(stoppedAt))),
                     WhereAReadingStopped.ELSEWHERE), List.of()));
         }
         return List.copyOf(out);

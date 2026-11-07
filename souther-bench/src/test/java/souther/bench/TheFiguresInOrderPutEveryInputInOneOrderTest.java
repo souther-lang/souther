@@ -26,8 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * only while that pair tells every two figures apart; a figure added later whose name and
  * standing another already has would make it false without any test of the figures saying so.
  *
- * <p>The population is every figure of both kinds, and at more than one standing for the ones
- * that are handed one, including standings spelled alike.
+ * <p>The population is every figure of both kinds, each at more than one standing, since a
+ * compilation may hold either kind to another figure, including standings spelled alike.
  */
 class TheFiguresInOrderPutEveryInputInOneOrderTest {
 
@@ -69,7 +69,9 @@ class TheFiguresInOrderPutEveryInputInOneOrderTest {
     private static List<Figure> population() {
         List<Figure> out = new ArrayList<>();
         for (CompositionBudget each : CompositionBudget.values()) {
-            out.add(new Figure.Budget(each));
+            for (int standing : Set.copyOf(List.of(0, 1, 10, each.declared()))) {
+                out.add(new Figure.Budget(each, standing));
+            }
         }
         for (WorkFigure each : WorkFigure.values()) {
             for (String standing : Set.of("0", "1", "01", "10", "9", "")) {

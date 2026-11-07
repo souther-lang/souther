@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.semantics.ConditionJoin;
-import souther.compiler.types.BinOp;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -293,9 +292,9 @@ sealed interface ClauseExpr {
      * the fragment an imported clause falls outside of is the whole of them (spec
      * §invariant-discharge-representation).
      *
-     * <p>So: the call, the {@code if} an author wrote themselves, and a comparison against a
-     * written {@code true} or {@code false} — {@code p == false} and {@code p /= true} deny what
-     * {@code p} states, and the other two state it.
+     * <p>So: the call and a comparison against a written {@code true} or {@code false}, which are
+     * what {@link TruthRestatement} reads and the reading of the ways a value arrives reads too, and
+     * the {@code if} an author wrote themselves.
      *
      * <p>The equivalence class and not the spellings. What a reading is given is a part and a
      * polarity, so {@code not (p == false)} and {@code p} arrive as the same pair — and a reader
@@ -303,11 +302,11 @@ sealed interface ClauseExpr {
      */
     private static ClauseExpr restating(Core clause, boolean positive, List<Core> spelled,
                                         ClauseOccurrence at, int[] counted) {
-        Core bare = Core.withoutStanding(clause);
-        if (bare instanceof Core.PreservedCall call && DischargeRules.denies(call.operation())
-                && call.args().size() == 1) {
-            return of(call.args().get(0), !positive, spelled, at, counted);
+        TruthRestatement restated = TruthRestatement.of(clause);
+        if (restated != null) {
+            return of(restated.operand(), restated.denies() != positive, spelled, at, counted);
         }
+        Core bare = Core.withoutStanding(clause);
         if (bare instanceof Core.If iff
                 && Core.withoutStanding(iff.then()) instanceof Core.Bool t && !t.value()
                 && Core.withoutStanding(iff.els()) instanceof Core.Bool f && f.value()) {
@@ -321,29 +320,6 @@ sealed interface ClauseExpr {
             return new Joined(spelled, positive, at, ConditionJoin.EITHER.under(positive),
                     under(iff.cond(), positive, counted), under(iff.els(), positive, counted));
         }
-        return againstATruthValue(clause, positive, spelled, at, counted);
-    }
-
-    /**
-     * The same of a comparison one side of which is a written {@code true} or {@code false}.
-     *
-     * <p>Whether it denies is whether the two disagree: an equality against {@code true} and a
-     * disequality against {@code false} state what the other side states, and the other pair deny
-     * it. Read off the operator and the literal rather than written out as four cases, so a fifth
-     * way to write the same thing arrives here as one of the two answers and not as a case nobody
-     * added.
-     */
-    private static ClauseExpr againstATruthValue(Core clause, boolean positive,
-                                                 List<Core> spelled, ClauseOccurrence at, int[] counted) {
-        if (!(Core.withoutStanding(clause) instanceof Core.Binary bin)
-                || (bin.op() != BinOp.EQ && bin.op() != BinOp.NE)) {
-            return null;
-        }
-        boolean holds = bin.op() == BinOp.EQ;
-        if (Core.withoutStanding(bin.right()) instanceof Core.Bool truth) {
-            return of(bin.left(), (truth.value() != holds) != positive, spelled, at, counted);
-        }
-        return Core.withoutStanding(bin.left()) instanceof Core.Bool truth
-                ? of(bin.right(), (truth.value() != holds) != positive, spelled, at, counted) : null;
+        return null;
     }
 }

@@ -426,7 +426,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.DataChecker.collectConstructions",
                     "asks the enum whether the right operand runs on every run, for which"
                             + " constructions building a value runs"),
-            new Held("souther.compiler.flow.ValueArrivals.reading",
+            new Held("souther.compiler.flow.ValueArrivals.meant",
                     "asks the enum whether the right operand runs on every run"),
             new Held("souther.compiler.flow.ValueArrivals.through", "and which way it runs under"),
             new Held("souther.compiler.reading.CoverageRead.descend",
@@ -595,7 +595,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " until somebody says what it means here"),
             new Held("souther.compiler.check.Conditions.asSizeComparison",
                     "writes the equality an emptiness check means: a size stood against nought"),
-            new Held("souther.compiler.check.ClauseExpr.againstATruthValue",
+            new Held("souther.compiler.check.TruthRestatement.of",
                     "asks whether the operator is the equality or the disequality, for a comparison"
                             + " one side of which is a written truth value: which of the two it is"
                             + " and which value was written are together what says whether such a"

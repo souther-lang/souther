@@ -28,4 +28,16 @@ public enum Truth {
     public static Truth of(boolean value) {
         return value ? TRUE : FALSE;
     }
+
+    /**
+     * What the path arrives with where the value is denied: the other truth, and no answer where
+     * there was none, since a value nobody read the truth of is not read by being denied.
+     */
+    public Truth denied() {
+        return switch (this) {
+            case TRUE -> FALSE;
+            case FALSE -> TRUE;
+            case UNREAD -> UNREAD;
+        };
+    }
 }

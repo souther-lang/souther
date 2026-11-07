@@ -406,6 +406,29 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
         return Proposition.any(choices);
     }
 
+    /**
+     * Choices past a figure name the figure whose number they were held to: four of eight are
+     * seventy choices, past sixteen of them by how many they are, and past sixteen parts long
+     * before they are past the choices.
+     */
+    @Test
+    void choicesPastAFigureNameTheFigureTheyWereHeldTo() {
+        List<Proposition> eight = new ArrayList<>();
+        for (int at = 0; at < 8; at++) {
+            eight.add(new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("s" + at)),
+                    true));
+        }
+        WhichOfThemHold four = WhichOfThemHold.of(relation(eight, Rel.EQ, 4));
+        CompositionBudget sixteen = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG;
+
+        assertEquals(new WhichOfThemHold.Written(null, sixteen, 0),
+                four.written(sixteen, CompositionBudget.PARTS_A_DERIVATION_CONCLUDES),
+                "past the choices");
+        assertEquals(new WhichOfThemHold.Written(null, sixteen, 0),
+                four.written(CompositionBudget.READINGS_OF_ONE_CONDITION, sixteen),
+                "past the parts");
+    }
+
     /** {@code #each - against} standing to nought as {@code rel} says. */
     private static Proposition howMany(List<Proposition> each, Rel rel, long against) {
         return Proposition.compared(relation(each, rel, against), true);

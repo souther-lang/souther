@@ -19,18 +19,26 @@ import java.util.Set;
  * is not one of these: what is not carried is not said, and nothing reconstructs it later from a
  * word that several figures share.
  *
- * <p>Two kinds: the figures the composing stage holds itself to, which are fixed
- * ({@link Budget}), and the rest of this compiler's, some fixed and some handed to a run
- * ({@link WorkFigure.At}). Sealed, so a figure is a value whose equality is its kind's and an
- * answer that holds one is compared by what it holds.
+ * <p>Two kinds: the figures the composing stage holds itself to ({@link Budget}), and the rest of
+ * this compiler's ({@link WorkFigure.At}). Each is some fixed where it is declared and some a
+ * compilation is set up with, so each carries the number it stood at where it was reached, and
+ * a reader is told the number the compilation it is reading used. Sealed, so a figure is a value
+ * whose equality is its kind's and its number's, and an answer that holds one is compared by
+ * what it holds.
  */
 public sealed interface Figure permits Figure.Budget, WorkFigure.At {
 
-    /** One of the composing stage's budgets, which stands at the figure it declares. */
-    record Budget(CompositionBudget budget) implements Figure {
+    /**
+     * One of the composing stage's budgets, and the figure it stood at where it was reached
+     * ({@link CompositionBudget#figure}): the one the compilation reaching it held it to.
+     */
+    record Budget(CompositionBudget budget, int at) implements Figure {
 
         public Budget {
             Objects.requireNonNull(budget, "a budget reached is some budget");
+            if (at < 0) {
+                throw new IllegalArgumentException("a budget stands at no fewer than none: " + at);
+            }
         }
 
         @Override
@@ -45,7 +53,7 @@ public sealed interface Figure permits Figure.Budget, WorkFigure.At {
 
         @Override
         public String most() {
-            return Integer.toString(budget.maximum());
+            return Integer.toString(at);
         }
     }
 

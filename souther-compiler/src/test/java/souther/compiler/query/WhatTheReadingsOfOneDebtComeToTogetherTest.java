@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.observe.Figure;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.query.ItemAssessment.Coverage;
@@ -53,8 +54,9 @@ class WhatTheReadingsOfOneDebtComeToTogetherTest {
     @Test
     void aRowFoundBesideCasesNobodyWorkedOutSettlesTheDebt() {
         WeakeningSet whichCase = WeakeningSet.of(new Weakening.BorderValueUnreadable(null,
-                new ReadingGap.CasesNotWorkedOut(List.of(
-                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure()))));
+                new ReadingGap.CasesNotWorkedOut(List.of(new Figure.Budget(
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.declared())))));
         Measurement<Coverage> notWorkedOut =
                 new Measurement.Partial<>(new Coverage.NoHit(), whichCase);
         for (List<Measurement<Coverage>> readings : List.of(List.of(found(), notWorkedOut),

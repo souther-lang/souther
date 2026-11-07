@@ -453,7 +453,7 @@ public final class AnAnswerComposed {
      * and a value is not composed past it here.
      */
     private static CompositionBudget stoppedAt(WhyNotTaken why) {
-        return why.figure().orElse(null) instanceof Figure.Budget(CompositionBudget budget)
+        return why.figure().orElse(null) instanceof Figure.Budget(CompositionBudget budget, var _)
                 ? budget : null;
     }
 
