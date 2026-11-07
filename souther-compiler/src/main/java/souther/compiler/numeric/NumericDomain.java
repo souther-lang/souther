@@ -1937,9 +1937,16 @@ public final class NumericDomain<A> {
         }
 
         /**
-         * Every sum of a value of this and a value of {@code other}: the ends added, an end
-         * reached where both are, and no end on a side where either has none. Null where the sum
-         * of two ends is no number written down.
+         * Every sum of a value of this and a value of {@code other}, where each is a run as
+         * {@link #wholeRunOf} answers one: the ends added, an end reached where both are, and no
+         * end on a side where either has none. Null where the sum of two ends is no number
+         * written down.
+         *
+         * <p>That holds of runs whose every end is a value taken, or, where the values are dense,
+         * one approached as near as any. It does not of an end left out over whole numbers:
+         * {@code (0, 2]} of whole numbers starts at one, and two such add to {@code (0, 4]},
+         * where no pair of them comes to one. Close such an end to the whole number inside it
+         * first.
          */
         public Bounds plus(Bounds other) {
             Endpoint low = plusEnd(min, other.min);

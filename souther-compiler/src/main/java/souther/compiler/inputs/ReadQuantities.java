@@ -188,15 +188,15 @@ final class ReadQuantities implements Quantities {
      */
     private volatile StructuralContext.Merge accumulated;
     /**
-     * What the terms {@link #accumulated} is worked out over were listed by ({@link Lineage});
-     * null until anybody asks, where this reading was not handed it.
+     * The terms {@link #accumulated} is worked out over, and what they were listed by
+     * ({@link Listing}); null until anybody asks, where this reading was not handed them.
      *
      * <p>A reading made by fixing one more term or taking one more condition in lists what the one
-     * it was made from lists and the terms it adds, so it is handed that lineage with those added.
+     * it was made from lists and the terms it adds, so it is handed that listing with those added.
      * A search fixes one more term at each step of a path hundreds of terms long, and each step
      * putting all of them in order again compared every pair a sort compares.
      */
-    private volatile Lineage lineage;
+    private volatile Listing listing;
     /**
      * What the declarations leave under each context, before anything is fixed or taken in.
      *
@@ -513,7 +513,7 @@ final class ReadQuantities implements Quantities {
                 contexts, oneMoreFixed, oneMoreTaken, answered, null);
     }
 
-    /** The same, handed what its terms were listed by ({@link #lineage}), or null. */
+    /** The same, handed the terms it lists ({@link #listing}), or null. */
     private ReadQuantities(Map<TermPath, OpenedRules> byRoot, Roots roots,
                            Map<TermPath, Position> byPath, List<CasesRead> cases,
                            java.util.function.Function<TermPath, Type> typeAt,
@@ -522,8 +522,8 @@ final class ReadQuantities implements Quantities {
                            List<HeldAgainst> heldAgainst, Contexts contexts,
                            OneMoreFixed oneMoreFixed, OneMoreTaken oneMoreTaken,
                            Map<StructuralContext, ConstraintState<InputAtom>> answered,
-                           Lineage lineage) {
-        this.lineage = lineage;
+                           Listing listing) {
+        this.listing = listing;
         this.contexts = contexts;
         this.answered = answered;
         this.oneMoreFixed = oneMoreFixed;
@@ -1302,7 +1302,7 @@ final class ReadQuantities implements Quantities {
         OneMoreTaken oneMore = assumed.isEmpty() ? null : new OneMoreTaken(both.last(), answered);
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, ruleReading,
                 both, pairs, contexts, null, oneMore, new ConcurrentHashMap<>(),
-                lineage().takingIn(List.copyOf(taking.terms())));
+                listing().takingIn(List.copyOf(taking.terms())));
     }
 
     /**
@@ -1598,31 +1598,56 @@ final class ReadQuantities implements Quantities {
 
     /** {@link #accumulated}, worked out. */
     private StructuralContext.Merge whereItStands() {
-        Lineage terms = lineage();
-        return contexts.standing(terms, () -> whereTheyStand(terms.listed()));
+        Listing terms = listing();
+        return contexts.standing(terms.lineage(), () -> whereTheyStand(terms.listed()));
     }
 
     /**
-     * What the terms fixed and taken in were listed by: handed on by the reading this one was made
-     * from where it was ({@link #lineage}), and otherwise listed here, once.
+     * The terms fixed and taken in: handed on by the reading this one was made from where it was
+     * ({@link #listing}), and otherwise listed here, once.
      */
-    private Lineage lineage() {
-        Lineage had = lineage;
+    private Listing listing() {
+        Listing had = listing;
         if (had != null) {
             return had;
         }
         List<NumericTerm> taken = new ArrayList<>();
         assumed.forEach(each -> taken.addAll(each.terms()));
-        had = contexts.nothingListed.fixing(List.copyOf(fixed.keySet()))
+        had = new Listing(contexts.nothingListed, List.of()).fixing(List.copyOf(fixed.keySet()))
                 .takingIn(List.copyOf(taken));
-        lineage = had;
+        listing = had;
         return had;
+    }
+
+    /**
+     * The terms a reading has fixed and taken in, in the order {@link #accumulated} puts them in
+     * ({@link Listed#ORDER}), and what they were listed by.
+     *
+     * <p>The list is the reading's, and goes when the reading does. It is a function of the
+     * lineage, but a lineage is held by every one made from it, and by every standing kept by it
+     * ({@link Contexts#standing}): a list held there would be held as long as anything listed after
+     * it, and a path of readings one term apart would hold a list of each length.
+     */
+    private record Listing(Lineage lineage, List<Listed> listed) {
+
+        /** These, with {@code terms} fixed after the ones fixed before and listed before what was
+         *  taken in. */
+        Listing fixing(List<NumericTerm> terms) {
+            return terms.isEmpty() ? this : new Listing(lineage.then(terms, false),
+                    Listed.with(listed, Listed.of(terms, false, lineage.fixedSoFar)));
+        }
+
+        /** These, with {@code terms} taken in after everything taken in before. */
+        Listing takingIn(List<NumericTerm> terms) {
+            return terms.isEmpty() ? this : new Listing(lineage.then(terms, true),
+                    Listed.with(listed, Listed.of(terms, true, lineage.takenSoFar)));
+        }
     }
 
     /**
      * What a reading's terms were listed by: the lineage of the reading it was made from, and the
      * terms it added, fixed or taken in, in the order they arrived. Two readings of one lineage list
-     * the same terms in the same order ({@link #listed}), which settles where they stand together,
+     * the same terms in the same order ({@link Listing}), which settles where they stand together,
      * so it is what that is kept by ({@link Contexts#standing}).
      *
      * <p>Its hash is worked out once, of the one before and the terms added, and two lineages are
@@ -1641,6 +1666,9 @@ final class ReadQuantities implements Quantities {
      *
      * <p>Two readings listing the same terms by another lineage are kept apart, which only works
      * where they stand out again.
+     *
+     * <p>It holds what it adds and how many were listed before, and nothing worked out of all
+     * the terms: everything made from it, and every standing kept by it, holds it.
      */
     private static final class Lineage {
 
@@ -1651,12 +1679,6 @@ final class ReadQuantities implements Quantities {
         /** How many of the terms were fixed, and how many taken in. */
         private final int fixedSoFar;
         private final int takenSoFar;
-        /**
-         * The terms in the order {@link #accumulated} puts them in ({@link Listed#ORDER}): the ones
-         * the lineage before lists, with the ones added put where they go. A function of the
-         * lineage, worked out the first time anybody asks; null until then.
-         */
-        private volatile List<Listed> listed;
         /**
          * The lineages {@link #then} made, held weakly: one a reading still lists by is found
          * again, and one nothing lists by any more is not kept for it. Null until {@link #then} is
@@ -1679,38 +1701,8 @@ final class ReadQuantities implements Quantities {
             this.takenSoFar = takenIn ? takenBefore + added.size() : takenBefore;
         }
 
-        /** This, with {@code terms} fixed after the ones fixed before and listed before what was
-         *  taken in. */
-        Lineage fixing(List<NumericTerm> terms) {
-            return terms.isEmpty() ? this : then(terms, false);
-        }
-
-        /** This, with {@code terms} taken in after everything taken in before. */
-        Lineage takingIn(List<NumericTerm> terms) {
-            return terms.isEmpty() ? this : then(terms, true);
-        }
-
-        List<Listed> listed() {
-            List<Listed> had = listed;
-            if (had != null) {
-                return had;
-            }
-            if (before == null) {
-                had = List.of();
-            } else {
-                List<Listed> more = new ArrayList<>();
-                int at = takenIn ? before.takenSoFar : before.fixedSoFar;
-                for (NumericTerm term : added) {
-                    more.add(new Listed(term.spelling(), term.subjectPath(), takenIn, at++));
-                }
-                had = Listed.with(before.listed(), more);
-            }
-            listed = had;
-            return had;
-        }
-
         /** This, with {@code terms} added, fixed or taken in. */
-        private synchronized Lineage then(List<NumericTerm> terms, boolean taking) {
+        synchronized Lineage then(List<NumericTerm> terms, boolean taking) {
             Lineage one = new Lineage(this, terms, taking);
             if (made == null) {
                 made = new WeakHashMap<>();
@@ -1768,13 +1760,31 @@ final class ReadQuantities implements Quantities {
             return Integer.compare(one.at, other.at);
         };
 
-        /** {@code before}, in order, with each of {@code more} put where it goes. */
+        /** {@code terms} listed as fixed, or as taken in, from {@code at} on. */
+        static List<Listed> of(List<NumericTerm> terms, boolean takenIn, int at) {
+            List<Listed> out = new ArrayList<>(terms.size());
+            for (NumericTerm term : terms) {
+                out.add(new Listed(term.spelling(), term.subjectPath(), takenIn, at++));
+            }
+            return out;
+        }
+
+        /** {@code before}, in order, with each of {@code more} put where it goes: the two lists
+         *  in order merged, so that listing many terms at once costs one pass and one sort of
+         *  them. */
         static List<Listed> with(List<Listed> before, List<Listed> more) {
-            List<Listed> out = new ArrayList<>(before.size() + more.size());
-            out.addAll(before);
-            for (Listed each : more) {
-                int found = Collections.binarySearch(out, each, ORDER);
-                out.add(found < 0 ? -found - 1 : found, each);
+            List<Listed> added = new ArrayList<>(more);
+            added.sort(ORDER);
+            List<Listed> out = new ArrayList<>(before.size() + added.size());
+            int one = 0;
+            int other = 0;
+            while (one < before.size() || other < added.size()) {
+                if (other == added.size() || (one < before.size()
+                        && ORDER.compare(before.get(one), added.get(other)) <= 0)) {
+                    out.add(before.get(one++));
+                } else {
+                    out.add(added.get(other++));
+                }
             }
             return Collections.unmodifiableList(out);
         }
@@ -2357,7 +2367,7 @@ final class ReadQuantities implements Quantities {
         }
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, ruleReading,
                 assumed, heldAgainst, contexts, oneMoreThan(both), oneMoreTaken, answered,
-                lineage().fixing(List.copyOf(firstFixed)));
+                listing().fixing(List.copyOf(firstFixed)));
     }
 
     /**

@@ -148,6 +148,12 @@ class AWalkAddingDecimalsCompletesStepByStepTest {
      * Two totals of one list, added, are named by the comparison as the one total of what each
      * element comes to. The operations read the two, which a row holds by the list it is built
      * with and not as terms of its own, and a row of one element writes what the one total takes.
+     *
+     * <p>Neither total is a number of the row, so what is asked of the walks there is that the
+     * list is one that is built: every element written at no more places than a row is built at,
+     * and so each total. That the builder writes them so is
+     * {@link AListATotalIsTheSumOfIsWrittenAtNoMorePlacesThanARowIsBuiltAtTest}; refused for the
+     * want of the totals among the row's numbers, the walks would leave the comparison unread.
      */
     @Test
     void twoTotalsOfOneListAreReadAsTheOneTotalTheComparisonNames() {

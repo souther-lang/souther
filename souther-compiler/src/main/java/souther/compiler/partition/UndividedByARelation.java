@@ -8396,6 +8396,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             }
             places.add(place);
+            // Each field's run is the one the region answers for the place, every end a value
+            // taken, and moved by one or minus one: the runs a sum of their ends is a sum of.
             sum = sum == null ? part : sum.plus(part);
             if (sum == null) {
                 return null;
