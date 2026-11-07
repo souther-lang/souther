@@ -4,6 +4,7 @@ import souther.compiler.check.SeededWalk;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.ElementValue;
+import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.WrittenOperation;
@@ -73,6 +74,10 @@ record AddedOfEachElement(int sign, int factors) {
      * What a total adds up of each element, where {@code term} is a total over a container of a
      * path of each element or one product of paths of it, at the weight one or minus one; null
      * where it is any other number.
+     *
+     * <p>The total of a walk joining two maps adds, for each entry of one, its value times what the
+     * other files under its key or a nought written in its place: two numbers multiplied, as the
+     * step that total is read of is written ({@link InputNumber#ofAWalkJoiningTwoMaps}).
      */
     static AddedOfEachElement ofTheTotal(NumericTerm term) {
         if (term instanceof NumericTerm.TakenOf taken) {
@@ -85,6 +90,9 @@ record AddedOfEachElement(int sign, int factors) {
         }
         if (over.source() instanceof RunSource.ProjectedOccurrences) {
             return new AddedOfEachElement(1, 1);
+        }
+        if (over.source() instanceof RunSource.JoinedOccurrences) {
+            return new AddedOfEachElement(1, 2);
         }
         if (!(over.source() instanceof RunSource.ComputedOccurrences computed)) {
             return null;

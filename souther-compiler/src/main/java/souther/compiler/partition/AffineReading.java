@@ -1684,12 +1684,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return false;
                 }
                 NumericTerm total = addedAsItIs(walk.added());
+                AddedOfEachElement each = total == null ? null : joinsTwoMaps(total)
+                        ? AddedOfEachElement.ofTheTotal(total) : addedByTheStep(seeded, total);
                 if (seeded.step().body().type() == Type.DECIMAL) {
                     BigDecimal seed = aDecimalWrittenOut(seeded.seed());
-                    AddedOfEachElement each = seed == null || total == null ? null
-                            : joinsTwoMaps(total) ? new AddedOfEachElement(1, 2)
-                            : addedByTheStep(seeded, total);
-                    if (each == null) {
+                    if (seed == null || each == null) {
                         return false;
                     }
                     told.walksAddingDecimals(answer, seed, asTheRelationNamesIt(total),
@@ -1703,7 +1702,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     tellAnIntTotal(node, answer, List.of());
                     return true;
                 }
-                if (total != null && (joinsTwoMaps(total) || addedByTheStep(seeded, total) != null)) {
+                if (each != null) {
                     tellAnIntTotal(node, answer, List.of());
                     told.partials.add(total);
                     return true;
@@ -1811,9 +1810,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 };
             }
 
-            /** Whether {@code total} is the walk joining two maps, which is read only of the one
-             *  step that adds the product as it is written
-             *  ({@link InputNumber#ofAWalkJoiningTwoMaps}). */
+            /** Whether {@code total} is the walk joining two maps, whose step is read where the
+             *  total is ({@link InputNumber#ofAWalkJoiningTwoMaps}) and is asked nothing again. */
             private static boolean joinsTwoMaps(NumericTerm total) {
                 return total instanceof NumericTerm.TakenOver over
                         && over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds
@@ -1822,9 +1820,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             /**
              * The total of a container that {@code added} is, at the weight one, where it adds up
-             * a part of each element written as a path of it or a product of paths
-             * ({@link AddedOfEachElement#ofTheTotal}), or is the walk joining two maps — or null
-             * where it adds anything beside that.
+             * a part of each element written as a path of it or a product of paths, or is the
+             * walk joining two maps ({@link AddedOfEachElement#ofTheTotal}) — or null where it
+             * adds anything beside that.
              */
             private static NumericTerm addedAsItIs(LinearForm<NumericTerm> added) {
                 if (added.coefs().size() != 1 || !added.constant().isZero()) {
@@ -1832,8 +1830,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
                 Map.Entry<NumericTerm, ExactRatio> only = added.coefs().entrySet().iterator().next();
                 return ExactRatio.ONE.equals(only.getValue())
-                        && (AddedOfEachElement.ofTheTotal(only.getKey()) != null
-                                || joinsTwoMaps(only.getKey())) ? only.getKey() : null;
+                        && AddedOfEachElement.ofTheTotal(only.getKey()) != null
+                        ? only.getKey() : null;
             }
 
             /**
