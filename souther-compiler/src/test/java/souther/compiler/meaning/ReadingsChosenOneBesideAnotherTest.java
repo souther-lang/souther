@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
-import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -127,47 +126,23 @@ class ReadingsChosenOneBesideAnotherTest {
     }
 
     /**
-     * Two readings each chosen on one part of its own multiply, and said as their answers they
-     * are as many ways: each answer is chosen on where its one part was. Nothing is said.
+     * Two readings each chosen on one part of its own, made together: their choices multiply,
+     * and that is what is told. What the readings would come to declared as a behavior is
+     * another compilation, which nothing here asks.
      */
     @Test
-    void readingsEachChosenOnOnePartAreAsManyWaysSaidAsAnswers() {
+    void readingsEachChosenOnOnePartMultiplyAndAreNamed() {
         DecidingCase.Cases next = anyOf(one("h2a"), not("h2a"));
-        assertEquals(Map.of(),
+        assertEquals(Map.of("H", List.of("h1", "h2")),
                 found(anyOf(together(one("h1a"), next), together(not("h1a"), next))));
     }
 
     /**
-     * Chosen on {@code h1a}, and on {@code h1b} only inside an alternative holding neither
-     * {@code h1a} nor its denial: said as its answer, no way of {@code h1} holds it both ways,
-     * and the ways are as many.
-     */
-    @Test
-    void aChoiceOnAnotherPartPastNoSideOfTheFirstIsAsManyWaysAsAnswers() {
-        assertEquals(Map.of(), found(together(
-                anyOf(together(one("h1a"), one("ga")), together(not("h1a"), one("gb")),
-                        together(one("gc"), anyOf(one("h1b"), not("h1b")))),
-                anyOf(one("h2a"), not("h2a")))));
-    }
-
-    /**
-     * Chosen on {@code h1a}, with {@code h1b} on both sides, held on one and denied on the other:
-     * said as its answer, each side holds it one way, and the ways are as many.
-     */
-    @Test
-    void aPartOnBothSidesOfAChoiceHeldOppositeWaysIsAsManyWaysAsAnswers() {
-        assertEquals(Map.of(), found(together(
-                anyOf(together(one("h1a"), one("h1b")), together(not("h1a"), not("h1b"))),
-                anyOf(one("h2a"), not("h2a")))));
-    }
-
-    /**
      * Chosen on whether a part holds, and again on another part of the same reading inside one
-     * side, as a walk that reaches the next candidate past every way the one before it fails:
-     * said as its answer, one of the ways in there holds the answer both ways.
+     * side, as a walk that reaches the next candidate past every way the one before it fails.
      */
     @Test
-    void aReadingChosenOnTwoOfItsPartsAlongOneWayIsFewerWaysAsItsAnswer() {
+    void aWalkPastEveryWayTheCandidateBeforeFailsMultipliesItsReadings() {
         DecidingCase.Cases next = anyOf(together(one("h2a"), anyOf(one("h2b"), not("h2b"))),
                 not("h2a"));
         DecidingCase.Cases failing = anyOf(together(one("h1b"), next), together(not("h1b"),
@@ -408,40 +383,6 @@ class ReadingsChosenOneBesideAnotherTest {
                 + named);
     }
 
-    /** One part as a way holds it: which part, or which reading's answer, and whether it holds. */
-    private record Held(String what, boolean holds) {}
-
-    /** Each part held and denied, by the proposition a case holds it as. */
-    private static final Map<Proposition, Held> AS_HELD = asHeld();
-
-    private static Map<Proposition, Held> asHeld() {
-        Map<Proposition, Held> out = new HashMap<>();
-        PARTS.keySet().forEach(name -> {
-            out.put(part(name), new Held(name, true));
-            out.put(part(name).denied(), new Held(name, false));
-        });
-        return out;
-    }
-
-    /** Every way of choosing, as the parts it holds, each said by {@code said}: a way holding a
-     *  part both ways is no way, and two ways holding the same are one. */
-    private static Set<Set<Held>> waysAsHeld(DecidingCase.Cases cases, Function<String, String> said) {
-        Set<Set<Held>> out = new LinkedHashSet<>();
-        for (List<Proposition> way : heldAlong(cases)) {
-            Set<Held> held = new LinkedHashSet<>();
-            for (Proposition part : way) {
-                Held as = AS_HELD.get(part);
-                if (as != null) {
-                    held.add(new Held(said.apply(as.what()), as.holds()));
-                }
-            }
-            if (held.stream().noneMatch(one -> held.contains(new Held(one.what(), !one.holds())))) {
-                out.add(held);
-            }
-        }
-        return out;
-    }
-
     /** The parts each way of choosing holds, walked as a tree. */
     private static List<List<Proposition>> heldAlong(DecidingCase.Cases cases) {
         return switch (cases) {
@@ -469,45 +410,21 @@ class ReadingsChosenOneBesideAnotherTest {
     }
 
     /**
-     * What naming a helper claims, held to what the cases would be: declared as a behavior, each
-     * reading of it is one answer, so every part a reading of it alone made is that reading's
-     * answer, held as the part was. Where the helper is named, the ways the cases are, told
-     * apart by what they hold, are fewer with each reading said as its answer than with its
-     * parts. Asked by walking every way and nothing the fold keeps, so a rule the fold reads that
-     * names a helper declaring which leaves the cases as many is caught here.
+     * What every way of a case holds comes in the order its parts are met, and is the same
+     * whichever run of the machine asks: the readings that made them are asked for, and so
+     * numbered and told, in that order. A set iterated by a salt fixed once per process would
+     * give some other order of these ten parts on almost every run.
      */
     @Test
-    void whereAHelperIsNamedSayingEachReadingAsItsAnswerLeavesFewerWays() {
-        Random dice = new Random(30701);
-        List<String> names = List.copyOf(PARTS.keySet().stream().sorted().toList());
-        Map<Spelling, BitSet> madeBy = madeBy(PARTS, READINGS);
-        int named = 0;
-        for (int round = 0; round < 12000; round++) {
-            DecidingCase.Cases cases = drawn(dice, names);
-            if (ways(cases, 4000) == null) {
-                continue;
-            }
-            // Only cases the taking apart could write: no way holds a part both ways, and no
-            // two hold the same.
-            int as = waysAsHeld(cases, Function.identity()).size();
-            if (as != heldAlong(cases).size()) {
-                continue;
-            }
-            Map<String, BitSet> found = ReadingsChosenOneBesideAnother.of(cases,
-                    spelling -> madeBy.getOrDefault(spelling, new BitSet()), GROUP::get,
-                    ReadingsChosenOneBesideAnotherTest::mayBeOne);
-            for (String group : found.keySet()) {
-                named++;
-                int answered = waysAsHeld(cases, name -> {
-                    List<String> by = PARTS.get(name);
-                    return by.size() == 1 && GROUP.get(READINGS.indexOf(by.getFirst()))
-                            .equals(group) ? "answer of " + by.getFirst() : name;
-                }).size();
-                assertTrue(answered < as, group + " named, and said as its answers the cases are"
-                        + " as many ways (" + as + " to " + answered + "): " + cases);
-            }
-        }
-        assertTrue(named > 50, "something is named: " + named);
+    void whatEveryWayHoldsIsInTheOrderItsPartsAreMet() {
+        List<Proposition> parts = List.of("h1c", "ga", "h2b", "ia", "h1a", "gc", "h2a", "ib",
+                "gb", "h1b").stream().map(ReadingsChosenOneBesideAnotherTest::part).toList();
+        DecidingCase.Cases cases = new DecidingCase.Cases.One(Proposition.all(parts));
+        List<Proposition> held = List.copyOf(
+                ReadingsChosenOneBesideAnother.heldOnEveryWay(cases).get(cases));
+        List<Proposition> written = cases instanceof DecidingCase.Cases.One(var condition)
+                && condition instanceof Proposition.All all ? all.parts() : List.of();
+        assertEquals(written, held);
     }
 
     private static BitSet ofGroup(BitSet readings, String group) {
