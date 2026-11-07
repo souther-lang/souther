@@ -21,6 +21,13 @@ final class Collect {
         return out;
     }
 
+    /** {@code value}, and every value it is made of. */
+    static Set<Value> values(Value value) {
+        Set<Value> out = new LinkedHashSet<>();
+        visit(value, out::add);
+        return out;
+    }
+
     /** The values that stand as what an operation, a closure or a sameness is handed — the ones a
      *  statement holding of every value is worth asking of. */
     static Set<Value> handed(LawProposition<Value> holds) {

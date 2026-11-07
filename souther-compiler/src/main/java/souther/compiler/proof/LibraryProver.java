@@ -399,9 +399,13 @@ public final class LibraryProver {
                 yield op == BinOp.DIV || Type.RATIONAL.equals(one) || Type.RATIONAL.equals(other)
                         ? Type.RATIONAL : one != null && one.equals(other) ? one : null;
             }
+            // Both sides of a join are of one type, so whichever side says more says what the
+            // join is: a list written out says list where the other is only a type variable.
             case Value.Joined(Value left, Value right) -> {
                 Type one = typeOf(left, takes, startedAs);
-                yield one != null ? one : typeOf(right, takes, startedAs);
+                Type other = typeOf(right, takes, startedAs);
+                yield one instanceof Type.ListOf || one == Type.STRING || other == null ? one
+                        : other;
             }
             case Value.PayloadOf(Value option) ->
                     typeOf(option, takes, startedAs) instanceof Type.OptionOf(Type element)
@@ -613,6 +617,9 @@ public final class LibraryProver {
         private final Map<LibraryTerm, List<Reading.Case>> met;
         private final Reading reading;
         private final BigInteger mostElements;
+        /** The parts of what the walk carries each of whose elements holds no more than the part
+         *  walked: the elements of a map of lists a step files one more element in. */
+        private final Set<List<Integer>> elementsHeld = new LinkedHashSet<>();
 
         Walked(Induction induction, List<Part> parts, Map<LibraryTerm, List<Reading.Case>> met,
                Reading reading, BigInteger mostElements) {
@@ -621,6 +628,45 @@ public final class LibraryProver {
             this.met = met;
             this.reading = reading;
             this.mostElements = mostElements;
+        }
+
+        /**
+         * Tells {@link #elementsHeld} each part of {@code paths} each element of which holds no
+         * more than the part walked, by induction on the elements walked: the part starts with
+         * none, and every step answers it as it was or with one value put in by an operation
+         * that puts a value in ({@link Library#puts}) that holds no more than the part walked
+         * with the element the step is handed — where what is in it already does.
+         */
+        void heldElementByElement(List<List<Integer>> paths) {
+            for (List<Integer> path : paths) {
+                Value started = Induction.at(induction.seed(), path);
+                LinearForm<LawNumber<Value>> size = reading.size(started);
+                if (!size.coefs().isEmpty() || size.constant().signum() != 0) {
+                    continue;
+                }
+                elementsHeld.add(path);
+                Value before = Induction.at(CARRIED, path);
+                boolean held = true;
+                for (Reading.Case each : induction.stepped()) {
+                    Value after = Induction.at(each.is(), path);
+                    if (after.equals(before)) {
+                        continue;
+                    }
+                    held = after instanceof Value.Made(ValueName.Stdlib.Operation puts,
+                            List<Value> args)
+                            && library.puts(puts) instanceof Library.Put(int value, int into)
+                            && args.get(into).equals(before)
+                            && follows(each, List.of(), Props.compared(
+                                    reading.size(args.get(value)), Rel.LE,
+                                    reading.size(induction.walkedOneFurther())));
+                    if (!held) {
+                        break;
+                    }
+                }
+                if (!held) {
+                    elementsHeld.remove(path);
+                }
+            }
         }
 
         Induction induction() {
@@ -636,8 +682,10 @@ public final class LibraryProver {
         }
 
         /** Whether {@code goal} follows at a step where {@code each} was met: from what the walk
-         *  is proved to carry there, and from the part walked with the element it is handed being
-         *  a part of the list, which a collection holds. */
+         *  is proved to carry there, from the part walked with the element it is handed being
+         *  a part of the list, which a collection holds, and from each element of a part
+         *  {@link #elementsHeld} names holding no more than the part walked — of which the one
+         *  value an operation answers of that part's elements is one. */
         boolean follows(Reading.Case each, List<LawProposition<Value>> also,
                         LawProposition<Value> goal) {
             List<LawProposition<Value>> given = given(each, also);
@@ -645,6 +693,20 @@ public final class LibraryProver {
             given.add(Props.compared(further, Rel.LE, reading.size(induction.walkedToTheEnd())));
             given.add(Props.compared(further, Rel.LE,
                     LinearForm.constant(ExactRatio.of(mostElements))));
+            Set<Value> named = new LinkedHashSet<>(Collect.values(each.is()));
+            named.addAll(Collect.values(goal));
+            for (Value one : named) {
+                if (one instanceof Value.PayloadOf(Value.Made(ValueName.Stdlib.Operation gets,
+                        List<Value> args))
+                        && library.listing(gets) instanceof AppliedClosures.Listing
+                                .AtMostOneElementOf(int argument)
+                        && argument < args.size()
+                        && elementsHeld.stream().anyMatch(path ->
+                                args.get(argument).equals(Induction.at(CARRIED, path)))) {
+                    given.add(Props.compared(reading.size(one), Rel.LE,
+                            reading.size(induction.walkedSoFar())));
+                }
+            }
             return LibraryProver.this.follows(reading, given, induction.atAStep(), goal,
                     induction.spacedAtAStep());
         }
@@ -693,7 +755,9 @@ public final class LibraryProver {
             try {
                 if (!carries.isEmpty() && induction.prove() == null) {
                     Map<LibraryTerm, List<Reading.Case>> met = new IdentityHashMap<>(reading.met());
-                    return new Walked(induction, parts, met, reading, mostElements);
+                    Walked out = new Walked(induction, parts, met, reading, mostElements);
+                    out.heldElementByElement(paths);
+                    return out;
                 }
                 if (carries.isEmpty()) {
                     induction.stepped();
@@ -1225,6 +1289,11 @@ public final class LibraryProver {
          *  walked before the element it is handed. */
         List<Universal> atAStep() {
             return universal(CARRIED, view(WALKED));
+        }
+
+        /** The part walked before the element a step is handed. */
+        Value walkedSoFar() {
+            return view(WALKED);
         }
 
         /** The part walked once the step has taken the element it is handed. */

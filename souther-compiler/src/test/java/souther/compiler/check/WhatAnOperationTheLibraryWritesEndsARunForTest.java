@@ -262,12 +262,16 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
      * A collection a body builds holds no more than what it is shown to under the way the body
      * went to reach it, and a body answers where what it builds there fits: an insert reached
      * only where the key is there holds no more than the map; one reached either way, one more; a
-     * walk starting from a map holds it and one for each entry walked; and a walk joining whole
-     * lists holds what they hold together.
+     * walk starting from a map holds it and one for each entry walked; a walk joining whole
+     * lists holds what they hold together; and one filing each element in a list under its key
+     * holds, in every list, no more than it has walked, since the list it finds under the key is
+     * one of those it filed.
      */
     @Test
     void whatABodyBuildsIsHeldToWhatItIsShownToHoldWhereItIsReached() {
         LibraryEndings endings = LibraryEndings.shipped();
+        assertEquals(new GetsPast.Always(), endings.completionApartFromWhatItIsHanded(
+                ValueName.Stdlib.operation("List", "groupBy")));
         assertEquals(new GetsPast.Always(), endings.completionApartFromWhatItIsHanded(
                 ValueName.Stdlib.operation("Map", "updateIfPresent")));
         assertEquals(new GetsPast.WhereTheAnswerFits(GetsPast.together(1, 3)),
@@ -292,6 +296,20 @@ class WhatAnOperationTheLibraryWritesEndsARunForTest {
         }
         assertEquals(new Endings.Known(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE)),
                 endings.of(ValueName.Stdlib.operation("Int", "abs")));
+    }
+
+    /** One filing two for an element under a key, whether into the list it finds there or as
+     *  the list it starts there, may hold more under the key than it walked, and nothing is said
+     *  of where it answers. */
+    @Test
+    void aWalkFilingTwoForAnElementUnderAKeyIsNotKnownToAnswer() {
+        for (String[] rewrite : new String[][] {
+                {"| Some bucket -> bucket ++ [x],", "| Some bucket -> bucket ++ [x, x],"},
+                {"| None -> [x]\n", "| None -> [x, x]\n"}}) {
+            LibraryEndings endings = LibraryEndings.of(rewritten(rewrite[0], rewrite[1]));
+            assertEquals(new GetsPast.NotKnown(), endings.completionApartFromWhatItIsHanded(
+                    ValueName.Stdlib.operation("List", "groupBy")), rewrite[1]);
+        }
     }
 
     /** A value a step works out and then does not answer is worked out all the same, and what it
