@@ -39,19 +39,18 @@ import java.util.function.Function;
  * With every one of them fixed, each is a number beside the element as any input's is, and where
  * the element's own numbers turn over is worked out against it ({@link AStatementAtARow#turnsAt}).
  *
- * <p><b>An element read in a container of so many coming to those numbers.</b> A row holding the
- * elements of a group alone comes to what they come to, which is not the number fixed. So the group
- * is read with its own places answered by the row holding it and the container's whole numbers
- * answered by a row of as many elements coming to what is fixed: the group, one element holding
- * what is left of each total, and elements holding nought ({@link Fixed#readingOf}). What is read of the
- * container through that row is what the container chosen will come to, which is what the reading
- * of the group is for.
+ * <p><b>An element read with those numbers where they are fixed.</b> A row holding the elements of
+ * a group alone comes to what they come to, which is not the number fixed. So the group is read
+ * with its own places answered by the row holding it and every number of the whole answered as
+ * fixed ({@link Fixed#beside}, read through {@link BorderQuantity.Observation#fixedAt}): what it
+ * answers in any container coming to them.
  *
  * <p><b>Then the elements are moved to come to it.</b> The elements a sharing draws are the values
  * they were listed at, and a total of them is whatever those come to. Each is moved at every place
- * a total adds up, inside the run of that place its answers hold over — between the numbers that
- * place turns over at — until the elements come to what was fixed ({@link Fixed#spread}). What
- * comes of that is read again whole before it is offered, as every container is.
+ * a total adds up, once for each place to the one number every total of it asks, inside the run of
+ * that place its answers hold over — between the numbers that place turns over at — until the
+ * elements come to what was fixed ({@link Fixed#spread}). What comes of that is read back against
+ * every total fixed, and read again whole before it is offered, as every container is.
  */
 final class ContainerAsAWhole {
 
