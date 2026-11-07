@@ -113,6 +113,23 @@ public final class PositionsAStatementReads {
         return Optional.of(Collections.unmodifiableSet(out));
     }
 
+    /**
+     * Every place each number {@code quantity} is read off ({@link NumericTerm#placesReadOff}) —
+     * both factors of a product, and not only the one it is filed under — and each value a binding
+     * holds that it reads, the places first; or empty where it reads anything else: an answer,
+     * what a walk carried, a piece of a string.
+     */
+    public static Optional<Set<ReadSubject>> ofANumber(Quantity quantity) {
+        PositionsAStatementReads reading = new PositionsAStatementReads(false, true, true);
+        if (!reading.reads(quantity)) {
+            return Optional.empty();
+        }
+        Set<ReadSubject> out = new LinkedHashSet<>();
+        reading.out.forEach(path -> out.add(new ReadSubject.At(path)));
+        reading.bound.forEach(value -> out.add(new ReadSubject.Bound(value)));
+        return Optional.of(Collections.unmodifiableSet(out));
+    }
+
     /** The positions {@code stated} reads, in the order it names them, or empty where it reads
      *  something else as well. */
     public static Optional<List<TermPath>> of(Proposition stated) {

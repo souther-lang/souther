@@ -3400,6 +3400,7 @@ public final class Bodies {
                         // are written in it and nowhere else, and a reading without it leaves every
                         // one of them to whatever answer absence is given.
                         DecisionSources.of(
+                                inliner.value().library(),
                                 inliner.value().reachable(),
                                 // Reached as this module reaches its own behavior, which is bare —
                                 // the forks below are looked up by the reference a call carries,
@@ -4489,8 +4490,8 @@ public final class Bodies {
                 throw new IllegalStateException("`" + name + "` has value methods and no table its"
                         + " declarations are read against");
             }
-            decisions.putAll(DecisionSources.of(against.value().table().reachable(),
-                    Map.of()).byFork());
+            decisions.putAll(DecisionSources.of(against.value().table().library(),
+                    against.value().table().reachable(), Map.of()).byFork());
         }
         // What each body declares cannot arrive, held against what its input's own declarations
         // leave. Judged here rather than beside each body: it reads the signature, which is the

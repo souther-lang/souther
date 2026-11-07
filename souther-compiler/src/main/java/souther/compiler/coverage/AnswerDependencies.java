@@ -61,12 +61,26 @@ public record AnswerDependencies(Map<ReachName.Declaration, Set<Integer>> bySlot
 
     /** What {@code declarations} answer out of. */
     public static AnswerDependencies of(Map<ReachName.Declaration, Hir.FnDef> declarations) {
+        return of(declarations, NONE);
+    }
+
+    /**
+     * What {@code declarations} answer out of, where what they call besides one another is read
+     * already and is {@code under}.
+     *
+     * <p>{@code under} is a lower part of the same reading: none of what it was read over calls any
+     * of {@code declarations}, so nothing these come to moves it, and the fixed point over both is
+     * {@code under} beside the fixed point over these with it held where it is. The library is such
+     * a part of every module's reading — it calls nothing a module writes — and is read once.
+     */
+    public static AnswerDependencies of(Map<ReachName.Declaration, Hir.FnDef> declarations,
+                                        AnswerDependencies under) {
         // Everything being read starts at nothing, so a declaration this has not got to yet is
         // told from a callable it will never read. Started from an empty map, the two were the same
         // absence: a call to something declared further down was read as resting on every argument,
         // and the passes only ever add — so the answer stayed at what the first pass could not
         // know, and forks resting on nothing were owed a row per call site.
-        Map<ReachName.Declaration, Set<Integer>> bySlot = new LinkedHashMap<>();
+        Map<ReachName.Declaration, Set<Integer>> bySlot = new LinkedHashMap<>(under.bySlot());
         declarations.keySet().forEach(each -> bySlot.put(each, Set.of()));
         boolean moved = true;
         while (moved) {

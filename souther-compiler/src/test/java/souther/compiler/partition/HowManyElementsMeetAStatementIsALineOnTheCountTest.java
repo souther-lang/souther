@@ -93,19 +93,34 @@ class HowManyElementsMeetAStatementIsALineOnTheCountTest {
     }
 
     /**
-     * A product of decimals is no number a row's values are read for, so how many elements it is
-     * above three for is no count a line is drawn on: a line there would be one no row is ever
-     * read at.
+     * A product of decimals is worked out at a row as the run works it out, so how many elements
+     * it is above three for is a count a line is drawn on, and the rows that hold none, one, two
+     * and three such elements are read at its points. Which of the factors is named first is no
+     * part of it: the product is filed under one of them, and the statement is about the element
+     * whichever that is.
      */
     @Test
-    void aCountOfElementsWhoseProductOfDecimalsMeetsSomethingIsNoLine() {
-        assertTrue(countBorders(reportOf("""
-                module probe
+    void aCountOfElementsWhoseProductOfDecimalsMeetsSomethingIsALineRowsAreReadAt() {
+        for (String other : List.of("limit", "zz")) {
+            List<JsonNode> counts = countBorders(reportOf("""
+                    module probe
 
-                behavior atLeastTwo : (xs: List<Decimal>, limit: Decimal) -> Int
-                let atLeastTwo (xs, limit) =
-                    if List.length(List.filter(x -> x * limit > 3.0m, xs)) >= 2 then 1 else 0
-                """)).isEmpty());
+                    behavior atLeastTwo : (xs: List<Decimal>, %1$s: Decimal) -> Int
+                    let atLeastTwo (xs, %1$s) =
+                        if List.length(List.filter(x -> x * %1$s > 3.0m, xs)) >= 2 then 1 else 0
+
+                    example atLeastTwo
+                        | "none" : ([], 1.0m) -> 0
+                        | "one" : ([5.0m], 1.0m) -> 0
+                        | "two" : ([5.0m, 6.0m], 1.0m) -> 1
+                        | "three" : ([5.0m, 6.0m, 7.0m], 1.0m) -> 1
+                    """.formatted(other)));
+            assertEquals(1, counts.size(), () -> other + ": one line on the count: " + counts);
+            for (String point : List.of("on", "off", "in", "out")) {
+                assertTrue(pointAt(counts.getFirst(), point).path("hit").asBoolean(),
+                        () -> other + ": a row at the " + point + " point: " + counts);
+            }
+        }
     }
 
     /**

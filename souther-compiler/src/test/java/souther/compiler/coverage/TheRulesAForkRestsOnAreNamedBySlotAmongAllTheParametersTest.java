@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
@@ -46,7 +47,7 @@ class TheRulesAForkRestsOnAreNamedBySlotAmongAllTheParametersTest {
         Hir.FnDef fn = aHelperWithRulesBetweenData();
 
         Map<SourceConstructOrigin, DecisionSource> read =
-                DecisionSources.of(Map.of(), Map.of(DECLARATION, fn)).byFork();
+                DecisionSources.of(DefaultStdlib.get(), Map.of(), Map.of(DECLARATION, fn)).byFork();
 
         Hir.ListComp comp = (Hir.ListComp) ((Hir.FnBody.Written) fn.body()).expr();
         List<List<String>> named = new ArrayList<>();
