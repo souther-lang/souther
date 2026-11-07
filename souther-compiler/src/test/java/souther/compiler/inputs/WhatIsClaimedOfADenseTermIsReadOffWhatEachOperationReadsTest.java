@@ -579,10 +579,29 @@ class WhatIsClaimedOfADenseTermIsReadOffWhatEachOperationReadsTest {
                 DecimalOperation.readsOf(operations));
     }
 
+    /**
+     * An operation reading a term alone is asked far out only where it reads the term as a place
+     * the row holds, whose scale is how the number is written. A total and a walk adding one up
+     * are at the scale of the numbers a row is built from, whatever the term comes to.
+     */
+    @Test
+    void anOperationReadingATotalAloneHasRoomFarOut() {
+        Written two = new Written(new BigDecimal("2.0"));
+        assertFalse(DecimalOperation.everyOperationReadingItHasRoomAtEveryNumber(
+                List.of(product(S, two)), "s"));
+        assertTrue(DecimalOperation.everyOperationReadingItHasRoomAtEveryNumber(
+                List.of(product(new Total("s"), two)), "s"));
+        assertTrue(DecimalOperation.everyOperationReadingItHasRoomAtEveryNumber(List.of(
+                new DecimalAdditiveWalk(BigDecimal.ZERO,
+                        new Formed(Map.of("s", ExactRatio.ONE), ExactRatio.ZERO), 1),
+                product(new Worked(0), two)), "s"));
+    }
+
     /** A walk reads the total it adds up, and what is worked out of it reads that through it. */
     @Test
     void aWalkReadsTheTotalItAddsUp() {
-        List<DecimalWork> worked = List.of(new DecimalAdditiveWalk(BigDecimal.ZERO, "s"),
+        List<DecimalWork> worked = List.of(new DecimalAdditiveWalk(BigDecimal.ZERO,
+                        new Formed(Map.of("s", ExactRatio.ONE), ExactRatio.ZERO), 1),
                 sum(new Worked(0), H));
         assertEquals(List.of(Set.of("s"), Set.of("s", "h")), DecimalOperation.readsOf(worked));
     }

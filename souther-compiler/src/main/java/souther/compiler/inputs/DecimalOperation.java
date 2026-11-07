@@ -84,16 +84,30 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * operations it is worked out of. A walk reads the total it adds up.
      */
     static List<Set<Object>> readsOf(List<DecimalWork> all) {
+        return readsOf(all, true);
+    }
+
+    /** The same, with the totals read left out where {@code totals} is false: the places each
+     *  reads as the row holds them. */
+    private static List<Set<Object>> readsOf(List<DecimalWork> all, boolean totals) {
         List<Set<Object>> reads = new ArrayList<>();
         for (DecimalWork work : all) {
             Set<Object> here = new LinkedHashSet<>();
             switch (work) {
-                case DecimalAdditiveWalk walk -> here.add(walk.total());
+                case DecimalAdditiveWalk walk -> {
+                    if (totals) {
+                        here.addAll(walk.added().coefs().keySet());
+                    }
+                }
                 case DecimalOperation each -> {
                     for (Operand operand : each.operands) {
                         switch (operand) {
                             case Formed formed -> here.addAll(formed.coefs().keySet());
-                            case Total total -> here.add(total.term());
+                            case Total total -> {
+                                if (totals) {
+                                    here.add(total.term());
+                                }
+                            }
                             case Worked worked -> {
                                 if (worked.operation() < reads.size()) {
                                     here.addAll(reads.get(worked.operation()));
@@ -169,19 +183,22 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
      * Whether every operation of {@code all} that reads {@code asked} reads another term with it
      * and has room at every number ({@link #roomsOf}). A run with no end on a side is asked at the
      * edge of what is built for such operations: the room is the same there as at any number. An
-     * operation reading the term alone has room by the scale the term is written at, which the far
-     * side of a run with no end does not say, and is not taken here.
+     * operation reading the term alone as a place of the row has room by the scale the term is
+     * written at, which the far side of a run with no end does not say, and is not taken here. A
+     * total, and a walk adding one up ({@link DecimalAdditiveWalk}), are at a scale the numbers a
+     * row is built from bound, whatever number the term comes to, and are taken alone.
      */
     static boolean everyOperationReadingItHasRoomAtEveryNumber(List<DecimalWork> all,
                                                                Object asked) {
         List<Set<Object>> reads = readsOf(all);
+        List<Set<Object>> asPlaces = readsOf(all, false);
         Rooms rooms = roomsOf(all);
         if (rooms == null) {
             return false;
         }
         for (int i = 0; i < all.size(); i++) {
-            if (reads.get(i).contains(asked)
-                    && (reads.get(i).size() < 2 || !rooms.atEveryNumber().get(i))) {
+            if (reads.get(i).contains(asked) && (!rooms.atEveryNumber().get(i)
+                    || (asPlaces.get(i).contains(asked) && reads.get(i).size() < 2))) {
                 return false;
             }
         }
@@ -481,6 +498,7 @@ public record DecimalOperation(BinOp op, List<Operand> operands, List<Integer> a
 
     /** The same, with the operations it is worked out of moved {@code by} places later among
      *  those told. */
+    @Override
     public DecimalOperation shifted(int by) {
         return new DecimalOperation(op,
                 operands.stream().map(each -> each instanceof Worked worked

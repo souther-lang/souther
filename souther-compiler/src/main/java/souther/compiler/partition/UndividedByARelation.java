@@ -1596,15 +1596,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /** Whether every number {@code work} reads from a row as a place of it is a side of this
-     *  relation, once. A total is read as the row holds it, by a walk as by an operation. */
+     *  relation, once: what an operation's operand comes to, and what a walk adds up. */
     private static boolean overTheSides(DecimalWork work, Map<Object, Integer> named) {
         return switch (work) {
-            case DecimalAdditiveWalk _ -> true;
+            case DecimalAdditiveWalk walk -> overTheSides(walk.added(), named);
             case DecimalOperation operation -> operation.operands().stream()
                     .allMatch(operand -> !(operand instanceof DecimalOperation.Formed formed)
-                            || formed.coefs().keySet().stream()
-                                    .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom))));
+                            || overTheSides(formed, named));
         };
+    }
+
+    private static boolean overTheSides(DecimalOperation.Formed formed, Map<Object, Integer> named) {
+        return formed.coefs().keySet().stream()
+                .allMatch(atom -> Integer.valueOf(1).equals(named.get(atom)));
     }
 
     /**

@@ -9,59 +9,71 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * A walk that adds each element of a list of the input, as the row holds it, to the answer so far,
- * from a seed the program writes: {@code List.fold((acc, n) -> Decimal.add(acc, n.gross.value),
- * 0.0m, notes)}. Its answer is the seed and the total of the elements, the term {@code total}; a
- * run works it out one addition per element, and each can stop it for want of room.
+ * A walk over a list of the input that adds a part of each element to the answer so far, or takes
+ * it away, from a seed the program writes: {@code List.fold((acc, n) -> Decimal.add(acc,
+ * n.gross.value), 0.0m, notes)}. A part is a path of the element, or {@code factors} paths of it
+ * multiplied. Its answer is the seed and {@code added}, the total of the parts as the relation
+ * names its terms; a run
+ * works it out one step per element, a product and a sum or a difference, and each can stop it
+ * for want of room. A total of what a closure makes of each element ({@code List.sum(List.map(l
+ * -> Decimal.multiply(l.price, l.qty), lines))}) is the same walk from nought: the library adds
+ * the parts up exactly, at the scale the walk ends at.
  *
- * <p>That every addition has room is shown by induction over the walk, and not by asking one sum
- * of the seed and the total: a sum of the same number worked out once lines up other scales than
- * the steps do. The answer so far starts at the seed's scale. An element is a decimal of a row,
- * which the builder writes at no more than {@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT}
- * places before or after the point ({@link DecimalOperation#writtenForARow}), and a sum is at the
- * greater of its operands' scales. So the answer after any number of steps, and both operands of
- * every step, are at a scale no further from nought than the seed's or that bound, whichever is
- * further, and where that is within what room is shown for, every step has room, on every list a
- * row is built with. The scale the walk ends at is the greatest of the seed's and the elements',
- * which is how the list is written and not a fact of the total, so what is worked out of the
- * answer is asked as what is worked out of a total is
- * ({@link DecimalOperation#leavesNoCompletionToHowATotalIsWritten}).
+ * <p>That every step has room is shown by induction over the walk, and not by asking one sum of
+ * the seed and the total: a sum of the same number worked out once lines up other scales than
+ * the steps do. A number of a row is written at no more than
+ * {@link DecimalOperation#PLACES_A_ROW_IS_BUILT_AT} places before or after the point
+ * ({@link DecimalOperation#writtenForARow}), a product is at the sum of its factors' scales, and a
+ * sum or a difference is at the greater of its operands'. So each part, and each product on the
+ * way to it, is at no more than {@code factors} times that bound, and the answer so far, starting
+ * at the seed's scale, after any number of steps is at a scale no further from nought than the
+ * seed's or the parts', whichever is further. Where that is within what room is shown for, every
+ * step has room, on every list a row is built with. The scale the walk ends at is how the list is
+ * written and not a fact of the total, so what is worked out of the answer is asked as what is
+ * worked out of a total is ({@link DecimalOperation#leavesNoCompletionToHowATotalIsWritten}).
  *
- * <p>Told only where the step adds the element and does nothing else, the seed is written out at
- * the scale it is written, and the list is a place of the input: anything else the walk works out
- * is no step of this one.
+ * <p>Told only where the step works out the part and the sum or difference and nothing else, the
+ * seed is written out at the scale it is written, and the list is a place of the input: anything
+ * else the walk works out is no step of this one.
  *
- * @param seed  the decimal the walk starts from, at the scale the program writes it
- * @param total the key of the term the walk adds up, as {@link DecimalOperation.Formed} keys its
- *              places
+ * @param seed    the decimal the walk starts from, at the scale the program writes it
+ * @param added   what the walk adds to the seed, over the terms of a row: the total it adds up, or
+ *                that total taken away
+ * @param factors how many paths of an element each part multiplies, one where it is a path alone
  */
-public record DecimalAdditiveWalk(BigDecimal seed, Object total) implements DecimalWork {
+public record DecimalAdditiveWalk(BigDecimal seed, DecimalOperation.Formed added, int factors)
+        implements DecimalWork {
 
     public DecimalAdditiveWalk {
         Objects.requireNonNull(seed, "the decimal a walk starts from");
-        Objects.requireNonNull(total, "the total a walk adds up");
+        Objects.requireNonNull(added, "the total a walk adds up");
+        if (factors < 1) {
+            throw new IllegalArgumentException("a part of an element multiplies at least one path"
+                    + " of it: " + factors);
+        }
     }
 
-    /** The scale furthest from nought that the answer so far and any element of a row are at, on
-     *  every step of the walk. */
+    /** The scale furthest from nought that the answer so far, a part, or a product on the way to
+     *  one is at, on every step of the walk. */
     long scaleOfEveryStep() {
-        return Math.max(Math.abs((long) seed.scale()), DecimalOperation.PLACES_A_ROW_IS_BUILT_AT);
+        return Math.max(Math.abs((long) seed.scale()),
+                (long) factors * DecimalOperation.PLACES_A_ROW_IS_BUILT_AT);
     }
 
-    /** Whether every step of the walk has room on every row: its operands and its answer are at
-     *  no scale further from nought than room is shown for. */
+    /** Whether every step of the walk has room on every row: what it works out is at no scale
+     *  further from nought than room is shown for. */
     boolean everyStepHasRoom() {
         return scaleOfEveryStep() <= DecimalOperation.SCALE_THE_ROOM_IS_SHOWN_FOR;
     }
 
     /**
-     * What the walk answers on a row whose terms stand at {@code values}: the seed added to the
-     * total at the fewest places its number is written with, the representative a total is worked
-     * out with ({@link DecimalOperation.Total}). Null where the row has no total.
+     * What the walk answers on a row whose terms stand at {@code values}: the seed added to what
+     * it adds at the fewest places that number is written with, the representative a total is
+     * worked out with ({@link DecimalOperation.Total}). Null where the row has no total.
      */
     BigDecimal workedOut(Map<Object, ExactRatio> values) {
-        return new DecimalOperation.Total(total).at(values)
-                .map(sum -> ExactDecimals.sumWhereThereIsRoom(seed, sum)).orElse(null);
+        return added.at(values).map(sum -> ExactDecimals.sumWhereThereIsRoom(seed, sum))
+                .orElse(null);
     }
 
     @Override

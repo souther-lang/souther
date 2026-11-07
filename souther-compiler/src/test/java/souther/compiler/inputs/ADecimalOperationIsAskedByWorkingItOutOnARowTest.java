@@ -47,6 +47,9 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
         return DecimalOperation.allCompleteAt(List.of(operations), Map.of("h", h));
     }
 
+    /** What a walk adds to its seed: the term {@code "t"}, the total the row holds. */
+    private static final Formed ADDING_T = new Formed(Map.of("t", ExactRatio.ONE), ExactRatio.ZERO);
+
     /** The numbers a row is built with, from both ends of the places it is built at and between,
      *  as the builder writes them. */
     private static final List<BigDecimal> ELEMENTS = Stream.of(
@@ -106,7 +109,7 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
     void aWalkShownToCompleteGetsThroughEveryStepOnEveryListARowIsBuiltWith() {
         for (BigDecimal seed : List.of(BigDecimal.ZERO, new BigDecimal("0.0"),
                 new BigDecimal("-1.5"), ELEMENTS.get(0), ELEMENTS.get(1))) {
-            DecimalAdditiveWalk walk = new DecimalAdditiveWalk(seed, "t");
+            DecimalAdditiveWalk walk = new DecimalAdditiveWalk(seed, ADDING_T, 1);
             for (List<BigDecimal> elements : listsOfElements()) {
                 if (DecimalOperation.allCompleteAt(List.of(walk), totalOf(elements))) {
                     assertNotNull(walked(seed, elements), () -> seed + " " + elements);
@@ -118,13 +121,35 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
     }
 
     /**
+     * A walk adding a product of two numbers of each element works the product out on every step
+     * as well: where it is shown to complete, the run time gets through every product and every
+     * sum, on every list of pairs of {@link #ELEMENTS}.
+     */
+    @Test
+    void aWalkOfProductsShownToCompleteGetsThroughEveryStep() {
+        DecimalAdditiveWalk walk = new DecimalAdditiveWalk(new BigDecimal("0.0"), ADDING_T, 2);
+        boolean anyShown = false;
+        for (List<BigDecimal> prices : listsOfElements()) {
+            List<BigDecimal> parts = new ArrayList<>();
+            for (BigDecimal price : prices) {
+                parts.add(ExactDecimals.timesWhereThereIsRoom(price, ELEMENTS.get(3)));
+            }
+            if (DecimalOperation.allCompleteAt(List.of(walk), totalOf(parts))) {
+                anyShown = true;
+                assertNotNull(walked(walk.seed(), parts), prices::toString);
+            }
+        }
+        assertTrue(anyShown, "some list of products is shown to complete");
+    }
+
+    /**
      * A seed at a scale room is not shown for is no row, though the seed and the total added once
      * have room: the list that comes to nought is added a step at a time, and the run time stops
      * at its first step.
      */
     @Test
     void aWalkFromASeedAtAScaleNoRoomIsShownForIsNoRow() {
-        DecimalAdditiveWalk walk = new DecimalAdditiveWalk(NOUGHT_AT_THE_FLOOR, "t");
+        DecimalAdditiveWalk walk = new DecimalAdditiveWalk(NOUGHT_AT_THE_FLOOR, ADDING_T, 1);
         List<BigDecimal> elements = List.of(ELEMENTS.get(0), ELEMENTS.get(0).negate());
         assertNotNull(ExactDecimals.sumWhereThereIsRoom(NOUGHT_AT_THE_FLOOR, BigDecimal.ZERO));
         assertNull(walked(NOUGHT_AT_THE_FLOOR, elements));
@@ -134,7 +159,7 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
     /** A walk reads the total the row holds, and a row that holds none is no row of it. */
     @Test
     void aWalkOverATotalTheRowDoesNotNameIsNoRow() {
-        DecimalAdditiveWalk walk = new DecimalAdditiveWalk(BigDecimal.ZERO, "t");
+        DecimalAdditiveWalk walk = new DecimalAdditiveWalk(BigDecimal.ZERO, ADDING_T, 1);
         assertFalse(DecimalOperation.allCompleteAt(List.of(walk), Map.of("s", ExactRatio.ONE)));
     }
 
@@ -145,7 +170,7 @@ class ADecimalOperationIsAskedByWorkingItOutOnARowTest {
      */
     @Test
     void whatIsWorkedOutOfAWalkIsAskedAsWhatIsWorkedOutOfATotal() {
-        DecimalAdditiveWalk walk = new DecimalAdditiveWalk(new BigDecimal("0.0"), "t");
+        DecimalAdditiveWalk walk = new DecimalAdditiveWalk(new BigDecimal("0.0"), ADDING_T, 1);
         Map<Object, ExactRatio> total = totalOf(List.of(new BigDecimal("2.5")));
         DecimalOperation timesFour = new DecimalOperation(BinOp.MUL,
                 List.of(new Worked(0), new Written(FOUR)), List.of(0));

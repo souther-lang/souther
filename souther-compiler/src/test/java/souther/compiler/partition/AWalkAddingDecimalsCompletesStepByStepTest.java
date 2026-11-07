@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A walk adding the decimals of a list to a seed one at a time can stop at any step for want of
@@ -26,6 +27,7 @@ class AWalkAddingDecimalsCompletesStepByStepTest {
             data Amount = Decimal
                 invariant value >= 0.0m
             data Note = { gross: Amount }
+            data Line = { price: Amount, qty: Amount }
             """;
 
     private static final String INPUTS =
@@ -46,7 +48,7 @@ class AWalkAddingDecimalsCompletesStepByStepTest {
                 behavior m : (%s) -> Bool
                 let m (%s) = %s
                 """.formatted(DECLARATIONS, helpers, inputs,
-                inputs.replaceAll(": (List<[^>]*>|[A-Za-z<>]+)", ""), body), "Main");
+                inputs.replaceAll(": (Map<[^>]*>|List<[^>]*>|[A-Za-z<>]+)", ""), body), "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
@@ -93,6 +95,52 @@ class AWalkAddingDecimalsCompletesStepByStepTest {
         String walked = report(INPUTS, credited("Decimal.add(acc, n.gross.value)", "0.0m"));
         assertEquals(THE_FOUR_TERMS, related(walked), walked);
         assertEquals(Set.of(), notShown(walked), walked);
+    }
+
+    /**
+     * A walk's room turns on no number of the total it adds up, so a relation of the total with
+     * one other number reads the total as well: its rows far out are asked as any are.
+     */
+    @Test
+    void aTotalComparedWithOneOtherNumberIsRead() {
+        String listed = report("existing: List<Note>, c: Amount", """
+                Decimal.compare(List.fold((acc, n) -> Decimal.add(acc, n.gross.value), 0.0m,
+                                          existing), c.value) <= 0""");
+        assertEquals(Set.of("List.sum(existing[*].gross)", "c"), related(listed), listed);
+        String mapped = report("m: Map<String, Amount>, c: Amount", """
+                Decimal.compare(Map.fold((acc, k, v) -> Decimal.add(acc, v.value), 0.0m, m),
+                                c.value) <= 0""");
+        assertEquals(Set.of("List.sum(m[*])", "c"), related(mapped), mapped);
+        // A total worked out once is as bound: its scale is the elements', whatever it comes to.
+        String doubled = report("existing: List<Note>, c: Amount", """
+                Decimal.compare(Decimal.multiply(List.sum(List.map(n -> n.gross.value, existing)),
+                                                 2.0m), c.value) <= 0""");
+        assertEquals(Set.of("List.sum(existing[*].gross)", "c"), related(doubled), doubled);
+    }
+
+    /**
+     * What a step adds of an element may be taken away, or be a product of its fields: the step
+     * works out that product and the sum or difference, and the walk is told with both. A total
+     * of what a closure makes of each element is the same walk from nought.
+     */
+    @Test
+    void aStepTakingAwayOrAddingAProductIsTheSameWalk() {
+        String takenAway = report("existing: List<Note>, c: Amount", """
+                Decimal.compare(List.fold((acc, n) -> Decimal.subtract(acc, n.gross.value),
+                                          100.0m, existing), c.value) <= 0""");
+        assertEquals(Set.of(), notShown(takenAway), takenAway);
+        assertTrue(related(takenAway).contains("List.sum(existing[*].gross)"), takenAway);
+        String products = "List.sum({1·price·qty + 0 | lines[*]})";
+        String walked = report("lines: List<Line>, c: Amount", """
+                Decimal.compare(List.fold((acc, l) -> Decimal.add(acc,
+                                              Decimal.multiply(l.price.value, l.qty.value)),
+                                          0.0m, lines), c.value) <= 0""");
+        assertEquals(Set.of(products, "c"), related(walked), walked);
+        String summed = report("lines: List<Line>, c: Amount", """
+                Decimal.compare(List.sum(List.map(l -> Decimal.multiply(l.price.value,
+                                                                        l.qty.value), lines)),
+                                c.value) <= 0""");
+        assertEquals(Set.of(products, "c"), related(summed), summed);
     }
 
     /** A walk a helper works out is worked out where the helper is called. */

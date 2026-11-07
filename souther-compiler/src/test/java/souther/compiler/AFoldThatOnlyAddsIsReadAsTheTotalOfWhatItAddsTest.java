@@ -178,12 +178,12 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
      * A total that is a number among others in a comparison is read as one of them, and the walk
      * is not the sum for where a run gets through it. The walk adds one gross at a time and holds
      * every answer so far to {@code Int}, so grosses of either sign can pass the type on the way
-     * to a total that is in it, as {@code [max, 1, -1]} does at its second step. Nothing shows
-     * which totals every list coming to them gets through, so no row is shown computed and no
-     * place is shown left either way.
+     * to a total that is in it, as {@code [max, 1, -1]} does at its second step. A row of one
+     * element runs no total on the way, and every total in the type is the gross of one element,
+     * so the relation is read at those rows, as it is of a walk adding each element as it stands.
      */
     @Test
-    void aTotalBesideAnotherNumberIsReadAndNotShownComputed() {
+    void aTotalBesideAnotherNumberIsReadAtTheRowsOneElementWrites() {
         String report = report("""
                 module example.folded
 
@@ -194,11 +194,10 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
                 let fits (limit, ns, asked) =
                     asked <= limit - List.fold((acc, n) -> acc + n.gross, 0, ns)
                 """);
-        assertTrue(report.contains("List.sum(ns[*].gross)"), report);
-        assertEquals(Set.of(), placesSaying(report, "rather than dividing the values here"),
-                report);
         assertEquals(Set.of("asked", "limit", "List.sum(ns[*].gross)"), placesSaying(report,
-                "not shown to reach every value here"), report);
+                "rather than dividing the values here"), report);
+        assertEquals(Set.of(), placesSaying(report, "not shown to reach every value here"),
+                report);
     }
 
     /** The places the lines of {@code report} saying {@code words} of a rule's line are about. */
