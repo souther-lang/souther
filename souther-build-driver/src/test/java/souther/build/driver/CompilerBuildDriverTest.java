@@ -3,6 +3,8 @@ package souther.build.driver;
 import souther.build.BuildDiagnostic;
 import souther.build.BuildRequest;
 import souther.build.BuildResult;
+import souther.compiler.diag.Messages;
+import souther.compiler.diag.msg.InvariantMessage.NothingKnownHereEstablishesTheInvariant;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -12,6 +14,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -302,7 +305,9 @@ class CompilerBuildDriverTest {
 
         String rendered = result.diagnostics().get(0).rendered();
         assertTrue(rendered.contains("(警告)"), rendered);
-        assertTrue(rendered.contains("不変条件に違反する可能性があります"), rendered);
+        String said = Messages.render(new NothingKnownHereEstablishesTheInvariant("Eaches"),
+                Locale.JAPANESE);
+        assertTrue(rendered.contains(said.substring(0, said.indexOf('。') + 1)), rendered);
     }
 
     @Test

@@ -4,6 +4,8 @@ import souther.cli.CliProcess.Ran;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.diag.Located;
+import souther.compiler.diag.Messages;
+import souther.compiler.diag.msg.InvariantMessage.NothingKnownHereEstablishesTheInvariant;
 import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
@@ -12,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -70,7 +73,9 @@ class WarningReportingTest {
         String ja = compile(file, "--lang", "ja");
 
         assertTrue(ja.contains("(警告)"), ja);
-        assertTrue(ja.contains("不変条件に違反する可能性があります"), ja);
+        String said = Messages.render(new NothingKnownHereEstablishesTheInvariant("Eaches"),
+                Locale.JAPANESE);
+        assertTrue(ja.contains(said.substring(0, said.indexOf('。') + 1)), ja);
     }
 
     @Test

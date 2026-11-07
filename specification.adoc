@@ -3615,7 +3615,7 @@ What a row can be held to without a body, it is held to. Its arity, each input b
 
 Evaluation begins by itself. The row is unchanged when the `+let+` arrives; from that compile on it is applied and compared like any other, and a row that stated the wrong answer is <<e1905>> then rather than never.
 
-An implementation supplied to a run is the other way it begins. Where something outside a compile answers the behavior, the row is applied and compared the same way — the same fixtures, the same arm resolution, the same comparison — and a row that stated the wrong answer is <<e1905>> there too. What the implementation answered is held to what the behavior declares of what it answers (<<an-implementation-keeps-what-the-behavior-states>>), which for an injected behavior is where that clause is checked at all. Whether such a run happens is not the model's to say and nothing about the row changes for it: what is recorded is what applied it, and the rows are the same rows either way.
+An implementation supplied to a run is the other way it begins. Where something outside a compile answers the behavior, the row is applied and compared the same way — the same fixtures, the same arm resolution, the same comparison — and a row that stated the wrong answer is <<e1905>> there too. What the implementation returned is held to the behavior's `+ensures+` (<<an-implementation-keeps-what-the-behavior-states>>), which for an injected behavior is where that clause is checked at all. Whether such a run happens is not the model's to say and nothing about the row changes for it: what is recorded is what applied it, and the rows are the same rows either way.
 
 A `+fake+` is not what a pending row wants. A fake stands in for a dependency while some *other* behavior's row runs (<<example-fakes>>); an `+example+` of an injected behavior says what that behavior itself will have to answer. Neither is run from the other, so both belong. An injected behavior declares no `+depends on+` of its own (<<depends-on>>), so a pending row needs no fake at all.
 
@@ -3677,7 +3677,7 @@ include::syntax/grammar.ebnf[tag=example-placement]
 
 [[an-attached-files-values-are-for-its-rows]]A value an attached file declares MAY be named by a row, by a `+fake+` and by another value of an attached file, and MUST NOT be named by the model: not by a `+data+`'s `+invariant+`, a `+behavior+`'s `+ensures+`, a `+let+`'s body, or the module's `+exposing+` list.
 
-The base form is written inline, in the same source as the behavior. To keep fixtures out of the model source, examples may instead be written in an attached file that begins with `+examples for <module>+`. It holds the rows, the `+fake+` tables they run against, and the values they name; a data, a behavior, an `+import+` and a `+let+` with parameters belong in the module itself, and writing one there is <<e1906>>. The compiler merges an attached file into its target module; it is not a module of its own and needs no `+import+` (it sees the target module's names directly). Its values join the module the rows join, so a name the module already declares is <<e1906>> too — the rows would read that declaration and the one written here would say nothing. An attached file that names a module not being compiled is <<e1907>>.
+The base form is written inline, in the same source as the behavior. To keep fixtures out of the model source, examples may instead be written in an attached file that begins with `+examples for <module>+`. It holds the rows, the `+fake+` tables they run against, and the values they use; data, behaviors, imports and `+let+`​s with parameters go in the module itself, and writing one there is <<e1906>>. The compiler merges an attached file into its target module; it is not a module of its own and needs no `+import+` (it sees the target module's names directly). Its values join the module the rows join, so a name the module already declares is <<e1906>> too — the rows would use that declaration and the one written here would never be used. An attached file that names a module not being compiled is <<e1907>>.
 
 The merge makes those values reachable under the same names as the module's own, and the direction they may be reached in is one way. A row is what the file is for, and a row written inline in the model source is a row too, so it names them as freely as one written beside them. The model is the other way: a module that named one would not compile without a file of fixtures, and a clause that named one would travel to an importer under <<a-published-module-carries-what-it-says-it-declares>> spelling a name the jar has no source for — the module's own source is what is published, and an attached file adds nothing to it. Naming one from the model is <<e1626>>. A value the model needs is declared in the model.
 
@@ -4275,13 +4275,13 @@ The rules it obeys:
 * Reaching it *aborts*, as an invariant violation does (<<invariant-abort>>) and for the same reason: what failed is the model, not the business. It is not catchable, and a boundary maps it to a 500, apart from a business failure's 400.
 * It is not written in an `+invariant+` (<<invariant-expressions>>): an invariant answers whether the value being built holds, on every path through it.
 
-[[unreachable-is-for-what-the-model-rules-out]]What it is not for is a case the model can produce. `+| InsufficientFunds -> unreachable "the caller checked the balance"+` states an assumption no type carries, and if the caller ever does not check, the rule aborts where it should have answered. Where the combination is one the model admits as input, the arm answers a value or the input types change; `+unreachable+` is for what the model rules out.
+[[unreachable-is-for-what-the-model-rules-out]]What it is not for is a case the model can produce. `+| InsufficientFunds -> unreachable "the caller checked the balance"+` states an assumption no type carries, and if the caller ever does not check, the rule aborts where it should have answered. If the model allows the combination as input, the arm returns a value or the input types change; `+unreachable+` is only for combinations the model rules out.
 
 *Where that can be read, it is checked, and a case the model admits is <<e1326>>.* An arm of the first `+match+` a behavior's body reaches, on one of its own input positions, is the end where it can: nothing stands between the fork and the caller, so what may arrive there is what the declarations reaching that position leave (<<what-a-position-admits>>). A case they leave is a case a caller can supply, and an arm declaring it cannot arrive is a premise the model's own signature denies.
 
 Nothing further is proven and nothing further is refused. A case behind a second `+match+`, behind a `+guard+`, or at a position whose rules this compiler could not read is one nothing here settles — a table indexed by two sums says what it says about *pairs*, and neither axis states anything about the other — so the arm stands and what is not settled is said rather than decided (<<a-case-a-claim-is-made-about-is-counted-until-the-rules-refuse-it>>). Every such arm is read, wherever in the body it is written; what is not read is an arm of a `+match+` on something that is not an input position at all, which is a claim about a value the model's rules say nothing about.
 
-[[a-branch-the-rules-make-dead-is-said-so]]The other direction is a branch the model's own rules make dead, and it is *said*. Where the conditions on the way to a branch cannot all hold, no value the model admits arrives at it: no row can be written through it, and the arm asks for work nobody can do.
+[[a-branch-the-rules-make-dead-is-said-so]]The other direction is a branch the model's own rules make dead, and it is *said*. Where the conditions that lead to a branch cannot all be true at once, no input the model allows reaches it: no example row can go through it, and the arm asks for work nobody can do.
 
 [,text]
 ----
@@ -4297,7 +4297,7 @@ The rules it obeys:
 * Nothing here proves that a branch *is* reached. A reading that found no contradiction found none — which is not the same as a value existing — so what would be needed to refute an author's claim is a value, a run that went through, or a rule that states it settles the question, and none of those is this.
 * What takes an obligation away and what reports a defect read one answer and act on the one arm of it. A branch left unsettled keeps its rows and is silent; the two never disagree about which branches those are.
 * [[a-dead-branch-is-said-at-the-outermost-branch]]A branch inside another that nothing reaches is said with that one and not again: what an author takes out is the branch it is inside. A branch of a helper is said where it is written unless at every call it is inside a branch nothing reaches there.
-* [[what-a-dead-branch-of-an-attempt-says-to-do]]What is said to do about a branch of an attempted construction turns on the rest of the attempt. Where no departure is taken, the value is built outright rather than attempted. Where one departure is shut and another is taken, the shut one stays — a named clause has a departure (<<attempt-answers-every-failing-clause>>) — and is answered with `+unreachable+`, which is no arm (<<an-arm-that-answers-nothing-is-not-an-arm>>). Where the value is never built, what the attempt departs with is answered rather than attempting it. Where nothing reaches the attempt, it is taken out as any branch is.
+* [[what-a-dead-branch-of-an-attempt-says-to-do]]What is said to do about a branch of an attempted construction turns on the rest of the attempt. Where the clauses the `+else+` handles are always true, the construction never fails, and the value is built directly instead of being written as `+guard ... as ... else+`. Where one arm of the `+else+` is never taken and another can be, the one never taken stays — every named clause needs its arm (<<attempt-answers-every-failing-clause>>) — and `+unreachable+` is written as its value, which is no arm (<<an-arm-that-answers-nothing-is-not-an-arm>>). Where the clauses cannot all be true, the construction always fails, and the `+else+` value is returned directly instead of writing `+guard ... as+`. Where nothing reaches the attempt, it is removed as any branch is.
 * It is reported to the module whose source wrote the fork. A call splices another module's branches into this body, and an argument handed to them can leave one of their arms unreachable *here* while it is alive wherever else that module is used — which is a fact about the call, and a branch the author of this module cannot take out.
 
 [#guard]
@@ -5558,8 +5558,8 @@ Reported where a `+data X = Y+` names a `+Y+` carrying no external representatio
 
 [,text]
 ----
-data `Rank` has an empty body, which names a type with one value — that is a unit data, and it is
-written without a body.
+data `Rank` has an empty body, which declares a type with only one value — that is a unit data, and
+it is written without a body.
 ----
 
 Reported at a `+data+` whose body is written and holds nothing (<<unit-data-is-written-without-a-body>>). The declaration means what a unit data means, and a unit data has one spelling.
@@ -5615,10 +5615,10 @@ data `OrgMember` cannot be constructed: it needs a value of itself, with nothing
 
 data `Discount` cannot be constructed: its rules cannot all hold, so no value satisfies them.
 
-data `Pair` cannot be constructed: `value` must hold more values that differ than there are of what
-it holds, which is at most 1.
+data `Pair` cannot be constructed: `value` must hold more distinct values than its element type has,
+which is at most 1.
 
-data `Window` cannot be constructed: the rules leave `value` nothing to hold.
+data `Window` cannot be constructed: the rules leave no value that `value` can have.
 ----
 
 Reported at the declaration (<<a-data-can-be-constructed>>). One code for every way a data comes to have no value, and the sentence says which of them was shown. Self-reference is what an org chart or a tree is made of, and it bottoms out at an optional, or at a collection the rules on it let be empty (<<self-referential-data>>); with neither on the cycle there is no first value.
@@ -5770,8 +5770,8 @@ Reported where an `+invariant+` is written on a unit data (<<invariant-needs-a-v
 
 [,text]
 ----
-`Amount` declares two invariant clauses named `inYen`. A name is what an attempted construction and
-a boundary issue call one rule, so two rules cannot share it.
+`Amount` declares two invariant clauses named `inYen`. `guard ... as ... else` and boundary errors
+refer to a clause by its name, so two clauses cannot share one.
 ----
 
 Reported at the second clause of a name (<<invariant-clause-names-are-distinct>>). An attempted construction answers a clause by name (<<attempt-departures>>) and a decode failure reports one by name; neither can say which of two was meant.
@@ -5782,8 +5782,8 @@ Reported at the second clause of a name (<<invariant-clause-names-are-distinct>>
 [,text]
 ----
 `_` cannot name an invariant clause of `Amount`.
-Hint: Give the clause a name of its own, or leave it unnamed — an unnamed clause is enforced and
-answered by `| _ -> ...`.
+Hint: Give the clause a name of its own, or leave it unnamed — an unnamed clause is still checked,
+and is handled by `| _ -> ...`.
 ----
 
 Reported where a clause is written `+invariant _ = …+` (<<invariant-clause-name-is-not-underscore>>). `+| _ -> …+` answers the clauses carrying no name, so a clause holding that name as its own could never be the one it answered.
@@ -5804,8 +5804,8 @@ Reported at the construction (<<an-invariant-observes-and-does-not-build>>), nam
 
 [,text]
 ----
-The invariant of `Amount` reaches the `partial` helper `spin`, which carries no termination
-guarantee; an invariant is checked on every construction.
+The invariant of `Amount` calls the `partial` helper `spin`, which may not terminate; an invariant
+is checked at construction time and must terminate.
 ----
 
 Reported at the clause (<<an-invariant-answers-on-every-path>>). An invariant runs at every construction and at every boundary, so a path through it that answers nothing — an `+unreachable+`, or a `+partial+` helper that may not stop — is a check that may not come back.
@@ -5815,11 +5815,11 @@ Reported at the clause (<<an-invariant-answers-on-every-path>>). An invariant ru
 
 [,text]
 ----
-`Stage` is a sum, and nothing constructs one — a value of `Stage` is written as one of its cases —
-so this invariant would be owed by no construction and checked at no boundary.
+`Stage` is a sum, and a sum is never constructed — a value of `Stage` is written as one of its
+cases — so this invariant would never be checked, neither at a construction nor at a boundary.
 ----
 
-Reported at the clause (<<an-invariant-is-declared-where-a-construction-owes-it>>). Write the rule on the case it is about, or on a newtype over the sum, which is built and carries its own check. Refused rather than kept as a clause with no effect: a sum is lowered into a declaration with no place to put one, so a clause allowed through here is dropped along with anything written inside it, and a reading that asks which rules a position has cannot tell it from a declaration nobody wrote a rule on.
+Reported at the clause (<<an-invariant-is-declared-where-a-construction-owes-it>>). Write the rule on the case it is about, or on a newtype over the sum, which is constructed and checks its own invariant. Refused rather than kept as a clause with no effect: a sum is lowered into a declaration with no place to put one, so a clause allowed through here is dropped along with anything written inside it, and a reading that asks which rules a position has cannot tell it from a declaration nobody wrote a rule on.
 
 [#e1201]
 === Non-exhaustive match
@@ -5912,10 +5912,10 @@ This branch produces Int. The preceding branches produce Blue | Red.
 
 [,text]
 ----
-`Station` adds nothing to this arm: `OnceKind` also answers for every value it does.
+`Station` adds nothing to this arm: `OnceKind` already matches every value it does.
 ----
 
-Reported at the arm (<<an-arms-alternatives-each-add-what-it-answers-for>>). A case named twice is reported as that and not as one covering the other, since it is the more particular of the two: `This arm names `Station` twice, and the second says nothing the first did not.`
+Reported at the arm (<<an-arms-alternatives-each-add-what-it-answers-for>>). A case named twice is reported as that and not as one covering the other, since it is the more particular of the two: `This arm lists `Station` twice; the second adds nothing.`
 
 [#e1301]
 === Use of null
@@ -5950,9 +5950,9 @@ Elsewhere an optional is only read — a `?` field, `Map.get`, `List.find` — n
 [,text]
 ----
 `None` is the empty value of a `?` field, and nothing here is asking for one.
-Hint: Where the model owns the absence, make it a case of its own sum. Absence of that
-kind does not reach `List.filterMap`, whose step has to answer an optional: use
-`List.flatMap` over a step answering a list of nought or one.
+Hint: Where the model owns the absence, make it a case of its own sum. `List.filterMap`
+cannot express absence of that kind, because its step has to return an optional. Use
+`List.flatMap` with a step that returns a list of zero or one element.
 ----
 
 A pattern is unaffected by either: `+| Some v+` matches an optional the model was given.
@@ -5962,10 +5962,10 @@ A pattern is unaffected by either: `+| Some v+` matches an optional the model wa
 
 [,text]
 ----
-Nothing here says what this position holds, and `unreachable` answers no value to say it
-with.
-Hint: Write it where the type is stated — an arm beside one that answers a value, a
-field, a declared return, an annotated binding.
+The type of this position is not stated anywhere, and `unreachable` gives no value to
+infer it from.
+Hint: Write it where the type is stated: in an arm next to one that returns a value, in a
+field, in a declared return, or in a binding with a type annotation.
 ----
 
 Reported where an `+unreachable+` (<<unreachable>>) stands in a position that states no type and has no branch beside it that does — `+let n = unreachable "..."+`, or an arithmetic operand. No value is made there, but the code that would read one is still compiled, and it has no shape to read.
@@ -6018,7 +6018,7 @@ Reported at the behavior's parameter (<<a-parameter-names-one-type>>). An anonym
 
 [,text]
 ----
-The output of `findMember` carries an optional (`Member?`).
+The output of `findMember` contains an optional (`Member?`).
 ----
 
 Reported at the parameter, or at the behavior for its output (<<an-optional-does-not-stand-in-a-boundary>>). The message names the optional it found, which is the whole of the boundary when it is written as one and a part of it when a collection carries it — so what changes is the position that optional stands in, which is not always the behavior's own type. Absence at a boundary is part of the model's vocabulary: put it on the `+?+` field of the data that carries it, whose own decoder reads it, or name it as a case of a sum so the caller matches on a name rather than unwrapping. Where the whole output is the optional, that sum is written directly — `+-> Member | NotFound+`; a behavior's parameter takes a declared name instead (<<a-parameter-names-one-type>>).
@@ -6125,12 +6125,12 @@ Reported at the read (<<a-field-read-is-declared-by-the-value>>). A sum exposes 
 `2026-07-01T09:30:45.123` is finer than a second, and a `DateTime` holds no fraction of one. Write
 it to the second, or use `Instant` where the sub-second reading is the point.
 
-`2026-07-01T09:30:45+09:00` carries an offset. It names the same moment
-`Instant("2026-07-01T00:30:45Z")` names, and that is how an `Instant` is written. A boundary reads
-either.
+`2026-07-01T09:30:45+09:00` has a time zone offset. It is the same moment as
+`Instant("2026-07-01T00:30:45Z")`, and that is how an `Instant` is written: a value in source is
+written the same way the value is printed. A boundary accepts either form.
 
-`2026-06-30T23:59:60Z` names a leap second. The language has no moment for one, and reading it as
-the second before would answer a different moment than the text says.
+`2026-06-30T23:59:60Z` is a leap second. The language has no moment for one, and reading it as the
+second before would give a different moment than the text says.
 ----
 
 Reported at the value (<<a-temporal-value-is-written-as-a-literal>>). The text is spelled out so it can be read at compile time, which is what lets malformed text be refused here instead of at run time. The same code covers three more refusals, and they are not one kind of thing. A fraction of a second, and a leap second, are text saying something the type cannot hold — the first a reading finer than the type keeps (<<a-local-temporal-is-held-to-the-second>>), the second a moment the language does not have (<<a-leap-second-is-no-moment>>). A numeric offset is neither: it names exactly the moment the `+Z+` form of it names, and is refused only because a written value is written the way the value is written back (<<temporal-literal>>). A boundary reads the offset form and refuses the other two.
@@ -6169,7 +6169,7 @@ Reported at the operator (<<newtype-arithmetic-follows-the-units>>). Which rule 
 
 [,text]
 ----
-`divide` answers `DivisionByZero`, which the language declares rather than this model.
+`divide` returns `DivisionByZero`, which the language declares rather than this model.
 ----
 
 Reported at the parameter, or at the behavior for its output (<<a-boundary-carries-the-models-own-vocabulary>>). `+DivisionByZero+` and `+NotANumber+` say what `+Int.truncatingDivide+` and `+String.toInt+` can answer, `+RoundingMode+` says what `+Decimal.round+` takes; each is the language's account of one of its own operations. A behavior that has the same thing to report declares the case — `+data Undivided+`, answered as `+-> Int | Undivided+` — so that what the behavior publishes stays its own even when the language's account of itself changes. Reported wherever the name stands in what crosses, at any depth and as a member of an output union.
@@ -6181,11 +6181,13 @@ Reported at the parameter, or at the behavior for its output (<<a-boundary-carri
 ----
 `Off` can arrive at `f`, so this point is reachable.
 Hint: `Off` is a case of `Flag`, and no rule refuses it here.
+Hint: If the model allows this combination as input, return a value from the arm or change the input
+types. `unreachable` is only for combinations the model rules out.
 ----
 
 Reported at an `+unreachable+` in an arm of the first `+match+` a body reaches, on one of the behavior's own input positions, whose case the declarations reaching that position leave standing (<<unreachable-is-for-what-the-model-rules-out>>). Nothing stands between that fork and the caller, so the case is one a caller can supply and the point is one a row reaches — which is <<e1911>> for whoever writes it and an abort for whoever runs the model.
 
-The diagnostic names three things, because acting on it takes all three: where the claim is written, which case at which position it is about, and the declaration that says the case can arrive. The answer is the one the rule above states — the arm answers a value, or that declaration changes.
+The diagnostic names three things, because acting on it takes all three: where the claim is written, which case at which position it is about, and the declaration that says the case can arrive. The answer is the one the rule above states, and the hint says it: if the model allows the combination as input, return a value from the arm or change the input types.
 
 Read from the body as it is emitted, so a claim written in a `+let+` this body called is judged here as well: what the claim says about this behavior's input is what it says wherever it was written.
 
@@ -6200,9 +6202,9 @@ Hint: Remove the branch, or change the model's rules so that some input reaches 
 branch itself is not what rules it out.
 ----
 
-Reported at the branch, as a warning (<<a-branch-the-rules-make-dead-is-said-so>>). What makes it dead is said with it: the conditions on the way and which way each went, the position whose values stop short of what the branch is written for, or the cases the rules refuse where the arm matches on them.
+Reported at the branch, as a warning (<<a-branch-the-rules-make-dead-is-said-so>>). What makes it dead is said with it: the conditions that lead here and whether each has to be true or false, the values a position can only be when the branch is for values outside them, or the cases the model's rules never let a position be where the arm matches on them.
 
-The same reading is what takes the branch's rows out of what the model is measured against, so a report never asks for a row through a branch it has already said nothing reaches. Where the reading cannot settle a branch, both halves leave it alone: the rows stay owed and nothing is said.
+The same reading is what takes the branch's rows out of what the model is measured against, so a report never asks for a row through a branch it has already said no input reaches. Where the reading cannot settle a branch, both halves leave it alone: the rows stay owed and nothing is said.
 
 [#e1401-removed]
 === (retired)
@@ -6238,7 +6240,7 @@ module `List` uses a name reserved for the standard-library qualifier `List` (as
 `import List ( … )`); pick another module name.
 ----
 
-Reported where a module or a data takes a name the core holds (<<a-core-name-is-not-taken>>) — the reserved `+souther+` namespace, or a standard-library qualifier. The qualifier is the only spelling that reaches the library, so a declaration of that name does not shadow it in one place, it hides it everywhere.
+Reported where a module or a data takes a name the core holds (<<a-core-name-is-not-taken>>) — the reserved `+souther+` namespace, or a standard-library qualifier. The qualifier is the only way to refer to the library, so a declaration of that name does not shadow it in one place, it hides it everywhere.
 
 [#e1503]
 === A module is declared in two places
@@ -6304,11 +6306,11 @@ Reported where a name an `+import+` brings in has more than one answer here (<<a
 ----
 Module `example.employee` is on the class path, and this compiler cannot read what it published.
   It was built by Souther 0.4.0, which does not agree with this compiler about what an importing
-  module may reach.
+  module may use.
   Rebuild `example.employee` with this compiler, or compile against the version that built it.
 ----
 
-Reported where a module the class path carries cannot be read back into the surface this compiler understands (<<a-published-module-can-be-read-back>>). What went wrong inside the artifact is said under the report: a class carrying metadata this compiler cannot read, a boundary revision that does not agree (<<a-published-module-agrees-with-this-compiler>>), declarations that name a different module from the one they were found under, a declaration whose class is not there (<<a-published-module-carries-what-it-says-it-declares>>), published text this compiler does not parse, an `+import+` line of the published surface it cannot read.
+Reported where a module the class path carries cannot be read back into the surface this compiler understands (<<a-published-module-can-be-read-back>>). What went wrong inside the artifact is said under the report: a class containing metadata this compiler cannot read, a boundary revision that does not agree (<<a-published-module-agrees-with-this-compiler>>), declarations that name a different module from the one they were found under, a declaration whose class is not there (<<a-published-module-carries-what-it-says-it-declares>>), published text this compiler does not parse, an `+import+` line of the published surface it cannot read.
 
 Said where the module was reached from — the `+import+` line in this project that arrives at it, and every other line that does, since a dependency two files import is reached by both. The artifact's own lines are not this compile's to quote, and a report carrying one sends an author to a place in a file they do not have.
 
@@ -6506,8 +6508,8 @@ Reported where the name is written — in a `+depends on+` clause, or as a `+>->
 
 [,text]
 ----
-`taxed` is published, so its body runs in each module that imports it, and that body builds
-`Step`, which this module keeps to itself.
+`taxed` is published, so its body runs in each module that imports it, and that body uses `Step`,
+which this module does not expose.
 ----
 
 Reported where the module that publishes the helper is compiled (<<a-published-helper-builds-only-what-its-reader-can-reach>>). A published helper is expanded into its reader, so the reader's classes name what the helper builds, and a type its module keeps is not one they can name. Nothing in the helper's signature shows it: `Step` may occur only in the body, or only in a private value the body names, which is expanded with it.
@@ -6563,7 +6565,7 @@ A composition with a written declaration requires exact agreement with the infer
 
 [,text]
 ----
-`exposing` names the composition `placeOrder`, so it must declare its output there.
+`exposing` lists the composition `placeOrder`, so its output must be declared there.
 Hint: Write `exposing ( placeOrder : PlacedOrder | OutOfStock )`.
 ----
 
@@ -6609,7 +6611,7 @@ let allocateAndShip (number, instructShipment) =
 `behavior ship` declares `depends on allocate`, but `allocate` depends on nothing, so
 there is nothing to inject.
 Hint: Remove `allocate` from `depends on` and call it directly; a behavior that depends
-on nothing is reached by name.
+on nothing can be called by its name.
 ----
 
 `+depends on+` names a behavior whose requirement set is not empty, declared here or imported (<<depends-on>>). A behavior that depends on nothing is E1607 — call it instead (<<calling-a-behavior>>) — and so is a `+>->+` composition, whose requirements are inferred from its stages rather than written, and so is a name that is no behavior in scope. All three are reported at the clause, where the name was written.
@@ -6619,7 +6621,7 @@ on nothing is reached by name.
 
 [,text]
 ----
-`behavior ship` reaches itself: ship -> allocate -> ship.
+`behavior ship` calls itself: ship -> allocate -> ship.
 Hint: A behavior does not recurse, through calls, `depends on` or `>->` stages. Write the
 recursion as a helper `let`, where it is proven total.
 ----
@@ -6733,7 +6735,7 @@ it in this scope so its parameter types follow.
 
 [,text]
 ----
-`inc` is reached by an entry and holds a function, but its function type is not written: write it
+`inc` is used by an entry and holds a function, but its function type is not written: write it
 (`let inc: (Int) -> Bool = ...`).
 ----
 
@@ -6744,8 +6746,8 @@ Reported at the binding (<<a-function-bindings-type-is-known>>). The second form
 
 [,text]
 ----
-Nothing says what this function takes: write it where a declaration gives its type, or write the
-type of the `let` that holds it.
+The parameter types of this function are not stated. Write it where a declaration gives its type, or
+annotate the `let` that holds it with a type.
 ----
 
 Reported where the lambda is written (<<a-function-value-has-a-type-where-it-is-written>>). No position it stands in takes a function, and it is no name whose declaration states one, so it has no parameter types to be read at.
@@ -6765,8 +6767,8 @@ Reported at the annotation (<<an-annotation-on-a-function-binding-is-a-function-
 
 [,text]
 ----
-Helper `let total` parameter `line` is only read through a field, which names no type; annotate it
-with its type.
+Helper `let total` parameter `line` is only read through a field, which does not determine its type;
+annotate it with its type.
 ----
 
 Reported at the parameter (<<a-helper-parameter-states-its-type>>). Reading a field off a parameter, or applying it, does not name a type — several types have a field of that name — so the annotation is what says which.
@@ -7019,7 +7021,7 @@ A warning, and one that needs the arms measured where the line was drawn by a fo
 
 Said of the two points against the line and of neither of the two away from it (<<a-border-has-four-point-roles>>). Those two are what simplified domain coverage asks for and what a row on the line shows that no other row does; the points inside and outside are the two items reliable domain coverage adds, and a build is told about them under <<e1917>>. A build measuring this far is held to all four (<<example-adequacy>>), and the report still names neither as satisfied.
 
-Which of the two it is, in the word the report gives it (<<a-border-says-which-point-it-owes>>). One finding is told on two surfaces, and a reader handed this vocabulary by the report was working it out again here. `+ON+` and `+OFF+` are the technique's terms rather than English words for it, so they are the same in every catalog and what a catalog holds is the sentence around them. The rule is named as the one that drew the border and not as one drawing its line here: only one of the two points carries the value the rule was written with, so the other would be told the line is where it is not. The hint follows the point and is said in the same words — what a row at the nearest value the border keeps in shows, and what one at the nearest value it keeps out shows. Not which side of the line the value falls on: which of the two points carries the line's own value turns on the border being closed or open (<<a-border-has-four-point-roles>>), so a hint keyed on that would be a second reading of one finding under a sentence that has just named the role. What tells `+<=+` from `+<+` is the border being closed or open, which the report says of the border.
+Which of the two it is, in the word the report gives it (<<a-border-says-which-point-it-owes>>). One finding is told on two surfaces, and a reader handed this vocabulary by the report was working it out again here. `+ON+` and `+OFF+` are the technique's terms rather than English words for it, so they are the same in every catalog and what a catalog holds is the sentence around them. The rule is named as the one that sets the boundary and not as one drawing its line here: only one of the two points carries the value the rule was written with, so the other would be told the line is where it is not. The hint follows the point and is said in the same words — what a row at the last value inside the boundary catches, and what one at the first value outside it catches: the boundary being one step too far in, or one step too far out. Not which side of the line the value falls on: which of the two points carries the line's own value turns on the border being closed or open (<<a-border-has-four-point-roles>>), so a hint keyed on that would be a second reading of one finding under a sentence that has just named the role. What tells `+<=+` from `+<+` is the border being closed or open, which the report says of the border.
 
 The fork is named by the construct it was written as — an `+if+`, a `+guard+`, or a guard comprehension (<<stdlib-list>>) — and where it is written is pointed at rather than said, a place being something only a reader's own files give a name to. All three lower to one form before anything runs, so the word comes from where the source was read and not from the shape it was lowered to.
 
@@ -7082,7 +7084,7 @@ Could not compare this fake with the rows recorded for `find` — building the t
 its budget of 100000000 steps.
 ----
 
-A warning, quoted where the `+fake+` names the behavior it stands in for. Emitted when reading a `+fake+` table against the rows recorded for that behavior (<<example-pending>>) does not come to a value, so what the two state was never compared. Which of three things stopped it is said: the table spent its counted budget, it reached the recursion-depth limit, or the evaluation stopped answering. The first two are decided by what the table states and read the same on every machine; the third is not a statement about the model at all. Being told nothing was found and being told nothing was compared are different answers, and an empty list of disagreements is what the first one looks like.
+A warning, quoted where the `+fake+` names the behavior it stands in for. Emitted when reading a `+fake+` table against the rows recorded for that behavior (<<example-pending>>) does not come to a value, so what the two state was never compared. Which of three things stopped it is said: the table spent its counted budget, it reached the recursion-depth limit, or building it did not finish within the wait. The first two are decided by what the table states and read the same on every machine; the third is not a statement about the model at all. Being told nothing was found and being told nothing was compared are different answers, and an empty list of disagreements is what the first one looks like.
 
 [#e1921]
 === A fake's table was not built in time
@@ -7308,7 +7310,7 @@ A rule this compiler read fewer distinctions of than its way consults is not one
 
 Said only of the rules something was seen standing in. Whether a rule is owed a row at all is settled before this and the other two answers are not warned about: a rule the readings that already exist show no row takes is owed nothing, and a rule this compiler looked for and did not find is neither covered nor a gap — reporting the second would tell an author that a shortfall of this compiler is work of theirs.
 
-*The sentence names the behavior and no more, and which rule it is, is marked.* One label per condition, put where the construct that drew it is written and saying which way the rule takes it — `+the rule takes this failing+` at a comparison, and at the application of one of the language's operations where the condition is what that operation answers (`+List.isEmpty(xs)+`, `+List.any(p, xs)+`), `+the rule goes through the else+` at a fork. What tells one rule from another is the proposition each of its conditions is keyed on, written the one way round that makes a comparison and its denial one column — so a sentence spelling it would show an author `+n <= 100+` where they wrote `+n > 100+`. Where a condition has no construct to mark, a hint says so rather than the condition being left out: a rule described by fewer conditions than it turns on is one two of which a reader cannot tell apart.
+*The sentence names the behavior and no more, and which rule it is, is marked.* One label per condition, put where the construct that drew it is written and saying which way the rule takes it — `+the rule needs this to be false+` at a comparison, and at the application of one of the language's operations where the condition is what that operation answers (`+List.isEmpty(xs)+`, `+List.any(p, xs)+`), `+the rule goes through the else+` at a fork. What tells one rule from another is the proposition each of its conditions is keyed on, written the one way round that makes a comparison and its denial one column — so a sentence spelling it would show an author `+n <= 100+` where they wrote `+n > 100+`. Where a condition has no construct to mark, a hint says so rather than the condition being left out: a rule described by fewer conditions than it turns on is one two of which a reader cannot tell apart.
 
 The report says the same rule the same way, in its own words: one line per condition under the sentence, each naming the construct and the way the rule takes it. Two rules of one behavior are shown alike in the sentence and are told apart by those lines, and by the identity the document carries (<<example-report-vocabulary>>).
 
@@ -7389,7 +7391,7 @@ No row of `refund` would give a different result if the `case OutOfPocket` arm h
   hint: Write a row with the input (Item { amount = Amount(1), payer = OutOfPocket }). The two give different results there.
 ----
 
-A warning (<<what-a-build-refuses-over-is-the-account>>). Said of a behavior with a body, at the fork of the arm a rewrite replaces, at the fold a rewrite of a walk replaces, or at the body when the rewrite is one answer (<<every-rewrite-of-a-body-is-told-apart>>). A rewrite of an arm names the arm and the arm it answers as, in the words <<e1918>> names an arm in: a fork has more than one arm where it is written, and which answered as which is what tells two rewrites at one fork apart. A rewrite of a walk says which of the two it is. A rewrite of the body as one answer names the row that came to that value, which is what tells it from the rewrite as another. A fork or a fold written in code this build holds no source of is said at the body, by the definition that wrote it.
+A warning (<<what-a-build-refuses-over-is-the-account>>). Said of a behavior with a body, at the fork of the arm a rewrite replaces, at the fold a rewrite of a walk replaces, or at the body when the rewrite is one answer (<<every-rewrite-of-a-body-is-told-apart>>). A rewrite of an arm names the arm and the arm it is replaced by, in the words <<e1918>> names an arm in: a fork has more than one arm where it is written, and which was replaced by which is what tells two rewrites at one fork apart. A rewrite of a walk says which of the two it is. A rewrite of the body as one answer names the row whose result the body would always return, which is what tells it from the rewrite as another. A fork or a fold written in code this build has no source for is said at the body, by the definition that wrote it.
 
 [,text]
 ----
@@ -7407,7 +7409,7 @@ No row of `total` would give a different result if this fold stopped after its f
 
 *A search that found nothing proves nothing.* A rewrite neither shown to differ nor proven the same is left undecided, which weakens the measure and is not a gap. It says how the search ended, each way as itself: the runs the measure lets one rewrite take were spent, the composing of rows stopped at a figure of its own, a run came back without an answer, or every row composed was answered alike — where it looked, and not everywhere. Nothing here concludes two bodies are the same from a search.
 
-*And a row's verdict is what tells them apart.* A rewrite is told apart by a row that holds of one of the two bodies and fails of the other, which is what the row states, its answer or whatever else it writes, read against each. A row that holds of both tells neither from the other, and so does one that fails of both: a row written wrong about the body as written is not made right by a rewrite that is wrong the same way. Where a row the module writes is the one the two answer differently on, the hint asks for that row's whole answer to be written down, since a row stating less, or nothing, comes out the same under either; where it is a row this compiler composed, the hint is that row.
+*And a row's verdict is what tells them apart.* A rewrite is told apart by a row that holds of one of the two bodies and fails of the other, which is what the row states, its answer or whatever else it writes, read against each. A row that holds of both tells neither from the other, and so does one that fails of both: a row written wrong about the body as written is not made right by a rewrite that is wrong the same way. Where a row the module writes is the one the two answer differently on, the hint asks for that row's whole expected result to be written out, since a row stating less, or nothing, comes out the same under either; where it is a row this compiler composed, the hint is that row.
 
 Told apart from <<e1918>>, which is an arm no row goes through, and from <<e1938>>, which is a border a line beside it is not told from. This one is said only of what the rows do reach.
 
@@ -7449,17 +7451,17 @@ The same code says the two other ways the guarantee fails. One is reaching a dec
 
 [,text]
 ----
-`let depth` does not carry the termination guarantee it claims: it reaches the `partial`
-helper `spin` (depth -> measure -> spin). Mark `depth` `partial` as well, or stop
-reaching it.
+`let depth` is not marked `partial`, but it calls the `partial` helper `spin` (depth ->
+measure -> spin), so it may not terminate. Mark `depth` `partial` as well, or stop
+calling it.
 ----
 
 The other is writing a `+partial+` helper where a value goes, which takes it out of reach of the walk above.
 
 [,text]
 ----
-The `partial` helper `spin` is written where a value goes. A function type carries no
-termination guarantee, so a `partial` helper may be applied but not handed over.
+The `partial` helper `spin` is written where a value goes. A function type does not
+promise termination, so a `partial` helper may be called but not passed as a value.
 ----
 
 [#e2010]
@@ -7475,9 +7477,9 @@ Emitted when the check proves the invariant false at a construction (<<invariant
 
 [,text]
 ----
-Constructing `Amount` here violates its invariant on a reachable path: under what is
-assumed where it stands, the value being built is one the invariant rejects. Fix the
-value, or guard the path so the violating case cannot reach here.
+Constructing `Amount` here violates its invariant on a reachable path: given what is
+known at this point, the value being built is one the invariant rejects. Fix the value,
+or add a guard so the violating case cannot get here.
 ----
 
 Neither names what decided it: the check knows the values alone did not, and not which of the things known there did.
@@ -7494,17 +7496,18 @@ Where the paths reaching a construction fail different clauses, every path viola
 model.sou:7:5
 7|     invariant charged <= limit
        ^^^^^^^^^^^^^^^^^^^^^^^^^^
-Nothing known here establishes this clause.
+Nothing known at this point shows that this clause holds.
 
-Constructing `Amount` here may violate its invariant: nothing known here establishes it.
+Constructing `Amount` here may violate its invariant: nothing known at this point shows that
+it holds.
 Hint: If inputs for which the construction fails are ones the behavior accepts, that failure
-is a business case: guard the construction, or attempt it with `... as name else ...`, which
-states the invariant check once. If those inputs are not admitted by the model, the relation
+is a business case: guard the construction, or write it as `guard T(v) as name else ...`,
+which checks the invariant once. If those inputs are not admitted by the model, the relation
 belongs to a data — declare it as an `invariant` on the input that holds these values,
 introducing such a data where none exists.
 ----
 
-The message says what the check found and the hint says what the model has left to say, and the two are not the same sentence. What was found is that nothing known where the construction stands establishes the clause — not that a guard is missing. What is known there is what the input types declare, what a `+...+` spread brought in, and what the conditions on the way there add; a guard is one of those and naming it alone read as a report about guards.
+The message says what the check found and the hint says what the model has left to say, and the two are not the same sentence. What was found is that nothing known where the construction stands shows that the clause holds — not that a guard is missing. What is known there is what the input types declare, what a `+...+` spread brought in, and what the conditions on the way there add; a guard is one of those and naming it alone read as a report about guards.
 
 The hint states the modelling question, which has two answers and three spellings. Where the inputs the construction fails for are ones the behavior takes, the failure is a business one and is written as a branch — by a guard, or by attempting the construction (<<attempted-construction>>), which is the same answer with the invariant written once instead of twice. Where they are not inputs the model admits, the relation belongs to a data that owns it, which need not already exist: a relation between two parameters belongs to no input, so writing it means introducing the input that holds them both. There is deliberately no third answer that leaves the construction as it is and accepts the abort — an invariant check is the safety net for a model bug (<<violation-destination>>), not a way to record an unanswered modelling question in the source.
 
@@ -7568,7 +7571,7 @@ is declared (`invariant <name> = ...`); clauses declared without a name are hand
 `| _ -> ...`.
 ----
 
-E2015 leaves a clause that can fail with no arm to reach. A failure reaches one arm, so a clause with none is a failure with nowhere to go:
+E2015 leaves a clause that can fail with no arm to reach. When the construction fails, the arm for the clause that failed is taken, so a clause with none is a failure with nowhere to go:
 
 [,text]
 ----
@@ -7675,7 +7678,7 @@ Emitted when two arms name the same clause (<<attempt-answers-each-clause-once>>
 [,text]
 ----
 `data Wide` needs 256 JVM parameter slots, but the constructor generated for it takes at
-most 254. An `Int` field is carried as a `long` and takes two slots; every other field
+most 254. An `Int` field is stored as a `long` and takes two slots; every other field
 takes one.
 Hint: Split `Wide` into smaller data and hold them as fields.
 ----
@@ -7843,8 +7846,8 @@ Reported where an expression does not read (<<expression-syntax>>), including a 
 
 [,text]
 ----
-A case value is bound with `as`: write `| Submitted as s`, not `| Submitted s`. Only `Some` carries
-a payload to bind positionally.
+A case value is bound with `as`: write `| Submitted as s`, not `| Submitted s`. Only `Some` has a
+value that is bound by position.
 ----
 
 Reported where a pattern does not read (<<pattern-syntax>>). The forms differ by what is being destructured — a case binds with `+as+`, an optional binds its payload positionally, a record destructures its fields directly — so the message names the form for the thing at hand.

@@ -322,8 +322,8 @@ public final class Analyzer {
      */
     private LspDiagnostic internalError(LineIndex lines, Throwable t) {
         return new LspDiagnostic(range(lines, 0, 1), LspDiagnostic.ERROR, null,
-                "the compiler could not finish reading this file ("
-                        + t.getClass().getSimpleName() + ")");
+                "The compiler failed with an internal error ("
+                        + t.getClass().getSimpleName() + ") while checking this file.");
     }
 
     /**
@@ -1168,7 +1168,7 @@ public final class Analyzer {
                 continue;
             }
             CodeAction.Deferred offer = new CodeAction.Deferred(
-                    "Write the rows `" + behavior.name() + "` does not cover", uri, module,
+                    "Add the missing example rows for `" + behavior.name() + "`", uri, module,
                     behavior.name());
             // Where the client will not come back for it, the edit is worked out now. What the
             // handshake settles is when this costs what it costs, and never whether the offer is
@@ -2982,8 +2982,16 @@ public final class Analyzer {
         for (TypeSymbol each : discharge.casesNothingIsSaidAbout()) {
             unstated.add("`" + each.name() + "`");
         }
-        return new Hover(shown.contents() + "\n\nNothing is stated about "
-                + String.join(", ", unstated) + ".", shown.range());
+        return new Hover(shown.contents() + "\n\nNo `ensures` rule applies when `" + ident.text()
+                + "` returns " + oneOf(unstated) + ".", shown.range());
+    }
+
+    /** {@code a}, {@code a or b}, {@code a, b or c}. */
+    private static String oneOf(List<String> each) {
+        if (each.size() == 1) {
+            return each.getFirst();
+        }
+        return String.join(", ", each.subList(0, each.size() - 1)) + " or " + each.getLast();
     }
 
     /**
@@ -3052,7 +3060,10 @@ public final class Analyzer {
      * a form the check can carry.
      */
     private String ruleContents(List<RuleDischarge> rules) {
-        StringBuilder out = new StringBuilder("**What the check reads of this**\n");
+        StringBuilder out = new StringBuilder(
+                "**What code that calls this behavior can rely on**\n\nEvery rule is checked when"
+                        + " the behavior returns. This shows how much of each rule the compiler"
+                        + " can use when it checks the code that calls the behavior.\n");
         for (RuleDischarge rule : rules) {
             String about = rule.rule().selector() == null ? ""
                     : "`" + rule.rule().selector().name() + "`: ";
@@ -3065,13 +3076,14 @@ public final class Analyzer {
      *  finished, which says nothing about the rule. */
     private String readOfARule(ClauseDischarge capability) {
         return switch (capability.capability()) {
-            case CapabilityResult.AnalysisStopped _ -> "**not determined** — this analysis did not"
-                    + " finish on it, so nothing here says what the check can make of it";
+            case CapabilityResult.AnalysisStopped _ -> "**not determined** — the compiler stopped"
+                    + " before it finished analyzing this rule, so it is not known how much of it"
+                    + " a caller can rely on";
             case CapabilityResult.Decided it -> it.holds()
-                    ? "**always holds** — it settles on its own, so nothing the behavior answers is"
-                            + " asked for it"
-                    : "**never holds** — it settles the other way on its own, so nothing the behavior"
-                            + " answers satisfies it";
+                    ? "**always holds** — it is true whatever the behavior returns, so it tells a"
+                            + " caller nothing"
+                    : "**never holds** — it is false whatever the behavior returns, so no result"
+                            + " can satisfy it";
             // Joined by "and", which is what the parts are: every one of them has to be established
             // for the rule to be, and a reader given them as alternatives would take either as
             // enough.
@@ -3084,18 +3096,21 @@ public final class Analyzer {
     private String rulePart(RequiredPart part) {
         return switch (part) {
             case RequiredPart.Routed it -> ruleRoute(weakest(it));
-            case RequiredPart.OutsideTheFragment it -> "**runtime only** — not read, so the check"
-                    + " the behavior runs on its answer is the whole of it; " + saidOf(it.why());
+            case RequiredPart.OutsideTheFragment it -> "**runtime only** — it is checked when the"
+                    + " behavior returns, but a caller cannot rely on it, because "
+                    + saidOf(it.why());
         };
     }
 
     /** One way a guard could discharge a part. */
     private String ruleRoute(StaticRoute route) {
         return switch (route) {
-            case StaticRoute.AsABound _ ->
-                    "**derivable** — read as a relation the numeric domain reasons over";
-            case StaticRoute.AsATerm _ -> "**exact match** — read as a term the check can name and"
-                    + " compare, and nothing weaker states it";
+            case StaticRoute.AsABound _ -> "**derivable** — it is a comparison the compiler"
+                    + " can reason about, so a caller can rely on it and on anything that"
+                    + " follows from it";
+            case StaticRoute.AsATerm _ -> "**exact match** — the compiler can compare it only as"
+                    + " written, so a caller can rely on it only where the same condition over the"
+                    + " same values is required";
         };
     }
 
@@ -3104,9 +3119,9 @@ public final class Analyzer {
     private String saidOf(FragmentReason why) {
         return switch (why) {
             case FragmentReason.ItCallsAnOperation it -> "it calls `" + it.operation()
-                    + "`, which the check reads as a value and not as a term";
+                    + "`, and the compiler has no rules for what `" + it.operation() + "` returns";
             case FragmentReason.ItsShapeIsNotRead _ ->
-                    "it is not one of the shapes the check reads";
+                    "the compiler does not analyze a condition written in this form";
         };
     }
 
@@ -3169,21 +3184,23 @@ public final class Analyzer {
             // Nothing about the clause. What is said is that this compiler did not finish, because
             // whether a guard discharges it is exactly what was not established.
             case CapabilityResult.AnalysisStopped _ -> "**Static discharge: not determined**\n\n"
-                    + "This analysis did not finish on this clause, so nothing is known here about "
-                    + "whether a guard discharges it. The check on construction stands either way.";
+                    + "The compiler stopped before it finished analyzing this clause, so it is "
+                    + "not known whether a `guard` can satisfy it. The clause is still checked "
+                    + "whenever a value of this type is constructed.";
             case CapabilityResult.Decided it -> it.holds()
-                    ? "**Static discharge: always holds**\n\nThis clause settles to true on its "
-                            + "own, so the obligation is met without a guard."
-                    : "**Static discharge: never holds**\n\nThis clause settles to false on its "
-                            + "own. No guard establishes it, so no construction of this type passes "
-                            + "it.";
+                    ? "**Static discharge: always holds**\n\nThis clause is true for every value, "
+                            + "so constructing a value of this type needs no `guard` for it."
+                    : "**Static discharge: never holds**\n\nThis clause is false for every value, "
+                            + "so no value of this type can be constructed. No `guard` can make it "
+                            + "true.";
             case CapabilityResult.Analyzed got -> got.parts().stream().map(this::clausePart)
                     .collect(java.util.stream.Collectors.joining("\n\n"));
         };
         // What the clause is called is what an attempted construction's arm and a boundary issue read,
         // so it belongs beside how the clause discharges.
         return clause.owed().name()
-                .map(n -> body + "\n\nDeparted from by name: `| " + n + " -> ...`.")
+                .map(n -> body + "\n\nIn the `else` of a `guard ... as`, the arm for this clause is"
+                        + " `| " + n + " -> ...`.")
                 .orElse(body);
     }
 
@@ -3194,9 +3211,9 @@ public final class Analyzer {
             case RequiredPart.Routed it -> "**Static discharge: " + routeName(weakest(it))
                     + "**\n\n" + clauseRoute(weakest(it));
             case RequiredPart.OutsideTheFragment it -> "**Static discharge: runtime only**\n\n"
-                    + "This part of the clause cannot be represented by the static checker and is "
-                    + "enforced only at construction time. No guard discharges it.\n\n"
-                    + saidOf(it.why()) + ".";
+                    + "No `guard` can satisfy this part of the clause, so it is checked only at "
+                    + "run time, when a value of this type is constructed. The compiler cannot "
+                    + "analyze it because " + saidOf(it.why()) + ".";
         };
     }
 
@@ -3227,11 +3244,14 @@ public final class Analyzer {
     /** What one route takes from a guard. */
     private String clauseRoute(StaticRoute route) {
         return switch (route) {
-            case StaticRoute.AsABound _ -> "The checker can prove this from numeric relations when "
-                    + "the constructed value is nameable, so any guard that implies it discharges "
-                    + "the construction.";
-            case StaticRoute.AsATerm _ -> "The checker can discharge this from a guard establishing "
-                    + "the same canonical property, and nothing weaker states it.";
+            case StaticRoute.AsABound _ -> "This is a comparison the compiler can reason about. "
+                    + "Where a value of this type is constructed from something the compiler can "
+                    + "name, such as a parameter or one of its fields, any `guard` whose condition "
+                    + "implies this clause satisfies it.";
+            case StaticRoute.AsATerm _ -> "The compiler can compare this clause only as written. "
+                    + "Only a `guard` stating the same condition over the same values satisfies "
+                    + "it. A related condition, such as the same check over a different field, "
+                    + "does not.";
         };
     }
 
