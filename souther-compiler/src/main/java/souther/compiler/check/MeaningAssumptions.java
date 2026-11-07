@@ -27,6 +27,8 @@ import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.observe.Figure;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.ConstantArguments;
@@ -187,21 +189,46 @@ final class MeaningAssumptions {
      * disjunctions of its own, each of whose parts is taken alone again, so what grows is the
      * nesting: a disjunction of two parts never reaches a count kept for it alone, however many
      * times over the nesting takes it.
+     *
+     * <p>Settling the choices a path left undecided is counted the same way against the path's
+     * own count ({@link #settling}), which is another figure. Each count carries the reason a
+     * part past it is declined for, naming the figure it was counted against, so a reason met in
+     * a part is told apart by which count it came of and not by its kind.
      */
     private static final class Tries {
 
         private int left;
 
-        Tries() {
-            this(CompositionBudget.ALTERNATIVES_A_PATH_TRIES.maximum());
+        private final WhyNotTaken.MoreAlternativesThanAreTried pastIt;
+
+        private Tries(int left, Figure figure) {
+            this.left = left;
+            this.pastIt = new WhyNotTaken.MoreAlternativesThanAreTried(figure);
         }
 
-        Tries(int left) {
-            this.left = left;
+        /** The parts one reading of a condition takes alone. */
+        static Tries reading() {
+            return new Tries(CompositionBudget.ALTERNATIVES_A_PATH_TRIES.maximum(),
+                    CompositionBudget.ALTERNATIVES_A_PATH_TRIES.reached());
+        }
+
+        /**
+         * What is left of the parts the path {@code known} is on may take alone settling its
+         * choices, said where it runs out as the whole figure it is counted for the path against:
+         * the parts other readings along the path took are what it was counted against too.
+         */
+        static Tries settling(Known known) {
+            return new Tries(known.settlingLeft(),
+                    WorkFigure.PARTS_A_PATH_SETTLES.at(Known.Choices.PARTS_A_PATH_SETTLES));
         }
 
         int left() {
             return left;
+        }
+
+        /** Why a part past this count is declined. */
+        WhyNotTaken.MoreAlternativesThanAreTried pastIt() {
+            return pastIt;
         }
 
         /** Whether another part may be taken alone, counting it where it may. */
@@ -219,7 +246,7 @@ final class MeaningAssumptions {
     static Predicates.Assumed assumed(Proposition stated, boolean positive, Known k, Terms terms,
                                       InputPlaces places, Denotations at) {
         Proposition asked = positive ? stated : stated.denied();
-        MeaningAssumptions taking = new MeaningAssumptions(terms, places, at, k, new Tries());
+        MeaningAssumptions taking = new MeaningAssumptions(terms, places, at, k, Tries.reading());
         // A count of statements is taken as the choices of which of them hold, every count in
         // the statement written out together and held to one figure.
         switch (CountsWrittenOut.of(asked)) {
@@ -249,11 +276,14 @@ final class MeaningAssumptions {
      *
      * <p>A choice is read over the state it is kept in, and taken out of it only once a part is
      * taken in for it. The parts read are counted for the path ({@link Known.Choices#PARTS_A_PATH_SETTLES});
-     * where the count runs out the choices left stay undecided, as they were when they were kept.
-     * That is no fact about the condition being read, so it is said of none.
+     * where the count runs out the choices left stay undecided, as they were when they were kept,
+     * and that is said of none: nothing was taken in for them. Where it runs out inside the one
+     * part a choice comes to, that part is taken in with a disjunction of it declined, and the
+     * reading says so as it says any reason the part gave, naming the path's count
+     * ({@link Tries#settling}).
      */
     private void settleWhatWasLeftUndecided() {
-        Tries settling = new Tries(known.settlingLeft());
+        Tries settling = Tries.settling(known);
         boolean settled = true;
         while (settled && !reachability.reachesNothing(known) && known.awaitsSettling()
                 && settling.left() > 0) {
@@ -263,7 +293,7 @@ final class MeaningAssumptions {
                         choice.at(), known, settling);
                 again.takingOneOf(choice.any());
                 if (again.leftUndecided) {
-                    if (again.notTaken.contains(new WhyNotTaken.MoreAlternativesThanAreTried())) {
+                    if (again.notTaken.contains(settling.pastIt())) {
                         break;
                     }
                     continue;
@@ -287,7 +317,7 @@ final class MeaningAssumptions {
             return k;
         }
         MeaningAssumptions settling = new MeaningAssumptions(terms, InputPlaces.NONE, null, k,
-                new Tries());
+                Tries.reading());
         settling.settleWhatWasLeftUndecided();
         return settling.known;
     }
@@ -362,6 +392,22 @@ final class MeaningAssumptions {
                     WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
                             WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), asked)
                             .forEach(this::notTaken);
+            // Some element being a value is how many of the container's elements are that value,
+            // which a path holds; and the container holding one where some is.
+            case Proposition.Some(DecisionSubject.AnInput(TermPath container,
+                                          ValueIdentity identity),
+                                  Proposition.SameValue(DecisionSubject one, DecisionSubject other,
+                                          boolean same, var _), boolean holds, var _)
+                    when same && howManyAre(container, identity, one, other) != null -> {
+                FactSubject count = howManyAre(container, identity, one, other);
+                known = known.taking(LinearForm.atomMinusConstant(count, ExactRatio.ONE),
+                        holds ? Rel.GE : Rel.LT, Known.Held.ON_THE_PATH,
+                        terms.spacesOf(LinearForm.atom(count)));
+                taken = true;
+                if (holds) {
+                    tookTheCount(container, identity, true);
+                }
+            }
             // Some element, asked nothing of it, is the container holding one: a count, which a path
             // holds.
             case Proposition.Some(DecisionSubject.AnInput(TermPath container,
@@ -794,8 +840,7 @@ final class MeaningAssumptions {
         List<MeaningAssumptions> left = new ArrayList<>();
         for (Proposition part : any.parts()) {
             if (!tries.another()) {
-                WhyNotTaken.declinedWhole(new WhyNotTaken.MoreAlternativesThanAreTried(), any)
-                        .forEach(this::notTaken);
+                WhyNotTaken.declinedWhole(tries.pastIt(), any).forEach(this::notTaken);
                 leftUndecided = true;
                 return;
             }
@@ -820,12 +865,11 @@ final class MeaningAssumptions {
                 only.notTaken.forEach(this::notTaken);
             }
             default -> {
-                boolean cutShort = left.stream().anyMatch(each -> each.notTaken.contains(
-                        new WhyNotTaken.MoreAlternativesThanAreTried()));
+                boolean cutShort = left.stream()
+                        .anyMatch(each -> each.notTaken.contains(tries.pastIt()));
                 leftUndecided = true;
                 if (cutShort) {
-                    WhyNotTaken.declinedWhole(new WhyNotTaken.MoreAlternativesThanAreTried(), any)
-                            .forEach(this::notTaken);
+                    WhyNotTaken.declinedWhole(tries.pastIt(), any).forEach(this::notTaken);
                 } else {
                     // Said when the reading ends, and only if no later condition has settled it.
                     Known.Declined declined = new Known.Declined(any, at, places);
@@ -971,6 +1015,38 @@ final class MeaningAssumptions {
         if (!tookTheCount(container, identity, holds)) {
             outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
         }
+    }
+
+    /**
+     * How many elements of the container at {@code container}, or keys, are the value one of
+     * {@code one} and {@code other} names, where the other is the element or the key — or null
+     * where neither is, the value is no input, or either is a place a path does not read.
+     */
+    private FactSubject howManyAre(TermPath container, ValueIdentity identity, DecisionSubject one,
+                                   DecisionSubject other) {
+        for (AddsWhatItDoesNotHold.Of of : AddsWhatItDoesNotHold.Of.values()) {
+            DecisionSubject value = heldAs(container, of, one) ? other
+                    : heldAs(container, of, other) ? one : null;
+            FactSubject count = value instanceof DecisionSubject.AnInput(TermPath at,
+                    ValueIdentity named)
+                    ? terms.howManyAreAtPlace(placeOf(container, identity), placeOf(at, named), of)
+                    : null;
+            if (count != null) {
+                return count;
+            }
+        }
+        return null;
+    }
+
+    /** Whether {@code subject} is what of the container at {@code container} a value is held as,
+     *  as {@code of} says: its element, or its key. */
+    private static boolean heldAs(TermPath container, AddsWhatItDoesNotHold.Of of,
+                                  DecisionSubject subject) {
+        return subject instanceof DecisionSubject.AnInput(TermPath at, var _)
+                && at.equals(switch (of) {
+                    case ELEMENTS -> container.element();
+                    case KEYS -> container.key();
+                });
     }
 
     /** The same, saying whether the count was named here at all, and nothing about why not. */

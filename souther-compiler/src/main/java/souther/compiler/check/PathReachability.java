@@ -96,6 +96,10 @@ import java.util.Set;
  */
 public final class PathReachability {
 
+    /** How far an attempt's construction is read apart where its arms are asked: as the walk reads
+     *  everything else, once. */
+    private static final ContextMultiplicity ONE_READING = ContextMultiplicity.ofOneReading();
+
     /**
      * What arrives at each construct a line is drawn at — a comparison, or an application whose
      * answer states one — before it is taken either way, and where a row coming to it is recorded.
@@ -495,7 +499,8 @@ public final class PathReachability {
     public static Answers of(Core body, SpecImplementation.Implemented implemented,
                              CoverageSites.Plan plan, InputReading read,
                              RuleReadingContext ruleReading, MeaningsOfABody meanings,
-                             ElementBindings elements, ValueDefinitions values) {
+                             ElementBindings elements, ValueDefinitions values,
+                             DeparturesNoRunTakes checked) {
         Objects.requireNonNull(read, "a reachability reading is made against an input that was read");
         if (implemented == null) {
             return Answers.NONE;
@@ -509,7 +514,7 @@ public final class PathReachability {
             params = params.with(input.written().binder(),
                     TypeOps.successType(input.declared().type()));
         }
-        return of(body, params, plan, read, ruleReading, meanings, elements, values);
+        return of(body, params, plan, read, ruleReading, meanings, elements, values, checked);
     }
 
     /**
@@ -535,7 +540,7 @@ public final class PathReachability {
     public static Answers of(Core body, Scope params, CoverageSites.Plan plan,
                              InputReading reading, RuleReadingContext ruleReading,
                              MeaningsOfABody meanings, ElementBindings elements,
-                             ValueDefinitions values) {
+                             ValueDefinitions values, DeparturesNoRunTakes checked) {
         Objects.requireNonNull(reading,
                 "a reachability reading is made against an input that was read");
         if (body == null) {
@@ -559,7 +564,7 @@ public final class PathReachability {
                         ruleReading.source().newtypes(), out,
                         arriving, meanings, new MeaningAssumptions.InputPlaces(parameters,
                                 path -> read.typeAt(path, ruleReading.source()), Map.of(),
-                                Map.of()));
+                                Map.of()), checked);
         walker.entry = in.known();
         walker.entered = in.at();
         walker.walk(body, Walked.entering(in.known()), in.at(),
@@ -734,14 +739,19 @@ public final class PathReachability {
     private final MeaningsOfABody meanings;
     /** Where the positions those statements name stand in this tree. */
     private final MeaningAssumptions.InputPlaces places;
+    /** The departures the discharge check found no run takes, reading the tree its operations
+     *  stand in. */
+    private final DeparturesNoRunTakes checked;
 
     private PathReachability(PathEngine engine, CoverageSites.Plan plan, InputReading reading,
                              Symbols symbols, DeclarationNewtypes newtypes,
                              Map<ControlPlace, Reachability> out,
                              Map<ConstructOccurrence,
                                      souther.compiler.reach.ComparisonArrival> arriving,
-                             MeaningsOfABody meanings, MeaningAssumptions.InputPlaces places) {
+                             MeaningsOfABody meanings, MeaningAssumptions.InputPlaces places,
+                             DeparturesNoRunTakes checked) {
         this.engine = engine;
+        this.checked = Objects.requireNonNull(checked);
         this.completion = new PathCompletion(engine.terms(), engine.predicates());
         this.entry = engine.nothingKnown();
         this.plan = plan;
@@ -764,6 +774,7 @@ public final class PathReachability {
      *  {@code meanings}: what they state on the one application of a closure the walk is of. */
     private PathReachability(PathReachability of, MeaningsOfABody meanings) {
         this.engine = of.engine;
+        this.checked = of.checked;
         this.completion = of.completion;
         this.entry = of.entry;
         this.entered = of.entered;
@@ -933,20 +944,34 @@ public final class PathReachability {
                 for (Core.FieldValue value : ic.construct().values()) {
                     given = walk(value.value(), given, at, reads);
                 }
+                // Which departure a run takes is what the construction's clauses come to where it
+                // stands, asked by the rules the discharge check reports by: a departure they leave
+                // no run is filed as one nothing enters. Asked of this tree, and of what the check
+                // found reading the tree the operations stand in, which may say more of what an
+                // operation answered; either proof is one.
+                ControlPlace.Arm[] arms = plan.armsOf(ic);
+                List<Boolean> notTaken = nothingReaches(given.known())
+                        ? Collections.nCopies(ic.els().size(), false)
+                        : engine.verdicts().departuresNoRunTakes(ic, given.known(), at,
+                                ONE_READING);
                 Choice.Decides.ItWasBuilt held = Choice.Decides.ofBuilt(ic);
                 PathEngine.Entered built = engine.enteringBuilt(held, given.known(), at);
                 List<Walked> ways = new ArrayList<>();
-                ways.add(walk(ic.then(), given.enteringAWay(built.known(), given.decided()),
-                        built.at(), reads.choosing(held, symbols, newtypes)));
-                for (Core.ElseArm arm : ic.els()) {
-                    ways.add(walk(arm.body(), given.enteringAWay(given.known(), given.decided()),
-                            at, reads.choosing(Choice.Decides.ofDeparture(ic, arm), symbols,
+                ways.add(building(arms, ic, given, built, reads.choosing(held, symbols,
+                        newtypes)));
+                for (int i = 0; i < ic.els().size(); i++) {
+                    Core.ElseArm arm = ic.els().get(i);
+                    boolean shut = notTaken.get(i)
+                            || (!nothingReaches(given.known())
+                                    && checked.shut(ic.place().occurrence(), i));
+                    ways.add(departing(arms, i + 1, ic, arm.body(), given, shut, at,
+                            reads.choosing(Choice.Decides.ofDeparture(ic, arm), symbols,
                                     newtypes)));
                 }
                 // No run gets past the arguments where they leave nothing, and then why is theirs
                 // and not the ways'.
                 if (nothingReaches(given.known())) {
-                    given.whyNothingArrives().ifPresent(why -> noneEnters(plan.armsOf(ic), why));
+                    given.whyNothingArrives().ifPresent(why -> noneEnters(arms, why));
                     yield given;
                 }
                 yield leaving(given, ways);
@@ -1587,12 +1612,17 @@ public final class PathReachability {
     /** Every arm of a fork in {@code arms} the walk has not proven otherwise, as one nothing enters
      *  for {@code why}. */
     private void noneEnters(ControlPlace.Arm[] arms, Proof why) {
+        noneEnters(arms, why, Reachability.Said.HERE);
+    }
+
+    /** The same, said where {@code said} says. */
+    private void noneEnters(ControlPlace.Arm[] arms, Proof why, Reachability.Said said) {
         if (arms == null) {
             return;
         }
         for (ControlPlace.Arm arm : arms) {
             if (!(out.get(arm) instanceof Reachability.Unreachable)) {
-                out.put(arm, new Reachability.Unreachable(why));
+                out.put(arm, new Reachability.Unreachable(why, said));
             }
         }
     }
@@ -1611,9 +1641,10 @@ public final class PathReachability {
     /**
      * Every comparison below a place nothing arrives at, answered as one nothing arrives at.
      *
-     * <p>A separate descent because what it does is not what the walk does: no arm is filed, and
-     * nothing here narrows anything — the state was already empty when this began, and it stays
-     * that way for every node under it. Whether one operand of a short circuit was reached is a
+     * <p>A separate descent because what it does is not what the walk does: every arm below is
+     * filed as one nothing enters — said at the first fork, and with that fork for the forks
+     * inside it — and nothing here narrows anything — the state was already empty when this
+     * began, and it stays that way for every node under it. Whether one operand of a short circuit was reached is a
      * question about a run, and there are none.
      *
      * <p>Written out rather than folded into the walk, because the walk stops here and stopping is
@@ -1629,9 +1660,15 @@ public final class PathReachability {
         Walked below = here;
         ControlPlace.Arm[] arms = plan.armsOf(e);
         Optional<Proof> why = here.whyNothingArrives();
-        if (arms != null && !here.filedAbove() && why.isPresent()) {
-            noneEnters(arms, why.get());
-            below = here.filed();
+        if (arms != null && why.isPresent()) {
+            // The first fork below where nothing arrives is where it is said; a fork inside an
+            // arm already said to be one nothing enters is owed no row either, and is said there.
+            if (here.filedAbove()) {
+                noneEnters(arms, why.get(), Reachability.Said.ABOVE);
+            } else {
+                noneEnters(arms, why.get(), Reachability.Said.HERE);
+                below = here.filed();
+            }
         }
         Walked under = below;
         Core.forEachChild(e, child -> unreached(child, under, at, reads));
@@ -1912,6 +1949,58 @@ public final class PathReachability {
         return walk(arm, fork.enteringAWay(
                         noRunPast.isPresent() ? inside.reachingNothing() : inside, under), at,
                 reads.choosing(Choice.Decides.ofCondition(iff, holds), symbols, newtypes));
+    }
+
+    /**
+     * The success branch of an attempt, entered with what the construction's clauses guarantee.
+     *
+     * <p>Where the clauses cannot all hold beside what holds on the way here, no run builds the
+     * value — each clause may hold and they cannot hold together — and the branch is filed as one
+     * nothing enters: the conditions on the way here and building it cannot all hold. What is
+     * under it is walked as a place nothing arrives at. Where nothing gets to the attempt at all,
+     * why is the attempt's, and nothing is filed here.
+     *
+     * @return what a run leaving the branch holds
+     */
+    private Walked building(ControlPlace.Arm[] arms, Core.IfConstructed attempt, Walked fork,
+                            PathEngine.Entered built, InputReads reads) {
+        if (nothingReaches(fork.known()) || !nothingReaches(built.known())) {
+            return walk(attempt.then(), fork.enteringAWay(built.known(), fork.decided()),
+                    built.at(), reads);
+        }
+        List<PathDecision> under = new ArrayList<>(fork.decided());
+        under.add(PathDecision.ofAnArm(attempt.then().pos(), attempt.lineage()));
+        if (arms != null && arms.length > 0) {
+            out.put(arms[0], new Reachability.Unreachable(
+                    Proof.conditionsThatCannotAllHold(under)));
+        }
+        return walk(attempt.then(), fork.enteringAWay(built.known(), under), built.at(), reads);
+    }
+
+    /**
+     * One departure of an attempt, entered where nothing was built, so with nothing the attempt
+     * would have guaranteed.
+     *
+     * <p>Where {@code notTaken} says the construction's clauses leave no run this departure, it is
+     * filed as one nothing enters — the conditions on the way here and taking it cannot all hold —
+     * and what is under it is walked as a place nothing arrives at. Otherwise nothing is filed and
+     * the walk goes on inside it.
+     *
+     * @return what a run leaving the departure holds
+     */
+    private Walked departing(ControlPlace.Arm[] arms, int index, Core.IfConstructed attempt,
+                             Core arm, Walked fork, boolean notTaken, Denotations at,
+                             InputReads reads) {
+        if (!notTaken) {
+            return walk(arm, fork.enteringAWay(fork.known(), fork.decided()), at, reads);
+        }
+        List<PathDecision> under = new ArrayList<>(fork.decided());
+        under.add(PathDecision.ofAnArm(arm.pos(), attempt.lineage()));
+        if (arms != null && index < arms.length) {
+            out.put(arms[index], new Reachability.Unreachable(
+                    Proof.conditionsThatCannotAllHold(under)));
+        }
+        return walk(arm, fork.enteringAWay(fork.known().reachingNothing(), under), at, reads);
     }
 
     /**

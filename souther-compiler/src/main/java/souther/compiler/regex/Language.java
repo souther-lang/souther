@@ -269,7 +269,7 @@ public final class Language {
     /** Where the code point a string it holds has at {@code index} lies, or null where it holds
      *  no string that long. */
     public Ends codePointsAt(int index) {
-        return CodePointSums.atIndex(machine, index);
+        return EndsOfAMachine.codePointsAt(machine, index);
     }
 
     /** The code points that stand at {@code index} of a string it holds of {@code length} code
@@ -314,16 +314,15 @@ public final class Language {
 
     /**
      * Where what the code points of a string it holds come to lies, or null where it holds none.
-     * Read off the machine, which is walked once.
+     * Read off the machine, which is walked once ({@link EndsOfAMachine}).
      */
     public Ends sumsOfCodePoints() {
-        return CodePointSums.range(machine, CodePoints::least,
-                over -> over.ranges().getLast().to());
+        return EndsOfAMachine.sumsOfCodePoints(machine);
     }
 
     /** Where how many code points a string it holds is lies, or null where it holds none. */
     public Ends lengths() {
-        return CodePointSums.range(machine, _ -> 1, _ -> 1);
+        return EndsOfAMachine.lengths(machine);
     }
 
     /**
