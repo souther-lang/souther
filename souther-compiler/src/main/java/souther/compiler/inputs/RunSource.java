@@ -33,6 +33,26 @@ public sealed interface RunSource {
     TermPath subjectPath();
 
     /**
+     * The places whose every occurrence is a value the run is read across: the place it is read
+     * from and, for a join, the map it is joined to — each a place inside the containers it
+     * stands in. None for the nodes of a tree, which stand in no container and are found by
+     * walking down from the root.
+     *
+     * <p>Not {@link #subjectPath}, which is one place to read from: a total of what two maps hold
+     * under one key is read across both of them, and asked of the one it is read from it is read
+     * off nothing of the other.
+     */
+    default List<TermPath> readAcross() {
+        return switch (this) {
+            case ProjectedOccurrences projected -> List.of(projected.subjectPath());
+            case FlattenedOccurrences flattened -> List.of(flattened.subjectPath());
+            case ComputedOccurrences computed -> List.of(computed.elements());
+            case JoinedOccurrences joined -> List.of(joined.elements(), joined.alongside());
+            case ReachableNodes _, SearchedLine _ -> List.of();
+        };
+    }
+
+    /**
      * Whether the run is the elements of one container, one value for each: then how many it holds
      * is how many that container holds, and a count of it is a taking of the container's place.
      */

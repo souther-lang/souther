@@ -9,7 +9,6 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Refinement;
-import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -844,26 +843,26 @@ final class AStatementAtARow {
             case NumericTerm.FromOnePosition one -> new WhatItReads(
                     acrossTheElements(one.position(), container) ? TurnsOn.OTHER_ELEMENTS
                             : TurnsOn.THE_ELEMENT, readsTheValue(one.position(), under));
-            case NumericTerm.TakenOver taken ->
-                    new WhatItReads(overTheRun(taken.source(), container), false);
+            // One number of all the values it is read across, and of what it reads beside them.
+            case NumericTerm.TakenOver _, NumericTerm.OccurrencesOfAKey _,
+                 NumericTerm.GatheredUnderAKey _ ->
+                    new WhatItReads(acrossOrOwn(term, container), false);
             case NumericTerm.Multiplicity often -> new WhatItReads(underItsValue(
-                    List.of(often.container()), container, across, isAt(under, often.place()),
-                    TurnsOn.THOSE_UNDER_ITS_VALUE), false);
+                    term.runsReadAcross().getFirst(), container, across,
+                    isAt(under, often.place()), TurnsOn.THOSE_UNDER_ITS_VALUE), false);
             case NumericTerm.ExtremeOfItsKey end -> new WhatItReads(underItsValue(
-                    List.of(end.container()), container, across, isAt(under, end.key()),
+                    term.runsReadAcross().getFirst(), container, across, isAt(under, end.key()),
                     TurnsOn.THOSE_UNDER_ITS_VALUE), readsTheValue(end.value(), under));
             case NumericTerm.OccurrencesOfItsValue often -> {
-                List<TermPath> ranged = often.run().subjectPath().containersHoldingIt();
+                List<TermPath> ranged = term.runsReadAcross().getFirst();
                 yield new WhatItReads(ranged.size() == 1 || ranged.equals(over(container, across))
                         ? underItsValue(ranged, container, across,
                                 isAt(under, often.subjectPath()), TurnsOn.THOSE_UNDER_ITS_VALUE)
-                        : overTheRun(often.run(), container), false)
+                        : acrossOrOwn(term, container), false)
                         .and(keeping(often.selection(), container, under, across));
             }
-            case NumericTerm.OccurrencesOfAKey often ->
-                    new WhatItReads(overTheRun(often.run(), container), false);
             case NumericTerm.GatheredUnderItsKey gathered -> {
-                List<TermPath> ranged = gathered.elements().containersHoldingIt();
+                List<TermPath> ranged = term.runsReadAcross().getFirst();
                 boolean readsIt = gathered.value().reads().stream()
                         .anyMatch(each -> readsTheValue(each.from(gathered.elements()), under));
                 if (ranged.size() != 1 && !ranged.equals(over(container, across))) {
@@ -882,9 +881,6 @@ final class AStatementAtARow {
                                     TurnsOn.THE_ORDER_OF_THOSE_UNDER_ITS_VALUE;
                         }), readsIt).and(keeping(gathered.selection(), container, under, across));
             }
-            case NumericTerm.GatheredUnderAKey gathered -> new WhatItReads(among(
-                    gathered.gathered().elements().containersHoldingIt(), container)
-                    ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT, false);
             // Made of the numbers of its two forms, and reads what all of them read.
             case NumericTerm.ProductOf product -> {
                 WhatItReads read = new WhatItReads(TurnsOn.THE_ELEMENT, false);
@@ -939,15 +935,19 @@ final class AStatementAtARow {
         return among(counted, container) ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT;
     }
 
-    /** What a number taken over every value of {@code run} turns on: other elements where the run
-     *  reaches across the elements of {@code container}, and the element's own otherwise. */
-    private static TurnsOn overTheRun(RunSource run, TermPath container) {
-        if (run instanceof RunSource.ReachableNodes nodes) {
-            return acrossTheElements(nodes.root(), container) ? TurnsOn.OTHER_ELEMENTS
-                    : TurnsOn.THE_ELEMENT;
-        }
-        return among(run.subjectPath().containersHoldingIt(), container)
-                ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT;
+    /**
+     * What a number of the values it is read across turns on: other elements where some run it
+     * is read across ({@link NumericTerm#runsReadAcross}) reaches across the elements of
+     * {@code container} — both maps of a join — or some place it reads beside them
+     * ({@link NumericTerm#placesReadBeside}), the root of a tree among them, is not shown inside
+     * one or apart; the element's own otherwise.
+     */
+    private static TurnsOn acrossOrOwn(NumericTerm term, TermPath container) {
+        boolean acrossThem = term.runsReadAcross().stream()
+                .anyMatch(run -> among(run, container))
+                || term.placesReadBeside().stream()
+                        .anyMatch(place -> acrossTheElements(place, container));
+        return acrossThem ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT;
     }
 
     /** Whether reading across the elements of any of {@code counted} reads across those of
@@ -985,21 +985,21 @@ final class AStatementAtARow {
     void lookAt(BorderQuantity.Observation row, Set<TermPath> taken) {
         for (OneRelation each : relations.values()) {
             if (each instanceof OneRelation.OnAQuantity read && read.terms().stream()
-                    .noneMatch(term -> under(term.subjectPath(), taken))) {
+                    .noneMatch(term -> readUnder(term, taken))) {
                 read.over().lookAt(row);
             }
             if (each instanceof OneRelation.OnAProduct product && product.terms().stream()
-                    .noneMatch(term -> under(term.subjectPath(), taken))) {
+                    .noneMatch(term -> readUnder(term, taken))) {
                 product.factors().lookAt(row);
             }
             if (each instanceof OneRelation.OnARemainderByAnInput remainder
                     && remainder.terms().stream()
-                    .noneMatch(term -> under(term.subjectPath(), taken))) {
+                    .noneMatch(term -> readUnder(term, taken))) {
                 remainder.numbers().lookAt(row);
             }
             if (each instanceof OneRelation.OnARemainderOfAForm remainder
                     && remainder.terms().stream()
-                    .noneMatch(term -> under(term.subjectPath(), taken))) {
+                    .noneMatch(term -> readUnder(term, taken))) {
                 remainder.numbers().lookAt(row);
                 if (remainder.addedNumbers() != null) {
                     remainder.addedNumbers().lookAt(row);
@@ -1022,8 +1022,16 @@ final class AStatementAtARow {
         }
     }
 
+    /** Whether {@code path} may stand at or under one of {@code taken}: false only where it is
+     *  shown not to, as the value is reached ({@link TermPath#standsAtOrUnder}). */
     private static boolean under(TermPath path, Set<TermPath> taken) {
-        return taken.stream().anyMatch(path::isAtOrUnder);
+        return taken.stream().anyMatch(path::standsAtOrUnder);
+    }
+
+    /** Whether some place {@code term} is read off ({@link NumericTerm#placesReadOff}) may stand
+     *  at or under one of {@code taken}: a total of a join read under it by either map is. */
+    private static boolean readUnder(NumericTerm term, Set<TermPath> taken) {
+        return term.placesReadOff().stream().anyMatch(place -> under(place, taken));
     }
 
     /**
@@ -1443,9 +1451,9 @@ final class AStatementAtARow {
         // one it is about, and any other place one it reads — for a number of the elements a
         // statement keeps, what the statement reads.
         for (NumericTerm term : numbersOf(stated)) {
-            List<TermPath> across = term.containersReadAcross();
+            List<List<TermPath>> runs = term.runsReadAcross();
             for (TermPath place : term.placesReadOff()) {
-                if (across.contains(place) && !place.insideAContainer()) {
+                if (!place.insideAContainer() && runs.stream().anyMatch(run -> run.contains(place))) {
                     about.add(place);
                 } else {
                     read.add(place);

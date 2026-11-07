@@ -194,7 +194,8 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
             if (each.demand() instanceof RowDemand.OfACondition condition) {
                 for (NumericTerm term : condition.terms()) {
                     if (term instanceof NumericTerm.OccurrencesOfAKey asked) {
-                        reads.add(new Reads(asked.containersReadAcross().getFirst(), asked.key()));
+                        reads.add(new Reads(asked.runsReadAcross().getFirst().getFirst(),
+                                asked.key()));
                     }
                 }
             }
