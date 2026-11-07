@@ -56,13 +56,16 @@ import java.util.function.Function;
 public final class ContainerSizesUnderAWitness {
 
     private final Function<Core, Optional<BigInteger>> ofTheInput;
+    private final Function<Core, Optional<BigInteger>> ofEachElementOfTheInput;
     private final Map<BindingId, Core> boundTo = new HashMap<>();
     private final Map<BindingId, Core> carriedBy = new HashMap<>();
     private final Set<Core> asking = new HashSet<>();
 
     private ContainerSizesUnderAWitness(Core within,
-                                        Function<Core, Optional<BigInteger>> ofTheInput) {
+                                        Function<Core, Optional<BigInteger>> ofTheInput,
+                                        Function<Core, Optional<BigInteger>> ofEachElement) {
         this.ofTheInput = ofTheInput;
+        this.ofEachElementOfTheInput = ofEachElement;
         names(within);
     }
 
@@ -73,24 +76,27 @@ public final class ContainerSizesUnderAWitness {
      * whose size nothing here bounds.
      */
     public static Optional<BigInteger> mostHeldWhateverTheInputHolds(Core collection) {
-        return new ContainerSizesUnderAWitness(collection, node -> Optional.empty())
-                .most(collection);
+        return new ContainerSizesUnderAWitness(collection, node -> Optional.empty(),
+                node -> Optional.empty()).most(collection);
     }
 
     /**
      * Whether {@code operator}, standing in {@code within} and answering where {@code fits} says,
      * answers on every run whose input collections hold no more than {@code ofTheInput} says.
      *
-     * @param ofTheInput the most a collection of the input read at a node holds on such a run, or
-     *                   nothing where the node reads no collection of the input or nothing bounds
-     *                   it
+     * @param ofTheInput    the most a collection of the input read at a node holds on such a run,
+     *                      or nothing where the node reads no collection of the input or nothing
+     *                      bounds it
+     * @param ofEachElement the same, of the most each element of such a collection holds
      */
     public static boolean answersOn(Core within, Core operator, GetsPast completion,
-                                    Function<Core, Optional<BigInteger>> ofTheInput) {
-        ContainerSizesUnderAWitness reading = new ContainerSizesUnderAWitness(within, ofTheInput);
+                                    Function<Core, Optional<BigInteger>> ofTheInput,
+                                    Function<Core, Optional<BigInteger>> ofEachElement) {
+        ContainerSizesUnderAWitness reading =
+                new ContainerSizesUnderAWitness(within, ofTheInput, ofEachElement);
         return switch (completion) {
             case GetsPast.Always _ -> true;
-            case GetsPast.WhereTheAnswerFits(GetsPast.AnswerSize answer) ->
+            case GetsPast.WhereTheAnswerFits(LinearForm<LawNumber<Integer>> answer) ->
                     reading.answer(operator, answer)
                             .map(most -> most.compareTo(GetsPast.MOST_ELEMENTS) <= 0)
                             .orElse(false);
@@ -173,37 +179,14 @@ public final class ContainerSizesUnderAWitness {
         Core.forEachChild(node, this::names);
     }
 
-    /** The most the answer of {@code node} holds, as {@code size} says of what it is handed. */
-    private Optional<BigInteger> answer(Core node, GetsPast.AnswerSize size) {
+    /** The most the answer of {@code node} holds, as {@code size}, a number of what it is handed
+     *  by place, says. */
+    private Optional<BigInteger> answer(Core node, LinearForm<LawNumber<Integer>> size) {
         List<Core> operands = operandsOf(node);
         if (operands == null) {
             return Optional.empty();
         }
-        return switch (size) {
-            case GetsPast.AnswerSize.SumOf(List<Integer> at, int more) -> {
-                BigInteger total = BigInteger.valueOf(more);
-                for (int each : at) {
-                    Optional<BigInteger> one = each < operands.size()
-                            ? most(operands.get(each)) : Optional.empty();
-                    if (one.isEmpty()) {
-                        yield Optional.empty();
-                    }
-                    total = total.add(one.get());
-                }
-                yield Optional.of(total);
-            }
-            case GetsPast.AnswerSize.PiecesOf(int source, int function) -> {
-                if (source >= operands.size() || function >= operands.size()
-                        || !(Core.withoutStanding(operands.get(function))
-                                instanceof Core.Block made)) {
-                    yield Optional.empty();
-                }
-                Optional<BigInteger> elements = most(operands.get(source));
-                Optional<BigInteger> piece = most(made.body());
-                yield elements.isPresent() && piece.isPresent()
-                        ? Optional.of(elements.get().multiply(piece.get())) : Optional.empty();
-            }
-        };
+        return mostOf(size, at -> at < operands.size() ? operands.get(at) : null);
     }
 
     /** The most the collection {@code e} answers holds on such a run, or nothing where that is
@@ -259,7 +242,8 @@ public final class ContainerSizesUnderAWitness {
                     yield carried(walk, false);
                 }
                 if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
-                        instanceof GetsPast.WhereTheAnswerFits(GetsPast.AnswerSize size)) {
+                        instanceof GetsPast.WhereTheAnswerFits(
+                                LinearForm<LawNumber<Integer>> size)) {
                     yield answer(node, size);
                 }
                 yield assembledOrStated(node);
@@ -308,24 +292,46 @@ public final class ContainerSizesUnderAWitness {
         return Optional.empty();
     }
 
-    /** The most {@code form} comes to, each number in it the most a collection handed to
-     *  {@code applied} holds, or a part of one. */
+    /** The same, of {@code form} over the arguments of {@code applied}. */
     private Optional<BigInteger> mostOf(LinearForm<LawNumber<DeclaredArgument>> form,
                                         AnOperationApplied applied) {
+        return mostOf(form, applied::argument);
+    }
+
+    /**
+     * The most {@code form}, a number of what a site is handed, comes to: each number in it the
+     * most a collection {@code handed} names holds, or a part of one, or the most the elements of
+     * one hold between them — as many as it holds, each holding as many as one of them may, or
+     * as many as the closure handed beside it answers on one.
+     */
+    private <A> Optional<BigInteger> mostOf(LinearForm<LawNumber<A>> form,
+                                            Function<A, Core> handed) {
         Optional<BigInteger> out = whole(form.constant());
-        for (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> term : form.coefs().entrySet()) {
+        for (Map.Entry<LawNumber<A>, ExactRatio> term : form.coefs().entrySet()) {
             if (out.isEmpty() || term.getValue().signum() < 0) {
                 return Optional.empty();
             }
-            DeclaredArgument container = switch (term.getKey()) {
-                case LawNumber.SizeOf<DeclaredArgument>(
-                        LawSubject.Argument<DeclaredArgument>(var argument)) -> argument;
-                case LawNumber.HowManyMeet<DeclaredArgument>(var argument, var _) -> argument;
-                case LawNumber.HowManyDifferent<DeclaredArgument>(var argument, var _) -> argument;
-                default -> null;
+            Optional<BigInteger> held = switch (term.getKey()) {
+                case LawNumber.SizeOf<A>(LawSubject.Argument<A>(A argument)) -> mostIn(handed,
+                        argument);
+                case LawNumber.HowManyMeet<A>(A argument, var _) -> mostIn(handed, argument);
+                case LawNumber.HowManyDifferent<A>(A argument, var _) -> mostIn(handed, argument);
+                case LawNumber.SumOver<A>(A argument, LawNumber.SizeOf<A>(
+                        LawSubject.ElementOf<A>(A same))) when same.equals(argument) -> {
+                    Core container = handed.apply(argument);
+                    yield container == null ? Optional.empty()
+                            : times(most(container), mostOfAnElement(container));
+                }
+                case LawNumber.SumOver<A>(A argument, LawNumber.SizeOf<A>(
+                        LawSubject.WhatTheClosureAnswers<A>(A closure))) -> {
+                    Core container = handed.apply(argument);
+                    Core function = handed.apply(closure);
+                    yield container == null || function == null
+                            || !(Core.withoutStanding(function) instanceof Core.Block made)
+                            ? Optional.empty() : times(most(container), most(made.body()));
+                }
+                default -> Optional.empty();
             };
-            Core handed = container == null ? null : applied.argument(container);
-            Optional<BigInteger> held = handed == null ? Optional.empty() : most(handed);
             Optional<BigInteger> coefficient = whole(term.getValue());
             if (held.isEmpty() || coefficient.isEmpty()) {
                 return Optional.empty();
@@ -333,6 +339,36 @@ public final class ContainerSizesUnderAWitness {
             out = Optional.of(out.get().add(coefficient.get().multiply(held.get())));
         }
         return out;
+    }
+
+    /** The most the collection {@code handed} names at {@code argument} holds. */
+    private <A> Optional<BigInteger> mostIn(Function<A, Core> handed, A argument) {
+        Core container = handed.apply(argument);
+        return container == null ? Optional.empty() : most(container);
+    }
+
+    /** The most any element of the collection {@code container} holds: of one written out, the
+     *  most of those written; of one of the input, as the caller says. */
+    private Optional<BigInteger> mostOfAnElement(Core container) {
+        Core node = Core.withoutStanding(container);
+        Optional<BigInteger> input = ofEachElementOfTheInput.apply(node);
+        if (input.isPresent()) {
+            return input;
+        }
+        if (!(node instanceof Core.ListLit written)) {
+            return Optional.empty();
+        }
+        Optional<BigInteger> out = Optional.of(BigInteger.ZERO);
+        for (Core each : written.elements()) {
+            out = larger(out, most(each));
+        }
+        return out;
+    }
+
+    private static Optional<BigInteger> times(Optional<BigInteger> one,
+                                              Optional<BigInteger> other) {
+        return one.isPresent() && other.isPresent()
+                ? Optional.of(one.get().multiply(other.get())) : Optional.empty();
     }
 
     /** {@code ratio} rounded up to a whole number, or nothing where it is below nought. */
@@ -395,8 +431,7 @@ public final class ContainerSizesUnderAWitness {
      */
     private Optional<BigInteger> putInByAnOperator(Core node, BindingId carried) {
         if (!(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
-                instanceof GetsPast.WhereTheAnswerFits(
-                        GetsPast.AnswerSize.SumOf(List<Integer> at, int more)))) {
+                instanceof GetsPast.WhereTheAnswerFits(LinearForm<LawNumber<Integer>> size))) {
             return Optional.empty();
         }
         AnOperationApplied applied = AnOperationApplied.of(node);
@@ -404,33 +439,26 @@ public final class ContainerSizesUnderAWitness {
             return Optional.empty();
         }
         List<Core> operands = applied.args();
-        int carriedAt = -1;
-        BigInteger total = BigInteger.valueOf(more);
-        for (int each : at) {
-            if (each >= operands.size()) {
-                return Optional.empty();
-            }
-            Core operand = Core.withoutStanding(operands.get(each));
-            if (operand instanceof Core.Read name && name.binding().equals(carried)
-                    && carriedAt < 0) {
-                carriedAt = each;
-                continue;
-            }
-            if (mentions(operand, carried)) {
-                return Optional.empty();
-            }
-            Optional<BigInteger> one = most(operand);
-            if (one.isEmpty()) {
-                return Optional.empty();
-            }
-            total = total.add(one.get());
-        }
-        for (int other = 0; other < operands.size(); other++) {
-            if (!at.contains(other) && mentions(operands.get(other), carried)) {
+        // What is carried, counted once and as it is; every other operand reads none of it.
+        Integer carriedAt = null;
+        for (int at = 0; at < operands.size(); at++) {
+            Core operand = Core.withoutStanding(operands.get(at));
+            LawNumber<Integer> itsSize = new LawNumber.SizeOf<>(new LawSubject.Argument<>(at));
+            if (carriedAt == null && operand instanceof Core.Read name
+                    && name.binding().equals(carried)
+                    && ExactRatio.ONE.equals(size.coefs().get(itsSize))) {
+                carriedAt = at;
+            } else if (mentions(operand, carried)) {
                 return Optional.empty();
             }
         }
-        return carriedAt < 0 ? Optional.empty() : Optional.of(total);
+        if (carriedAt == null) {
+            return Optional.empty();
+        }
+        LinearForm<LawNumber<Integer>> beside = size.minus(LinearForm.atom(
+                new LawNumber.SizeOf<>(new LawSubject.Argument<>(carriedAt)))).orNull();
+        return beside == null ? Optional.empty()
+                : mostOf(beside, at -> at < operands.size() ? operands.get(at) : null);
     }
 
     /** Whether {@code e} reads {@code name} anywhere. */

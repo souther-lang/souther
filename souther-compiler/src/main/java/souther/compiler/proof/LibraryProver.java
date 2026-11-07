@@ -1,6 +1,8 @@
 package souther.compiler.proof;
 
 import souther.compiler.core.TheWalk;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -11,11 +13,14 @@ import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.Unsayable;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -307,6 +312,504 @@ public final class LibraryProver {
         } catch (Reading.Stopped stopped) {
             return stoppedAt(stopped);
         }
+    }
+
+    /**
+     * The type of what each operator of {@code operation}'s body, {@code body}, answers, read off
+     * what it is handed: an argument as the operation's signature says, a number written out as
+     * its own, what an operation answers as that operation's signature says, and what a walk
+     * carries as where it started. An operator handed values of no type said here, or answering
+     * values of more than one type where it is met, is not among them.
+     *
+     * <p>Only where a reading meets it: an operator in a closure the body never applies is met
+     * nowhere, and nor is one in a body this reading stops in.
+     */
+    public Map<LibraryTerm, Type> typesOf(ValueName.Stdlib.Operation operation, LibraryTerm body) {
+        Reading reading = new Reading(library, readThrough);
+        List<Type> takes = library.takes(operation);
+        try {
+            List<Value> params = arguments(operation);
+            List<Reading.Case> cases = reading.cases(body, new Reading.Frame(params, Map.of()));
+            Set<Value.Made> walks = new LinkedHashSet<>();
+            cases.forEach(each -> walksIn(each.is(), walks));
+            Map<Value, Type> startedAs = new HashMap<>();
+            for (Value.Made walk : walks) {
+                TheWalk shape = library.stdlib().walk();
+                if (!(walk.args().get(shape.step()) instanceof Value.Lambda)) {
+                    continue;
+                }
+                Value carried = new Value.Fresh(10 + startedAs.size(), "what a walk carries");
+                startedAs.put(carried, typeOf(walk.args().get(shape.seed()), takes, Map.of()));
+                List<Value> handed = new ArrayList<>(List.of(carried, carried));
+                handed.set(shape.accumulator(), carried);
+                handed.set(shape.element(), new Value.ElementOf(walk.args().get(shape.container())));
+                reading.applied(walk.args().get(shape.step()), handed);
+            }
+            Map<LibraryTerm, Type> out = new IdentityHashMap<>();
+            reading.met().forEach((term, met) -> {
+                Set<Type> types = new LinkedHashSet<>();
+                for (Reading.Case each : met) {
+                    types.add(typeOf(ofTheSameType(term, each.is()), takes, startedAs));
+                }
+                if ((term instanceof LibraryTerm.Operator || term instanceof LibraryTerm.Negated)
+                        && types.size() == 1 && types.iterator().next() != null) {
+                    out.put(term, types.iterator().next());
+                }
+            });
+            return out;
+        } catch (Reading.Stopped stopped) {
+            return Map.of();
+        }
+    }
+
+    /** A value of the type what {@code term} came to, {@code value}, is of: a negation is read as
+     *  nought less the number, whose type the number says. */
+    private static Value ofTheSameType(LibraryTerm term, Value value) {
+        return term instanceof LibraryTerm.Negated
+                && value instanceof Value.Arithmetic(var _, var _, Value negated) ? negated : value;
+    }
+
+    /**
+     * The type {@code value} is a value of, where what made it says: or null where nothing here
+     * says. {@code startedAs} is the type each value standing for what a walk carries started as.
+     */
+    private Type typeOf(Value value, List<Type> takes, Map<Value, Type> startedAs) {
+        return switch (value) {
+            case Value.Argument(int at) -> takes.get(at);
+            case Value.Whole _ -> Type.INT;
+            case Value.Decimal _ -> Type.DECIMAL;
+            case Value.Truth _, Value.Statement _ -> Type.BOOL;
+            case Value.Listed(List<Value> elements) -> new Type.ListOf(elements.isEmpty()
+                    ? new Type.Nothing() : typeOf(elements.getFirst(), takes, startedAs));
+            case Value.Tupled(List<Value> elements) -> {
+                List<Type> each = new ArrayList<>();
+                for (Value element : elements) {
+                    each.add(typeOf(element, takes, startedAs));
+                }
+                yield each.contains(null) ? null : new Type.TupleOf(each);
+            }
+            case Value.Component(Value tuple, int index) ->
+                    typeOf(tuple, takes, startedAs) instanceof Type.TupleOf(List<Type> elements)
+                            && index < elements.size() ? elements.get(index) : null;
+            case Value.Made(ValueName.Stdlib.Operation made, var _) ->
+                    library.stdlib().entry(made).signature().result();
+            case Value.Arithmetic(BinOp op, Value left, Value right) -> {
+                Type one = typeOf(left, takes, startedAs);
+                Type other = typeOf(right, takes, startedAs);
+                yield op == BinOp.DIV || Type.RATIONAL.equals(one) || Type.RATIONAL.equals(other)
+                        ? Type.RATIONAL : one != null && one.equals(other) ? one : null;
+            }
+            case Value.Joined(Value left, Value right) -> {
+                Type one = typeOf(left, takes, startedAs);
+                yield one != null ? one : typeOf(right, takes, startedAs);
+            }
+            case Value.PayloadOf(Value option) ->
+                    typeOf(option, takes, startedAs) instanceof Type.OptionOf(Type element)
+                            ? element : null;
+            case Value.ElementOf(Value container) -> switch (typeOf(container, takes, startedAs)) {
+                case Type.ListOf(Type element) -> element;
+                case Type.SetOf(Type element) -> element;
+                case null, default -> null;
+            };
+            case Value.Fresh _ -> startedAs.get(value);
+            default -> null;
+        };
+    }
+
+    /**
+     * How much the collections an operation's body builds at the sites {@code asked} names hold on
+     * the way to its answer, and whether the whole numbers it works out at the others lie where
+     * {@code asked} says, where no collection holds more than it says ({@link AskedOnTheWay}).
+     *
+     * <p>Each site is asked of every case a reading of the body meets it in, under the way the body
+     * went to reach it. A walk in the body is read by induction, over what it carries part by part:
+     * a collection holding no more than it started with and one element, or the elements of one
+     * element, for each element walked, and a whole number no further from where it started than
+     * what one step adds to it for each. The first such statement proved of the walk is what a site
+     * in its step is asked under, with the part walked so far, and the element the step is handed,
+     * a part of the list ({@link Induction}). A site holds no more than some collection handed to
+     * the operation where it holds no more than one of them, or no more than what a part of the
+     * walk is proved to carry once the element it is handed is walked, where that is no more than
+     * one of them at the end of the list. Otherwise no more than a number of the arguments: all
+     * the collections handed together, how many the operation's answer holds, where its law says
+     * that whatever it is handed, or one of {@code alsoNoMoreThan}, what the asker's owners say a
+     * site holds over the arguments.
+     *
+     * <p>A site met nowhere — under a closure the body never applies — and a body this reading
+     * stops in, or one walking more than once, are not shown.
+     */
+    public HeldOnTheWay heldOnTheWay(AskedOnTheWay asked) {
+        ValueName.Stdlib.Operation operation = asked.operation();
+        LibraryTerm body = asked.body();
+        Set<LibraryTerm> collections = asked.collections();
+        Set<LibraryTerm> numbers = asked.numbers();
+        BigInteger least = asked.least();
+        BigInteger greatest = asked.greatest();
+        BigInteger mostElements = asked.mostElements();
+        Reading reading = new Reading(library, readThrough);
+        try {
+            List<Value> params = arguments(operation);
+            List<Reading.Case> cases = reading.cases(body, new Reading.Frame(params, Map.of()));
+            Map<LibraryTerm, List<Reading.Case>> outside = new IdentityHashMap<>(reading.met());
+            Set<Value.Made> walks = new LinkedHashSet<>();
+            cases.forEach(each -> walksIn(each.is(), walks));
+            if (walks.size() > 1) {
+                return new HeldOnTheWay.NotShown();
+            }
+            List<Integer> handed = new ArrayList<>();
+            List<Type> takes = library.takes(operation);
+            for (int at = 0; at < takes.size(); at++) {
+                if (aCollection(takes.get(at))) {
+                    handed.add(at);
+                }
+            }
+            List<LawProposition<Value>> fitting = new ArrayList<>();
+            for (int at : handed) {
+                fitting.add(Props.compared(reading.size(params.get(at)), Rel.LE,
+                        LinearForm.constant(ExactRatio.of(mostElements))));
+            }
+            Walked walked = walks.isEmpty() ? null
+                    : walked(operation, reading, params, walks.iterator().next(), mostElements);
+            Map<LibraryTerm, List<Reading.Case>> inside =
+                    walked == null ? Map.of() : walked.met();
+            List<Universal> ended = walked == null ? List.of()
+                    : walked.induction().whereItEnds();
+            Function<Value, Granularity> spaced = spacing(operation, Map.of());
+            // Every number in range, wherever it is met.
+            for (LibraryTerm site : numbers) {
+                boolean atAStep = !outside.containsKey(site);
+                List<Reading.Case> met = atAStep ? inside.get(site) : outside.get(site);
+                if (met == null) {
+                    return new HeldOnTheWay.NotShown();
+                }
+                for (Reading.Case each : met) {
+                    LinearForm<LawNumber<Value>> number = reading.number(each.is());
+                    LawProposition<Value> goal = Props.both(
+                            Props.compared(number, Rel.GE,
+                                    LinearForm.constant(ExactRatio.of(least))),
+                            Props.compared(number, Rel.LE,
+                                    LinearForm.constant(ExactRatio.of(greatest))));
+                    if (!(atAStep ? walked.follows(each, fitting, goal)
+                            : follows(reading, given(each, fitting), ended, goal, spaced))) {
+                        return new HeldOnTheWay.NotShown();
+                    }
+                }
+            }
+            // What each collection is no more than: a collection handed, or what it is no more
+            // than at the end of the list.
+            List<LinearForm<LawNumber<Value>>> singles = new ArrayList<>();
+            handed.forEach(at -> singles.add(reading.size(params.get(at))));
+            List<List<LinearForm<LawNumber<Value>>>> owed = new ArrayList<>();
+            boolean withinWhatItIsHanded = true;
+            for (LibraryTerm site : collections) {
+                boolean atAStep = !outside.containsKey(site);
+                List<Reading.Case> met = atAStep ? inside.get(site) : outside.get(site);
+                if (met == null) {
+                    return new HeldOnTheWay.NotShown();
+                }
+                for (Reading.Case each : met) {
+                    LinearForm<LawNumber<Value>> size = reading.size(each.is());
+                    List<LinearForm<LawNumber<Value>>> noMoreThan = new ArrayList<>();
+                    if (atAStep) {
+                        for (Walked.Part part : walked.parts()) {
+                            if (walked.follows(each, fitting, Props.compared(size, Rel.LE,
+                                    part.most(walked.induction().walkedOneFurther())))) {
+                                noMoreThan.add(part.most(walked.induction().walkedToTheEnd()));
+                            }
+                        }
+                    } else {
+                        noMoreThan.add(size);
+                    }
+                    if (noMoreThan.isEmpty()) {
+                        return new HeldOnTheWay.NotShown();
+                    }
+                    withinWhatItIsHanded &= noMoreThan.stream().anyMatch(most -> singles.stream()
+                            .anyMatch(one -> follows(reading, given(each, fitting), ended,
+                                    Props.compared(most, Rel.LE, one), spaced)));
+                    owed.add(noMoreThan);
+                }
+            }
+            if (withinWhatItIsHanded) {
+                return new HeldOnTheWay.WithinWhatItIsHanded();
+            }
+            List<LinearForm<LawNumber<Integer>>> candidates =
+                    new ArrayList<>(noMoreThan(operation, handed));
+            candidates.addAll(asked.alsoNoMoreThan());
+            for (LinearForm<LawNumber<Integer>> most : candidates) {
+                LinearForm<LawNumber<Value>> read = reading.form(most, operation, params::get,
+                        Reading.Elements.none());
+                if (owed.stream().allMatch(one -> one.stream().anyMatch(each -> follows(reading,
+                        fitting, ended, Props.compared(each, Rel.LE, read), spaced)))) {
+                    return new HeldOnTheWay.NoMoreThan(most);
+                }
+            }
+            return new HeldOnTheWay.NotShown();
+        } catch (Reading.Stopped stopped) {
+            return new HeldOnTheWay.NotShown();
+        }
+    }
+
+    /** {@code also}, and that the way to {@code met} was taken. */
+    private static List<LawProposition<Value>> given(Reading.Case met,
+                                                     List<LawProposition<Value>> also) {
+        List<LawProposition<Value>> out = new ArrayList<>(also);
+        out.add(met.when());
+        return out;
+    }
+
+    /** Whether a value of {@code type} is a collection, counted by how many it holds. */
+    private static boolean aCollection(Type type) {
+        return type instanceof Type.ListOf || type instanceof Type.SetOf
+                || type instanceof Type.MapOf;
+    }
+
+    /**
+     * The numbers of {@code operation}'s arguments a collection it builds may be held to, in
+     * order: every collection it is handed together, and how many its answer holds where its law
+     * says that whatever it is handed.
+     */
+    private List<LinearForm<LawNumber<Integer>>> noMoreThan(ValueName.Stdlib.Operation operation,
+                                                            List<Integer> handed) {
+        List<LinearForm<LawNumber<Integer>>> out = new ArrayList<>();
+        if (!handed.isEmpty()) {
+            LinearForm<LawNumber<Integer>> together = Props.constant(0);
+            for (int at : handed) {
+                together = Props.plus(together, LinearForm.atom(
+                        new LawNumber.SizeOf<>(new LawSubject.Argument<>(at))));
+            }
+            out.add(together);
+        }
+        if (library.settled(operation, OperationLaw.Observed.SIZE)
+                instanceof Library.Settled.ByALaw(OperationLaw<Integer> law)
+                && law instanceof OperationLaw.Size<Integer> size && size.unconditional() != null) {
+            out.add(size.unconditional());
+        }
+        return out;
+    }
+
+    /**
+     * The walk of a body proved to carry no more than it started with and a bounded growth for
+     * each element, part by part, with every site its step was met at under that.
+     */
+    private final class Walked {
+
+        /** One part of what a walk carries, by where it is in it, and how much it is proved to
+         *  hold at most: a number of the operation's arguments and of the part walked. */
+        record Part(List<Integer> path, LinearForm<LawNumber<Slot>> held,
+                    ValueName.Stdlib.Operation operation, List<Value> params, Reading reading) {
+
+            /** How much it holds at most where {@code walked} is the part walked. */
+            LinearForm<LawNumber<Value>> most(Value walked) {
+                return reading.form(held, operation, slot -> switch (slot) {
+                    case Slot.Place(int position) -> params.get(position);
+                    case Slot.Walked _ -> walked;
+                    case Slot.Carried _, Slot.Every _, Slot.Answer _ -> null;
+                }, Reading.Elements.none());
+            }
+        }
+
+        private final Induction induction;
+        private final List<Part> parts;
+        private final Map<LibraryTerm, List<Reading.Case>> met;
+        private final Reading reading;
+        private final BigInteger mostElements;
+
+        Walked(Induction induction, List<Part> parts, Map<LibraryTerm, List<Reading.Case>> met,
+               Reading reading, BigInteger mostElements) {
+            this.induction = induction;
+            this.parts = List.copyOf(parts);
+            this.met = met;
+            this.reading = reading;
+            this.mostElements = mostElements;
+        }
+
+        Induction induction() {
+            return induction;
+        }
+
+        List<Part> parts() {
+            return parts;
+        }
+
+        Map<LibraryTerm, List<Reading.Case>> met() {
+            return met;
+        }
+
+        /** Whether {@code goal} follows at a step where {@code each} was met: from what the walk
+         *  is proved to carry there, and from the part walked with the element it is handed being
+         *  a part of the list, which a collection holds. */
+        boolean follows(Reading.Case each, List<LawProposition<Value>> also,
+                        LawProposition<Value> goal) {
+            List<LawProposition<Value>> given = given(each, also);
+            LinearForm<LawNumber<Value>> further = reading.size(induction.walkedOneFurther());
+            given.add(Props.compared(further, Rel.LE, reading.size(induction.walkedToTheEnd())));
+            given.add(Props.compared(further, Rel.LE,
+                    LinearForm.constant(ExactRatio.of(mostElements))));
+            return LibraryProver.this.follows(reading, given, induction.atAStep(), goal,
+                    induction.spacedAtAStep());
+        }
+    }
+
+    /**
+     * {@code walk}, the one walk of {@code operation}'s body, with the first statement of what it
+     * carries that is proved of it — or null where none is.
+     */
+    private Walked walked(ValueName.Stdlib.Operation operation, Reading reading,
+                          List<Value> params, Value.Made walk, BigInteger mostElements) {
+        TheWalk shape = library.stdlib().walk();
+        Value seed = walk.args().get(shape.seed());
+        List<List<Integer>> paths = new ArrayList<>();
+        if (seed instanceof Value.Tupled(List<Value> elements)) {
+            for (int at = 0; at < elements.size(); at++) {
+                paths.add(List.of(at));
+            }
+        } else {
+            paths.add(List.of());
+        }
+        // For each part, what it may be proved to carry, each with how much it then holds.
+        List<List<Carrying>> ways = new ArrayList<>();
+        for (List<Integer> path : paths) {
+            ways.add(carrying(operation, reading, params, walk, path));
+        }
+        for (List<Carrying> chosen : everyChoice(ways)) {
+            List<LawProposition<Slot>> carries = new ArrayList<>();
+            List<Walked.Part> parts = new ArrayList<>();
+            for (int at = 0; at < paths.size(); at++) {
+                Carrying one = chosen.get(at);
+                if (one == null) {
+                    continue;
+                }
+                carries.addAll(one.clauses());
+                if (one.held() != null) {
+                    parts.add(new Walked.Part(paths.get(at), one.held(), operation, params,
+                            reading));
+                }
+            }
+            Induction induction = new Induction(operation, carries, reading, params, walk);
+            if (!induction.overItsArguments()) {
+                return null;
+            }
+            reading.forgetWhatWasMet();
+            try {
+                if (!carries.isEmpty() && induction.prove() == null) {
+                    Map<LibraryTerm, List<Reading.Case>> met = new IdentityHashMap<>(reading.met());
+                    return new Walked(induction, parts, met, reading, mostElements);
+                }
+                if (carries.isEmpty()) {
+                    induction.stepped();
+                    return new Walked(induction, parts, new IdentityHashMap<>(reading.met()),
+                            reading, mostElements);
+                }
+            } catch (Reading.Stopped stopped) {
+                // Not this statement: the next may be read further.
+            }
+        }
+        return null;
+    }
+
+    /** A statement of what one part of a walk carries, and how much it then holds at most, or
+     *  null where it is a number. */
+    private record Carrying(List<LawProposition<Slot>> clauses, LinearForm<LawNumber<Slot>> held) {}
+
+    /**
+     * What the part at {@code path} of what {@code walk} carries may be proved to be: where it
+     * starts as a whole number written out, no lower than that and no higher than what a step adds
+     * at most for each element walked; where it starts as a collection whose size is a number of
+     * the arguments, holding no more than that and one for each element walked, or than that and
+     * what each element walked holds. Nothing (a choice of no statement) where it is neither.
+     */
+    private List<Carrying> carrying(ValueName.Stdlib.Operation operation, Reading reading,
+                                    List<Value> params, Value.Made walk, List<Integer> path) {
+        TheWalk shape = library.stdlib().walk();
+        Value started = Induction.at(walk.args().get(shape.seed()), path);
+        LawNumber<Slot> part = started instanceof Value.Whole
+                ? new LawNumber.AnArgument<>(new Slot.Carried(path))
+                : new LawNumber.SizeOf<>(new LawSubject.Argument<>(new Slot.Carried(path)));
+        LinearForm<LawNumber<Slot>> walkedSize = LinearForm.atom(
+                new LawNumber.SizeOf<>(new LawSubject.Argument<>(new Slot.Walked())));
+        List<Carrying> out = new ArrayList<>();
+        if (started instanceof Value.Whole(long from)) {
+            BigInteger most = mostAddedInAStep(reading, walk, path);
+            if (most != null) {
+                LinearForm<LawNumber<Slot>> held = Props.plus(Props.constant(from),
+                        Props.held(walkedSize.times(ExactRatio.of(most))));
+                out.add(new Carrying(List.of(
+                        Props.compared(LinearForm.atom(part), Rel.GE, Props.constant(from)),
+                        Props.compared(LinearForm.atom(part), Rel.LE, held)), null));
+            }
+        } else {
+            LinearForm<LawNumber<Slot>> from = sizeAsItStarts(reading, started);
+            if (from != null) {
+                LinearForm<LawNumber<Slot>> oneEach = Props.plus(from, walkedSize);
+                LinearForm<LawNumber<Slot>> theirs = Props.plus(from, LinearForm.atom(
+                        new LawNumber.SumOver<>(new Slot.Walked(), new LawNumber.SizeOf<>(
+                                new LawSubject.ElementOf<>(new Slot.Walked())))));
+                out.add(new Carrying(List.of(Props.compared(LinearForm.atom(part), Rel.LE,
+                        oneEach)), oneEach));
+                out.add(new Carrying(List.of(Props.compared(LinearForm.atom(part), Rel.LE,
+                        theirs)), theirs));
+            }
+        }
+        out.add(null);
+        return out;
+    }
+
+    /** How many a collection that starts as {@code started} holds, as a number of the
+     *  operation's arguments, or null where it is not one. */
+    private static LinearForm<LawNumber<Slot>> sizeAsItStarts(Reading reading, Value started) {
+        if (started instanceof Value.Argument(int at)) {
+            return LinearForm.atom(new LawNumber.SizeOf<>(new LawSubject.Argument<>(
+                    new Slot.Place(at))));
+        }
+        LinearForm<LawNumber<Value>> size = reading.size(started);
+        return size.coefs().isEmpty() ? LinearForm.constant(size.constant()) : null;
+    }
+
+    /**
+     * The most a step of {@code walk} adds to the whole number at {@code path} of what it carries,
+     * where in every case it comes to that number with a whole number not below nought written
+     * out added — or null where it is anything else.
+     */
+    private static BigInteger mostAddedInAStep(Reading reading, Value.Made walk,
+                                               List<Integer> path) {
+        // A reading of its own, so that what this meets is not taken for what the proof meets.
+        Reading apart = new Reading(reading.library(), Set.of());
+        TheWalk shape = reading.library().stdlib().walk();
+        List<Value> handed = new ArrayList<>(List.of(NEXT, NEXT));
+        handed.set(shape.accumulator(), CARRIED);
+        handed.set(shape.element(), NEXT);
+        LinearForm<LawNumber<Value>> before = apart.number(Induction.at(CARRIED, path));
+        BigInteger most = BigInteger.ZERO;
+        for (Reading.Case each : apart.applied(walk.args().get(shape.step()), handed)) {
+            LinearForm<LawNumber<Value>> added = Props.minus(
+                    apart.number(Induction.at(each.is(), path)), before);
+            if (!added.coefs().isEmpty() || added.constant().signum() < 0
+                    || !(added.constant().ceiling() instanceof ExactAnswer.Held<BigInteger>(
+                            var whole))
+                    || !added.constant().equals(ExactRatio.of(whole))) {
+                return null;
+            }
+            most = most.max(whole);
+        }
+        return most;
+    }
+
+    /** Every way of taking one of each list, in order. */
+    private static <T> List<List<T>> everyChoice(List<List<T>> each) {
+        List<List<T>> out = new ArrayList<>();
+        out.add(List.of());
+        for (List<T> one : each) {
+            List<List<T>> wider = new ArrayList<>();
+            for (List<T> before : out) {
+                for (T chosen : one) {
+                    List<T> next = new ArrayList<>(before);
+                    next.add(chosen);
+                    wider.add(next);
+                }
+            }
+            out = wider;
+        }
+        return out;
     }
 
     static Outcome stoppedAt(Reading.Stopped stopped) {
@@ -639,6 +1142,13 @@ public final class LibraryProver {
         };
     }
 
+    /** What the walk carries at a step, read as any value it may be. */
+    private static final Value CARRIED = new Value.Fresh(1, "what the walk carries");
+    /** The part of the list a step's walk has walked before the element it is handed. */
+    private static final Value WALKED = new Value.Fresh(2, "what the walk has walked");
+    /** The element a step is handed. */
+    private static final Value NEXT = new Value.Fresh(3, "the element the walk is handed next");
+
     /** One walk in a body, and the proof of what it carries. */
     private final class Induction {
 
@@ -682,14 +1192,10 @@ public final class LibraryProver {
             if (!follows(reading, List.of(), base, spacing(operation, Map.of()))) {
                 return new Failed(Unproved.Obligation.THE_SEED, base);
             }
-            Value carried = new Value.Fresh(1, "what the walk carries");
-            Value walked = new Value.Fresh(2, "what the walk has walked");
-            Value next = new Value.Fresh(3, "the element the walk is handed next");
-            List<Value> handed = new ArrayList<>(List.of(next, next));
-            handed.set(shape.accumulator(), carried);
-            handed.set(shape.element(), next);
-            Value step = walk.args().get(shape.step());
-            for (Reading.Case each : reading.applied(step, handed)) {
+            Value carried = CARRIED;
+            Value walked = WALKED;
+            Value next = NEXT;
+            for (Reading.Case each : stepped()) {
                 LawProposition<Value> goal = carried(each.is(),
                         view(new Value.OneMore(walked, next)), Induction::anyValue);
                 List<LawProposition<Value>> given = new ArrayList<>();
@@ -704,6 +1210,36 @@ public final class LibraryProver {
                 }
             }
             return null;
+        }
+
+        /** The cases the step comes to, handed what the walk carries so far and the next element
+         *  as values standing for any. */
+        List<Reading.Case> stepped() {
+            List<Value> handed = new ArrayList<>(List.of(NEXT, NEXT));
+            handed.set(shape.accumulator(), CARRIED);
+            handed.set(shape.element(), NEXT);
+            return reading.applied(walk.args().get(shape.step()), handed);
+        }
+
+        /** What the lemma's statements hold of what the walk carries at a step, with the part
+         *  walked before the element it is handed. */
+        List<Universal> atAStep() {
+            return universal(CARRIED, view(WALKED));
+        }
+
+        /** The part walked once the step has taken the element it is handed. */
+        Value walkedOneFurther() {
+            return view(new Value.OneMore(WALKED, NEXT));
+        }
+
+        /** The whole list walked, as the lemma's statements read it. */
+        Value walkedToTheEnd() {
+            return view(list());
+        }
+
+        /** How the numbers a value standing for what the walk carries can be are spaced. */
+        Function<Value, Granularity> spacedAtAStep() {
+            return spacing(operation, startedAs(CARRIED));
         }
 
         /** What the lemma's statements hold of where the walk ends, the whole list walked. */

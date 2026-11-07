@@ -70,7 +70,8 @@ class ContainerSizesUnderAWitnessTest {
                                    Function<Core, Optional<BigInteger>> witness) {
         GetsPast completion = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(union);
         return completion instanceof GetsPast.WhereTheAnswerFits fits
-                && ContainerSizesUnderAWitness.answersOn(body, union, fits, witness);
+                && ContainerSizesUnderAWitness.answersOn(body, union, fits, witness,
+                        node -> Optional.empty());
     }
 
     private static final String WALK =
