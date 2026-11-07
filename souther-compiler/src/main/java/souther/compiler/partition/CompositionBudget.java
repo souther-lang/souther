@@ -536,8 +536,9 @@ public enum CompositionBudget {
      * line decides in any of them. What this bounds is the taking apart: each case is a way the
      * statement's other parts come out, and finding them walks every way the parts can come out
      * once for each case found. And how many of them are asked: cases kept as choices rather than
-     * written out are as many as the ways of choosing one, counted before any is asked, and past
-     * this figure none is.
+     * written out are as many as the ways of choosing one that no comparison chosen leaves a form
+     * no value of, counted before any is asked, and past this figure none is. Where those are not
+     * counted, they are every way as the choices stand.
      *
      * <p><b>Reaching it gives the cases up and says so.</b> The condition is kept, said for cases
      * nobody took apart ({@link souther.compiler.meaning.DecidingCase.Cases.NotTakenApart}).
@@ -749,8 +750,17 @@ public enum CompositionBudget {
         this.maximum = maximum;
     }
 
-    /** The figure itself. What is done on reaching it is the member's to say. */
+    /**
+     * The figure itself, as the compilation reading it holds it ({@link Allowances}). What is
+     * done on reaching it is the member's to say.
+     */
     public int maximum() {
+        return Allowances.inForce(this);
+    }
+
+    /** The figure written down here, which a compilation holds this to where it says nothing
+     *  else. */
+    public int declared() {
         return maximum;
     }
 

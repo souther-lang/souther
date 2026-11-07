@@ -28,6 +28,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.AuthorsLines;
 import souther.compiler.meaning.CaseExpansion;
+import souther.compiler.meaning.CasesOfALineAsked;
 import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.DecisionAtom;
@@ -362,9 +363,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 return new Several(parts.stream().map(each).toList(), derivedBy);
             }
 
-            /** Whether some line's cases are more ways of choosing one than are taken apart,
-             *  which is where what made their parts is told. */
-            boolean pastTheCasesTakenApart() {
+            /**
+             * Whether some line's cases are more ways of choosing one than are taken apart as the
+             * choices stand, which every line whose cases are not taken apart is
+             * ({@link CasesOfALineAsked}), and the only lines what made their parts is told of.
+             * Some are taken apart still, where the ways their numbers leave are few; telling
+             * them apart here would count the ways a second time, for a reading that is only
+             * kept.
+             */
+            boolean mayBePastTheCasesTakenApart() {
                 long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
                 return parts.stream().anyMatch(part -> part.cases().stream()
                         .anyMatch(one -> one.standsFor().waysOfChoosing(most) > most));
@@ -937,7 +944,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * what made their parts is read off the application each was read on.
      */
     private static Read.Several derivedOnEach(Read.Several lines, List<Derivation> derived) {
-        return lines.pastTheCasesTakenApart() ? lines.derivedAs(derived) : lines;
+        return lines.mayBePastTheCasesTakenApart() ? lines.derivedAs(derived) : lines;
     }
 
     /**
@@ -1361,9 +1368,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         Optional.of(comparison.claim()))));
         Read drawn = readAsAWhole(behavior, comparison, read, reads, answering, onTheInput,
                 onEveryElement, lines);
-        // How the statement was derived is held only where some line's cases are too many to be
-        // taken apart, which is the one place a reader reads what made their parts off it.
-        if (drawn instanceof Read.Several several && several.pastTheCasesTakenApart()) {
+        // How the statement was derived is held only where some line's cases may be too many to
+        // be taken apart, which is the one place a reader reads what made their parts off it.
+        if (drawn instanceof Read.Several several && several.mayBePastTheCasesTakenApart()) {
             return several.derivedAs(List.of(stated.meaning().how()));
         }
         if (writtenIn.isEmpty() || !(stated.proposition() instanceof Proposition.Compared compared)

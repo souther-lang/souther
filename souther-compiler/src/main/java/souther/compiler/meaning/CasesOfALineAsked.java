@@ -2,6 +2,7 @@ package souther.compiler.meaning;
 
 import souther.compiler.partition.CompositionBudget;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -61,6 +62,23 @@ import java.util.function.Predicate;
  * rows at its points outright. Where a part chosen so far that no row is in leaves the cases past it
  * out, asking the cases some row may be in, the ways are not counted: most of them are past such a
  * part, and the steps bound the rest.
+ *
+ * <p><b>And the ways its numbers leave.</b> Two comparisons of one number are two choices, and as
+ * the choices stand every way of taking them is counted, those no value of the number meets
+ * among them. So a line whose ways are more than are taken apart as they stand is taken apart still
+ * where the ways no comparison chosen leaves a form no value of are no more than that
+ * ({@link NumericallyConsistentWays.Counts#ofTheIntervals}), and asking it ends each way at the
+ * part that leaves some number no value — a form's interval or a dividend's remainders — before
+ * that part is asked, and whatever the asking would have said of it. The ways walked to the end
+ * are then among the ones counted, and the count is what bounds them. Only where a line's cases
+ * are asked: an answer for every case is for each case there is.
+ *
+ * <p>The intervals let a line be taken apart, and the remainders do not, though both end a way.
+ * A count bounds the ways walked to the end and not the prefixes asked on the way to them, which
+ * are what the steps count; that the ways are few says nothing of how many prefixes they share.
+ * Which count lets a line in is a choice of where the steps are spent, and not a claim about
+ * which ways a row can take: a line the remainders leave few ways in and the intervals many can
+ * take every step there is and say no more than the figure would, and is cut off as it stands.
  *
  * <p><b>Counted by the step, and stopped short as a stop.</b> Every step of the choosing is counted
  * against {@link CompositionBudget#CASES_A_LINE_IS_ASKED_IN} for the one case they were said as:
@@ -193,8 +211,13 @@ public final class CasesOfALineAsked {
     private final Map<DecidingCase.Cases, Set<CompositionBudget>> figuresOf =
             new IdentityHashMap<>();
 
-    private CasesOfALineAsked(Function<Proposition, Crossing> crossedIn) {
+    /** Whether a part chosen that the numbers chosen so far refute ends the way there, asked of
+     *  nobody: what a line is asked of, and not what every case is answered for. */
+    private final boolean readsTheNumbers;
+
+    private CasesOfALineAsked(Function<Proposition, Crossing> crossedIn, boolean readsTheNumbers) {
         this.crossedIn = crossedIn;
+        this.readsTheNumbers = readsTheNumbers;
     }
 
     /**
@@ -210,7 +233,7 @@ public final class CasesOfALineAsked {
      *                  it come to ({@link Crossing})
      */
     public static Found casesOf(DecidingCase said, Function<Proposition, Crossing> crossedIn) {
-        return new CasesOfALineAsked(crossedIn).asked(said);
+        return new CasesOfALineAsked(crossedIn, true).asked(said);
     }
 
     /**
@@ -255,7 +278,7 @@ public final class CasesOfALineAsked {
      * are counted as they are for {@link #casesOf}.
      */
     public static <T> Atoms<T> atomsOf(DecidingCase said, Function<Proposition, T> answer) {
-        return new CasesOfALineAsked(_ -> Crossing.MAY_CROSS).allAsked(said, answer, true);
+        return new CasesOfALineAsked(_ -> Crossing.MAY_CROSS, false).allAsked(said, answer, true);
     }
 
     /**
@@ -270,8 +293,8 @@ public final class CasesOfALineAsked {
     public static <T> Atoms<T> atomsOf(DecidingCase said, Function<Proposition, T> answer,
                                        Predicate<Proposition> mayHoldARow) {
         return new CasesOfALineAsked(
-                condition -> mayHoldARow.test(condition) ? Crossing.MAY_CROSS : Crossing.NO_ROWS)
-                .allAsked(said, answer, false);
+                condition -> mayHoldARow.test(condition) ? Crossing.MAY_CROSS : Crossing.NO_ROWS,
+                false).allAsked(said, answer, false);
     }
 
     /**
@@ -297,7 +320,8 @@ public final class CasesOfALineAsked {
             return new Atoms<>(List.of(), stopped);
         }
         List<Atom<T>> out = new ArrayList<>();
-        chosen(SoFar.NOTHING, List.of(heldFirst(said.standsFor())), crossedIn,
+        chosen(SoFar.NOTHING, NumericallyConsistentWays.State.NOTHING_CHOSEN,
+                List.of(heldFirst(said.standsFor())), crossedIn,
                 chosen -> out.add(new Atom<>(chosen, answer.apply(chosen))));
         return new Atoms<>(out, stopped);
     }
@@ -322,12 +346,19 @@ public final class CasesOfALineAsked {
             return new Found(List.of(said), List.of());
         }
         if (said.standsFor().waysOfChoosing(most) > most) {
-            moreWaysThanAreTakenApart(said);
-            counted = Optional.of(CaseCount.of(said.standsFor()));
-            return new Found(List.of(), notWorkedOutIn(said));
+            NumericallyConsistentWays.Counts counts =
+                    NumericallyConsistentWays.counted(said.standsFor());
+            if (!(counts.ofTheIntervals()
+                    instanceof NumericallyConsistentWays.Counted.AtMost(var ways))
+                    || ways.compareTo(BigInteger.valueOf(most)) > 0) {
+                moreWaysThanAreTakenApart(said);
+                counted = Optional.of(CaseCount.of(said.standsFor(), counts.ofTheNumbers()));
+                return new Found(List.of(), notWorkedOutIn(said));
+            }
         }
         DecidingCase.Cases cases = heldFirst(said.standsFor());
-        chosen(SoFar.NOTHING, List.of(cases), crossedIn, chosen -> dividing.add(chosen));
+        chosen(SoFar.NOTHING, NumericallyConsistentWays.State.NOTHING_CHOSEN, List.of(cases),
+                crossedIn, chosen -> dividing.add(chosen));
         // Every case with a row in it divides rows and every one was worked out: the case is what
         // it was said as, and saying it again would read the line under another condition for
         // nothing. A case no row is in adds no row to where it holds, so the rows it holds are
@@ -508,8 +539,9 @@ public final class CasesOfALineAsked {
      * hold of those places together — a relation of the line, a rule of a value around them, a
      * tie a run makes — so the question asked beside it is no question asked without it.
      */
-    private void chosen(SoFar chosen, List<DecidingCase.Cases> toChoose,
-                        Function<Proposition, Crossing> goesOn, Consumer<Proposition> atEnd) {
+    private void chosen(SoFar chosen, NumericallyConsistentWays.State numbers,
+                        List<DecidingCase.Cases> toChoose, Function<Proposition, Crossing> goesOn,
+                        Consumer<Proposition> atEnd) {
         if (toChoose.isEmpty()) {
             atEnd.accept(chosen.condition());
             return;
@@ -517,6 +549,14 @@ public final class CasesOfALineAsked {
         List<DecidingCase.Cases> rest = toChoose.subList(1, toChoose.size());
         switch (toChoose.getFirst()) {
             case DecidingCase.Cases.One(var condition) -> {
+                NumericallyConsistentWays.State numbersLeft =
+                        readsTheNumbers ? numbers.takingAll(condition) : numbers;
+                // A part some form or dividend has no value left for holds no row with what was
+                // chosen before it, and is no question: the ways a count of the consistent ones
+                // leaves out are the ways the walk does.
+                if (numbersLeft == null) {
+                    return;
+                }
                 if (!aStepIsLeft()) {
                     pastTheSteps(toChoose);
                     return;
@@ -525,7 +565,7 @@ public final class CasesOfALineAsked {
                 // A prefix no row is in leaves no row in any case past it, so none of those is
                 // walked or said as one not worked out.
                 switch (goesOn.apply(further.condition())) {
-                    case MAY_CROSS -> chosen(further, rest, goesOn, atEnd);
+                    case MAY_CROSS -> chosen(further, numbersLeft, rest, goesOn, atEnd);
                     case CANNOT_CROSS -> droppedNonDividing = true;
                     case NO_ROWS -> { }
                 }
@@ -544,13 +584,13 @@ public final class CasesOfALineAsked {
                     List<DecidingCase.Cases> next = new ArrayList<>();
                     next.add(alternatives.get(at));
                     next.addAll(rest);
-                    chosen(chosen, next, goesOn, atEnd);
+                    chosen(chosen, numbers, next, goesOn, atEnd);
                 }
             }
             case DecidingCase.Cases.Together(var factors) -> {
                 List<DecidingCase.Cases> next = new ArrayList<>(factors);
                 next.addAll(rest);
-                chosen(chosen, next, goesOn, atEnd);
+                chosen(chosen, numbers, next, goesOn, atEnd);
             }
             // Nobody took them apart, and nothing asks them.
             case DecidingCase.Cases.NotTakenApart(var stoppedAt) -> stopped.add(stoppedAt);

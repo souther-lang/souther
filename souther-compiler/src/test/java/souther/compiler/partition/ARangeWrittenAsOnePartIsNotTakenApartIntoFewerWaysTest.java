@@ -67,7 +67,14 @@ class ARangeWrittenAsOnePartIsNotTakenApartIntoFewerWaysTest {
     }
 
     private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return compiled(source, CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.declared());
+    }
+
+    /** {@code source}, its lines' cases taken apart into {@code takenApartInto} at most. */
+    private static Compilation compiled(String source, int takenApartInto) {
+        Compilation compilation = Compilation.ofSource(source, "Main").allowing(
+                Allowances.DECLARED.with(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
+                        takenApartInto));
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors(), source);
@@ -170,6 +177,13 @@ class ARangeWrittenAsOnePartIsNotTakenApartIntoFewerWaysTest {
     }
 
     /**
+     * How many cases a line of the search below is taken apart into: none. The bounds of each
+     * candidate's number leave its lines few ways, as many as the figure declared takes apart, and
+     * a line taken apart is told nothing beside why.
+     */
+    private static final int SEARCH_TAKEN_APART_INTO = 0;
+
+    /**
      * What a report says of a case is what the numbers leave and what made its parts, and never
      * a count a rewrite would leave: no field of an entry is one.
      */
@@ -183,7 +197,8 @@ class ARangeWrittenAsOnePartIsNotTakenApartIntoFewerWaysTest {
                     Option.withDefault(0 - 1, List.find(k -> x - k >= 1 && x - k <= 5
                             && Bool.not(x + k == h), [0, 1, 2, 3, 4, 5, 6])) > 2
                 """;
-        JsonNode expansions = JSON.readTree(AdequacyReport.of(compiled(model))
+        JsonNode expansions = JSON.readTree(AdequacyReport
+                        .of(compiled(model, SEARCH_TAKEN_APART_INTO))
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)))
                 .path("modules").get(0).path("behaviors").get(0).path("partition")
                 .path("caseExpansions");

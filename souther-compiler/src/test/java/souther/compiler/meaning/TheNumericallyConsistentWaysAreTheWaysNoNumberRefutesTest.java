@@ -30,6 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * held together and as alternatives, with what one choice leads to shared by others — so a count
  * that read a shared case once for every state would come out wrong, as would one that forgot the
  * remainders or the number.
+ *
+ * <p>So is the count of the ways the intervals leave, held against each form asked apart from the
+ * others, a remainder of the number being a form of its own there.
  */
 class TheNumericallyConsistentWaysAreTheWaysNoNumberRefutesTest {
 
@@ -194,6 +197,7 @@ class TheNumericallyConsistentWaysAreTheWaysNoNumberRefutesTest {
     void theConsistentWaysAreTheWaysWrittenOutThatSomeValueMeets() {
         Random random = new Random(3042);
         int refuted = 0;
+        int refutedByARemainder = 0;
         for (int drawn = 0; drawn < 600; drawn++) {
             DecidingCase.Cases cases = cases(random);
             List<List<Proposition>> ways = ways(cases);
@@ -202,10 +206,52 @@ class TheNumericallyConsistentWaysAreTheWaysNoNumberRefutesTest {
             assertEquals(BigInteger.valueOf(ways.size()),
                     cases.structuralWays(CaseCount.WAYS_A_COUNT_IS_HELD_TO),
                     "every way of choosing is counted once, however the cases share: " + cases);
-            assertEquals(BigInteger.valueOf(met), atMost(NumericallyConsistentWays.of(cases)),
+            NumericallyConsistentWays.Counts counted = NumericallyConsistentWays.counted(cases);
+            assertEquals(BigInteger.valueOf(met), atMost(counted.ofTheNumbers()),
                     "a way is consistent exactly where some value meets what it chose: " + cases);
+            long ofTheIntervals = ways.stream()
+                    .filter(way -> eachFormHasSomeValue(comparisonsIn(way))).count();
+            refutedByARemainder += (int) (ofTheIntervals - met);
+            assertEquals(BigInteger.valueOf(ofTheIntervals), atMost(counted.ofTheIntervals()),
+                    "and is one of the intervals' exactly where each form it compared has some"
+                            + " value meeting it, each form apart from the others: " + cases);
         }
         assertTrue(refuted > 0, "some way drawn is refuted, or nothing was asked");
+        assertTrue(refutedByARemainder > 0,
+                "some way drawn is refuted by a remainder alone, or the two counts were not told"
+                        + " apart");
+    }
+
+    /**
+     * Whether each affine form {@code chosen} compares has some value meeting every comparison of
+     * it, the forms asked apart: a remainder is any number there, and no other form's value
+     * settles it.
+     */
+    private static boolean eachFormHasSomeValue(List<Proposition.Compared> chosen) {
+        Map<Map<Quantity, ExactRatio>, List<Proposition.Compared>> byForm = new LinkedHashMap<>();
+        for (Proposition.Compared each : chosen) {
+            byForm.computeIfAbsent(((Relation.Affine) each.relation()).form().coefs(),
+                    _ -> new ArrayList<>()).add(each);
+        }
+        for (List<Proposition.Compared> ofOneForm : byForm.values()) {
+            boolean met = false;
+            for (int doubled = -20; doubled <= 20 && !met; doubled++) {
+                ExactRatio value = ExactRatio.of(BigInteger.valueOf(doubled), BigInteger.TWO);
+                met = ofOneForm.stream().allMatch(each -> holdsWith(each, value));
+            }
+            if (!met) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether the comparison holds where its one quantity is {@code value}. */
+    private static boolean holdsWith(Proposition.Compared comparison, ExactRatio value) {
+        Relation.Affine affine = (Relation.Affine) comparison.relation();
+        ExactRatio by = affine.form().coefs().values().iterator().next();
+        ExactRatio left = value.times(by).orNull().plus(affine.form().constant()).orNull();
+        return affine.proposition().holds(left.signum()) == comparison.holds();
     }
 
     @Test

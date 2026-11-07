@@ -6,6 +6,7 @@ import souther.compiler.check.ResolvedSymbols;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TheCompilationsSources;
+import souther.compiler.partition.Allowances;
 import souther.compiler.revision.StoreWork;
 import souther.compiler.source.SourceId;
 import souther.compiler.types.TypeKey;
@@ -334,6 +335,41 @@ public final class Db implements StoreWork {
     }
 
     /**
+     * The figures this compilation's budgets are held to, in force for every question it answers.
+     *
+     * <p>Beside the memos and not in them, as {@link #execution} is: no answer records reading a
+     * figure, so a figure changed would leave every answer worked out under the old one standing.
+     * So they are said before anything is asked, and are the same for as long as the store lives.
+     */
+    private Allowances allowances = Allowances.DECLARED;
+
+    /** Whether some question has been asked of this store, after which its figures are what its
+     *  answers were worked out under. */
+    private boolean asked;
+
+    /**
+     * Holds this compilation's budgets to {@code allowances}, before anything is asked of it.
+     *
+     * @throws IllegalStateException where something has been asked already
+     */
+    public Db allowing(Allowances allowances) {
+        if (allowances == null) {
+            throw new IllegalArgumentException("a compilation holds its budgets to some figures");
+        }
+        if (asked && !allowances.equals(this.allowances)) {
+            throw new IllegalStateException("this store has answered questions under "
+                    + this.allowances + ", and would keep those answers under " + allowances);
+        }
+        this.allowances = allowances;
+        return this;
+    }
+
+    /** The figures this compilation's budgets are held to. */
+    public Allowances allowances() {
+        return allowances;
+    }
+
+    /**
      * Gives an input its value. An input set to what it already held changes nothing, so a caller
      * may hand over a whole workspace on every keystroke. Returns this store, so a compilation can
      * be set up in one expression.
@@ -387,7 +423,10 @@ public final class Db implements StoreWork {
     /** Answers {@code key}, computing it if nothing kept from before still holds. */
     @SuppressWarnings("unchecked")
     public <T> Answer<T> ask(Key<T> key) {
-        return (Answer<T>) answer(Filed.of(key));
+        asked = true;
+        Filed filed = Filed.of(key);
+        return (Answer<T>) (allowances.inForce() ? answer(filed)
+                : allowances.over(() -> answer(filed)));
     }
 
     private Answer<?> answer(Filed filed) {
