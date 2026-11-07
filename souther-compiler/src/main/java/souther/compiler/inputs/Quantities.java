@@ -135,6 +135,10 @@ public sealed interface Quantities permits ReadQuantities {
      */
     TermOrders ordersOf(NumericTerm term);
 
+    /** Whether {@code term} is under a value whose rules this reading holds, and so a term every
+     *  question here answers rather than refuses ({@link #ordersOf}). */
+    boolean answersFor(NumericTerm term);
+
     /** Whether the number {@code term} names is measured in whole numbers
      *  ({@link TermOrders#countsWhole}); not where nothing orders it. */
     default boolean countsWhole(NumericTerm term) {
