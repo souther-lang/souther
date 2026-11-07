@@ -20,10 +20,13 @@ import souther.compiler.types.TypeSymbol;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -104,8 +107,10 @@ final class ContainerAsAWhole {
      * of them is a number this does not fix: a total of a place whose elements are not written on
      * whole numbers.
      *
-     * <p>A total the statements read and the row does not ask is tried wherever the region leaves
-     * it ({@link TermRealizations#whereverItIsLeft}), the elements being moved to come to it. How
+     * <p>A total the statements read and the row does not ask is tried where they turn over on it,
+     * inside what the region leaves it ({@link #turningOn}), the elements being moved to come to
+     * it; {@code beside} is where the numbers beside the elements are fixed, which those turns
+     * read. How
      * many the container holds is fixed where a statement reads it, or where a total is of a form
      * of its elements' numbers, which comes to so much more for each element it holds; it is tried
      * at what the rules and the region leave it ({@link ContainersAddingUp#howMany}) and the row
@@ -114,7 +119,8 @@ final class ContainerAsAWhole {
      */
     static ContainerAsAWhole of(TermPath container, TypeView view,
                                 List<CardinalityComposer.Asked> asked, List<ATotal> totals,
-                                NumericSet size, Quantities measuring, SearchRegion within,
+                                Map<NumericTerm, Place> beside, NumericSet size,
+                                Quantities measuring, SearchRegion within,
                                 RuleReadingContext reading) {
         Map<NumericTerm, OneNumber> out = new LinkedHashMap<>();
         boolean howManyIsRead = false;
@@ -146,7 +152,7 @@ final class ContainerAsAWhole {
                 NumbersOfTheWhole.AddedUp added = NumbersOfTheWhole.addedUp(term);
                 Carrier carrier = carrierAt(added, measuring);
                 TermRealizations.Tried left = carrier == null ? null
-                        : TermRealizations.whereverItIsLeft(term, measuring, within, reading);
+                        : turningOn(term, asked, beside, measuring, within, reading);
                 if (left == null) {
                     return null;
                 }
@@ -158,12 +164,69 @@ final class ContainerAsAWhole {
         if (howManyIsRead || formed) {
             NumericTerm counted = many != null ? many
                     : new NumericTerm.ValueOf(container);
-            out.put(counted, new OneNumber(counted, null, null,
-                    sizes(ContainersAddingUp.howMany(view, container, within, reading, null),
-                            size)));
+            DeclaredBounds.CountRange held =
+                    ContainersAddingUp.howMany(view, container, within, reading, null);
+            if (held == null && DeclaredBounds.countsHeld(view, reading, null).least() == 0) {
+                // The region leaves the count nowhere, and so leaves no element a value: the
+                // container of none is the one it leaves, as whatNoneComeTo says of a total.
+                held = new DeclaredBounds.CountRange(0, 0);
+            }
+            out.put(counted, new OneNumber(counted, null, null, sizes(held, size)));
         }
         return new ContainerAsAWhole(container, new ArrayList<>(out.values()), howManyIsRead);
     }
+
+    /**
+     * The numbers a total nothing asks of is tried at: where the statements turn over on it, with
+     * the numbers beside the elements where {@code beside} fixes them, and values inside each run
+     * between — all of them inside what the region leaves it. A statement whose turn reads an
+     * element as well turns nowhere the total alone says, and adds no place.
+     *
+     * <p>Where the region leaves the total nowhere, it leaves no element of the container a value —
+     * an element's number is what the total adds up — and a container holding none is still an
+     * input: the total is tried at what adding up nothing comes to, which is nought. Every
+     * container composed is read again whole, so one the rules refuse for another reason is
+     * refused there.
+     */
+    private static TermRealizations.Tried turningOn(NumericTerm term,
+                                                    List<CardinalityComposer.Asked> asked,
+                                                    Map<NumericTerm, Place> beside,
+                                                    Quantities measuring, SearchRegion within,
+                                                    RuleReadingContext reading) {
+        TermOrders orders = measuring.ordersOf(term);
+        Carrier carrier = orders == null ? null : orders.answered();
+        if (carrier == null) {
+            return null;
+        }
+        Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
+        NumericDomain.Bounds run = switch (within.projectionOf(term)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                    held == null ? NumericDomain.Bounds.OPEN : held;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> null;
+            case null -> NumericDomain.Bounds.OPEN;
+        };
+        if (run == null) {
+            return new TermRealizations.Tried(List.of(Count.of(0)),
+                    new TermRealizations.Remainder.Exhausted());
+        }
+        List<ExactRatio> turns = new ArrayList<>();
+        for (CardinalityComposer.Asked one : asked) {
+            List<ExactRatio> where = one.turnsAt(term, beside);
+            if (where != null) {
+                turns.addAll(where);
+            }
+        }
+        List<Place> places = CardinalityComposer.valuesAlong(carrier, run, turns,
+                PLACES_IN_EACH_RUN, UsualPlaces.of(term, carrier, reading.today()),
+                new LinkedHashSet<>(), unnamed);
+        unnamed.add(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
+        return new TermRealizations.Tried(places, new TermRealizations.Remainder.SomeOf(unnamed));
+    }
+
+    /** How many values of each run between where the statements turn over a total is tried at:
+     *  more than one, so that a run holding a total the elements cannot be moved to come to holds
+     *  another. */
+    private static final int PLACES_IN_EACH_RUN = 2;
 
     /** The order the numbers at the place a total adds up are written on, where it counts in
      *  whole numbers — the elements are moved by whole steps to come to the total. */

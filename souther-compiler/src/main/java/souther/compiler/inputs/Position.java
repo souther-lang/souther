@@ -1,8 +1,6 @@
 package souther.compiler.inputs;
 
-import souther.compiler.check.FieldDomains;
 import souther.compiler.check.ProjectionEvidence;
-import souther.compiler.check.RuleKey;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedRuns;
@@ -74,16 +72,16 @@ public sealed interface Position permits ReadPosition {
      * taken over what every element of it holds, and a body reads it as a run of the elements
      * ({@link NumericTerm.TakenOver}) and never as a number one place answers.
      */
-    List<FieldDomains.TotalLeft> totalsLeft();
+    List<TotalLeft> totalsLeft();
 
     /**
-     * Where the rules leave {@code operation} accumulated over what each element holds at
-     * {@code inside}, or null where none of them says.
+     * Where the rules leave {@code operation} accumulated over what the elements hold at
+     * {@code place}, or null where none of them says.
      */
-    default NumericDomain.Bounds totalLeft(ValueName operation, RuleKey inside) {
+    default NumericDomain.Bounds totalLeft(ValueName operation, TermPath place) {
         NumericDomain.Bounds out = null;
-        for (FieldDomains.TotalLeft each : totalsLeft()) {
-            if (each.operation().equals(operation) && each.inside().equals(inside)) {
+        for (TotalLeft each : totalsLeft()) {
+            if (each.operation().equals(operation) && each.place().equals(place)) {
                 out = out == null ? each.left() : out.meet(each.left());
             }
         }

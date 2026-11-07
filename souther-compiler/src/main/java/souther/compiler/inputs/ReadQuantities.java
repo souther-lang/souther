@@ -2973,27 +2973,27 @@ final class ReadQuantities implements Quantities {
      */
     private NumericDomain.Bounds totalLeftBy(NumericTerm term) {
         TermPath container;
-        RuleKey inside;
+        TermPath place;
         ValueName operation;
         switch (term) {
             case NumericTerm.TakenOver over
                     when over.source() instanceof RunSource.ProjectedOccurrences run -> {
                 container = run.subjectPath().containersHoldingIt().getFirst();
-                inside = run.subjectPath().ruleKeyUnder(container.element());
+                place = run.subjectPath();
                 operation = over.operation();
             }
             case NumericTerm.TakenOf taken when taken.transformation().equals(ValueTransformation.NONE)
                     && taken.arguments().equals(TakenArguments.NONE) -> {
                 container = taken.position();
-                inside = RuleKey.THE_VALUE;
+                place = container.element();
                 operation = taken.operation();
             }
             default -> {
                 return null;
             }
         }
-        Position at = inside == null ? null : byPath.get(container);
-        return at == null ? null : at.totalLeft(operation, inside);
+        Position at = byPath.get(container);
+        return at == null ? null : at.totalLeft(operation, place);
     }
 
     /** An end as a number the arithmetic can cut at, or null where it stops at a value there is no

@@ -2764,20 +2764,22 @@ public final class FieldDomains {
      * A number an operation accumulates over the elements of a container, each element read at
      * {@code inside} of it, and where the rules leave it.
      *
-     * @param inside what each element is read at, relative to the element: the value itself where
-     *               the elements are what is added up
+     * @param inside the fields read off each element, none where the elements are what is added
+     *               up. Fields of the element and not a name of this value: what an element holds is
+     *               a value with a declaration of its own, and none of this value's rules is
+     *               written at a name inside it
      */
-    public record TotalLeft(ValueName operation, RuleKey inside, NumericDomain.Bounds left) {
+    public record TotalLeft(ValueName operation, List<String> inside, NumericDomain.Bounds left) {
 
         public TotalLeft {
             java.util.Objects.requireNonNull(operation, "a total is taken by some operation");
-            java.util.Objects.requireNonNull(inside, "of something each element holds");
+            inside = List.copyOf(inside);
             java.util.Objects.requireNonNull(left, "and the rules leave it somewhere");
         }
     }
 
     /** Which container a total is of, by what this value calls it. */
-    private record TotalRead(RuleKey container, ValueName operation, RuleKey inside) {}
+    private record TotalRead(RuleKey container, ValueName operation, List<String> inside) {}
 
     /**
      * The total {@code call} is, or null where it is none: an operation that accumulates what a
@@ -2798,7 +2800,7 @@ public final class FieldDomains {
         }
         RuleKey container = inside == null ? null : namedBy.get(FactSubject.of(walked));
         return container == null ? null
-                : new TotalRead(container, operation, new RuleKey(inside));
+                : new TotalRead(container, operation, inside);
     }
 
     /** The operation that hands on what a closure answers of each element of a list. */

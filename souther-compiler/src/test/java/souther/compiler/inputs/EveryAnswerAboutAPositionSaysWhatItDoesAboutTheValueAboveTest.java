@@ -58,6 +58,10 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
                         + ".aCaseThatStopsTheFieldShorterThanTheValueAboveHoldsThatEndAlone"));
         table.put("leftAt", new Decided(Above.ASKED, "what both leave, met",
                 "AClauseAboveASumIsReadAtTheFieldItIsAboutTest.theEndStandsUnderEachCase"));
+        table.put("totalsLeftAt", new Decided(Above.ASKED,
+                "both, each a total the position's elements have to come to",
+                "AClauseAboveASumIsReadAtTheFieldItIsAboutTest"
+                        + ".aTotalAboveStandsAtTheSharedContainerUnderEachCase"));
         table.put("admits", new Decided(Above.ASKED,
                 "the values both admit, and short of what either was short of",
                 "ALineDrawnOnASharedNameFallsUnderEachCaseTest"

@@ -1,6 +1,5 @@
 package souther.compiler.inputs;
 
-import souther.compiler.check.FieldDomains;
 import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.OrderedRuns;
@@ -30,7 +29,7 @@ import java.util.Set;
  *                 can be told from one the rules refused
  */
 record ReadPosition(TermPath path, TypeView view, List<PositionBounds> bounds,
-                    List<FieldDomains.TotalLeft> totalsLeft,
+                    List<TotalLeft> totalsLeft,
                     boolean nothingExists,
                     ProjectionEvidence projection, List<Case> declared, ReadingResult reading,
                     ObligationDomain obligations, AdmissibleSet admitted, OrderedRuns orderedRegion,

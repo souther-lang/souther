@@ -549,8 +549,8 @@ final class CardinalityComposer {
         Map<NumericTerm, Place> outside = settledOutside(asked, container, within);
         // And the numbers of the container as a whole the row asks or the statements read, each
         // fixed at one number before an element is chosen: what an element answers reads them.
-        ContainerAsAWhole whole = ContainerAsAWhole.of(container, view, asked, totals, size,
-                measuring, within, reading);
+        ContainerAsAWhole whole = ContainerAsAWhole.of(container, view, asked, totals, outside,
+                size, measuring, within, reading);
         if (whole == null) {
             return notChosen("a number of `" + container + "` as a whole is a total of a place"
                     + " whose numbers are not whole ones, and nothing here moves its elements to"
