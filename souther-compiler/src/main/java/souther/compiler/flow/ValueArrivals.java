@@ -3,7 +3,6 @@ package souther.compiler.flow;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.TruthRestatement;
-import souther.compiler.check.ValueStanding;
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
@@ -696,8 +695,8 @@ public final class ValueArrivals<P> {
      * <p>The one place the two are told apart. A copy's code is the walk an operation of the
      * language does, and nothing in it is a way of the body: the application comes out the way it
      * answers, where the copy is entered ({@link #answering}). So no reading of a value by what it
-     * means — an operator that stops early, a truth restated, a truth taken off a record, a truth
-     * split two ways — is made of a copy's code, and what it comes to there does not turn on how the
+     * means — an operator that stops early, a truth restated, a truth split two ways — is made of a
+     * copy's code, and what it comes to there does not turn on how the
      * library happened to write the operation. Each such reading is in {@link #meant}, behind this.
      */
     private Paths<P> valueOf(Core e, Naming<P> naming, ComparisonWays comparisons,
@@ -708,9 +707,8 @@ public final class ValueArrivals<P> {
 
     /**
      * A value of the model's own code, read for what it means: an operator that stops as soon as
-     * its answer is settled ({@link #through}), the truth it restates ({@link #restating}), the
-     * truth written where it is taken off a value written out ({@link #takenOff}), and otherwise a
-     * value {@link #built} out of its parts and split the ways it comes out
+     * its answer is settled ({@link #through}), the truth it restates ({@link #restating}), and
+     * otherwise a value {@link #built} out of its parts and split the ways it comes out
      * ({@link #answeredWhole}).
      */
     private Paths<P> meant(Core e, Naming<P> naming, ComparisonWays comparisons,
@@ -722,83 +720,7 @@ public final class ValueArrivals<P> {
         if (restated != null) {
             return restating(e, restated, naming, comparisons, bound);
         }
-        Paths<P> written = takenOff(e, naming, comparisons, bound);
-        return written != null ? written
-                : answeredWhole(e, built(e, naming, comparisons, bound), naming, comparisons, bound);
-    }
-
-    /**
-     * The ways to a truth taken off a value written out — a field of a record built here, or of
-     * one a name was bound to — which are the ways of the truth written there, or null where it
-     * is taken off nothing written.
-     *
-     * <p>{@code s.hit} with {@code s} bound to {@code Seen { hit = a || b, ... }} is {@code a || b}
-     * read through a record, as {@code c} bound to {@code a || b} is read through a name, and is
-     * settled where and how {@code a || b} is. A value made of its parts arrives with no truth along
-     * any of its ways, so a fork on the field would otherwise have only its arms to tell them apart
-     * by. What the field is taken off is evaluated all the same, and where it arrives at no value,
-     * neither does the field. How far a field is followed is {@link ValueStanding}'s, with this
-     * reading's names as what each name was settled to.
-     *
-     * <p>A truth only. The ways a value of another type arrives carry nothing of it, and a value
-     * written there that arrives one way whose truth nobody read is read as one built out of its
-     * parts, as a restatement of one is ({@link #restating}).
-     */
-    private Paths<P> takenOff(Core e, Naming<P> naming, ComparisonWays comparisons,
-                              Map<BindingId, Bound<P>> bound) {
-        if (!Type.BOOL.equals(e.type()) || !(e instanceof Core.FieldAccess
-                || e instanceof Core.TupleGet || e instanceof Core.FieldProjection)) {
-            return null;
-        }
-        for (Core part : partsOf(e)) {
-            settle(part, naming, comparisons, bound);
-            if (!arrivesAt(part)) {
-                return new Paths.Held<>(List.of());
-            }
-        }
-        Core stands = ValueStanding.one(e, bound, new SettledNames()).value();
-        Paths<P> ways = stands == e ? null : settled.get(stands);
-        if (ways instanceof Paths.Held<P> held && held.arrivals().size() == 1
-                && held.arrivals().getFirst().value() == Truth.UNREAD) {
-            return null;
-        }
-        return ways;
-    }
-
-    /**
-     * What each name of this reading was settled to, as the environment a value is followed in.
-     *
-     * <p>A name is the value it was bound to where the body bound it to one, and stands for itself
-     * where it was bound to nothing this reading can read — a position, an arm's binding. Nothing
-     * here is several values, and a binding met inside what is followed is not entered: its names
-     * are not this reading's, so the walk stops in front of them.
-     */
-    private final class SettledNames
-            implements ValueStanding.Names<Map<BindingId, Bound<P>>, SettledNames> {
-
-        @Override
-        public ValueStanding.ReadThrough<Map<BindingId, Bound<P>>> readThrough(
-                Core.Read read, Map<BindingId, Bound<P>> at) {
-            Bound<P> named = at.get(read.binding());
-            return named == null || named.settledBy() == null ? null
-                    : new ValueStanding.ReadThrough<>(named.settledBy(), at);
-        }
-
-        @Override
-        public List<ValueStanding.ReadThrough<Map<BindingId, Bound<P>>>> alternativesOf(
-                Core.Read read, Map<BindingId, Bound<P>> at) {
-            return null;
-        }
-
-        @Override
-        public Map<BindingId, Bound<P>> inside(Core.LetIn li, Map<BindingId, Bound<P>> at) {
-            return at;
-        }
-
-        @Override
-        public SettledNames oneAtATime() {
-            return this;
-        }
+        return answeredWhole(e, built(e, naming, comparisons, bound), naming, comparisons, bound);
     }
 
     /**
@@ -811,6 +733,15 @@ public final class ValueArrivals<P> {
      * only its two arms to tell the ways apart by. Everything a way holds is kept as it was — what
      * the naming could not write of it, and whether it was read whole — and a value the operand
      * never arrives at is not arrived at by denying it.
+     *
+     * <p>Answered by the operand's ways in place of the ways {@link #built} would compose, and that
+     * is the same list of ways and not a part of it: the operand is the one part of a restatement
+     * that has ways at all. The call has no other argument, and the other side of a comparison is a
+     * written truth, which arrives one way along nowhere. So nothing the value's parts settle is
+     * left behind, every way the operand arrives by is one of the value's, and a list the operand's
+     * reading would not hold is one the value's would not either. A truth taken off a value built
+     * of several parts has no such correspondence — which of the parts' ways a way of the whole came
+     * by is what composing them forgets — and is read as the value built.
      *
      * <p>Where the operand arrives one way whose truth nobody read, carrying it through says nothing
      * the value made of it does not, and the value is read as one built out of its part, which is
@@ -988,7 +919,7 @@ public final class ValueArrivals<P> {
         // its place among the arms, and one that answers nothing is skipped rather than closing the
         // gap and letting the next arm be called the first.
         Core[] arms = {iff.then(), iff.els()};
-        settle(iff.cond(), naming, comparisons, bound);
+        Paths<P> condition = settle(iff.cond(), naming, comparisons, bound);
         Comes cond = comesAt(iff.cond());
         IntoArms waysInto = new IntoArms(iff, naming);
         into.put(iff, waysInto);
@@ -1002,6 +933,15 @@ public final class ValueArrivals<P> {
                     ? !(stated.get() instanceof AWayThrough.RuledOut) : cond.mayCome(want);
         }
         enters.put(iff, entering);
+        // The ways into an arm are the ways the condition comes out that way, and a condition of
+        // more ways than this reading holds has ways it would not write down. Read as the arm
+        // instead, a way would stand for every one of them and the fork would be called read to
+        // the end. An arm is the way in only where the condition's ways are not this reading's to
+        // write — a truth nobody read, a way no words were found for — and not where they are too
+        // many to hold.
+        if (condition instanceof Paths.Beyond) {
+            return condition;
+        }
         Gathered out = new Gathered();
         for (int part = 0; part < arms.length; part++) {
             if (!entering[part]) {

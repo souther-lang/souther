@@ -761,9 +761,6 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "flow/ValueArrivals", "meant", ways, 1,
                 "whether the node the walk stands at is an operator that stops early: a Widen has"
                         + " its own reading, as the value it holds, and never arrives here");
-        row(out, c + "flow/ValueArrivals", "takenOff", ways, 3,
-                "whether the node the walk stands at takes a value off another: a Widen has its"
-                        + " own reading, as the value it holds, and never arrives here");
         return out;
     }
 

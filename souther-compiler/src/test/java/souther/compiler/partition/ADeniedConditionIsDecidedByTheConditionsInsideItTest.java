@@ -30,9 +30,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * in it, from the rules to the rows: the rules are the same, each step of each is seen where the
  * call deciding it answers and never at an arm of the guard, two rows leave the rule {@code b}
  * decides owed and offer the row for it, and the three rows meeting the three ways owe nothing.
- *
- * <p>A truth taken off a record built in the body is the same kind of value: what decides it is
- * what was written into the field, and it is held to the same condition bound to a name.
  */
 class ADeniedConditionIsDecidedByTheConditionsInsideItTest {
 
@@ -173,54 +170,6 @@ class ADeniedConditionIsDecidedByTheConditionsInsideItTest {
                 .map(rule -> rule.shownBy().stream()
                         .map(shown -> shown.getClass().getSimpleName()).toList())
                 .collect(Collectors.toSet());
-    }
-
-    /**
-     * A truth taken off a record built in the body is the truth written there, as one bound to a
-     * name is: its rules are the ways the condition written into the field is decided, and the
-     * rows meeting them are placed at them.
-     */
-    @Test
-    void aTruthTakenOffARecordIsDecidedByWhatWasWrittenThere() {
-        String source = """
-                module notdemo
-
-                data Done
-                data Fresh
-                data Seen = { hit: Bool, at: Int }
-
-                behavior kept : (n: Int, a: Set<Int>, b: Set<Int>) -> Done | Fresh
-                    constructs Seen
-                let kept (n, a, b) = {
-                    let s = Seen { hit = %s, at = 0 }
-                    if s.hit then Done else Fresh
-                }
-
-                behavior named : (n: Int, a: Set<Int>, b: Set<Int>) -> Done | Fresh
-                let named (n, a, b) = {
-                    let hit = %s
-                    if hit then Done else Fresh
-                }
-
-                behavior plain : (n: Int, a: Set<Int>, b: Set<Int>) -> Done | Fresh
-                let plain (n, a, b) = if %s then Done else Fresh
-                %s
-                """;
-        String rows = """
-                example kept
-                    | (0, [], [])  -> Fresh
-                    | (0, [0], []) -> Done
-                    | (0, [], [0]) -> Done
-                """;
-        String written = source.formatted(A_OR_B, A_OR_B, A_OR_B, rows);
-        DecisionReadings.Compiled compiled = DecisionReadings.compiled(written);
-        Set<String> plain = rules(compiled, "plain");
-        assertEquals(3, plain.size(), "a, then b past a false a, then neither");
-        assertEquals(plain, rules(compiled, "named"), "the condition read through a name");
-        assertEquals(plain, rules(compiled, "kept"), "and read through a record");
-        assertSeenWhereTheCallsAnswer(compiled, "kept", "a truth taken off a record");
-        assertEquals(0, uncoveredRulesOf(measured(written), "kept"),
-                "a row for each way, and each placed at its rule");
     }
 
     /** The rules, each the conditions it consults in order and the way each was taken. */
