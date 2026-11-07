@@ -29,7 +29,8 @@ class NoCaseIsHeldNowhereTest {
     }
 
     private static final DecidingCase.Cases.NotTakenApart STOPPED =
-            new DecidingCase.Cases.NotTakenApart(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN);
+            new DecidingCase.Cases.NotTakenApart(
+                    CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached());
 
     /** Two choices held together, beside cases nobody took apart: four ways and one more. */
     private static final DecidingCase.Cases SOME = new DecidingCase.Cases.EachOf(List.of(

@@ -62,7 +62,14 @@ public record CaseCount(Ways structuralWays,
 
     /** {@code cases} counted both ways. */
     public static CaseCount of(DecidingCase.Cases cases) {
+        return of(cases, NumericallyConsistentWays.of(cases));
+    }
+
+    /** {@code cases} counted as the choices stand, beside the consistent ways already counted of
+     *  them. */
+    public static CaseCount of(DecidingCase.Cases cases,
+                               NumericallyConsistentWays.Counted numericallyConsistentWays) {
         return new CaseCount(Ways.held(cases.structuralWays(WAYS_A_COUNT_IS_HELD_TO)),
-                NumericallyConsistentWays.of(cases));
+                numericallyConsistentWays);
     }
 }

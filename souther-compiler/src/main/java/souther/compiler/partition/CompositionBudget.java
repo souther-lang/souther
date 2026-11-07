@@ -536,8 +536,9 @@ public enum CompositionBudget {
      * line decides in any of them. What this bounds is the taking apart: each case is a way the
      * statement's other parts come out, and finding them walks every way the parts can come out
      * once for each case found. And how many of them are asked: cases kept as choices rather than
-     * written out are as many as the ways of choosing one, counted before any is asked, and past
-     * this figure none is.
+     * written out are as many as the ways of choosing one that no comparison chosen leaves a form
+     * no value of, counted before any is asked, and past this figure none is. Where those are not
+     * counted, they are every way as the choices stand.
      *
      * <p><b>Reaching it gives the cases up and says so.</b> The condition is kept, said for cases
      * nobody took apart ({@link souther.compiler.meaning.DecidingCase.Cases.NotTakenApart}).
@@ -749,14 +750,43 @@ public enum CompositionBudget {
         this.maximum = maximum;
     }
 
-    /** The figure itself. What is done on reaching it is the member's to say. */
+    /**
+     * The figure itself, as the compilation reading it holds it ({@link Allowances}); for a
+     * budget no compilation may hold to another figure, the one declared. What is done on
+     * reaching it is the member's to say.
+     */
     public int maximum() {
+        return Allowances.SETTABLE.contains(this) ? Allowances.inForce(this) : maximum;
+    }
+
+    /** The figure written down here, which a compilation holds this to where it says nothing
+     *  else. */
+    public int declared() {
         return maximum;
     }
 
-    /** This budget as a figure something stopped at. */
+    /**
+     * This budget as the figure something stopped at, made where it stopped: the figure the
+     * compilation stopping there held it to. What carries the stop carries this.
+     */
+    public Figure.Budget reached() {
+        return new Figure.Budget(this, maximum());
+    }
+
+    /**
+     * This budget as a figure, made wherever it is asked: the one declared, which is the figure
+     * every compilation holds a budget to that none may hold to another.
+     *
+     * @throws IllegalStateException for a budget a compilation may hold to another figure
+     *         ({@link Allowances#SETTABLE}): which figure it stopped at is known only where it
+     *         stopped, and what stopped there carries it ({@link #reached})
+     */
     public Figure figure() {
-        return new Figure.Budget(this);
+        if (Allowances.SETTABLE.contains(this)) {
+            throw new IllegalStateException(this + " may be held to another figure than the one"
+                    + " declared, and what stopped at it carries the figure it stopped at");
+        }
+        return reached();
     }
 
     /**

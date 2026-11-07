@@ -8,12 +8,12 @@ import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -29,9 +29,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class ARowInCasesNobodyWorkedOutIsNotToldToBeWhereTheLineDecidesTest {
 
-    private static final CasesWorkedOut STOPPED = CasesWorkedOut.Stopped.at(EnumSet.of(
+    /** Where the cases were taken apart, as a compilation holding the figure to the one declared
+     *  reaches it. */
+    private static final Figure TAKEN_APART = new Figure.Budget(
             CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
-            CompositionBudget.CASES_A_LINE_IS_ASKED_IN));
+            CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.declared());
+
+    private static final CasesWorkedOut STOPPED = new CasesWorkedOut.Stopped(List.of(
+            TAKEN_APART, CompositionBudget.CASES_A_LINE_IS_ASKED_IN.figure()));
 
     private static final TermPath STAGE = TermPath.of("s");
 
@@ -56,8 +61,7 @@ class ARowInCasesNobodyWorkedOutIsNotToldToBeWhereTheLineDecidesTest {
                 at(HOT_HOLDS, CasesWorkedOut.SHOWN, IN_THE_CASE),
                 "in a case the line was shown to decide in");
         assertEquals(new WhereAPartDecides.AtARow.CouldNotTell(Set.of(
-                        new ReadingGap.CasesNotWorkedOut(List.of(
-                                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure(),
+                        new ReadingGap.CasesNotWorkedOut(List.of(TAKEN_APART,
                                 CompositionBudget.CASES_A_LINE_IS_ASKED_IN.figure())))),
                 at(HOT_HOLDS, STOPPED, IN_THE_CASE),
                 "where cases nobody worked out are, naming what stopped them");

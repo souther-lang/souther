@@ -7,6 +7,7 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
+import souther.compiler.partition.Allowances;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.LabeledRegion;
@@ -383,6 +384,15 @@ public final class Compilation {
         java.util.SequencedSet<SourceId> wrote = db.ask(new Front.ExampleSources(module)).value();
         return wrote == null
                 ? java.util.Collections.unmodifiableSequencedSet(new LinkedHashSet<>()) : wrote;
+    }
+
+    /**
+     * Holds this compilation's budgets to {@code allowances} ({@link Allowances}), before
+     * anything is asked of it.
+     */
+    public Compilation allowing(Allowances allowances) {
+        db.allowing(allowances);
+        return this;
     }
 
     /** What this compilation was asked to measure. Set before anything is asked; the answers are

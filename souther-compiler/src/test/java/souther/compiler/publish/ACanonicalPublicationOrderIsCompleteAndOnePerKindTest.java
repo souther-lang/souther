@@ -2,6 +2,7 @@ package souther.compiler.publish;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.RunSensitivity;
@@ -234,7 +235,8 @@ class ACanonicalPublicationOrderIsCompleteAndOnePerKindTest {
     /** Cases nobody worked out, at a figure: the place is the kind, whatever figures it was met
      *  at, as an observation's is its code. */
     private static final ReadingGap CASES_NOT_WORKED_OUT = new ReadingGap.CasesNotWorkedOut(
-            List.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure()));
+            List.of(new Figure.Budget(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
+                    CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.declared())));
 
     /** An observation of {@code code}, at a figure where a figure is what decides it. */
     private static ReadingGap anObservationOf(Incompleteness.Code code) {
