@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.observe.Figure;
 
-import java.util.Collection;
 import java.util.List;
 
 /**
@@ -39,11 +38,6 @@ public sealed interface CasesWorkedOut {
                 throw new IllegalArgumentException(
                         "cases nobody worked out were stopped at some figure");
             }
-        }
-
-        /** Stopped at {@code budgets}. */
-        static Stopped at(Collection<CompositionBudget> budgets) {
-            return new Stopped(budgets.stream().map(CompositionBudget::figure).toList());
         }
 
         /** What a row in the cases is not told: which of them it is in. */

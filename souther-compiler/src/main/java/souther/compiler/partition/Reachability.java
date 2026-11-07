@@ -444,6 +444,27 @@ public sealed interface Reachability {
                                     region));
         }
 
+        /**
+         * Whether where each number {@code each} names runs is shown on one side or the other of
+         * taking it in, so that its not moving ({@link #movesAny}) is something shown. A number of
+         * no one position has no run, and one whose run is shown on neither side has none to
+         * compare: unmoved there is only unshown. Nor is a constraint naming no number shown to
+         * hold by moving none.
+         */
+        private static boolean runsShown(TakenConstraint each, SearchRegion before,
+                                         SearchRegion after) {
+            if (each.terms().isEmpty()) {
+                return false;
+            }
+            for (NumericTerm term : each.terms()) {
+                if (!(term instanceof NumericTerm.FromOnePosition one)
+                        || (before.wholeRunOf(one) == null && after.wholeRunOf(one) == null)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         /** Whether taking {@code each} in moves where a number it names runs or what is held
          *  apart from it, going from {@code before} to {@code after}. */
         private static boolean movesAny(TakenConstraint each, SearchRegion before,
@@ -531,13 +552,17 @@ public sealed interface Reachability {
                 for (TakenConstraint each : own ? answered.ofTheRelation()
                         : answered.onTheWay()) {
                     SearchRegion next = each.narrowing(narrowed);
-                    // One number that no run of moves is one the region already holds. Several
-                    // say how they go together, which no run of one of them shows: a sum held
-                    // below a greatest value leaves each its values and the pair fewer. Unless
-                    // every row of the region meets it, which leaves them as they are.
+                    // One number that no run of moves is one the region already holds, where the
+                    // runs are shown; where they are not, that none moved says nothing, and it is
+                    // asked as several are. Several say how they go together, which no run of one
+                    // of them shows: a sum held below a greatest value leaves each its values and
+                    // the pair fewer. Unless every row of the region meets it, which leaves them
+                    // as they are.
                     boolean keeps = each.terms().size() > 1
                             ? !heldAtEveryRow(each, region, narrowed)
-                            : movesAny(each, narrowed, next);
+                            : movesAny(each, narrowed, next)
+                                    || (!runsShown(each, narrowed, next)
+                                            && !heldAtEveryRow(each, region, narrowed));
                     if (keeps) {
                         (own ? ofTheRelation : onTheWay).add(each);
                         narrowed = next;

@@ -136,6 +136,19 @@ final class Compiled {
     record Invocation(Site site, List<String> said) {}
 
     /**
+     * One static field read, with what the next instruction does with what was read.
+     *
+     * <p><b>The next instruction and nothing more</b>, for the reason {@link Invocation} reads the
+     * constant just before: a value read and at once handed to a call is one nothing else holds,
+     * and where it went past that is running the program. A rule over these says which reads go
+     * straight into a call, and that every other one is something it names.
+     *
+     * @param read    the field read
+     * @param takenBy the call the next instruction makes, where it makes one; null otherwise
+     */
+    record StaticRead(Site read, Site takenBy) {}
+
+    /**
      * Every call of every compiled class, with the text read at it, worked out once.
      *
      * <p>Beside the parsed classes, which the fork shares, and not the same thing: this is what
@@ -153,10 +166,16 @@ final class Compiled {
         return theReactor().sites();
     }
 
+    /** Every static field read of every module, with the call that takes it where one does, out
+     *  of the same walk. */
+    static List<StaticRead> staticReads() {
+        return theReactor().staticReads();
+    }
+
     /**
      * What one walk over some classes came to.
      *
-     * <p>Both of them, because they are two projections of one decoding and not two readings. What
+     * <p>All of them, because they are projections of one decoding and not several readings. What
      * a call is appears in each — a site saying that a call was made, and the same site with the
      * text this could read at it — so a reading that answered them separately would walk the code
      * twice, decode every method twice, and build two of the site for every call there is. Which is
@@ -166,11 +185,12 @@ final class Compiled {
      * shares can empty a list everything after it reads. Made per ask, that was the caller's own
      * copy to spoil; shared, the lifetime is shared and the way to change it has to go.
      */
-    record Reading(List<Site> sites, List<Invocation> invocations) {
+    record Reading(List<Site> sites, List<Invocation> invocations, List<StaticRead> staticReads) {
 
         Reading {
             sites = List.copyOf(sites);
             invocations = List.copyOf(invocations);
+            staticReads = List.copyOf(staticReads);
         }
     }
 
@@ -227,6 +247,7 @@ final class Compiled {
     static Reading read(List<ClassModel> classes) {
         List<Site> sites = new ArrayList<>();
         List<Invocation> invocations = new ArrayList<>();
+        List<StaticRead> staticReads = new ArrayList<>();
         for (ClassModel model : classes) {
             String from = named(model.thisClass().asInternalName());
             for (var method : model.methods()) {
@@ -237,7 +258,19 @@ final class Compiled {
                 String name = method.methodName().stringValue();
                 String descriptor = method.methodType().stringValue();
                 String loaded = null;
+                // A static read waits for the next instruction, which is what takes it; a label or
+                // a line number between them is no instruction and takes nothing.
+                Site read = null;
                 for (var element : code) {
+                    if (read != null && element instanceof Instruction next) {
+                        staticReads.add(new StaticRead(read, next instanceof InvokeInstruction call
+                                ? new Site(from, name, descriptor, How.CALLS,
+                                        named(call.owner().asInternalName()),
+                                        call.name().stringValue(),
+                                        call.opcode() == Opcode.INVOKESTATIC)
+                                : null));
+                        read = null;
+                    }
                     // Whatever was loaded is only what this call took if nothing came between, so
                     // anything that is not the constant itself clears it. Kept across the ones in
                     // between, a name put in a local and passed a line later would read as the
@@ -269,11 +302,15 @@ final class Compiled {
                             loaded = null;
                         }
                         case FieldInstruction field -> {
-                            sites.add(new Site(from, name, descriptor, How.READS,
+                            Site site = new Site(from, name, descriptor, How.READS,
                                     named(field.owner().asInternalName()),
                                     field.name().stringValue(),
                                     field.opcode() == Opcode.GETSTATIC
-                                            || field.opcode() == Opcode.PUTSTATIC));
+                                            || field.opcode() == Opcode.PUTSTATIC);
+                            sites.add(site);
+                            if (field.opcode() == Opcode.GETSTATIC) {
+                                read = site;
+                            }
                             loaded = null;
                         }
                         case InvokeDynamicInstruction reference -> {
@@ -298,7 +335,7 @@ final class Compiled {
                 + " do holds nothing");
         assertFalse(invocations.isEmpty(), "these classes make no call at all, so a rule read off"
                 + " the text at a call holds nothing");
-        return new Reading(sites, invocations);
+        return new Reading(sites, invocations, staticReads);
     }
 
     /** Whether this {@code invokedynamic} is a {@code switch} over what a value is. Asked of the

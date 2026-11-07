@@ -2,12 +2,12 @@ package souther.compiler.meaning;
 
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.Figure;
 import souther.compiler.partition.CompositionBudget;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -282,10 +282,11 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
          * Cases nobody took apart, the taking apart stopped at {@code stoppedAt}: more cases than
          * are taken apart ({@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO}), or more
          * steps than a statement is read in
-         * ({@link CompositionBudget#STEPS_A_STATEMENT_IS_READ_IN}). Which of them hold a row on each
-         * side of the line is something nobody worked out.
+         * ({@link CompositionBudget#STEPS_A_STATEMENT_IS_READ_IN}), at the figure the compilation
+         * taking them apart held it to. Which of them hold a row on each side of the line is
+         * something nobody worked out.
          */
-        record NotTakenApart(CompositionBudget stoppedAt) implements Cases {
+        record NotTakenApart(Figure.Budget stoppedAt) implements Cases {
 
             public NotTakenApart {
                 Objects.requireNonNull(stoppedAt, "a taking apart stops at some figure");
@@ -376,7 +377,7 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
         }
 
         /** Each figure some of these were stopped at where they were never taken apart. */
-        default Set<CompositionBudget> notTakenApartAt() {
+        default Set<Figure.Budget> notTakenApartAt() {
             return notTakenApartAt(new IdentityHashMap<>());
         }
 
@@ -571,35 +572,34 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
          * @param worked what has been made of the cases already, for a reader that asks of
          *               several cases that share some
          */
-        default Set<CompositionBudget> notTakenApartAt(Map<Cases, Set<CompositionBudget>> worked) {
-            return fold(new Fold<Set<CompositionBudget>>() {
+        default Set<Figure.Budget> notTakenApartAt(Map<Cases, Set<Figure.Budget>> worked) {
+            return fold(new Fold<Set<Figure.Budget>>() {
 
                 @Override
-                public Set<CompositionBudget> one(One one) {
+                public Set<Figure.Budget> one(One one) {
                     return Set.of();
                 }
 
                 @Override
-                public Set<CompositionBudget> eachOf(EachOf node,
-                                                     List<Set<CompositionBudget>> alternatives) {
+                public Set<Figure.Budget> eachOf(EachOf node,
+                                                 List<Set<Figure.Budget>> alternatives) {
                     return union(alternatives);
                 }
 
                 @Override
-                public Set<CompositionBudget> together(Together node,
-                                                       List<Set<CompositionBudget>> factors) {
+                public Set<Figure.Budget> together(Together node, List<Set<Figure.Budget>> factors) {
                     return union(factors);
                 }
 
                 @Override
-                public Set<CompositionBudget> notTakenApart(NotTakenApart notTakenApart) {
+                public Set<Figure.Budget> notTakenApart(NotTakenApart notTakenApart) {
                     return Set.of(notTakenApart.stoppedAt());
                 }
             }, worked);
         }
 
-        private static Set<CompositionBudget> union(List<Set<CompositionBudget>> these) {
-            Set<CompositionBudget> out = EnumSet.noneOf(CompositionBudget.class);
+        private static Set<Figure.Budget> union(List<Set<Figure.Budget>> these) {
+            Set<Figure.Budget> out = new LinkedHashSet<>();
             these.forEach(out::addAll);
             return out.isEmpty() ? Set.of() : Collections.unmodifiableSet(out);
         }
@@ -624,7 +624,7 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
                 case One(var condition) -> other instanceof One(var that)
                         && condition.equals(that);
                 case NotTakenApart(var stoppedAt) -> other instanceof NotTakenApart(var that)
-                        && stoppedAt == that;
+                        && stoppedAt.equals(that);
                 case EachOf(var alternatives) -> other instanceof EachOf(var that)
                         && sameAll(alternatives, that, met);
                 case Together(var factors) -> other instanceof Together(var that)
@@ -681,7 +681,8 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
             }
             return label + switch (cases) {
                 case One(var condition) -> "One[" + condition + "]";
-                case NotTakenApart(var stoppedAt) -> "NotTakenApart[" + stoppedAt + "]";
+                case NotTakenApart(var stoppedAt) ->
+                        "NotTakenApart[" + stoppedAt.budget() + " " + stoppedAt.most() + "]";
                 case EachOf(var alternatives) -> "EachOf" + describeAll(alternatives, held,
                         numbered);
                 case Together(var factors) -> "Together" + describeAll(factors, held, numbered);

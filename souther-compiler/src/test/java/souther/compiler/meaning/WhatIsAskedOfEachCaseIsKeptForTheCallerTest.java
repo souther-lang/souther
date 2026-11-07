@@ -119,7 +119,7 @@ class WhatIsAskedOfEachCaseIsKeptForTheCallerTest {
 
         assertEquals(List.of(), atoms.each());
         assertEquals(List.of(), asking.asked());
-        assertEquals(Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO),
+        assertEquals(Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached()),
                 atoms.notWorkedOut());
     }
 
@@ -163,13 +163,13 @@ class WhatIsAskedOfEachCaseIsKeptForTheCallerTest {
     @Test
     void whatWasWalkedToIsKeptBesideWhatStoppedTheRest() {
         DecidingCase.Cases readTooLong = new DecidingCase.Cases.NotTakenApart(
-                CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN);
+                CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached());
 
         CasesOfALineAsked.Atoms<Boolean> atoms = new Asking<Boolean>(_ -> true).of(
                 new DecidingCase.Cases.EachOf(List.of(readTooLong, one(A))));
 
         assertEquals(List.of(new CasesOfALineAsked.Atom<>(A, true)), atoms.each());
-        assertEquals(Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN),
+        assertEquals(Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached()),
                 atoms.notWorkedOut());
     }
 }

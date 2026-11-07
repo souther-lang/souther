@@ -25,8 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * not, it names none.
  *
  * <p>Every model here searches seven thresholds with three comparisons failing at each, so the
- * line on what the search found is past the cases taken apart wherever the comparisons are
- * written. What changes from one model to the next is who wrote them and how often a reading of
+ * line on what the search found is past the cases taken apart as the choices stand wherever the
+ * comparisons are written. What changes from one model to the next is who wrote them and how often a reading of
  * them is chosen past another.
  */
 class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
@@ -92,8 +92,18 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
                     [1, 2, 3, 4, 5, 6, 7])) > (if h(y) || h(x) then 3 else 4)
             """;
 
+    /**
+     * How many cases a line is taken apart into here: none. The comparisons of one search leave
+     * few ways once their numbers are read, so at the figure declared the line would be taken
+     * apart and say nothing of a helper; held to none, every line past the figure as the choices
+     * stand is cut off ({@link Allowances}).
+     */
+    private static final int NO_CASE_TAKEN_APART = 0;
+
     private static Compilation compiled(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
+        Compilation compilation = Compilation.ofSource(model, "Main").allowing(
+                Allowances.DECLARED.with(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
+                        NO_CASE_TAKEN_APART));
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors());

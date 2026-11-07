@@ -365,7 +365,7 @@ class WhereALineInsideAQuantifierDecidesTest {
                     alternatives.forEach(one -> notTakenApartAt(one, into));
             case DecidingCase.Cases.Together(var factors) ->
                     factors.forEach(one -> notTakenApartAt(one, into));
-            case DecidingCase.Cases.NotTakenApart(var figure) -> into.add(figure);
+            case DecidingCase.Cases.NotTakenApart(var figure) -> into.add(figure.budget());
         }
     }
 
@@ -385,7 +385,7 @@ class WhereALineInsideAQuantifierDecidesTest {
                     alternatives.forEach(one -> stoppedAt(one, into));
             case DecidingCase.Cases.Together(var factors) ->
                     factors.forEach(one -> stoppedAt(one, into));
-            case DecidingCase.Cases.NotTakenApart(var figure) -> into.add(figure);
+            case DecidingCase.Cases.NotTakenApart(var figure) -> into.add(figure.budget());
         }
     }
 

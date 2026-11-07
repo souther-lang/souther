@@ -12,6 +12,7 @@ import souther.compiler.meaning.NumericallyConsistentWays;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Spelling;
 import souther.compiler.meaning.WrittenLine;
+import souther.compiler.observe.Figure;
 
 import java.math.BigInteger;
 import java.util.List;
@@ -32,8 +33,9 @@ class ACountOfALinesCasesLeavesWhatItsPlacesAreLeftWithAsItWasTest {
     private static final ComparisonAssessment.Unread NOT_WORKED_OUT =
             new ComparisonAssessment.Unread(ComparisonAssessment.atEachOf(
                     List.of(FilingCoordinate.at(TermPath.of("x"))),
-                    new BlockReason.WhereALineDecidesNotWorkedOut(
-                            CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure())),
+                    new BlockReason.WhereALineDecidesNotWorkedOut(new Figure.Budget(
+                            CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
+                            CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.declared()))),
                     WhereAReadingStopped.ELSEWHERE);
 
     private static ComparisonAssessment.Several read(List<CaseExpansion.Counted> expanded) {

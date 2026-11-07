@@ -319,6 +319,30 @@ class ACountOfStatementsIsJudgedAsACountTest {
 
         assertEquals(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum(), walks);
         assertTrue(steps.ranOut());
+        assertEquals(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG, steps.ranOutAt());
+    }
+
+    /**
+     * What ran out is said as the figure that ran out: a search handed steps whose walks are
+     * spent says the walks', with steps of its own left, and one whose steps are spent says the
+     * steps'.
+     */
+    @Test
+    void aSearchStoppedSaysTheFigureThatRanOut() {
+        CountedWays.Steps walked = CountedWays.Steps.ofAWay();
+        for (int each = 0; each <= CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum(); each++) {
+            walked.takeAWalk();
+        }
+        assertEquals(new CountedWays.Found.Unknown<String>(
+                        CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG),
+                CountedWays.of(new Counting(), 0, ofPositives(20, 10), 16, true, walked));
+
+        CountedWays.Steps stepped = new CountedWays.Steps(0);
+        assertEquals(new CountedWays.Found.Unknown<String>(
+                        CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT),
+                CountedWays.of(new Counting(), 0, ofPositives(20, 10), 16, true, stepped));
+        assertEquals(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT, stepped.ranOutAt(),
+                "and the steps keep the figure they ran out at");
     }
 
     /**
