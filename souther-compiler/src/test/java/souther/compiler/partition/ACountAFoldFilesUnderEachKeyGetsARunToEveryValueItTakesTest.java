@@ -28,13 +28,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  *
  * <p>What is shown is shown of the count's own operations where they stand in its step, and of
  * nothing else: a key worked out by an operation that may pass an {@code Int}, a move by more than
- * a full collection keeps inside an {@code Int}, a move written as a closure handed by name, and a
- * walk of its own inside what is counted each still stop a run on the places they read, which a
- * relation after the count then reads.
+ * a full collection keeps inside an {@code Int}, a move written as a closure handed by name, a
+ * walk of its own inside what is counted, and a product past an {@code Int} worked out after the
+ * count each still stop a run on the places they read, which a relation after the count then
+ * reads.
  *
  * <p>And the witness of a count holds the counted container at the most it holds, which a rule of
  * the container may lower, and does not claim a row where what is inside the container is held to
- * more than one element: a count of copies then holds more pieces than the walk's list may.
+ * more than one element: a count of copies then holds more pieces than the walk's list may. Which
+ * values the count takes is a claim of its own, of rows of copies, and the witness makes none.
  */
 class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
 
@@ -47,6 +49,11 @@ class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
             data Board = { issues: List<Issue> }
             data FewIssues = { issues: List<Issue> }
                 invariant List.length(issues) <= 3
+            data ManyIssues = { issues: List<Issue> }
+                invariant List.length(issues) >= 2
+            data Ticket = { id: String, labels: Set<Label> }
+            data Apart = { issues: List<Ticket> }
+                invariant List.allDistinctBy(t -> t.id, issues)
             data Paired = { labels: Set<Label> }
                 invariant Set.size(labels) >= 2
             data Pairs = { issues: List<Paired> }
@@ -56,6 +63,8 @@ class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
             data No
 
             let keysOf (issues: List<Issue>): List<String> =
+                List.flatMap(i -> List.map(l -> l.value, Set.toList(i.labels)), issues)
+            let ticketKeys (issues: List<Ticket>): List<String> =
                 List.flatMap(i -> List.map(l -> l.value, Set.toList(i.labels)), issues)
             let pairKeys (issues: List<Paired>): List<String> =
                 List.flatMap(i -> List.map(l -> l.value, Set.toList(i.labels)), issues)
@@ -126,6 +135,27 @@ class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
             let countedFew (board, atLeast) =
                 Usage { counts = Map.filterEntries((_, c) -> c >= atLeast,
                         byOne(keysOf(board.issues))) }
+
+            behavior countedMany : (board: ManyIssues, atLeast: Int) -> Usage
+                constructs Usage
+            let countedMany (board, atLeast) =
+                Usage { counts = Map.filterEntries((_, c) -> c >= atLeast,
+                        byOne(keysOf(board.issues))) }
+
+            behavior countedApart : (board: Apart, atLeast: Int) -> Usage
+                constructs Usage
+            let countedApart (board, atLeast) =
+                Usage { counts = Map.filterEntries((_, c) -> c >= atLeast,
+                        byOne(ticketKeys(board.issues))) }
+
+            behavior outsideThenGuard : (board: Board, atLeast: Int) -> Usage | No
+                constructs Usage
+            let outsideThenGuard (board, atLeast) = {
+                let counts = byOne(keysOf(board.issues))
+                let far = List.length(board.issues) * 4611686018427387904
+                guard List.length(board.issues) >= atLeast else No
+                Usage { counts = Map.insert("far", far, counts) }
+            }
 
             behavior countedPaired : (board: Pairs, atLeast: Int) -> Usage
                 constructs Usage
@@ -210,6 +240,8 @@ class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
             UndividedPosition.Reason.RULE_RELATING_TWO_VALUES;
     private static final UndividedPosition.Reason NOT_REACHED =
             UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE;
+    private static final UndividedPosition.Reason NOT_TO_REACH =
+            UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE;
 
     private static final Map<String, PartitionEvidence> COVERAGE = coverage();
 
@@ -221,8 +253,28 @@ class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
         expected.put("countedLooked", List.of(RELATES));
         expected.put("countedStepNamed", List.of(RELATES));
         expected.put("countedFew", List.of(RELATES));
+        expected.put("countedMany", List.of(RELATES));
+        expected.put("countedApart", List.of(RELATES));
         expected.put("countedMoveNamed", List.of(NOT_REACHED));
         assertEquals(expected, reasonsAt(THE_COUNT, expected.keySet()));
+    }
+
+    /**
+     * That a count takes every value is a claim of the rows of copies of one element, and the
+     * witness's bound on how many the counted container holds is none of it. So the bar is read
+     * with its lines where a row of copies takes every count, and is not shown reached where the
+     * container is held to a few, or to two at least, where its elements are kept apart by an id
+     * so no element is held over again, or where what is inside each is held to two.
+     */
+    @Test
+    void theBarIsReadOnlyWhereARowOfCopiesTakesEveryCount() {
+        Map<String, List<UndividedPosition.Reason>> expected = new LinkedHashMap<>();
+        expected.put("countedByOne", List.of());
+        expected.put("countedFew", List.of(NOT_TO_REACH));
+        expected.put("countedMany", List.of(NOT_TO_REACH));
+        expected.put("countedApart", List.of(NOT_TO_REACH));
+        expected.put("countedPaired", List.of(NOT_TO_REACH));
+        assertEquals(expected, reasonsAt("atLeast", expected.keySet()));
     }
 
     @Test
@@ -256,6 +308,7 @@ class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
         expected.put("nextKeyThenGuard", List.of(NOT_REACHED));
         expected.put("moveNamedThenGuard", List.of(NOT_REACHED));
         expected.put("walkInsideThenGuard", List.of(NOT_REACHED));
+        expected.put("outsideThenGuard", List.of(NOT_REACHED));
         assertEquals(expected, reasonsAt(HOW_MANY_ISSUES, expected.keySet()));
     }
 
