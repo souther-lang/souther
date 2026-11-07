@@ -8777,7 +8777,8 @@
           "required": [
             "partsSplitOn",
             "unattributed",
-            "factors"
+            "factors",
+            "multipliedHelpers"
           ]
         },
         {
@@ -9068,6 +9069,53 @@
                 }
               }
             ]
+          }
+        },
+        "multipliedHelpers": {
+          "type": "array",
+          "description": "The helpers whose readings the case's choices multiply, in the order the cases meet them. A helper is read more than once at two copies of its body or on two applications of a closure its call is written in; it is named where a choice among alternatives one reading made has more than one alternative that chooses again among parts another reading made, so the inner choice is made whichever outer alternative was taken — the way a walk reaches a candidate only past every way the one before it fails. A helper is expanded where it is called, so each reading's comparisons are choices of the caller's; declared as a behavior it is not expanded, its own lines are measured on its own inputs, and each reading is its answer. Not every helper whose comparisons made parts: readings that are alternatives to each other add to the ways and multiply nothing, so does a choice inside one alternative alone, and one reading whose choices multiply others' is one reading however it is declared. Says nothing about what the case would come to under the other declaration, which is another compilation.",
+          "items": {
+            "type": "object",
+            "required": [
+              "helper",
+              "madeAt"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "helper": {
+                "type": "string",
+                "description": "The helper, as its module and name."
+              },
+              "madeAt": {
+                "type": "array",
+                "minItems": 1,
+                "description": "Each comparison, and each condition of a choice, the helper wrote that made those parts, in the copy of the body it was read in.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "construct",
+                    "calledInside"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "construct": {
+                      "$ref": "#/$defs/constructOccurrence"
+                    },
+                    "at": {
+                      "$ref": "#/$defs/at",
+                      "description": "Where the author wrote the comparison, as `at` of a `choice` is."
+                    },
+                    "calledInside": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "The helpers whose copies the copy stands in, the one calling this helper first, as module and name. A helper cannot call a behavior, so a call of the helper declared as one moves out past every one of them into a behavior's own `let`. Empty where the helper is called in the behavior's own body."
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }

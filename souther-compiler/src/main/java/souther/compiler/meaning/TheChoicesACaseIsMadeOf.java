@@ -2,11 +2,14 @@ package souther.compiler.meaning;
 
 import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -35,6 +38,13 @@ import java.util.Set;
  * every application, so a choice in it is one construct chosen once on each: how many times is
  * how many of its choosings the case is taken apart on parts of. One application inside another
  * of the same call — a walk carrying what the step before it answered — is that inner one.
+ *
+ * <p><b>And which helper wrote them, read off the same walk.</b> The constructs above are what
+ * multiplied the parts, and a helper holding a {@code find} is named by them; the helper whose
+ * comparisons a {@code find} applies on each candidate is not. So the walk also keeps the
+ * comparison, or the condition of a choice, each part was made inside, and a helper is named
+ * where the cases choose among its readings one past another
+ * ({@link CaseExpansion.MultipliedHelper}).
  *
  * <p><b>For a reader explaining a line, and nothing that reads the line.</b> Nothing here is a
  * figure the line stopped at, and past {@link #STEPS_A_READING_TAKES} what the parts came from is
@@ -75,8 +85,8 @@ public final class TheChoicesACaseIsMadeOf {
             }
         }
         List<CaseExpansion.Attribution> out = new ArrayList<>();
-        for (Set<Spelling> split : each) {
-            out.add(given != null ? given : reading.attributed(split));
+        for (int at = 0; at < cases.size(); at++) {
+            out.add(given != null ? given : reading.attributed(each.get(at), cases.get(at)));
         }
         return out;
     }
@@ -124,16 +134,25 @@ public final class TheChoicesACaseIsMadeOf {
     /**
      * Where a walk down the derivation stands: the frames around it, outermost first; the choice
      * the step just entered makes, for the step under it to say which of its premises it decides
-     * by; and the operation whose law the steps below read, until they reach the elements it goes
-     * through.
+     * by; the operation whose law the steps below read, until they reach the elements it goes
+     * through; and the construct of the model whose condition the step is inside, the innermost
+     * comparison or the condition of the innermost choice, which wrote the parts made there.
      */
     private record Context(List<Frame> frames, Optional<Choosing> choosing,
-                           Optional<Applied> law) {
+                           Optional<Applied> law, Optional<ModelOccurrence> madeIn) {
 
-        static final Context OUTSIDE = new Context(List.of(), Optional.empty(), Optional.empty());
+        static final Context OUTSIDE = new Context(List.of(), Optional.empty(), Optional.empty(),
+                Optional.empty());
 
         Context plain() {
-            return choosing.isEmpty() ? this : new Context(frames, Optional.empty(), law);
+            return choosing.isEmpty() ? this
+                    : new Context(frames, Optional.empty(), law, madeIn);
+        }
+
+        /** Inside the comparison at {@code at}, or inside none the model states where the model
+         *  states nothing there. */
+        Context comparing(ConstructOccurrence at) {
+            return new Context(frames, Optional.empty(), law, ModelOccurrence.statedAt(at));
         }
 
         Context inside(Frame frame) {
@@ -146,13 +165,16 @@ public final class TheChoicesACaseIsMadeOf {
                 }
             }
             more.add(frame);
-            return new Context(List.copyOf(more), Optional.empty(), law);
+            // Inside a choice is inside its condition: what decides it is written there.
+            return new Context(List.copyOf(more), Optional.empty(), law,
+                    frame instanceof Choosing entered ? Optional.of(entered.construct()) : madeIn);
         }
     }
 
-    /** Where a part was made: the frames around the step, and that step where it writes out
-     *  the ways elements are kept. */
-    private record Origin(List<Frame> frames, Optional<Derivation.WaysWrittenWhenAsked> ways) {}
+    /** Where a part was made: the frames around the step, that step where it writes out the ways
+     *  elements are kept, and the construct of the model whose condition the step is inside. */
+    private record Origin(List<Frame> frames, Optional<Derivation.WaysWrittenWhenAsked> ways,
+                          Optional<ModelOccurrence> madeIn) {}
 
     private static final class Reading {
 
@@ -161,6 +183,14 @@ public final class TheChoicesACaseIsMadeOf {
         private final Map<Derivation, Set<Context>> seen = new IdentityHashMap<>();
         /** What each kind of factor is first met as, so they are told in the order met. */
         private final Set<Object> order = new LinkedHashSet<>();
+        /** Each reading of a helper met, numbered in the order it was first met, which is what the
+         *  readings are carried as: a reading is hashed once, where it is met. */
+        private final List<ReadingOfAHelper> readings = new ArrayList<>();
+        private final Map<ReadingOfAHelper, Integer> numbered = new HashMap<>();
+        /** The comparisons and choices each reading made its parts at, by its number. */
+        private final List<Set<ModelOccurrence>> madeAt = new ArrayList<>();
+        /** The readings that made each part, as they are asked for. */
+        private final Map<Spelling, BitSet> readingsOf = new HashMap<>();
         private Conclusion concluding;
         private Map<Derivation, Set<Spelling>> under;
         private int steps;
@@ -210,7 +240,7 @@ public final class TheChoicesACaseIsMadeOf {
             if (!own.isEmpty()) {
                 Origin origin = new Origin(at.frames(),
                         step instanceof Derivation.WaysWrittenWhenAsked ways ? Optional.of(ways)
-                                : Optional.empty());
+                                : Optional.empty(), at.madeIn());
                 if (origin.ways().isPresent()) {
                     order.add(keptBy(origin.ways().get()));
                 }
@@ -225,6 +255,8 @@ public final class TheChoicesACaseIsMadeOf {
                                 .orElseGet(() -> visit(derived, at.plain()));
                 case Derivation.AChoiceAt(var where, var choice) ->
                         visit(choice, entering(where, choice, at));
+                case Derivation.AComparisonAt(var where, var read) ->
+                        visit(read, at.comparing(where));
                 case Derivation.IfThenElse(var condition, var then, var otherwise)
                         when at.choosing().isPresent() ->
                         visit(condition, at.inside(at.choosing().get()))
@@ -261,7 +293,8 @@ public final class TheChoicesACaseIsMadeOf {
 
         private boolean overTheElements(List<Derivation> each, Context at) {
             Applied law = at.law().orElseThrow();
-            Context below = new Context(at.frames(), Optional.empty(), Optional.empty());
+            Context below = new Context(at.frames(), Optional.empty(), Optional.empty(),
+                    at.madeIn());
             for (int ordinal = 0; ordinal < each.size(); ordinal++) {
                 if (!visit(each.get(ordinal), below.inside(
                         registered(new Applied(law.call(), law.construct(), ordinal))))) {
@@ -299,10 +332,11 @@ public final class TheChoicesACaseIsMadeOf {
             };
             if (choice instanceof Derivation.ByALaw(var call, var _, var _)) {
                 return new Context(at.frames(), Optional.empty(), Optional.of(new Applied(
-                        new ACallOfAnOperation(call.operation(), where), construct.get(), 0)));
+                        new ACallOfAnOperation(call.operation(), where), construct.get(), 0)),
+                        at.madeIn());
             }
             choosing.ifPresent(this::registered);
-            return new Context(at.frames(), choosing, at.law());
+            return new Context(at.frames(), choosing, at.law(), at.madeIn());
         }
 
         private <F extends Frame> F registered(F frame) {
@@ -334,7 +368,7 @@ public final class TheChoicesACaseIsMadeOf {
          * occurrence and not as many as the applications. One making a part another makes too
          * makes it all the same; the case is taken apart on a part once.
          */
-        CaseExpansion.Attributed attributed(Set<Spelling> ofTheCase) {
+        CaseExpansion.Attributed attributed(Set<Spelling> ofTheCase, DecidingCase.Cases cases) {
             int unattributed = 0;
             // What each occurrence of each thing made, by where it stood.
             Map<Object, Map<Standing, Set<Spelling>>> occurrences = new LinkedHashMap<>();
@@ -387,9 +421,175 @@ public final class TheChoicesACaseIsMadeOf {
                     };
                 });
             }
-            return new CaseExpansion.Attributed(factors, ofTheCase.size(), unattributed);
+            return new CaseExpansion.Attributed(factors, ofTheCase.size(), unattributed,
+                    multiplied(cases));
+        }
+
+        /**
+         * The helpers whose readings {@code cases} choose among one past another
+         * ({@link CaseExpansion.MultipliedHelper}): a choice among alternatives made by one
+         * reading, more than one of which chooses among another reading again.
+         *
+         * <p>Asked of the cases as they were taken apart and not of how often a reading recurs:
+         * readings chosen among as alternatives to each other are as many ways as theirs added up,
+         * and so is a choice inside one alternative alone. Chosen again whichever of several
+         * alternatives was taken, the inner choice is made beside the outer one, which is how a
+         * walk that reaches its next candidate only past every way the one before it fails is
+         * taken apart: each candidate's ways shared by every way of failing the one before.
+         */
+        private List<CaseExpansion.MultipliedHelper> multiplied(DecidingCase.Cases cases) {
+            Map<ValueName.Helper, BitSet> found = new LinkedHashMap<>();
+            cases.fold(new DecidingCase.Cases.Fold<Chosen>() {
+
+                @Override
+                public Chosen one(DecidingCase.Cases.One one) {
+                    BitSet direct = new BitSet();
+                    for (Spelling part : WhereEachLineDecides.partsJoinedBy(one.condition())) {
+                        direct.or(readingsMaking(part));
+                    }
+                    return new Chosen(1, direct, new BitSet());
+                }
+
+                @Override
+                public Chosen eachOf(DecidingCase.Cases.EachOf node, List<Chosen> alternatives) {
+                    long ways = 0;
+                    BitSet own = new BitSet();
+                    BitSet chosen = new BitSet();
+                    // Each reading chosen among again inside an alternative, how many alternatives
+                    // choose among it again, and what those alternatives were chosen by.
+                    Map<Integer, Integer> past = new HashMap<>();
+                    Map<Integer, BitSet> besideIt = new LinkedHashMap<>();
+                    for (Chosen each : alternatives) {
+                        ways = Math.min(2, ways + each.ways());
+                        own.or(each.direct());
+                        chosen.or(each.chosen());
+                        each.chosen().stream().forEach(again -> {
+                            past.merge(again, 1, Integer::sum);
+                            besideIt.computeIfAbsent(again, _ -> new BitSet()).or(each.direct());
+                        });
+                    }
+                    // Chosen among again past more than one of the alternatives, a reading is
+                    // chosen beside the choice among them, whichever was taken; past one alone,
+                    // its ways are only added to the others'. Another reading of the same helper
+                    // on each side: one reading on both is one answer however it is declared.
+                    besideIt.forEach((again, by) -> {
+                        if (past.get(again) > 1) {
+                            ValueName.Helper helper = readings.get(again).helper();
+                            by.stream().filter(outer -> outer != again
+                                            && readings.get(outer).helper().equals(helper))
+                                    .forEach(outer -> {
+                                        BitSet of = found.computeIfAbsent(helper,
+                                                _ -> new BitSet());
+                                        of.set(outer);
+                                        of.set(again);
+                                    });
+                        }
+                    });
+                    if (ways > 1) {
+                        chosen.or(own);
+                    }
+                    return new Chosen(ways, new BitSet(), chosen);
+                }
+
+                @Override
+                public Chosen together(DecidingCase.Cases.Together node, List<Chosen> factors) {
+                    long ways = 1;
+                    BitSet direct = new BitSet();
+                    BitSet chosen = new BitSet();
+                    for (Chosen each : factors) {
+                        ways = Math.min(2, ways * each.ways());
+                        direct.or(each.direct());
+                        chosen.or(each.chosen());
+                    }
+                    return new Chosen(ways, direct, chosen);
+                }
+
+                @Override
+                public Chosen notTakenApart(DecidingCase.Cases.NotTakenApart notTakenApart) {
+                    return new Chosen(1, new BitSet(), new BitSet());
+                }
+            });
+            List<CaseExpansion.MultipliedHelper> out = new ArrayList<>();
+            found.forEach((helper, these) -> {
+                Set<ModelOccurrence> at = new LinkedHashSet<>();
+                these.stream().forEach(each -> at.addAll(madeAt.get(each)));
+                out.add(new CaseExpansion.MultipliedHelper(helper, List.copyOf(at)));
+            });
+            return out;
+        }
+
+        /**
+         * The readings of helpers that made {@code part}: for each place it was made inside a
+         * comparison or the condition of a choice a helper's body wrote, standing in a copy of
+         * that body, the copy and the applications around it made outside the copy.
+         *
+         * <p>The helper the innermost copy is of is the one that wrote it: a construct of the model
+         * stands in the copies of whoever wrote it, out of any block handed over
+         * ({@link ModelOccurrence#statedAt}). One the language writes is no author's to declare.
+         */
+        private BitSet readingsMaking(Spelling part) {
+            BitSet known = readingsOf.get(part);
+            if (known != null) {
+                return known;
+            }
+            BitSet out = new BitSet();
+            for (Origin origin : made.getOrDefault(part, Set.of())) {
+                if (origin.madeIn().isEmpty()) {
+                    continue;
+                }
+                ModelOccurrence written = origin.madeIn().get();
+                if (!(written.lineage() instanceof ExpansionLineage.Expansion copy)
+                        || !(copy.expanded() instanceof ValueName.Helper helper)
+                        || helper.isDeclaredByLanguage()) {
+                    continue;
+                }
+                List<Applied> on = new ArrayList<>();
+                for (Frame frame : origin.frames()) {
+                    if (frame instanceof Applied applied
+                            && !standsIn(applied.construct().lineage(), copy)) {
+                        on.add(applied);
+                    }
+                }
+                int number = numbered.computeIfAbsent(
+                        new ReadingOfAHelper(helper, copy, List.copyOf(on)), reading -> {
+                            readings.add(reading);
+                            madeAt.add(new LinkedHashSet<>());
+                            return readings.size() - 1;
+                        });
+                out.set(number);
+                madeAt.get(number).add(written);
+            }
+            readingsOf.put(part, out);
+            return out;
+        }
+
+        /** Whether {@code lineage} is {@code copy} or a copy made inside it. */
+        private static boolean standsIn(ExpansionLineage lineage, ExpansionLineage.Expansion copy) {
+            for (ExpansionLineage each = lineage; each instanceof ExpansionLineage.Expansion step;
+                    each = step.within()) {
+                if (step.equals(copy)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
+
+    /**
+     * One reading of a helper's body: the copy of it, and the applications made outside the copy
+     * it was read on. Two readings are two answers a behavior would give.
+     */
+    private record ReadingOfAHelper(ValueName.Helper helper, ExpansionLineage.Expansion copy,
+                                    List<Applied> on) {}
+
+    /**
+     * What {@link Reading#multiplied} makes of some cases: how many ways they are, counted as far
+     * as two; the readings of helpers whose parts they hold outside any choice, which a choice
+     * they are an alternative of chooses among; and the readings whose parts a choice among more
+     * than one way inside them chooses among. Each reading by its number, so no more than the
+     * readings the case's parts were made by, however many ways lead here.
+     */
+    private record Chosen(long ways, BitSet direct, BitSet chosen) {}
 
     /**
      * Where one occurrence of a thing stood: the frames down to it, the writing out of kept ways
