@@ -1127,9 +1127,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     if (!NumbersOnTheWayToATotal.completeWhereTheAnswerHasAPlace(node, numbers,
                             ofTheInput, at)) {
                         NumericTerm total = addedAsItIs(numbers);
-                        AddedOfEachElement each = total == null ? null
-                                : addedByTheClosureOfASum(node, total);
-                        if (each == null) {
+                        Core.Block closure = total == null ? null : theClosureOfASum(node);
+                        AddedOfEachElement each = closure == null ? null
+                                : AddedOfEachElement.ofTheTotal(total);
+                        if (each == null || !each.equals(AddedOfEachElement.ofAClosure(closure,
+                                ruleSource.symbols()))
+                                || !preparedWithoutAStop(node, at, closure, node)) {
                             told.exact = false;
                         } else if (Core.withoutStanding(node).type() == Type.DECIMAL) {
                             told.walksAddingDecimals(numbers, BigDecimal.ZERO,
@@ -1608,7 +1611,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         && NumbersOnTheWayToATotal.completeWhereTheAnswerHasAPlace(node, answer,
                                 ofTheInput, at)) {
                     tellAnIntTotal(node, answer, List.of());
-                } else if (seeded == null || !toldTheWalk(node, seeded, walk, answer)) {
+                } else if (seeded == null
+                        || !toldTheWalk(node, at, node, seeded.step(), seeded, walk, answer)) {
                     told.exact = false;
                 }
                 told.readByATerm(node);
@@ -1655,7 +1659,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             /**
              * Whether what a run stops at in working out {@code seeded}, read as {@code walk}
-             * whose answer is {@code answer}, is told; {@code node} works it out.
+             * whose answer is {@code answer}, is told; {@code node} works it out by {@code call},
+             * the walk as written, whose step is {@code step}. {@code seeded} is that walk, or a
+             * walk of one field of what it carries. Nothing is told where working {@code node} out
+             * may stop beside the steps ({@link #preparedWithoutAStop}).
              *
              * <p>A walk of decimals stops where a step has no room for its digits, which is no
              * fact of the numbers on the way: it is told as the walk it is
@@ -1670,9 +1677,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * takes away a part of the element and works out nothing else
              * ({@link AddedOfEachElement}), the running totals are told as such.
              */
-            private boolean toldTheWalk(Core node, SeededWalk seeded,
-                                        InputNumber.SeedAndAdded walk,
+            private boolean toldTheWalk(Core node, InputReads at, Core call, Core.Block step,
+                                        SeededWalk seeded, InputNumber.SeedAndAdded walk,
                                         LinearForm<NumericTerm> answer) {
+                if (!preparedWithoutAStop(node, at, step, call)) {
+                    return false;
+                }
                 NumericTerm total = addedAsItIs(walk.added());
                 if (seeded.step().body().type() == Type.DECIMAL) {
                     BigDecimal seed = aDecimalWrittenOut(seeded.seed());
@@ -1742,8 +1752,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                             : walk.ofTheField(each.field());
                     InputNumber.SeedAndAdded added = other == read ? field : other == null ? null
                             : InputNumber.ofAWalkAdding(other, inputs, whole.at(), ruleSource);
-                    if (added == null || !toldTheWalk(node, other, added, other == read ? answer
-                            : new LinearForm<>(added.seed(), added.added().coefs()))) {
+                    if (added == null || !toldTheWalk(node, at, whole.value(), walk.step(), other,
+                            added, other == read ? answer
+                                    : new LinearForm<>(added.seed(), added.added().coefs()))) {
                         told.exact = false;
                     }
                 }
@@ -1826,14 +1837,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             /**
-             * What {@code node} adds of each element, where it is the total of a closure's
-             * answers over a container and the closure answers what {@code total} adds up of the
-             * element and works out nothing else ({@link AddedOfEachElement}):
+             * The closure whose answers {@code node} adds up, where it is the total of what a
+             * closure written at a call makes of each element of a container:
              * {@code List.sum(List.map(l -> l.price * l.qty, lines))}. Null otherwise.
              */
-            private AddedOfEachElement addedByTheClosureOfASum(Core node, NumericTerm total) {
-                AddedOfEachElement each = AddedOfEachElement.ofTheTotal(total);
-                if (each == null || !(Core.withoutStanding(node) instanceof Core.PreservedCall sum)
+            private static Core.Block theClosureOfASum(Core node) {
+                if (!(Core.withoutStanding(node) instanceof Core.PreservedCall sum)
                         || sum.args().size() != 1
                         || !(Core.withoutStanding(sum.args().getFirst())
                                 instanceof Core.PreservedCall map)) {
@@ -1847,8 +1856,24 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return null;
                 }
                 return Core.withoutStanding(map.args().get(1 - over)) instanceof Core.Block closure
-                        && each.equals(AddedOfEachElement.ofAClosure(closure, ruleSource.symbols()))
-                        ? each : null;
+                        ? closure : null;
+            }
+
+            /**
+             * Whether working {@code node} out ends no run apart from what a total told of it
+             * answers for: the body of {@code step}, the closure whose every application the total
+             * tells, and {@code total}, the call working the total out, whose own stops the total
+             * tells. Everything else is asked of what a run works out to reach a value
+             * ({@link WorkedOutToReachIt}): the container and the seed as written and what each
+             * name in them was given, a closure applied on the way to the container, and the
+             * calls the total is reached through. Which elements a walk is handed and what it
+             * starts from are read through those, but that says nothing of whether working them
+             * out gets there.
+             */
+            private boolean preparedWithoutAStop(Core node, InputReads at, Core.Block step,
+                                                 Core total) {
+                return reached.besideWhatWasRestated(List.of(step), total)
+                        .endsNoRun(new Denotation(node, at));
             }
 
             /**

@@ -212,6 +212,57 @@ class AWalkAddingDecimalsCompletesStepByStepTest {
         assertEquals(Set.of(), related(doubling), doubling);
     }
 
+    /**
+     * A walk is worked out after the list it walks, and a total after the closure that makes what
+     * it adds up: what working those out may stop a run at is no step's, and where it may, the
+     * steps are not every operation a row gets past. Here {@code n + 1} stops where {@code n} is
+     * the greatest {@code Int}, written where the list is made, in the closure making it, in the
+     * list a total of products is taken over, and in the list a walk carrying a record or one
+     * joining two maps walks.
+     */
+    @Test
+    void whatIsWorkedOutToReachTheStepsIsAskedOfTheWalk() {
+        String inputs = "n: Int, xs: List<Amount>, c: Amount";
+        String overTheList = "List.fold((acc, x) -> Decimal.add(acc, x.value), 0.0m, %s)";
+        for (String list : List.of("""
+                {
+                        let unused = n + 1
+                        xs
+                    }""", """
+                List.map(x -> {
+                        let unused = n + 1
+                        x
+                    }, xs)""")) {
+            String report = report(inputs, "Decimal.compare(%s, c.value) <= 0"
+                    .formatted(overTheList.formatted(list)));
+            assertEquals(Set.of(), related(report), () -> list + report);
+        }
+        String products = report("n: Int, lines: List<Line>, c: Amount", """
+                Decimal.compare(List.sum(List.map(l -> Decimal.multiply(l.price.value,
+                                                                        l.qty.value), {
+                        let unused = n + 1
+                        lines
+                    })), c.value) <= 0""");
+        assertEquals(Set.of(), related(products), products);
+        String carried = report("n: Int, existing: List<Note>, c: Amount", """
+                Decimal.compare(List.fold((acc, x) -> Totals {
+                                        gross = Decimal.add(acc.gross, x.gross.value),
+                                        count = acc.count + 1 },
+                                    Totals { gross = 0.0m, count = 0 }, {
+                        let unused = n + 1
+                        existing
+                    }).gross, c.value) <= 0""");
+        assertEquals(Set.of(), related(carried), carried);
+        String joined = report(
+                "n: Int, qty: Map<String, Decimal>, prices: Map<String, Decimal>, c: Amount", """
+                Decimal.compare(Map.fold((acc, k, q) -> Decimal.add(acc, Decimal.multiply(q,
+                                    Option.withDefault(0.0m, Map.get(k, prices)))), 0.0m, {
+                        let unused = n + 1
+                        qty
+                    }), c.value) <= 0""");
+        assertEquals(Set.of(), related(joined), joined);
+    }
+
     /** A walk a helper works out is worked out where the helper is called. */
     @Test
     void aWalkInAHelperIsTheSameWalk() {
